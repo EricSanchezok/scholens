@@ -314,7 +314,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "parser_backend IS NULL OR parser_backend IN ('mineru', 'pymupdf')",
+            "parser_backend IS NULL OR parser_backend IN ('mineru', 'pymupdf4llm', 'markitdown')",
             name="ck_documents_parser_backend",
         ),
         sa.CheckConstraint(
