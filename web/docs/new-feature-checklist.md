@@ -34,6 +34,9 @@ Use this checklist for every new route or substantial product capability.
 - [ ] Reuse Radix/UI primitives without copying their behavior into product code.
 - [ ] Cover keyboard, focus-visible, disabled, loading, validation, destructive,
       long-content, and narrow states as applicable.
+- [ ] Classify every action with the action-feedback contract. Reuse shared
+      pending/success/error behavior, keep persistent state as its own feedback,
+      and never swallow an action failure.
 - [ ] For phone support, define the mobile composition explicitly instead of
       shrinking desktop panels. Share domain state and actions; allow navigation,
       disclosure, and page composition to change for touch and single-column use.

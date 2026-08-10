@@ -19,6 +19,12 @@ const forbiddenIconPackages = [
   "phosphor",
   "@tabler/icons",
 ];
+const clipboardOwner = path.join(
+  sourceRoot,
+  "components",
+  "feedback",
+  "copy-action.tsx",
+);
 
 function isInside(filePath, directory) {
   return (
@@ -86,6 +92,13 @@ for (const filePath of files) {
       violations,
       filePath,
       "manually rendered SVG found; add an Iconoir glyph through the Scholens Icon wrapper",
+    );
+  }
+  if (/navigator\.clipboard/.test(contents) && filePath !== clipboardOwner) {
+    report(
+      violations,
+      filePath,
+      "direct clipboard access is forbidden; use the shared CopyActionButton feedback contract",
     );
   }
 

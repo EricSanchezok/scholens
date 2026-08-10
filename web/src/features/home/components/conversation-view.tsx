@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Copy,
   NavArrowDown,
   NavArrowLeft,
   NavArrowRight,
@@ -17,6 +16,7 @@ import {
   Skeleton,
   keyboardFocusRing,
 } from "@/components/ui";
+import { CopyActionButton } from "@/components/feedback";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import type {
@@ -139,7 +139,6 @@ function AssistantMessage({
   onUseSuggestion?: (suggestion: string) => void;
 }) {
   const t = useTranslations("Home.conversation");
-  const [copied, setCopied] = React.useState(false);
   const [sourcesOpen, setSourcesOpen] = React.useState(false);
   const [selectedSourceKey, setSelectedSourceKey] = React.useState<
     number | undefined
@@ -223,24 +222,14 @@ function AssistantMessage({
               </IconButton>
             </div>
           )}
-          <IconButton
+          <CopyActionButton
             className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-            label={copied ? t("copied") : t("copy")}
-            onClick={() => {
-              void (async () => {
-                try {
-                  await navigator.clipboard.writeText(visibleContent);
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1500);
-                } catch {
-                  // Clipboard access may be denied outside a secure context.
-                }
-              })();
-            }}
-            variant="ghost"
-          >
-            <Icon glyph={Copy} size={20} tone="secondary" />
-          </IconButton>
+            errorLabel={t("copyFailed")}
+            label={t("copy")}
+            pendingLabel={t("copying")}
+            successLabel={t("copied")}
+            value={visibleContent}
+          />
           {canRetry && onRetryResponse && (
             <IconButton
               className="size-11 bg-transparent lg:size-8 lg:min-h-8"
@@ -260,9 +249,6 @@ function AssistantMessage({
             references={references}
             selectedSourceKey={selectedSourceKey}
           />
-          <span className="sr-only" aria-live="polite">
-            {copied ? t("copied") : ""}
-          </span>
         </div>
       )}
       {response && onUseSuggestion && (

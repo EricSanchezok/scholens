@@ -64,6 +64,35 @@ actually shared.
 - Motion must explain state or spatial continuity and respect reduced-motion;
   decorative motion requires a product reason.
 
+## Action feedback contract
+
+Classify an action by what changes before choosing its feedback. This prevents
+each feature from inventing a different success animation, timer, or toast:
+
+| Action kind                                      | Required response                                                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Immediate, local, reversible action such as Copy | Keep focus in place; expose pending, success, and error through the shared transient-action pattern; reset automatically |
+| Persistent selection or toggle                   | Let the changed control state be the confirmation; do not add a redundant success toast                                  |
+| Visible async mutation                           | Keep the initiating control busy and block duplicate submission; resolve into the updated surface or an inline error     |
+| Background async mutation                        | Confirm acceptance near the initiator, then use the owning status surface or Toast for completion/failure                |
+| Destructive mutation                             | Use explicit destructive language and confirmation when the result is difficult to recover                               |
+| Navigation or disclosure                         | The destination or expanded state is the feedback; do not announce success                                               |
+
+Use `TransientActionIconButton` for icon actions whose result is brief and does
+not create a persistent surface. It owns the `idle → pending → success/error →
+idle` lifecycle, timer cleanup, stable focus target, tooltip, and polite live
+announcement while continuing to render the shared `IconButton`. Use
+`CopyActionButton` for clipboard writes; product code must not access
+`navigator.clipboard` directly. Callers provide localized labels and the value,
+not another timer or visual state. Errors must be visible and announced; never
+silently catch them.
+
+Do not use transient feedback when the resulting content is already visible,
+and do not create a global action-state Context. The state belongs to the
+control that initiated the action. Motion is limited to a quiet 150–200 ms
+state transition without bounce or layout movement; reduced-motion retains the
+state change without the transition.
+
 ## External component intake
 
 Before accepting external source code:
@@ -125,6 +154,7 @@ Current baseline:
 | Button, IconButton, LinkButton                       | Ready           |
 | Input, PasswordInput, Field, Checkbox, Select        | Ready           |
 | Alert, Toast, Progress, Skeleton, AsyncFeedback      | Ready           |
+| TransientActionIconButton, CopyActionButton          | Ready           |
 | Dialog, AlertDialog, Popover, Tooltip                | Ready           |
 | Combobox and complex responsive overlay compositions | Needs hardening |
 | AuthViewport and Auth session harness                | Feature-owned   |

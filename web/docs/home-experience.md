@@ -68,6 +68,10 @@ response variants. Only the latest turn may expose retry and variant selection;
 once a newer turn is submitted, prior alternatives and their controls are
 removed from the product history.
 Every completed answer exposes a copy action for the selected final response.
+It uses the shared transient-action contract: the control keeps its position
+and focus, changes to a success or error glyph with a short anchored label,
+announces the outcome politely, and returns to its idle state without shifting
+the action row. Clipboard failure is never silent.
 Retry creates a new response variant under the same latest turn, selects it
 after completion, and never duplicates the user prompt. Version navigation is
 shown only while that turn remains latest. Exactly three persisted follow-up
