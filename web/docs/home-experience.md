@@ -245,8 +245,9 @@ sources. On phones it uses a two-row composition: input first, then context,
 reasoning, and submit actions in the thumb zone. Context is represented by one
 Iconoir AtSign trigger; its accessible name and native title carry the current
 library, project, paper, mixed-item, or empty-selection scope. Standard and
-Deep open one descriptive radio menu instead of a segmented toggle. The
-separate selected-source chip remains desktop-only.
+Deep open one descriptive, text-only radio menu instead of a segmented toggle;
+decorative mode icons do not repeat the labels. The separate selected-source
+chip remains desktop-only.
 The canonical responsive Composer contract is Figma node
 [`923:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=923-2628),
 `Matrix / Composer v2`. It supersedes earlier isolated Composer compositions;

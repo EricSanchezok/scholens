@@ -113,6 +113,12 @@ export const DesktopReasoningMenuOpen: Story = {
     const page = within(canvasElement.ownerDocument.body);
     await expect(page.getByText("快速、均衡的推理")).toBeVisible();
     await expect(page.getByText("更充分地分析复杂问题")).toBeVisible();
+    await expect(
+      page.getByRole("menuitemradio", { name: /标准/ }).querySelector("svg"),
+    ).toBeNull();
+    await expect(
+      page.getByRole("menuitemradio", { name: /深入/ }).querySelector("svg"),
+    ).toBeNull();
   },
 };
 

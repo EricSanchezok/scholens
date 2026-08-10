@@ -1,14 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  ArrowUp,
-  AtSign,
-  Brain,
-  Flash,
-  NavArrowDown,
-  Square,
-} from "iconoir-react";
+import { ArrowUp, AtSign, NavArrowDown, Square } from "iconoir-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
@@ -348,7 +341,6 @@ function ReasoningSelector({
   value: ReasoningLevel;
 }) {
   const t = useTranslations("Home");
-  const SelectedGlyph = value === "deep" ? Brain : Flash;
 
   return (
     <DropdownMenu modal={false}>
@@ -358,16 +350,13 @@ function ReasoningSelector({
             value: t(`composer.${value}`),
           })}
           className={cn(
-            "hover:bg-hover active:bg-pressed flex h-12 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium lg:h-11",
+            "hover:bg-hover active:bg-pressed flex h-12 min-w-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium lg:h-11",
             keyboardFocusRing,
             className,
           )}
           disabled={disabled}
           type="button"
         >
-          <span className="grid size-5 shrink-0 place-items-center">
-            <Icon glyph={SelectedGlyph} size={20} />
-          </span>
           <span className="truncate">{t(`composer.${value}`)}</span>
           <span className="grid size-4 shrink-0 place-items-center">
             <Icon glyph={NavArrowDown} size={16} tone="secondary" />
@@ -384,16 +373,12 @@ function ReasoningSelector({
           value={value}
         >
           {(["standard", "deep"] as const).map((level) => {
-            const Glyph = level === "deep" ? Brain : Flash;
             return (
               <DropdownMenuRadioItem
-                className="min-h-16 items-start gap-3 py-2.5 pr-8 pl-2 [&>span:first-child]:right-3 [&>span:first-child]:left-auto"
+                className="min-h-16 items-start py-2.5 pr-8 pl-3 [&>span:first-child]:right-3 [&>span:first-child]:left-auto"
                 key={level}
                 value={level}
               >
-                <span className="grid size-6 shrink-0 place-items-center">
-                  <Icon glyph={Glyph} size={20} />
-                </span>
                 <span className="min-w-0 flex-1">
                   <span className="text-foreground block font-medium">
                     {t(`composer.${level}`)}
