@@ -5,7 +5,7 @@ import {
   NavArrowDown,
   NavArrowLeft,
   NavArrowRight,
-  RefreshDouble,
+  Refresh,
   WarningTriangle,
 } from "iconoir-react";
 import { useTranslations } from "next-intl";
@@ -45,6 +45,64 @@ export type ConversationResponseVariant =
   components["schemas"]["ConversationResponseVariantResponse"];
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
+
+function FollowUpSuggestions({
+  response,
+  onUseSuggestion,
+}: {
+  response: ConversationResponseVariant;
+  onUseSuggestion: (suggestion: string) => void;
+}) {
+  const t = useTranslations("Home.conversation");
+
+  if (response.suggestions_status === "pending") {
+    return (
+      <section
+        aria-label={t("suggestionsPreparing")}
+        className="lg:border-line-subtle grid justify-items-start gap-2 pt-3 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
+        role="status"
+      >
+        <Skeleton className="h-11 w-3/4 rounded-full lg:h-10 lg:w-full lg:rounded-none" />
+        <Skeleton className="h-11 w-[88%] rounded-full lg:h-10 lg:w-full lg:rounded-none" />
+        <Skeleton className="h-11 w-2/3 rounded-full lg:h-10 lg:w-full lg:rounded-none" />
+      </section>
+    );
+  }
+
+  if (response.suggestions_status === "failed") {
+    return (
+      <p className="text-muted pt-2 text-xs" role="status">
+        {t("suggestionsUnavailable")}
+      </p>
+    );
+  }
+
+  if (
+    response.suggestions_status !== "completed" ||
+    response.suggestions?.length !== 3
+  ) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-label={t("suggestions")}
+      className="lg:border-line-subtle grid justify-items-start gap-2 pt-3 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
+    >
+      {response.suggestions.map((suggestion) => (
+        <button
+          className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors lg:min-h-10 lg:w-full lg:rounded-none lg:border-b lg:bg-transparent lg:px-1 lg:py-2.5 ${keyboardFocusRing}`}
+          key={suggestion}
+          onClick={() => onUseSuggestion(suggestion)}
+          type="button"
+        >
+          {suggestion}
+        </button>
+      ))}
+    </section>
+  );
+}
+
 function AssistantMessage({
   entries,
   content,
@@ -89,6 +147,14 @@ function AssistantMessage({
   const visibleContent = content || provisionalContent || "";
   const presentationState =
     content && state === "streaming" ? "complete" : state;
+  const orderedVariants = canSwitch
+    ? [...(variants ?? [])].sort(
+        (left, right) => left.variant_index - right.variant_index,
+      )
+    : [];
+  const selectedVariantIndex = orderedVariants.findIndex(
+    (candidate) => candidate.id === response?.id,
+  );
   return (
     <article aria-label={t("assistantMessage")} className="grid gap-3">
       <ConversationWorklog
@@ -114,11 +180,51 @@ function AssistantMessage({
       )}
       {response?.status === "completed" && visibleContent && (
         <div
-          className="flex min-h-10 items-center gap-1"
+          className="flex min-h-11 flex-wrap items-center gap-0 pt-1 lg:min-h-8"
           role="group"
           aria-label={t("answerActions")}
         >
+          {canSwitch && orderedVariants.length > 1 && onSelectResponse && (
+            <div className="text-secondary flex h-11 items-center lg:h-8">
+              <IconButton
+                className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                disabled={selectedVariantIndex <= 0}
+                label={t("previousResponse")}
+                onClick={() =>
+                  onSelectResponse(
+                    orderedVariants[selectedVariantIndex - 1]!.id,
+                  )
+                }
+                variant="ghost"
+              >
+                <Icon glyph={NavArrowLeft} size={20} tone="secondary" />
+              </IconButton>
+              <span
+                aria-label={t("responseVersion", {
+                  current: selectedVariantIndex + 1,
+                  total: orderedVariants.length,
+                })}
+                className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
+              >
+                {selectedVariantIndex + 1} / {orderedVariants.length}
+              </span>
+              <IconButton
+                className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                disabled={selectedVariantIndex >= orderedVariants.length - 1}
+                label={t("nextResponse")}
+                onClick={() =>
+                  onSelectResponse(
+                    orderedVariants[selectedVariantIndex + 1]!.id,
+                  )
+                }
+                variant="ghost"
+              >
+                <Icon glyph={NavArrowRight} size={20} tone="secondary" />
+              </IconButton>
+            </div>
+          )}
           <IconButton
+            className="size-11 bg-transparent lg:size-8 lg:min-h-8"
             label={copied ? t("copied") : t("copy")}
             onClick={() => {
               void (async () => {
@@ -137,53 +243,14 @@ function AssistantMessage({
           </IconButton>
           {canRetry && onRetryResponse && (
             <IconButton
+              className="size-11 bg-transparent lg:size-8 lg:min-h-8"
               label={t("regenerate")}
               onClick={onRetryResponse}
               variant="ghost"
             >
-              <Icon glyph={RefreshDouble} size={20} tone="secondary" />
+              <Icon glyph={Refresh} size={16} tone="secondary" />
             </IconButton>
           )}
-          {canSwitch &&
-            variants &&
-            variants.length > 1 &&
-            onSelectResponse &&
-            (() => {
-              const ordered = [...variants].sort(
-                (left, right) => left.variant_index - right.variant_index,
-              );
-              const index = ordered.findIndex(
-                (candidate) => candidate.id === response.id,
-              );
-              return (
-                <div className="text-muted ml-1 flex items-center gap-0.5 text-xs">
-                  <IconButton
-                    disabled={index <= 0}
-                    label={t("previousResponse")}
-                    onClick={() => onSelectResponse(ordered[index - 1]!.id)}
-                    variant="ghost"
-                  >
-                    <Icon glyph={NavArrowLeft} size={16} />
-                  </IconButton>
-                  <span
-                    aria-label={t("responseVersion", {
-                      current: index + 1,
-                      total: ordered.length,
-                    })}
-                  >
-                    {index + 1}/{ordered.length}
-                  </span>
-                  <IconButton
-                    disabled={index >= ordered.length - 1}
-                    label={t("nextResponse")}
-                    onClick={() => onSelectResponse(ordered[index + 1]!.id)}
-                    variant="ghost"
-                  >
-                    <Icon glyph={NavArrowRight} size={16} />
-                  </IconButton>
-                </div>
-              );
-            })()}
           <ConversationSources
             onOpenChange={(open) => {
               setSourcesOpen(open);
@@ -198,44 +265,12 @@ function AssistantMessage({
           </span>
         </div>
       )}
-      {response?.suggestions_status === "pending" && onUseSuggestion && (
-        <div
-          aria-label={t("suggestionsPreparing")}
-          className="grid w-full max-w-md gap-2 pt-1"
-          role="status"
-        >
-          <span className="text-muted text-xs">
-            {t("suggestionsPreparing")}
-          </span>
-          <Skeleton className="h-11 w-3/4 rounded-full" />
-          <Skeleton className="h-11 w-[88%] rounded-full" />
-          <Skeleton className="h-11 w-2/3 rounded-full" />
-        </div>
+      {response && onUseSuggestion && (
+        <FollowUpSuggestions
+          onUseSuggestion={onUseSuggestion}
+          response={response}
+        />
       )}
-      {response?.suggestions_status === "failed" && onUseSuggestion && (
-        <p className="text-muted pt-1 text-xs" role="status">
-          {t("suggestionsUnavailable")}
-        </p>
-      )}
-      {response?.suggestions_status === "completed" &&
-        response.suggestions?.length === 3 &&
-        onUseSuggestion && (
-          <div
-            className="grid justify-items-start gap-2 pt-1"
-            aria-label={t("suggestions")}
-          >
-            {response.suggestions.map((suggestion) => (
-              <button
-                className={`bg-subtle hover:bg-hover min-h-11 rounded-full px-4 py-2 text-left text-sm transition-colors ${keyboardFocusRing}`}
-                key={suggestion}
-                onClick={() => onUseSuggestion(suggestion)}
-                type="button"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
-        )}
     </article>
   );
 }

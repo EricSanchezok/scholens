@@ -1,6 +1,14 @@
 "use client";
 
-import { LightBulb, NavArrowDown, Page, WarningTriangle } from "iconoir-react";
+import {
+  EditPencil,
+  LightBulb,
+  Link,
+  NavArrowDown,
+  Page,
+  Search,
+  WarningTriangle,
+} from "iconoir-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -13,6 +21,7 @@ import type {
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
+import { LibraryIcon } from "./home-icons";
 
 type ActivityBatch = {
   kind: "batch";
@@ -129,15 +138,26 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
   ];
   const visibleSubjects = subjects.slice(0, 2);
   const remaining = subjects.length - visibleSubjects.length;
+  const categories = new Set(
+    batch.activities.map((activity) => activity.category),
+  );
+  const category = categories.size === 1 ? [...categories][0] : undefined;
+  const glyph = failed
+    ? WarningTriangle
+    : category === "search"
+      ? Search
+      : category === "read"
+        ? LibraryIcon
+        : category === "workspace_action"
+          ? EditPencil
+          : category === "connector"
+            ? Link
+            : Page;
 
   return (
     <li className="relative flex min-w-0 gap-2.5 py-1 lg:static">
       <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 shrink-0 place-items-center rounded-full border lg:static lg:mt-0.5 lg:size-auto lg:border-0 lg:bg-transparent">
-        <Icon
-          glyph={failed ? WarningTriangle : Page}
-          size={16}
-          tone="secondary"
-        />
+        <Icon glyph={glyph} size={16} tone="secondary" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="text-foreground block text-sm leading-5 font-medium lg:text-xs">

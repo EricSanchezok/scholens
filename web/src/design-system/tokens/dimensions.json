@@ -22,7 +22,7 @@
   "layout": {
     "sidebar": {
       "$type": "dimension",
-      "$value": { "value": 264, "unit": "px" }
+      "$value": { "value": 240, "unit": "px" }
     },
     "reading-column": {
       "$type": "dimension",
@@ -49,7 +49,7 @@
     "width": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } }
   },
   "type": {
-    "ui": { "$type": "dimension", "$value": { "value": 13, "unit": "px" } },
+    "ui": { "$type": "dimension", "$value": { "value": 14, "unit": "px" } },
     "caption": {
       "$type": "dimension",
       "$value": { "value": 11, "unit": "px" }

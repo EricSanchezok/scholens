@@ -8,7 +8,7 @@
   --icon-sm: 16px;
   --icon-stroke: 1.5;
   --layout-reading-column: 720px;
-  --layout-sidebar: 264px;
+  --layout-sidebar: 240px;
   --opacity-disabled: 0.38;
   --radius-full: 999px;
   --radius-lg: 12px;
@@ -28,7 +28,7 @@
   --space-8: 32px;
   --touch-target: 44px;
   --type-caption: 11px;
-  --type-ui: 13px;
+  --type-ui: 14px;
 }
 @theme inline {
   --color-canvas: var(--color-bg-canvas);

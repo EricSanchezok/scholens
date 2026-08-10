@@ -18,7 +18,7 @@ the deliberately deferred boundaries.
   an unsent draft. Sidebar, picker, and in-progress stream state remain local.
 - Desktop and mobile share one navigation model, actor state, conversation
   state, and `AppShell` boundary, but use device-appropriate compositions. The
-  desktop sidebar is 264 px when expanded and 72 px when collapsed. Phones use
+  desktop sidebar is 240 px when expanded and 72 px when collapsed. Phones use
   a persistent bottom bar for Ask, Library, and Projects. Their full-width
   navigation hub is reserved for conversation search, pinned/recent history,
   and the account trigger anchored above the bottom safe area; it does not
@@ -122,7 +122,8 @@ Light/Dark and Mobile Light/Dark groups. The superseded per-tool activity
 checklist is archived under `99 — Archive / Interaction States`.
 
 The final-answer action and evidence contract is the authoritative Figma matrix
-[`906:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=906-2628):
+[`906:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=906-2628),
+`Matrix / Final answer actions and sources v2`:
 
 | Figma `20 — Home / Final answer actions and sources` | Storybook acceptance state                           |
 | ---------------------------------------------------- | ---------------------------------------------------- |
@@ -144,6 +145,16 @@ px viewport controls available for the same executable states. The superseded
 phone reading surface at node `898:2628` is archived under
 `99 — Archive / Interaction States`; it is historical reference, not a current
 implementation contract.
+
+The answer-action row uses one Iconoir source with optical sizing rather than
+equal glyph sizes: Copy renders at 20 px and Refresh at 16 px so their visible
+bounds match. Version navigation, Copy, and Refresh form one gapless tool group
+with transparent resting surfaces; hover, active, and keyboard focus reveal
+the individual hit target without dividing the row into persistent blocks.
+Mobile hit targets remain 44 px and desktop hit targets are 32 px. Disabled
+arrows retain normal opacity and use the muted semantic color. Follow-up
+suggestions have no visible heading or repeated icon: phones use 44 px pills,
+while desktop uses full-width rows separated by the subtle border token.
 
 Reader consumes the same message contract instead of defining a second
 conversation renderer. Its authoritative Figma matrix is

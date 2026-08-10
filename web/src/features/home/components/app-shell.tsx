@@ -1,17 +1,13 @@
 "use client";
 
 import {
-  BookStack,
-  ChatBubbleEmpty,
-  ChatPlusIn,
-  Folder,
+  FastArrowLeft,
+  FastArrowRight,
   LogOut,
   Menu,
   NavArrowDown,
   NavArrowRight,
   Settings,
-  SidebarCollapse,
-  SidebarExpand,
 } from "iconoir-react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -46,6 +42,12 @@ import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import type { ReasoningLevel } from "./research-composer";
 import { useMobileKeyboard } from "../hooks/use-mobile-keyboard";
+import {
+  AskIcon,
+  LibraryIcon,
+  NewConversationIcon,
+  ProjectIcon,
+} from "./home-icons";
 
 type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
 
@@ -79,32 +81,46 @@ function SidebarControl({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? accessibleLabel : undefined}
       className={cn(
-        "text-ui hover:bg-hover flex h-11 items-center gap-2.5 rounded-[var(--radius-md)] font-medium transition-colors",
+        "hover:bg-hover flex h-11 items-center gap-2 rounded-[var(--radius-md)] font-medium transition-colors",
         keyboardFocusRing,
-        collapsed ? "w-11 justify-center" : "w-full px-2.5",
-        active && "bg-pressed",
+        collapsed ? "w-11 justify-center" : "w-full px-2",
+        active && "bg-hover",
       )}
       href={href as Route}
       onClick={onSelect}
     >
-      <Icon glyph={glyph} size={20} tone={active ? "primary" : "secondary"} />
-      {!collapsed && <span className="truncate">{label}</span>}
+      <span className="grid size-6 shrink-0 place-items-center">
+        <Icon
+          className={glyph === ProjectIcon ? "size-4.5" : undefined}
+          glyph={glyph}
+          size={20}
+          tone="primary"
+        />
+      </span>
+      {!collapsed && <span className="text-ui truncate">{label}</span>}
     </Link>
   ) : (
     <button
       aria-disabled={disabled || undefined}
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
-        "text-ui flex h-11 items-center gap-2.5 rounded-[var(--radius-md)] font-medium",
+        "flex h-11 items-center gap-2 rounded-[var(--radius-md)] font-medium",
         keyboardFocusRing,
-        collapsed ? "w-11 justify-center" : "w-full px-2.5",
-        disabled ? "text-muted cursor-not-allowed" : "hover:bg-hover",
+        collapsed ? "w-11 justify-center" : "w-full px-2",
+        disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
       )}
       onClick={disabled ? undefined : onSelect}
       type="button"
     >
-      <Icon glyph={glyph} size={20} tone="secondary" />
-      {!collapsed && <span className="truncate">{label}</span>}
+      <span className="grid size-6 shrink-0 place-items-center">
+        <Icon
+          className={glyph === ProjectIcon ? "size-4.5" : undefined}
+          glyph={glyph}
+          size={20}
+          tone="secondary"
+        />
+      </span>
+      {!collapsed && <span className="text-ui truncate">{label}</span>}
     </button>
   );
 
@@ -145,14 +161,14 @@ function ConversationGroup({
           className={cn(
             "text-ui hover:bg-hover flex h-9 min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2",
             keyboardFocusRing,
-            activeConversationId === conversation.id && "bg-pressed",
+            activeConversationId === conversation.id && "bg-hover",
           )}
           href={`/?conversation=${conversation.id}`}
           key={conversation.id}
           onClick={onSelect}
         >
           {conversation.pinned_at && (
-            <Icon glyph={ChatBubbleEmpty} size={20} tone="secondary" />
+            <Icon glyph={AskIcon} size={20} tone="secondary" />
           )}
           <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
           {conversation.scope_label && (
@@ -486,7 +502,7 @@ function MobileTabBar() {
           className="bg-primary grid size-8 place-items-center rounded-full"
           data-selected-indicator
         >
-          <Icon glyph={ChatBubbleEmpty} size={20} tone="inverse" />
+          <Icon glyph={AskIcon} size={20} tone="inverse" />
         </span>
         <span className="font-semibold">{t("ask")}</span>
       </Link>
@@ -497,7 +513,7 @@ function MobileTabBar() {
         type="button"
       >
         <span className="grid size-8 place-items-center">
-          <Icon glyph={BookStack} size={24} tone="secondary" />
+          <Icon glyph={LibraryIcon} size={24} tone="secondary" />
         </span>
         <span>{t("library")}</span>
       </button>
@@ -508,7 +524,7 @@ function MobileTabBar() {
         type="button"
       >
         <span className="grid size-8 place-items-center">
-          <Icon glyph={Folder} size={24} tone="secondary" />
+          <Icon glyph={ProjectIcon} size={20} tone="secondary" />
         </span>
         <span>{t("projects")}</span>
       </button>
@@ -580,7 +596,7 @@ function Sidebar({
           <Link
             aria-hidden={collapsed || undefined}
             className={cn(
-              "absolute left-1 text-base font-medium tracking-[-0.003em] whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none",
+              "absolute left-1 text-base font-semibold tracking-[-0.003em] whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none",
               collapsed && "pointer-events-none opacity-0",
             )}
             href="/"
@@ -589,16 +605,17 @@ function Sidebar({
             Scholens
           </Link>
           <IconButton
-            className="bg-surface border-line hover:bg-hover"
+            className="hover:bg-hover size-9 min-h-9 bg-transparent"
             label={
               collapsed ? t("navigation.expand") : t("navigation.collapse")
             }
             onClick={() => onCollapsedChange(!collapsed)}
-            variant="secondary"
+            variant="ghost"
           >
             <Icon
-              glyph={collapsed ? SidebarExpand : SidebarCollapse}
+              glyph={collapsed ? FastArrowRight : FastArrowLeft}
               size={20}
+              tone="secondary"
             />
           </IconButton>
         </div>
@@ -609,7 +626,7 @@ function Sidebar({
           <SidebarControl
             active={!activeConversationId}
             collapsed={collapsed}
-            glyph={ChatPlusIn}
+            glyph={NewConversationIcon}
             href="/"
             label={t("navigation.newChat")}
             onSelect={onSelect}
@@ -618,14 +635,14 @@ function Sidebar({
             collapsed={collapsed}
             disabled
             disabledHint={t("navigation.comingSoon")}
-            glyph={BookStack}
+            glyph={LibraryIcon}
             label={t("navigation.library")}
           />
           <SidebarControl
             collapsed={collapsed}
             disabled
             disabledHint={t("navigation.comingSoon")}
-            glyph={Folder}
+            glyph={ProjectIcon}
             label={t("navigation.projects")}
           />
         </nav>
@@ -707,7 +724,7 @@ export function AppShell({
 
   return (
     <div
-      className="bg-canvas flex h-dvh min-h-0 overflow-hidden antialiased lg:h-screen lg:min-h-[36rem]"
+      className="bg-canvas flex h-dvh min-h-0 overflow-hidden lg:h-screen lg:min-h-[36rem]"
       style={
         effectiveMobileKeyboard.viewportHeight
           ? {
@@ -775,7 +792,7 @@ export function AppShell({
               )}
               href="/"
             >
-              <Icon glyph={ChatPlusIn} size={24} />
+              <Icon glyph={NewConversationIcon} size={24} />
             </Link>
           </div>
         </header>

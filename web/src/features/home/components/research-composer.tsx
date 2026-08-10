@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUp, AtSign, Folder, Square } from "iconoir-react";
+import { ArrowUp, Square } from "iconoir-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useForm, type UseFormReturn } from "react-hook-form";
@@ -22,6 +22,7 @@ import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { composerSchema, type ComposerValues } from "../schemas";
+import { LibraryIcon, PaperIcon, ProjectIcon } from "./home-icons";
 
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
@@ -136,6 +137,13 @@ function ContextPicker({
           })
         : t(display.kind === "library" ? "scopeLibrary" : "scopeEmpty");
   const accessibleLabel = t("scopeAccessible", { scope: displayLabel });
+  const contextGlyph =
+    display.kind === "project"
+      ? ProjectIcon
+      : display.kind === "paper" || display.kind === "papers"
+        ? PaperIcon
+        : LibraryIcon;
+  const contextIconSize = display.kind === "project" ? 16 : 20;
 
   function updateSelection(
     field: "project_ids" | "document_ids",
@@ -164,7 +172,7 @@ function ContextPicker({
           disabled={disabled}
           type="button"
         >
-          <Icon glyph={AtSign} size={20} />
+          <Icon glyph={contextGlyph} size={contextIconSize} />
           <span className="truncate lg:hidden">{displayLabel}</span>
         </button>
       </PopoverTrigger>
@@ -454,7 +462,7 @@ export function ResearchComposer({
       {context.kind === "selection" && selectionCount > 0 ? (
         <div className="col-span-3 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
           <span className="bg-subtle text-secondary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
-            <Icon glyph={Folder} size={16} tone="secondary" />
+            <Icon glyph={PaperIcon} size={16} tone="secondary" />
             {t("context.selectionSummary", { count: selectionCount })}
           </span>
         </div>
@@ -492,7 +500,7 @@ export function ResearchComposer({
           label={t("composer.submit")}
           type="submit"
         >
-          <Icon glyph={ArrowUp} size={24} tone="inverse" />
+          <Icon glyph={ArrowUp} size={20} tone="inverse" />
         </IconButton>
       )}
     </form>

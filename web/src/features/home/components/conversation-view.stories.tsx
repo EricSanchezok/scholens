@@ -295,6 +295,10 @@ export const SuggestedFollowUps: Story = {
     await expect(args.onUseSuggestion).toHaveBeenCalledWith(
       "What is tomorrow’s date?",
     );
+    await expect(
+      canvas.queryByText("Suggested follow-up questions"),
+    ).not.toBeInTheDocument();
+    await expect(suggestion.querySelector("svg")).toBeNull();
     await expect(args.onSubmit).not.toHaveBeenCalled();
   },
 };

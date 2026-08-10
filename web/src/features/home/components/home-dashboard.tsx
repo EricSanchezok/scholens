@@ -1,6 +1,5 @@
 "use client";
 
-import { BookStack, Folder } from "iconoir-react";
 import { useFormatter, useTranslations } from "next-intl";
 
 import { Button, keyboardFocusRing, Skeleton } from "@/components/ui";
@@ -14,6 +13,7 @@ import {
 } from "./research-composer";
 import type { ComposerValues } from "../schemas";
 import type { UseFormReturn } from "react-hook-form";
+import { LibraryIcon, ProjectIcon } from "./home-icons";
 
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
@@ -91,7 +91,7 @@ function ProjectRow({ project }: { project: Project }) {
   return (
     <article className="border-line bg-surface flex min-w-0 items-center gap-3 rounded-[var(--radius-md)] border p-3">
       <span className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
-        <Icon glyph={Folder} size={20} tone="secondary" />
+        <Icon glyph={ProjectIcon} size={16} tone="secondary" />
       </span>
       <div className="min-w-0">
         <h3 className="truncate text-sm font-medium">{project.title}</h3>
@@ -212,8 +212,8 @@ function MobileRecentLauncher({
                 type="button"
               >
                 <Icon
-                  glyph={item.kind === "paper" ? BookStack : Folder}
-                  size={20}
+                  glyph={item.kind === "paper" ? LibraryIcon : ProjectIcon}
+                  size={item.kind === "paper" ? 20 : 16}
                   tone="secondary"
                 />
                 <span className="truncate">{item.title}</span>
