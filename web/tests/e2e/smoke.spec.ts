@@ -194,7 +194,7 @@ test("keeps sidebar controls vertically anchored while collapsing", async ({
   await expect(
     page.getByRole("button", { name: "Expand sidebar" }),
   ).toBeVisible();
-  await expect(page.locator("aside")).toHaveCSS("width", "72px");
+  await expect(page.locator("aside")).toHaveCSS("width", "64px");
   const after = {
     newChat: await newChat.evaluate((element) =>
       element.getBoundingClientRect().toJSON(),
@@ -206,6 +206,43 @@ test("keeps sidebar controls vertically anchored while collapsing", async ({
 
   expect(Math.abs(after.newChat.y - before.newChat.y)).toBeLessThan(1);
   expect(Math.abs(after.account.y - before.account.y)).toBeLessThan(1);
+});
+
+test("opens mobile navigation as an opaque partial-width layer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+
+  const dialog = page.getByRole("dialog");
+  const panel = dialog.getByRole("complementary");
+  const overlay = page.locator('[data-slot="sheet-overlay"]');
+  await expect(dialog).toBeVisible();
+  await expect(panel).toBeVisible();
+  await expect(overlay).toBeVisible();
+
+  const metrics = await dialog.evaluate((element) => {
+    const overlayElement = document.querySelector<HTMLElement>(
+      '[data-slot="sheet-overlay"]',
+    );
+    const style = getComputedStyle(element);
+    return {
+      contentZ: Number(style.zIndex),
+      overlayZ: Number(
+        overlayElement ? getComputedStyle(overlayElement).zIndex : 0,
+      ),
+      width: element.getBoundingClientRect().width,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(metrics.width).toBeLessThan(metrics.viewportWidth);
+  await expect
+    .poll(() =>
+      panel.evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .not.toBe("rgba(0, 0, 0, 0)");
+  expect(metrics.contentZ).toBeGreaterThan(metrics.overlayZ);
 });
 
 test("fits the Home shell at 390px without horizontal scrolling", async ({

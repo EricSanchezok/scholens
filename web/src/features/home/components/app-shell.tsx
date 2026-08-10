@@ -80,21 +80,16 @@ function SidebarControl({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? accessibleLabel : undefined}
       className={cn(
-        "hover:bg-hover flex h-11 items-center gap-2 rounded-[var(--radius-md)] font-medium transition-colors",
+        "hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-md)] font-medium transition-colors",
         keyboardFocusRing,
-        collapsed ? "w-11 justify-center" : "w-full px-2",
+        collapsed ? "w-10 justify-center" : "w-full px-2",
         active && "bg-hover",
       )}
       href={href as Route}
       onClick={onSelect}
     >
-      <span className="grid size-6 shrink-0 place-items-center">
-        <Icon
-          className={glyph === ProjectIcon ? "size-4.5" : undefined}
-          glyph={glyph}
-          size={20}
-          tone="primary"
-        />
+      <span className="grid size-5 shrink-0 place-items-center">
+        <Icon glyph={glyph} size={16} tone="primary" />
       </span>
       {!collapsed && <span className="text-ui truncate">{label}</span>}
     </Link>
@@ -103,21 +98,16 @@ function SidebarControl({
       aria-disabled={disabled || undefined}
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
-        "flex h-11 items-center gap-2 rounded-[var(--radius-md)] font-medium",
+        "flex h-10 items-center gap-2 rounded-[var(--radius-md)] font-medium",
         keyboardFocusRing,
-        collapsed ? "w-11 justify-center" : "w-full px-2",
+        collapsed ? "w-10 justify-center" : "w-full px-2",
         disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
       )}
       onClick={disabled ? undefined : onSelect}
       type="button"
     >
-      <span className="grid size-6 shrink-0 place-items-center">
-        <Icon
-          className={glyph === ProjectIcon ? "size-4.5" : undefined}
-          glyph={glyph}
-          size={20}
-          tone="secondary"
-        />
+      <span className="grid size-5 shrink-0 place-items-center">
+        <Icon glyph={glyph} size={16} tone="secondary" />
       </span>
       {!collapsed && <span className="text-ui truncate">{label}</span>}
     </button>
@@ -149,7 +139,7 @@ function ConversationGroup({
 
   return (
     <section className="grid gap-0.5">
-      <div className="text-secondary flex h-7 items-center px-2 text-xs font-medium">
+      <div className="text-secondary flex h-6 items-center px-2 text-xs font-medium">
         {title}
       </div>
       {items.map((conversation) => (
@@ -158,7 +148,7 @@ function ConversationGroup({
             activeConversationId === conversation.id ? "page" : undefined
           }
           className={cn(
-            "text-ui hover:bg-hover flex h-9 min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2",
+            "text-ui hover:bg-hover flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2",
             keyboardFocusRing,
             activeConversationId === conversation.id && "bg-hover",
           )}
@@ -207,17 +197,17 @@ function AccountMenu({
           className={cn(
             "hover:bg-hover flex items-center rounded-[var(--radius-md)] px-2",
             keyboardFocusRing,
-            mobile ? "h-[72px] w-full gap-3" : "h-14",
+            mobile ? "h-16 w-full gap-2.5" : "h-12",
             collapsed
-              ? "ml-auto w-11 justify-center"
-              : !mobile && "w-full gap-2.5",
+              ? "ml-auto w-10 justify-center"
+              : !mobile && "w-full gap-2",
           )}
           type="button"
         >
           <span
             className={cn(
               "bg-pressed grid shrink-0 place-items-center rounded-full font-medium",
-              mobile ? "size-10 text-sm" : "size-7 text-xs",
+              mobile ? "size-8 text-xs" : "text-caption size-6",
             )}
           >
             {initial}
@@ -226,8 +216,8 @@ function AccountMenu({
             <span className="min-w-0 flex-1 text-left">
               <span
                 className={cn(
-                  "block truncate leading-5 font-medium",
-                  mobile ? "text-base" : "text-ui",
+                  "text-ui block truncate leading-5",
+                  mobile ? "font-medium" : "font-normal",
                 )}
               >
                 {name}
@@ -235,16 +225,14 @@ function AccountMenu({
               <span
                 className={cn(
                   "text-secondary block truncate",
-                  mobile
-                    ? "mt-0.5 text-sm leading-5"
-                    : "text-caption leading-4",
+                  mobile ? "text-xs leading-4" : "text-caption leading-4",
                 )}
               >
                 {actor.email}
               </span>
             </span>
           )}
-          {mobile && <Icon glyph={Settings} size={24} tone="secondary" />}
+          {mobile && <Icon glyph={Settings} size={20} tone="secondary" />}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -319,8 +307,8 @@ function MobileConversationGroup({
 }) {
   if (items.length === 0) return null;
   return (
-    <section className="grid gap-1">
-      <h2 className="text-secondary px-3 pt-3 pb-1 text-sm font-medium">
+    <section className="grid gap-0.5">
+      <h2 className="text-secondary px-3 pt-3 pb-1 text-xs font-medium">
         {title}
       </h2>
       {items.map((conversation) => (
@@ -329,7 +317,7 @@ function MobileConversationGroup({
             activeConversationId === conversation.id ? "page" : undefined
           }
           className={cn(
-            "hover:bg-hover flex min-h-12 min-w-0 items-center rounded-[var(--radius-lg)] px-3 text-base",
+            "text-ui hover:bg-hover flex min-h-11 min-w-0 items-center rounded-[var(--radius-md)] px-3",
             keyboardFocusRing,
             activeConversationId === conversation.id && "bg-pressed",
           )}
@@ -339,7 +327,7 @@ function MobileConversationGroup({
         >
           <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
           {conversation.scope_label && (
-            <span className="text-secondary ml-3 max-w-20 truncate text-sm">
+            <span className="text-caption text-secondary ml-3 max-w-20 truncate">
               {conversation.scope_label}
             </span>
           )}
@@ -377,15 +365,15 @@ function MobileNavigation({
 
   return (
     <aside className="bg-sidebar flex h-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
-      <div className="flex h-16 shrink-0 items-center px-5 pr-16">
-        <Link className="text-xl font-semibold tracking-[-0.015em]" href="/">
+      <div className="flex h-14 shrink-0 items-center px-4 pr-14">
+        <Link className="text-base font-semibold tracking-[-0.003em]" href="/">
           Scholens
         </Link>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3">
         <SearchField
           aria-label={t("navigation.searchConversations")}
-          className="bg-subtle h-12 rounded-[var(--radius-lg)] border-transparent text-base"
+          className="bg-subtle h-11 rounded-[var(--radius-md)] border-transparent text-base"
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder={t("navigation.searchConversations")}
           value={query}
@@ -530,14 +518,14 @@ function Sidebar({
       <aside
         className={cn(
           "border-line bg-sidebar flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))] transition-[width] duration-200 ease-out motion-reduce:transition-none",
-          collapsed ? "w-[72px]" : "w-[var(--layout-sidebar)]",
+          collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
         )}
       >
-        <div className="relative mb-4 flex h-11 shrink-0 items-center justify-end">
+        <div className="relative mb-3 flex h-10 shrink-0 items-center justify-end">
           <Link
             aria-hidden={collapsed || undefined}
             className={cn(
-              "absolute left-1 text-base font-semibold tracking-[-0.003em] whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none",
+              "text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none",
               collapsed && "pointer-events-none opacity-0",
             )}
             href="/"
@@ -546,7 +534,7 @@ function Sidebar({
             Scholens
           </Link>
           <IconButton
-            className="hover:bg-hover size-9 min-h-9 bg-transparent"
+            className="hover:bg-hover size-8 min-h-8 bg-transparent"
             label={
               collapsed ? t("navigation.expand") : t("navigation.collapse")
             }
@@ -555,13 +543,13 @@ function Sidebar({
           >
             <Icon
               glyph={collapsed ? FastArrowRight : FastArrowLeft}
-              size={20}
+              size={16}
               tone="secondary"
             />
           </IconButton>
         </div>
         <nav
-          className={cn("grid gap-1", collapsed && "justify-items-end")}
+          className={cn("grid gap-0.5", collapsed && "justify-items-end")}
           aria-label={t("navigation.openMenu")}
         >
           <SidebarControl
@@ -588,7 +576,7 @@ function Sidebar({
           />
         </nav>
         {!collapsed && (
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
             <ConversationGroup
               activeConversationId={activeConversationId}
               items={pinned}
@@ -688,7 +676,7 @@ export function AppShell({
       </div>
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
-          className="left-0 w-full border-0 p-0 focus:outline-none sm:w-[min(92vw,28rem)] sm:border-r"
+          className="bg-sidebar right-auto left-0 w-[min(88vw,22rem)] max-w-none border-0 border-r p-0 focus:outline-none"
           closeGlyph={NavArrowRight}
           closeLabel={t("navigation.closeMenu")}
           onOpenAutoFocus={(event) => {

@@ -8,6 +8,12 @@ import { homeHandlers } from "./api/handlers";
 import { homeConversations } from "./api/fixtures";
 import { HomeWorkspace } from "./home-page";
 
+const longIdentityActor = {
+  ...actor,
+  display_name: "EricSanchez",
+  email: "niexiaohangeric@163.com",
+};
+
 const meta = {
   title: "Features/Home/Workspace",
   component: HomeWorkspace,
@@ -59,6 +65,12 @@ export const Default: Story = {
       name: /Ask Scholens|询问 Scholens/,
     });
     await expect(submit).toBeDisabled();
+    const newChat = canvas.getByRole("link", { name: "New chat" });
+    const account = canvas.getByRole("button", {
+      name: "Open account menu",
+    });
+    await expect(newChat).toHaveStyle({ height: "40px" });
+    await expect(account).toHaveStyle({ height: "48px" });
     await userEvent.click(composer);
     await expect(composer).toHaveAttribute("data-focus-delegate", "surface");
     await expect(composer).toHaveAttribute("data-focus-origin", "pointer");
@@ -114,6 +126,10 @@ export const AccountMenuOpen: Story = {
       body.getByRole("menuitemradio", { name: "System" }),
     ).toBeVisible();
   },
+};
+
+export const LongAccountIdentity: Story = {
+  args: { actor: longIdentityActor },
 };
 
 export const Conversation: Story = {
@@ -343,7 +359,10 @@ export const MobileReasoningMenuOpen: Story = {
 };
 
 export const MobileNavigationOpen: Story = {
-  args: { initialConversationId: homeConversations[0]!.id },
+  args: {
+    actor: longIdentityActor,
+    initialConversationId: homeConversations[0]!.id,
+  },
   globals: {
     locale: "zh-CN",
     viewport: { value: "mobile", isRotated: false },
@@ -355,8 +374,21 @@ export const MobileNavigationOpen: Story = {
     );
     const body = within(document.body);
     const dialog = await body.findByRole("dialog");
+    const overlay = document.querySelector<HTMLElement>(
+      '[data-slot="sheet-overlay"]',
+    );
     const navigation = within(dialog);
+    const panel = navigation.getByRole("complementary");
     await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute("data-slot", "sheet-content");
+    await expect(dialog.getBoundingClientRect().width).toBeLessThan(
+      window.innerWidth,
+    );
+    await expect(panel).toHaveClass("bg-sidebar");
+    await expect(overlay).not.toBeNull();
+    await expect(Number(getComputedStyle(dialog).zIndex)).toBeGreaterThan(
+      Number(getComputedStyle(overlay!).zIndex),
+    );
     await expect(
       navigation.getByRole("searchbox", { name: "搜索对话" }),
     ).toBeVisible();
@@ -366,7 +398,7 @@ export const MobileNavigationOpen: Story = {
     await expect(
       navigation.queryByRole("link", { name: "新对话" }),
     ).not.toBeInTheDocument();
-    await expect(navigation.getByText(actor.email)).toBeVisible();
+    await expect(navigation.getByText(longIdentityActor.email)).toBeVisible();
   },
 };
 

@@ -18,15 +18,24 @@ the deliberately deferred boundaries.
   an unsent draft. Sidebar, picker, and in-progress stream state remain local.
 - Desktop and mobile share one navigation model, actor state, conversation
   state, and `AppShell` boundary, but use device-appropriate compositions. The
-  desktop sidebar is 240 px when expanded and 72 px when collapsed. Phones use
-  a persistent bottom bar for Ask, Library, and Projects. Their full-width
-  navigation hub is reserved for conversation search, pinned/recent history,
+  desktop sidebar is 240 px when expanded and 64 px when collapsed. Phones use
+  a persistent bottom bar for Ask, Library, and Projects. Their partial-width,
+  opaque navigation panel is reserved for conversation search, pinned/recent history,
   and the account trigger anchored above the bottom safe area; it does not
   repeat the primary destinations or render the desktop Sidebar inside a
   narrow drawer. The hub closes with a directional collapse control rather
   than a dismiss-style X.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
+- Desktop sidebar density remains subordinate to the reading surface: primary
+  navigation uses 40 px rows with 16 px glyphs in fixed slots, conversation
+  history uses 32 px rows, and the account trigger uses a 48 px row. The actor
+  name and email use distinct weight and semantic-color levels rather than
+  competing with the primary navigation.
+- The phone navigation panel occupies at most 88 percent of the viewport and
+  owns an opaque sidebar surface above a lower stacking-level backdrop. Its
+  visible rows retain 44 px touch targets even though typography and glyphs
+  follow the compact sidebar hierarchy.
 - Deferred destinations retain their product names in the visible navigation;
   availability is disclosed through the disabled control and its tooltip, not
   implementation-plan copy.
@@ -93,13 +102,13 @@ never overwritten by title generation.
 
 ## State coverage
 
-| Surface      | Deterministic coverage                                                                |
-| ------------ | ------------------------------------------------------------------------------------- |
-| Home data    | populated, loading/slow, empty, and recoverable error                                 |
-| Navigation   | expanded, collapsed, mobile bottom bar and history hub, search, active conversation   |
-| Context      | entire library and selected project/paper sources, including search                   |
-| Conversation | direct answer, tool activity, partial failure, references, complete, cancelled, error |
-| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check  |
+| Surface      | Deterministic coverage                                                                              |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| Home data    | populated, loading/slow, empty, and recoverable error                                               |
+| Navigation   | expanded, collapsed, mobile bottom bar and partial-width history panel, search, active conversation |
+| Context      | entire library and selected project/paper sources, including search                                 |
+| Conversation | direct answer, tool activity, partial failure, references, complete, cancelled, error               |
+| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check                |
 
 The Figma conversation-state frames and Storybook stories map one-to-one:
 
@@ -195,6 +204,7 @@ The mobile Dock acceptance inventory extends that mapping:
 | Long project scope at 320 px      | `Research Composer / Long Project Scope`            |
 | Multiline input                   | `Research Composer / Multiline Input`               |
 | Mobile reasoning menu             | `Workspace / Mobile Reasoning Menu Open`            |
+| Mobile navigation panel           | `Workspace / Mobile Navigation Open`                |
 | Desktop reasoning menu            | `Research Composer / Desktop Reasoning Menu Open`   |
 | Streaming / Stop                  | `Research Composer / Streaming Stop`                |
 | 430 px Dark English               | `Research Composer / Dark English Large`            |
@@ -307,6 +317,13 @@ Figma `20 — Home` also records the phone-specific recent-content contract as
 (`889:3521`). These frames intentionally use a single compact launcher list
 instead of shrinking the desktop paper and project cards.
 
+The navigation-open acceptance frame is `Home / Mobile / Navigation open`
+(`939:2639`). It fixes the panel at 88% of the viewport with an opaque sidebar
+surface above a lower-z backdrop, leaving a visible dismissal strip instead of
+covering the phone with a transparent full-width layer. Storybook mirrors this
+state as `Workspace / Mobile Navigation Open`, including a long account name
+and email so truncation and alignment remain executable acceptance criteria.
+
 When both recent-paper and recent-project queries settle empty, Home uses a
 focused first-run composition instead of preserving empty card silhouettes.
 On phones, its composer sits at the bottom of the usable canvas immediately
@@ -320,6 +337,9 @@ composition.
 The account trigger sits against the sidebar's bottom safe-area inset without a
 redundant disclosure arrow. Its menu aligns to the expanded sidebar content
 edge and opens to the right of the collapsed rail.
+`Workspace / Long Account Identity` preserves the same compact 48 px desktop
+row while exercising a long name and email; the mobile navigation story covers
+the corresponding 64 px touch row.
 On desktop, when only one collection has data, only that section is rendered
 and centered; loading and recoverable errors remain visible per collection.
 The populated desktop state continues to follow the canonical two-paper and
