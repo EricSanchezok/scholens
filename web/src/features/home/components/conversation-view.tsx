@@ -59,12 +59,12 @@ function FollowUpSuggestions({
     return (
       <section
         aria-label={t("suggestionsPreparing")}
-        className="lg:border-line-subtle grid justify-items-start gap-2 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
+        className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0 lg:px-1"
         role="status"
       >
-        <Skeleton className="h-11 w-3/4 rounded-full lg:h-10 lg:w-full lg:rounded-none" />
-        <Skeleton className="h-11 w-[88%] rounded-full lg:h-10 lg:w-full lg:rounded-none" />
-        <Skeleton className="h-11 w-2/3 rounded-full lg:h-10 lg:w-full lg:rounded-none" />
+        <Skeleton className="h-11 w-3/4 rounded-full lg:h-10 lg:w-full lg:rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-11 w-[88%] rounded-full lg:h-10 lg:w-full lg:rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-11 w-2/3 rounded-full lg:h-10 lg:w-full lg:rounded-[var(--radius-sm)]" />
       </section>
     );
   }
@@ -87,11 +87,11 @@ function FollowUpSuggestions({
   return (
     <section
       aria-label={t("suggestions")}
-      className="lg:border-line-subtle grid justify-items-start gap-2 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
+      className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0 lg:px-1"
     >
       {response.suggestions.map((suggestion) => (
         <button
-          className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors lg:min-h-10 lg:w-full lg:rounded-none lg:border-b lg:bg-transparent lg:px-1 lg:py-2.5 ${keyboardFocusRing}`}
+          className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors motion-reduce:transition-none lg:min-h-10 lg:w-full lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
           key={suggestion}
           onClick={() => onUseSuggestion(suggestion)}
           type="button"
@@ -177,85 +177,91 @@ function AssistantMessage({
           }}
         />
       )}
-      {response?.status === "completed" && visibleContent && (
-        <div
-          className="flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
-          role="group"
-          aria-label={t("answerActions")}
-        >
-          {canSwitch && orderedVariants.length > 1 && onSelectResponse && (
-            <div className="text-secondary flex h-11 items-center lg:h-8">
-              <IconButton
-                className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
-                disabled={selectedVariantIndex <= 0}
-                label={t("previousResponse")}
-                onClick={() =>
-                  onSelectResponse(
-                    orderedVariants[selectedVariantIndex - 1]!.id,
-                  )
-                }
-                variant="ghost"
-              >
-                <Icon glyph={NavArrowLeft} size={20} tone="secondary" />
-              </IconButton>
-              <span
-                aria-label={t("responseVersion", {
-                  current: selectedVariantIndex + 1,
-                  total: orderedVariants.length,
-                })}
-                className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
-              >
-                {selectedVariantIndex + 1} / {orderedVariants.length}
-              </span>
-              <IconButton
-                className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
-                disabled={selectedVariantIndex >= orderedVariants.length - 1}
-                label={t("nextResponse")}
-                onClick={() =>
-                  onSelectResponse(
-                    orderedVariants[selectedVariantIndex + 1]!.id,
-                  )
-                }
-                variant="ghost"
-              >
-                <Icon glyph={NavArrowRight} size={20} tone="secondary" />
-              </IconButton>
+      {response && (
+        <footer className="grid gap-2 lg:max-w-2xl lg:gap-1">
+          {response.status === "completed" && visibleContent && (
+            <div
+              className="flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
+              role="group"
+              aria-label={t("answerActions")}
+            >
+              {canSwitch && orderedVariants.length > 1 && onSelectResponse && (
+                <div className="text-secondary flex h-11 items-center lg:h-8">
+                  <IconButton
+                    className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                    disabled={selectedVariantIndex <= 0}
+                    label={t("previousResponse")}
+                    onClick={() =>
+                      onSelectResponse(
+                        orderedVariants[selectedVariantIndex - 1]!.id,
+                      )
+                    }
+                    variant="ghost"
+                  >
+                    <Icon glyph={NavArrowLeft} size={20} tone="secondary" />
+                  </IconButton>
+                  <span
+                    aria-label={t("responseVersion", {
+                      current: selectedVariantIndex + 1,
+                      total: orderedVariants.length,
+                    })}
+                    className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
+                  >
+                    {selectedVariantIndex + 1} / {orderedVariants.length}
+                  </span>
+                  <IconButton
+                    className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                    disabled={
+                      selectedVariantIndex >= orderedVariants.length - 1
+                    }
+                    label={t("nextResponse")}
+                    onClick={() =>
+                      onSelectResponse(
+                        orderedVariants[selectedVariantIndex + 1]!.id,
+                      )
+                    }
+                    variant="ghost"
+                  >
+                    <Icon glyph={NavArrowRight} size={20} tone="secondary" />
+                  </IconButton>
+                </div>
+              )}
+              <CopyActionButton
+                className="size-11 bg-transparent lg:size-8 lg:min-h-8"
+                errorLabel={t("copyFailed")}
+                label={t("copy")}
+                pendingLabel={t("copying")}
+                successLabel={t("copied")}
+                value={visibleContent}
+              />
+              {canRetry && onRetryResponse && (
+                <IconButton
+                  className="size-11 bg-transparent lg:size-8 lg:min-h-8"
+                  label={t("regenerate")}
+                  onClick={onRetryResponse}
+                  variant="ghost"
+                >
+                  <Icon glyph={Refresh} size={16} tone="secondary" />
+                </IconButton>
+              )}
+              <ConversationSources
+                onOpenChange={(open) => {
+                  setSourcesOpen(open);
+                  if (!open) setSelectedSourceKey(undefined);
+                }}
+                open={sourcesOpen}
+                references={references}
+                selectedSourceKey={selectedSourceKey}
+              />
             </div>
           )}
-          <CopyActionButton
-            className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-            errorLabel={t("copyFailed")}
-            label={t("copy")}
-            pendingLabel={t("copying")}
-            successLabel={t("copied")}
-            value={visibleContent}
-          />
-          {canRetry && onRetryResponse && (
-            <IconButton
-              className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-              label={t("regenerate")}
-              onClick={onRetryResponse}
-              variant="ghost"
-            >
-              <Icon glyph={Refresh} size={16} tone="secondary" />
-            </IconButton>
+          {onUseSuggestion && (
+            <FollowUpSuggestions
+              onUseSuggestion={onUseSuggestion}
+              response={response}
+            />
           )}
-          <ConversationSources
-            onOpenChange={(open) => {
-              setSourcesOpen(open);
-              if (!open) setSelectedSourceKey(undefined);
-            }}
-            open={sourcesOpen}
-            references={references}
-            selectedSourceKey={selectedSourceKey}
-          />
-        </div>
-      )}
-      {response && onUseSuggestion && (
-        <FollowUpSuggestions
-          onUseSuggestion={onUseSuggestion}
-          response={response}
-        />
+        </footer>
       )}
     </article>
   );

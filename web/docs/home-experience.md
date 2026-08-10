@@ -158,8 +158,12 @@ with transparent resting surfaces; hover, active, and keyboard focus reveal
 the individual hit target without dividing the row into persistent blocks.
 Mobile hit targets remain 44 px and desktop hit targets are 32 px. Disabled
 arrows retain normal opacity and use the muted semantic color. Follow-up
-suggestions have no visible heading or repeated icon: phones use 44 px pills,
-while desktop uses full-width rows separated by the subtle border token.
+suggestions have no visible heading or repeated icon: phones use 44 px pills.
+On desktop, actions and suggestions share one response footer. Suggestion rows
+use secondary text, 16 px content inset, subtle separators only between rows,
+and a local rounded hover/focus surface; there is no outer divider or permanent
+card background. This preserves an actionable next-step identity without
+competing with the answer or relying on repeated glyphs.
 On phones, the final answer, its 44 px action row, and its suggestions form one
 proximity group: the answer-to-actions and actions-to-suggestions boundaries
 each use a single 8 px gap. Components must not add a second top padding at

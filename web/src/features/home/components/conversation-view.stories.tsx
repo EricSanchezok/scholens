@@ -300,6 +300,7 @@ export const SuggestedFollowUps: Story = {
     ).not.toBeInTheDocument();
     await expect(suggestion.querySelector("svg")).toBeNull();
     await expect(args.onSubmit).not.toHaveBeenCalled();
+    suggestion.blur();
   },
 };
 
