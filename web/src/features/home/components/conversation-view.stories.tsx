@@ -303,6 +303,36 @@ export const SuggestedFollowUps: Story = {
   },
 };
 
+export const MobileAnswerRhythm: Story = {
+  globals: { locale: "zh-CN", viewport: { value: "mobile", isRotated: false } },
+  args: {
+    turns: [
+      turn({
+        locale: "zh-CN",
+        user_query: "Scholens 可以怎样帮助我整理研究？",
+        responses: [
+          response({
+            content:
+              "Scholens 可以帮你检索论文、整理阅读清单，并把研究资料组织进项目。",
+            suggestions: [
+              "先帮我建立一份阅读清单",
+              "比较资料库里的三篇论文",
+              "把研究重点整理成一个项目",
+            ],
+          }),
+        ],
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("group", { name: "回答操作" })).toBeVisible();
+    await expect(
+      canvas.getByRole("region", { name: "建议的后续问题" }),
+    ).toBeVisible();
+  },
+};
+
 export const SuggestionsPending: Story = {
   args: {
     turns: [

@@ -135,6 +135,7 @@ The final-answer action and evidence contract is the authoritative Figma matrix
 | Retried response versions                            | `Conversation View / Retried Response Versions`      |
 | Historical answer                                    | `Conversation View / Historical Answer Has No Retry` |
 | Suggested follow-ups                                 | `Conversation View / Suggested Follow Ups`           |
+| Mobile answer rhythm                                 | `Conversation View / Mobile Answer Rhythm`           |
 | Suggestions pending                                  | `Conversation View / Suggestions Pending`            |
 | Suggestions unavailable                              | `Conversation View / Suggestions Unavailable`        |
 | Retry in progress                                    | `Conversation View / Retry In Progress`              |
@@ -159,6 +160,11 @@ Mobile hit targets remain 44 px and desktop hit targets are 32 px. Disabled
 arrows retain normal opacity and use the muted semantic color. Follow-up
 suggestions have no visible heading or repeated icon: phones use 44 px pills,
 while desktop uses full-width rows separated by the subtle border token.
+On phones, the final answer, its 44 px action row, and its suggestions form one
+proximity group: the answer-to-actions and actions-to-suggestions boundaries
+each use a single 8 px gap. Components must not add a second top padding at
+either boundary. Touch targets keep their full size even though the visible
+glyphs and surfaces read as a compact continuation of the answer.
 
 Reader consumes the same message contract instead of defining a second
 conversation renderer. Its authoritative Figma matrix is

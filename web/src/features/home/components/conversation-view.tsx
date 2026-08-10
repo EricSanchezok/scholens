@@ -59,7 +59,7 @@ function FollowUpSuggestions({
     return (
       <section
         aria-label={t("suggestionsPreparing")}
-        className="lg:border-line-subtle grid justify-items-start gap-2 pt-3 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
+        className="lg:border-line-subtle grid justify-items-start gap-2 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
         role="status"
       >
         <Skeleton className="h-11 w-3/4 rounded-full lg:h-10 lg:w-full lg:rounded-none" />
@@ -71,7 +71,7 @@ function FollowUpSuggestions({
 
   if (response.suggestions_status === "failed") {
     return (
-      <p className="text-muted pt-2 text-xs" role="status">
+      <p className="text-muted text-xs lg:pt-2" role="status">
         {t("suggestionsUnavailable")}
       </p>
     );
@@ -87,7 +87,7 @@ function FollowUpSuggestions({
   return (
     <section
       aria-label={t("suggestions")}
-      className="lg:border-line-subtle grid justify-items-start gap-2 pt-3 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
+      className="lg:border-line-subtle grid justify-items-start gap-2 lg:max-w-2xl lg:justify-items-stretch lg:gap-0 lg:border-t lg:pt-2"
     >
       {response.suggestions.map((suggestion) => (
         <button
@@ -155,7 +155,7 @@ function AssistantMessage({
     (candidate) => candidate.id === response?.id,
   );
   return (
-    <article aria-label={t("assistantMessage")} className="grid gap-3">
+    <article aria-label={t("assistantMessage")} className="grid gap-2 lg:gap-3">
       <ConversationWorklog
         entries={entries}
         failure={failure ?? null}
@@ -179,7 +179,7 @@ function AssistantMessage({
       )}
       {response?.status === "completed" && visibleContent && (
         <div
-          className="flex min-h-11 flex-wrap items-center gap-0 pt-1 lg:min-h-8"
+          className="flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
           role="group"
           aria-label={t("answerActions")}
         >
