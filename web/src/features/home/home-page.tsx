@@ -348,9 +348,7 @@ export function HomeWorkspace({
       collapsed={collapsed}
       conversations={conversations}
       onCollapsedChange={setCollapsed}
-      onReasoningLevelChange={setReasoningLevel}
       onSignOut={handleSignOut}
-      reasoningLevel={reasoningLevel}
       signingOut={signingOut}
       mobileComposer={mobileComposer}
       mobileKeyboardOverride={mobileKeyboardOverride}
@@ -384,7 +382,6 @@ export function HomeWorkspace({
           reasoningLevel={reasoningLevel}
           readOnlyReason={conversationQuery.data?.read_only_reason}
           showComposer={isDesktop}
-          title={conversationQuery.data?.title}
         />
       ) : (
         <HomeDashboard

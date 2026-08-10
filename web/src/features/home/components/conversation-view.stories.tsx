@@ -168,7 +168,6 @@ const meta = {
   title: "Features/Home/Conversation View",
   component: ConversationView,
   args: {
-    title: "Reasoning compression",
     turns: homeTurns,
     liveTurn: null,
     context: { kind: "library" },
@@ -202,6 +201,7 @@ export const DirectAnswer: Story = {
   args: { turns: [turn()] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(canvas.queryByRole("heading", { level: 1 })).toBeNull();
     await expect(canvas.getByText(/Today is Wednesday/)).toBeVisible();
     await expect(
       canvas.queryByText(/Research complete/),
@@ -397,7 +397,7 @@ export const RetryFailed: Story = {
 
 export const MobileResearchAnswer: Story = {
   globals: { locale: "zh-CN", viewport: { value: "mobile", isRotated: false } },
-  args: { turns: [researchTurn()], title: "思维链压缩技术调研" },
+  args: { turns: [researchTurn()] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
@@ -418,7 +418,7 @@ export const MobileResearchAnswerDark: Story = {
 
 export const AnswerSources: Story = {
   globals: { locale: "zh-CN" },
-  args: { turns: [researchTurn()], title: "思维链压缩技术调研" },
+  args: { turns: [researchTurn()] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "打开来源 1" }));

@@ -362,7 +362,6 @@ function MessageHistory({
 }
 
 export function ConversationView({
-  title,
   turns,
   liveTurn,
   context,
@@ -384,7 +383,6 @@ export function ConversationView({
   composerForm,
   showComposer = true,
 }: {
-  title?: string;
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
   context: ResearchContext;
@@ -486,11 +484,6 @@ export function ConversationView({
       className="mx-auto flex min-h-full w-full max-w-[848px] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8"
       ref={rootRef}
     >
-      <header className="border-line sticky top-0 z-10 hidden h-16 shrink-0 items-center border-b bg-[color-mix(in_oklab,var(--color-bg-canvas)_92%,transparent)] px-1 backdrop-blur lg:flex">
-        <h1 className="truncate text-sm font-medium">
-          {title || t("assistant")}
-        </h1>
-      </header>
       <div className="flex-1 pt-6 pb-10 lg:py-8 lg:pb-40">
         {loading ? (
           <p className="text-muted py-12 text-center text-sm" role="status">

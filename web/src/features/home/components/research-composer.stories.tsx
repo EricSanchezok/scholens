@@ -100,6 +100,22 @@ export const MultilineInput: Story = {
   },
 };
 
+export const DesktopReasoningMenuOpen: Story = {
+  globals: {
+    locale: "zh-CN",
+    viewport: { value: "desktop", isRotated: false },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("button", { name: "思考强度：标准" }),
+    );
+    const page = within(canvasElement.ownerDocument.body);
+    await expect(page.getByText("快速、均衡的推理")).toBeVisible();
+    await expect(page.getByText("更充分地分析复杂问题")).toBeVisible();
+  },
+};
+
 export const StreamingStop: Story = {
   args: { busy: true },
   play: async ({ canvasElement }) => {

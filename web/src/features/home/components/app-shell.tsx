@@ -5,7 +5,6 @@ import {
   FastArrowRight,
   LogOut,
   Menu,
-  NavArrowDown,
   NavArrowRight,
   Settings,
 } from "iconoir-react";
@@ -40,7 +39,6 @@ import { useTheme } from "@/design-system/theme/theme-provider";
 import type { Actor } from "@/features/authentication";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
-import type { ReasoningLevel } from "./research-composer";
 import { useMobileKeyboard } from "../hooks/use-mobile-keyboard";
 import {
   AskIcon,
@@ -422,64 +420,6 @@ function MobileNavigation({
   );
 }
 
-function MobileReasoningMenu({
-  onChange,
-  value,
-}: {
-  onChange: (level: ReasoningLevel) => void;
-  value: ReasoningLevel;
-}) {
-  const t = useTranslations("Home.composer");
-
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <button
-          aria-label={t("reasoningStrengthValue", {
-            value: t(value),
-          })}
-          className={cn(
-            "hover:bg-hover active:bg-pressed ml-1 flex min-h-11 min-w-0 items-center gap-1 rounded-[var(--radius-md)] px-2.5 text-left",
-            keyboardFocusRing,
-          )}
-          type="button"
-        >
-          <span className="truncate text-base font-semibold">{t(value)}</span>
-          <Icon glyph={NavArrowDown} size={16} tone="secondary" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-[min(17rem,calc(100vw-1.5rem))] p-1.5"
-        sideOffset={4}
-      >
-        <DropdownMenuLabel>{t("reasoningStrength")}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          onValueChange={(nextValue) => onChange(nextValue as ReasoningLevel)}
-          value={value}
-        >
-          {(["standard", "deep"] as const).map((level) => (
-            <DropdownMenuRadioItem
-              className="min-h-14 items-start py-2.5"
-              key={level}
-              value={level}
-            >
-              <span className="min-w-0">
-                <span className="text-foreground block font-medium">
-                  {t(level)}
-                </span>
-                <span className="text-secondary mt-0.5 block text-xs leading-4">
-                  {t(`${level}Description`)}
-                </span>
-              </span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function MobileTabBar() {
   const t = useTranslations("Home.navigation");
   const itemClassName = cn(
@@ -687,9 +627,7 @@ export function AppShell({
   activeConversationId,
   collapsed,
   signingOut,
-  reasoningLevel,
   onCollapsedChange,
-  onReasoningLevelChange,
   onSignOut,
   mobileComposer,
   mobileKeyboardOverride,
@@ -700,9 +638,7 @@ export function AppShell({
   activeConversationId?: string;
   collapsed: boolean;
   signingOut: boolean;
-  reasoningLevel: ReasoningLevel;
   onCollapsedChange: (collapsed: boolean) => void;
-  onReasoningLevelChange: (level: ReasoningLevel) => void;
   onSignOut: () => Promise<void>;
   mobileComposer?: React.ReactNode;
   mobileKeyboardOverride?: {
@@ -780,10 +716,6 @@ export function AppShell({
             >
               <Icon glyph={Menu} size={24} />
             </IconButton>
-            <MobileReasoningMenu
-              onChange={onReasoningLevelChange}
-              value={reasoningLevel}
-            />
             <Link
               aria-label={t("navigation.newChat")}
               className={cn(

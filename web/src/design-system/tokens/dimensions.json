@@ -17,6 +17,7 @@
     "md": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } },
     "lg": { "$type": "dimension", "$value": { "value": 12, "unit": "px" } },
     "xl": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } },
+    "2xl": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } },
     "full": { "$type": "dimension", "$value": { "value": 999, "unit": "px" } }
   },
   "layout": {

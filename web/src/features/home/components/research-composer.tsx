@@ -1,14 +1,26 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUp, Square } from "iconoir-react";
+import {
+  ArrowUp,
+  AtSign,
+  Brain,
+  Flash,
+  NavArrowDown,
+  Square,
+} from "iconoir-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { useForm, type UseFormReturn } from "react-hook-form";
+import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
 
 import {
   Button,
   Checkbox,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
   IconButton,
   keyboardFocusRing,
   Popover,
@@ -22,7 +34,7 @@ import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { composerSchema, type ComposerValues } from "../schemas";
-import { LibraryIcon, PaperIcon, ProjectIcon } from "./home-icons";
+import { PaperIcon } from "./home-icons";
 
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
@@ -137,13 +149,6 @@ function ContextPicker({
           })
         : t(display.kind === "library" ? "scopeLibrary" : "scopeEmpty");
   const accessibleLabel = t("scopeAccessible", { scope: displayLabel });
-  const contextGlyph =
-    display.kind === "project"
-      ? ProjectIcon
-      : display.kind === "paper" || display.kind === "papers"
-        ? PaperIcon
-        : LibraryIcon;
-  const contextIconSize = display.kind === "project" ? 16 : 20;
 
   function updateSelection(
     field: "project_ids" | "document_ids",
@@ -166,14 +171,14 @@ function ContextPicker({
         <button
           aria-label={accessibleLabel}
           className={cn(
-            "border-line bg-surface hover:bg-hover flex h-12 max-w-[min(9.5rem,36.25vw)] items-center gap-1.5 rounded-full border px-3 font-medium lg:size-9 lg:justify-center lg:p-0",
+            "hover:bg-hover active:bg-pressed grid size-12 shrink-0 place-items-center rounded-full lg:size-11",
             keyboardFocusRing,
           )}
           disabled={disabled}
+          title={displayLabel}
           type="button"
         >
-          <Icon glyph={contextGlyph} size={contextIconSize} />
-          <span className="truncate lg:hidden">{displayLabel}</span>
+          <Icon glyph={AtSign} size={20} />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -343,31 +348,66 @@ function ReasoningSelector({
   value: ReasoningLevel;
 }) {
   const t = useTranslations("Home");
+  const SelectedGlyph = value === "deep" ? Brain : Flash;
+
   return (
-    <div
-      aria-label={t("composer.deepDescription")}
-      className={cn(
-        "border-line bg-surface flex h-11 items-center overflow-hidden rounded-[var(--radius-md)] border lg:h-8 lg:rounded-[var(--radius-sm)] lg:p-1",
-        className,
-      )}
-      role="group"
-    >
-      {(["standard", "deep"] as const).map((level) => (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
         <button
-          aria-pressed={value === level}
+          aria-label={t("composer.reasoningStrengthValue", {
+            value: t(`composer.${value}`),
+          })}
           className={cn(
-            "text-secondary h-11 rounded-[var(--radius-sm)] px-3 text-sm font-medium lg:h-6 lg:rounded-[var(--radius-xs)] lg:px-2 lg:text-xs",
-            value === level && "bg-subtle text-foreground",
+            "hover:bg-hover active:bg-pressed flex h-12 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium lg:h-11",
+            keyboardFocusRing,
+            className,
           )}
           disabled={disabled}
-          key={level}
-          onClick={() => onChange(level)}
           type="button"
         >
-          {t(`composer.${level}`)}
+          <span className="grid size-5 shrink-0 place-items-center">
+            <Icon glyph={SelectedGlyph} size={20} />
+          </span>
+          <span className="truncate">{t(`composer.${value}`)}</span>
+          <span className="grid size-4 shrink-0 place-items-center">
+            <Icon glyph={NavArrowDown} size={16} tone="secondary" />
+          </span>
         </button>
-      ))}
-    </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-[min(18rem,calc(100vw-1.5rem))] p-1.5"
+        sideOffset={8}
+      >
+        <DropdownMenuRadioGroup
+          onValueChange={(nextValue) => onChange(nextValue as ReasoningLevel)}
+          value={value}
+        >
+          {(["standard", "deep"] as const).map((level) => {
+            const Glyph = level === "deep" ? Brain : Flash;
+            return (
+              <DropdownMenuRadioItem
+                className="min-h-16 items-start gap-3 py-2.5 pr-8 pl-2 [&>span:first-child]:right-3 [&>span:first-child]:left-auto"
+                key={level}
+                value={level}
+              >
+                <span className="grid size-6 shrink-0 place-items-center">
+                  <Icon glyph={Glyph} size={20} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-foreground block font-medium">
+                    {t(`composer.${level}`)}
+                  </span>
+                  <span className="text-secondary mt-0.5 block text-xs leading-4">
+                    {t(`composer.${level}Description`)}
+                  </span>
+                </span>
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -402,6 +442,10 @@ export function ResearchComposer({
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const internalForm = useResearchComposerForm();
   const composerForm = form ?? internalForm;
+  const messageValue = useWatch({
+    control: composerForm.control,
+    name: "message",
+  });
   const messageRegistration = composerForm.register("message");
   const { focusHandlers, focusOrigin } =
     useTextControlFocus<HTMLTextAreaElement>({
@@ -411,6 +455,10 @@ export function ResearchComposer({
     context.kind === "selection"
       ? (context.project_ids?.length ?? 0) + (context.document_ids?.length ?? 0)
       : 0;
+  const expanded =
+    selectionCount > 0 ||
+    messageValue.includes("\n") ||
+    messageValue.trim().length > 88;
 
   async function submit(values: ComposerValues) {
     await onSubmit(values.message.trim());
@@ -419,11 +467,13 @@ export function ResearchComposer({
   return (
     <form
       className={cn(
-        "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2 rounded-[var(--radius-xl)] border p-2.5 lg:px-4",
-        compact
-          ? "max-w-[720px] lg:gap-3 lg:pt-4 lg:pb-2"
-          : "max-w-[760px] lg:gap-4 lg:pt-4 lg:pb-3",
+        "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 gap-y-1 rounded-[var(--radius-2xl)] border p-2",
+        compact ? "max-w-[720px]" : "max-w-[760px]",
+        expanded
+          ? "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:rounded-[var(--radius-2xl)] lg:p-3"
+          : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-2",
       )}
+      data-expanded={expanded}
       data-focus-surface
       onSubmit={composerForm.handleSubmit(submit)}
     >
@@ -434,10 +484,10 @@ export function ResearchComposer({
             : t("composer.placeholder")
         }
         className={cn(
-          "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-24 min-h-12 w-full resize-none self-center overflow-y-auto bg-transparent py-3 text-[17px] leading-6 outline-none focus-visible:outline-none lg:col-span-3 lg:col-start-1 lg:max-h-32 lg:py-0 lg:text-sm",
-          compact
-            ? "lg:min-h-[22px] lg:leading-[22px]"
-            : "lg:min-h-7 lg:leading-7",
+          "placeholder:text-muted col-span-3 col-start-1 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-[17px] leading-6 outline-none focus-visible:outline-none lg:max-h-36 lg:text-sm lg:leading-6",
+          expanded
+            ? "lg:col-span-4 lg:col-start-1 lg:min-h-14 lg:px-1"
+            : "lg:col-span-1 lg:col-start-2 lg:min-h-11 lg:self-center lg:px-1 lg:py-2.5",
         )}
         data-focus-delegate="surface"
         data-focus-origin={focusOrigin ?? undefined}
@@ -460,14 +510,21 @@ export function ResearchComposer({
         {...focusHandlers}
       />
       {context.kind === "selection" && selectionCount > 0 ? (
-        <div className="col-span-3 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
+        <div className="col-span-4 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
           <span className="bg-subtle text-secondary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
             <Icon glyph={PaperIcon} size={16} tone="secondary" />
             {t("context.selectionSummary", { count: selectionCount })}
           </span>
         </div>
       ) : null}
-      <div className="col-start-1 row-start-1 lg:row-start-3">
+      <div
+        className={cn(
+          "col-start-1 row-start-2",
+          expanded
+            ? "lg:col-start-1 lg:row-start-3"
+            : "lg:col-start-1 lg:row-start-1",
+        )}
+      >
         <ContextPicker
           context={context}
           disabled={unavailable}
@@ -479,14 +536,22 @@ export function ResearchComposer({
         />
       </div>
       <ReasoningSelector
-        className="hidden lg:col-start-2 lg:row-start-3 lg:flex lg:justify-self-start"
+        className={cn(
+          "col-start-2 row-start-2 justify-self-start",
+          expanded
+            ? "lg:col-start-3 lg:row-start-3 lg:justify-self-end"
+            : "lg:col-start-3 lg:row-start-1",
+        )}
         disabled={unavailable}
         onChange={onReasoningLevelChange}
         value={reasoningLevel}
       />
       {busy && onStop ? (
         <IconButton
-          className="col-start-3 row-start-1 size-12 lg:row-start-3 lg:size-11"
+          className={cn(
+            "col-start-3 row-start-2 size-12 rounded-full lg:col-start-4 lg:size-11",
+            expanded ? "lg:row-start-3" : "lg:row-start-1",
+          )}
           label={t("composer.stop")}
           onClick={onStop}
           type="button"
@@ -495,7 +560,10 @@ export function ResearchComposer({
         </IconButton>
       ) : (
         <IconButton
-          className="col-start-3 row-start-1 size-12 lg:row-start-3 lg:size-11"
+          className={cn(
+            "col-start-3 row-start-2 size-12 rounded-full lg:col-start-4 lg:size-11",
+            expanded ? "lg:row-start-3" : "lg:row-start-1",
+          )}
           disabled={!composerForm.formState.isValid || busy || unavailable}
           label={t("composer.submit")}
           type="submit"

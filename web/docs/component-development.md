@@ -36,6 +36,10 @@ actually shared.
 - Never write product colors directly in a component.
 - Use the Scholens `Icon` wrapper with Iconoir glyphs. Do not import another
   icon library or manually redraw a glyph inside product code.
+- Rows and toolbars that mix icons with labels reserve an explicit, fixed-size,
+  non-shrinking icon slot and align text in a separate flexible slot. Do not
+  rely on each SVG's visible bounds, ad hoc margins, or the label length to
+  establish alignment. Touch target size and glyph size are separate concerns.
 - Every interactive control must have default, hover, pressed, focus-visible,
   disabled, and loading behavior where applicable.
 - Keyboard focus visuals are a design-system primitive. Buttons, links, and
