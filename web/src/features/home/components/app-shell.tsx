@@ -722,7 +722,7 @@ export function AppShell({
               <Icon glyph={Menu} size={24} />
             </IconButton>
             <ReasoningMenu
-              className="mx-1 max-w-56"
+              className="mx-2"
               onChange={onReasoningLevelChange}
               value={reasoningLevel}
               variant="mobileHeader"

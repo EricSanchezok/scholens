@@ -258,6 +258,8 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
   await expect(reasoningTrigger).toBeVisible();
   await reasoningTrigger.click();
   await expect(page.getByRole("menuitemradio")).toHaveCount(2);
+  await expect(page.getByText("Fast, balanced reasoning")).toHaveCount(0);
+  await expect(page.getByText("More thorough reasoning")).toHaveCount(0);
   await expect(
     page.getByRole("menuitemradio", { name: /Standard/ }),
   ).toBeVisible();

@@ -334,6 +334,10 @@ export const MobileReasoningMenuOpen: Story = {
     await expect(
       body.getByRole("menuitemradio", { name: /深入/ }),
     ).toBeVisible();
+    await expect(body.queryByText("快速、均衡的推理")).not.toBeInTheDocument();
+    await expect(
+      body.queryByText("更充分地分析复杂问题"),
+    ).not.toBeInTheDocument();
     await expect(body.queryByText("选择模型")).not.toBeInTheDocument();
   },
 };

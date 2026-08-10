@@ -355,7 +355,7 @@ export function ReasoningMenu({
           className={cn(
             "hover:bg-hover active:bg-pressed flex min-w-0 items-center gap-1.5 text-sm font-medium",
             mobileHeader
-              ? "h-14 flex-1 rounded-[var(--radius-md)] px-2 text-left"
+              ? "h-11 shrink-0 rounded-[var(--radius-md)] px-3"
               : "h-11 rounded-full px-3",
             keyboardFocusRing,
             className,
@@ -363,14 +363,7 @@ export function ReasoningMenu({
           disabled={disabled}
           type="button"
         >
-          <span className="min-w-0 flex-1">
-            <span className="block truncate">{t(`composer.${value}`)}</span>
-            {mobileHeader ? (
-              <span className="text-secondary block truncate text-xs leading-4 font-normal">
-                {t(`composer.${value}Description`)}
-              </span>
-            ) : null}
-          </span>
+          <span className="truncate">{t(`composer.${value}`)}</span>
           <span className="grid size-4 shrink-0 place-items-center">
             <Icon glyph={NavArrowDown} size={16} tone="secondary" />
           </span>
@@ -378,7 +371,10 @@ export function ReasoningMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align={mobileHeader ? "start" : "end"}
-        className="w-[min(18rem,calc(100vw-1.5rem))] p-1.5"
+        className={cn(
+          "p-1.5",
+          mobileHeader ? "w-32" : "w-[min(18rem,calc(100vw-1.5rem))]",
+        )}
         sideOffset={mobileHeader ? 4 : 8}
       >
         <DropdownMenuRadioGroup
@@ -388,18 +384,29 @@ export function ReasoningMenu({
           {(["standard", "deep"] as const).map((level) => {
             return (
               <DropdownMenuRadioItem
-                className="min-h-16 items-start py-2.5 pr-8 pl-3 [&>span:first-child]:right-3 [&>span:first-child]:left-auto"
+                className={cn(
+                  "pr-8 pl-3 [&>span:first-child]:right-3 [&>span:first-child]:left-auto",
+                  mobileHeader
+                    ? "min-h-11 items-center py-2"
+                    : "min-h-16 items-start py-2.5",
+                )}
                 key={level}
                 value={level}
               >
-                <span className="min-w-0 flex-1">
-                  <span className="text-foreground block font-medium">
+                {mobileHeader ? (
+                  <span className="text-foreground truncate font-medium">
                     {t(`composer.${level}`)}
                   </span>
-                  <span className="text-secondary mt-0.5 block text-xs leading-4">
-                    {t(`composer.${level}Description`)}
+                ) : (
+                  <span className="min-w-0 flex-1">
+                    <span className="text-foreground block font-medium">
+                      {t(`composer.${level}`)}
+                    </span>
+                    <span className="text-secondary mt-0.5 block text-xs leading-4">
+                      {t(`composer.${level}Description`)}
+                    </span>
                   </span>
-                </span>
+                )}
               </DropdownMenuRadioItem>
             );
           })}
