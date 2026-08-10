@@ -329,18 +329,21 @@ function ContextPicker({
   );
 }
 
-function ReasoningSelector({
+export function ReasoningMenu({
   className,
   disabled,
   onChange,
+  variant = "composer",
   value,
 }: {
   className?: string;
   disabled?: boolean;
   onChange: (level: ReasoningLevel) => void;
+  variant?: "composer" | "mobileHeader";
   value: ReasoningLevel;
 }) {
   const t = useTranslations("Home");
+  const mobileHeader = variant === "mobileHeader";
 
   return (
     <DropdownMenu modal={false}>
@@ -350,23 +353,33 @@ function ReasoningSelector({
             value: t(`composer.${value}`),
           })}
           className={cn(
-            "hover:bg-hover active:bg-pressed flex h-12 min-w-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium lg:h-11",
+            "hover:bg-hover active:bg-pressed flex min-w-0 items-center gap-1.5 text-sm font-medium",
+            mobileHeader
+              ? "h-14 flex-1 rounded-[var(--radius-md)] px-2 text-left"
+              : "h-11 rounded-full px-3",
             keyboardFocusRing,
             className,
           )}
           disabled={disabled}
           type="button"
         >
-          <span className="truncate">{t(`composer.${value}`)}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{t(`composer.${value}`)}</span>
+            {mobileHeader ? (
+              <span className="text-secondary block truncate text-xs leading-4 font-normal">
+                {t(`composer.${value}Description`)}
+              </span>
+            ) : null}
+          </span>
           <span className="grid size-4 shrink-0 place-items-center">
             <Icon glyph={NavArrowDown} size={16} tone="secondary" />
           </span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="end"
+        align={mobileHeader ? "start" : "end"}
         className="w-[min(18rem,calc(100vw-1.5rem))] p-1.5"
-        sideOffset={8}
+        sideOffset={mobileHeader ? 4 : 8}
       >
         <DropdownMenuRadioGroup
           onValueChange={(nextValue) => onChange(nextValue as ReasoningLevel)}
@@ -452,7 +465,7 @@ export function ResearchComposer({
   return (
     <form
       className={cn(
-        "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 gap-y-1 rounded-[var(--radius-2xl)] border p-2",
+        "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 rounded-full border p-2",
         compact ? "max-w-[720px]" : "max-w-[760px]",
         expanded
           ? "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:rounded-[var(--radius-2xl)] lg:p-3"
@@ -469,7 +482,7 @@ export function ResearchComposer({
             : t("composer.placeholder")
         }
         className={cn(
-          "placeholder:text-muted col-span-3 col-start-1 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-[17px] leading-6 outline-none focus-visible:outline-none lg:max-h-36 lg:text-sm lg:leading-6",
+          "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 py-3 text-[17px] leading-6 outline-none focus-visible:outline-none lg:max-h-36 lg:text-sm lg:leading-6",
           expanded
             ? "lg:col-span-4 lg:col-start-1 lg:min-h-14 lg:px-1"
             : "lg:col-span-1 lg:col-start-2 lg:min-h-11 lg:self-center lg:px-1 lg:py-2.5",
@@ -504,7 +517,7 @@ export function ResearchComposer({
       ) : null}
       <div
         className={cn(
-          "col-start-1 row-start-2",
+          "col-start-1 row-start-1",
           expanded
             ? "lg:col-start-1 lg:row-start-3"
             : "lg:col-start-1 lg:row-start-1",
@@ -520,9 +533,9 @@ export function ResearchComposer({
           projects={projects}
         />
       </div>
-      <ReasoningSelector
+      <ReasoningMenu
         className={cn(
-          "col-start-2 row-start-2 justify-self-start",
+          "hidden justify-self-start lg:flex",
           expanded
             ? "lg:col-start-3 lg:row-start-3 lg:justify-self-end"
             : "lg:col-start-3 lg:row-start-1",
@@ -534,7 +547,7 @@ export function ResearchComposer({
       {busy && onStop ? (
         <IconButton
           className={cn(
-            "col-start-3 row-start-2 size-12 rounded-full lg:col-start-4 lg:size-11",
+            "col-start-3 row-start-1 size-12 rounded-full lg:col-start-4 lg:size-11",
             expanded ? "lg:row-start-3" : "lg:row-start-1",
           )}
           label={t("composer.stop")}
@@ -546,7 +559,7 @@ export function ResearchComposer({
       ) : (
         <IconButton
           className={cn(
-            "col-start-3 row-start-2 size-12 rounded-full lg:col-start-4 lg:size-11",
+            "col-start-3 row-start-1 size-12 rounded-full lg:col-start-4 lg:size-11",
             expanded ? "lg:row-start-3" : "lg:row-start-1",
           )}
           disabled={!composerForm.formState.isValid || busy || unavailable}

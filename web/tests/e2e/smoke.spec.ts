@@ -239,6 +239,12 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
   await expect(
     dock.getByRole("button", { name: "Research scope: Library" }),
   ).toBeVisible();
+  await expect(
+    dock.getByRole("button", { name: "Reasoning strength: Standard" }),
+  ).toHaveCount(0);
+  expect(
+    (await dock.locator("form").boundingBox())?.height,
+  ).toBeLessThanOrEqual(72);
   const touchTargets = dock.locator("button:visible, a:visible");
   for (let index = 0; index < (await touchTargets.count()); index += 1) {
     const box = await touchTargets.nth(index).boundingBox();
@@ -246,9 +252,11 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
     expect(box?.width).toBeGreaterThanOrEqual(48);
   }
 
-  await page
-    .getByRole("button", { name: "Reasoning strength: Standard" })
-    .click();
+  const reasoningTrigger = page.getByRole("button", {
+    name: "Reasoning strength: Standard",
+  });
+  await expect(reasoningTrigger).toBeVisible();
+  await reasoningTrigger.click();
   await expect(page.getByRole("menuitemradio")).toHaveCount(2);
   await expect(
     page.getByRole("menuitemradio", { name: /Standard/ }),

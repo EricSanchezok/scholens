@@ -318,9 +318,15 @@ export const MobileReasoningMenuOpen: Story = {
   ...MobileEmpty,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      await canvas.findByRole("button", { name: "思考强度：标准" }),
-    );
+    const trigger = await canvas.findByRole("button", {
+      name: "思考强度：标准",
+    });
+    await expect(
+      within(canvas.getByTestId("mobile-bottom-dock")).queryByRole("button", {
+        name: "思考强度：标准",
+      }),
+    ).toBeNull();
+    await userEvent.click(trigger);
     const body = within(document.body);
     await expect(
       await body.findByRole("menuitemradio", { name: /标准/ }),

@@ -46,6 +46,7 @@ import {
   NewConversationIcon,
   ProjectIcon,
 } from "./home-icons";
+import { ReasoningMenu, type ReasoningLevel } from "./research-composer";
 
 type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
 
@@ -627,7 +628,9 @@ export function AppShell({
   activeConversationId,
   collapsed,
   signingOut,
+  reasoningLevel,
   onCollapsedChange,
+  onReasoningLevelChange,
   onSignOut,
   mobileComposer,
   mobileKeyboardOverride,
@@ -638,7 +641,9 @@ export function AppShell({
   activeConversationId?: string;
   collapsed: boolean;
   signingOut: boolean;
+  reasoningLevel: ReasoningLevel;
   onCollapsedChange: (collapsed: boolean) => void;
+  onReasoningLevelChange: (level: ReasoningLevel) => void;
   onSignOut: () => Promise<void>;
   mobileComposer?: React.ReactNode;
   mobileKeyboardOverride?: {
@@ -716,6 +721,12 @@ export function AppShell({
             >
               <Icon glyph={Menu} size={24} />
             </IconButton>
+            <ReasoningMenu
+              className="mx-1 max-w-56"
+              onChange={onReasoningLevelChange}
+              value={reasoningLevel}
+              variant="mobileHeader"
+            />
             <Link
               aria-label={t("navigation.newChat")}
               className={cn(

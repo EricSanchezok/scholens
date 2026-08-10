@@ -180,6 +180,7 @@ The mobile Dock acceptance inventory extends that mapping:
 | Multiple-paper scope              | `Research Composer / Multiple Papers Scope`         |
 | Long project scope at 320 px      | `Research Composer / Long Project Scope`            |
 | Multiline input                   | `Research Composer / Multiline Input`               |
+| Mobile reasoning menu             | `Workspace / Mobile Reasoning Menu Open`            |
 | Desktop reasoning menu            | `Research Composer / Desktop Reasoning Menu Open`   |
 | Streaming / Stop                  | `Research Composer / Streaming Stop`                |
 | 430 px Dark English               | `Research Composer / Dark English Large`            |
@@ -215,9 +216,9 @@ receive every tool update. The same semantic component is used on desktop and
 mobile, with compact responsive spacing and no inner scrolling surface.
 
 On phones, the shell uses a 64 px content bar plus platform safe-area insets.
-The bar owns navigation and the new-chat action; reasoning strength lives in
-the Composer on every viewport. The selector exposes only Standard and Deep;
-model selection is not part of the Scholens product surface. Conversation content uses a stable
+The bar owns navigation, a text-only reasoning-strength selector, and the
+new-chat action. The selector exposes only Standard and Deep; model selection
+is not part of the Scholens product surface. Conversation content uses a stable
 16 px body with 28 px line height, 22/19/17 px heading steps, and 20 px
 horizontal gutters at the primary phone widths (16 px at 320 px). Browser text
 adjustment is fixed at 100%, preventing Android Chrome from inflating a long
@@ -241,13 +242,14 @@ separated by 4 px inside the Dock rather than behaving as independent floating
 surfaces; a non-layout 20 px fade softens the transition from scrolling content.
 Only one real Composer is mounted at a time. On desktop it rests as a rounded
 single-line bar and expands to a rounded panel for multiline input or selected
-sources. On phones it uses a two-row composition: input first, then context,
-reasoning, and submit actions in the thumb zone. Context is represented by one
-Iconoir AtSign trigger; its accessible name and native title carry the current
-library, project, paper, mixed-item, or empty-selection scope. Standard and
-Deep open one descriptive, text-only radio menu instead of a segmented toggle;
-decorative mode icons do not repeat the labels. The separate selected-source
-chip remains desktop-only.
+sources. On phones it stays one compact row above primary navigation: the
+Iconoir AtSign context trigger anchors the left, the input owns the flexible
+middle slot, and the circular submit or stop action anchors the right. The
+context trigger's accessible name and native title carry the current library,
+project, paper, mixed-item, or empty-selection scope. Standard and Deep open
+one descriptive, text-only radio menu from the phone header or desktop
+Composer instead of a segmented toggle; decorative mode icons do not repeat
+the labels. The separate selected-source chip remains desktop-only.
 The canonical responsive Composer contract is Figma node
 [`923:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=923-2628),
 `Matrix / Composer v2`. It supersedes earlier isolated Composer compositions;

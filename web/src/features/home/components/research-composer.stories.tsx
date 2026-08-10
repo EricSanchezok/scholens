@@ -33,11 +33,15 @@ type Story = StoryObj<typeof meta>;
 
 export const LibraryScope: Story = {
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
     await expect(
-      within(canvasElement).getByRole("button", {
+      canvas.getByRole("button", {
         name: "研究范围：资料库",
       }),
     ).toBeVisible();
+    await expect(
+      canvas.queryByRole("button", { name: "思考强度：标准" }),
+    ).toBeNull();
   },
 };
 
