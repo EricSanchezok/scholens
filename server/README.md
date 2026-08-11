@@ -131,6 +131,15 @@ stream retains a bounded two-second sidecar tail before `complete`.
 There is no private delimiter. Clients may abort the request, but must not
 automatically retry this non-idempotent operation.
 
+Paper ingestion has a separate operation-scoped idempotency contract. Uploads
+and DOI/arXiv/direct-PDF sources return `202` only after the canonical Library
+ingestion row, durable job, and outbox dispatch are committed. If the browser
+loses that response, it reconciles or repeats the same parameters with the same
+`Idempotency-Key`; it must not create a second operation. The Papers list
+returns completed papers and active/failed ingestions as one discriminated
+collection. `DELETE /api/v1/paper-ingestions/{job_id}` cancels an owned
+ingestion, and late worker callbacks cannot restore it.
+
 # Migrations
 
 This project uses Alembic for database migrations. Commands are run through the

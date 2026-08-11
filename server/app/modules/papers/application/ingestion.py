@@ -6,19 +6,13 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from app.modules.papers.domain import normalize_idempotency_key
-from app.modules.jobs.application.actions import JOB_COMPLETED, JOB_CREATED, JOB_FAILED
-from app.modules.papers.application.actions import (
-    DOCUMENT_PROCESSING_FAILED,
-    LIBRARY_PAPER_REMOVED,
+from app.modules.jobs.application.actions import JOB_CREATED, JOB_FAILED
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
 )
-from app.modules.projects.application.actions import PROJECT_PAPER_REMOVED
 from app.modules.operation_journal.application import OperationJournal
-from app.modules.operation_journal.domain import (
-    OperationAction,
-    OperationChange,
-    ResourceRef,
-)
+from app.modules.operation_journal.domain import OperationAction, ResourceRef
+from app.modules.papers.domain import normalize_idempotency_key
 from app.shared.application import Actor, OperationContext
 
 PAPER_INGESTED = OperationAction("paper.ingested")
@@ -31,20 +25,10 @@ class FetchedPdf:
 
 
 @dataclass(frozen=True, slots=True)
-class IngestionReservation:
-    job_id: UUID
+class AcceptedIngestion:
+    ingestion: LibraryPaperIngestionResponse
     replayed: bool
-    reaped_stale_uploads: tuple[ReapedStaleIngestion, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class ReapedStaleIngestion:
-    job_id: UUID
-    document_id: UUID | None
-    project_id: UUID | None
-    reference_removed: bool
-    document_processing_failed: bool
-    created_gc_job_id: UUID | None
+    processing_required: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,17 +42,21 @@ class IngestionFinalization:
 
 
 @dataclass(frozen=True, slots=True)
-class IngestionRetryReservation:
+class RetrySource:
     job_id: UUID
     content_sha256: str
     filename: str | None
-    replayed: bool
+    display_name: str
+    source_kind: str
+    project_id: UUID | None
 
 
 @dataclass(frozen=True, slots=True)
 class PreparedPaperInput:
     content: bytes
     filename: str | None
+    display_name: str
+    source_kind: str
 
 
 class PdfInputValidator(Protocol):
@@ -93,7 +81,7 @@ class PaperIngestionLimits(Protocol):
 
 
 class PaperIngestionGateway(Protocol):
-    def reserve(
+    def accept(
         self,
         *,
         actor: Actor,
@@ -102,28 +90,25 @@ class PaperIngestionGateway(Protocol):
         project_id: UUID | None,
         content: bytes,
         filename: str | None,
+        display_name: str,
+        source_kind: str,
         idempotency_key: str | None,
-    ) -> IngestionReservation: ...
+        job_id: UUID,
+        retry_of: UUID | None,
+    ) -> AcceptedIngestion: ...
 
     def fail(self, *, actor: Actor, job_id: UUID, error_code: str) -> bool: ...
 
-    def finalize(
-        self,
-        *,
-        actor: Actor,
-        job_id: UUID,
-        content: bytes,
-    ) -> IngestionFinalization: ...
+    def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource: ...
 
-    def retry(
+    def cancel(
         self,
         *,
         actor: Actor,
         job_id: UUID,
         correlation_id: UUID,
         origin_operation_id: UUID,
-        idempotency_key: str | None,
-    ) -> IngestionRetryReservation: ...
+    ) -> bool: ...
 
 
 class IngestPaper:
@@ -150,18 +135,31 @@ class IngestPaper:
     ) -> PreparedPaperInput:
         await self._limits.enforce_rate(actor=actor, ip_address=ip_address)
         self._validator.validate(content=content, source=filename or "upload")
-        return PreparedPaperInput(content=content, filename=filename)
+        display_name = (filename or "paper.pdf").strip() or "paper.pdf"
+        return PreparedPaperInput(
+            content=content,
+            filename=filename,
+            display_name=display_name,
+            source_kind="upload",
+        )
 
     def prepare_persisted(
         self,
         *,
         content: bytes,
         filename: str | None,
+        display_name: str,
+        source_kind: str,
     ) -> PreparedPaperInput:
         """Revalidate a persisted source without charging a new HTTP rate limit."""
 
         self._validator.validate(content=content, source=filename or "persisted upload")
-        return PreparedPaperInput(content=content, filename=filename)
+        return PreparedPaperInput(
+            content=content,
+            filename=filename,
+            display_name=display_name,
+            source_kind=source_kind,
+        )
 
     async def prepare_url(
         self,
@@ -170,6 +168,8 @@ class IngestPaper:
         url: str,
         source: PdfUrlSource,
         ip_address: str,
+        display_name: str,
+        source_kind: str,
     ) -> PreparedPaperInput:
         await self._limits.enforce_rate(actor=actor, ip_address=ip_address)
         fetched = await source.fetch(url=url)
@@ -177,9 +177,11 @@ class IngestPaper:
         return PreparedPaperInput(
             content=fetched.content,
             filename=fetched.filename,
+            display_name=display_name,
+            source_kind=source_kind,
         )
 
-    def reserve(
+    def accept(
         self,
         *,
         actor: Actor,
@@ -187,111 +189,36 @@ class IngestPaper:
         prepared: PreparedPaperInput,
         project_id: UUID | None,
         idempotency_key: str | None,
-    ) -> IngestionReservation:
-        reservation = self._gateway.reserve(
+        job_id: UUID,
+        retry_of: UUID | None = None,
+    ) -> AcceptedIngestion:
+        accepted = self._gateway.accept(
             actor=actor,
             correlation_id=operation.trace.correlation_id,
             origin_operation_id=operation.trace.operation_id,
             project_id=project_id,
             content=prepared.content,
             filename=prepared.filename,
+            display_name=prepared.display_name,
+            source_kind=prepared.source_kind,
             idempotency_key=normalize_idempotency_key(idempotency_key),
+            job_id=job_id,
+            retry_of=retry_of,
         )
-        changes: list[OperationChange] = []
-        for reaped in reservation.reaped_stale_uploads:
-            changes.append(
-                OperationChange(
-                    action=JOB_FAILED,
-                    resources=(ResourceRef("job", str(reaped.job_id)),),
-                )
+        if not accepted.replayed:
+            self._journal.append(
+                actor=actor,
+                operation=operation,
+                action=JOB_CREATED,
+                resources=(ResourceRef("job", str(accepted.ingestion.id)),),
             )
-            if reaped.document_id is not None:
-                if reaped.document_processing_failed:
-                    changes.append(
-                        OperationChange(
-                            action=DOCUMENT_PROCESSING_FAILED,
-                            resources=(
-                                ResourceRef("document", str(reaped.document_id)),
-                            ),
-                        )
-                    )
-                if reaped.reference_removed:
-                    resources = [ResourceRef("document", str(reaped.document_id))]
-                    if reaped.project_id is None:
-                        action = LIBRARY_PAPER_REMOVED
-                    else:
-                        action = PROJECT_PAPER_REMOVED
-                        resources.append(ResourceRef("project", str(reaped.project_id)))
-                    changes.append(
-                        OperationChange(action=action, resources=tuple(resources))
-                    )
-            if reaped.created_gc_job_id is not None:
-                changes.append(
-                    OperationChange(
-                        action=JOB_CREATED,
-                        resources=(ResourceRef("job", str(reaped.created_gc_job_id)),),
-                    )
-                )
-        if not reservation.replayed:
-            changes.append(
-                OperationChange(
-                    action=JOB_CREATED,
-                    resources=(ResourceRef("job", str(reservation.job_id)),),
-                )
-            )
-        self._journal.append_many(
-            actor=actor,
-            operation=operation,
-            changes=changes,
-        )
-        return reservation
+        return accepted
 
     async def acquire(self, *, actor: Actor, job_id: UUID) -> None:
         await self._limits.acquire(actor=actor, job_id=job_id)
 
     async def release(self, *, actor: Actor, job_id: UUID) -> None:
         await self._limits.release(actor=actor, job_id=job_id)
-
-    def finalize(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        job_id: UUID,
-        prepared: PreparedPaperInput,
-    ) -> IngestionFinalization:
-        result = self._gateway.finalize(
-            actor=actor,
-            job_id=job_id,
-            content=prepared.content,
-        )
-        changes: list[OperationChange] = []
-        if result.changed:
-            resources = [
-                ResourceRef("document", str(result.document_id)),
-                ResourceRef("job", str(result.job_id)),
-            ]
-            if result.project_id is not None:
-                resources.append(ResourceRef("project", str(result.project_id)))
-            changes.append(
-                OperationChange(
-                    action=PAPER_INGESTED,
-                    resources=tuple(resources),
-                )
-            )
-        if result.job_completed:
-            changes.append(
-                OperationChange(
-                    action=JOB_COMPLETED,
-                    resources=(ResourceRef("job", str(result.job_id)),),
-                )
-            )
-        self._journal.append_many(
-            actor=actor,
-            operation=operation,
-            changes=changes,
-        )
-        return result
 
     def fail(
         self,
@@ -314,26 +241,27 @@ class IngestPaper:
                 resources=(ResourceRef(type="job", id=str(job_id)),),
             )
 
-    def retry(
+    def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource:
+        return self._gateway.retry_source(actor=actor, job_id=job_id)
+
+    def cancel(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         job_id: UUID,
-        idempotency_key: str | None,
-    ) -> IngestionRetryReservation:
-        result = self._gateway.retry(
+    ) -> bool:
+        changed = self._gateway.cancel(
             actor=actor,
             job_id=job_id,
             correlation_id=operation.trace.correlation_id,
             origin_operation_id=operation.trace.operation_id,
-            idempotency_key=normalize_idempotency_key(idempotency_key),
         )
-        if not result.replayed:
+        if changed:
             self._journal.append(
                 actor=actor,
                 operation=operation,
-                action=JOB_CREATED,
-                resources=(ResourceRef("job", str(result.job_id)),),
+                action=JOB_FAILED,
+                resources=(ResourceRef("job", str(job_id)),),
             )
-        return result
+        return changed

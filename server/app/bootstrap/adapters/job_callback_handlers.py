@@ -43,6 +43,13 @@ class SqlAlchemyJobLifecycle:
     def heartbeat(self, *, job_id: UUID) -> bool:
         return job_repository.heartbeat(self._db, job_id=job_id)
 
+    def progress(self, *, job_id: UUID, progress_code: str) -> bool:
+        return job_repository.progress(
+            self._db,
+            job_id=job_id,
+            progress_code=progress_code,
+        )
+
     def fail(self, *, job_id: UUID, error_code: str) -> bool:
         _job, changed = job_repository.fail(
             self._db, job_id=job_id, error_code=error_code

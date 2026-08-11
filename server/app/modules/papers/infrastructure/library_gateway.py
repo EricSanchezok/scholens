@@ -7,9 +7,14 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from app.helpers.s3 import s3_service
+from app.database.models import DurableJob, JobDispatch
 from app.modules.papers.application.contracts.documents import (
     DocumentResponse,
     LibraryPaperResponse,
+    LibraryPaperIngestionResponse,
+    LibraryPaperListEntry,
+    LibraryPaperListIngestionEntry,
+    LibraryPaperListPaperEntry,
     LibraryPaperSort,
     LibraryPaperUpdateRequest,
     PublicPaperOwnerResponse,
@@ -23,9 +28,14 @@ from app.modules.papers.application.library import (
     LibraryPaperUpdateResult,
     PublicShare,
 )
-from app.modules.papers.infrastructure.models import Document, LibraryPaper
+from app.modules.papers.infrastructure.models import (
+    Document,
+    LibraryPaper,
+    UploadReservation,
+)
 from app.modules.papers.infrastructure.models import LibraryPaperTag
 from app.modules.papers.infrastructure.repository import document_repository
+from app.shared.domain.enums import JobStatus
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -79,6 +89,40 @@ def library_paper_response(entry: LibraryPaper) -> LibraryPaperResponse:
             "document": document_response(entry.document),
             "created_at": entry.created_at,
             "updated_at": entry.updated_at,
+        }
+    )
+
+
+def library_ingestion_response(
+    reservation: UploadReservation,
+) -> LibraryPaperIngestionResponse:
+    job = reservation.job
+    stages = {
+        "downloading",
+        "parsing",
+        "extracting_metadata",
+        "indexing",
+        "finalizing",
+    }
+    if job.status == JobStatus.RUNNING.value:
+        state = "processing"
+        stage = job.progress_code if job.progress_code in stages else "parsing"
+    elif job.status == JobStatus.FAILED.value:
+        state = "failed"
+        stage = job.progress_code if job.progress_code in stages else "queued"
+    else:
+        state, stage = "queued", "queued"
+    return LibraryPaperIngestionResponse.model_validate(
+        {
+            "id": job.id,
+            "display_name": reservation.display_name,
+            "source_kind": reservation.source_kind,
+            "state": state,
+            "stage": stage,
+            "project_id": job.project_id,
+            "document_id": job.document_id,
+            "error_code": job.error_code,
+            "created_at": job.created_at,
         }
     )
 
@@ -223,7 +267,41 @@ class SqlAlchemyPaperLibraryGateway:
         entries = entries[:limit]
         if direction is LibraryPageDirection.BACKWARD:
             entries.reverse()
-        responses = [library_paper_response(entry) for entry in entries]
+        responses: list[LibraryPaperListEntry] = [
+            LibraryPaperListPaperEntry.model_validate(
+                library_paper_response(entry).model_dump()
+            )
+            for entry in entries
+        ]
+        if direction is LibraryPageDirection.FORWARD and position is None:
+            reservations = list(
+                self._db.scalars(
+                    select(UploadReservation)
+                    .join(DurableJob, DurableJob.id == UploadReservation.id)
+                    .join(JobDispatch, JobDispatch.job_id == DurableJob.id)
+                    .options(selectinload(UploadReservation.job))
+                    .where(
+                        DurableJob.requested_by_id == user_id,
+                        DurableJob.status.in_(
+                            [
+                                JobStatus.PENDING.value,
+                                JobStatus.RUNNING.value,
+                                JobStatus.FAILED.value,
+                            ]
+                        ),
+                        UploadReservation.superseded_by_id.is_(None),
+                    )
+                    .order_by(DurableJob.created_at.desc(), DurableJob.id.desc())
+                    .limit(20)
+                ).all()
+            )
+            ingestion_responses: list[LibraryPaperListEntry] = [
+                LibraryPaperListIngestionEntry(
+                    ingestion=library_ingestion_response(reservation)
+                )
+                for reservation in reservations
+            ]
+            responses = ingestion_responses + responses
         positions = [
             LibraryPagePosition(
                 key=self._paper_key(entry, sort=sort),
@@ -334,7 +412,9 @@ class SqlAlchemyPaperLibraryGateway:
             ).all()
         )
         found = {entry.document_id for entry in entries}
-        missing = [document_id for document_id in document_ids if document_id not in found]
+        missing = [
+            document_id for document_id in document_ids if document_id not in found
+        ]
         if missing:
             from app.shared.domain import AppError, FailureKind
 

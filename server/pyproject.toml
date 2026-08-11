@@ -17,6 +17,7 @@ readme = "README.md"
 dependencies = [
     "sanchezcloud-identity[aliyun,fastapi] @ git+https://github.com/EricSanchezok/sanchezcloud-identity.git@v0.5.2",
     "fastapi>=0.115",
+    "httpx>=0.28.0",
     "uvicorn>=0.34",
     "pydantic[email]>=2.10",
     "python-dotenv>=1.2.2",

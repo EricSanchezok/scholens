@@ -3883,7 +3883,7 @@
             "title": "Operation",
             "type": "string"
           },
-          "progress_message": {
+          "progress_code": {
             "anyOf": [
               {
                 "type": "string"
@@ -3892,7 +3892,7 @@
                 "type": "null"
               }
             ],
-            "title": "Progress Message"
+            "title": "Progress Code"
           },
           "project_id": {
             "anyOf": [
@@ -3943,7 +3943,7 @@
           "document_id",
           "project_id",
           "status",
-          "progress_message",
+          "progress_code",
           "error_code",
           "result",
           "created_at",
@@ -4172,11 +4172,220 @@
         "title": "LibraryPaperContext",
         "type": "object"
       },
+      "LibraryPaperIngestionResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "source_kind": {
+            "enum": [
+              "upload",
+              "doi",
+              "arxiv",
+              "url"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "queued",
+              "downloading",
+              "parsing",
+              "extracting_metadata",
+              "indexing",
+              "finalizing"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "processing",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "source_kind",
+          "state",
+          "stage",
+          "project_id",
+          "document_id",
+          "error_code",
+          "created_at"
+        ],
+        "title": "LibraryPaperIngestionResponse",
+        "type": "object"
+      },
+      "LibraryPaperListIngestionEntry": {
+        "properties": {
+          "entry_type": {
+            "const": "ingestion",
+            "default": "ingestion",
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "ingestion": {
+            "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
+          }
+        },
+        "required": [
+          "ingestion"
+        ],
+        "title": "LibraryPaperListIngestionEntry",
+        "type": "object"
+      },
+      "LibraryPaperListPaperEntry": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentResponse"
+          },
+          "entry_type": {
+            "const": "paper",
+            "default": "paper",
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "last_accessed_at": {
+            "format": "date-time",
+            "title": "Last Accessed At",
+            "type": "string"
+          },
+          "library_entry_id": {
+            "format": "uuid",
+            "title": "Library Entry Id",
+            "type": "string"
+          },
+          "metadata_overrides": {
+            "$ref": "#/components/schemas/DocumentMetadataOverrides"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaperStatus"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryPaperTagResponse"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "library_entry_id",
+          "user_id",
+          "status",
+          "last_accessed_at",
+          "metadata_overrides",
+          "is_public",
+          "preview_url",
+          "tags",
+          "document",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LibraryPaperListPaperEntry",
+        "type": "object"
+      },
       "LibraryPaperListResponse": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/LibraryPaperResponse"
+              "discriminator": {
+                "mapping": {
+                  "ingestion": "#/components/schemas/LibraryPaperListIngestionEntry",
+                  "paper": "#/components/schemas/LibraryPaperListPaperEntry"
+                },
+                "propertyName": "entry_type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/LibraryPaperListPaperEntry"
+                },
+                {
+                  "$ref": "#/components/schemas/LibraryPaperListIngestionEntry"
+                }
+              ]
             },
             "title": "Items",
             "type": "array"
@@ -7488,25 +7697,6 @@
           }
         },
         "title": "UpdateProfileBody",
-        "type": "object"
-      },
-      "UploadAcceptedResponse": {
-        "properties": {
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
-          },
-          "message": {
-            "default": "File upload started",
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "job_id"
-        ],
-        "title": "UploadAcceptedResponse",
         "type": "object"
       },
       "UploadFromSourceRequest": {
@@ -12029,7 +12219,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadAcceptedResponse"
+                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
                 }
               }
             },
@@ -12109,7 +12299,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadAcceptedResponse"
+                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
                 }
               }
             },
@@ -12132,6 +12322,44 @@
           }
         ],
         "summary": "Upload Pdf"
+      }
+    },
+    "/api/v1/paper-ingestions/{job_id}": {
+      "delete": {
+        "operationId": "cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Cancel Pdf Ingestion"
       }
     },
     "/api/v1/paper-ingestions/{job_id}/retries": {
@@ -12172,7 +12400,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadAcceptedResponse"
+                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
                 }
               }
             },

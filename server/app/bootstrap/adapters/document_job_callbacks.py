@@ -265,10 +265,13 @@ def handle_failed_upload(
     reason: str = "Unknown error",
 ) -> tuple[OperationChange, ...]:
     """
-    Handle cleanup for a failed paper upload job.
+    Mark a paper upload as failed while preserving its retry source.
 
-    Removes the paper record and any associated ProjectPaper relationships
-    that were created during the upload process.
+    The provisional Library or Project membership is removed because a failed
+    document is not a usable paper. The canonical document and its source
+    object deliberately remain owned by the unsuperseded failed reservation so
+    the user can retry from the standard ingestion row. Explicit cancellation
+    or removal owns eventual document garbage collection.
 
     Args:
         db: Database session
@@ -333,23 +336,6 @@ def handle_failed_upload(
                     )
                 )
             db.flush()
-            from app.bootstrap.adapters.document_gc import (
-                schedule_document_gc,
-            )
-
-            scheduled_gc = schedule_document_gc(
-                db,
-                document_id=document_id,
-                origin_operation_id=operation.trace.operation_id,
-                correlation_id=operation.trace.correlation_id,
-            )
-            if scheduled_gc is not None and scheduled_gc.created:
-                changes.append(
-                    OperationChange(
-                        action=JOB_CREATED,
-                        resources=(ResourceRef("job", str(scheduled_gc.job_id)),),
-                    )
-                )
 
     try:
         job_repository.fail(

@@ -24,7 +24,9 @@ from app.modules.papers.application.contracts.search import (
     PaperSearchFilters,
     PaperSearchRequest,
 )
-from app.modules.papers.application.contracts.uploads import UploadAcceptedResponse
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
+)
 from app.modules.projects.application.contracts import (
     AddPaperToProjectRequest,
     CollectPaperFromProjectRequest,
@@ -909,7 +911,7 @@ def build_workspace_tool_catalog(
     ) -> ToolOutcome:
         parsed = IngestPaperFromUrlInput.model_validate(arguments)
         idempotency_key = "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest()
-        result: UploadAcceptedResponse = await ingestion.from_url(
+        result: LibraryPaperIngestionResponse = await ingestion.from_url(
             actor=context.actor,
             operation=context.operation,
             url=str(parsed.url),

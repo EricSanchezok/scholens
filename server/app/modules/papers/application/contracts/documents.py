@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated, Literal
 from uuid import UUID
 
 from app.shared.domain import JsonValue
@@ -141,8 +142,42 @@ class LibraryPaperResponse(BaseModel):
     updated_at: datetime
 
 
+class LibraryPaperIngestionResponse(BaseModel):
+    id: UUID
+    display_name: str
+    source_kind: Literal["upload", "doi", "arxiv", "url"]
+    state: Literal["queued", "processing", "failed"]
+    stage: Literal[
+        "queued",
+        "downloading",
+        "parsing",
+        "extracting_metadata",
+        "indexing",
+        "finalizing",
+    ]
+    project_id: UUID | None
+    document_id: UUID | None
+    error_code: str | None
+    created_at: datetime
+
+
+class LibraryPaperListPaperEntry(LibraryPaperResponse):
+    entry_type: Literal["paper"] = "paper"
+
+
+class LibraryPaperListIngestionEntry(BaseModel):
+    entry_type: Literal["ingestion"] = "ingestion"
+    ingestion: LibraryPaperIngestionResponse
+
+
+LibraryPaperListEntry = Annotated[
+    LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry,
+    Field(discriminator="entry_type"),
+]
+
+
 class LibraryPaperListResponse(BaseModel):
-    items: list[LibraryPaperResponse]
+    items: list[LibraryPaperListEntry]
     next_cursor: str | None = None
     previous_cursor: str | None = None
     total_count: int = Field(ge=0)

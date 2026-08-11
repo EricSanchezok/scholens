@@ -7,7 +7,7 @@ import pytest
 
 from app.modules.papers.application.contracts.documents import (
     LibraryOutputSort,
-    LibraryPaperResponse,
+    LibraryPaperListPaperEntry,
     LibraryPaperSort,
 )
 from app.modules.papers.application.library import (
@@ -48,7 +48,7 @@ def _library(*, gateway: MagicMock, outputs: MagicMock) -> PaperLibrary:
 
 def _paper_page(*, item_id: UUID, has_more: bool) -> LibraryPaperPage:
     return LibraryPaperPage(
-        items=[LibraryPaperResponse.model_construct()],
+        items=[LibraryPaperListPaperEntry.model_construct()],
         positions=[LibraryPagePosition(key="2026-08-11T10:00:00+00:00", id=item_id)],
         has_more=has_more,
         total_count=2,

@@ -5,7 +5,7 @@ import socket
 from datetime import datetime
 from urllib.parse import urljoin, urlsplit
 
-import requests
+import httpx
 from app.modules.papers.domain import MAX_PDF_SIZE_MB
 from pypdf import PdfReader
 
@@ -145,15 +145,15 @@ def _validate_public_http_url(url: str) -> None:
             raise ValueError("PDF URL must resolve only to public addresses")
 
 
-def _validate_public_response_peer(response: requests.Response) -> None:
-    connection = getattr(response.raw, "_connection", None)
-    socket_object = getattr(connection, "sock", None)
-    if socket_object is None:
-        response.close()
+def _validate_public_response_peer(response: httpx.Response) -> None:
+    network_stream = response.extensions.get("network_stream")
+    if network_stream is None:
         raise ValueError("Could not verify PDF server address")
-    peer_ip = ipaddress.ip_address(socket_object.getpeername()[0])
+    server_address = network_stream.get_extra_info("server_addr")
+    if not isinstance(server_address, tuple) or not server_address:
+        raise ValueError("Could not verify PDF server address")
+    peer_ip = ipaddress.ip_address(str(server_address[0]))
     if not peer_ip.is_global:
-        response.close()
         raise ValueError("PDF server connection used a non-public address")
 
 
@@ -165,71 +165,73 @@ def validate_url_and_fetch_pdf(url: str) -> tuple[bool, bytes, str]:
     try:
         max_bytes = MAX_PDF_SIZE_MB * 1024 * 1024
         current_url = url
-        with requests.Session() as session:
-            session.trust_env = False
-            response: requests.Response | None = None
-
+        with httpx.Client(
+            trust_env=False,
+            follow_redirects=False,
+            timeout=httpx.Timeout(URL_DOWNLOAD_TIMEOUT_SECONDS),
+        ) as client:
             for redirect_count in range(MAX_URL_REDIRECTS + 1):
                 _validate_public_http_url(current_url)
-                response = session.get(
+                with client.stream(
+                    "GET",
                     current_url,
-                    timeout=URL_DOWNLOAD_TIMEOUT_SECONDS,
-                    stream=True,
-                    allow_redirects=False,
-                    headers={"Accept": "application/pdf"},
-                )
-                _validate_public_response_peer(response)
-                if response.is_redirect or response.is_permanent_redirect:
-                    response.close()
-                    location = response.headers.get("location")
-                    if not location or redirect_count == MAX_URL_REDIRECTS:
-                        return False, b"", "PDF URL has too many redirects"
-                    current_url = urljoin(current_url, location)
-                    continue
-                break
-
-            if response is None:
-                return False, b"", "PDF download failed"
-            with response:
-                response.raise_for_status()
-                content_type = (
-                    response.headers.get("content-type", "").split(";", 1)[0].lower()
-                )
-                if content_type not in ALLOWED_PDF_CONTENT_TYPES:
-                    return False, b"", "URL did not return a PDF content type"
-
-                content_length = response.headers.get("content-length")
-                if content_length:
-                    if not content_length.isdigit():
-                        return (
-                            False,
-                            b"",
-                            "PDF server returned an invalid content length",
-                        )
-                    declared_size = int(content_length)
-                    if declared_size > max_bytes:
-                        return (
-                            False,
-                            b"",
-                            f"File too large (max {MAX_PDF_SIZE_MB}MB)",
-                        )
-                    if declared_size < 1024:
-                        return False, b"", "File too small to be a valid PDF"
-
-                chunks: list[bytes] = []
-                total = 0
-                for chunk in response.iter_content(chunk_size=65536):
-                    if not chunk:
+                    headers={
+                        "Accept": "application/pdf",
+                        "Accept-Encoding": "identity",
+                    },
+                ) as response:
+                    _validate_public_response_peer(response)
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location or redirect_count == MAX_URL_REDIRECTS:
+                            return False, b"", "PDF URL has too many redirects"
+                        current_url = urljoin(current_url, location)
                         continue
-                    total += len(chunk)
-                    if total > max_bytes:
-                        return (
-                            False,
-                            b"",
-                            f"File too large (max {MAX_PDF_SIZE_MB}MB)",
-                        )
-                    chunks.append(chunk)
-                pdf_bytes = b"".join(chunks)
+
+                    response.raise_for_status()
+                    content_type = (
+                        response.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .lower()
+                    )
+                    if content_type not in ALLOWED_PDF_CONTENT_TYPES:
+                        return False, b"", "URL did not return a PDF content type"
+
+                    content_length = response.headers.get("content-length")
+                    if content_length:
+                        if not content_length.isdigit():
+                            return (
+                                False,
+                                b"",
+                                "PDF server returned an invalid content length",
+                            )
+                        declared_size = int(content_length)
+                        if declared_size > max_bytes:
+                            return (
+                                False,
+                                b"",
+                                f"File too large (max {MAX_PDF_SIZE_MB}MB)",
+                            )
+                        if declared_size < 1024:
+                            return False, b"", "File too small to be a valid PDF"
+
+                    chunks: list[bytes] = []
+                    total = 0
+                    for chunk in response.iter_raw(chunk_size=65536):
+                        if not chunk:
+                            continue
+                        total += len(chunk)
+                        if total > max_bytes:
+                            return (
+                                False,
+                                b"",
+                                f"File too large (max {MAX_PDF_SIZE_MB}MB)",
+                            )
+                        chunks.append(chunk)
+                    pdf_bytes = b"".join(chunks)
+                    break
+            else:
+                return False, b"", "PDF URL has too many redirects"
 
         # Validate the downloaded content
         is_valid, error_msg = validate_pdf_content(pdf_bytes, "URL")
@@ -240,7 +242,7 @@ def validate_url_and_fetch_pdf(url: str) -> tuple[bool, bytes, str]:
 
     except ValueError as exc:
         return False, b"", str(exc)
-    except requests.exceptions.RequestException:
+    except httpx.HTTPError:
         logger.info("paper.pdf_url.download_failed", exc_info=True)
         return False, b"", "Failed to download PDF from URL"
     except Exception:

@@ -45,6 +45,8 @@ def _upload_job(*, project_id=None) -> UploadReservation:
         reserved_size_kb=2,
         reserved_reference_count=1,
         original_filename="source.pdf",
+        display_name="source.pdf",
+        source_kind="upload",
     )
     reservation.job = durable_job
     return reservation
@@ -118,6 +120,9 @@ def test_personal_submission_persists_identity_before_broker_publish(
     task_kwargs = add_dispatch.call_args.kwargs["kwargs"]
     assert task_kwargs["s3_object_key"] == document.s3_object_key
     assert task_kwargs["claim_url"].endswith(f"/jobs/{upload_job.id}/claim")
+    assert task_kwargs["progress_url"].endswith(
+        f"/jobs/{upload_job.id}/progress"
+    )
 
 
 def test_project_submission_consumes_reserved_project_destination(

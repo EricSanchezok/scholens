@@ -1,15 +1,26 @@
-"""Cross-module infrastructure adapter for paper ingestion."""
+"""Cross-module infrastructure adapter for atomic paper ingestion."""
 
 from __future__ import annotations
 
 import asyncio
 import re
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import NoReturn
 from urllib.parse import unquote, urlparse
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from app.database.models import DurableJob, JobOperation, JobStatus, UploadReservation
+from app.bootstrap.adapters.document_submission import finalize_reserved_document
+from app.bootstrap.adapters.upload_repository import upload_reservation_repository
+from app.bootstrap.adapters.upload_reservations import reserve_upload
+from app.database.models import (
+    DurableJob,
+    JobOperation,
+    JobStatus,
+    LibraryPaper,
+    ProjectPaper,
+    UploadReservation,
+)
 from app.helpers.ai_limits import (
     AILimitExceeded,
     acquire_concurrency,
@@ -19,23 +30,19 @@ from app.helpers.ai_limits import (
 )
 from app.helpers.paper_search import get_work_by_doi, normalize_doi
 from app.helpers.parser import validate_pdf_content, validate_url_and_fetch_pdf
-from app.modules.jobs.infrastructure.repository import CreateJob, job_repository
+from app.modules.jobs.infrastructure.repository import job_repository
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
+)
 from app.modules.papers.application.ingestion import (
+    AcceptedIngestion,
     FetchedPdf,
-    IngestionFinalization,
-    IngestionReservation,
-    IngestionRetryReservation,
-    ReapedStaleIngestion,
+    RetrySource,
 )
-from app.modules.papers.domain import content_sha256, durable_ingestion_key
-from app.bootstrap.adapters.document_submission import finalize_reserved_document
-from app.bootstrap.adapters.upload_repository import (
-    upload_reservation_repository,
-)
-from app.bootstrap.adapters.upload_reservations import reserve_upload
+from app.modules.papers.domain import content_sha256
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 
@@ -51,20 +58,52 @@ class DefaultPdfInputValidator:
 
 
 class SafePdfUrlSource:
+    _ERRORS: tuple[tuple[tuple[str, ...], str, FailureKind], ...] = (
+        (("too large",), "upload_too_large", FailureKind.INVALID_ARGUMENT),
+        (("encrypted",), "pdf_encrypted", FailureKind.INVALID_ARGUMENT),
+        (
+            (
+                "private",
+                "non-public",
+                "public addresses",
+                "credentials",
+                "scheme",
+                "server address",
+            ),
+            "paper_source_unsafe_address",
+            FailureKind.INVALID_ARGUMENT,
+        ),
+        (
+            ("not a valid pdf", "corrupted", "unreadable", "too small"),
+            "invalid_pdf",
+            FailureKind.INVALID_ARGUMENT,
+        ),
+    )
+
     async def fetch(self, *, url: str) -> FetchedPdf:
         valid, content, error = await asyncio.to_thread(
             validate_url_and_fetch_pdf,
             url,
         )
         if not valid:
+            normalized_error = (error or "").lower()
+            for fragments, code, kind in self._ERRORS:
+                if any(fragment in normalized_error for fragment in fragments):
+                    raise AppError(
+                        code=code,
+                        message=error or "The PDF source could not be accepted",
+                        kind=kind,
+                    )
             raise AppError(
-                code="invalid_pdf_url",
-                message=error or "The URL did not return a valid PDF",
-                kind=FailureKind.INVALID_ARGUMENT,
+                code="paper_source_pdf_unavailable",
+                message=error or "No safely accessible PDF is available",
+                kind=FailureKind.UNAVAILABLE,
             )
         filename = (
             PurePosixPath(unquote(urlparse(url).path)).name or "downloaded-paper.pdf"
         )
+        if not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
         return FetchedPdf(content=content, filename=filename)
 
 
@@ -82,10 +121,10 @@ class DefaultPaperSourceResolver:
                 self._raise_unavailable()
             return normalized
         if kind == "arxiv":
-            arxiv_id = self._normalize_arxiv(normalized)
+            arxiv_id = self.normalize_arxiv_id(normalized)
             if arxiv_id is None:
                 self._raise_unavailable()
-            return f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+            return f"https://arxiv.org/pdf/{arxiv_id}"
         if kind == "doi":
             doi = normalize_doi(normalized)
             if doi is None:
@@ -104,18 +143,22 @@ class DefaultPaperSourceResolver:
         self._raise_unavailable()
 
     @classmethod
-    def _normalize_arxiv(cls, value: str) -> str | None:
-        parsed = urlparse(value)
-        candidate = value
+    def normalize_arxiv_id(cls, value: str) -> str | None:
+        candidate = value.strip()
+        if candidate.lower().startswith("arxiv:"):
+            candidate = candidate[6:].strip()
+        parsed = urlparse(candidate)
         if parsed.scheme or parsed.netloc:
+            if parsed.scheme not in {"http", "https"}:
+                return None
             if parsed.hostname not in {"arxiv.org", "www.arxiv.org"}:
                 return None
             candidate = parsed.path
         candidate = candidate.strip("/")
         for prefix in ("abs/", "pdf/"):
-            if candidate.startswith(prefix):
+            if candidate.lower().startswith(prefix):
                 candidate = candidate[len(prefix) :]
-        if candidate.endswith(".pdf"):
+        if candidate.lower().endswith(".pdf"):
             candidate = candidate[:-4]
         return candidate if cls._ARXIV_ID.fullmatch(candidate) else None
 
@@ -129,12 +172,7 @@ class DefaultPaperSourceResolver:
 
 
 class DefaultPaperIngestionLimits:
-    async def enforce_rate(
-        self,
-        *,
-        actor: Actor,
-        ip_address: str,
-    ) -> None:
+    async def enforce_rate(self, *, actor: Actor, ip_address: str) -> None:
         try:
             await enforce_rate_limit(
                 user_id=actor.id,
@@ -172,7 +210,46 @@ class SqlPaperIngestionGateway:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def reserve(
+    @staticmethod
+    def response(
+        reservation: UploadReservation,
+        *,
+        accepted_terminal: bool = False,
+    ) -> LibraryPaperIngestionResponse:
+        job = reservation.job
+        stages = {
+            "downloading",
+            "parsing",
+            "extracting_metadata",
+            "indexing",
+            "finalizing",
+        }
+        progress = job.progress_code
+        if accepted_terminal:
+            state, stage = "processing", "finalizing"
+        elif job.status == JobStatus.RUNNING.value:
+            state = "processing"
+            stage = progress if progress in stages else "parsing"
+        elif job.status == JobStatus.FAILED.value:
+            state = "failed"
+            stage = progress if progress in stages else "queued"
+        else:
+            state, stage = "queued", "queued"
+        return LibraryPaperIngestionResponse.model_validate(
+            {
+                "id": job.id,
+                "display_name": reservation.display_name,
+                "source_kind": reservation.source_kind,
+                "state": state,
+                "stage": stage,
+                "project_id": job.project_id,
+                "document_id": job.document_id,
+                "error_code": job.error_code,
+                "created_at": job.created_at,
+            }
+        )
+
+    def accept(
         self,
         *,
         actor: Actor,
@@ -181,21 +258,25 @@ class SqlPaperIngestionGateway:
         project_id: UUID | None,
         content: bytes,
         filename: str | None,
+        display_name: str,
+        source_kind: str,
         idempotency_key: str | None,
-    ) -> IngestionReservation:
-        durable_key = durable_ingestion_key(
-            actor_id=actor.id,
-            project_id=project_id,
-            idempotency_key=idempotency_key,
-        )
-        replayed = (
-            durable_key is not None
-            and job_repository.find_by_idempotency_key(
-                self._db,
-                idempotency_key=durable_key,
+        job_id: UUID,
+        retry_of: UUID | None,
+    ) -> AcceptedIngestion:
+        original_reservation: UploadReservation | None = None
+        durable_key: str | None = None
+        if retry_of is not None:
+            original = self._require_failed(actor=actor, job_id=retry_of, lock=True)
+            original_reservation = self._db.get(UploadReservation, original.id)
+            if original_reservation is None:
+                self._not_found()
+            durable_key = (
+                f"pdf-ingestion-retry:{actor.id}:{retry_of}:{idempotency_key}"
+                if idempotency_key is not None
+                else None
             )
-            is not None
-        )
+
         reserved = reserve_upload(
             self._db,
             requester=actor,
@@ -204,28 +285,38 @@ class SqlPaperIngestionGateway:
             project_id=project_id,
             input_size_bytes=len(content),
             original_filename=filename,
+            display_name=display_name,
+            source_kind=source_kind,
             content_sha256=content_sha256(content),
             idempotency_key=idempotency_key,
+            durable_idempotency_key=durable_key,
+            job_id=job_id,
         )
         reservation = reserved.reservation
-        replayed = (
-            replayed
-            or reservation.job.dispatch is not None
-            or reservation.job.document_id is not None
-        )
-        return IngestionReservation(
-            job_id=reservation.id,
-            replayed=replayed,
-            reaped_stale_uploads=tuple(
-                ReapedStaleIngestion(
-                    job_id=reaped.job_id,
-                    document_id=reaped.document_id,
-                    project_id=reaped.project_id,
-                    reference_removed=reaped.reference_removed,
-                    document_processing_failed=reaped.document_processing_failed,
-                    created_gc_job_id=reaped.created_gc_job_id,
-                )
-                for reaped in reserved.reaped_stale_uploads
+        accepted_terminal = reservation.job.status == JobStatus.COMPLETED.value
+        if reserved.created:
+            finalization = finalize_reserved_document(
+                pdf_bytes=content,
+                upload_job=reservation,
+                user=actor,
+                db=self._db,
+            )
+            accepted_terminal = finalization.job_completed
+            if original_reservation is not None:
+                original_reservation.superseded_by_id = reservation.id
+        elif reservation.job.dispatch is None or reservation.job.document_id is None:
+            # A returned ingestion must be complete enough for the outbox to publish.
+            raise RuntimeError("accepted_ingestion_is_not_dispatchable")
+
+        return AcceptedIngestion(
+            ingestion=self.response(
+                reservation,
+                accepted_terminal=accepted_terminal,
+            ),
+            replayed=not reserved.created,
+            processing_required=(
+                reservation.job.status
+                not in {JobStatus.COMPLETED.value, JobStatus.CANCELLED.value}
             ),
         )
 
@@ -244,126 +335,109 @@ class SqlPaperIngestionGateway:
         )
         return changed
 
-    def finalize(
-        self,
-        *,
-        actor: Actor,
-        job_id: UUID,
-        content: bytes,
-    ) -> IngestionFinalization:
-        reservation = upload_reservation_repository.get(
-            self._db,
-            id=job_id,
-            user=actor,
-        )
+    def retry_source(self, *, actor: Actor, job_id: UUID) -> RetrySource:
+        original = self._require_failed(actor=actor, job_id=job_id, lock=False)
+        reservation = self._db.get(UploadReservation, original.id)
         if reservation is None:
-            raise RuntimeError("reserved_ingestion_not_found")
-        return finalize_reserved_document(
-            pdf_bytes=content,
-            upload_job=reservation,
-            user=actor,
-            db=self._db,
+            self._not_found()
+        return RetrySource(
+            job_id=original.id,
+            content_sha256=reservation.content_sha256,
+            filename=reservation.original_filename,
+            display_name=reservation.display_name,
+            source_kind=reservation.source_kind,
+            project_id=original.project_id,
         )
 
-    def retry(
+    def cancel(
         self,
         *,
         actor: Actor,
         job_id: UUID,
         correlation_id: UUID,
         origin_operation_id: UUID,
-        idempotency_key: str | None,
-    ) -> IngestionRetryReservation:
-        original = self._db.scalar(
+    ) -> bool:
+        job = self._db.scalar(
             select(DurableJob)
             .where(
                 DurableJob.id == job_id,
                 DurableJob.requested_by_id == actor.id,
+                DurableJob.operation == JobOperation.PDF_PROCESS.value,
             )
             .with_for_update()
         )
-        if original is None:
+        if job is None:
+            self._not_found()
+        if job.status == JobStatus.CANCELLED.value:
+            return False
+        if job.status == JobStatus.COMPLETED.value:
             raise AppError(
-                code="paper_ingestion_job_not_found",
-                message="Paper ingestion job not found",
-                kind=FailureKind.NOT_FOUND,
+                code="paper_ingestion_cancel_not_allowed",
+                message="Completed paper ingestions cannot be cancelled",
+                kind=FailureKind.CONFLICT,
             )
-        if (
-            original.operation != JobOperation.PDF_PROCESS.value
-            or original.status != JobStatus.FAILED.value
-        ):
+        reservation = self._db.get(UploadReservation, job.id)
+        if reservation is None:
+            self._not_found()
+        if reservation.reference_created and job.document_id is not None:
+            if job.project_id is None:
+                self._db.execute(
+                    delete(LibraryPaper).where(
+                        LibraryPaper.user_id == actor.id,
+                        LibraryPaper.document_id == job.document_id,
+                    )
+                )
+            else:
+                self._db.execute(
+                    delete(ProjectPaper).where(
+                        ProjectPaper.project_id == job.project_id,
+                        ProjectPaper.document_id == job.document_id,
+                    )
+                )
+            from app.bootstrap.adapters.document_gc import schedule_document_gc
+
+            schedule_document_gc(
+                self._db,
+                document_id=job.document_id,
+                origin_operation_id=origin_operation_id,
+                correlation_id=correlation_id,
+            )
+        job.status = JobStatus.CANCELLED.value
+        job.completed_at = datetime.now(UTC)
+        job.lease_expires_at = None
+        job.progress_code = None
+        self._db.flush()
+        return True
+
+    def _require_failed(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+        lock: bool,
+    ) -> DurableJob:
+        statement = select(DurableJob).where(
+            DurableJob.id == job_id,
+            DurableJob.requested_by_id == actor.id,
+            DurableJob.operation == JobOperation.PDF_PROCESS.value,
+        )
+        if lock:
+            statement = statement.with_for_update()
+        job = self._db.scalar(statement)
+        if job is None:
+            self._not_found()
+        if job.status != JobStatus.FAILED.value:
             raise AppError(
                 code="paper_ingestion_retry_not_allowed",
                 message="Only failed paper ingestion jobs can be retried",
                 kind=FailureKind.CONFLICT,
             )
-        original_reservation = self._db.get(UploadReservation, original.id)
-        if original_reservation is None:
-            raise AppError(
-                code="paper_ingestion_job_not_found",
-                message="Paper ingestion job not found",
-                kind=FailureKind.NOT_FOUND,
-            )
-        durable_key = (
-            f"pdf-ingestion-retry:{actor.id}:{job_id}:{idempotency_key}"
-            if idempotency_key is not None
-            else f"pdf-ingestion-retry:{actor.id}:{job_id}:{uuid4()}"
-        )
-        existing = job_repository.find_by_idempotency_key(
-            self._db,
-            idempotency_key=durable_key,
-        )
-        if existing is not None:
-            if existing.payload.get("retry_of") != str(job_id):
-                raise AppError(
-                    code="idempotency_key_reused",
-                    message="The idempotency key was already used for another request",
-                    kind=FailureKind.CONFLICT,
-                )
-            return IngestionRetryReservation(
-                job_id=existing.id,
-                content_sha256=original_reservation.content_sha256,
-                filename=original_reservation.original_filename,
-                replayed=True,
-            )
-        new_job_id = uuid4()
-        persisted = job_repository.create(
-            self._db,
-            request=CreateJob(
-                operation=JobOperation.PDF_PROCESS,
-                requested_by_id=actor.id,
-                correlation_id=correlation_id,
-                origin_operation_id=origin_operation_id,
-                project_id=original.project_id,
-                document_id=original.document_id,
-                idempotency_key=durable_key,
-                payload={
-                    "content_sha256": original_reservation.content_sha256,
-                    "original_filename": original_reservation.original_filename,
-                    "input_size_bytes": original.payload.get("input_size_bytes", 0),
-                    "retry_of": str(job_id),
-                },
-                job_id=new_job_id,
-            ),
-        )
-        reservation = UploadReservation(
-            id=persisted.job.id,
-            quota_owner_id=original_reservation.quota_owner_id,
-            reserved_size_kb=(
-                original_reservation.reserved_size_kb
-                if original.document_id is None
-                else 0
-            ),
-            reserved_reference_count=(0 if original.document_id is not None else 1),
-            content_sha256=original_reservation.content_sha256,
-            original_filename=original_reservation.original_filename,
-        )
-        reservation.job = persisted.job
-        self._db.add(reservation)
-        self._db.flush()
-        return IngestionRetryReservation(
-            job_id=persisted.job.id,
-            content_sha256=reservation.content_sha256,
-            filename=reservation.original_filename,
-            replayed=False,
+        return job
+
+    @staticmethod
+    def _not_found() -> NoReturn:
+        raise AppError(
+            code="paper_ingestion_job_not_found",
+            message="Paper ingestion job not found",
+            kind=FailureKind.NOT_FOUND,
         )

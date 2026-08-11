@@ -38,8 +38,3 @@ class UploadFromSourceRequest(BaseModel):
 
     source: PaperSource
     project_id: UUID | None = None
-
-
-class UploadAcceptedResponse(BaseModel):
-    message: str = "File upload started"
-    job_id: UUID

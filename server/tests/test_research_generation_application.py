@@ -65,6 +65,7 @@ def _job(job_id: UUID) -> JobResponse:
         document_id=None,
         project_id=None,
         status="pending",
+        progress_code=None,
         progress_message=None,
         error_code=None,
         result=None,

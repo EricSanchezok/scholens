@@ -46,6 +46,7 @@ class UploadReservation(Base):
             name="ck_upload_reservations_reserved_reference_count",
         ),
         Index("ix_upload_reservations_quota_owner", "quota_owner_id"),
+        Index("ix_upload_reservations_superseded_by", "superseded_by_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -78,6 +79,13 @@ class UploadReservation(Base):
         server_default="false",
     )
     original_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    display_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("upload_reservations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     job: Mapped["DurableJob"] = relationship(
         "DurableJob",
         foreign_keys=[id],

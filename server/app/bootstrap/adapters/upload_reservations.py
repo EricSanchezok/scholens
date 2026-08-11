@@ -35,10 +35,6 @@ from app.modules.billing.infrastructure.quotas import (
 from app.modules.projects.infrastructure.access import require_project_permission
 from app.shared.application import Actor
 from app.modules.jobs.infrastructure.repository import CreateJob, job_repository
-from app.bootstrap.adapters.upload_lifecycle import (
-    ReapedStaleUpload,
-    reap_stale_uploads,
-)
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -48,7 +44,7 @@ ACTIVE_UPLOAD_STATUSES = (JobStatus.PENDING, JobStatus.RUNNING)
 @dataclass(frozen=True, slots=True)
 class UploadReservationResult:
     reservation: UploadReservation
-    reaped_stale_uploads: tuple[ReapedStaleUpload, ...]
+    created: bool
 
 
 def _active_account_reservations(db: Session, *, owner_id: int) -> tuple[int, int]:
@@ -250,8 +246,12 @@ def reserve_upload(
     project_id: UUID | None,
     input_size_bytes: int,
     original_filename: str | None,
+    display_name: str,
+    source_kind: str,
     content_sha256: str,
     idempotency_key: str | None = None,
+    durable_idempotency_key: str | None = None,
+    job_id: UUID | None = None,
 ) -> UploadReservationResult:
     """Authorize once and persist the destination and quota owner before hand-off."""
     if input_size_bytes <= 0:
@@ -283,15 +283,15 @@ def reserve_upload(
         owner_id = project.owner_id
 
     lock_account_resource_quota(db, user_id=owner_id)
-    durable_idempotency_key = (
+    resolved_idempotency_key = durable_idempotency_key or (
         f"pdf-ingestion:{requester.id}:{project_id or 'library'}:{idempotency_key}"
         if idempotency_key is not None
         else None
     )
-    if durable_idempotency_key is not None:
+    if resolved_idempotency_key is not None:
         existing_job = job_repository.find_by_idempotency_key(
             db,
-            idempotency_key=durable_idempotency_key,
+            idempotency_key=resolved_idempotency_key,
         )
         if existing_job is not None:
             same_request = (
@@ -306,9 +306,15 @@ def reserve_upload(
                     message="The idempotency key was already used for another request",
                     kind=FailureKind.CONFLICT,
                 )
+            if existing_job.status == JobStatus.CANCELLED.value:
+                raise AppError(
+                    code="paper_ingestion_cancelled",
+                    message="This paper ingestion was cancelled",
+                    kind=FailureKind.CONFLICT,
+                )
             return UploadReservationResult(
                 reservation=existing_reservation,
-                reaped_stale_uploads=(),
+                created=False,
             )
 
     existing_document_id = db.scalar(
@@ -345,12 +351,6 @@ def reserve_upload(
             kind=FailureKind.CONFLICT,
         )
 
-    reaped = reap_stale_uploads(
-        db,
-        quota_owner_id=owner_id,
-        origin_operation_id=origin_operation_id,
-        correlation_id=correlation_id,
-    )
     if _has_active_duplicate_reservation(
         db,
         requester_id=requester.id,
@@ -426,7 +426,7 @@ def reserve_upload(
                 kind=FailureKind.PERMISSION_DENIED,
             )
 
-    job_id = uuid4()
+    job_id = job_id or uuid4()
     persisted_job = job_repository.create(
         db,
         request=CreateJob(
@@ -435,7 +435,7 @@ def reserve_upload(
             correlation_id=correlation_id,
             origin_operation_id=origin_operation_id,
             project_id=project_id,
-            idempotency_key=durable_idempotency_key or f"pdf-reservation:{job_id}",
+            idempotency_key=resolved_idempotency_key or f"pdf-reservation:{job_id}",
             payload={
                 "content_sha256": content_sha256,
                 "original_filename": original_filename,
@@ -452,6 +452,8 @@ def reserve_upload(
         reserved_reference_count=reserved_reference_count,
         content_sha256=content_sha256,
         original_filename=original_filename,
+        display_name=display_name,
+        source_kind=source_kind,
     )
     reservation.job = durable_job
     db.add(reservation)
@@ -459,5 +461,5 @@ def reserve_upload(
     db.refresh(reservation)
     return UploadReservationResult(
         reservation=reservation,
-        reaped_stale_uploads=reaped,
+        created=True,
     )

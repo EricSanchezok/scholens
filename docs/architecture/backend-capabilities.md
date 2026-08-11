@@ -253,6 +253,15 @@ filters, sort, and limit. Paper sources enter through the discriminated
 retried by creating a new durable job from the persisted source, never by
 mutating the failed history row.
 
+PDF uploads and source imports share one atomic acceptance boundary. A `202`
+means the personal membership, source reference, durable job, and dispatch
+outbox record are committed and the ingestion is already visible through the
+Papers list union. The response is the canonical ingestion projection rather
+than an upload-only acknowledgement. `DELETE /api/v1/paper-ingestions/{job_id}`
+owns cancellation; cancelled jobs reject replay and ignore late worker
+callbacks. The worker reports bounded lifecycle stages and heartbeats, while
+the Server owns terminal timeout/failure policy.
+
 ## Adding a capability or adapter
 
 1. Define transport-neutral request/response contracts and a port in the

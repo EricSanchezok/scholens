@@ -114,8 +114,9 @@ class SqlAlchemyLibraryOutputsGateway:
                 joinedload(ResearchItem.citation),
                 joinedload(ResearchItem.audio_overview),
                 joinedload(ResearchItem.data_table),
-                joinedload(ResearchItem.highlight_thread)
-                .selectinload(HighlightThread.comments),
+                joinedload(ResearchItem.highlight_thread).selectinload(
+                    HighlightThread.comments
+                ),
             )
         )
         items = list(self._db.scalars(statement).unique().all())
@@ -149,8 +150,12 @@ class SqlAlchemyLibraryOutputsGateway:
             select(ResearchItem)
             .outerjoin(Document, Document.id == ResearchItem.document_id)
             .outerjoin(Project, Project.id == ResearchItem.project_id)
-            .outerjoin(HighlightThread, HighlightThread.research_item_id == ResearchItem.id)
-            .outerjoin(CitationOutput, CitationOutput.research_item_id == ResearchItem.id)
+            .outerjoin(
+                HighlightThread, HighlightThread.research_item_id == ResearchItem.id
+            )
+            .outerjoin(
+                CitationOutput, CitationOutput.research_item_id == ResearchItem.id
+            )
             .outerjoin(
                 ResearchAudioOverview,
                 ResearchAudioOverview.research_item_id == ResearchItem.id,
@@ -223,7 +228,9 @@ class SqlAlchemyLibraryOutputsGateway:
     @staticmethod
     def _title(item: ResearchItem) -> str:
         if item.kind == ResearchItemKind.HIGHLIGHT_THREAD.value:
-            return (item.highlight_thread.quote_text if item.highlight_thread else "")[:240]
+            return (item.highlight_thread.quote_text if item.highlight_thread else "")[
+                :240
+            ]
         if item.kind == ResearchItemKind.CITATION.value:
             data_value = item.citation.snapshot.get("data") if item.citation else None
             data = (

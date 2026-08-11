@@ -83,3 +83,11 @@ projection metadata and must not infer ownership by composing unrelated APIs.
 Paper ingestion jobs retain immutable failure history. A retry creates a new
 `DurableJob` referencing the persisted PDF source and original Project context;
 it does not reset or overwrite the failed job.
+
+An ingestion operation owns its reservation, source identity, DurableJob, and
+dispatch outbox record. Server commits those records together before returning
+acceptance. Jobs may report progress or a terminal result only through the
+signed callback boundary; it never creates Library membership directly.
+Cancellation is a terminal Server decision. Storage cleanup is scheduled after
+the transaction, and any callback arriving after cancellation is an idempotent
+no-op rather than a second state authority.

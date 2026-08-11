@@ -83,8 +83,8 @@ class DurableJob(Base):
         default=JobStatus.PENDING.value,
         server_default=JobStatus.PENDING.value,
     )
-    progress_message: Mapped[str | None] = mapped_column(
-        String(240),
+    progress_code: Mapped[str | None] = mapped_column(
+        String(40),
         nullable=True,
     )
     payload: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)

@@ -205,6 +205,9 @@
     "/api/v1/paper-ingestions/uploads": [
       "post"
     ],
+    "/api/v1/paper-ingestions/{job_id}": [
+      "delete"
+    ],
     "/api/v1/paper-ingestions/{job_id}/retries": [
       "post"
     ],

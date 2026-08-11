@@ -58,5 +58,17 @@ class JobsClient:
                 raise RuntimeError("jobs_broker_unavailable") from exc
             raise RuntimeError("jobs_publish_failed") from exc
 
+    def revoke(self, *, job_id: str) -> None:
+        """Best-effort queued-task cancellation; workers stop cooperatively.
+
+        Deliberately do not use ``terminate=True``: Celery documents that as an
+        administrator-only last resort because the worker process may already
+        have moved on to a different task.
+        """
+        try:
+            self._celery_app.control.revoke(job_id, terminate=False)
+        except Exception as exc:
+            raise RuntimeError("jobs_revoke_failed") from exc
+
 
 jobs_client = JobsClient()

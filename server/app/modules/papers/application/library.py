@@ -13,6 +13,7 @@ from app.modules.papers.application.contracts.documents import (
     CollectPublicPaperResponse,
     DocumentResponse,
     LibraryPaperListResponse,
+    LibraryPaperListEntry,
     LibraryOutputListResponse,
     LibraryOutputResponse,
     LibraryOutputSort,
@@ -59,7 +60,7 @@ class LibraryPagePosition:
 
 @dataclass(frozen=True, slots=True)
 class LibraryPaperPage:
-    items: list[LibraryPaperResponse]
+    items: list[LibraryPaperListEntry]
     positions: list[LibraryPagePosition]
     has_more: bool
     total_count: int
@@ -450,9 +451,7 @@ class PaperLibrary:
                 changes.append(
                     OperationChange(
                         action=JOB_CREATED,
-                        resources=(
-                            ResourceRef("job", str(result.created_gc_job_id)),
-                        ),
+                        resources=(ResourceRef("job", str(result.created_gc_job_id)),),
                     )
                 )
         self._journal.append_many(actor=actor, operation=operation, changes=changes)
@@ -541,9 +540,7 @@ class PaperLibrary:
         if not page.positions:
             return None
         has_next = (
-            page.has_more
-            if direction is LibraryPageDirection.FORWARD
-            else had_position
+            page.has_more if direction is LibraryPageDirection.FORWARD else had_position
         )
         if not has_next:
             return None

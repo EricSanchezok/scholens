@@ -17,6 +17,18 @@ class JobClaimResponse(BaseModel):
     claimed: bool
 
 
+class JobProgressRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    progress_code: Literal[
+        "downloading",
+        "parsing",
+        "extracting_metadata",
+        "indexing",
+        "finalizing",
+    ]
+
+
 class JobCallbackIdentity(BaseModel):
     task_id: UUID
 
@@ -98,7 +110,7 @@ class JobResponse(BaseModel):
     document_id: UUID | None
     project_id: UUID | None
     status: str
-    progress_message: str | None
+    progress_code: str | None
     error_code: str | None
     result: dict[str, JsonValue] | None
     created_at: datetime

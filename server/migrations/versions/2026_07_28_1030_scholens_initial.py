@@ -780,7 +780,7 @@ def upgrade() -> None:
         sa.Column(
             "status", sa.String(length=16), server_default="pending", nullable=False
         ),
-        sa.Column("progress_message", sa.String(length=240), nullable=True),
+        sa.Column("progress_code", sa.String(length=40), nullable=True),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("result", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("error_code", sa.String(length=80), nullable=True),
@@ -1445,6 +1445,9 @@ def upgrade() -> None:
             "reference_created", sa.Boolean(), server_default="false", nullable=False
         ),
         sa.Column("original_filename", sa.String(length=512), nullable=True),
+        sa.Column("display_name", sa.String(length=512), nullable=False),
+        sa.Column("source_kind", sa.String(length=16), nullable=False),
+        sa.Column("superseded_by_id", sa.UUID(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -1467,6 +1470,11 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["id"], ["scholens.jobs.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
+            ["superseded_by_id"],
+            ["scholens.upload_reservations.id"],
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
             ["quota_owner_id"], ["auth.users.id"], ondelete="RESTRICT"
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -1483,6 +1491,13 @@ def upgrade() -> None:
         "ix_upload_reservations_quota_owner",
         "upload_reservations",
         ["quota_owner_id"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_index(
+        "ix_upload_reservations_superseded_by",
+        "upload_reservations",
+        ["superseded_by_id"],
         unique=False,
         schema="scholens",
     )
@@ -1871,6 +1886,11 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("research_items", schema="scholens")
+    op.drop_index(
+        "ix_upload_reservations_superseded_by",
+        table_name="upload_reservations",
+        schema="scholens",
+    )
     op.drop_index(
         "ix_upload_reservations_quota_owner",
         table_name="upload_reservations",

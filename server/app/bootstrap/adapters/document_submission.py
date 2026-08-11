@@ -155,6 +155,9 @@ def finalize_reserved_document(
                     f"{base_url}/internal/v1/jobs/{upload_job.id}/complete"
                 ),
                 "claim_url": f"{base_url}/internal/v1/jobs/{upload_job.id}/claim",
+                "progress_url": (
+                    f"{base_url}/internal/v1/jobs/{upload_job.id}/progress"
+                ),
                 "skip_metadata_extraction": skip_metadata_extraction,
             },
         )

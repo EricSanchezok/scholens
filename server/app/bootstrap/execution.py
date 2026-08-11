@@ -277,12 +277,14 @@ def create_paper_ingestion_workflow(
         build_paper_source_resolver,
         build_pdf_url_source,
     )
+    from app.modules.jobs.infrastructure.client import jobs_client
 
     return PaperIngestionWorkflow(
         executor=executor,
         url_source=build_pdf_url_source(),
         source_resolver=build_paper_source_resolver(),
         operation_factory=operation_factory,
+        jobs=jobs_client,
     )
 
 

@@ -261,6 +261,28 @@ class JobRepository:
         )
 
     @staticmethod
+    def progress(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        progress_code: str,
+        lease: timedelta = DEFAULT_JOB_LEASE,
+    ) -> bool:
+        return bool(
+            db.execute(
+                update(DurableJob)
+                .where(
+                    DurableJob.id == job_id,
+                    DurableJob.status == JobStatus.RUNNING.value,
+                )
+                .values(
+                    progress_code=progress_code,
+                    lease_expires_at=datetime.now(UTC) + lease,
+                )
+            ).rowcount
+        )
+
+    @staticmethod
     def recover_expired_leases(db: Session, *, limit: int) -> int:
         """Return abandoned jobs to the outbox without creating a second job."""
         now = datetime.now(UTC)
@@ -286,7 +308,7 @@ class JobRepository:
                 raise RuntimeError("selected_job_is_not_recoverable")
             job.status = JobStatus.PENDING.value
             job.lease_expires_at = None
-            job.progress_message = "Recovered after worker lease expired"
+            job.progress_code = "queued"
             if job.dispatch is None:
                 raise RuntimeError("running_job_without_dispatch")
             job.dispatch.status = JobDispatchStatus.PENDING.value

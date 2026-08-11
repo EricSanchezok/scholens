@@ -6,7 +6,7 @@ from typing import Annotated
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor
 from app.modules.jobs.application.authentication import VerifiedJobCallback
-from app.modules.jobs.application.contracts import JobClaimResponse
+from app.modules.jobs.application.contracts import JobClaimResponse, JobProgressRequest
 from app.shared.application import ApplicationExecutor
 from app.transport.http.internal_v1.authentication import verify_jobs_webhook
 from fastapi import APIRouter, Depends
@@ -43,4 +43,24 @@ def heartbeat_durable_job(
 ) -> JobClaimResponse:
     return executor.command(
         lambda capabilities: capabilities.job_callbacks.heartbeat(job_id=job_id)
+    )
+
+
+@lifecycle_webhook_router.post(
+    "/jobs/{job_id}/progress",
+    response_model=JobClaimResponse,
+)
+def progress_durable_job(
+    job_id: uuid.UUID,
+    payload: JobProgressRequest,
+    _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> JobClaimResponse:
+    return executor.command(
+        lambda capabilities: capabilities.job_callbacks.progress(
+            job_id=job_id,
+            progress_code=payload.progress_code,
+        )
     )
