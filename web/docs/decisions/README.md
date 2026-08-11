@@ -19,6 +19,7 @@ history; add a later ADR that supersedes it.
 - [ADR 0007: Generated design-system contract](./0007-generated-design-system-contract.md)
 - [ADR 0008: Single Conversation agent](./0008-single-conversation-agent.md)
 - [ADR 0009: Conversation turns own response variants](./0009-turn-response-variants.md)
+- [ADR 0010: Turn suggestions and two-stage response readiness](./0010-turn-suggestions-and-response-ready.md)
 
 ## Template
 

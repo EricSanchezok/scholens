@@ -19,13 +19,15 @@ from app.modules.conversations.application.chat import (
     ConversationContextSnapshot,
 )
 from app.modules.conversations.application.contracts.turns import (
-    ConversationActivity,
     ConversationAssistantItem,
     ConversationTurnCreateRequest,
     ConversationStreamActivityEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
     ConversationStreamReferencesEvent,
+)
+from app.modules.conversations.application.contracts.trace import (
+    ConversationActivity,
     ConversationTrace,
 )
 from app.modules.conversations.application.contracts.answer_packet import (

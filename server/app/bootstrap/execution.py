@@ -23,9 +23,6 @@ from app.bootstrap.workflows.discovery import PaperDiscoveryWorkflow
 from app.bootstrap.workflows.research_generation import ResearchGenerationWorkflow
 from app.bootstrap.workflows.translation import TranslationWorkflow
 from app.bootstrap.workflows.connectors import ConnectorWorkflow
-from app.bootstrap.workflows.conversation_suggestions import (
-    ConversationSuggestionWorkflow,
-)
 from app.bootstrap.workflows.zotero import (
     ZoteroPostprocessWorkflow,
     ZoteroWorkflow,
@@ -106,16 +103,8 @@ def create_conversation_chat(
             runtime,
             operation_factory,
             diagnostic_recorder,
+            FollowUpSuggestionGenerator(),
         )
-    )
-
-
-def create_conversation_suggestion_workflow(
-    executor: ApplicationExecutor[ApplicationCapabilities],
-) -> ConversationSuggestionWorkflow:
-    return ConversationSuggestionWorkflow(
-        executor=executor,
-        generator=FollowUpSuggestionGenerator(),
     )
 
 
@@ -401,15 +390,6 @@ def get_operation_context_factory(request: Request) -> OperationContextFactory:
 
 def get_conversation_chat(request: Request) -> ConversationChat:
     return cast(ConversationChat, request.app.state.conversation_chat)
-
-
-def get_conversation_suggestion_workflow(
-    request: Request,
-) -> ConversationSuggestionWorkflow:
-    return cast(
-        ConversationSuggestionWorkflow,
-        request.app.state.conversation_suggestion_workflow,
-    )
 
 
 def get_citation_workflow(request: Request) -> CitationWorkflow:

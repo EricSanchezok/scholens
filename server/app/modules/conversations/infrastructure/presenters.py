@@ -29,8 +29,6 @@ def serialize_response(
             ]
             or None,
             "trace": response.trace,
-            "suggestions": response.suggestions,
-            "suggestions_status": response.suggestions_status,
         }
     )
 
@@ -62,6 +60,7 @@ def serialize_turns(
                     "time_zone": turn.time_zone,
                     "sequence": turn.sequence,
                     "selected_response_id": turn.selected_response_id,
+                    "suggestions": turn.suggestions,
                     "responses": responses,
                 }
             )

@@ -8,7 +8,7 @@ from app.modules.research.application.contracts import CitationSnapshot
 from app.modules.conversations.application.contracts.answer_packet import (
     ReferenceBundle,
 )
-from app.modules.conversations.application.contracts.turns import ConversationTrace
+from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.shared.domain import (
     JsonValue,
     WorkspacePermission,
@@ -166,14 +166,6 @@ class ConversationResponseVariantResponse(BaseModel):
     references: ReferenceBundle | None
     artifacts: list[CitationSnapshot] | None
     trace: ConversationTrace | None
-    suggestions: list[str] | None
-    suggestions_status: Literal["idle", "pending", "completed", "failed"]
-
-
-class ConversationSuggestionsResponse(BaseModel):
-    response_id: UUID
-    status: Literal["pending", "completed", "failed"]
-    suggestions: list[str]
 
 
 class ConversationTurnResponse(BaseModel):
@@ -186,6 +178,7 @@ class ConversationTurnResponse(BaseModel):
     time_zone: str
     sequence: int
     selected_response_id: UUID | None
+    suggestions: list[str] | None
     responses: list[ConversationResponseVariantResponse]
 
 

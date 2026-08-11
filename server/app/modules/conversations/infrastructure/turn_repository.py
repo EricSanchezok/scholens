@@ -8,7 +8,7 @@ from uuid import UUID
 
 from app.database.models import Conversation, ConversationResponse, ConversationTurn
 from app.helpers.postgres import sanitize_for_postgres
-from app.modules.conversations.application.contracts.turns import ConversationTrace
+from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.shared.domain import AppError, FailureKind, JsonValue
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import Session, selectinload
@@ -77,11 +77,6 @@ class TurnRepository:
             .with_for_update()
         )
         if previous is not None:
-            selected = (
-                db.get(ConversationResponse, previous.selected_response_id)
-                if previous.selected_response_id is not None
-                else None
-            )
             if previous.selected_response_id is not None:
                 db.execute(
                     delete(ConversationResponse).where(
@@ -89,9 +84,7 @@ class TurnRepository:
                         ConversationResponse.id != previous.selected_response_id,
                     )
                 )
-            if selected is not None:
-                selected.suggestions = None
-                selected.suggestions_status = "idle"
+            previous.suggestions = None
 
         max_sequence = db.scalar(
             select(func.max(ConversationTurn.sequence)).where(
@@ -371,6 +364,32 @@ class TurnRepository:
             .order_by(desc(ConversationTurn.sequence))
             .limit(1)
         )
+
+    def save_suggestions_if_latest(
+        self,
+        db: Session,
+        *,
+        conversation_id: UUID,
+        turn_id: UUID,
+        user_id: int,
+        suggestions: tuple[str, str, str],
+    ) -> bool:
+        self.lock_conversation(db, conversation_id=conversation_id, user_id=user_id)
+        turn = self.require_turn(
+            db,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            user_id=user_id,
+            lock=True,
+        )
+        if (
+            self.latest_turn_id(db, conversation_id=conversation_id, user_id=user_id)
+            != turn.id
+        ):
+            return False
+        turn.suggestions = list(suggestions)
+        db.flush()
+        return True
 
     def list_turns(
         self,

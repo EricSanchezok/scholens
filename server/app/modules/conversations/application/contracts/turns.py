@@ -4,6 +4,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.shared.domain import JsonValue
 from app.shared.domain.enums import ReasoningLevel
+from app.modules.conversations.application.contracts.conversations import (
+    ConversationTurnResponse,
+)
+from app.modules.conversations.application.contracts.trace import (
+    ConversationActivity,
+)
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 
 
@@ -14,54 +20,6 @@ class ConversationStreamStartEvent(BaseModel):
     response_id: uuid.UUID
     variant_index: int = Field(ge=1)
     generation_kind: Literal["initial", "retry"]
-
-
-class ConversationActivity(BaseModel):
-    """One sanitized, user-inspectable tool lifecycle entry."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["activity"] = "activity"
-    id: str = Field(min_length=1, max_length=200)
-    sequence: int = Field(ge=1)
-    category: Literal["search", "read", "workspace_action", "connector"]
-    state: Literal["running", "succeeded", "failed"]
-    subject: str | None = Field(default=None, max_length=240)
-    connector_name: str | None = Field(default=None, max_length=80)
-    source_count: int | None = Field(default=None, ge=0)
-    artifact_count: int | None = Field(default=None, ge=0)
-
-
-class ConversationCitationSummary(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    source_count: int = Field(ge=0)
-    annotation_count: int = Field(ge=0)
-    rejected_source_count: int = Field(ge=0)
-
-
-class ConversationProgressEntry(BaseModel):
-    """One safe, user-visible progress statement emitted before tool work."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["progress"] = "progress"
-    id: str = Field(min_length=1, max_length=200)
-    sequence: int = Field(ge=1)
-    content: str = Field(min_length=1, max_length=4_000)
-
-
-ConversationTraceEntry = Annotated[
-    ConversationProgressEntry | ConversationActivity,
-    Field(discriminator="kind"),
-]
-
-
-class ConversationTrace(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    entries: list[ConversationTraceEntry] = Field(default_factory=list)
-    citation_summary: ConversationCitationSummary | None = None
 
 
 class ConversationStreamActivityEvent(BaseModel):
@@ -105,12 +63,22 @@ class ConversationStreamReferencesEvent(BaseModel):
     references: dict[str, JsonValue]
 
 
+class ConversationStreamResponseReadyEvent(BaseModel):
+    type: Literal["response_ready"] = "response_ready"
+    turn: ConversationTurnResponse
+
+
+class ConversationStreamSuggestionsEvent(BaseModel):
+    type: Literal["suggestions"] = "suggestions"
+    turn_id: uuid.UUID
+    response_id: uuid.UUID
+    suggestions: list[str] = Field(min_length=3, max_length=3)
+
+
 class ConversationStreamCompleteEvent(BaseModel):
     type: Literal["complete"] = "complete"
     turn_id: uuid.UUID
     response_id: uuid.UUID
-    trace: ConversationTrace | None = None
-    artifacts: list[dict[str, JsonValue]] = Field(default_factory=list)
 
 
 class ConversationStreamErrorEvent(BaseModel):
@@ -126,6 +94,8 @@ ConversationStreamEvent = Annotated[
     | ConversationStreamAssistantItemDeltaEvent
     | ConversationStreamAssistantItemCompleteEvent
     | ConversationStreamReferencesEvent
+    | ConversationStreamResponseReadyEvent
+    | ConversationStreamSuggestionsEvent
     | ConversationStreamCompleteEvent
     | ConversationStreamErrorEvent,
     Field(discriminator="type"),

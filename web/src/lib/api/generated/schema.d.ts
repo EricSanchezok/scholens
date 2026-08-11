@@ -383,23 +383,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/conversations/{conversation_id}/responses/{response_id}/suggestions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Generate Conversation Suggestions */
-        post: operations["generate_conversation_suggestions_api_v1_conversations__conversation_id__responses__response_id__suggestions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/conversations/{conversation_id}/scope": {
         parameters: {
             query?: never;
@@ -2227,13 +2210,6 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "completed" | "failed" | "cancelled";
-            /** Suggestions */
-            suggestions: string[] | null;
-            /**
-             * Suggestions Status
-             * @enum {string}
-             */
-            suggestions_status: "idle" | "pending" | "completed" | "failed";
             trace: components["schemas"]["ConversationTrace"] | null;
             /** Variant Index */
             variant_index: number;
@@ -2307,16 +2283,11 @@ export interface components {
         };
         /** ConversationStreamCompleteEvent */
         ConversationStreamCompleteEvent: {
-            /** Artifacts */
-            artifacts?: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
-            }[];
             /**
              * Response Id
              * Format: uuid
              */
             response_id: string;
-            trace?: components["schemas"]["ConversationTrace"] | null;
             /**
              * Turn Id
              * Format: uuid
@@ -2349,7 +2320,7 @@ export interface components {
          * ConversationStreamEventSchema
          * @description Public schema for the JSON payload carried by each SSE event.
          */
-        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
             /** References */
@@ -2366,6 +2337,15 @@ export interface components {
              * @enum {string}
              */
             type: "references";
+        };
+        /** ConversationStreamResponseReadyEvent */
+        ConversationStreamResponseReadyEvent: {
+            turn: components["schemas"]["ConversationTurnResponse"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "response_ready";
         };
         /** ConversationStreamStartEvent */
         ConversationStreamStartEvent: {
@@ -2397,20 +2377,25 @@ export interface components {
             /** Variant Index */
             variant_index: number;
         };
-        /** ConversationSuggestionsResponse */
-        ConversationSuggestionsResponse: {
+        /** ConversationStreamSuggestionsEvent */
+        ConversationStreamSuggestionsEvent: {
             /**
              * Response Id
              * Format: uuid
              */
             response_id: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "pending" | "completed" | "failed";
             /** Suggestions */
             suggestions: string[];
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "suggestions";
         };
         /** ConversationSummaryResponse */
         ConversationSummaryResponse: {
@@ -2517,6 +2502,8 @@ export interface components {
             selected_response_id: string | null;
             /** Sequence */
             sequence: number;
+            /** Suggestions */
+            suggestions: string[] | null;
             /** Time Zone */
             time_zone: string;
             /** User Query */
@@ -5215,38 +5202,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryPaperContext"] | components["schemas"]["SelectedPaperContext"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    generate_conversation_suggestions_api_v1_conversations__conversation_id__responses__response_id__suggestions_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-                response_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSuggestionsResponse"];
                 };
             };
             /** @description Validation Error */

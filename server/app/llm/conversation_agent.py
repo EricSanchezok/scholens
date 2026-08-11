@@ -36,15 +36,17 @@ from app.modules.conversations.application.contracts.answer_packet import (
 )
 from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
-    ConversationActivity,
-    ConversationCitationSummary,
     ConversationTurnCreateRequest,
-    ConversationProgressEntry,
     ConversationStreamActivityEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
     ConversationStreamAssistantItemStartEvent,
     ConversationStreamReferencesEvent,
+)
+from app.modules.conversations.application.contracts.trace import (
+    ConversationActivity,
+    ConversationCitationSummary,
+    ConversationProgressEntry,
     ConversationTrace,
 )
 from app.modules.integrations.connectors.infrastructure.mcp import (

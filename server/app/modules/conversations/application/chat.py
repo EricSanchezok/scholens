@@ -10,8 +10,8 @@ from uuid import UUID
 
 from app.modules.conversations.application.contracts.turns import (
     ConversationTurnCreateRequest,
-    ConversationTrace,
 )
+from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import (
     OperationAction,
@@ -98,6 +98,7 @@ class ConversationTurnStart:
     turn_created: bool
     response_created: bool
     generation_kind: Literal["initial", "retry"]
+    suggestions: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +179,15 @@ class ConversationChatDataGateway(Protocol):
         response_id: UUID,
         status: str,
     ) -> None: ...
+
+    def save_turn_suggestions(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        suggestions: tuple[str, str, str],
+    ) -> bool: ...
 
     def retry_request(
         self,
@@ -363,6 +373,21 @@ class ConversationChatData:
             conversation_id=conversation_id,
             response_id=response_id,
             status=status,
+        )
+
+    def save_turn_suggestions(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        suggestions: tuple[str, str, str],
+    ) -> bool:
+        return self._gateway.save_turn_suggestions(
+            actor=actor,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            suggestions=suggestions,
         )
 
     def retry_request(

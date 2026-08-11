@@ -121,9 +121,10 @@ rewrite the prompt. Jobs persist only their origin operation and correlation
 UUIDs, then callbacks resume a new SYSTEM operation after signature and owner
 verification.
 
-A Conversation title is generated once, after its first successful assistant
-reply. Later turns never invoke the title model or rewrite the Sidebar title;
-an explicit user title always wins over a concurrent generated title.
+A Conversation title sidecar starts with its first turn and is applied once.
+It never blocks answer persistence or the public `response_ready` event. Later
+turns may retry only while the title remains the default; an explicit user title
+always wins over a concurrent generated title.
 
 ## Canonical tool catalog
 
@@ -158,7 +159,8 @@ there is no second untyped event protocol to drift. Empty assistant items are
 rejected and a turn cannot complete without visible final content.
 
 The public Conversation stream exposes item lifecycle events, sanitized
-activity, final-only server-generated references, and one terminal event. Raw
+activity, final-only server-generated references, a persisted `response_ready`
+snapshot, an optional turn-suggestion update, and one terminal event. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 
@@ -168,16 +170,15 @@ completed response variants and permits retry or selection. Starting a newer
 turn deletes the older turn's unselected variants and its now-stale follow-up
 suggestions; persisted history therefore remains linear and bounded.
 
-`ConversationSuggestionsData` owns the short transactional claim and finalize
-stages for follow-up suggestions. `ConversationSuggestionWorkflow` performs
-the model call between those stages, outside an application transaction. The
-finalize stage locks the conversation and persists only while the response is
-still the latest selected completed variant, preventing slow work from
-resurrecting suggestions after a selection or turn change. Inputs are limited
-to the turn query, selected final answer, locale, and verified reference
-titles; ordered worklog entries, provider output, and tool payloads are not
-suggestion context. The typed output requires exactly three unique questions
-covering deeper inquiry, comparison or verification, and practical use.
+Follow-up suggestions are a non-critical turn sidecar started before answer
+streaming. The model call runs outside an application transaction; the final
+short write locks the conversation and persists only while the turn is still
+latest, preventing slow work from resurrecting stale suggestions. Inputs are
+limited to the current query, locale, three recent selected turns, and
+authorized scope titles; the current answer, ordered worklog, provider output,
+tool payloads, and document bodies are not suggestion context. The typed output
+requires exactly three unique questions covering deeper inquiry, comparison or
+verification, and practical use. A retry reuses the turn-owned result.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Command tools commit

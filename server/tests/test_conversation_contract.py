@@ -29,8 +29,8 @@ from app.modules.conversations.application.contracts.conversations import (
 )
 from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
-    ConversationTrace,
 )
+from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.infrastructure.presenters import serialize_turns
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.shared.application import Actor
@@ -88,7 +88,6 @@ def test_response_trace_serializes_as_a_typed_product_trace() -> None:
                 "rejected_source_count": 0,
             },
         },
-        suggestions_status="idle",
     )
     response.research_items = []
     turn.responses = [response]
@@ -124,10 +123,7 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
         "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response"
         in paths
     )
-    assert (
-        "/api/v1/conversations/{conversation_id}/responses/{response_id}/suggestions"
-        in paths
-    )
+    assert not any(path.endswith("/suggestions") for path in paths)
     assert "/api/v1/conversations/{conversation_id}/messages" not in paths
     assert not any(path.startswith("/api/v1/conversation/") for path in paths)
     assert not any(path.startswith("/api/v1/projects/conversations") for path in paths)
@@ -184,9 +180,18 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "ConversationStreamAssistantItemDeltaEvent",
         "ConversationStreamAssistantItemCompleteEvent",
         "ConversationStreamReferencesEvent",
+        "ConversationStreamResponseReadyEvent",
+        "ConversationStreamSuggestionsEvent",
         "ConversationStreamCompleteEvent",
         "ConversationStreamErrorEvent",
     }
+
+    schemas = app.openapi()["components"]["schemas"]
+    assert "ConversationSuggestionsResponse" not in schemas
+    variant_properties = schemas["ConversationResponseVariantResponse"]["properties"]
+    assert "suggestions" not in variant_properties
+    assert "suggestions_status" not in variant_properties
+    assert "suggestions" in schemas["ConversationTurnResponse"]["properties"]
 
 
 def test_owned_conversation_lookup_filters_id_and_user_in_one_query() -> None:

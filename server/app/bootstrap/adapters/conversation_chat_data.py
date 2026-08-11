@@ -26,8 +26,8 @@ from app.modules.conversations.application.chat import (
 from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.modules.conversations.application.contracts.turns import (
     ConversationTurnCreateRequest,
-    ConversationTrace,
 )
+from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.papers.infrastructure.access import accessible_document_condition
@@ -328,6 +328,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             turn_created=turn_created,
             response_created=response_created,
             generation_kind=generation_kind,
+            suggestions=tuple(turn.suggestions or ()),
         )
 
     def complete_turn(
@@ -405,6 +406,22 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             response_id=response_id,
             user_id=actor.id,
             status=status,
+        )
+
+    def save_turn_suggestions(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        turn_id: uuid.UUID,
+        suggestions: tuple[str, str, str],
+    ) -> bool:
+        return turn_repository.save_suggestions_if_latest(
+            self._session,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            user_id=actor.id,
+            suggestions=suggestions,
         )
 
     def retry_request(

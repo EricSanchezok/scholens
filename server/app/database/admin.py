@@ -180,7 +180,6 @@ class ConversationResponseAdmin(ModelView, model=ConversationResponse):
         ConversationResponse.turn_id,
         ConversationResponse.variant_index,
         ConversationResponse.status,
-        ConversationResponse.suggestions_status,
     ]
     column_searchable_list = [ConversationResponse.content]
 

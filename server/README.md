@@ -96,8 +96,11 @@ creates another response variant at
 `POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses`.
 Both generation endpoints stream standard Server-Sent Events. Consumers must handle
 the typed `start`, `assistant_item_start`, `assistant_item_delta`,
-`assistant_item_complete`, `activity`, `references`, `complete`, and `error`
-events and treat `complete` or `error` as terminal. Assistant items begin as
+`assistant_item_complete`, `activity`, `references`, `response_ready`,
+`suggestions`, `complete`, and `error` events and treat `complete` or `error`
+as terminal. `response_ready` carries the complete persisted turn snapshot and
+unblocks response actions; `suggestions` is an optional late sidecar update.
+Assistant items begin as
 provisional and are authoritatively classified on completion as `progress` or
 `final`; clients move the same stable item instead of duplicating its text.
 Progress and activity entries share a monotonic sequence. Requests include the
@@ -113,17 +116,18 @@ instead of persisting an empty response variant. A turn owns the immutable user
 prompt and one or more generated responses; only the latest turn may be retried
 or switch its selected response. Creating the next turn prunes unselected
 variants from the prior turn, so completed history has one canonical response.
-The latest selected completed response may generate persisted follow-up
-suggestions at
-`POST /api/v1/conversations/{conversation_id}/responses/{response_id}/suggestions`.
-Generation claims the response in a short transaction, calls the model after
-that transaction closes, and rechecks latest/selected ownership before the
-result is finalized. The structured result is exactly three unique questions:
+The latest turn may own persisted follow-up suggestions. Suggestion generation
+starts beside the answer stream and shares the same SSE instead of requiring a
+second HTTP request or polling. It uses no open database transaction while the
+model runs and rechecks latest-turn ownership before persisting. The structured
+result is exactly three unique questions:
 one deepening question, one comparison or verification question, and one
-practical-application question. Only the turn query, selected final answer,
-locale, and verified reference titles enter that prompt; trace data and raw
-tool output never do. A newer turn clears the preceding suggestions, and a
-late generation result cannot restore them.
+practical-application question. Only the current query, locale, three recent
+selected turns, and authorized scope display titles enter that prompt; the
+current answer, trace data, raw tool output, and document bodies never do. A
+newer turn clears the preceding suggestions, and a late result cannot restore
+them. Suggestions and first-title generation never block `response_ready`; the
+stream retains a bounded two-second sidecar tail before `complete`.
 There is no private delimiter. Clients may abort the request, but must not
 automatically retry this non-idempotent operation.
 

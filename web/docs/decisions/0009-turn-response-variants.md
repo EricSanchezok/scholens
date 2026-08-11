@@ -20,7 +20,8 @@ The persisted conversation aggregate is `ConversationTurn` plus one or more
 - A turn owns the immutable user prompt, context scope, reasoning strength,
   locale, time zone, and sequence.
 - A response owns generation state, final content, ordered worklog trace,
-  references, artifacts, and follow-up suggestions.
+  references, and artifacts. Follow-up suggestion ownership described below was
+  superseded by [ADR 0010](./0010-turn-suggestions-and-response-ready.md).
 - The turn's `selected_response_id` identifies the only response used as Agent
   history and the response shown by default.
 - Only the latest turn may create another response or select a completed
@@ -31,11 +32,7 @@ The persisted conversation aggregate is `ConversationTurn` plus one or more
   therefore linear and bounded.
 - Public creation routes are `/turns` and `/turns/{turn_id}/responses`. There is
   no `/messages` write route, compatibility DTO, or dual repository.
-- Follow-up suggestions belong to one response variant and are generated only
-  for the latest selected completed response. The Server claims generation,
-  runs the model without an open database transaction, then revalidates the
-  same ownership before persisting exactly three typed suggestions. A late
-  result is discarded after the selection or latest turn changes.
+- Follow-up suggestion generation and ownership are defined by ADR 0010.
 
 References and research artifacts use `response_id`; they never attach to an
 ambiguous generic message. The existing node-driven Agent harness remains the
@@ -55,8 +52,8 @@ ownership.
 ## Consequences
 
 Retry and response switching survive refresh and share one Server-enforced
-latest-turn policy. Suggestions and sources naturally follow the selected
-response. Starting a new turn intentionally removes old alternatives, so this
+latest-turn policy. Sources follow the selected response. Starting a new turn
+intentionally removes old alternatives, so this
 is not a branching-conversation history feature.
 
 The change is destructive while Scholens is local-only. Existing development
@@ -67,6 +64,5 @@ or backward-compatible endpoint is maintained.
 
 Contract tests cover initial generation, retry success/failure/cancellation,
 concurrent and non-latest conflicts, response selection, history projection,
-cleanup when a newer turn is created, suggestion idempotency, and the
-short-transaction generation boundary. The public OpenAPI snapshot and Web
+cleanup when a newer turn is created, and response selection. The public OpenAPI snapshot and Web
 types must contain no Message creation route or Message aggregate.

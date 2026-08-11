@@ -1787,30 +1787,6 @@
             "title": "Status",
             "type": "string"
           },
-          "suggestions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Suggestions"
-          },
-          "suggestions_status": {
-            "enum": [
-              "idle",
-              "pending",
-              "completed",
-              "failed"
-            ],
-            "title": "Suggestions Status",
-            "type": "string"
-          },
           "trace": {
             "anyOf": [
               {
@@ -1833,9 +1809,7 @@
           "content",
           "references",
           "artifacts",
-          "trace",
-          "suggestions",
-          "suggestions_status"
+          "trace"
         ],
         "title": "ConversationResponseVariantResponse",
         "type": "object"
@@ -1964,30 +1938,10 @@
       },
       "ConversationStreamCompleteEvent": {
         "properties": {
-          "artifacts": {
-            "items": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue-Output"
-              },
-              "type": "object"
-            },
-            "title": "Artifacts",
-            "type": "array"
-          },
           "response_id": {
             "format": "uuid",
             "title": "Response Id",
             "type": "string"
-          },
-          "trace": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ConversationTrace"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "turn_id": {
             "format": "uuid",
@@ -2047,7 +2001,9 @@
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
             "error": "#/components/schemas/ConversationStreamErrorEvent",
             "references": "#/components/schemas/ConversationStreamReferencesEvent",
-            "start": "#/components/schemas/ConversationStreamStartEvent"
+            "response_ready": "#/components/schemas/ConversationStreamResponseReadyEvent",
+            "start": "#/components/schemas/ConversationStreamStartEvent",
+            "suggestions": "#/components/schemas/ConversationStreamSuggestionsEvent"
           },
           "propertyName": "type"
         },
@@ -2069,6 +2025,12 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamReferencesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamResponseReadyEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamSuggestionsEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
@@ -2105,6 +2067,24 @@
           "references"
         ],
         "title": "ConversationStreamReferencesEvent",
+        "type": "object"
+      },
+      "ConversationStreamResponseReadyEvent": {
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/ConversationTurnResponse"
+          },
+          "type": {
+            "const": "response_ready",
+            "default": "response_ready",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn"
+        ],
+        "title": "ConversationStreamResponseReadyEvent",
         "type": "object"
       },
       "ConversationStreamStartEvent": {
@@ -2154,36 +2134,40 @@
         "title": "ConversationStreamStartEvent",
         "type": "object"
       },
-      "ConversationSuggestionsResponse": {
+      "ConversationStreamSuggestionsEvent": {
         "properties": {
           "response_id": {
             "format": "uuid",
             "title": "Response Id",
             "type": "string"
           },
-          "status": {
-            "enum": [
-              "pending",
-              "completed",
-              "failed"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
           "suggestions": {
             "items": {
               "type": "string"
             },
+            "maxItems": 3,
+            "minItems": 3,
             "title": "Suggestions",
             "type": "array"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "suggestions",
+            "default": "suggestions",
+            "title": "Type",
+            "type": "string"
           }
         },
         "required": [
+          "turn_id",
           "response_id",
-          "status",
           "suggestions"
         ],
-        "title": "ConversationSuggestionsResponse",
+        "title": "ConversationStreamSuggestionsEvent",
         "type": "object"
       },
       "ConversationSummaryResponse": {
@@ -2510,6 +2494,20 @@
             "title": "Sequence",
             "type": "integer"
           },
+          "suggestions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestions"
+          },
           "time_zone": {
             "title": "Time Zone",
             "type": "string"
@@ -2543,6 +2541,7 @@
           "time_zone",
           "sequence",
           "selected_response_id",
+          "suggestions",
           "responses"
         ],
         "title": "ConversationTurnResponse",
@@ -9203,61 +9202,6 @@
           }
         ],
         "summary": "Update Conversation Paper Context"
-      }
-    },
-    "/api/v1/conversations/{conversation_id}/responses/{response_id}/suggestions": {
-      "post": {
-        "operationId": "generate_conversation_suggestions_api_v1_conversations__conversation_id__responses__response_id__suggestions_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "response_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Response Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationSuggestionsResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Generate Conversation Suggestions"
       }
     },
     "/api/v1/conversations/{conversation_id}/scope": {

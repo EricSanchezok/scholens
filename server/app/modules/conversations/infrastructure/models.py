@@ -112,6 +112,7 @@ class ConversationTurn(Base):
         ),
         nullable=True,
     )
+    suggestions: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     conversation: Mapped["Conversation"] = relationship(
         "Conversation", back_populates="turns"
     )
@@ -142,10 +143,6 @@ class ConversationResponse(Base):
             "status IN ('running', 'completed', 'failed', 'cancelled')",
             name="ck_conversation_responses_status",
         ),
-        CheckConstraint(
-            "suggestions_status IN ('idle', 'pending', 'completed', 'failed')",
-            name="ck_conversation_responses_suggestions_status",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -170,10 +167,6 @@ class ConversationResponse(Base):
         JSONB, nullable=True
     )
     trace: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
-    suggestions: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
-    suggestions_status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="idle", server_default="idle"
-    )
     turn: Mapped["ConversationTurn"] = relationship(
         "ConversationTurn",
         back_populates="responses",

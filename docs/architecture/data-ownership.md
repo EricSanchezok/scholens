@@ -55,8 +55,9 @@ remain advisory until Scholens is declared production-ready in the consumer regi
 Scholens owns conversation state entirely inside `scholens.*`. A
 `conversation_turns` row is the immutable user request and owns one or more
 `conversation_responses`. The turn's selected response is the sole model-history
-branch. References, research items, artifacts, worklog trace, and follow-up
-suggestions belong to a concrete response ID rather than a generic message.
+branch. References, research items, artifacts, and worklog trace belong to a
+concrete response ID. Follow-up suggestions belong to the turn because retries
+and selected variants share the same next-question context.
 
 Only the latest turn may retain multiple completed response variants. Creating
 the next turn removes unselected variants from the previous turn and clears its
