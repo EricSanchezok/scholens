@@ -35,8 +35,11 @@ Public resources use canonical identifiers:
 
 - `document_id` identifies a paper everywhere. Association-row identifiers
   are named explicitly and are never presented as paper identifiers.
-- Collections return `{ "items": [...], "next_cursor": "..." }`; cursors are
-  opaque, signed, query-bound tokens.
+- Collections return `{ "items": [...], "next_cursor": "...",
+  "previous_cursor": "...", "total_count": 0 }` when bidirectional navigation
+  is part of the product. Cursors are opaque, signed, user- and query-bound
+  keysets with a stable identifier tie-breaker; offset values are not disguised
+  as cursors.
 - Resource creation returns `201`, accepted asynchronous work returns `202`,
   and deletions without a response body return `204`.
 - Paper ingestion, Zotero imports, and generated artifacts accept
@@ -227,6 +230,28 @@ re-evaluated for each operation, and the outer `Document` query keeps papers
 that are reachable through several paths unique. Personal-library listing,
 tags, storage accounting, and ingestion ownership continue to use
 `LibraryPaper`; no Project paper is copied into the personal library.
+
+## Library collection
+
+The Library exposes two deliberately different collections:
+
+- Papers are personal `LibraryPaper` memberships. Search, tag OR-filtering,
+  stable keyset sorting, removal, download, and ingestion operate on that
+  membership. Removing a paper removes the personal membership only; shared
+  `Document` storage is reclaimed later only when no scope still references it.
+- Outputs are a read projection over the four existing `ResearchItemKind`
+  values: `highlight_thread`, `citation`, `audio_overview`, and `data_table`.
+  The bootstrap adapter applies the canonical Research visibility predicate
+  across personal, document, and Project scopes and returns source scope/title
+  metadata in one response. The browser does not join permissions itself.
+
+`GET /api/v1/library/summary` returns visible Paper and Output counts. Both list
+endpoints use signed Previous/Next keyset cursors bound to user, collection,
+filters, sort, and limit. Paper sources enter through the discriminated
+`POST /api/v1/paper-ingestions/sources` contract (`doi`, `arxiv`, or direct PDF
+`url`); URL resolution and PDF validation remain server-owned. Failed jobs are
+retried by creating a new durable job from the persisted source, never by
+mutating the failed history row.
 
 ## Adding a capability or adapter
 

@@ -58,6 +58,14 @@ class IngestionFinalization:
 
 
 @dataclass(frozen=True, slots=True)
+class IngestionRetryReservation:
+    job_id: UUID
+    content_sha256: str
+    filename: str | None
+    replayed: bool
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedPaperInput:
     content: bytes
     filename: str | None
@@ -107,6 +115,16 @@ class PaperIngestionGateway(Protocol):
         content: bytes,
     ) -> IngestionFinalization: ...
 
+    def retry(
+        self,
+        *,
+        actor: Actor,
+        job_id: UUID,
+        correlation_id: UUID,
+        origin_operation_id: UUID,
+        idempotency_key: str | None,
+    ) -> IngestionRetryReservation: ...
+
 
 class IngestPaper:
     def __init__(
@@ -132,6 +150,17 @@ class IngestPaper:
     ) -> PreparedPaperInput:
         await self._limits.enforce_rate(actor=actor, ip_address=ip_address)
         self._validator.validate(content=content, source=filename or "upload")
+        return PreparedPaperInput(content=content, filename=filename)
+
+    def prepare_persisted(
+        self,
+        *,
+        content: bytes,
+        filename: str | None,
+    ) -> PreparedPaperInput:
+        """Revalidate a persisted source without charging a new HTTP rate limit."""
+
+        self._validator.validate(content=content, source=filename or "persisted upload")
         return PreparedPaperInput(content=content, filename=filename)
 
     async def prepare_url(
@@ -284,3 +313,27 @@ class IngestPaper:
                 action=JOB_FAILED,
                 resources=(ResourceRef(type="job", id=str(job_id)),),
             )
+
+    def retry(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        job_id: UUID,
+        idempotency_key: str | None,
+    ) -> IngestionRetryReservation:
+        result = self._gateway.retry(
+            actor=actor,
+            job_id=job_id,
+            correlation_id=operation.trace.correlation_id,
+            origin_operation_id=operation.trace.operation_id,
+            idempotency_key=normalize_idempotency_key(idempotency_key),
+        )
+        if not result.replayed:
+            self._journal.append(
+                actor=actor,
+                operation=operation,
+                action=JOB_CREATED,
+                resources=(ResourceRef("job", str(result.job_id)),),
+            )
+        return result

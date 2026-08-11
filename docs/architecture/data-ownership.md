@@ -64,3 +64,22 @@ the next turn removes unselected variants from the previous turn and clears its
 no-longer-visible suggestions. No Identity, Scholight, or Jobs schema owns or
 selects a conversation response; callbacks may update Scholens-owned artifacts
 only through the Server's verified application boundary.
+
+## Library storage and projections
+
+`Document` owns canonical paper metadata and source-object identity.
+`LibraryPaper` owns one user's personal membership, metadata overrides, tags,
+status, sharing state, and last-access time. Removing that membership never
+implies deleting a `Document`: Project references and other users' memberships
+remain authoritative, and orphan cleanup is scheduled outside the request
+transaction.
+
+Library Outputs do not introduce another persistence model. They are a
+permission-filtered read projection of Scholens-owned `ResearchItem` rows and
+their existing kind-specific payload tables. Personal, document, and Project
+scope access is resolved by the Server. The Web receives source scope/title as
+projection metadata and must not infer ownership by composing unrelated APIs.
+
+Paper ingestion jobs retain immutable failure history. A retry creates a new
+`DurableJob` referencing the persisted PDF source and original Project context;
+it does not reset or overwrite the failed job.

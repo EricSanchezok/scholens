@@ -42,7 +42,9 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
     RequestReference,
+    SignedCursorCodec,
 )
+from app.shared.domain import FailureKind
 
 
 class _Store:
@@ -168,8 +170,15 @@ def test_library_update_journals_only_user_visible_changes() -> None:
     journal, store = _journal()
     library = PaperLibrary(
         gateway=cast(PaperLibraryGateway, gateway),
+        outputs=MagicMock(),
         capacity=MagicMock(),
         signer=MagicMock(),
+        cursors=SignedCursorCodec(
+            "test-library-cursor-secret",
+            revision="library-v1",
+            error_code="library_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
     actor = _actor()
@@ -211,8 +220,15 @@ def test_library_remove_journals_only_a_new_cleanup_job() -> None:
     journal, store = _journal()
     library = PaperLibrary(
         gateway=cast(PaperLibraryGateway, gateway),
+        outputs=MagicMock(),
         capacity=MagicMock(),
         signer=MagicMock(),
+        cursors=SignedCursorCodec(
+            "test-library-cursor-secret",
+            revision="library-v1",
+            error_code="library_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 

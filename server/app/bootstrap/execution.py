@@ -273,11 +273,15 @@ def create_paper_ingestion_workflow(
     executor: ApplicationExecutor[ApplicationCapabilities],
     operation_factory: OperationContextFactory,
 ) -> PaperIngestionWorkflow:
-    from app.bootstrap.container import build_pdf_url_source
+    from app.bootstrap.container import (
+        build_paper_source_resolver,
+        build_pdf_url_source,
+    )
 
     return PaperIngestionWorkflow(
         executor=executor,
         url_source=build_pdf_url_source(),
+        source_resolver=build_paper_source_resolver(),
         operation_factory=operation_factory,
     )
 

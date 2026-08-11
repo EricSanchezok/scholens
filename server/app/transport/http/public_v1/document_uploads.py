@@ -11,7 +11,7 @@ from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.modules.papers.domain import MAX_PDF_BYTES, MAX_PDF_SIZE_MB
 from app.modules.papers.application.contracts.uploads import (
     UploadAcceptedResponse,
-    UploadFromUrlRequest,
+    UploadFromSourceRequest,
 )
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind
@@ -32,24 +32,24 @@ IdempotencyHeader = Annotated[
 
 
 @document_upload_router.post(
-    "/urls",
+    "/sources",
     response_model=UploadAcceptedResponse,
     status_code=202,
 )
-async def upload_pdf_from_url(
-    payload: UploadFromUrlRequest,
+async def upload_pdf_from_source(
+    payload: UploadFromSourceRequest,
     request: Request,
     idempotency_key: IdempotencyHeader = None,
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
     ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
-    project_id: UUID | None = None,
 ) -> UploadAcceptedResponse:
-    return await ingestion.from_url(
+    return await ingestion.from_source(
         actor=current_user,
         operation=operation,
-        url=str(payload.url),
-        project_id=project_id,
+        kind=payload.source.kind,
+        value=payload.source.value,
+        project_id=payload.project_id,
         idempotency_key=idempotency_key,
         ip_address=http_client_ip(request),
     )
@@ -115,4 +115,24 @@ async def upload_pdf(
         project_id=project_id,
         idempotency_key=idempotency_key,
         ip_address=http_client_ip(request),
+    )
+
+
+@document_upload_router.post(
+    "/{job_id}/retries",
+    response_model=UploadAcceptedResponse,
+    status_code=202,
+)
+async def retry_pdf_ingestion(
+    job_id: UUID,
+    idempotency_key: IdempotencyHeader = None,
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+    ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
+) -> UploadAcceptedResponse:
+    return await ingestion.retry(
+        actor=current_user,
+        operation=operation,
+        job_id=job_id,
+        idempotency_key=idempotency_key,
     )

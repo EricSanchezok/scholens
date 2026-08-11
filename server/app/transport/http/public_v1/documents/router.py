@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
@@ -13,18 +14,25 @@ from app.modules.papers.application.contracts.documents import (
     DocumentContentResponse,
     DocumentFileUrlResponse,
     DocumentResponse,
+    LibraryOutputListResponse,
+    LibraryOutputSort,
     LibraryPaperListResponse,
+    LibraryPaperRemovalRequest,
+    LibraryPaperRemovalResponse,
     LibraryPaperResponse,
+    LibraryPaperSort,
+    LibrarySummaryResponse,
     LibraryPaperShareResponse,
     LibraryPaperUpdateRequest,
     PublicPaperResponse,
 )
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
+from app.shared.domain.enums import ResearchItemKind
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 document_router = APIRouter()
 library_router = APIRouter()
@@ -33,13 +41,82 @@ public_document_router = APIRouter()
 
 @library_router.get("/papers", response_model=LibraryPaperListResponse)
 def list_library_papers(
+    q: Annotated[str | None, Query(max_length=500)] = None,
+    tag_ids: Annotated[list[UUID] | None, Query()] = None,
+    sort: LibraryPaperSort = LibraryPaperSort.ADDED_DESC,
+    cursor: Annotated[str | None, Query(max_length=2048)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
 ) -> LibraryPaperListResponse:
     return executor.query(
-        lambda capabilities: capabilities.paper_library.list(actor=current_user)
+        lambda capabilities: capabilities.paper_library.list(
+            actor=current_user,
+            query=q,
+            tag_ids=tuple(tag_ids or ()),
+            sort=sort,
+            cursor=cursor,
+            limit=limit,
+        )
+    )
+
+
+@library_router.get("/outputs", response_model=LibraryOutputListResponse)
+def list_library_outputs(
+    q: Annotated[str | None, Query(max_length=500)] = None,
+    kinds: Annotated[list[ResearchItemKind] | None, Query()] = None,
+    sort: LibraryOutputSort = LibraryOutputSort.UPDATED_DESC,
+    cursor: Annotated[str | None, Query(max_length=2048)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+) -> LibraryOutputListResponse:
+    return executor.query(
+        lambda capabilities: capabilities.paper_library.list_outputs(
+            actor=current_user,
+            query=q,
+            kinds=tuple(kinds or ()),
+            sort=sort,
+            cursor=cursor,
+            limit=limit,
+        )
+    )
+
+
+@library_router.get("/summary", response_model=LibrarySummaryResponse)
+def get_library_summary(
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+) -> LibrarySummaryResponse:
+    return executor.query(
+        lambda capabilities: capabilities.paper_library.summary(actor=current_user)
+    )
+
+
+@library_router.post(
+    "/paper-removals",
+    response_model=LibraryPaperRemovalResponse,
+)
+def remove_library_papers(
+    request: LibraryPaperRemovalRequest,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+) -> LibraryPaperRemovalResponse:
+    return executor.command(
+        lambda capabilities: capabilities.paper_library.remove_many(
+            actor=current_user,
+            operation=operation,
+            document_ids=request.document_ids,
+        )
     )
 
 

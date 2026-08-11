@@ -22,6 +22,7 @@ from app.shared.application import (
 from app.shared.domain import AppError, FailureKind
 from app.modules.operation_journal.domain import OperationChange
 from app.bootstrap.adapters.paper_ingestion import SqlPaperIngestionGateway
+from app.bootstrap.adapters.paper_ingestion import DefaultPaperSourceResolver
 from app.bootstrap.adapters.upload_lifecycle import ReapedStaleUpload
 from app.bootstrap.adapters.upload_reservations import UploadReservationResult
 from app.database.models import (
@@ -171,6 +172,71 @@ async def test_idempotent_ingestion_replay_does_not_dispatch_twice() -> None:
     assert journal.entries == []
     limits.acquire.assert_not_awaited()
     gateway.finalize.assert_not_called()
+
+
+def test_retry_revalidates_persisted_pdf_without_http_rate_charge() -> None:
+    validator = MagicMock()
+    limits = MagicMock()
+    limits.enforce_rate = AsyncMock()
+    ingestion = IngestPaper(
+        validator=validator,
+        limits=limits,
+        gateway=MagicMock(),
+        journal=FakeJournal(),  # type: ignore[arg-type]
+    )
+
+    prepared = ingestion.prepare_persisted(
+        content=b"%PDF persisted",
+        filename="paper.pdf",
+    )
+
+    assert prepared.content == b"%PDF persisted"
+    validator.validate.assert_called_once_with(
+        content=b"%PDF persisted", source="paper.pdf"
+    )
+    limits.enforce_rate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_paper_source_resolver_normalizes_arxiv_sources() -> None:
+    resolver = DefaultPaperSourceResolver()
+
+    assert await resolver.resolve(kind="arxiv", value="2401.01234v2") == (
+        "https://arxiv.org/pdf/2401.01234v2.pdf"
+    )
+    assert await resolver.resolve(
+        kind="arxiv", value="https://arxiv.org/abs/2401.01234"
+    ) == "https://arxiv.org/pdf/2401.01234.pdf"
+
+
+@pytest.mark.asyncio
+async def test_paper_source_resolver_uses_openalex_pdf_for_doi() -> None:
+    resolver = DefaultPaperSourceResolver()
+    work = MagicMock()
+    work.primary_location.pdf_url = "https://papers.example/paper.pdf"
+
+    with patch(
+        "app.bootstrap.adapters.paper_ingestion.get_work_by_doi",
+        return_value=work,
+    ) as lookup:
+        resolved = await resolver.resolve(
+            kind="doi", value="https://doi.org/10.1000/example"
+        )
+
+    assert resolved == "https://papers.example/paper.pdf"
+    lookup.assert_called_once_with("10.1000/example")
+
+
+@pytest.mark.asyncio
+async def test_paper_source_resolver_rejects_non_arxiv_hosts() -> None:
+    resolver = DefaultPaperSourceResolver()
+
+    with pytest.raises(AppError) as raised:
+        await resolver.resolve(
+            kind="arxiv", value="https://example.com/abs/2401.01234"
+        )
+
+    assert raised.value.code == "paper_source_pdf_unavailable"
 
 
 def test_reservation_journals_reaped_upload_changes_atomically() -> None:

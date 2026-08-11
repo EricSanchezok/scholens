@@ -146,7 +146,12 @@ def test_library_tag_api_uses_library_document_boundaries() -> None:
     paths = app.openapi()["paths"]
 
     assert "/api/v1/paper-ingestions/uploads" in paths
-    assert "/api/v1/paper-ingestions/urls" in paths
+    assert "/api/v1/paper-ingestions/sources" in paths
+    assert "/api/v1/paper-ingestions/urls" not in paths
+    assert "/api/v1/paper-ingestions/{job_id}/retries" in paths
+    assert "/api/v1/library/outputs" in paths
+    assert "/api/v1/library/summary" in paths
+    assert "/api/v1/library/paper-removals" in paths
     assert "/api/v1/library/tags" in paths
     assert "/api/v1/library/tags/assignments" in paths
     assert "/api/v1/library/papers/{document_id}/tags/{tag_id}" in paths

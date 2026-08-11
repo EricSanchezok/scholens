@@ -710,6 +710,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Library Outputs */
+        get: operations["list_library_outputs_api_v1_library_outputs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/paper-removals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Library Papers */
+        post: operations["remove_library_papers_api_v1_library_paper_removals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/papers": {
         parameters: {
             query?: never;
@@ -777,6 +811,23 @@ export interface paths {
         post?: never;
         /** Remove Library Tag Assignment */
         delete: operations["remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Library Summary */
+        get: operations["get_library_summary_api_v1_library_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -960,6 +1011,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/paper-ingestions/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Pdf From Source */
+        post: operations["upload_pdf_from_source_api_v1_paper_ingestions_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/paper-ingestions/uploads": {
         parameters: {
             query?: never;
@@ -977,7 +1045,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/paper-ingestions/urls": {
+    "/api/v1/paper-ingestions/{job_id}/retries": {
         parameters: {
             query?: never;
             header?: never;
@@ -986,8 +1054,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload Pdf From Url */
-        post: operations["upload_pdf_from_url_api_v1_paper_ingestions_urls_post"];
+        /** Retry Pdf Ingestion */
+        post: operations["retry_pdf_ingestion_api_v1_paper_ingestions__job_id__retries_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1757,6 +1825,16 @@ export interface components {
              * @default null
              */
             stage: string | null;
+        };
+        /** ArxivPaperSource */
+        ArxivPaperSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "arxiv";
+            /** Value */
+            value: string;
         };
         /** AudioOverviewContent */
         AudioOverviewContent: {
@@ -2762,6 +2840,16 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DoiPaperSource */
+        DoiPaperSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "doi";
+            /** Value */
+            value: string;
+        };
         /** ExternalAnswerSource */
         ExternalAnswerSource: {
             /** Key */
@@ -2910,6 +2998,37 @@ export interface components {
             /** Score */
             score?: number | null;
         };
+        /** LibraryOutputListResponse */
+        LibraryOutputListResponse: {
+            /** Items */
+            items: components["schemas"]["LibraryOutputResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /** Total Count */
+            total_count: number;
+        };
+        /** LibraryOutputResponse */
+        LibraryOutputResponse: {
+            item: components["schemas"]["ResearchItemResponse"];
+            source: components["schemas"]["LibraryOutputSourceResponse"];
+            /** Title */
+            title: string;
+        };
+        /**
+         * LibraryOutputSort
+         * @enum {string}
+         */
+        LibraryOutputSort: "updated_desc" | "updated_asc" | "title_asc" | "title_desc";
+        /** LibraryOutputSourceResponse */
+        LibraryOutputSourceResponse: {
+            /** Scope Id */
+            scope_id: string | null;
+            scope_type: components["schemas"]["ResearchScopeType"];
+            /** Title */
+            title: string;
+        };
         /**
          * LibraryPaperCollection
          * @description All documents readable through personal or Project-based access.
@@ -2938,6 +3057,20 @@ export interface components {
             items: components["schemas"]["LibraryPaperResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /** Total Count */
+            total_count: number;
+        };
+        /** LibraryPaperRemovalRequest */
+        LibraryPaperRemovalRequest: {
+            /** Document Ids */
+            document_ids: string[];
+        };
+        /** LibraryPaperRemovalResponse */
+        LibraryPaperRemovalResponse: {
+            /** Removed Document Ids */
+            removed_document_ids: string[];
         };
         /** LibraryPaperResponse */
         LibraryPaperResponse: {
@@ -2980,6 +3113,11 @@ export interface components {
             /** Share Token */
             share_token: string;
         };
+        /**
+         * LibraryPaperSort
+         * @enum {string}
+         */
+        LibraryPaperSort: "added_desc" | "added_asc" | "published_desc" | "published_asc" | "title_asc";
         /** LibraryPaperTagResponse */
         LibraryPaperTagResponse: {
             /** Color */
@@ -2996,6 +3134,13 @@ export interface components {
         LibraryPaperUpdateRequest: {
             metadata_overrides?: components["schemas"]["DocumentMetadataOverrides"] | null;
             status?: components["schemas"]["PaperStatus"] | null;
+        };
+        /** LibrarySummaryResponse */
+        LibrarySummaryResponse: {
+            /** Output Count */
+            output_count: number;
+            /** Paper Count */
+            paper_count: number;
         };
         /** LibraryTagAssignmentRequest */
         LibraryTagAssignmentRequest: {
@@ -4033,13 +4178,22 @@ export interface components {
              */
             message: string;
         };
-        /** UploadFromUrlRequest */
-        UploadFromUrlRequest: {
+        /** UploadFromSourceRequest */
+        UploadFromSourceRequest: {
+            /** Project Id */
+            project_id?: string | null;
+            /** Source */
+            source: components["schemas"]["DoiPaperSource"] | components["schemas"]["ArxivPaperSource"] | components["schemas"]["UrlPaperSource"];
+        };
+        /** UrlPaperSource */
+        UrlPaperSource: {
             /**
-             * Url
-             * Format: uri
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            url: string;
+            kind: "url";
+            /** Value */
+            value: string;
         };
         /** UsageResponse */
         UsageResponse: {
@@ -5904,9 +6058,83 @@ export interface operations {
             };
         };
     };
-    list_library_papers_api_v1_library_papers_get: {
+    list_library_outputs_api_v1_library_outputs_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                kinds?: components["schemas"]["ResearchItemKind"][] | null;
+                sort?: components["schemas"]["LibraryOutputSort"];
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryOutputListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_library_papers_api_v1_library_paper_removals_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryPaperRemovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPaperRemovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_library_papers_api_v1_library_papers_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                tag_ids?: string[] | null;
+                sort?: components["schemas"]["LibraryPaperSort"];
+                cursor?: string | null;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5920,6 +6148,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryPaperListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6138,6 +6375,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_library_summary_api_v1_library_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySummaryResponse"];
                 };
             };
         };
@@ -6686,6 +6943,41 @@ export interface operations {
             };
         };
     };
+    upload_pdf_from_source_api_v1_paper_ingestions_sources_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadFromSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_pdf_api_v1_paper_ingestions_uploads_post: {
         parameters: {
             query?: {
@@ -6723,22 +7015,18 @@ export interface operations {
             };
         };
     };
-    upload_pdf_from_url_api_v1_paper_ingestions_urls_post: {
+    retry_pdf_ingestion_api_v1_paper_ingestions__job_id__retries_post: {
         parameters: {
-            query?: {
-                project_id?: string | null;
-            };
+            query?: never;
             header?: {
                 "Idempotency-Key"?: string | null;
             };
-            path?: never;
+            path: {
+                job_id: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UploadFromUrlRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             202: {

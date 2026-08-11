@@ -2,26 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from datetime import datetime
+from typing import Any, Protocol
 from uuid import UUID
 
 from app.helpers.s3 import s3_service
 from app.modules.papers.application.contracts.documents import (
     DocumentResponse,
     LibraryPaperResponse,
+    LibraryPaperSort,
     LibraryPaperUpdateRequest,
     PublicPaperOwnerResponse,
 )
 from app.modules.papers.application.library import (
+    LibraryPageDirection,
+    LibraryPagePosition,
     LibraryPaperAttachment,
+    LibraryPaperPage,
     LibraryPaperRemoval,
     LibraryPaperUpdateResult,
     PublicShare,
 )
 from app.modules.papers.infrastructure.models import Document, LibraryPaper
+from app.modules.papers.infrastructure.models import LibraryPaperTag
 from app.modules.papers.infrastructure.repository import document_repository
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, selectinload
 
 
 def document_response(document: Document) -> DocumentResponse:
@@ -105,11 +111,142 @@ class SqlAlchemyPaperLibraryGateway:
         self._db = db
         self._document_removed = document_removed
 
-    def list(self, *, user_id: int) -> list[LibraryPaperResponse]:
-        return [
-            library_paper_response(entry)
-            for entry in document_repository.list_library(self._db, user_id=user_id)
+    def list(
+        self,
+        *,
+        user_id: int,
+        query: str | None,
+        tag_ids: tuple[UUID, ...],
+        sort: LibraryPaperSort,
+        limit: int,
+        direction: LibraryPageDirection,
+        position: LibraryPagePosition | None,
+    ) -> LibraryPaperPage:
+        title = func.lower(
+            func.coalesce(
+                LibraryPaper.metadata_overrides["title"].astext,
+                Document.title,
+                Document.original_filename,
+            )
+        )
+        if sort in {LibraryPaperSort.ADDED_ASC, LibraryPaperSort.ADDED_DESC}:
+            key: Any = LibraryPaper.created_at
+            cursor_key: Any = (
+                datetime.fromisoformat(position.key) if position is not None else None
+            )
+            natural_ascending = sort is LibraryPaperSort.ADDED_ASC
+        elif sort in {
+            LibraryPaperSort.PUBLISHED_ASC,
+            LibraryPaperSort.PUBLISHED_DESC,
+        }:
+            sentinel = (
+                datetime.max if sort is LibraryPaperSort.PUBLISHED_ASC else datetime.min
+            )
+            key = func.coalesce(Document.publish_date, sentinel)
+            cursor_key = (
+                datetime.fromisoformat(position.key) if position is not None else None
+            )
+            natural_ascending = sort is LibraryPaperSort.PUBLISHED_ASC
+        else:
+            key = title
+            cursor_key = position.key if position is not None else None
+            natural_ascending = True
+
+        filters = [LibraryPaper.user_id == user_id]
+        if query is not None:
+            pattern = f"%{query.lower()}%"
+            filters.append(
+                or_(
+                    title.like(pattern),
+                    func.lower(func.coalesce(Document.abstract, "")).like(pattern),
+                    func.lower(func.coalesce(Document.doi, "")).like(pattern),
+                    func.lower(func.array_to_string(Document.authors, " ")).like(
+                        pattern
+                    ),
+                )
+            )
+        if tag_ids:
+            filters.append(
+                LibraryPaper.id.in_(
+                    select(LibraryPaperTag.library_paper_id).where(
+                        LibraryPaperTag.tag_id.in_(tag_ids)
+                    )
+                )
+            )
+
+        count_statement = (
+            select(func.count(LibraryPaper.id))
+            .join(Document, Document.id == LibraryPaper.document_id)
+            .where(*filters)
+        )
+        total_count = int(self._db.scalar(count_statement) or 0)
+
+        effective_ascending = (
+            natural_ascending
+            if direction is LibraryPageDirection.FORWARD
+            else not natural_ascending
+        )
+        if position is not None and cursor_key is not None:
+            if effective_ascending:
+                filters.append(
+                    or_(
+                        key > cursor_key,
+                        and_(key == cursor_key, LibraryPaper.id > position.id),
+                    )
+                )
+            else:
+                filters.append(
+                    or_(
+                        key < cursor_key,
+                        and_(key == cursor_key, LibraryPaper.id < position.id),
+                    )
+                )
+
+        order = key.asc() if effective_ascending else key.desc()
+        id_order = (
+            LibraryPaper.id.asc() if effective_ascending else LibraryPaper.id.desc()
+        )
+        entries = list(
+            self._db.scalars(
+                select(LibraryPaper)
+                .join(Document, Document.id == LibraryPaper.document_id)
+                .options(
+                    selectinload(LibraryPaper.document),
+                    selectinload(LibraryPaper.tags),
+                )
+                .where(*filters)
+                .order_by(order, id_order)
+                .limit(limit + 1)
+            ).all()
+        )
+        has_more = len(entries) > limit
+        entries = entries[:limit]
+        if direction is LibraryPageDirection.BACKWARD:
+            entries.reverse()
+        responses = [library_paper_response(entry) for entry in entries]
+        positions = [
+            LibraryPagePosition(
+                key=self._paper_key(entry, sort=sort),
+                id=entry.id,
+            )
+            for entry in entries
         ]
+        return LibraryPaperPage(
+            items=responses,
+            positions=positions,
+            has_more=has_more,
+            total_count=total_count,
+        )
+
+    def paper_count(self, *, user_id: int) -> int:
+        return int(
+            self._db.scalar(
+                select(func.count(LibraryPaper.id)).where(
+                    LibraryPaper.user_id == user_id
+                )
+            )
+            or 0
+        )
 
     def get(self, *, user_id: int, document_id: UUID) -> LibraryPaperResponse:
         return library_paper_response(
@@ -177,6 +314,70 @@ class SqlAlchemyPaperLibraryGateway:
                 else None
             )
         )
+
+    def remove_many(
+        self,
+        *,
+        user_id: int,
+        document_ids: tuple[UUID, ...],
+        origin_operation_id: UUID,
+        correlation_id: UUID,
+    ) -> dict[UUID, LibraryPaperRemoval]:
+        entries = list(
+            self._db.scalars(
+                select(LibraryPaper)
+                .where(
+                    LibraryPaper.user_id == user_id,
+                    LibraryPaper.document_id.in_(document_ids),
+                )
+                .with_for_update()
+            ).all()
+        )
+        found = {entry.document_id for entry in entries}
+        missing = [document_id for document_id in document_ids if document_id not in found]
+        if missing:
+            from app.shared.domain import AppError, FailureKind
+
+            raise AppError(
+                code="library_paper_not_found",
+                message="One or more Library papers were not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        for entry in entries:
+            self._db.delete(entry)
+        self._db.flush()
+        results: dict[UUID, LibraryPaperRemoval] = {}
+        for document_id in document_ids:
+            scheduled = self._document_removed(
+                document_id=document_id,
+                origin_operation_id=origin_operation_id,
+                correlation_id=correlation_id,
+            )
+            results[document_id] = LibraryPaperRemoval(
+                created_gc_job_id=(
+                    scheduled.job_id
+                    if scheduled is not None and scheduled.created
+                    else None
+                )
+            )
+        return results
+
+    @staticmethod
+    def _paper_key(entry: LibraryPaper, *, sort: LibraryPaperSort) -> str:
+        if sort in {LibraryPaperSort.ADDED_ASC, LibraryPaperSort.ADDED_DESC}:
+            return entry.created_at.isoformat()
+        if sort in {
+            LibraryPaperSort.PUBLISHED_ASC,
+            LibraryPaperSort.PUBLISHED_DESC,
+        }:
+            fallback = (
+                datetime.max if sort is LibraryPaperSort.PUBLISHED_ASC else datetime.min
+            )
+            return (entry.document.publish_date or fallback).isoformat()
+        override_title = entry.metadata_overrides.get("title")
+        return str(
+            override_title or entry.document.title or entry.document.original_filename
+        ).lower()
 
     def public_share(self, *, share_token: str) -> PublicShare:
         shared = document_repository.require_public_share(

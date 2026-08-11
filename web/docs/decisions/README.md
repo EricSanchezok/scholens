@@ -20,6 +20,7 @@ history; add a later ADR that supersedes it.
 - [ADR 0008: Single Conversation agent](./0008-single-conversation-agent.md)
 - [ADR 0009: Conversation turns own response variants](./0009-turn-response-variants.md)
 - [ADR 0010: Turn suggestions and two-stage response readiness](./0010-turn-suggestions-and-response-ready.md)
+- [ADR 0011: Library projections and signed keyset pagination](./0011-library-projections-and-keyset-pagination.md)
 
 ## Template
 

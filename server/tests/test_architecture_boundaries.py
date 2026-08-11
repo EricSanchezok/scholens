@@ -425,7 +425,8 @@ def test_mutation_status_and_idempotency_contracts_are_stable() -> None:
     paths = app.openapi()["paths"]
     async_mutations = {
         "/api/v1/paper-ingestions/uploads",
-        "/api/v1/paper-ingestions/urls",
+        "/api/v1/paper-ingestions/sources",
+        "/api/v1/paper-ingestions/{job_id}/retries",
         "/api/v1/integrations/zotero/imports",
         "/api/v1/integrations/zotero/sync-runs",
         "/api/v1/papers/{document_id}/audio-overviews",

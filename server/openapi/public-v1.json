@@ -459,6 +459,28 @@
         "title": "ApiErrorResponse",
         "type": "object"
       },
+      "ArxivPaperSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "arxiv",
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "ArxivPaperSource",
+        "type": "object"
+      },
       "AudioOverviewContent": {
         "properties": {
           "audio_url": {
@@ -3456,6 +3478,28 @@
         "title": "DocumentResponse",
         "type": "object"
       },
+      "DoiPaperSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "doi",
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "DoiPaperSource",
+        "type": "object"
+      },
       "ExternalAnswerSource": {
         "additionalProperties": false,
         "properties": {
@@ -3995,6 +4039,111 @@
         "title": "Keyword",
         "type": "object"
       },
+      "LibraryOutputListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryOutputResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "LibraryOutputListResponse",
+        "type": "object"
+      },
+      "LibraryOutputResponse": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ResearchItemResponse"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LibraryOutputSourceResponse"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "title",
+          "source"
+        ],
+        "title": "LibraryOutputResponse",
+        "type": "object"
+      },
+      "LibraryOutputSort": {
+        "enum": [
+          "updated_desc",
+          "updated_asc",
+          "title_asc",
+          "title_desc"
+        ],
+        "title": "LibraryOutputSort",
+        "type": "string"
+      },
+      "LibraryOutputSourceResponse": {
+        "properties": {
+          "scope_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "scope_type": {
+            "$ref": "#/components/schemas/ResearchScopeType"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_type",
+          "scope_id",
+          "title"
+        ],
+        "title": "LibraryOutputSourceResponse",
+        "type": "object"
+      },
       "LibraryPaperCollection": {
         "additionalProperties": false,
         "description": "All documents readable through personal or Project-based access.",
@@ -4042,12 +4191,66 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
-          "items"
+          "items",
+          "total_count"
         ],
         "title": "LibraryPaperListResponse",
+        "type": "object"
+      },
+      "LibraryPaperRemovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_ids"
+        ],
+        "title": "LibraryPaperRemovalRequest",
+        "type": "object"
+      },
+      "LibraryPaperRemovalResponse": {
+        "properties": {
+          "removed_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Removed Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "removed_document_ids"
+        ],
+        "title": "LibraryPaperRemovalResponse",
         "type": "object"
       },
       "LibraryPaperResponse": {
@@ -4142,6 +4345,17 @@
         "title": "LibraryPaperShareResponse",
         "type": "object"
       },
+      "LibraryPaperSort": {
+        "enum": [
+          "added_desc",
+          "added_asc",
+          "published_desc",
+          "published_asc",
+          "title_asc"
+        ],
+        "title": "LibraryPaperSort",
+        "type": "string"
+      },
       "LibraryPaperTagResponse": {
         "properties": {
           "color": {
@@ -4198,6 +4412,26 @@
           }
         },
         "title": "LibraryPaperUpdateRequest",
+        "type": "object"
+      },
+      "LibrarySummaryResponse": {
+        "properties": {
+          "output_count": {
+            "minimum": 0.0,
+            "title": "Output Count",
+            "type": "integer"
+          },
+          "paper_count": {
+            "minimum": 0.0,
+            "title": "Paper Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paper_count",
+          "output_count"
+        ],
+        "title": "LibrarySummaryResponse",
         "type": "object"
       },
       "LibraryTagAssignmentRequest": {
@@ -7275,21 +7509,70 @@
         "title": "UploadAcceptedResponse",
         "type": "object"
       },
-      "UploadFromUrlRequest": {
+      "UploadFromSourceRequest": {
         "additionalProperties": false,
         "properties": {
-          "url": {
-            "format": "uri",
-            "maxLength": 2083,
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "arxiv": "#/components/schemas/ArxivPaperSource",
+                "doi": "#/components/schemas/DoiPaperSource",
+                "url": "#/components/schemas/UrlPaperSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DoiPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/ArxivPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/UrlPaperSource"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "UploadFromSourceRequest",
+        "type": "object"
+      },
+      "UrlPaperSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "url",
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2048,
             "minLength": 1,
-            "title": "Url",
+            "title": "Value",
             "type": "string"
           }
         },
         "required": [
-          "url"
+          "kind",
+          "value"
         ],
-        "title": "UploadFromUrlRequest",
+        "title": "UrlPaperSource",
         "type": "object"
       },
       "UsageResponse": {
@@ -10359,9 +10642,238 @@
         "summary": "Get Job"
       }
     },
+    "/api/v1/library/outputs": {
+      "get": {
+        "operationId": "list_library_outputs_api_v1_library_outputs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchItemKind"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kinds"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LibraryOutputSort",
+              "default": "updated_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOutputListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Library Outputs"
+      }
+    },
+    "/api/v1/library/paper-removals": {
+      "post": {
+        "operationId": "remove_library_papers_api_v1_library_paper_removals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryPaperRemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryPaperRemovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Remove Library Papers"
+      }
+    },
     "/api/v1/library/papers": {
       "get": {
         "operationId": "list_library_papers_api_v1_library_papers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag_ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Ids"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LibraryPaperSort",
+              "default": "added_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10372,6 +10884,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -10684,6 +11206,29 @@
           }
         ],
         "summary": "Remove Library Tag Assignment"
+      }
+    },
+    "/api/v1/library/summary": {
+      "get": {
+        "operationId": "get_library_summary_api_v1_library_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibrarySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Library Summary"
       }
     },
     "/api/v1/library/tags": {
@@ -11446,6 +11991,69 @@
         ]
       }
     },
+    "/api/v1/paper-ingestions/sources": {
+      "post": {
+        "operationId": "upload_pdf_from_source_api_v1_paper_ingestions_sources_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadFromSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Upload Pdf From Source"
+      }
+    },
     "/api/v1/paper-ingestions/uploads": {
       "post": {
         "operationId": "upload_pdf_api_v1_paper_ingestions_uploads_post",
@@ -11526,25 +12134,18 @@
         "summary": "Upload Pdf"
       }
     },
-    "/api/v1/paper-ingestions/urls": {
+    "/api/v1/paper-ingestions/{job_id}/retries": {
       "post": {
-        "operationId": "upload_pdf_from_url_api_v1_paper_ingestions_urls_post",
+        "operationId": "retry_pdf_ingestion_api_v1_paper_ingestions__job_id__retries_post",
         "parameters": [
           {
-            "in": "query",
-            "name": "project_id",
-            "required": false,
+            "in": "path",
+            "name": "job_id",
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Project Id"
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
             }
           },
           {
@@ -11566,16 +12167,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UploadFromUrlRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "202": {
             "content": {
@@ -11603,7 +12194,7 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Upload Pdf From Url"
+        "summary": "Retry Pdf Ingestion"
       }
     },
     "/api/v1/papers/{document_id}": {

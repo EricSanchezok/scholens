@@ -22,6 +22,7 @@ from app.modules.papers.infrastructure.downloads import S3PaperDownloadSigner
 from app.helpers.s3 import DEFAULT_SIGNED_URL_TTL_SECONDS
 from app.modules.papers.application.ingestion import IngestPaper
 from app.bootstrap.adapters.paper_ingestion import (
+    DefaultPaperSourceResolver,
     DefaultPaperIngestionLimits,
     DefaultPdfInputValidator,
     SafePdfUrlSource,
@@ -79,6 +80,7 @@ from app.modules.papers.infrastructure.details import SqlAlchemyPaperDetails
 from app.modules.papers.infrastructure.library_gateway import (
     SqlAlchemyPaperLibraryGateway,
 )
+from app.bootstrap.adapters.library_outputs import SqlAlchemyLibraryOutputsGateway
 from app.bootstrap.adapters.document_gc import schedule_document_gc
 from app.modules.projects.application.projects import Projects
 from app.bootstrap.adapters.project_gateway import (
@@ -213,6 +215,10 @@ def build_pdf_url_source() -> SafePdfUrlSource:
     return SafePdfUrlSource()
 
 
+def build_paper_source_resolver() -> DefaultPaperSourceResolver:
+    return DefaultPaperSourceResolver()
+
+
 def build_research_search(
     *,
     db: Session,
@@ -287,14 +293,26 @@ def build_external_paper_discovery(
     )
 
 
-def build_paper_library(*, db: Session, journal: OperationJournal) -> PaperLibrary:
+def build_paper_library(
+    *,
+    db: Session,
+    cursor_secret: str,
+    journal: OperationJournal,
+) -> PaperLibrary:
     return PaperLibrary(
         gateway=SqlAlchemyPaperLibraryGateway(
             db,
             document_removed=partial(schedule_document_gc, db),
         ),
+        outputs=SqlAlchemyLibraryOutputsGateway(db),
         capacity=BillingLibraryCapacity(db),
         signer=S3PaperDownloadSigner(),
+        cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="library-v1",
+            error_code="library_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 

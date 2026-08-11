@@ -136,6 +136,12 @@
     "/api/v1/jobs/{job_id}": [
       "get"
     ],
+    "/api/v1/library/outputs": [
+      "get"
+    ],
+    "/api/v1/library/paper-removals": [
+      "post"
+    ],
     "/api/v1/library/papers": [
       "get",
       "post"
@@ -151,6 +157,9 @@
     ],
     "/api/v1/library/papers/{document_id}/tags/{tag_id}": [
       "delete"
+    ],
+    "/api/v1/library/summary": [
+      "get"
     ],
     "/api/v1/library/tags": [
       "get",
@@ -190,10 +199,13 @@
       "get",
       "put"
     ],
+    "/api/v1/paper-ingestions/sources": [
+      "post"
+    ],
     "/api/v1/paper-ingestions/uploads": [
       "post"
     ],
-    "/api/v1/paper-ingestions/urls": [
+    "/api/v1/paper-ingestions/{job_id}/retries": [
       "post"
     ],
     "/api/v1/papers/{document_id}": [
