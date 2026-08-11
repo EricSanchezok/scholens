@@ -5,12 +5,14 @@ Celery tasks for Scholens jobs
 import asyncio
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any
 
 import psutil
 import requests
+from celery.exceptions import SoftTimeLimitExceeded
 
 from src.schemas import DataTableSchema, DataTableTaskRequest, ResearchDataTableResult
 from src.audio import generate_audio
@@ -32,6 +34,100 @@ logger = logging.getLogger(__name__)
 
 PDF_TASK_SOFT_TIME_LIMIT_SECONDS = 1200
 PDF_TASK_TIME_LIMIT_SECONDS = 1260
+JOB_HEARTBEAT_SECONDS = 30
+JOB_PROGRESS_TIMEOUT_SECONDS = 5
+PDF_PROGRESS_MARKERS = (
+    # Match terminal and specific stages before broad provider status text.
+    # "PDF processing complete" intentionally contains "processing".
+    ("complete", "finalizing"),
+    ("extracting", "extracting_metadata"),
+    ("read ", "extracting_metadata"),
+    ("indexing", "indexing"),
+    ("downloading", "downloading"),
+    ("parsing", "parsing"),
+    ("mineru", "parsing"),
+    ("fallback", "parsing"),
+    ("processing", "parsing"),
+)
+
+
+def _normalize_pdf_progress(status: str, *, current: str) -> str:
+    normalized = status.casefold()
+    return next(
+        (
+            code
+            for marker, code in PDF_PROGRESS_MARKERS
+            if marker in normalized
+        ),
+        current,
+    )
+
+
+class JobCancelled(Exception):
+    """Raised at a cooperative boundary after Server cancels an ingestion."""
+
+
+class ProgressReporter:
+    def __init__(
+        self,
+        *,
+        task: Any,
+        task_id: str,
+        progress_url: str,
+    ) -> None:
+        self._task = task
+        self._task_id = task_id
+        self._progress_url = progress_url
+        self._progress_code = "downloading"
+        self._stop = threading.Event()
+        self._cancelled = threading.Event()
+        self._thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"paper-progress-{task_id}",
+            daemon=True,
+        )
+
+    def __enter__(self) -> "ProgressReporter":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=JOB_PROGRESS_TIMEOUT_SECONDS + 1)
+
+    def update(self, status: str) -> None:
+        _update_status(self._task, self._task_id, status)
+        self._progress_code = _normalize_pdf_progress(
+            status,
+            current=self._progress_code,
+        )
+        self._post_progress()
+        self.check_cancelled()
+
+    def check_cancelled(self) -> None:
+        if self._cancelled.is_set():
+            raise JobCancelled("paper_ingestion_cancelled")
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stop.wait(JOB_HEARTBEAT_SECONDS):
+            self._post_progress()
+
+    def _post_progress(self) -> None:
+        try:
+            response = post_signed_json(
+                self._progress_url,
+                {"progress_code": self._progress_code},
+                timeout=JOB_PROGRESS_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            if not bool(response.json().get("claimed")):
+                self._cancelled.set()
+        except requests.RequestException:
+            logger.warning(
+                "job.progress.delivery_failed",
+                exc_info=True,
+                extra={"job_id": self._task_id},
+            )
 
 
 def _update_status(task: Any, task_id: str, status: str) -> None:
@@ -83,7 +179,8 @@ def upload_and_process_file(
     self,
     s3_object_key: str,
     webhook_url: str,
-    claim_url: str | None = None,
+    progress_url: str,
+    claim_url: str,
     skip_metadata_extraction: bool = False,
 ) -> dict[str, Any]:
     """
@@ -97,60 +194,93 @@ def upload_and_process_file(
     if not _claim_job(claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
-    write_to_status = partial(_update_status, self, task_id)
 
     try:
-        logger.info("job.pdf_processing.started", extra={"job_id": task_id})
-        write_to_status("Downloading PDF from S3")
+        with ProgressReporter(
+            task=self,
+            task_id=task_id,
+            progress_url=progress_url,
+        ) as progress:
+            logger.info("job.pdf_processing.started", extra={"job_id": task_id})
+            progress.update("Downloading PDF from S3")
 
-        async def download_with_timer():
-            async with time_it("Downloading PDF from S3", job_id=task_id):
-                return s3_service.download_file_to_bytes(s3_object_key)
+            async def download_with_timer():
+                async with time_it("Downloading PDF from S3", job_id=task_id):
+                    return s3_service.download_file_to_bytes(s3_object_key)
 
-        pdf_bytes = asyncio.run(download_with_timer())
+            pdf_bytes = asyncio.run(download_with_timer())
+            progress.check_cancelled()
 
-        write_to_status("Processing PDF file")
+            progress.update("Processing PDF file")
 
-        with collect_token_usage(task_id) as usage:
-            usage_events = usage.events
-            result = asyncio.run(
-                process_pdf_file(
-                    pdf_bytes,
-                    s3_object_key,
-                    task_id,
-                    status_callback=write_to_status,
-                    skip_metadata_extraction=skip_metadata_extraction,
+            with collect_token_usage(task_id) as usage:
+                usage_events = usage.events
+                result = asyncio.run(
+                    process_pdf_file(
+                        pdf_bytes,
+                        s3_object_key,
+                        task_id,
+                        status_callback=progress.update,
+                        skip_metadata_extraction=skip_metadata_extraction,
+                    )
                 )
+
+            progress.update("PDF processing complete!")
+            progress.check_cancelled()
+
+            webhook_payload = {
+                "task_id": task_id,
+                "status": "completed" if result.success else "failed",
+                "result": result.model_dump(),
+                "error": result.error if not result.success else None,
+                "usage_events": usage_events,
+            }
+
+            webhook_delivered = _deliver_webhook(
+                webhook_url,
+                webhook_payload,
+                task_id=task_id,
             )
+            if not webhook_delivered:
+                webhook_payload["webhook_error"] = "webhook_delivery_failed"
+            else:
+                try:
+                    asyncio.run(_clear_parser_checkpoint(task_id))
+                except ParserTransientError as exc:
+                    logger.warning(
+                        "job.pdf_checkpoint.clear_failed",
+                        extra={"job_id": task_id, **exc.diagnostic_fields()},
+                    )
 
-        write_to_status("PDF processing complete!")
+            logger.info("job.pdf_processing.completed", extra={"job_id": task_id})
+            return webhook_payload
 
-        webhook_payload = {
+    except JobCancelled:
+        logger.info("job.pdf_processing.cancelled", extra={"job_id": task_id})
+        try:
+            asyncio.run(_clear_parser_checkpoint(task_id))
+        except ParserTransientError as cleanup_exc:
+            logger.warning(
+                "job.pdf_checkpoint.clear_failed",
+                extra={"job_id": task_id, **cleanup_exc.diagnostic_fields()},
+            )
+        return {"task_id": task_id, "status": "cancelled"}
+
+    except SoftTimeLimitExceeded:
+        logger.exception("job.pdf_processing.timed_out", extra={"job_id": task_id})
+        timeout_payload = {
             "task_id": task_id,
-            "status": "completed" if result.success else "failed",
-            "result": result.model_dump(),
-            "error": result.error if not result.success else None,
+            "status": "failed",
+            "result": {
+                "success": False,
+                "job_id": task_id,
+                "error": "pdf_processing_timeout",
+            },
+            "error": "pdf_processing_timeout",
             "usage_events": usage_events,
         }
-
-        webhook_delivered = _deliver_webhook(
-            webhook_url,
-            webhook_payload,
-            task_id=task_id,
-        )
-        if not webhook_delivered:
-            webhook_payload["webhook_error"] = "webhook_delivery_failed"
-        else:
-            try:
-                asyncio.run(_clear_parser_checkpoint(task_id))
-            except ParserTransientError as exc:
-                logger.warning(
-                    "job.pdf_checkpoint.clear_failed",
-                    extra={"job_id": task_id, **exc.diagnostic_fields()},
-                )
-
-        logger.info("job.pdf_processing.completed", extra={"job_id": task_id})
-        return webhook_payload
+        _deliver_webhook(webhook_url, timeout_payload, task_id=task_id)
+        raise
 
     except Exception as exc:
         diagnostics = (

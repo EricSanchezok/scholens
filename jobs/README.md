@@ -21,6 +21,15 @@ The PDF worker follows one explicit pipeline:
    metadata, as Zotero imports do.
 9. Send the result and token usage to Server through an HMAC-signed webhook.
 
+The worker also sends a signed stage projection and heartbeat at bounded
+intervals. Public progress is limited to `queued`, `parsing`, `extracting`,
+`indexing`, and `finalizing`; provider-specific payloads never become client
+state. The task checks Server-owned cancellation before and after expensive
+boundaries. Revocation uses `terminate=False`: pending work can be skipped, and
+running work exits cooperatively without killing a worker process. Soft and hard
+task limits bound the complete workflow so a lost provider response cannot
+leave a Library row processing forever.
+
 MinerU is the only high-fidelity parser. PyMuPDF is a deterministic fallback for
 native-text PDFs; it does not attempt OCR, table reconstruction, or formula
 recognition. A fallback result is persisted as `text_only` so the client can
