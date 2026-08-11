@@ -1,7 +1,7 @@
+export { Page as PaperIcon } from "iconoir-react";
 export {
-  ChatBubbleEmpty as AskIcon,
-  BookStack as LibraryIcon,
-  EditPencil as NewConversationIcon,
-  Page as PaperIcon,
-  Folder as ProjectIcon,
-} from "iconoir-react";
+  AskIcon,
+  LibraryIcon,
+  NewConversationIcon,
+  ProjectIcon,
+} from "@/features/workspace-shell";

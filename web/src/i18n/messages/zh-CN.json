@@ -19,7 +19,7 @@
     "eyebrow": "前端基础 · 验证页面",
     "description": "独立的 Next.js、设计令牌、主题、查询、组件和多语言基础已经运行。具体产品页面将在后续开始开发。"
   },
-  "Home": {
+  "WorkspaceShell": {
     "navigation": {
       "newChat": "新对话",
       "ask": "问答",
@@ -51,7 +51,9 @@
       "system": "跟随系统",
       "signOut": "退出登录",
       "signingOut": "正在退出…"
-    },
+    }
+  },
+  "Home": {
     "hero": {
       "title": "你正在研究什么？",
       "description": "基于你的研究资料提问。",

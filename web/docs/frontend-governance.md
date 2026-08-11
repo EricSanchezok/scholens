@@ -23,6 +23,12 @@ Do not fix a local symptom at a broader layer. Conversely, do not copy a
 shared state into several call sites because changing the correct shared layer
 feels more expensive.
 
+An unfinished downstream feature is not permission to create a provisional
+page, substitute feature, compatibility facade, or fake-data workflow. The
+current slice must expose a clear localized unavailable state and omit dead
+navigation. Add the real integration only when the downstream vertical slice
+exists, then remove the unavailable state in that same change.
+
 ## Source responsibilities
 
 | Source                          | Owns                                                               | Does not own                                                           |

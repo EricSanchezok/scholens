@@ -19,7 +19,7 @@
     "eyebrow": "Web foundation · smoke route",
     "description": "The independent Next.js, token, theme, query, component, and internationalization foundation is running. Product routes intentionally begin later."
   },
-  "Home": {
+  "WorkspaceShell": {
     "navigation": {
       "newChat": "New chat",
       "ask": "Ask",
@@ -51,7 +51,9 @@
       "system": "System",
       "signOut": "Sign out",
       "signingOut": "Signing out…"
-    },
+    }
+  },
+  "Home": {
     "hero": {
       "title": "What are you working on?",
       "description": "Ask across your research.",

@@ -84,6 +84,10 @@ The canonical rules live in [`web/docs`](./web/docs/README.md). In particular:
   `dark:` appearance patches, or repeated typography/elevation recipes.
 - interface copy follows `web/docs/internationalization.md`; UI locale and
   Reader content translation are separate product concepts.
+- Do not invent a temporary page, substitute feature, compatibility facade, or
+  fake-data workflow merely because a downstream feature is unfinished. Keep
+  the current slice honest with an explicit localized unavailable state, then
+  connect the real dependency when its own vertical slice is implemented.
 
 Do not mechanically recreate Figma layers or absolute coordinates. Figma owns
 layout intent, visual hierarchy, interaction states, and acceptance; code owns

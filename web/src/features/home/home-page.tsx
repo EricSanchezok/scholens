@@ -8,7 +8,10 @@ import * as React from "react";
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
-import { AppShell } from "./components/app-shell";
+import {
+  WorkspaceNewChatAction,
+  WorkspaceShell,
+} from "@/features/workspace-shell";
 import { ConversationView } from "./components/conversation-view";
 import {
   conversationFailureFromError,
@@ -18,6 +21,7 @@ import {
 } from "./conversation-state";
 import { HomeDashboard } from "./components/home-dashboard";
 import { useDesktopLayout } from "./hooks/use-desktop-layout";
+import { useMobileKeyboard } from "./hooks/use-mobile-keyboard";
 import {
   createConversation,
   selectConversationResponse,
@@ -34,6 +38,7 @@ import {
   type ConversationTurnsResponse,
 } from "./api/conversation-cache";
 import {
+  ReasoningMenu,
   ResearchComposer,
   useResearchComposerForm,
   type ReasoningLevel,
@@ -94,6 +99,9 @@ export function HomeWorkspace({
   const submissionInFlight = React.useRef(false);
   const composerForm = useResearchComposerForm();
   const isDesktop = useDesktopLayout();
+  const mobileDockRef = React.useRef<HTMLDivElement>(null);
+  const measuredMobileKeyboard = useMobileKeyboard(mobileDockRef, !isDesktop);
+  const mobileViewport = mobileKeyboardOverride ?? measuredMobileKeyboard;
 
   const activeConversationId = initialConversationId ?? pendingConversationId;
 
@@ -473,18 +481,26 @@ export function HomeWorkspace({
   ) : undefined;
 
   return (
-    <AppShell
+    <WorkspaceShell
       activeConversationId={activeConversationId}
+      activeDestination="ask"
       actor={actor}
       collapsed={collapsed}
       conversations={conversations}
       onCollapsedChange={setCollapsed}
-      onReasoningLevelChange={setReasoningLevel}
       onSignOut={handleSignOut}
-      reasoningLevel={reasoningLevel}
       signingOut={signingOut}
-      mobileComposer={mobileComposer}
-      mobileKeyboardOverride={mobileKeyboardOverride}
+      mobileBottomContent={mobileComposer}
+      mobileBottomRef={mobileDockRef}
+      mobileHeaderCenter={
+        <ReasoningMenu
+          onChange={setReasoningLevel}
+          value={reasoningLevel}
+          variant="mobileHeader"
+        />
+      }
+      mobileHeaderTrailing={<WorkspaceNewChatAction />}
+      mobileViewport={mobileViewport}
     >
       {activeConversationId ? (
         <ConversationView
@@ -536,7 +552,7 @@ export function HomeWorkspace({
           showComposer={isDesktop}
         />
       )}
-    </AppShell>
+    </WorkspaceShell>
   );
 }
 

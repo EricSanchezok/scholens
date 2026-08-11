@@ -38,14 +38,20 @@ import { useTheme } from "@/design-system/theme/theme-provider";
 import type { Actor } from "@/features/authentication";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
-import { useMobileKeyboard } from "../hooks/use-mobile-keyboard";
 import {
   AskIcon,
   LibraryIcon,
   NewConversationIcon,
   ProjectIcon,
-} from "./home-icons";
-import { ReasoningMenu, type ReasoningLevel } from "./research-composer";
+} from "./icons";
+
+export type WorkspaceDestination = "ask" | "library" | "projects";
+
+export type MobileViewportState = {
+  open: boolean;
+  viewportHeight?: number;
+  viewportOffsetTop?: number;
+};
 
 type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
 
@@ -183,7 +189,7 @@ function AccountMenu({
   signingOut: boolean;
   onSignOut: () => Promise<void>;
 }) {
-  const t = useTranslations("Home");
+  const t = useTranslations("WorkspaceShell");
   const { preference, setColorSchemePreference } = useTheme();
   const name = actorName(actor);
   const initial = name.slice(0, 1).toUpperCase();
@@ -370,7 +376,7 @@ function MobileNavigation({
   onSignOut: () => Promise<void>;
   onSelect: () => void;
 }) {
-  const t = useTranslations("Home");
+  const t = useTranslations("WorkspaceShell");
   const [query, setQuery] = React.useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matching = normalizedQuery
@@ -443,8 +449,12 @@ function MobileNavigation({
   );
 }
 
-function MobileTabBar() {
-  const t = useTranslations("Home.navigation");
+function MobileTabBar({
+  activeDestination,
+}: {
+  activeDestination: WorkspaceDestination;
+}) {
+  const t = useTranslations("WorkspaceShell.navigation");
   const itemClassName = cn(
     "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] px-1 text-xs font-medium",
     keyboardFocusRing,
@@ -457,29 +467,63 @@ function MobileTabBar() {
       data-testid="mobile-tab-bar"
     >
       <Link
-        aria-current="page"
-        className={cn(itemClassName, "text-foreground")}
+        aria-current={activeDestination === "ask" ? "page" : undefined}
+        className={cn(
+          itemClassName,
+          activeDestination === "ask" ? "text-foreground" : "text-secondary",
+        )}
         href="/"
       >
         <span
-          className="bg-primary grid size-8 place-items-center rounded-full"
-          data-selected-indicator
+          className={cn(
+            "grid size-8 place-items-center rounded-full",
+            activeDestination === "ask" && "bg-primary",
+          )}
+          data-selected-indicator={
+            activeDestination === "ask" ? true : undefined
+          }
         >
-          <Icon glyph={AskIcon} size={20} tone="inverse" />
+          <Icon
+            glyph={AskIcon}
+            size={20}
+            tone={activeDestination === "ask" ? "inverse" : "secondary"}
+          />
         </span>
-        <span className="font-semibold">{t("ask")}</span>
+        <span className={activeDestination === "ask" ? "font-semibold" : ""}>
+          {t("ask")}
+        </span>
       </Link>
-      <button
-        aria-label={`${t("library")}. ${t("comingSoon")}`}
-        className={cn(itemClassName, "text-muted")}
-        disabled
-        type="button"
+      <Link
+        aria-current={activeDestination === "library" ? "page" : undefined}
+        className={cn(
+          itemClassName,
+          activeDestination === "library"
+            ? "text-foreground"
+            : "text-secondary",
+        )}
+        href={"/library" as Route}
       >
-        <span className="grid size-8 place-items-center">
-          <Icon glyph={LibraryIcon} size={24} tone="secondary" />
+        <span
+          className={cn(
+            "grid size-8 place-items-center rounded-full",
+            activeDestination === "library" && "bg-primary",
+          )}
+          data-selected-indicator={
+            activeDestination === "library" ? true : undefined
+          }
+        >
+          <Icon
+            glyph={LibraryIcon}
+            size={20}
+            tone={activeDestination === "library" ? "inverse" : "secondary"}
+          />
         </span>
-        <span>{t("library")}</span>
-      </button>
+        <span
+          className={activeDestination === "library" ? "font-semibold" : ""}
+        >
+          {t("library")}
+        </span>
+      </Link>
       <button
         aria-label={`${t("projects")}. ${t("comingSoon")}`}
         className={cn(itemClassName, "text-muted")}
@@ -496,11 +540,13 @@ function MobileTabBar() {
 }
 
 function MobileBottomDock({
-  composer,
+  activeDestination,
+  content,
   keyboardOpen,
   ref,
 }: {
-  composer: React.ReactNode;
+  activeDestination: WorkspaceDestination;
+  content?: React.ReactNode;
   keyboardOpen: boolean;
   ref: React.Ref<HTMLDivElement>;
 }) {
@@ -518,9 +564,25 @@ function MobileBottomDock({
         aria-hidden="true"
         className="pointer-events-none absolute right-0 bottom-full left-0 h-5 bg-[linear-gradient(to_top,var(--color-bg-canvas),transparent)]"
       />
-      <div className="min-w-0">{composer}</div>
-      {!keyboardOpen && <MobileTabBar />}
+      {content && <div className="min-w-0">{content}</div>}
+      {!keyboardOpen && <MobileTabBar activeDestination={activeDestination} />}
     </div>
+  );
+}
+
+export function WorkspaceNewChatAction() {
+  const t = useTranslations("WorkspaceShell.navigation");
+  return (
+    <Link
+      aria-label={t("newChat")}
+      className={cn(
+        "hover:bg-hover active:bg-pressed grid size-11 place-items-center rounded-[var(--radius-md)]",
+        keyboardFocusRing,
+      )}
+      href="/"
+    >
+      <Icon glyph={NewConversationIcon} size={24} />
+    </Link>
   );
 }
 
@@ -528,6 +590,7 @@ function Sidebar({
   actor,
   conversations,
   activeConversationId,
+  activeDestination,
   collapsed,
   signingOut,
   onCollapsedChange,
@@ -537,13 +600,14 @@ function Sidebar({
   actor: Actor;
   conversations: ConversationSummary[];
   activeConversationId?: string;
+  activeDestination: WorkspaceDestination;
   collapsed: boolean;
   signingOut: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onSignOut: () => Promise<void>;
   onSelect?: () => void;
 }) {
-  const t = useTranslations("Home");
+  const t = useTranslations("WorkspaceShell");
   const pinned = conversations.filter((item) => item.pinned_at).slice(0, 3);
   const recent = conversations.filter((item) => !item.pinned_at).slice(0, 7);
 
@@ -587,7 +651,7 @@ function Sidebar({
           aria-label={t("navigation.openMenu")}
         >
           <SidebarControl
-            active={!activeConversationId}
+            active={activeDestination === "ask" && !activeConversationId}
             collapsed={collapsed}
             glyph={NewConversationIcon}
             href="/"
@@ -595,10 +659,10 @@ function Sidebar({
             onSelect={onSelect}
           />
           <SidebarControl
+            active={activeDestination === "library"}
             collapsed={collapsed}
-            disabled
-            disabledHint={t("navigation.comingSoon")}
             glyph={LibraryIcon}
+            href="/library"
             label={t("navigation.library")}
           />
           <SidebarControl
@@ -644,55 +708,51 @@ function Sidebar({
   );
 }
 
-export function AppShell({
+export function WorkspaceShell({
   actor,
   conversations,
   activeConversationId,
+  activeDestination,
   collapsed,
   signingOut,
-  reasoningLevel,
   onCollapsedChange,
-  onReasoningLevelChange,
   onSignOut,
-  mobileComposer,
-  mobileKeyboardOverride,
+  mobileHeaderCenter,
+  mobileHeaderTrailing,
+  mobileBottomContent,
+  mobileBottomRef,
+  mobileViewport,
   children,
 }: {
   actor: Actor;
   conversations: ConversationSummary[];
   activeConversationId?: string;
+  activeDestination: WorkspaceDestination;
   collapsed: boolean;
   signingOut: boolean;
-  reasoningLevel: ReasoningLevel;
   onCollapsedChange: (collapsed: boolean) => void;
-  onReasoningLevelChange: (level: ReasoningLevel) => void;
   onSignOut: () => Promise<void>;
-  mobileComposer?: React.ReactNode;
-  mobileKeyboardOverride?: {
-    open: boolean;
-    viewportHeight?: number;
-    viewportOffsetTop?: number;
-  };
+  mobileHeaderCenter?: React.ReactNode;
+  mobileHeaderTrailing?: React.ReactNode;
+  mobileBottomContent?: React.ReactNode;
+  mobileBottomRef?: React.Ref<HTMLDivElement>;
+  mobileViewport?: MobileViewportState;
   children: React.ReactNode;
 }) {
-  const t = useTranslations("Home");
+  const t = useTranslations("WorkspaceShell");
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const mobileSheetRef = React.useRef<HTMLDivElement>(null);
-  const mobileDockRef = React.useRef<HTMLDivElement>(null);
-  const mobileKeyboard = useMobileKeyboard(
-    mobileDockRef,
-    Boolean(mobileComposer),
-  );
-  const effectiveMobileKeyboard = mobileKeyboardOverride ?? mobileKeyboard;
+  const localMobileDockRef = React.useRef<HTMLDivElement>(null);
+  const effectiveMobileViewport = mobileViewport ?? { open: false };
 
   return (
     <div
       className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden"
       style={
-        effectiveMobileKeyboard.viewportHeight
+        effectiveMobileViewport.viewportHeight
           ? {
-              height: `${effectiveMobileKeyboard.viewportHeight}px`,
-              transform: `translateY(${effectiveMobileKeyboard.viewportOffsetTop ?? 0}px)`,
+              height: `${effectiveMobileViewport.viewportHeight}px`,
+              transform: `translateY(${effectiveMobileViewport.viewportOffsetTop ?? 0}px)`,
             }
           : undefined
       }
@@ -700,6 +760,7 @@ export function AppShell({
       <div className="hidden lg:block">
         <Sidebar
           activeConversationId={activeConversationId}
+          activeDestination={activeDestination}
           actor={actor}
           collapsed={collapsed}
           conversations={conversations}
@@ -743,22 +804,8 @@ export function AppShell({
             >
               <Icon glyph={Menu} size={24} />
             </IconButton>
-            <ReasoningMenu
-              className="mx-2"
-              onChange={onReasoningLevelChange}
-              value={reasoningLevel}
-              variant="mobileHeader"
-            />
-            <Link
-              aria-label={t("navigation.newChat")}
-              className={cn(
-                "hover:bg-hover active:bg-pressed ml-auto grid size-11 place-items-center rounded-[var(--radius-md)]",
-                keyboardFocusRing,
-              )}
-              href="/"
-            >
-              <Icon glyph={NewConversationIcon} size={24} />
-            </Link>
+            <div className="mx-2 min-w-0 flex-1">{mobileHeaderCenter}</div>
+            <div className="ml-auto shrink-0">{mobileHeaderTrailing}</div>
           </div>
         </header>
         <main
@@ -767,13 +814,12 @@ export function AppShell({
         >
           {children}
         </main>
-        {mobileComposer && (
-          <MobileBottomDock
-            composer={mobileComposer}
-            keyboardOpen={effectiveMobileKeyboard.open}
-            ref={mobileDockRef}
-          />
-        )}
+        <MobileBottomDock
+          activeDestination={activeDestination}
+          content={mobileBottomContent}
+          keyboardOpen={effectiveMobileViewport.open}
+          ref={mobileBottomRef ?? localMobileDockRef}
+        />
       </div>
     </div>
   );
