@@ -300,6 +300,14 @@ export const SuggestedFollowUps: Story = {
     ).not.toBeInTheDocument();
     await expect(suggestion.querySelector("svg")).toBeNull();
     await expect(args.onSubmit).not.toHaveBeenCalled();
+    const answer = canvas.getByText("Today is Wednesday, August 5, 2026.");
+    const suggestionStyle = window.getComputedStyle(suggestion);
+    const suggestionLabelLeft =
+      suggestion.getBoundingClientRect().left +
+      Number.parseFloat(suggestionStyle.paddingLeft);
+    await expect(
+      Math.abs(suggestionLabelLeft - answer.getBoundingClientRect().left),
+    ).toBeLessThanOrEqual(1);
     suggestion.blur();
   },
 };

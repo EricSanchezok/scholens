@@ -59,12 +59,12 @@ function FollowUpSuggestions({
     return (
       <section
         aria-label={t("suggestionsPreparing")}
-        className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0 lg:px-1"
+        className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0"
         role="status"
       >
-        <Skeleton className="h-11 w-3/4 rounded-full lg:h-10 lg:w-full lg:rounded-[var(--radius-sm)]" />
-        <Skeleton className="h-11 w-[88%] rounded-full lg:h-10 lg:w-full lg:rounded-[var(--radius-sm)]" />
-        <Skeleton className="h-11 w-2/3 rounded-full lg:h-10 lg:w-full lg:rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-11 w-3/4 rounded-full lg:-mx-3 lg:h-10 lg:w-auto lg:rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-11 w-[88%] rounded-full lg:-mx-3 lg:h-10 lg:w-auto lg:rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-11 w-2/3 rounded-full lg:-mx-3 lg:h-10 lg:w-auto lg:rounded-[var(--radius-sm)]" />
       </section>
     );
   }
@@ -87,11 +87,11 @@ function FollowUpSuggestions({
   return (
     <section
       aria-label={t("suggestions")}
-      className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0 lg:px-1"
+      className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0"
     >
       {response.suggestions.map((suggestion) => (
         <button
-          className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors motion-reduce:transition-none lg:min-h-10 lg:w-full lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
+          className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors motion-reduce:transition-none lg:-mx-3 lg:min-h-10 lg:w-auto lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
           key={suggestion}
           onClick={() => onUseSuggestion(suggestion)}
           type="button"
