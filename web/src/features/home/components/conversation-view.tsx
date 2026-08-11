@@ -16,6 +16,7 @@ import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import type {
   ConversationFailure,
+  ProvisionalAssistantItem,
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
@@ -74,7 +75,7 @@ function FollowUpSuggestions({
 function AssistantMessage({
   entries,
   content,
-  provisionalContent,
+  provisionalItems,
   references,
   sourceTotal,
   state,
@@ -92,7 +93,7 @@ function AssistantMessage({
 }: {
   entries: ConversationTraceEntry[];
   content: string;
-  provisionalContent?: string;
+  provisionalItems?: ProvisionalAssistantItem[];
   references: unknown;
   sourceTotal: number;
   state: LiveTurn["state"];
@@ -113,7 +114,7 @@ function AssistantMessage({
   const [selectedSourceKey, setSelectedSourceKey] = React.useState<
     number | undefined
   >();
-  const visibleContent = content || provisionalContent || "";
+  const visibleContent = content;
   const presentationState =
     content && state === "streaming" ? "complete" : state;
   const orderedVariants = canSwitch
@@ -131,7 +132,7 @@ function AssistantMessage({
         failure={failure ?? null}
         historical={historical}
         onOpenChange={onActivityOpenChange}
-        provisionalVisible={Boolean(provisionalContent)}
+        provisionalItems={provisionalItems ?? []}
         sourceTotal={sourceTotal}
         state={presentationState}
       />
@@ -315,9 +316,7 @@ function MessageHistory({
                 onUseSuggestion={
                   latestControlsVisible ? onUseSuggestion : undefined
                 }
-                provisionalContent={liveTurn.provisionalItems
-                  .map((item) => item.content)
-                  .join("")}
+                provisionalItems={liveTurn.provisionalItems}
                 references={liveTurn.references}
                 response={liveResponse}
                 sourceTotal={
@@ -425,9 +424,9 @@ export function ConversationView({
         : `${entry.id}:${entry.content.length}`,
     )
     .join("|");
-  const provisionalContent = liveTurn?.provisionalItems
-    .map((item) => item.content)
-    .join("");
+  const provisionalSignature = liveTurn?.provisionalItems
+    .map((item) => `${item.id}:${item.content.length}`)
+    .join("|");
   const liveResponse = liveTurn?.readyTurn?.responses.find(
     (response) => response.id === liveTurn.responseId,
   );
@@ -472,7 +471,7 @@ export function ConversationView({
     worklogSignature,
     liveTurn?.content,
     liveTurn?.suggestions,
-    provisionalContent,
+    provisionalSignature,
     visibleTurns.length,
   ]);
 
@@ -493,7 +492,7 @@ export function ConversationView({
       className="mx-auto flex min-h-full w-full max-w-[848px] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8"
       ref={rootRef}
     >
-      <div className="flex-1 pt-6 pb-10 lg:py-8 lg:pb-40">
+      <div className="flex-1 pt-6 pb-10 lg:py-8">
         {loading ? (
           <p className="text-muted py-12 text-center text-sm" role="status">
             {t("loading")}
@@ -563,7 +562,7 @@ export function ConversationView({
                   onUseSuggestion={
                     submissionPending ? undefined : onUseSuggestion
                   }
-                  provisionalContent={provisionalContent}
+                  provisionalItems={liveTurn.provisionalItems}
                   references={liveTurn.references}
                   response={liveResponse}
                   sourceTotal={

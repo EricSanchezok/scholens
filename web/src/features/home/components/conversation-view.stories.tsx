@@ -580,6 +580,16 @@ export const ProvisionalResponse: Story = {
       ],
     }),
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const content = canvas.getByText(
+      "I’ll first inspect the research available in your library.",
+    );
+    await expect(content.closest("li")).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: /Thinking/ }),
+    ).toHaveAttribute("aria-expanded", "true");
+  },
 };
 
 export const ProgressBeforeTools: Story = {

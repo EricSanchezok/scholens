@@ -79,6 +79,12 @@ test("renders the authenticated Home shell and primary data", async ({
     "data-color-scheme",
     /light|dark/,
   );
+  expect(
+    await page.evaluate(() => {
+      const root = document.scrollingElement;
+      return root ? root.scrollHeight <= root.clientHeight : false;
+    }),
+  ).toBe(true);
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);

@@ -687,7 +687,7 @@ export function AppShell({
 
   return (
     <div
-      className="bg-canvas flex h-dvh min-h-0 overflow-hidden lg:h-screen lg:min-h-[36rem]"
+      className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden"
       style={
         effectiveMobileKeyboard.viewportHeight
           ? {
@@ -761,7 +761,10 @@ export function AppShell({
             </Link>
           </div>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto" tabIndex={0}>
+        <main
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+          tabIndex={0}
+        >
           {children}
         </main>
         {mobileComposer && (

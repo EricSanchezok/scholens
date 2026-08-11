@@ -25,6 +25,11 @@ the deliberately deferred boundaries.
   inside a narrow drawer. The hub closes with a directional return control
   rather than a dismiss-style X. Search, Settings, and New conversation remain
   anchored in one bottom utility row above the safe area.
+- `AppShell` is fixed to the visual viewport and prevents document scrolling.
+  Its `main` element is the sole vertical conversation scroller; the desktop
+  Sidebar and mobile Dock remain outside that scroll ownership. Message content
+  keeps only the padding needed for its in-flow Composer, so scrolling to the
+  latest turn cannot expose an artificial blank page below the answer.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary
@@ -54,10 +59,12 @@ lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 then atomically classified as `progress` or `final` by its completion event;
 `response_ready` supplies the complete persisted turn snapshot, and an optional
 `suggestions` event may supplement it before `complete` closes the stream. The
-client never infers phase
-from prose and never duplicates the text while moving it. Progress and activity
-share one sequence and become an ordered worklog. The final answer remains
-outside that trace and is always visible.
+client never infers phase from prose and never duplicates the text while moving
+it. Until classification, the stable item occupies the worklog's progress slot
+and uses the same message typography it retains if classified as progress, so
+the completion event changes ownership and disclosure without a visual-format
+flash. Progress and activity share one sequence and become an ordered worklog.
+The final answer remains outside that trace and is always visible.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
 tool name. Adjacent tool entries are rendered as one category-count batch;

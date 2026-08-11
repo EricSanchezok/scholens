@@ -18,10 +18,12 @@ import { cn } from "@/lib/utilities/cn";
 import type {
   ConversationActivity,
   ConversationFailure,
+  ProvisionalAssistantItem,
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
 import { LibraryIcon } from "./home-icons";
+import { MessageContent } from "./message-content";
 
 type ActivityBatch = {
   kind: "batch";
@@ -182,7 +184,7 @@ export function ConversationWorklog({
   sourceTotal,
   state,
   failure,
-  provisionalVisible,
+  provisionalItems,
   historical = false,
   onOpenChange,
 }: {
@@ -190,27 +192,41 @@ export function ConversationWorklog({
   sourceTotal: number;
   state: LiveTurn["state"];
   failure: ConversationFailure | null;
-  provisionalVisible: boolean;
+  provisionalItems: ProvisionalAssistantItem[];
   historical?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const t = useTranslations("Home.conversation");
   const [manualOpen, setManualOpen] = React.useState<boolean | null>(null);
-  const rows = React.useMemo(() => groupWorklogEntries(entries), [entries]);
-  const hasHistory = rows.length > 0;
+  const rows = React.useMemo(
+    () =>
+      groupWorklogEntries([
+        ...entries,
+        ...provisionalItems
+          .filter((item) => item.content)
+          .map((item) => ({
+            kind: "progress" as const,
+            id: item.id,
+            sequence: item.sequence,
+            content: item.content,
+          })),
+      ]),
+    [entries, provisionalItems],
+  );
+  const hasDetails = rows.length > 0;
   const open =
-    manualOpen ?? (!historical && state === "streaming" && hasHistory);
+    manualOpen ?? (!historical && state === "streaming" && hasDetails);
   const visible =
-    hasHistory ||
+    hasDetails ||
     state === "cancelled" ||
     state === "error" ||
-    (state === "streaming" && !provisionalVisible);
+    state === "streaming";
   const summary = worklogSummary(entries, state, sourceTotal, failure, t);
 
   if (!visible) return null;
 
   function toggle() {
-    if (!hasHistory) return;
+    if (!hasDetails) return;
     const next = !open;
     setManualOpen(next);
     onOpenChange?.(next);
@@ -221,7 +237,7 @@ export function ConversationWorklog({
       className="text-secondary min-w-0 text-[0.9375rem] leading-6 lg:text-sm lg:leading-normal"
       data-state={state}
     >
-      {hasHistory ? (
+      {hasDetails ? (
         <button
           aria-expanded={open}
           className={cn(
@@ -259,18 +275,18 @@ export function ConversationWorklog({
           </span>
         </p>
       )}
-      {open && hasHistory && (
+      {open && hasDetails && (
         <ol className="border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
           {rows.map((row) =>
             row.kind === "progress" ? (
               <li
-                className="text-foreground relative py-1 text-sm leading-[1.375rem] [overflow-wrap:anywhere] lg:static lg:text-xs lg:leading-5"
+                className="text-foreground relative py-1 [overflow-wrap:anywhere] lg:static"
                 key={row.id}
               >
                 <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 place-items-center rounded-full border lg:hidden">
                   <Icon glyph={LightBulb} size={16} tone="secondary" />
                 </span>
-                {row.content}
+                <MessageContent content={row.content} />
               </li>
             ) : (
               <ActivityBatchRow batch={row} key={row.id} />
