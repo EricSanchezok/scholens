@@ -178,6 +178,133 @@
       "retry": "Retry session check"
     }
   },
+  "Library": {
+    "title": "Library",
+    "description": "Organize papers and the research outputs created from them.",
+    "tabs": {
+      "papers": "Papers {count}",
+      "outputs": "Outputs {count}"
+    },
+    "common": {
+      "close": "Close",
+      "noOptions": "No options available",
+      "cancel": "Cancel",
+      "actionFailed": "The action could not be completed"
+    },
+    "addPapers": {
+      "open": "Add papers",
+      "close": "Close add papers",
+      "title": "Add papers",
+      "description": "Upload PDFs or add an open paper from DOI, arXiv, or a direct PDF URL.",
+      "pdfTitle": "PDF files",
+      "pdfDescription": "Select multiple PDFs up to 50 MB each. Up to three upload at once.",
+      "fileTooLarge": "This file is larger than 50 MB.",
+      "uploadFailed": "Upload failed. Try this file again.",
+      "chooseFiles": "Choose PDFs",
+      "queueLabel": "PDF upload queue",
+      "retry": "Retry",
+      "uploadFiles": "Upload {count, plural, one {# file} other {# files}}",
+      "status": {
+        "queued": "Ready to upload",
+        "uploading": "Uploading",
+        "succeeded": "Added for processing",
+        "failed": "Upload failed"
+      },
+      "sourceTitle": "DOI, arXiv, or PDF URL",
+      "sourceDescription": "Scholens will resolve an open PDF and add it to your library.",
+      "sourceType": "Source type",
+      "pdfUrl": "PDF URL",
+      "sourceValue": "Source",
+      "placeholder": {
+        "doi": "10.1000/example",
+        "arxiv": "2401.01234",
+        "url": "https://example.org/paper.pdf"
+      },
+      "sourceRequired": "Enter a DOI, arXiv ID, or direct PDF URL.",
+      "sourceFailed": "This source could not be added. Check that an open PDF is available.",
+      "destination": "Destination",
+      "personalLibrary": "Personal library",
+      "destinationDescription": "Optionally add the paper to a project while importing it.",
+      "addSource": "Add source"
+    },
+    "papers": {
+      "search": "Search papers",
+      "loading": "Loading papers",
+      "tryAgain": "Try again",
+      "errorTitle": "Papers could not be loaded",
+      "errorDescription": "Your filters are preserved. Try loading the library again.",
+      "emptyTitle": "No papers found",
+      "emptyDescription": "Adjust the filters or add a paper to start your library.",
+      "count": "{count, plural, one {# paper} other {# papers}}",
+      "selectAll": "Select all papers on this page",
+      "select": "Select {title}",
+      "unknown": "Unknown",
+      "columns": {
+        "paper": "Paper",
+        "added": "Added",
+        "published": "Published",
+        "actions": "Actions"
+      },
+      "selected": "{count, plural, one {# paper selected} other {# papers selected}}",
+      "previous": "Previous",
+      "next": "Next",
+      "sort": {
+        "label": "Sort papers",
+        "added_desc": "Newest added",
+        "added_asc": "Oldest added",
+        "published_desc": "Newest published",
+        "published_asc": "Oldest published",
+        "title_asc": "Title A–Z"
+      },
+      "actions": {
+        "open": "Actions for {title}",
+        "tags": "Edit tags",
+        "project": "Add to project",
+        "download": "Download PDF",
+        "remove": "Remove from library",
+        "downloadFailed": "The PDF download could not be opened"
+      },
+      "ingestion": {
+        "section": "Paper processing",
+        "failed": "Paper processing failed",
+        "processing": "Processing paper",
+        "failedDescription": "The source is preserved and can be retried.",
+        "processingDescription": "This row will update when processing finishes.",
+        "retry": "Retry"
+      },
+      "filters": {
+        "tags": "Tags",
+        "noTags": "No tags yet"
+      },
+      "tagDialog": {
+        "title": "Edit tags",
+        "description": "Choose the tags to assign to {count, plural, one {this paper} other {these papers}}.",
+        "submit": "Apply tags"
+      },
+      "projectDialog": {
+        "title": "Add to project",
+        "description": "Choose one project for {count, plural, one {this paper} other {these papers}}.",
+        "submit": "Add to project"
+      },
+      "removeDialog": {
+        "title": "Remove from library?",
+        "description": "This removes {count, plural, one {the paper} other {# papers}} from your personal library. Project references remain intact.",
+        "cancel": "Cancel",
+        "confirm": "Remove"
+      }
+    },
+    "outputs": {
+      "search": "Search outputs",
+      "notAvailableTitle": "Outputs are not implemented yet",
+      "notAvailableDescription": "This tab is completed in the next Library phase without creating a temporary page."
+    },
+    "session": {
+      "checking": "Opening your library",
+      "retry": "Retry session check",
+      "unavailableTitle": "Your session could not be checked",
+      "unavailableDescription": "Your library is still here. Retry when the server is available."
+    }
+  },
   "AsyncFeedback": {
     "loading": "Loading",
     "retrying": "Trying again",

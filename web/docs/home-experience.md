@@ -381,8 +381,10 @@ check.
 
 ## Deferred by design
 
-Library, Projects, Reader, Translation, and Settings routes remain disabled
-navigation destinations until their own vertical slices begin. Home does not
-introduce abstractions for those pages, edit conversation metadata, or add a
-legacy-client compatibility layer. Any newly discovered backend gap must block
-a current Home behavior before the contract is expanded.
+Projects, Reader, Translation, and Settings routes remain disabled navigation
+destinations until their own vertical slices begin. Library is now an owned
+vertical slice and reuses only the Workspace Shell boundary; Home continues to
+own its composer, reasoning control, keyboard behavior, and conversation state.
+Home does not edit conversation metadata or add a legacy-client compatibility
+layer. Any newly discovered backend gap must block a current Home behavior
+before the contract is expanded.

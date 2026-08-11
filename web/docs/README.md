@@ -27,6 +27,7 @@ runtime behavior, accessibility, data contracts, and component APIs.
 | [Internationalization](./internationalization.md)                               | Adding UI copy, locale behavior, formatting, or another language     |
 | [Authentication foundation](./authentication-foundation.md)                     | Building auth UI, session behavior, responsive auth layout, or mocks |
 | [Home experience](./home-experience.md)                                         | Changing the Home shell, composer, recents, or conversation stream   |
+| [Library experience](./library-experience.md)                                   | Changing Papers, Outputs, import, filtering, or Library actions      |
 | [API development](./api-development.md)                                         | Changing a backend contract or adding a request/query                |
 | [Testing](./testing.md)                                                         | Choosing test scope or adding a network/interaction state            |
 | [New feature checklist](./new-feature-checklist.md)                             | Starting and finishing every product feature                         |

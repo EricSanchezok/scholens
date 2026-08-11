@@ -1,6 +1,7 @@
 import * as React from "react";
 
-export type IconTone = "primary" | "secondary" | "inverse" | "disabled";
+export type IconTone =
+  "primary" | "secondary" | "inverse" | "disabled" | "success" | "danger";
 export type IconSize = 16 | 20 | 24;
 
 const toneClass: Record<IconTone, string> = {
@@ -8,6 +9,8 @@ const toneClass: Record<IconTone, string> = {
   secondary: "text-ui-icon-secondary",
   inverse: "text-ui-icon-inverse",
   disabled: "text-ui-icon-disabled",
+  success: "text-success",
+  danger: "text-danger",
 };
 
 export type IconGlyph = React.ForwardRefExoticComponent<

@@ -178,6 +178,133 @@
       "retry": "重试状态检查"
     }
   },
+  "Library": {
+    "title": "资料库",
+    "description": "集中管理论文，以及从论文中生成的研究产物。",
+    "tabs": {
+      "papers": "论文 {count}",
+      "outputs": "产物 {count}"
+    },
+    "common": {
+      "close": "关闭",
+      "noOptions": "暂无可选项",
+      "cancel": "取消",
+      "actionFailed": "未能完成此操作"
+    },
+    "addPapers": {
+      "open": "添加论文",
+      "close": "关闭添加论文",
+      "title": "添加论文",
+      "description": "上传 PDF，或通过 DOI、arXiv、PDF 直链添加开放论文。",
+      "pdfTitle": "PDF 文件",
+      "pdfDescription": "可多选，每个 PDF 最大 50 MB；同时最多上传 3 个。",
+      "fileTooLarge": "此文件超过 50 MB。",
+      "uploadFailed": "上传失败，请重试此文件。",
+      "chooseFiles": "选择 PDF",
+      "queueLabel": "PDF 上传队列",
+      "retry": "重试",
+      "uploadFiles": "上传 {count} 个文件",
+      "status": {
+        "queued": "等待上传",
+        "uploading": "正在上传",
+        "succeeded": "已进入处理队列",
+        "failed": "上传失败"
+      },
+      "sourceTitle": "DOI、arXiv 或 PDF 网址",
+      "sourceDescription": "Scholens 会解析开放 PDF，并将其添加到你的资料库。",
+      "sourceType": "来源类型",
+      "pdfUrl": "PDF 网址",
+      "sourceValue": "来源",
+      "placeholder": {
+        "doi": "10.1000/example",
+        "arxiv": "2401.01234",
+        "url": "https://example.org/paper.pdf"
+      },
+      "sourceRequired": "请输入 DOI、arXiv ID 或 PDF 直链。",
+      "sourceFailed": "无法添加此来源，请确认存在可访问的开放 PDF。",
+      "destination": "添加到",
+      "personalLibrary": "个人资料库",
+      "destinationDescription": "导入时也可以同时将论文加入一个项目。",
+      "addSource": "添加来源"
+    },
+    "papers": {
+      "search": "搜索论文",
+      "loading": "正在加载论文",
+      "tryAgain": "重试",
+      "errorTitle": "无法加载论文",
+      "errorDescription": "筛选条件已保留，请重新加载资料库。",
+      "emptyTitle": "没有找到论文",
+      "emptyDescription": "调整筛选条件，或添加一篇论文开始使用资料库。",
+      "count": "共 {count} 篇论文",
+      "selectAll": "选择当前页全部论文",
+      "select": "选择《{title}》",
+      "unknown": "未知",
+      "columns": {
+        "paper": "论文",
+        "added": "添加时间",
+        "published": "发表时间",
+        "actions": "操作"
+      },
+      "selected": "已选择 {count} 篇论文",
+      "previous": "上一页",
+      "next": "下一页",
+      "sort": {
+        "label": "论文排序",
+        "added_desc": "最近添加",
+        "added_asc": "最早添加",
+        "published_desc": "最近发表",
+        "published_asc": "最早发表",
+        "title_asc": "标题 A–Z"
+      },
+      "actions": {
+        "open": "《{title}》的操作",
+        "tags": "编辑标签",
+        "project": "加入项目",
+        "download": "下载 PDF",
+        "remove": "从资料库移除",
+        "downloadFailed": "无法打开 PDF 下载"
+      },
+      "ingestion": {
+        "section": "论文处理状态",
+        "failed": "论文处理失败",
+        "processing": "正在处理论文",
+        "failedDescription": "来源已保留，可以重新处理。",
+        "processingDescription": "处理完成后，此状态会自动更新。",
+        "retry": "重试"
+      },
+      "filters": {
+        "tags": "标签",
+        "noTags": "暂无标签"
+      },
+      "tagDialog": {
+        "title": "编辑标签",
+        "description": "为已选择的 {count} 篇论文设置标签。",
+        "submit": "应用标签"
+      },
+      "projectDialog": {
+        "title": "加入项目",
+        "description": "为已选择的 {count} 篇论文选择一个项目。",
+        "submit": "加入项目"
+      },
+      "removeDialog": {
+        "title": "从资料库移除？",
+        "description": "将从个人资料库移除 {count} 篇论文；项目中的引用会继续保留。",
+        "cancel": "取消",
+        "confirm": "移除"
+      }
+    },
+    "outputs": {
+      "search": "搜索产物",
+      "notAvailableTitle": "产物页签尚未实现",
+      "notAvailableDescription": "下一阶段会直接完成正式实现，不创建临时页面。"
+    },
+    "session": {
+      "checking": "正在打开资料库",
+      "retry": "重试状态检查",
+      "unavailableTitle": "无法检查登录状态",
+      "unavailableDescription": "你的资料库仍在这里。服务恢复后请重试。"
+    }
+  },
   "AsyncFeedback": {
     "loading": "正在加载",
     "retrying": "正在重试",

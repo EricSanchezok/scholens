@@ -287,10 +287,8 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
     activeDestination.locator("[data-selected-indicator]"),
   ).toBeVisible();
   await expect(
-    primaryNavigation.getByRole("button", {
-      name: "Library. Not available yet",
-    }),
-  ).toBeDisabled();
+    primaryNavigation.getByRole("link", { name: "Library" }),
+  ).toHaveAttribute("href", "/library");
   const dock = page.getByTestId("mobile-bottom-dock");
   await expect(dock.getByRole("textbox", { name: "Ask anything" })).toHaveCount(
     1,
