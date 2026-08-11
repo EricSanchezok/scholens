@@ -51,6 +51,10 @@
   },
   "type": {
     "ui": { "$type": "dimension", "$value": { "value": 14, "unit": "px" } },
+    "sidebar": {
+      "$type": "dimension",
+      "$value": { "value": 13, "unit": "px" }
+    },
     "caption": {
       "$type": "dimension",
       "$value": { "value": 11, "unit": "px" }

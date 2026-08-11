@@ -30,21 +30,29 @@ const conversations: Conversation[] = [
     scope_id: null,
     scope_label: null,
     scope_type: "global",
-    title: "Review retrieval methods",
+    title: "Review retrieval methods across multimodal research archives",
     updated_at: "2026-08-11T08:00:00Z",
   },
 ];
 
+const longIdentityActor = {
+  ...actor,
+  display_name: "EricSanchez",
+  email: "niexiaohangeric@163.com",
+};
+
 function ShellStory({
   activeDestination = "library",
+  storyActor = actor,
 }: {
   activeDestination?: "ask" | "library" | "projects";
+  storyActor?: typeof actor;
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
   return (
     <WorkspaceShell
       activeDestination={activeDestination}
-      actor={actor}
+      actor={storyActor}
       collapsed={collapsed}
       conversations={conversations}
       mobileHeaderCenter={
@@ -92,6 +100,22 @@ export const DesktopExpanded: Story = {
       "aria-current",
       "page",
     );
+  },
+};
+
+export const DesktopLongContent: Story = {
+  args: { storyActor: longIdentityActor },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const account = canvas.getByRole("button", { name: "Open account menu" });
+    const name = within(account).getByText(longIdentityActor.display_name);
+    const email = within(account).getByText(longIdentityActor.email);
+    const conversation = canvas.getByText(conversations[0]!.title);
+
+    await expect(name).toHaveStyle({ fontSize: "13px" });
+    await expect(conversation).toHaveStyle({ fontSize: "13px" });
+    await expect(email).toBeVisible();
+    await expect(email.scrollWidth).toBeLessThanOrEqual(email.clientWidth);
   },
 };
 

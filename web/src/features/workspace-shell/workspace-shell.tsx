@@ -96,7 +96,9 @@ function SidebarControl({
       <span className="grid size-5 shrink-0 place-items-center">
         <Icon glyph={glyph} size={16} tone="primary" />
       </span>
-      {!collapsed && <span className="text-ui truncate">{label}</span>}
+      {!collapsed && (
+        <span className="text-sidebar-label truncate">{label}</span>
+      )}
     </Link>
   ) : (
     <button
@@ -114,7 +116,9 @@ function SidebarControl({
       <span className="grid size-5 shrink-0 place-items-center">
         <Icon glyph={glyph} size={16} tone="secondary" />
       </span>
-      {!collapsed && <span className="text-ui truncate">{label}</span>}
+      {!collapsed && (
+        <span className="text-sidebar-label truncate">{label}</span>
+      )}
     </button>
   );
 
@@ -153,7 +157,7 @@ function ConversationGroup({
             activeConversationId === conversation.id ? "page" : undefined
           }
           className={cn(
-            "text-ui hover:bg-hover flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2",
+            "text-sidebar-label hover:bg-hover flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2",
             keyboardFocusRing,
             activeConversationId === conversation.id && "bg-hover",
           )}
@@ -206,10 +210,12 @@ function AccountMenu({
             keyboardFocusRing,
             settingsTrigger
               ? "bg-surface size-12 justify-center rounded-full"
-              : "rounded-[var(--radius-md)] px-2",
+              : "rounded-[var(--radius-md)]",
             !settingsTrigger && "h-12",
             !settingsTrigger &&
-              (collapsed ? "ml-auto w-10 justify-center" : "w-full gap-2"),
+              (collapsed
+                ? "ml-auto w-10 justify-center px-2"
+                : "w-full gap-2 px-1"),
           )}
           type="button"
         >
@@ -217,12 +223,17 @@ function AccountMenu({
             <Icon glyph={Settings} size={20} tone="primary" />
           ) : (
             <>
-              <span className="bg-pressed text-caption grid size-6 shrink-0 place-items-center rounded-full font-medium">
+              <span
+                className={cn(
+                  "bg-pressed text-caption grid shrink-0 place-items-center rounded-full font-medium",
+                  collapsed ? "size-6" : "size-5",
+                )}
+              >
                 {initial}
               </span>
               {!collapsed && (
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="text-ui block truncate leading-5 font-normal">
+                  <span className="text-sidebar-label block truncate leading-5 font-normal">
                     {name}
                   </span>
                   <span className="text-caption text-secondary block truncate leading-4">

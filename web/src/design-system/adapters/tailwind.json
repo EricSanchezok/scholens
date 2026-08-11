@@ -36,6 +36,7 @@
   },
   "fontSizes": {
     "ui": "type.ui",
+    "sidebar-label": "type.sidebar",
     "caption": "type.caption"
   },
   "shadows": {

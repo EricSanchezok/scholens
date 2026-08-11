@@ -130,6 +130,15 @@ export const AccountMenuOpen: Story = {
 
 export const LongAccountIdentity: Story = {
   args: { actor: longIdentityActor },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const account = await canvas.findByRole("button", {
+      name: "Open account menu",
+    });
+    const email = within(account).getByText(longIdentityActor.email);
+    await expect(email).toBeVisible();
+    await expect(email.scrollWidth).toBeLessThanOrEqual(email.clientWidth);
+  },
 };
 
 export const Conversation: Story = {

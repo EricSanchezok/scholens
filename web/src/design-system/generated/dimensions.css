@@ -29,6 +29,7 @@
   --space-8: 32px;
   --touch-target: 44px;
   --type-caption: 11px;
+  --type-sidebar: 13px;
   --type-ui: 14px;
 }
 @theme inline {
@@ -71,5 +72,6 @@
   --shadow-panel: var(--elevation-panel);
   --shadow-raised: var(--elevation-raised);
   --text-caption: var(--type-caption);
+  --text-sidebar-label: var(--type-sidebar);
   --text-ui: var(--type-ui);
 }

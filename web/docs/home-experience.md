@@ -34,9 +34,13 @@ the deliberately deferred boundaries.
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary
   navigation uses 40 px rows with 16 px glyphs in fixed slots, conversation
-  history uses 32 px rows, and the account trigger uses a 48 px row. The actor
-  name and email use distinct weight and semantic-color levels rather than
-  competing with the primary navigation.
+  history uses 32 px rows, and the account trigger uses a 48 px row. Expanded
+  sidebar navigation, conversation titles, and the actor name share the 13 px
+  `type.sidebar` role; the product label retains the 14 px UI role and the email
+  retains the 11 px caption role. The account trigger preserves its full hit
+  target while using a compact avatar and horizontal inset so a normal full
+  email has width headroom across browser font metrics rather than merely
+  fitting one reference screenshot.
 - The phone navigation hub fills the viewport and owns an opaque sidebar
   surface above a lower stacking-level backdrop. Its history is independently
   scrollable between fixed account and utility regions. Visible controls retain
