@@ -1,13 +1,14 @@
 import { delay, http, HttpResponse } from "msw";
 
 import {
-  failedJob,
+  failedIngestionEntry,
   libraryConversations,
   libraryOutputs,
   libraryPapers,
   libraryProjects,
   libraryTags,
-  processingJob,
+  processingIngestion,
+  processingIngestionEntry,
 } from "./fixtures";
 
 const api = "http://127.0.0.1:7301/api/v1";
@@ -24,9 +25,6 @@ const populatedHandlers = [
   ),
   http.get(`${api}/projects`, () =>
     HttpResponse.json({ items: libraryProjects, next_cursor: null }),
-  ),
-  http.get(`${api}/jobs`, () =>
-    HttpResponse.json({ items: [], next_cursor: null }),
   ),
   http.get(`${api}/library/papers`, () =>
     HttpResponse.json({
@@ -45,13 +43,17 @@ const populatedHandlers = [
     }),
   ),
   http.post(`${api}/paper-ingestions/uploads`, () =>
-    HttpResponse.json(processingJob, { status: 201 }),
+    HttpResponse.json(processingIngestion, { status: 202 }),
   ),
   http.post(`${api}/paper-ingestions/sources`, () =>
-    HttpResponse.json(processingJob, { status: 201 }),
+    HttpResponse.json(processingIngestion, { status: 202 }),
   ),
   http.post(`${api}/paper-ingestions/:jobId/retries`, () =>
-    HttpResponse.json(processingJob, { status: 201 }),
+    HttpResponse.json(processingIngestion, { status: 202 }),
+  ),
+  http.delete(
+    `${api}/paper-ingestions/:jobId`,
+    () => new HttpResponse(null, { status: 204 }),
   ),
   http.post(`${api}/library/paper-removals`, async ({ request }) => {
     const body = (await request.json()) as { document_ids: string[] };
@@ -102,14 +104,24 @@ export const libraryHandlers = {
     ...populatedHandlers,
   ],
   processing: [
-    http.get(`${api}/jobs`, () =>
-      HttpResponse.json({ items: [processingJob], next_cursor: null }),
+    http.get(`${api}/library/papers`, () =>
+      HttpResponse.json({
+        items: [processingIngestionEntry, ...libraryPapers],
+        next_cursor: "next-library-page",
+        previous_cursor: null,
+        total_count: 27,
+      }),
     ),
     ...populatedHandlers,
   ],
   failed: [
-    http.get(`${api}/jobs`, () =>
-      HttpResponse.json({ items: [failedJob], next_cursor: null }),
+    http.get(`${api}/library/papers`, () =>
+      HttpResponse.json({
+        items: [failedIngestionEntry, ...libraryPapers],
+        next_cursor: "next-library-page",
+        previous_cursor: null,
+        total_count: 27,
+      }),
     ),
     ...populatedHandlers,
   ],

@@ -1045,6 +1045,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/paper-ingestions/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel Pdf Ingestion */
+        delete: operations["cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/paper-ingestions/{job_id}/retries": {
         parameters: {
             query?: never;
@@ -2969,8 +2986,8 @@ export interface components {
             id: string;
             /** Operation */
             operation: string;
-            /** Progress Message */
-            progress_message: string | null;
+            /** Progress Code */
+            progress_code: string | null;
             /** Project Id */
             project_id: string | null;
             /** Result */
@@ -3051,10 +3068,94 @@ export interface components {
              */
             kind: "library";
         };
+        /** LibraryPaperIngestionResponse */
+        LibraryPaperIngestionResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "upload" | "doi" | "arxiv" | "url";
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "queued" | "downloading" | "parsing" | "extracting_metadata" | "indexing" | "finalizing";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "processing" | "failed";
+        };
+        /** LibraryPaperListIngestionEntry */
+        LibraryPaperListIngestionEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_type: "ingestion";
+            ingestion: components["schemas"]["LibraryPaperIngestionResponse"];
+        };
+        /** LibraryPaperListPaperEntry */
+        LibraryPaperListPaperEntry: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            document: components["schemas"]["DocumentResponse"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_type: "paper";
+            /** Is Public */
+            is_public: boolean;
+            /**
+             * Last Accessed At
+             * Format: date-time
+             */
+            last_accessed_at: string;
+            /**
+             * Library Entry Id
+             * Format: uuid
+             */
+            library_entry_id: string;
+            metadata_overrides: components["schemas"]["DocumentMetadataOverrides"];
+            /** Preview Url */
+            preview_url: string | null;
+            status: components["schemas"]["PaperStatus"];
+            /** Tags */
+            tags: components["schemas"]["LibraryPaperTagResponse"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Id */
+            user_id: number;
+        };
         /** LibraryPaperListResponse */
         LibraryPaperListResponse: {
             /** Items */
-            items: components["schemas"]["LibraryPaperResponse"][];
+            items: (components["schemas"]["LibraryPaperListPaperEntry"] | components["schemas"]["LibraryPaperListIngestionEntry"])[];
             /** Next Cursor */
             next_cursor?: string | null;
             /** Previous Cursor */
@@ -4164,19 +4265,6 @@ export interface components {
         UpdateProfileBody: {
             /** Display Name */
             display_name?: string | null;
-        };
-        /** UploadAcceptedResponse */
-        UploadAcceptedResponse: {
-            /**
-             * Job Id
-             * Format: uuid
-             */
-            job_id: string;
-            /**
-             * Message
-             * @default File upload started
-             */
-            message: string;
         };
         /** UploadFromSourceRequest */
         UploadFromSourceRequest: {
@@ -6964,7 +7052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadAcceptedResponse"];
+                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7001,8 +7089,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadAcceptedResponse"];
+                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -7034,7 +7151,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadAcceptedResponse"];
+                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
                 };
             };
             /** @description Validation Error */

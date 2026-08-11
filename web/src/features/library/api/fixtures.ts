@@ -1,9 +1,10 @@
 import type { components } from "@/lib/api/generated/schema";
 
 type Conversation = components["schemas"]["ConversationSummaryResponse"];
-type Job = components["schemas"]["JobResponse"];
 type LibraryOutput = components["schemas"]["LibraryOutputResponse"];
-type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
+type LibraryPaper = components["schemas"]["LibraryPaperListPaperEntry"];
+type LibraryPaperIngestion =
+  components["schemas"]["LibraryPaperIngestionResponse"];
 type Project = components["schemas"]["ProjectResponse"];
 type Tag = components["schemas"]["LibraryTagResponse"];
 
@@ -59,6 +60,7 @@ function paper(
       title,
       updated_at: now,
     },
+    entry_type: "paper",
     is_public: false,
     last_accessed_at: now,
     library_entry_id: id.replace("70000000", "72000000"),
@@ -267,25 +269,33 @@ export const libraryConversations: Conversation[] = [
   },
 ];
 
-export const processingJob: Job = {
-  completed_at: null,
+export const processingIngestion: LibraryPaperIngestion = {
   created_at: now,
   document_id: null,
+  display_name: "agentic-systems.pdf",
   error_code: null,
   id: "75000000-0000-4000-8000-000000000001",
-  operation: "pdf_process",
-  progress_message: "Parsing PDF",
   project_id: null,
-  result: null,
-  started_at: now,
-  status: "running",
+  source_kind: "upload",
+  stage: "parsing",
+  state: "processing",
 };
 
-export const failedJob: Job = {
-  ...processingJob,
+export const failedIngestion: LibraryPaperIngestion = {
+  ...processingIngestion,
+  display_name: "encrypted-paper.pdf",
   error_code: "paper_source_pdf_unavailable",
   id: "75000000-0000-4000-8000-000000000002",
-  progress_message: null,
-  started_at: null,
-  status: "failed",
+  stage: "queued",
+  state: "failed",
+};
+
+export const processingIngestionEntry = {
+  entry_type: "ingestion" as const,
+  ingestion: processingIngestion,
+};
+
+export const failedIngestionEntry = {
+  entry_type: "ingestion" as const,
+  ingestion: failedIngestion,
 };

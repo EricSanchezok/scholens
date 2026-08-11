@@ -7,7 +7,7 @@ import {
   libraryPapers,
   libraryProjects,
   libraryTags,
-  processingJob,
+  processingIngestion,
 } from "../../src/features/library/api/fixtures";
 
 const apiPattern = "**/api/v1";
@@ -63,12 +63,6 @@ async function mockLibrary(page: Page) {
       body: JSON.stringify({ items: libraryProjects, next_cursor: null }),
     }),
   );
-  await page.route(`${apiPattern}/jobs**`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ items: [], next_cursor: null }),
-    }),
-  );
   await page.route(`${apiPattern}/library/papers**`, (route) => {
     const cursor = new URL(route.request().url()).searchParams.get("cursor");
     return route.fulfill({
@@ -93,13 +87,35 @@ async function mockLibrary(page: Page) {
       }),
     });
   });
-  await page.route(`${apiPattern}/paper-ingestions/sources`, (route) =>
-    route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      body: JSON.stringify(processingJob),
-    }),
-  );
+  await page.route(`${apiPattern}/paper-ingestions/**`, (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "DELETE") {
+      return route.fulfill({ status: 204 });
+    }
+    if (pathname.endsWith("/paper-ingestions/uploads")) {
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...processingIngestion,
+          display_name: "local-paper.pdf",
+          id: "00000000-0000-4000-8000-000000000090",
+          source_kind: "upload",
+          stage: "queued",
+          state: "queued",
+        }),
+      });
+    }
+    if (pathname.endsWith("/paper-ingestions/sources")) {
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify(processingIngestion),
+      });
+    }
+    return route.fallback();
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -157,10 +173,63 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   expect((await sourceRequest).postDataJSON()).toEqual({
     source: { kind: "doi", value: "10.48550/arXiv.1706.03762" },
   });
+  await expect(dialog).toHaveCount(0);
+  const papersTable = page.getByRole("table");
+  await expect(papersTable.getByText("agentic-systems.pdf")).toBeVisible();
+  await expect(papersTable.getByText("Reading PDF")).toBeVisible();
 
   await expect(page).toHaveTitle(/Scholens/);
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("moves accepted uploads into paper rows and supports cancellation", async ({
+  page,
+}) => {
+  await page.goto("/library");
+  await page.getByRole("button", { name: "Add papers" }).click();
+  const dialog = page.getByRole("dialog");
+  const input = dialog.getByLabel("Choose PDFs");
+  await input.setInputFiles([
+    {
+      name: "local-paper.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\n%%EOF"),
+    },
+    {
+      name: "remove-before-upload.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\n%%EOF"),
+    },
+  ]);
+  await expect(dialog.getByText("local-paper.pdf")).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Remove remove-before-upload.pdf" })
+    .click();
+
+  const uploadRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/api/v1/paper-ingestions/uploads"),
+  );
+  await dialog.getByRole("button", { name: "Upload 1 file" }).click();
+  const acceptedRequest = await uploadRequest;
+  expect(acceptedRequest.headers()["idempotency-key"]).toBeTruthy();
+  await expect(dialog).toHaveCount(0);
+  const papersTable = page.getByRole("table");
+  await expect(papersTable.getByText("local-paper.pdf")).toBeVisible();
+  await expect(papersTable.getByText("Waiting to process")).toBeVisible();
+
+  const cancelRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "DELETE" &&
+      request
+        .url()
+        .includes("/paper-ingestions/00000000-0000-4000-8000-000000000090"),
+  );
+  await papersTable.getByRole("button", { name: "Cancel processing" }).click();
+  await cancelRequest;
+  await expect(papersTable.getByText("local-paper.pdf")).toHaveCount(0);
 });
 
 test("restores URL state and contains each supported phone width", async ({

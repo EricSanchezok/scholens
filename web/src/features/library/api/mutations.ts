@@ -3,11 +3,16 @@ import { apiClient } from "@/lib/api";
 
 type PaperSource = components["schemas"]["UploadFromSourceRequest"]["source"];
 
-function idempotencyKey() {
-  return crypto.randomUUID();
-}
+type IngestionRequestOptions = {
+  idempotencyKey: string;
+  projectId?: string;
+  signal?: AbortSignal;
+};
 
-export async function uploadPaperFile(file: File, projectId?: string) {
+export async function uploadPaperFile(
+  file: File,
+  { idempotencyKey, projectId, signal }: IngestionRequestOptions,
+) {
   const { data } = await apiClient.POST("/api/v1/paper-ingestions/uploads", {
     body: { file: file as unknown as string },
     bodySerializer: () => {
@@ -15,8 +20,9 @@ export async function uploadPaperFile(file: File, projectId?: string) {
       form.append("file", file);
       return form;
     },
-    headers: { "Idempotency-Key": idempotencyKey() },
+    headers: { "Idempotency-Key": idempotencyKey },
     params: { query: { project_id: projectId } },
+    signal,
   });
   if (!data) throw new Error("Paper upload response was empty");
   return data;
@@ -24,26 +30,40 @@ export async function uploadPaperFile(file: File, projectId?: string) {
 
 export async function uploadPaperSource(
   source: PaperSource,
-  projectId?: string,
+  { idempotencyKey, projectId, signal }: IngestionRequestOptions,
 ) {
   const { data } = await apiClient.POST("/api/v1/paper-ingestions/sources", {
     body: { project_id: projectId, source },
-    headers: { "Idempotency-Key": idempotencyKey() },
+    headers: { "Idempotency-Key": idempotencyKey },
+    signal,
   });
   if (!data) throw new Error("Paper source response was empty");
   return data;
 }
 
-export async function retryPaperIngestion(jobId: string) {
+export async function retryPaperIngestion(
+  jobId: string,
+  idempotencyKey: string,
+) {
   const { data } = await apiClient.POST(
     "/api/v1/paper-ingestions/{job_id}/retries",
     {
-      headers: { "Idempotency-Key": idempotencyKey() },
+      headers: { "Idempotency-Key": idempotencyKey },
       params: { path: { job_id: jobId } },
     },
   );
   if (!data) throw new Error("Paper retry response was empty");
   return data;
+}
+
+export async function cancelPaperIngestion(
+  jobId: string,
+  signal?: AbortSignal,
+) {
+  await apiClient.DELETE("/api/v1/paper-ingestions/{job_id}", {
+    params: { path: { job_id: jobId } },
+    signal,
+  });
 }
 
 export async function removeLibraryPapers(documentIds: string[]) {

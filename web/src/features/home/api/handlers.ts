@@ -19,7 +19,12 @@ const baseHandlers = [
     HttpResponse.json({ items: homeConversations, next_cursor: null }),
   ),
   http.get(`${api}/library/papers`, () =>
-    HttpResponse.json({ items: homePapers, next_cursor: null }),
+    HttpResponse.json({
+      items: homePapers,
+      next_cursor: null,
+      previous_cursor: null,
+      total_count: homePapers.length,
+    }),
   ),
   http.get(`${api}/projects`, () =>
     HttpResponse.json({ items: homeProjects, next_cursor: null }),

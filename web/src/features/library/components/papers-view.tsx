@@ -7,9 +7,11 @@ import {
   Folder,
   Label,
   MoreHoriz,
+  Page,
   RefreshDouble,
   Trash,
   WarningTriangle,
+  Xmark,
 } from "iconoir-react";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
@@ -51,14 +53,13 @@ import {
 import { Badge } from "@/components/ui/display";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
-import { cn } from "@/lib/utilities/cn";
 import type { PaperSort } from "../library-search";
+import type { PaperIngestionRow } from "../use-paper-ingestions";
 
-type Paper = components["schemas"]["LibraryPaperResponse"];
+type Paper = components["schemas"]["LibraryPaperListPaperEntry"];
 type PaperList = components["schemas"]["LibraryPaperListResponse"];
 type TagItem = components["schemas"]["LibraryTagResponse"];
 type Project = components["schemas"]["ProjectResponse"];
-type Job = components["schemas"]["JobResponse"];
 
 const PAPER_SORTS: PaperSort[] = [
   "added_desc",
@@ -178,64 +179,117 @@ function PaperActions({
   );
 }
 
-function IngestionRows({
-  jobs,
-  onRetry,
-  retryingJobId,
-}: {
-  jobs: Job[];
-  onRetry: (jobId: string) => void;
-  retryingJobId?: string;
-}) {
+function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
   const t = useTranslations("Library.papers.ingestion");
-  const visible = jobs
-    .filter((job) => ["pending", "running", "failed"].includes(job.status))
-    .slice(0, 5);
-  if (visible.length === 0) return null;
+  const active = !["failed"].includes(ingestion.state);
+  let description: string;
+  if (ingestion.state === "failed") {
+    switch (ingestion.errorCode) {
+      case "connection_failed":
+        description = t("errors.connection_failed");
+        break;
+      case "invalid_pdf":
+        description = t("errors.invalid_pdf");
+        break;
+      case "jobs_submission_failed":
+        description = t("errors.jobs_submission_failed");
+        break;
+      case "paper_source_pdf_unavailable":
+        description = t("errors.paper_source_pdf_unavailable");
+        break;
+      case "paper_source_unsafe_address":
+        description = t("errors.paper_source_unsafe_address");
+        break;
+      case "pdf_encrypted":
+        description = t("errors.pdf_encrypted");
+        break;
+      case "service_unavailable":
+        description = t("errors.service_unavailable");
+        break;
+      case "upload_quota_exceeded":
+      case "paper_upload_quota_exceeded":
+      case "paper_quota_exceeded":
+      case "storage_quota_exceeded":
+      case "project_owner_quota_exceeded":
+      case "project_paper_quota_exceeded":
+        description = t("errors.upload_quota_exceeded");
+        break;
+      case "upload_too_large":
+        description = t("errors.upload_too_large");
+        break;
+      default:
+        description = t("errors.unknown");
+    }
+  } else if (ingestion.state === "retrying") {
+    description = t("status.retrying");
+  } else if (ingestion.state === "cancelling") {
+    description = t("status.cancelling");
+  } else {
+    description = t(`stage.${ingestion.stage}`);
+  }
   return (
-    <section aria-label={t("section")} className="mt-3 grid gap-2">
-      {visible.map((job) => {
-        const failed = job.status === "failed";
-        return (
-          <div
-            className={cn(
-              "flex min-h-16 items-center gap-3 rounded-[var(--radius-md)] border px-3 py-2",
-              failed
-                ? "bg-state-danger-bg border-[var(--color-danger-border)]"
-                : "bg-state-info-bg border-[var(--color-info-border)]",
-            )}
-            key={job.id}
-          >
+    <div className="flex min-w-0 items-start gap-3">
+      <span className="border-line bg-subtle grid size-14 shrink-0 place-items-center rounded-[var(--radius-md)] border text-[0.6875rem] font-semibold">
+        PDF
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">
+          {ingestion.displayName}
+        </span>
+        <span
+          aria-live="polite"
+          className="text-secondary mt-1 flex items-center gap-1.5 text-xs"
+          role="status"
+        >
+          {active && (
             <Icon
-              className={cn(
-                !failed && "animate-spin motion-reduce:animate-none",
-              )}
-              glyph={failed ? WarningTriangle : RefreshDouble}
-              size={20}
+              className="animate-spin motion-reduce:animate-none"
+              glyph={RefreshDouble}
+              size={16}
               tone="secondary"
             />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">
-                {failed ? t("failed") : t("processing")}
-              </span>
-              <span className="text-secondary block truncate text-xs">
-                {failed ? t("failedDescription") : t("processingDescription")}
-              </span>
-            </span>
-            {failed && (
-              <Button
-                loading={retryingJobId === job.id}
-                onClick={() => onRetry(job.id)}
-                size="sm"
-                variant="secondary"
-              >
-                {t("retry")}
-              </Button>
-            )}
-          </div>
-        );
-      })}
-    </section>
+          )}
+          {!active && <Icon glyph={WarningTriangle} size={16} tone="danger" />}
+          <span className={ingestion.state === "failed" ? "text-danger" : ""}>
+            {description}
+          </span>
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function IngestionActions({
+  ingestion,
+  onCancel,
+  onRetry,
+}: {
+  ingestion: PaperIngestionRow;
+  onCancel: () => void;
+  onRetry: () => void;
+}) {
+  const t = useTranslations("Library.papers.ingestion");
+  if (ingestion.state === "failed") {
+    return (
+      <div className="flex items-center justify-end gap-1">
+        <Button onClick={onRetry} size="sm" variant="ghost">
+          {t("retry")}
+        </Button>
+        <IconButton label={t("remove")} onClick={onCancel} variant="ghost">
+          <Icon glyph={Trash} size={16} tone="secondary" />
+        </IconButton>
+      </div>
+    );
+  }
+  return (
+    <IconButton
+      disabled={ingestion.state === "cancelling"}
+      label={t("cancel")}
+      onClick={onCancel}
+      variant="ghost"
+    >
+      <Icon glyph={Xmark} size={16} tone="secondary" />
+    </IconButton>
   );
 }
 
@@ -427,7 +481,7 @@ function MobileTagFilter({
 export function PapersView({
   data,
   error,
-  jobs,
+  ingestions,
   loading,
   onAddToProject,
   onAssignTags,
@@ -435,19 +489,19 @@ export function PapersView({
   onNext,
   onPrevious,
   onRemove,
-  onRetry,
+  onCancelIngestion,
+  onRetryIngestion,
   onRetryLoad,
   onSortChange,
   onTagFilterChange,
   projects,
-  retryingJobId,
   sort,
   tagIds,
   tags,
 }: {
   data?: PaperList;
   error?: unknown;
-  jobs: Job[];
+  ingestions: PaperIngestionRow[];
   loading: boolean;
   onAddToProject: (documentIds: string[], projectId: string) => Promise<void>;
   onAssignTags: (documentIds: string[], tagIds: string[]) => Promise<void>;
@@ -455,12 +509,12 @@ export function PapersView({
   onNext: (cursor: string) => void;
   onPrevious: (cursor: string) => void;
   onRemove: (documentIds: string[]) => Promise<void>;
-  onRetry: (jobId: string) => void;
+  onCancelIngestion: (id: string) => void;
+  onRetryIngestion: (id: string) => void;
   onRetryLoad: () => void;
   onSortChange: (sort: PaperSort) => void;
   onTagFilterChange: (tagIds: string[]) => void;
   projects: Project[];
-  retryingJobId?: string;
   sort: PaperSort;
   tagIds: string[];
   tags: TagItem[];
@@ -473,7 +527,10 @@ export function PapersView({
   const [removeOpen, setRemoveOpen] = React.useState(false);
   const [actionPending, setActionPending] = React.useState(false);
 
-  const papers = data?.items ?? [];
+  const papers = (data?.items ?? []).flatMap((entry) =>
+    entry.entry_type === "paper" ? [entry] : [],
+  );
+  const hasRows = papers.length > 0 || ingestions.length > 0;
   const allSelected =
     papers.length > 0 &&
     papers.every((paper) => selected.includes(paper.document.document_id));
@@ -553,7 +610,7 @@ export function PapersView({
             title={t("errorTitle")}
           />
         )}
-        {!loading && !error && data && papers.length === 0 && (
+        {!loading && !error && data && !hasRows && (
           <AsyncFeedback
             description={t("emptyDescription")}
             icon={BookStack}
@@ -561,7 +618,7 @@ export function PapersView({
             title={t("emptyTitle")}
           />
         )}
-        {!loading && !error && papers.length > 0 && (
+        {!loading && !error && hasRows && (
           <>
             <div className="border-line bg-surface hidden overflow-hidden rounded-[var(--radius-lg)] border md:block">
               <table className="w-full table-fixed border-collapse text-left">
@@ -595,6 +652,36 @@ export function PapersView({
                   </tr>
                 </thead>
                 <tbody className="divide-line divide-y">
+                  {ingestions.map((ingestion) => (
+                    <tr
+                      className="transition-opacity duration-150"
+                      key={ingestion.id}
+                    >
+                      <td className="px-4 py-4 align-top">
+                        <span className="grid size-5 place-items-center">
+                          <Icon glyph={Page} size={20} tone="secondary" />
+                        </span>
+                      </td>
+                      <td className="px-2 py-4">
+                        <IngestionDetails ingestion={ingestion} />
+                      </td>
+                      <td className="text-secondary px-3 py-4 align-top text-sm">
+                        {format.dateTime(new Date(ingestion.createdAt), {
+                          dateStyle: "medium",
+                        })}
+                      </td>
+                      <td className="text-secondary px-3 py-4 align-top text-sm">
+                        {t("ingestion.pending")}
+                      </td>
+                      <td className="px-2 py-2 align-top">
+                        <IngestionActions
+                          ingestion={ingestion}
+                          onCancel={() => onCancelIngestion(ingestion.id)}
+                          onRetry={() => onRetryIngestion(ingestion.id)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
                   {papers.map((paper) => {
                     const id = paper.document.document_id;
                     const metadata = paperMetadata(paper);
@@ -641,6 +728,31 @@ export function PapersView({
             </div>
 
             <ul className="grid gap-2 md:hidden">
+              {ingestions.map((ingestion) => (
+                <li
+                  className="border-line bg-surface rounded-[var(--radius-lg)] border p-4 transition-opacity duration-150"
+                  key={ingestion.id}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <IngestionDetails ingestion={ingestion} />
+                    </div>
+                    <IngestionActions
+                      ingestion={ingestion}
+                      onCancel={() => onCancelIngestion(ingestion.id)}
+                      onRetry={() => onRetryIngestion(ingestion.id)}
+                    />
+                  </div>
+                  <div className="text-secondary mt-3 flex gap-3 pl-16 text-xs">
+                    <span>
+                      {format.dateTime(new Date(ingestion.createdAt), {
+                        dateStyle: "medium",
+                      })}
+                    </span>
+                    <span>{t("ingestion.pending")}</span>
+                  </div>
+                </li>
+              ))}
               {papers.map((paper) => {
                 const id = paper.document.document_id;
                 const metadata = paperMetadata(paper);
@@ -684,11 +796,6 @@ export function PapersView({
             </ul>
           </>
         )}
-        <IngestionRows
-          jobs={jobs}
-          onRetry={onRetry}
-          retryingJobId={retryingJobId}
-        />
       </div>
 
       {selected.length > 0 && (

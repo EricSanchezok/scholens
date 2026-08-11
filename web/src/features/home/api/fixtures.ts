@@ -1,6 +1,6 @@
 import type { components } from "@/lib/api/generated/schema";
 
-type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
+type LibraryPaper = components["schemas"]["LibraryPaperListPaperEntry"];
 type Project = components["schemas"]["ProjectResponse"];
 type Conversation = components["schemas"]["ConversationSummaryResponse"];
 type ConversationTurn = components["schemas"]["ConversationTurnResponse"];
@@ -73,6 +73,7 @@ function paper(
   lastAccessedAt: string,
 ): LibraryPaper {
   return {
+    entry_type: "paper",
     library_entry_id: id.replace("30000000", "31000000"),
     user_id: 7,
     status: "reading",

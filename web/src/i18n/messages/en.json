@@ -199,16 +199,12 @@
       "pdfTitle": "PDF files",
       "pdfDescription": "Select multiple PDFs up to 50 MB each. Up to three upload at once.",
       "fileTooLarge": "This file is larger than 50 MB.",
-      "uploadFailed": "Upload failed. Try this file again.",
       "chooseFiles": "Choose PDFs",
       "queueLabel": "PDF upload queue",
-      "retry": "Retry",
+      "removeFile": "Remove {name}",
       "uploadFiles": "Upload {count, plural, one {# file} other {# files}}",
       "status": {
-        "queued": "Ready to upload",
-        "uploading": "Uploading",
-        "succeeded": "Added for processing",
-        "failed": "Upload failed"
+        "queued": "Ready to upload"
       },
       "sourceTitle": "DOI, arXiv, or PDF URL",
       "sourceDescription": "Scholens will resolve an open PDF and add it to your library.",
@@ -222,6 +218,16 @@
       },
       "sourceRequired": "Enter a DOI, arXiv ID, or direct PDF URL.",
       "sourceFailed": "This source could not be added. Check that an open PDF is available.",
+      "sourcePending": "Validating source",
+      "cancelSource": "Cancel",
+      "errors": {
+        "unavailable": "No accessible open PDF was found for this source.",
+        "unsafeAddress": "This address is not allowed. Use a public direct PDF URL.",
+        "tooLarge": "This PDF is larger than 50 MB.",
+        "invalidPdf": "The source did not return a readable, unencrypted PDF.",
+        "quota": "Your paper or storage allowance has been reached.",
+        "serviceUnavailable": "The server could not accept this source. Keep the value and try again."
+      },
       "destination": "Destination",
       "personalLibrary": "Personal library",
       "destinationDescription": "Optionally add the paper to a project while importing it.",
@@ -265,12 +271,35 @@
         "downloadFailed": "The PDF download could not be opened"
       },
       "ingestion": {
-        "section": "Paper processing",
-        "failed": "Paper processing failed",
-        "processing": "Processing paper",
-        "failedDescription": "The source is preserved and can be retried.",
-        "processingDescription": "This row will update when processing finishes.",
-        "retry": "Retry"
+        "retry": "Retry",
+        "cancel": "Cancel processing",
+        "remove": "Remove failed import",
+        "pending": "Pending",
+        "status": {
+          "retrying": "Retrying import",
+          "cancelling": "Cancelling import"
+        },
+        "stage": {
+          "uploading": "Uploading PDF",
+          "queued": "Waiting to process",
+          "downloading": "Downloading PDF",
+          "parsing": "Reading PDF",
+          "extracting_metadata": "Extracting metadata",
+          "indexing": "Building search index",
+          "finalizing": "Finishing import"
+        },
+        "errors": {
+          "connection_failed": "Connection failed. Retry with the same file.",
+          "service_unavailable": "The processing service is unavailable.",
+          "jobs_submission_failed": "The processing service did not accept this paper.",
+          "paper_source_pdf_unavailable": "The source PDF is no longer available.",
+          "paper_source_unsafe_address": "The source address is not allowed.",
+          "upload_too_large": "This PDF is larger than 50 MB.",
+          "upload_quota_exceeded": "Your paper or storage allowance has been reached.",
+          "invalid_pdf": "This file is not a readable PDF.",
+          "pdf_encrypted": "Encrypted PDFs are not supported.",
+          "unknown": "Processing failed. The source is preserved for retry."
+        }
       },
       "filters": {
         "tags": "Tags",

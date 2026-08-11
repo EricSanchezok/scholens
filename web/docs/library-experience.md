@@ -38,15 +38,31 @@ dedicated stacked list rather than compressing the table. Both compositions
 offer search, tag filtering, sorting, explicit row actions, selection, and
 cursor navigation.
 
-Ingestion jobs are shown only while pending, running, or failed. Polling runs
-only while at least one job is unfinished and stops after terminal state.
-Failed jobs retain their source and expose Retry. No placeholder paper is
-inserted before the canonical query returns it.
+An accepted ingestion is a first-class row in the same desktop table or mobile
+paper list as completed papers; it is never rendered as a detached status
+banner. `uploading` is local-only. The Server's atomic `202` response begins the
+canonical lifecycle at `queued`, after which `parsing`, `extracting`, `indexing`,
+and `finalizing` update that row without changing its identity or layout.
+Completed ingestion becomes a normal paper row. Failed ingestion preserves its
+source, stable error code, Retry, and remove/cancel actions.
+
+The client polls only while a visible ingestion is active and stops after a
+terminal state. Progress heartbeats and Server-owned deadlines prevent an
+indefinite processing row. Cancellation is optimistic in the interface and
+cooperative in the worker: a late callback cannot restore a cancelled row.
 
 Add papers accepts multiple PDF files up to 50 MB each and processes at most
-three uploads concurrently. DOI, arXiv, and direct PDF URL are discriminated
-source submissions. Each file owns its status and retry action, so one failure
-never clears the other files or the source form.
+three uploads concurrently. A queued file may be removed before upload, and an
+in-flight file may be cancelled independently. DOI, arXiv, and direct PDF URL
+are discriminated source submissions with inline validation and one visible
+pending state. The dialog closes after canonical acceptance; the row that then
+appears in Library is the durable acknowledgement. Each file owns its status,
+cancel, and retry action, so one failure never clears the other files or the
+source form.
+
+When a network interruption makes the acceptance result unknown, Web retries
+or reconciles with the same operation-scoped idempotency key. It never invents
+a second key merely because the first HTTP response was lost.
 
 ## Outputs
 
@@ -83,12 +99,15 @@ Papers acceptance lives in section `974:1831` and maps to
 | desktop populated           | `974:1834`                         | `Populated`                              |
 | desktop empty/loading/error | `974:1919`, `974:1967`, `974:2012` | `Empty`, `Loading`, `Error`              |
 | multi-select                | `974:2060`                         | `MultiSelect`                            |
-| processing / failed retry   | `974:2153`, `974:2241`             | `Processing`, `FailedWithRetry`          |
+| processing stages / retry   | `974:2153`, `974:2241`             | `Processing`, `FailedWithRetry`          |
+| desktop cancelling          | `1002:1831`                        | `Cancelling`                             |
 | 390 populated / empty       | `974:2331`, `974:2379`             | `Mobile390`, `Mobile390Empty`            |
 | 430 loading / filters       | `974:2410`, `974:2469`             | `Mobile430Loading`, `Mobile430Filters`   |
 | 320 error / multi-select    | `974:2438`, `974:2517`             | `Mobile320Error`, `Mobile320MultiSelect` |
 | mobile processing / retry   | `974:2571`, `974:2622`             | `Mobile390Processing`, `Mobile390Failed` |
+| mobile queued / cancelling  | `1002:1919`, `1002:1970`           | `Mobile390Queued`, `Mobile390Cancelling` |
 | Add papers desktop / mobile | `979:1831`, `979:1938`             | `AddPapers`, mobile viewport review      |
+| lifecycle behavior contract | `1002:2021`                        | ingestion-row state stories              |
 
 Figma owns visual intent; Storybook owns executable runtime states. Differences
 required for responsive composition and accessibility are implemented in code,

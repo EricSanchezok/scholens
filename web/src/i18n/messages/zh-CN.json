@@ -199,16 +199,12 @@
       "pdfTitle": "PDF 文件",
       "pdfDescription": "可多选，每个 PDF 最大 50 MB；同时最多上传 3 个。",
       "fileTooLarge": "此文件超过 50 MB。",
-      "uploadFailed": "上传失败，请重试此文件。",
       "chooseFiles": "选择 PDF",
       "queueLabel": "PDF 上传队列",
-      "retry": "重试",
+      "removeFile": "移除 {name}",
       "uploadFiles": "上传 {count} 个文件",
       "status": {
-        "queued": "等待上传",
-        "uploading": "正在上传",
-        "succeeded": "已进入处理队列",
-        "failed": "上传失败"
+        "queued": "等待上传"
       },
       "sourceTitle": "DOI、arXiv 或 PDF 网址",
       "sourceDescription": "Scholens 会解析开放 PDF，并将其添加到你的资料库。",
@@ -222,6 +218,16 @@
       },
       "sourceRequired": "请输入 DOI、arXiv ID 或 PDF 直链。",
       "sourceFailed": "无法添加此来源，请确认存在可访问的开放 PDF。",
+      "sourcePending": "正在验证来源",
+      "cancelSource": "取消",
+      "errors": {
+        "unavailable": "没有找到可访问的开放 PDF。",
+        "unsafeAddress": "不允许访问这个地址，请使用公网 PDF 直链。",
+        "tooLarge": "此 PDF 超过 50 MB。",
+        "invalidPdf": "该来源不是可读取且未加密的 PDF。",
+        "quota": "论文数量或存储额度已用完。",
+        "serviceUnavailable": "服务器暂时无法接受此来源，输入已保留，请稍后重试。"
+      },
       "destination": "添加到",
       "personalLibrary": "个人资料库",
       "destinationDescription": "导入时也可以同时将论文加入一个项目。",
@@ -265,12 +271,35 @@
         "downloadFailed": "无法打开 PDF 下载"
       },
       "ingestion": {
-        "section": "论文处理状态",
-        "failed": "论文处理失败",
-        "processing": "正在处理论文",
-        "failedDescription": "来源已保留，可以重新处理。",
-        "processingDescription": "处理完成后，此状态会自动更新。",
-        "retry": "重试"
+        "retry": "重试",
+        "cancel": "取消处理",
+        "remove": "移除失败的导入",
+        "pending": "待完成",
+        "status": {
+          "retrying": "正在重新导入",
+          "cancelling": "正在取消导入"
+        },
+        "stage": {
+          "uploading": "正在上传 PDF",
+          "queued": "等待处理",
+          "downloading": "正在下载 PDF",
+          "parsing": "正在读取 PDF",
+          "extracting_metadata": "正在提取元数据",
+          "indexing": "正在建立搜索索引",
+          "finalizing": "正在完成导入"
+        },
+        "errors": {
+          "connection_failed": "连接失败，可使用同一文件直接重试。",
+          "service_unavailable": "论文处理服务暂时不可用。",
+          "jobs_submission_failed": "论文处理服务未接受此任务。",
+          "paper_source_pdf_unavailable": "来源 PDF 已不可访问。",
+          "paper_source_unsafe_address": "不允许访问该来源地址。",
+          "upload_too_large": "此 PDF 超过 50 MB。",
+          "upload_quota_exceeded": "论文数量或存储额度已用完。",
+          "invalid_pdf": "此文件不是可读取的 PDF。",
+          "pdf_encrypted": "暂不支持加密 PDF。",
+          "unknown": "处理失败，来源已保留，可直接重试。"
+        }
       },
       "filters": {
         "tags": "标签",

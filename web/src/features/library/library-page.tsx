@@ -28,7 +28,6 @@ import {
   libraryKeys,
   libraryQueries,
   removeLibraryPapers,
-  retryPaperIngestion,
 } from "./api";
 import { AddPapersDialog } from "./components/add-papers-dialog";
 import { OutputsView } from "./components/outputs-view";
@@ -41,6 +40,7 @@ import {
   type OutputSort,
   type PaperSort,
 } from "./library-search";
+import { usePaperIngestions } from "./use-paper-ingestions";
 
 function useDebouncedValue(value: string, delay: number) {
   const [debounced, setDebounced] = React.useState(value);
@@ -89,7 +89,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
-  const completedJobIds = React.useRef(new Set<string>());
 
   const replaceSearch = React.useCallback(
     (patch: Partial<LibrarySearchState>) => {
@@ -106,7 +105,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const summaryQuery = useQuery(libraryQueries.summary());
   const tagsQuery = useQuery(libraryQueries.tags());
   const projectsQuery = useQuery(libraryQueries.projects());
-  const jobsQuery = useQuery(libraryQueries.ingestions());
   const papersQuery = useQuery({
     ...libraryQueries.papers({
       cursor: parsed.cursor,
@@ -125,30 +123,13 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     }),
     enabled: parsed.tab === "outputs",
   });
-
-  React.useEffect(() => {
-    const completed =
-      jobsQuery.data?.items.filter((job) => job.status === "completed") ?? [];
-    const hasNewCompletion = completed.some(
-      (job) => !completedJobIds.current.has(job.id),
-    );
-    completed.forEach((job) => completedJobIds.current.add(job.id));
-    if (hasNewCompletion) {
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: [...libraryKeys.all, "papers"],
-        }),
-        queryClient.invalidateQueries({ queryKey: libraryKeys.summary() }),
-      ]);
-    }
-  }, [jobsQuery.data, queryClient]);
-
-  const retryMutation = useMutation({
-    mutationFn: retryPaperIngestion,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: libraryKeys.ingestions(),
-      });
+  const paperEntries = React.useMemo(
+    () => papersQuery.data?.items ?? [],
+    [papersQuery.data?.items],
+  );
+  const ingestion = usePaperIngestions(paperEntries, {
+    onWillIngest: () => {
+      if (parsed.cursor) replaceSearch({ cursor: undefined });
     },
   });
   const removeMutation = useMutation({
@@ -310,7 +291,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               key={`${parsed.query}:${parsed.sort}:${parsed.cursor ?? ""}:${parsed.tagIds.join(",")}`}
               data={papersQuery.data}
               error={papersQuery.error}
-              jobs={jobsQuery.data?.items ?? []}
+              ingestions={ingestion.rows}
               loading={papersQuery.isPending}
               onAddToProject={(documentIds, projectId) =>
                 runAction(() =>
@@ -323,13 +304,16 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 )
               }
               onDownload={(documentId) => void handleDownload(documentId)}
+              onCancelIngestion={(id) =>
+                void runAction(() => ingestion.cancel(id))
+              }
               onNext={(cursor) => replaceSearch({ cursor })}
               onPrevious={(cursor) => replaceSearch({ cursor })}
               onRemove={(documentIds) =>
                 runAction(() => removeMutation.mutateAsync(documentIds))
               }
-              onRetry={(jobId) =>
-                void runAction(() => retryMutation.mutateAsync(jobId))
+              onRetryIngestion={(id) =>
+                void runAction(() => ingestion.retry(id))
               }
               onRetryLoad={() => void papersQuery.refetch()}
               onSortChange={(sort: PaperSort) =>
@@ -339,7 +323,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 replaceSearch({ cursor: undefined, tagIds })
               }
               projects={projectsQuery.data?.items ?? []}
-              retryingJobId={retryMutation.variables}
               sort={parsed.sort as PaperSort}
               tagIds={parsed.tagIds}
               tags={tagsQuery.data?.items ?? []}
@@ -377,12 +360,9 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       </div>
 
       <AddPapersDialog
-        onIngestionStarted={() => {
-          void queryClient.invalidateQueries({
-            queryKey: libraryKeys.ingestions(),
-          });
-        }}
         onOpenChange={setAddOpen}
+        onSubmitSource={ingestion.submitSource}
+        onUploadFiles={ingestion.startUploads}
         open={addOpen}
         projects={projectsQuery.data?.items ?? []}
       />

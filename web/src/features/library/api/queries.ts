@@ -56,24 +56,6 @@ export const libraryQueries = {
         return data;
       },
     }),
-  ingestions: () =>
-    queryOptions({
-      queryKey: libraryKeys.ingestions(),
-      queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET("/api/v1/jobs", {
-          params: { query: { operation: "pdf_process" } },
-          signal,
-        });
-        if (!data) throw new Error("Ingestion job response was empty");
-        return data;
-      },
-      refetchInterval: (query) =>
-        query.state.data?.items.some((job) =>
-          ["pending", "running"].includes(job.status),
-        )
-          ? 2_000
-          : false,
-    }),
   papers: (
     state: Pick<LibrarySearchState, "cursor" | "query" | "sort" | "tagIds">,
   ) =>
@@ -95,6 +77,14 @@ export const libraryQueries = {
         if (!data) throw new Error("Library paper response was empty");
         return data;
       },
+      refetchInterval: (query) =>
+        query.state.data?.items.some(
+          (entry) =>
+            entry.entry_type === "ingestion" &&
+            ["queued", "processing"].includes(entry.ingestion.state),
+        )
+          ? 2_000
+          : false,
     }),
   outputs: (
     state: Pick<LibrarySearchState, "cursor" | "kinds" | "query" | "sort">,

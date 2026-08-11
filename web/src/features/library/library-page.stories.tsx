@@ -111,9 +111,10 @@ export const Processing: Story = {
     },
   },
   play: async ({ canvasElement }) => {
+    const copies = await within(canvasElement).findAllByText("Reading PDF");
     await expect(
-      await within(canvasElement).findByText("Processing paper"),
-    ).toBeVisible();
+      copies.some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
   },
 };
 
@@ -123,9 +124,12 @@ export const FailedWithRetry: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const copies = await canvas.findAllByText(
+      "The source PDF is no longer available.",
+    );
     await expect(
-      await canvas.findByText("Paper processing failed"),
-    ).toBeVisible();
+      copies.some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
     await expect(canvas.getByRole("button", { name: "Retry" })).toBeVisible();
   },
 };

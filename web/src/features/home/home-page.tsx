@@ -129,7 +129,9 @@ export function HomeWorkspace({
   );
 
   const conversations = conversationsQuery.data?.items ?? [];
-  const papers = papersQuery.data?.items ?? [];
+  const papers = (papersQuery.data?.items ?? []).flatMap((entry) =>
+    entry.entry_type === "paper" ? [entry] : [],
+  );
   const projects = projectsQuery.data?.items ?? [];
   const contextKey = activeConversationId ?? "new";
   const context =
