@@ -36,6 +36,19 @@ describe("conversation SSE parsing", () => {
     expect(parseConversationEventBlock(": keep-alive")).toBeUndefined();
   });
 
+  it("accepts the response-ready sidecar event sequence", () => {
+    expect(
+      parseConversationEventBlock(
+        'event: suggestions\ndata: {"type":"suggestions","turn_id":"50000000-0000-4000-8000-000000000001","response_id":"60000000-0000-4000-8000-000000000001","suggestions":["One","Two","Three"]}',
+      ),
+    ).toEqual({
+      type: "suggestions",
+      turn_id: "50000000-0000-4000-8000-000000000001",
+      response_id: "60000000-0000-4000-8000-000000000001",
+      suggestions: ["One", "Two", "Three"],
+    });
+  });
+
   it("rejects event discriminators outside the generated contract", () => {
     expect(() =>
       parseConversationEventBlock(

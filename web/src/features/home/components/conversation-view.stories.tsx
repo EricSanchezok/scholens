@@ -26,12 +26,6 @@ function response(
     references: null,
     artifacts: null,
     trace: null,
-    suggestions_status: "completed",
-    suggestions: [
-      "What is tomorrow’s date?",
-      "Which time zone are you using?",
-      "Show this week as a calendar.",
-    ],
     ...overrides,
   };
 }
@@ -52,6 +46,11 @@ function turn(
     sequence: 1,
     user_references: null,
     selected_response_id: responses.at(-1)?.id ?? null,
+    suggestions: [
+      "What is tomorrow’s date?",
+      "Which time zone are you using?",
+      "Show this week as a calendar.",
+    ],
     ...overrides,
     responses,
   };
@@ -129,17 +128,17 @@ function researchTurn(overrides: Partial<ConversationTurn> = {}) {
     user_query: "帮我调研一下思维链压缩技术",
     locale: "zh-CN",
     selected_response_id: "41000000-0000-4000-8000-000000000011",
+    suggestions: [
+      "比较三种主流压缩路线",
+      "如何设计统一评测？",
+      "列出值得阅读的论文",
+    ],
     responses: [
       response({
         id: "41000000-0000-4000-8000-000000000011",
         content: researchContent,
         references: researchReferences,
         trace: researchTrace,
-        suggestions: [
-          "比较三种主流压缩路线",
-          "如何设计统一评测？",
-          "列出值得阅读的论文",
-        ],
       }),
     ],
     ...overrides,
@@ -150,6 +149,7 @@ function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
   return {
     turnId: "52000000-0000-4000-8000-000000000001",
     responseId: "42000000-0000-4000-8000-000000000001",
+    variantIndex: null,
     generationKind: "initial",
     userMessage: "Compare the strongest reasoning-compression approaches.",
     content: "",
@@ -158,10 +158,33 @@ function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
     completedItemIds: [],
     trace: null,
     references: null,
+    suggestions: null,
+    readyTurn: null,
     failure: null,
     state: "streaming",
     ...overrides,
   };
+}
+
+function responseReadyLiveTurn(suggestions: string[] | null): LiveTurn {
+  const canonicalResponse = response({
+    id: "42000000-0000-4000-8000-000000000001",
+    content: "The answer is ready without waiting for a refetch.",
+  });
+  const canonicalTurn = turn({
+    id: "52000000-0000-4000-8000-000000000001",
+    user_query: "Compare the strongest reasoning-compression approaches.",
+    selected_response_id: canonicalResponse.id,
+    suggestions,
+    responses: [canonicalResponse],
+  });
+  return liveTurn({
+    variantIndex: 1,
+    content: canonicalResponse.content ?? "",
+    readyTurn: canonicalTurn,
+    suggestions,
+    state: "ready",
+  });
 }
 
 const meta = {
@@ -213,13 +236,29 @@ export const LatestAnswerActions: Story = {
   args: { turns: [turn()], onRetryResponse: fn() },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByRole("button", { name: "Copy answer" }),
-    ).toBeVisible();
+    await waitFor(() =>
+      expect(canvas.getByRole("button", { name: "Copy answer" })).toBeVisible(),
+    );
     await userEvent.click(
       canvas.getByRole("button", { name: "Try another response" }),
     );
     await expect(args.onRetryResponse).toHaveBeenCalledTimes(1);
+  },
+};
+
+export const SubmissionPendingHidesLatestOnlyControls: Story = {
+  args: { turns: [turn()], submissionPending: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() =>
+      expect(canvas.getByRole("button", { name: "Copy answer" })).toBeVisible(),
+    );
+    await expect(
+      canvas.queryByRole("button", { name: "Try another response" }),
+    ).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole("region", { name: "Suggested follow-up questions" }),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -242,7 +281,9 @@ export const RetriedResponseVersions: Story = {
   },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByLabelText("Response 2 of 2")).toBeVisible();
+    await waitFor(() =>
+      expect(canvas.getByLabelText("Response 2 of 2")).toBeVisible(),
+    );
     await userEvent.click(
       canvas.getByRole("button", { name: "Previous response" }),
     );
@@ -262,12 +303,11 @@ export const HistoricalAnswerHasNoRetry: Story = {
         sequence: 2,
         user_query: "And tomorrow?",
         selected_response_id: "41000000-0000-4000-8000-000000000003",
+        suggestions: null,
         responses: [
           response({
             id: "41000000-0000-4000-8000-000000000003",
             content: "Tomorrow is Thursday.",
-            suggestions: null,
-            suggestions_status: "idle",
           }),
         ],
       }),
@@ -319,15 +359,15 @@ export const MobileAnswerRhythm: Story = {
       turn({
         locale: "zh-CN",
         user_query: "Scholens 可以怎样帮助我整理研究？",
+        suggestions: [
+          "先帮我建立一份阅读清单",
+          "比较资料库里的三篇论文",
+          "把研究重点整理成一个项目",
+        ],
         responses: [
           response({
             content:
               "Scholens 可以帮你检索论文、整理阅读清单，并把研究资料组织进项目。",
-            suggestions: [
-              "先帮我建立一份阅读清单",
-              "比较资料库里的三篇论文",
-              "把研究重点整理成一个项目",
-            ],
           }),
         ],
       }),
@@ -335,48 +375,54 @@ export const MobileAnswerRhythm: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("group", { name: "回答操作" })).toBeVisible();
+    await waitFor(() =>
+      expect(canvas.getByRole("group", { name: "回答操作" })).toBeVisible(),
+    );
     await expect(
       canvas.getByRole("region", { name: "建议的后续问题" }),
     ).toBeVisible();
   },
 };
 
-export const SuggestionsPending: Story = {
+export const ResponseReadyWithSuggestions: Story = {
   args: {
-    turns: [
-      turn({
-        responses: [
-          response({ suggestions: null, suggestions_status: "pending" }),
-        ],
-      }),
-    ],
+    turns: [],
+    liveTurn: responseReadyLiveTurn([
+      "Compare the latency of each approach.",
+      "Show the evaluation criteria.",
+      "Which papers should I read first?",
+    ]),
   },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() =>
+      expect(
+        canvas.getByRole("group", { name: "Answer actions" }),
+      ).toBeVisible(),
+    );
     await expect(
-      within(canvasElement).getByRole("status", {
-        name: "Preparing follow-up suggestions…",
+      canvas.getByRole("button", {
+        name: "Compare the latency of each approach.",
       }),
     ).toBeVisible();
   },
 };
 
-export const SuggestionsUnavailable: Story = {
+export const ResponseReadyBeforeSuggestions: Story = {
   args: {
-    turns: [
-      turn({
-        responses: [
-          response({ suggestions: null, suggestions_status: "failed" }),
-        ],
-      }),
-    ],
+    turns: [],
+    liveTurn: responseReadyLiveTurn(null),
   },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() =>
+      expect(
+        canvas.getByRole("group", { name: "Answer actions" }),
+      ).toBeVisible(),
+    );
     await expect(
-      within(canvasElement).getByText(
-        "Follow-up suggestions are unavailable for this answer.",
-      ),
-    ).toBeVisible();
+      canvas.queryByRole("region", { name: "Suggested follow-up questions" }),
+    ).not.toBeInTheDocument();
   },
 };
 

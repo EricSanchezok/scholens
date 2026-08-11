@@ -49,9 +49,12 @@ DTOs.
 
 Conversation creation and continuation use one standard SSE decoder. The
 stream accepts `start`, the stable-ID `assistant_item_start → delta → complete`
-lifecycle, `activity`, `references`, `complete`, and `error`. A provisional
-assistant item is rendered immediately, then atomically classified as
-`progress` or `final` by its completion event; the client never infers phase
+lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
+`complete`, and `error`. A provisional assistant item is rendered immediately,
+then atomically classified as `progress` or `final` by its completion event;
+`response_ready` supplies the complete persisted turn snapshot, and an optional
+`suggestions` event may supplement it before `complete` closes the stream. The
+client never infers phase
 from prose and never duplicates the text while moving it. Progress and activity
 share one sequence and become an ordered worklog. The final answer remains
 outside that trace and is always visible.
@@ -60,7 +63,9 @@ outside that trace and is always visible.
 tool name. Adjacent tool entries are rendered as one category-count batch;
 progress text separates batches. Model reasoning, provider heartbeats, raw tool
 names, arguments, and return payloads are not product UI. Only final items may
-publish references. `complete` and `error` are terminal. The user may abort an
+publish references. `response_ready` releases the Composer and completed-answer
+actions without waiting for a GET refetch, conversation title, or suggestion
+sidecar. `complete` and `error` are terminal. The user may abort an
 active stream; the Web app never automatically retries turn or response
 creation. Once
 a turn is accepted into the optimistic transcript, the Composer clears
@@ -72,25 +77,27 @@ Capacity dependency outages are returned as `unavailable`, not as a user quota
 exhaustion. The interface preserves the failed user message, explains that it
 was saved, and retains the public diagnostic ID without exposing provider or
 Redis details.
-After completion, only the active conversation, its turns, and the conversation
-list are invalidated. A turn owns the submitted prompt and its generated
-response variants. Only the latest turn may expose retry and variant selection;
-once a newer turn is submitted, prior alternatives and their controls are
-removed from the product history.
+At `response_ready`, the turn snapshot is upserted directly into the TanStack
+Query cache; only conversation detail and list are invalidated in the background
+to synchronize a possible first-turn title. A turn owns the submitted prompt,
+its generated response variants, and exactly three optional follow-up
+suggestions. Only the latest turn may expose retry, variant selection, and
+suggestions; once a newer submission starts, those prior controls disappear in
+the same render while copy and sources remain available for completed answers.
 Every completed answer exposes a copy action for the selected final response.
 It uses the shared transient-action contract: the control keeps its position
 and focus, changes to a success or error glyph with a short anchored label,
 announces the outcome politely, and returns to its idle state without shifting
 the action row. Clipboard failure is never silent.
-Retry creates a new response variant under the same latest turn, selects it
-after completion, and never duplicates the user prompt. Version navigation is
-shown only while that turn remains latest. Exactly three persisted follow-up
-suggestions belong to the selected completed response; selecting one only
-fills and focuses the Composer so the user can edit it before sending.
-Suggestion generation is deliberately secondary: pending work uses a quiet
-three-row placeholder and a failed suggestion job leaves the completed answer
-usable with one muted status line. Neither state retries automatically or
-changes the response lifecycle.
+Retry creates a new response variant under the same latest turn, selects it at
+`response_ready`, reuses the turn suggestions, and never duplicates the user
+prompt. Version navigation is shown only while that turn remains latest.
+Selecting a suggestion only fills and focuses the Composer so the user can edit
+it before sending. Suggestion generation is a non-critical sidecar that starts
+alongside answer generation. If it finishes later, its typed SSE event updates
+both live state and the latest cached turn. There is no pending card, failure
+message, polling state, or automatic client retry; a failed or timed-out sidecar
+simply leaves suggestions absent without delaying answer actions.
 Grounded answers expose one source-count pill in the same action row. Selecting
 that pill opens the single canonical source panel: a bottom sheet on phones and
 a centered dialog on desktop. Inline citation markers open that same panel and
@@ -139,21 +146,25 @@ The final-answer action and evidence contract is the authoritative Figma matrix
 [`906:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=906-2628),
 `Matrix / Final answer actions and sources v2`:
 
-| Figma `20 — Home / Final answer actions and sources` | Storybook acceptance state                           |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| Latest answer actions                                | `Conversation View / Latest Answer Actions`          |
-| Retried response versions                            | `Conversation View / Retried Response Versions`      |
-| Historical answer                                    | `Conversation View / Historical Answer Has No Retry` |
-| Suggested follow-ups                                 | `Conversation View / Suggested Follow Ups`           |
-| Mobile answer rhythm                                 | `Conversation View / Mobile Answer Rhythm`           |
-| Suggestions pending                                  | `Conversation View / Suggestions Pending`            |
-| Suggestions unavailable                              | `Conversation View / Suggestions Unavailable`        |
-| Retry in progress                                    | `Conversation View / Retry In Progress`              |
-| Retry failed                                         | `Conversation View / Retry Failed`                   |
-| Source count and evidence panel                      | `Conversation View / Answer Sources`                 |
+| Figma `20 — Home / Final answer actions and sources` | Storybook acceptance state                              |
+| ---------------------------------------------------- | ------------------------------------------------------- |
+| Latest answer actions                                | `Conversation View / Latest Answer Actions`             |
+| Retried response versions                            | `Conversation View / Retried Response Versions`         |
+| Historical answer                                    | `Conversation View / Historical Answer Has No Retry`    |
+| Suggested follow-ups                                 | `Conversation View / Suggested Follow Ups`              |
+| Mobile answer rhythm                                 | `Conversation View / Mobile Answer Rhythm`              |
+| Streaming                                            | `Conversation View / Provisional Response`              |
+| Response ready, suggestions ready                    | `Conversation View / Response Ready With Suggestions`   |
+| Response ready, suggestions arrive later             | `Conversation View / Response Ready Before Suggestions` |
+| Retry in progress                                    | `Conversation View / Retry In Progress`                 |
+| Retry failed                                         | `Conversation View / Retry Failed`                      |
+| Source count and evidence panel                      | `Conversation View / Answer Sources`                    |
 
-The matrix covers mobile Light/Dark final actions, the mobile source bottom
-sheet, the desktop action row and centered source dialog, an inline selected
+The matrix's response-finalization lifecycle is recorded at node `961:2605`.
+It covers Streaming, response-ready with immediate or later suggestions,
+Historical answer, and Retried variants, together with mobile
+Light/Dark final actions, the mobile source bottom sheet, the desktop action row
+and centered source dialog, an inline selected
 citation, three editable follow-up suggestions, and pointer/touch versus
 keyboard focus acceptance. Storybook keeps locale, appearance, and 320/390/430
 px viewport controls available for the same executable states. The superseded

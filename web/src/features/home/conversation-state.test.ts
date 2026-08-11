@@ -11,9 +11,52 @@ const running = {
   subject: "reasoning compression",
 };
 const responseId = "60000000-0000-4000-8000-000000000001";
+const turnId = "50000000-0000-4000-8000-000000000001";
 
 function event<T extends object>(payload: T) {
   return { response_id: responseId, ...payload };
+}
+
+function readyEvent({
+  suggestions = null,
+  variantIndex = 1,
+}: {
+  suggestions?: string[] | null;
+  variantIndex?: number;
+} = {}) {
+  return {
+    type: "response_ready" as const,
+    turn: {
+      id: turnId,
+      user_query: "Question",
+      locale: "en" as const,
+      time_zone: "Asia/Shanghai",
+      reasoning_level: "standard",
+      scope: null,
+      sequence: 1,
+      user_references: null,
+      selected_response_id: responseId,
+      suggestions,
+      responses: [
+        {
+          id: responseId,
+          variant_index: variantIndex,
+          status: "completed" as const,
+          content: "Canonical answer",
+          references: null,
+          artifacts: null,
+          trace: {
+            entries: [{ ...running, state: "succeeded" as const }],
+            citation_summary: {
+              source_count: 3,
+              annotation_count: 2,
+              rejected_source_count: 0,
+            },
+          },
+        },
+      ],
+    },
+  };
 }
 
 describe("Home live conversation state", () => {
@@ -148,27 +191,20 @@ describe("Home live conversation state", () => {
     ]);
   });
 
-  it("uses terminal trace entries as canonical completed history", () => {
+  it("uses response_ready as canonical history before complete closes the stream", () => {
     let turn = reduceLiveTurn(
-      createLiveTurn("turn-1", responseId, "Question"),
-      event({
-        type: "complete",
-        turn_id: "turn-1",
-        artifacts: [],
-        trace: {
-          entries: [{ ...running, state: "succeeded" }],
-          citation_summary: {
-            source_count: 3,
-            annotation_count: 2,
-            rejected_source_count: 0,
-          },
-        },
-      }),
+      createLiveTurn(turnId, responseId, "Question"),
+      readyEvent(),
     );
 
-    expect(turn?.state).toBe("complete");
+    expect(turn?.state).toBe("ready");
+    expect(turn?.content).toBe("Canonical answer");
     expect(turn?.entries[0]).toMatchObject({ state: "succeeded" });
     expect(turn?.trace?.citation_summary?.source_count).toBe(3);
+    expect(turn?.readyTurn?.id).toBe(turnId);
+
+    turn = reduceLiveTurn(turn, event({ type: "complete", turn_id: turnId }));
+    expect(turn?.state).toBe("complete");
 
     turn = reduceLiveTurn(
       turn,
@@ -188,6 +224,65 @@ describe("Home live conversation state", () => {
 
     expect(turn?.entries[0]).toMatchObject({ state: "succeeded" });
     expect(turn?.provisionalItems).toEqual([]);
+  });
+
+  it("adds late suggestions only after the response is ready", () => {
+    let turn = reduceLiveTurn(
+      createLiveTurn(turnId, responseId, "Question"),
+      readyEvent(),
+    );
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "suggestions",
+        turn_id: turnId,
+        suggestions: ["One", "Two", "Three"],
+      }),
+    );
+
+    expect(turn?.suggestions).toEqual(["One", "Two", "Three"]);
+    expect(turn?.readyTurn?.suggestions).toEqual(["One", "Two", "Three"]);
+  });
+
+  it("ignores stale suggestions and a complete event before response_ready", () => {
+    const streaming = createLiveTurn(turnId, responseId, "Question");
+    const prematurelyCompleted = reduceLiveTurn(
+      streaming,
+      event({ type: "complete", turn_id: turnId }),
+    );
+    const ready = reduceLiveTurn(prematurelyCompleted, readyEvent());
+    const stale = reduceLiveTurn(
+      ready,
+      event({
+        type: "suggestions",
+        turn_id: "50000000-0000-4000-8000-000000000099",
+        suggestions: ["Stale one", "Stale two", "Stale three"],
+      }),
+    );
+
+    expect(prematurelyCompleted?.state).toBe("streaming");
+    expect(stale?.suggestions).toBeNull();
+  });
+
+  it("keeps a retried variant ready and ignores a later stream error", () => {
+    let turn = reduceLiveTurn(
+      createLiveTurn(turnId, responseId, "Question", "retry"),
+      readyEvent({
+        suggestions: ["One", "Two", "Three"],
+        variantIndex: 2,
+      }),
+    );
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "error",
+        error: { code: "late_sidecar_failure", retryable: false },
+      }),
+    );
+
+    expect(turn?.state).toBe("ready");
+    expect(turn?.variantIndex).toBe(2);
+    expect(turn?.failure).toBeNull();
   });
 
   it("retains safe diagnostics from a terminal stream error", () => {

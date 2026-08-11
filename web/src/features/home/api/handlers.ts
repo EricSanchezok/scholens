@@ -43,6 +43,50 @@ const baseHandlers = [
       const requestBody = (await request.json()) as {
         turn_id: string;
         response_id: string;
+        user_query: string;
+        locale: "en" | "zh-CN";
+        time_zone: string;
+        reasoning_level: string;
+      };
+      const finalizedResponse = {
+        id: requestBody.response_id,
+        variant_index: 1,
+        status: "completed" as const,
+        content: "The answer is grounded in your selected research.",
+        references: null,
+        artifacts: null,
+        trace: {
+          entries: [
+            {
+              kind: "activity" as const,
+              id: "search-1",
+              sequence: 1,
+              category: "search" as const,
+              state: "succeeded" as const,
+              subject: "selected research",
+              source_count: 1,
+              artifact_count: 0,
+            },
+          ],
+          citation_summary: {
+            source_count: 1,
+            annotation_count: 1,
+            rejected_source_count: 0,
+          },
+        },
+      };
+      const finalizedTurn = {
+        id: requestBody.turn_id,
+        user_query: requestBody.user_query,
+        locale: requestBody.locale,
+        time_zone: requestBody.time_zone,
+        reasoning_level: requestBody.reasoning_level,
+        scope: null,
+        sequence: homeTurns.length + 1,
+        user_references: null,
+        selected_response_id: requestBody.response_id,
+        suggestions: null,
+        responses: [finalizedResponse],
       };
       const events = [
         {
@@ -50,6 +94,8 @@ const baseHandlers = [
           conversation_id: activeConversation.id,
           turn_id: requestBody.turn_id,
           response_id: requestBody.response_id,
+          generation_kind: "initial",
+          variant_index: 1,
         },
         {
           type: "activity",
@@ -85,30 +131,21 @@ const baseHandlers = [
             content: "The answer is grounded in your selected research.",
           },
         },
+        { type: "response_ready", turn: finalizedTurn },
+        {
+          type: "suggestions",
+          turn_id: requestBody.turn_id,
+          response_id: requestBody.response_id,
+          suggestions: [
+            "Compare this with another paper.",
+            "Show the supporting evidence.",
+            "What should I investigate next?",
+          ],
+        },
         {
           type: "complete",
           turn_id: requestBody.turn_id,
           response_id: requestBody.response_id,
-          trace: {
-            entries: [
-              {
-                kind: "activity",
-                id: "search-1",
-                sequence: 1,
-                category: "search",
-                state: "succeeded",
-                subject: "selected research",
-                source_count: 1,
-                artifact_count: 0,
-              },
-            ],
-            citation_summary: {
-              source_count: 1,
-              annotation_count: 1,
-              rejected_source_count: 0,
-            },
-          },
-          artifacts: [],
         },
       ];
       const body = events
@@ -126,12 +163,30 @@ const baseHandlers = [
     async ({ request, params }) => {
       const requestBody = (await request.json()) as { response_id: string };
       const turnId = String(params.turnId);
+      const sourceTurn = homeTurns[0]!;
+      const finalizedResponse = {
+        id: requestBody.response_id,
+        variant_index: sourceTurn.responses.length + 1,
+        status: "completed" as const,
+        content: "A regenerated answer grounded in the same turn.",
+        references: null,
+        artifacts: null,
+        trace: null,
+      };
+      const finalizedTurn = {
+        ...sourceTurn,
+        id: turnId,
+        selected_response_id: requestBody.response_id,
+        responses: [...sourceTurn.responses, finalizedResponse],
+      };
       const events = [
         {
           type: "start",
           conversation_id: activeConversation.id,
           turn_id: turnId,
           response_id: requestBody.response_id,
+          generation_kind: "retry",
+          variant_index: finalizedResponse.variant_index,
         },
         {
           type: "assistant_item_start",
@@ -155,12 +210,11 @@ const baseHandlers = [
             content: "A regenerated answer grounded in the same turn.",
           },
         },
+        { type: "response_ready", turn: finalizedTurn },
         {
           type: "complete",
           turn_id: turnId,
           response_id: requestBody.response_id,
-          trace: null,
-          artifacts: [],
         },
       ];
       const body = events
@@ -181,14 +235,6 @@ const baseHandlers = [
         selected_response_id: requestBody.response_id,
       });
     },
-  ),
-  http.post(
-    `${api}/conversations/:conversationId/responses/:responseId/suggestions`,
-    () =>
-      HttpResponse.json({
-        status: "pending",
-        suggestions: null,
-      }),
   ),
 ];
 
@@ -241,24 +287,42 @@ export const homeHandlers = {
     http.post(
       `${api}/conversations/:conversationId/turns`,
       async ({ request }) => {
-        const requestBody = (await request.json()) as { response_id: string };
+        const requestBody = (await request.json()) as {
+          turn_id: string;
+          response_id: string;
+        };
         const encoder = new TextEncoder();
         const body = new ReadableStream({
           start(controller) {
             controller.enqueue(
               encoder.encode(
-                `event: activity\ndata: ${JSON.stringify({
-                  type: "activity",
-                  response_id: requestBody.response_id,
-                  activity: {
-                    kind: "activity",
-                    id: "search-1",
-                    sequence: 1,
-                    category: "search",
-                    state: "running",
-                    subject: "selected papers",
+                [
+                  {
+                    type: "start",
+                    conversation_id: activeConversation.id,
+                    turn_id: requestBody.turn_id,
+                    response_id: requestBody.response_id,
+                    generation_kind: "initial",
+                    variant_index: 1,
                   },
-                })}\n\n`,
+                  {
+                    type: "activity",
+                    response_id: requestBody.response_id,
+                    activity: {
+                      kind: "activity",
+                      id: "search-1",
+                      sequence: 1,
+                      category: "search",
+                      state: "running",
+                      subject: "selected papers",
+                    },
+                  },
+                ]
+                  .map(
+                    (event) =>
+                      `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+                  )
+                  .join(""),
               ),
             );
           },

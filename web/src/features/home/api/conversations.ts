@@ -18,6 +18,8 @@ const conversationStreamEventTypes = {
   assistant_item_delta: true,
   assistant_item_complete: true,
   references: true,
+  response_ready: true,
+  suggestions: true,
   complete: true,
   error: true,
 } satisfies Record<ConversationStreamEvent["type"], true>;
@@ -180,24 +182,5 @@ export async function selectConversationResponse({
     },
   );
   if (!data) throw new Error("Selected response was empty");
-  return data;
-}
-
-export async function generateConversationSuggestions({
-  conversationId,
-  responseId,
-}: {
-  conversationId: string;
-  responseId: string;
-}) {
-  const { data } = await apiClient.POST(
-    "/api/v1/conversations/{conversation_id}/responses/{response_id}/suggestions",
-    {
-      params: {
-        path: { conversation_id: conversationId, response_id: responseId },
-      },
-    },
-  );
-  if (!data) throw new Error("Suggestion generation response was empty");
   return data;
 }

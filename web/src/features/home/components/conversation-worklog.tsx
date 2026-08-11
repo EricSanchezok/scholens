@@ -233,7 +233,7 @@ export function ConversationWorklog({
         >
           <span
             aria-live="polite"
-            className="activity-copy-enter min-w-0 flex-1"
+            className="settled-content-enter min-w-0 flex-1"
             key={summary}
           >
             {summary}
@@ -254,7 +254,7 @@ export function ConversationWorklog({
           className="flex min-h-11 items-center lg:min-h-8"
           role="status"
         >
-          <span className="activity-copy-enter" key={summary}>
+          <span className="settled-content-enter" key={summary}>
             {summary}
           </span>
         </p>

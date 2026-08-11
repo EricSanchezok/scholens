@@ -202,6 +202,11 @@ export const homeTurns: ConversationTurn[] = [
     sequence: 1,
     user_references: null,
     selected_response_id: "40000000-0000-4000-8000-000000000002",
+    suggestions: [
+      "How does this compare with a retrieval-only assistant?",
+      "Which design choice matters most for continuity?",
+      "What evidence supports the paper’s central claim?",
+    ],
     responses: [
       {
         id: "40000000-0000-4000-8000-000000000002",
@@ -254,12 +259,6 @@ export const homeTurns: ConversationTurn[] = [
             rejected_source_count: 0,
           },
         },
-        suggestions_status: "completed",
-        suggestions: [
-          "How does this compare with a retrieval-only assistant?",
-          "Which design choice matters most for continuity?",
-          "What evidence supports the paper’s central claim?",
-        ],
       },
     ],
   },

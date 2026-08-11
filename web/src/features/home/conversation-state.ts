@@ -11,6 +11,8 @@ export type ConversationTraceEntry =
   ConversationProgressEntry | ConversationActivity;
 export type ConversationAssistantItem =
   components["schemas"]["ConversationAssistantItem"];
+export type ConversationTurn =
+  components["schemas"]["ConversationTurnResponse"];
 export type ProvisionalAssistantItem = Omit<
   ConversationAssistantItem,
   "phase"
@@ -26,6 +28,7 @@ export type ConversationFailure = {
 export type LiveTurn = {
   turnId: string;
   responseId: string;
+  variantIndex: number | null;
   generationKind: "initial" | "retry";
   userMessage: string;
   content: string;
@@ -34,8 +37,10 @@ export type LiveTurn = {
   completedItemIds: string[];
   trace: ConversationTrace | null;
   references: Record<string, unknown> | null;
+  suggestions: string[] | null;
+  readyTurn: ConversationTurn | null;
   failure: ConversationFailure | null;
-  state: "streaming" | "complete" | "cancelled" | "error";
+  state: "streaming" | "ready" | "complete" | "cancelled" | "error";
 };
 
 export function createLiveTurn(
@@ -47,6 +52,7 @@ export function createLiveTurn(
   return {
     turnId,
     responseId,
+    variantIndex: null,
     generationKind,
     userMessage,
     content: "",
@@ -55,6 +61,8 @@ export function createLiveTurn(
     completedItemIds: [],
     trace: null,
     references: null,
+    suggestions: null,
+    readyTurn: null,
     failure: null,
     state: "streaming",
   };
@@ -148,8 +156,63 @@ export function reduceLiveTurn(
   event: ConversationStreamEvent,
 ): LiveTurn | null {
   if (!current) return current;
-  if (current.state !== "streaming") return current;
+  if (event.type === "response_ready") {
+    if (event.turn.id !== current.turnId) return current;
+    const response = event.turn.responses.find(
+      (candidate) => candidate.id === current.responseId,
+    );
+    if (!response) return current;
+    return {
+      ...current,
+      variantIndex: response.variant_index,
+      content: response.content ?? current.content,
+      entries: response.trace?.entries ?? current.entries,
+      trace: response.trace,
+      references: response.references as Record<string, unknown> | null,
+      suggestions: event.turn.suggestions,
+      readyTurn: event.turn,
+      provisionalItems: [],
+      state: "ready",
+    };
+  }
   if (event.response_id !== current.responseId) return current;
+  if (event.type === "suggestions") {
+    if (
+      event.turn_id !== current.turnId ||
+      (current.state !== "ready" && current.state !== "complete")
+    ) {
+      return current;
+    }
+    return {
+      ...current,
+      suggestions: event.suggestions,
+      readyTurn: current.readyTurn
+        ? { ...current.readyTurn, suggestions: event.suggestions }
+        : null,
+    };
+  }
+  if (event.type === "complete") {
+    if (event.turn_id !== current.turnId || current.state !== "ready") {
+      return current;
+    }
+    return { ...current, state: "complete" };
+  }
+  if (event.type === "error") {
+    if (current.state === "ready" || current.state === "complete") {
+      return current;
+    }
+    return {
+      ...current,
+      failure: conversationFailureFromValue(event.error),
+      state: "error",
+    };
+  }
+  if (event.type === "start") {
+    return current.state === "streaming"
+      ? { ...current, variantIndex: event.variant_index }
+      : current;
+  }
+  if (current.state !== "streaming") return current;
   switch (event.type) {
     case "activity":
       return {
@@ -192,20 +255,5 @@ export function reduceLiveTurn(
         ...current,
         references: event.references as Record<string, unknown>,
       };
-    case "complete":
-      return {
-        ...current,
-        entries: event.trace?.entries ?? current.entries,
-        trace: event.trace ?? current.trace,
-        state: "complete",
-      };
-    case "error":
-      return {
-        ...current,
-        failure: conversationFailureFromValue(event.error),
-        state: "error",
-      };
-    case "start":
-      return current;
   }
 }

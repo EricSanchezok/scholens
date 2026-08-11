@@ -31,18 +31,20 @@ artifact checks, and the complete Server and Web gates.
 - Only visible non-empty text can enter an assistant item. Only a final item can
   publish references or become `ConversationResponse.content`.
 - The Server owns event validation, progress bounds, citations, persistence,
-  idempotency, and the unique terminal result. Web owns presentation state and
-  ignores events after a terminal state.
-- The SSE decoder accepts only discriminators from the generated public union
-  and stops dispatching after the first terminal event.
+  idempotency, the persisted `response_ready` snapshot, and the bounded
+  suggestion sidecar. Web owns presentation state and ignores events that no
+  longer match the active turn/response identity.
+- The SSE decoder accepts only discriminators from the generated public union.
+  `response_ready` is actionable but non-terminal; optional turn suggestions
+  may follow before `complete` closes the stream.
 - Raw reasoning, heartbeat data, tool identity, arguments, and results remain
   outside the public contract.
 - There is no legacy SSE reader, trace union, compatibility adapter, feature
   flag, duplicate reducer, or import from `client/`.
 - Response retry reuses the same `LiveTurn` reducer and transcript position as
-  initial generation. Suggestion pending and failed states project the
-  persisted response status directly; neither feature introduces a parallel
-  state machine or client-only retry loop.
+  initial generation. Turn-owned suggestions use the same typed stream and
+  introduce no polling, status projection, compatibility route, or client-only
+  retry loop.
 
 ## Dead-code and duplication audit
 
@@ -60,7 +62,8 @@ unproven abstraction.
 
 Storybook exercises the complete response lifecycle: direct completion,
 latest-only actions, multiple response variants, historical control removal,
-retry streaming and failure, suggestion pending/completed/failed, sources,
+retry streaming and failure, response-ready with immediate and later
+suggestions, sources,
 ordered progress, partial failure, cancellation, and terminal error. These
 states are fixtures over production types rather than mock-only component
 branches.

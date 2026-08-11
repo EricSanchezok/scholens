@@ -374,11 +374,10 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
       id: turnId,
       sequence: index + 1,
       selected_response_id: responseId,
+      suggestions: index === 5 ? source.suggestions : null,
       responses: source.responses.map((response) => ({
         ...response,
         id: responseId,
-        suggestions: index === 5 ? response.suggestions : [],
-        suggestions_status: index === 5 ? response.suggestions_status : "idle",
       })),
     };
   });

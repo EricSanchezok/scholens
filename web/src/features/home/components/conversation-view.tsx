@@ -10,12 +10,7 @@ import {
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
-import {
-  Button,
-  IconButton,
-  Skeleton,
-  keyboardFocusRing,
-} from "@/components/ui";
+import { Button, IconButton, keyboardFocusRing } from "@/components/ui";
 import { CopyActionButton } from "@/components/feedback";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
@@ -47,49 +42,22 @@ type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
 
 function FollowUpSuggestions({
-  response,
+  suggestions,
   onUseSuggestion,
 }: {
-  response: ConversationResponseVariant;
+  suggestions: string[];
   onUseSuggestion: (suggestion: string) => void;
 }) {
   const t = useTranslations("Home.conversation");
 
-  if (response.suggestions_status === "pending") {
-    return (
-      <section
-        aria-label={t("suggestionsPreparing")}
-        className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0"
-        role="status"
-      >
-        <Skeleton className="h-11 w-3/4 rounded-full lg:-mx-3 lg:h-10 lg:w-auto lg:rounded-[var(--radius-sm)]" />
-        <Skeleton className="h-11 w-[88%] rounded-full lg:-mx-3 lg:h-10 lg:w-auto lg:rounded-[var(--radius-sm)]" />
-        <Skeleton className="h-11 w-2/3 rounded-full lg:-mx-3 lg:h-10 lg:w-auto lg:rounded-[var(--radius-sm)]" />
-      </section>
-    );
-  }
-
-  if (response.suggestions_status === "failed") {
-    return (
-      <p className="text-muted text-xs lg:pt-2" role="status">
-        {t("suggestionsUnavailable")}
-      </p>
-    );
-  }
-
-  if (
-    response.suggestions_status !== "completed" ||
-    response.suggestions?.length !== 3
-  ) {
-    return null;
-  }
+  if (suggestions.length !== 3) return null;
 
   return (
     <section
       aria-label={t("suggestions")}
-      className="grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0"
+      className="settled-content-enter grid justify-items-start gap-2 lg:justify-items-stretch lg:gap-0"
     >
-      {response.suggestions.map((suggestion) => (
+      {suggestions.map((suggestion) => (
         <button
           className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors motion-reduce:transition-none lg:-mx-3 lg:min-h-10 lg:w-auto lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
           key={suggestion}
@@ -114,6 +82,7 @@ function AssistantMessage({
   historical,
   onActivityOpenChange,
   response,
+  suggestions,
   variants,
   canRetry,
   canSwitch,
@@ -131,6 +100,7 @@ function AssistantMessage({
   historical?: boolean;
   onActivityOpenChange?: (open: boolean) => void;
   response?: ConversationResponseVariant;
+  suggestions?: string[] | null;
   variants?: ConversationResponseVariant[];
   canRetry?: boolean;
   canSwitch?: boolean;
@@ -179,86 +149,94 @@ function AssistantMessage({
       )}
       {response && (
         <footer className="grid gap-2 lg:max-w-2xl lg:gap-1">
-          {response.status === "completed" && visibleContent && (
-            <div
-              className="flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
-              role="group"
-              aria-label={t("answerActions")}
-            >
-              {canSwitch && orderedVariants.length > 1 && onSelectResponse && (
-                <div className="text-secondary flex h-11 items-center lg:h-8">
-                  <IconButton
-                    className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
-                    disabled={selectedVariantIndex <= 0}
-                    label={t("previousResponse")}
-                    onClick={() =>
-                      onSelectResponse(
-                        orderedVariants[selectedVariantIndex - 1]!.id,
-                      )
-                    }
-                    variant="ghost"
-                  >
-                    <Icon glyph={NavArrowLeft} size={20} tone="secondary" />
-                  </IconButton>
-                  <span
-                    aria-label={t("responseVersion", {
-                      current: selectedVariantIndex + 1,
-                      total: orderedVariants.length,
-                    })}
-                    className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
-                  >
-                    {selectedVariantIndex + 1} / {orderedVariants.length}
-                  </span>
-                  <IconButton
-                    className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
-                    disabled={
-                      selectedVariantIndex >= orderedVariants.length - 1
-                    }
-                    label={t("nextResponse")}
-                    onClick={() =>
-                      onSelectResponse(
-                        orderedVariants[selectedVariantIndex + 1]!.id,
-                      )
-                    }
-                    variant="ghost"
-                  >
-                    <Icon glyph={NavArrowRight} size={20} tone="secondary" />
-                  </IconButton>
-                </div>
-              )}
-              <CopyActionButton
-                className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-                errorLabel={t("copyFailed")}
-                label={t("copy")}
-                pendingLabel={t("copying")}
-                successLabel={t("copied")}
-                value={visibleContent}
-              />
-              {canRetry && onRetryResponse && (
-                <IconButton
+          {response.status === "completed" &&
+            visibleContent &&
+            (state === "ready" || state === "complete") && (
+              <div
+                className="settled-content-enter flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
+                role="group"
+                aria-label={t("answerActions")}
+              >
+                {canSwitch &&
+                  orderedVariants.length > 1 &&
+                  onSelectResponse && (
+                    <div className="text-secondary flex h-11 items-center lg:h-8">
+                      <IconButton
+                        className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                        disabled={selectedVariantIndex <= 0}
+                        label={t("previousResponse")}
+                        onClick={() =>
+                          onSelectResponse(
+                            orderedVariants[selectedVariantIndex - 1]!.id,
+                          )
+                        }
+                        variant="ghost"
+                      >
+                        <Icon glyph={NavArrowLeft} size={20} tone="secondary" />
+                      </IconButton>
+                      <span
+                        aria-label={t("responseVersion", {
+                          current: selectedVariantIndex + 1,
+                          total: orderedVariants.length,
+                        })}
+                        className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
+                      >
+                        {selectedVariantIndex + 1} / {orderedVariants.length}
+                      </span>
+                      <IconButton
+                        className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                        disabled={
+                          selectedVariantIndex >= orderedVariants.length - 1
+                        }
+                        label={t("nextResponse")}
+                        onClick={() =>
+                          onSelectResponse(
+                            orderedVariants[selectedVariantIndex + 1]!.id,
+                          )
+                        }
+                        variant="ghost"
+                      >
+                        <Icon
+                          glyph={NavArrowRight}
+                          size={20}
+                          tone="secondary"
+                        />
+                      </IconButton>
+                    </div>
+                  )}
+                <CopyActionButton
                   className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-                  label={t("regenerate")}
-                  onClick={onRetryResponse}
-                  variant="ghost"
-                >
-                  <Icon glyph={Refresh} size={16} tone="secondary" />
-                </IconButton>
-              )}
-              <ConversationSources
-                onOpenChange={(open) => {
-                  setSourcesOpen(open);
-                  if (!open) setSelectedSourceKey(undefined);
-                }}
-                open={sourcesOpen}
-                references={references}
-                selectedSourceKey={selectedSourceKey}
-              />
-            </div>
-          )}
-          {onUseSuggestion && (
+                  errorLabel={t("copyFailed")}
+                  label={t("copy")}
+                  pendingLabel={t("copying")}
+                  successLabel={t("copied")}
+                  value={visibleContent}
+                />
+                {canRetry && onRetryResponse && (
+                  <IconButton
+                    className="size-11 bg-transparent lg:size-8 lg:min-h-8"
+                    label={t("regenerate")}
+                    onClick={onRetryResponse}
+                    variant="ghost"
+                  >
+                    <Icon glyph={Refresh} size={16} tone="secondary" />
+                  </IconButton>
+                )}
+                <ConversationSources
+                  onOpenChange={(open) => {
+                    setSourcesOpen(open);
+                    if (!open) setSelectedSourceKey(undefined);
+                  }}
+                  open={sourcesOpen}
+                  references={references}
+                  selectedSourceKey={selectedSourceKey}
+                />
+              </div>
+            )}
+          {onUseSuggestion && suggestions && (
             <FollowUpSuggestions
               onUseSuggestion={onUseSuggestion}
-              response={response}
+              suggestions={suggestions}
             />
           )}
         </footer>
@@ -282,6 +260,7 @@ function MessageHistory({
   turns,
   liveTurn,
   canSend,
+  suppressLatestControls,
   onRetryResponse,
   onSelectResponse,
   onUseSuggestion,
@@ -289,6 +268,7 @@ function MessageHistory({
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
   canSend: boolean;
+  suppressLatestControls: boolean;
   onRetryResponse: (turn: ConversationTurn) => void;
   onSelectResponse: (turnId: string, responseId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
@@ -299,6 +279,14 @@ function MessageHistory({
       {turns.map((turn) => {
         const response = selectedResponse(turn);
         const isLive = liveTurn?.turnId === turn.id;
+        const readyTurn = isLive ? liveTurn?.readyTurn : null;
+        const liveResponse = readyTurn
+          ? readyTurn.responses.find(
+              (candidate) => candidate.id === liveTurn?.responseId,
+            )
+          : undefined;
+        const latestControlsVisible =
+          turn.id === latestTurnId && !suppressLatestControls;
         return (
           <React.Fragment key={turn.id}>
             <div className="flex justify-end">
@@ -308,23 +296,42 @@ function MessageHistory({
             </div>
             {isLive && liveTurn ? (
               <AssistantMessage
+                canRetry={
+                  latestControlsVisible &&
+                  canSend &&
+                  (liveTurn.state === "ready" || liveTurn.state === "complete")
+                }
+                canSwitch={
+                  latestControlsVisible &&
+                  Boolean(readyTurn && readyTurn.responses.length > 1)
+                }
                 content={liveTurn.content}
                 entries={liveTurn.entries}
                 failure={liveTurn.failure}
+                onRetryResponse={() => onRetryResponse(readyTurn ?? turn)}
+                onSelectResponse={(responseId) =>
+                  onSelectResponse(turn.id, responseId)
+                }
+                onUseSuggestion={
+                  latestControlsVisible ? onUseSuggestion : undefined
+                }
                 provisionalContent={liveTurn.provisionalItems
                   .map((item) => item.content)
                   .join("")}
                 references={liveTurn.references}
+                response={liveResponse}
                 sourceTotal={
                   liveTurn.trace?.citation_summary?.source_count ??
                   referenceSourceCount(liveTurn.references)
                 }
                 state={liveTurn.state}
+                suggestions={liveTurn.suggestions}
+                variants={readyTurn?.responses}
               />
             ) : response ? (
               <AssistantMessage
-                canRetry={turn.id === latestTurnId && canSend}
-                canSwitch={turn.id === latestTurnId}
+                canRetry={latestControlsVisible && canSend}
+                canSwitch={latestControlsVisible}
                 content={response.content ?? ""}
                 entries={response.trace?.entries ?? []}
                 historical
@@ -333,7 +340,7 @@ function MessageHistory({
                   onSelectResponse(turn.id, responseId)
                 }
                 onUseSuggestion={
-                  turn.id === latestTurnId ? onUseSuggestion : undefined
+                  latestControlsVisible ? onUseSuggestion : undefined
                 }
                 references={response.references}
                 response={response}
@@ -342,6 +349,7 @@ function MessageHistory({
                   referenceSourceCount(response.references)
                 }
                 state="complete"
+                suggestions={turn.suggestions}
                 failure={null}
                 variants={turn.responses}
               />
@@ -371,6 +379,7 @@ export function ConversationView({
   onSelectResponse,
   onUseSuggestion,
   canSend,
+  submissionPending = false,
   readOnlyReason,
   composerForm,
   showComposer = true,
@@ -392,6 +401,7 @@ export function ConversationView({
   onSelectResponse: (turnId: string, responseId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
   canSend: boolean;
+  submissionPending?: boolean;
   readOnlyReason?: string | null;
   composerForm?: UseFormReturn<ComposerValues>;
   showComposer?: boolean;
@@ -418,6 +428,12 @@ export function ConversationView({
   const provisionalContent = liveTurn?.provisionalItems
     .map((item) => item.content)
     .join("");
+  const liveResponse = liveTurn?.readyTurn?.responses.find(
+    (response) => response.id === liveTurn.responseId,
+  );
+  const suppressLatestControls =
+    submissionPending ||
+    (liveTurn?.generationKind === "initial" && liveTurn.state === "streaming");
 
   React.useEffect(() => {
     const scrollRoot = rootRef.current?.closest("main");
@@ -455,6 +471,7 @@ export function ConversationView({
   }, [
     worklogSignature,
     liveTurn?.content,
+    liveTurn?.suggestions,
     provisionalContent,
     visibleTurns.length,
   ]);
@@ -507,6 +524,7 @@ export function ConversationView({
               onRetryResponse={onRetryResponse}
               onSelectResponse={onSelectResponse}
               onUseSuggestion={onUseSuggestion}
+              suppressLatestControls={suppressLatestControls}
               turns={visibleTurns}
             />
             {liveTurn?.generationKind === "initial" && (
@@ -517,19 +535,44 @@ export function ConversationView({
                   </p>
                 </div>
                 <AssistantMessage
+                  canRetry={
+                    canSend &&
+                    !submissionPending &&
+                    (liveTurn.state === "ready" ||
+                      liveTurn.state === "complete")
+                  }
+                  canSwitch={
+                    !submissionPending &&
+                    Boolean(
+                      liveTurn.readyTurn &&
+                      liveTurn.readyTurn.responses.length > 1,
+                    )
+                  }
                   content={liveTurn.content}
                   entries={liveTurn.entries}
                   key={liveTurn.turnId}
                   onActivityOpenChange={(open) => {
                     if (open) nearBottom.current = false;
                   }}
+                  onRetryResponse={() =>
+                    liveTurn.readyTurn && onRetryResponse(liveTurn.readyTurn)
+                  }
+                  onSelectResponse={(responseId) =>
+                    onSelectResponse(liveTurn.turnId, responseId)
+                  }
+                  onUseSuggestion={
+                    submissionPending ? undefined : onUseSuggestion
+                  }
                   provisionalContent={provisionalContent}
                   references={liveTurn.references}
+                  response={liveResponse}
                   sourceTotal={
                     liveTurn.trace?.citation_summary?.source_count ??
                     referenceSourceCount(liveTurn.references)
                   }
                   state={liveTurn.state}
+                  suggestions={liveTurn.suggestions}
+                  variants={liveTurn.readyTurn?.responses}
                   failure={liveTurn.failure}
                 />
               </>
@@ -562,7 +605,7 @@ export function ConversationView({
         <div className="pointer-events-none sticky bottom-0 z-20 -mx-4 flex justify-center bg-[linear-gradient(to_top,var(--color-bg-canvas)_78%,transparent)] px-4 pt-5 pb-3 min-[390px]:-mx-5 min-[390px]:px-5 sm:-mx-8 lg:mx-0 lg:px-4 lg:pt-10 lg:pb-6">
           <div className="pointer-events-auto w-full max-w-[720px]">
             <ResearchComposer
-              busy={liveTurn?.state === "streaming"}
+              busy={submissionPending || liveTurn?.state === "streaming"}
               compact
               context={context}
               form={composerForm}

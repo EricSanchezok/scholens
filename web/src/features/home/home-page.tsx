@@ -20,7 +20,6 @@ import { HomeDashboard } from "./components/home-dashboard";
 import { useDesktopLayout } from "./hooks/use-desktop-layout";
 import {
   createConversation,
-  generateConversationSuggestions,
   selectConversationResponse,
   streamConversationRetry,
   streamConversationTurn,
@@ -30,12 +29,27 @@ import {
 import { homeKeys } from "./api/keys";
 import { homeQueries } from "./api/queries";
 import {
+  updateLatestTurnSuggestions,
+  upsertConversationTurn,
+  type ConversationTurnsResponse,
+} from "./api/conversation-cache";
+import {
   ResearchComposer,
   useResearchComposerForm,
   type ReasoningLevel,
   type ResearchContext,
 } from "./components/research-composer";
 import type { ConversationTurn } from "./components/conversation-view";
+
+type StreamSession = {
+  conversationId: string;
+  turnId: string;
+  responseId: string;
+  controller: AbortController;
+  started: boolean;
+  ready: boolean;
+  superseded: boolean;
+};
 
 function sameContext(left: ResearchContext, right: ResearchContext) {
   if (left.kind !== right.kind) return false;
@@ -75,7 +89,8 @@ export function HomeWorkspace({
   const [liveTurn, setLiveTurn] = React.useState<LiveTurn | null>(null);
   const [liveTurnConversationId, setLiveTurnConversationId] =
     React.useState<string>();
-  const streamController = React.useRef<AbortController | null>(null);
+  const [submissionPending, setSubmissionPending] = React.useState(false);
+  const streamSession = React.useRef<StreamSession | null>(null);
   const submissionInFlight = React.useRef(false);
   const composerForm = useResearchComposerForm();
   const isDesktop = useDesktopLayout();
@@ -92,17 +107,18 @@ export function HomeWorkspace({
   const turnsQuery = useQuery({
     ...homeQueries.turns(activeConversationId ?? ""),
     enabled: Boolean(activeConversationId),
-    refetchInterval: (query) => {
-      const turns = query.state.data?.items ?? [];
-      const latestTurn = turns.at(-1);
-      const selectedResponse = latestTurn?.responses.find(
-        (response) => response.id === latestTurn.selected_response_id,
-      );
-      return selectedResponse?.suggestions_status === "pending" ? 1_000 : false;
-    },
   });
 
-  React.useEffect(() => () => streamController.current?.abort(), []);
+  React.useEffect(
+    () => () => {
+      const session = streamSession.current;
+      if (session) {
+        session.superseded = true;
+        session.controller.abort();
+      }
+    },
+    [],
+  );
 
   const conversations = conversationsQuery.data?.items ?? [];
   const papers = papersQuery.data?.items ?? [];
@@ -120,37 +136,103 @@ export function HomeWorkspace({
     }));
   }
 
-  function applyStreamEvent(event: ConversationStreamEvent) {
-    setLiveTurn((current) => reduceLiveTurn(current, event));
+  function supersedeReadyStream() {
+    const session = streamSession.current;
+    if (!session?.ready) return;
+    session.superseded = true;
+    streamSession.current = null;
+    session.controller.abort();
   }
 
-  async function finishGeneration(
-    conversationId: string,
-    responseId: string,
-    failed: boolean,
+  function releaseSubmission(session: StreamSession) {
+    if (streamSession.current !== session) return;
+    submissionInFlight.current = false;
+    setSubmissionPending(false);
+  }
+
+  function applyStreamEvent(
+    session: StreamSession,
+    event: ConversationStreamEvent,
   ) {
-    if (!failed) {
-      await generateConversationSuggestions({
-        conversationId,
-        responseId,
-      }).catch(() => undefined);
+    if (streamSession.current !== session || session.superseded) return;
+    if (event.type === "start") {
+      if (
+        event.turn_id !== session.turnId ||
+        event.response_id !== session.responseId
+      ) {
+        return;
+      }
+      session.started = true;
+    } else if (event.type === "response_ready") {
+      if (
+        event.turn.id !== session.turnId ||
+        !event.turn.responses.some(
+          (response) => response.id === session.responseId,
+        )
+      ) {
+        return;
+      }
+      session.ready = true;
+      queryClient.setQueryData<ConversationTurnsResponse>(
+        homeKeys.turns(session.conversationId),
+        (current) => upsertConversationTurn(current, event.turn),
+      );
+      releaseSubmission(session);
+      void queryClient.invalidateQueries({
+        queryKey: homeKeys.conversations(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: homeKeys.conversation(session.conversationId),
+      });
+    } else if (event.type === "suggestions") {
+      if (
+        event.turn_id !== session.turnId ||
+        event.response_id !== session.responseId
+      ) {
+        return;
+      }
+      queryClient.setQueryData<ConversationTurnsResponse>(
+        homeKeys.turns(session.conversationId),
+        (current) =>
+          updateLatestTurnSuggestions(
+            current,
+            event.turn_id,
+            event.suggestions,
+          ),
+      );
+    } else if (event.response_id !== session.responseId) {
+      return;
     }
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: homeKeys.conversations() }),
-      queryClient.invalidateQueries({
-        queryKey: homeKeys.turns(conversationId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: homeKeys.conversation(conversationId),
-      }),
-    ]);
-    if (!failed) setLiveTurn(null);
+
+    setLiveTurn((current) => reduceLiveTurn(current, event));
+
+    if (event.type === "error") releaseSubmission(session);
+    if (event.type === "complete") {
+      void queryClient.invalidateQueries({
+        queryKey: homeKeys.conversations(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: homeKeys.conversation(session.conversationId),
+      });
+      if (streamSession.current === session) streamSession.current = null;
+      setLiveTurn((current) =>
+        current?.turnId === session.turnId &&
+        current.responseId === session.responseId
+          ? null
+          : current,
+      );
+    }
   }
 
   async function sendMessage(message: string) {
     if (submissionInFlight.current) return;
     submissionInFlight.current = true;
+    setSubmissionPending(true);
+    supersedeReadyStream();
+    const previousLiveTurn = liveTurn;
+    const creatingConversation = !activeConversationId;
     let conversationId = activeConversationId;
+    let session: StreamSession | null = null;
     try {
       if (!conversationId) {
         const conversation = await createConversation({
@@ -178,11 +260,19 @@ export function HomeWorkspace({
       const controller = new AbortController();
       const turnId = crypto.randomUUID();
       const responseId = crypto.randomUUID();
-      streamController.current = controller;
+      session = {
+        conversationId,
+        turnId,
+        responseId,
+        controller,
+        started: false,
+        ready: false,
+        superseded: false,
+      };
+      streamSession.current = session;
       setLiveTurnConversationId(conversationId);
       setLiveTurn(createLiveTurn(turnId, responseId, message));
       composerForm.reset();
-      let failed = false;
       await streamConversationTurn({
         conversationId,
         request: {
@@ -194,18 +284,19 @@ export function HomeWorkspace({
           reasoning_level: reasoningLevel,
         },
         signal: controller.signal,
-        onEvent: (event) => {
-          if (event.type === "error") failed = true;
-          applyStreamEvent(event);
-        },
+        onEvent: (event) => applyStreamEvent(session!, event),
       });
-      await finishGeneration(conversationId, responseId, failed);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        setLiveTurn((current) =>
-          current ? { ...current, state: "cancelled" } : current,
-        );
-        if (conversationId) {
+        if (session && !session.superseded && !session.ready) {
+          const responseId = session.responseId;
+          setLiveTurn((current) =>
+            current?.responseId === responseId
+              ? { ...current, state: "cancelled" }
+              : current,
+          );
+        }
+        if (conversationId && session && !session.ready) {
           await Promise.all([
             queryClient.invalidateQueries({
               queryKey: homeKeys.turns(conversationId),
@@ -215,9 +306,17 @@ export function HomeWorkspace({
             }),
           ]);
         }
-      } else if (activeConversationId || conversationId) {
+      } else if (session?.ready) {
+        const responseId = session.responseId;
         setLiveTurn((current) =>
-          current
+          current?.responseId === responseId
+            ? { ...current, state: "complete" }
+            : current,
+        );
+      } else if (session?.started) {
+        const responseId = session.responseId;
+        setLiveTurn((current) =>
+          current?.responseId === responseId
             ? {
                 ...current,
                 failure: conversationFailureFromError(error),
@@ -226,14 +325,24 @@ export function HomeWorkspace({
             : current,
         );
       } else {
-        toast.notify({
-          title: t("conversation.error"),
-          description: t("conversation.retryHint"),
+        setLiveTurn(previousLiveTurn);
+        composerForm.setValue("message", message, {
+          shouldDirty: true,
+          shouldValidate: true,
         });
+        if (creatingConversation) {
+          toast.notify({
+            title: t("conversation.error"),
+            description: t("conversation.retryHint"),
+          });
+        }
       }
     } finally {
-      streamController.current = null;
-      submissionInFlight.current = false;
+      if (!session || streamSession.current === session) {
+        if (streamSession.current === session) streamSession.current = null;
+        submissionInFlight.current = false;
+        setSubmissionPending(false);
+      }
       setPendingConversationId(undefined);
     }
   }
@@ -241,32 +350,51 @@ export function HomeWorkspace({
   async function retryResponse(turn: ConversationTurn) {
     if (!activeConversationId || submissionInFlight.current) return;
     submissionInFlight.current = true;
+    setSubmissionPending(true);
+    supersedeReadyStream();
+    const previousLiveTurn = liveTurn;
     const responseId = crypto.randomUUID();
     const controller = new AbortController();
-    streamController.current = controller;
+    const session: StreamSession = {
+      conversationId: activeConversationId,
+      turnId: turn.id,
+      responseId,
+      controller,
+      started: false,
+      ready: false,
+      superseded: false,
+    };
+    streamSession.current = session;
     setLiveTurnConversationId(activeConversationId);
     setLiveTurn(createLiveTurn(turn.id, responseId, turn.user_query, "retry"));
     try {
-      let failed = false;
       await streamConversationRetry({
         conversationId: activeConversationId,
         turnId: turn.id,
         request: { response_id: responseId },
         signal: controller.signal,
-        onEvent: (event) => {
-          if (event.type === "error") failed = true;
-          applyStreamEvent(event);
-        },
+        onEvent: (event) => applyStreamEvent(session, event),
       });
-      await finishGeneration(activeConversationId, responseId, failed);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
+        if (!session.superseded && !session.ready) {
+          setLiveTurn((current) =>
+            current?.responseId === session.responseId
+              ? { ...current, state: "cancelled" }
+              : current,
+          );
+        }
+      } else if (session.ready) {
         setLiveTurn((current) =>
-          current ? { ...current, state: "cancelled" } : current,
+          current?.responseId === session.responseId
+            ? { ...current, state: "complete" }
+            : current,
         );
+      } else if (!session.started) {
+        setLiveTurn(previousLiveTurn);
       } else {
         setLiveTurn((current) =>
-          current
+          current?.responseId === session.responseId
             ? {
                 ...current,
                 failure: conversationFailureFromError(error),
@@ -279,8 +407,11 @@ export function HomeWorkspace({
         queryKey: homeKeys.turns(activeConversationId),
       });
     } finally {
-      streamController.current = null;
-      submissionInFlight.current = false;
+      if (streamSession.current === session) {
+        streamSession.current = null;
+        submissionInFlight.current = false;
+        setSubmissionPending(false);
+      }
     }
   }
 
@@ -314,7 +445,7 @@ export function HomeWorkspace({
     }
   }
 
-  const conversationBusy = liveTurn?.state === "streaming";
+  const conversationBusy = submissionPending || liveTurn?.state === "streaming";
   const conversationUnavailable =
     conversationQuery.isPending ||
     conversationQuery.isError ||
@@ -330,7 +461,7 @@ export function HomeWorkspace({
       onReasoningLevelChange={setReasoningLevel}
       onStop={
         activeConversationId
-          ? () => streamController.current?.abort()
+          ? () => streamSession.current?.controller.abort()
           : undefined
       }
       onSubmit={sendMessage}
@@ -365,6 +496,7 @@ export function HomeWorkspace({
             liveTurnConversationId === activeConversationId ? liveTurn : null
           }
           loading={conversationQuery.isPending || turnsQuery.isPending}
+          submissionPending={submissionPending}
           turns={turnsQuery.data?.items ?? []}
           onContextChange={handleContextChange}
           onReasoningLevelChange={setReasoningLevel}
@@ -376,7 +508,7 @@ export function HomeWorkspace({
           onSelectResponse={(turnId, responseId) =>
             void selectResponse(turnId, responseId)
           }
-          onStop={() => streamController.current?.abort()}
+          onStop={() => streamSession.current?.controller.abort()}
           onSubmit={sendMessage}
           onUseSuggestion={useSuggestion}
           papers={papers}
