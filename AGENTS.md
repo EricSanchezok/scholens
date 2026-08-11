@@ -38,6 +38,13 @@ token, theme, or Storybook state must follow
   `docs/architecture/data-ownership.md`.
 - Do not create compatibility layers between the old and new frontends. Evolve
   the public API contract deliberately instead.
+- Until the product is explicitly declared released, breaking product API and
+  `scholens` schema changes are reset-first: converge on one contract and
+  remove superseded routes, DTOs, columns, workflows, and tests in the same
+  change. Do not add dual read/write paths, legacy mappings, compatibility
+  flags, or backfills whose only purpose is preserving disposable pre-release
+  product data. Reset only the `scholens` schema and rebuild it explicitly;
+  `auth` data remains independently owned and must never be dropped.
 - Local development owns the `7300-7399` host-port block: Web `7300`, Server
   `7301`, Jobs `7302`, legacy client `7303`, Storybook `7306`, and Flower
   `7307`. Scholens local infrastructure uses PostgreSQL `55432`, RabbitMQ

@@ -208,10 +208,27 @@ how to add, modify, and delete pages, modules, components, tokens, themes, and
 their Figma/Storybook acceptance evidence. Run `pnpm design:check` after any
 styling, token, theme, adapter, component-state, or Storybook-global change.
 
+## Pre-release schema policy
+
+Scholens is currently pre-release. A breaking product schema or public API
+change must leave one canonical contract, not a compatibility period. Remove
+the superseded column, route, DTO, workflow, fixture, and test together. Do not
+add dual reads, dual writes, legacy adapters, feature flags, or data backfills
+solely to keep disposable local product rows alive.
+
+For breaking data-model work, reset the local `scholens` schema and rebuild the
+target schema. Alembic remains the reproducible schema builder; an unreleased
+revision is not a promise to migrate user data forever. Prefer replacing or
+squashing unreleased revisions over stacking transformations whose only value
+is preserving pre-release data. This policy changes only through an explicit
+release-readiness decision that also defines production migration and rollback
+requirements.
+
 ## Reset only the local product schema
 
-Scholens owns `scholens`; sanchezcloud-identity independently owns `auth`. During this
-pre-release phase you may reset local product data, but never drop `auth`:
+Scholens owns `scholens`; sanchezcloud-identity independently owns `auth`.
+Local product data is disposable during this pre-release phase, but `auth`
+must never be dropped:
 
 ```sql
 DROP SCHEMA IF EXISTS scholens CASCADE;
