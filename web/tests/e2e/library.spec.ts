@@ -3,6 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 import {
   libraryConversations,
+  libraryOutputs,
   libraryPapers,
   libraryProjects,
   libraryTags,
@@ -77,6 +78,18 @@ async function mockLibrary(page: Page) {
         next_cursor: cursor ? null : "next-library-page",
         previous_cursor: cursor ? "previous-library-page" : null,
         total_count: 27,
+      }),
+    });
+  });
+  await page.route(`${apiPattern}/library/outputs**`, (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: cursor ? [libraryOutputs[3]] : libraryOutputs,
+        next_cursor: cursor ? null : "next-output-page",
+        previous_cursor: cursor ? "previous-output-page" : null,
+        total_count: 8,
       }),
     });
   });
@@ -178,5 +191,78 @@ test("restores URL state and contains each supported phone width", async ({
   const sheet = page.getByRole("dialog");
   await expect(
     sheet.getByRole("checkbox", { name: "Transformers" }),
+  ).toBeVisible();
+});
+
+test("supports filtered Outputs without creating dead-end navigation", async ({
+  page,
+}) => {
+  await page.goto("/library?tab=outputs");
+
+  const table = page.getByRole("table");
+  await expect(table).toBeVisible();
+  await expect(table.getByText("Architecture notes")).toBeVisible();
+  await expect(table.getByText("Transformer citation")).toBeVisible();
+  await expect(table.getByText("Retrieval methods overview")).toBeVisible();
+  await expect(table.getByText("Model comparison")).toBeVisible();
+
+  await page.getByRole("button", { name: "Types" }).click();
+  await page.getByRole("checkbox", { name: "Citations" }).click();
+  await expect(page).toHaveURL(/kind=citation/);
+
+  await page.getByRole("combobox", { name: "Sort outputs" }).click();
+  await page.getByRole("option", { name: "Title Z–A" }).click();
+  await expect(page).toHaveURL(/sort=title_desc/);
+
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page).toHaveURL(/cursor=next-output-page/);
+  await expect(page.getByRole("button", { name: "Previous" })).toBeEnabled();
+
+  const unavailable = table.getByRole("button", {
+    name: "Not available yet",
+  });
+  await expect(unavailable).toHaveCount(1);
+  await expect(unavailable).toBeDisabled();
+  await expect(
+    page.getByRole("link", { name: /Not available yet/ }),
+  ).toHaveCount(0);
+
+  // Next streams async route metadata independently from the page shell in
+  // development. Wait for the document title before running a full-page audit.
+  await expect(page).toHaveTitle("Scholens");
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
+test("contains Outputs at 320, 390, and 430 pixels", async ({ page }) => {
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/library?tab=outputs");
+    await expect(page.getByRole("table")).toHaveCount(0);
+    await expect(
+      page.getByText("Architecture notes").filter({ visible: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    const contained = await page
+      .locator('input[aria-label="Search outputs"], main li')
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => element.getClientRects().length > 0)
+          .every((element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.left >= 0 && rect.right <= window.innerWidth;
+          }),
+      );
+    expect(contained).toBe(true);
+  }
+
+  await page.getByRole("button", { name: "Types" }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(
+    sheet.getByRole("checkbox", { name: "Audio overviews" }),
   ).toBeVisible();
 });

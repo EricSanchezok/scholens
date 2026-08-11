@@ -31,12 +31,14 @@ import {
   retryPaperIngestion,
 } from "./api";
 import { AddPapersDialog } from "./components/add-papers-dialog";
+import { OutputsView } from "./components/outputs-view";
 import { PapersView } from "./components/papers-view";
 import {
   parseLibrarySearch,
   serializeLibrarySearch,
   type LibrarySearchState,
   type LibraryTab,
+  type OutputSort,
   type PaperSort,
 } from "./library-search";
 
@@ -113,6 +115,15 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       tagIds: parsed.tagIds,
     }),
     enabled: parsed.tab === "papers",
+  });
+  const outputsQuery = useQuery({
+    ...libraryQueries.outputs({
+      cursor: parsed.cursor,
+      kinds: parsed.kinds,
+      query: parsed.query,
+      sort: parsed.sort,
+    }),
+    enabled: parsed.tab === "outputs",
   });
 
   React.useEffect(() => {
@@ -247,7 +258,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-10">
+      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-10">
         <header className="hidden items-start justify-between gap-6 lg:flex">
           <div>
             <h1 className="text-3xl font-semibold tracking-[-0.02em]">
@@ -262,7 +273,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
         </header>
 
         <Tabs
-          className="mt-0 lg:mt-8"
+          className="mt-0 min-w-0 lg:mt-8"
           onValueChange={handleTabChange}
           value={parsed.tab}
         >
@@ -284,8 +295,8 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               })}
             </TabsTrigger>
           </TabsList>
-          <TabsContent className="mt-5 grid gap-4" value="papers">
-            <div className="max-w-md">
+          <TabsContent className="mt-5 grid min-w-0 gap-4" value="papers">
+            <div className="w-full max-w-md min-w-0">
               <DebouncedLibrarySearch
                 key={`papers:${parsed.query}`}
                 label={t("papers.search")}
@@ -334,8 +345,8 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               tags={tagsQuery.data?.items ?? []}
             />
           </TabsContent>
-          <TabsContent className="mt-5 grid gap-4" value="outputs">
-            <div className="max-w-md">
+          <TabsContent className="mt-5 grid min-w-0 gap-4" value="outputs">
+            <div className="w-full max-w-md min-w-0">
               <DebouncedLibrarySearch
                 key={`outputs:${parsed.query}`}
                 label={t("outputs.search")}
@@ -345,10 +356,21 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 value={parsed.query}
               />
             </div>
-            <AsyncFeedback
-              description={t("outputs.notAvailableDescription")}
-              state="empty"
-              title={t("outputs.notAvailableTitle")}
+            <OutputsView
+              data={outputsQuery.data}
+              error={outputsQuery.error}
+              kinds={parsed.kinds}
+              loading={outputsQuery.isPending}
+              onKindFilterChange={(kinds) =>
+                replaceSearch({ cursor: undefined, kinds })
+              }
+              onNext={(cursor) => replaceSearch({ cursor })}
+              onPrevious={(cursor) => replaceSearch({ cursor })}
+              onRetryLoad={() => void outputsQuery.refetch()}
+              onSortChange={(sort: OutputSort) =>
+                replaceSearch({ cursor: undefined, sort })
+              }
+              sort={parsed.sort as OutputSort}
             />
           </TabsContent>
         </Tabs>

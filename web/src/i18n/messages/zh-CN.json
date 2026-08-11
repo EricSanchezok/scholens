@@ -295,8 +295,50 @@
     },
     "outputs": {
       "search": "搜索产物",
-      "notAvailableTitle": "产物页签尚未实现",
-      "notAvailableDescription": "下一阶段会直接完成正式实现，不创建临时页面。"
+      "loading": "正在加载产物",
+      "tryAgain": "重试",
+      "errorTitle": "无法加载产物",
+      "errorDescription": "筛选条件已保留，请重新加载产物。",
+      "emptyTitle": "没有找到产物",
+      "emptyDescription": "调整筛选条件，或从研究内容中创建产物。",
+      "count": "共 {count} 项产物",
+      "previous": "上一页",
+      "next": "下一页",
+      "notAvailable": "尚未开放",
+      "columns": {
+        "output": "产物",
+        "type": "类型",
+        "source": "来源",
+        "updated": "更新时间",
+        "open": "打开"
+      },
+      "sort": {
+        "label": "产物排序",
+        "updated_desc": "最近更新",
+        "updated_asc": "最早更新",
+        "title_asc": "标题 A–Z",
+        "title_desc": "标题 Z–A"
+      },
+      "filters": {
+        "label": "类型",
+        "kind": {
+          "highlight_thread": "标注",
+          "citation": "引用",
+          "audio_overview": "音频概览",
+          "data_table": "数据表"
+        }
+      },
+      "kind": {
+        "highlight_thread": "标注",
+        "citation": "引用",
+        "audio_overview": "音频概览",
+        "data_table": "数据表"
+      },
+      "scope": {
+        "personal": "个人",
+        "document": "论文",
+        "project": "项目"
+      }
     },
     "session": {
       "checking": "正在打开资料库",

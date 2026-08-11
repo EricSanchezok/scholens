@@ -295,8 +295,50 @@
     },
     "outputs": {
       "search": "Search outputs",
-      "notAvailableTitle": "Outputs are not implemented yet",
-      "notAvailableDescription": "This tab is completed in the next Library phase without creating a temporary page."
+      "loading": "Loading outputs",
+      "tryAgain": "Try again",
+      "errorTitle": "Outputs could not be loaded",
+      "errorDescription": "Your filters are preserved. Try loading the outputs again.",
+      "emptyTitle": "No outputs found",
+      "emptyDescription": "Adjust the filters or create an output from your research.",
+      "count": "{count, plural, one {# output} other {# outputs}}",
+      "previous": "Previous",
+      "next": "Next",
+      "notAvailable": "Not available yet",
+      "columns": {
+        "output": "Output",
+        "type": "Type",
+        "source": "Source",
+        "updated": "Updated",
+        "open": "Open"
+      },
+      "sort": {
+        "label": "Sort outputs",
+        "updated_desc": "Recently updated",
+        "updated_asc": "Oldest updated",
+        "title_asc": "Title A–Z",
+        "title_desc": "Title Z–A"
+      },
+      "filters": {
+        "label": "Types",
+        "kind": {
+          "highlight_thread": "Annotations",
+          "citation": "Citations",
+          "audio_overview": "Audio overviews",
+          "data_table": "Data tables"
+        }
+      },
+      "kind": {
+        "highlight_thread": "Annotations",
+        "citation": "Citations",
+        "audio_overview": "Audio overviews",
+        "data_table": "Data tables"
+      },
+      "scope": {
+        "personal": "Personal",
+        "document": "Paper",
+        "project": "Project"
+      }
     },
     "session": {
       "checking": "Opening your library",

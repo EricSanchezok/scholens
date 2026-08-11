@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from "msw";
 import {
   failedJob,
   libraryConversations,
+  libraryOutputs,
   libraryPapers,
   libraryProjects,
   libraryTags,
@@ -33,6 +34,14 @@ const populatedHandlers = [
       next_cursor: "next-library-page",
       previous_cursor: null,
       total_count: 27,
+    }),
+  ),
+  http.get(`${api}/library/outputs`, () =>
+    HttpResponse.json({
+      items: libraryOutputs,
+      next_cursor: "next-output-page",
+      previous_cursor: null,
+      total_count: 8,
     }),
   ),
   http.post(`${api}/paper-ingestions/uploads`, () =>
@@ -101,6 +110,35 @@ export const libraryHandlers = {
   failed: [
     http.get(`${api}/jobs`, () =>
       HttpResponse.json({ items: [failedJob], next_cursor: null }),
+    ),
+    ...populatedHandlers,
+  ],
+  outputsEmpty: [
+    http.get(`${api}/library/outputs`, () =>
+      HttpResponse.json({
+        items: [],
+        next_cursor: null,
+        previous_cursor: null,
+        total_count: 0,
+      }),
+    ),
+    ...populatedHandlers,
+  ],
+  outputsLoading: [
+    http.get(`${api}/library/outputs`, async () => {
+      await delay("infinite");
+      return HttpResponse.json({
+        items: [],
+        next_cursor: null,
+        previous_cursor: null,
+        total_count: 0,
+      });
+    }),
+    ...populatedHandlers,
+  ],
+  outputsError: [
+    http.get(`${api}/library/outputs`, () =>
+      HttpResponse.json({ code: "service_unavailable" }, { status: 503 }),
     ),
     ...populatedHandlers,
   ],

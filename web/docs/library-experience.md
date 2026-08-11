@@ -48,6 +48,21 @@ three uploads concurrently. DOI, arXiv, and direct PDF URL are discriminated
 source submissions. Each file owns its status and retry action, so one failure
 never clears the other files or the source form.
 
+## Outputs
+
+Outputs renders the Server's canonical Research Item projection. The only
+supported kinds are `highlight_thread`, `citation`, `audio_overview`, and
+`data_table`; the Web neither invents additional output models nor reconstructs
+scope permissions from other endpoints. Each item carries its source scope,
+source title, and update time from the list response.
+
+Desktop uses a semantic table with fixed column slots. Mobile uses dedicated
+stacked cards so type, source, and update metadata remain readable without
+compressing the table. Kind filters use a desktop popover and mobile bottom
+sheet. Because Reader and Projects destinations are not yet available, the
+open affordance is a disabled “Not available yet” action rather than a link,
+placeholder route, or temporary preview feature.
+
 ## Responsive and feedback contract
 
 The primary mobile acceptance widths are 390 and 430 px; 320 px is the minimum
@@ -78,3 +93,22 @@ Papers acceptance lives in section `974:1831` and maps to
 Figma owns visual intent; Storybook owns executable runtime states. Differences
 required for responsive composition and accessibility are implemented in code,
 not as duplicated Figma-layer mechanics.
+
+Outputs acceptance lives in section `984:1831` and maps to
+`Features/Library/Outputs` stories:
+
+| Acceptance state             | Figma node                         | Story                                |
+| ---------------------------- | ---------------------------------- | ------------------------------------ |
+| desktop populated            | `984:1834`                         | `Populated`                          |
+| desktop empty/loading/error  | `984:1938`, `984:1986`, `984:2031` | `Empty`, `Loading`, `Error`          |
+| desktop filtered             | `984:2079`                         | `Filtered`                           |
+| dark Simplified Chinese      | desktop populated layout           | `DarkChinese`                        |
+| 390 populated                | `984:2183`                         | `Mobile390`                          |
+| 430 filters sheet            | `984:2239`                         | `Mobile430Filters`                   |
+| 390 empty / 430 loading      | `984:2287`, `984:2318`             | `Mobile390Empty`, `Mobile430Loading` |
+| 320 error                    | `984:2346`                         | `Mobile320Error`                     |
+| archived superseded concepts | `984:2377`                         | not an executable acceptance state   |
+
+The archived section contains the former Reports, Notes, Recently opened, and
+page-number concepts. It is retained only as design history and is not a code
+or contract target.
