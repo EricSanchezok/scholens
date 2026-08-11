@@ -36,6 +36,7 @@
     },
     "sidebar": {
       "pinned": "置顶",
+      "conversations": "对话",
       "recent": "最近",
       "empty": "对话会显示在这里。",
       "noMatches": "没有匹配的对话",

@@ -208,7 +208,7 @@ test("keeps sidebar controls vertically anchored while collapsing", async ({
   expect(Math.abs(after.account.y - before.account.y)).toBeLessThan(1);
 });
 
-test("opens mobile navigation as an opaque partial-width layer", async ({
+test("opens mobile navigation as a full-screen history hub", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 568 });
@@ -233,16 +233,33 @@ test("opens mobile navigation as an opaque partial-width layer", async ({
         overlayElement ? getComputedStyle(overlayElement).zIndex : 0,
       ),
       width: element.getBoundingClientRect().width,
+      left: element.getBoundingClientRect().left,
+      right: element.getBoundingClientRect().right,
       viewportWidth: window.innerWidth,
     };
   });
-  expect(metrics.width).toBeLessThan(metrics.viewportWidth);
+  expect(Math.abs(metrics.width - metrics.viewportWidth)).toBeLessThanOrEqual(
+    1,
+  );
+  expect(Math.abs(metrics.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.right - metrics.viewportWidth)).toBeLessThanOrEqual(
+    1,
+  );
   await expect
     .poll(() =>
       panel.evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .not.toBe("rgba(0, 0, 0, 0)");
   expect(metrics.contentZ).toBeGreaterThan(metrics.overlayZ);
+  const tools = dialog.getByTestId("mobile-navigation-tools");
+  await expect(
+    tools.getByRole("searchbox", { name: "Search conversations" }),
+  ).toBeVisible();
+  await expect(tools.getByRole("button", { name: "Settings" })).toBeVisible();
+  await expect(tools.getByRole("link", { name: "New chat" })).toBeVisible();
+  const toolsBox = await tools.boundingBox();
+  expect(toolsBox?.y).toBeGreaterThan(400);
+  expect((toolsBox?.y ?? 0) + (toolsBox?.height ?? 0)).toBeLessThanOrEqual(568);
 });
 
 test("fits the Home shell at 390px without horizontal scrolling", async ({
@@ -313,7 +330,7 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
   ).toBeVisible();
   await expect(
     navigationHub.getByRole("link", { name: "New chat" }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await navigationHub.getByRole("button", { name: "Close navigation" }).click();
   expect(
     await page.evaluate(

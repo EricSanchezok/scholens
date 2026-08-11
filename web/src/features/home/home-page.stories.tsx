@@ -381,9 +381,9 @@ export const MobileNavigationOpen: Story = {
     const panel = navigation.getByRole("complementary");
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute("data-slot", "sheet-content");
-    await expect(dialog.getBoundingClientRect().width).toBeLessThan(
-      window.innerWidth,
-    );
+    await expect(
+      Math.abs(dialog.getBoundingClientRect().width - window.innerWidth),
+    ).toBeLessThanOrEqual(1);
     await expect(panel).toHaveClass("bg-sidebar");
     await expect(overlay).not.toBeNull();
     await expect(Number(getComputedStyle(dialog).zIndex)).toBeGreaterThan(
@@ -396,8 +396,14 @@ export const MobileNavigationOpen: Story = {
       navigation.getByRole("button", { name: "关闭导航" }),
     ).toBeVisible();
     await expect(
-      navigation.queryByRole("link", { name: "新对话" }),
-    ).not.toBeInTheDocument();
+      navigation.getByRole("link", { name: "新对话" }),
+    ).toBeVisible();
+    await expect(
+      navigation.getByRole("button", { name: "设置" }),
+    ).toBeVisible();
+    await expect(
+      navigation.getByTestId("mobile-navigation-tools"),
+    ).toBeVisible();
     await expect(navigation.getByText(longIdentityActor.email)).toBeVisible();
   },
 };

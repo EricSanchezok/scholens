@@ -19,12 +19,12 @@ the deliberately deferred boundaries.
 - Desktop and mobile share one navigation model, actor state, conversation
   state, and `AppShell` boundary, but use device-appropriate compositions. The
   desktop sidebar is 240 px when expanded and 64 px when collapsed. Phones use
-  a persistent bottom bar for Ask, Library, and Projects. Their partial-width,
-  opaque navigation panel is reserved for conversation search, pinned/recent history,
-  and the account trigger anchored above the bottom safe area; it does not
-  repeat the primary destinations or render the desktop Sidebar inside a
-  narrow drawer. The hub closes with a directional collapse control rather
-  than a dismiss-style X.
+  a persistent bottom bar for Ask, Library, and Projects. Their full-screen,
+  opaque navigation hub is reserved for the account identity, conversation
+  search, and pinned/recent history; it does not render the desktop Sidebar
+  inside a narrow drawer. The hub closes with a directional return control
+  rather than a dismiss-style X. Search, Settings, and New conversation remain
+  anchored in one bottom utility row above the safe area.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary
@@ -32,10 +32,11 @@ the deliberately deferred boundaries.
   history uses 32 px rows, and the account trigger uses a 48 px row. The actor
   name and email use distinct weight and semantic-color levels rather than
   competing with the primary navigation.
-- The phone navigation panel occupies at most 88 percent of the viewport and
-  owns an opaque sidebar surface above a lower stacking-level backdrop. Its
-  visible rows retain 44 px touch targets even though typography and glyphs
-  follow the compact sidebar hierarchy.
+- The phone navigation hub fills the viewport and owns an opaque sidebar
+  surface above a lower stacking-level backdrop. Its history is independently
+  scrollable between fixed account and utility regions. Visible controls retain
+  at least 48 px touch targets even though typography and glyphs follow the
+  compact sidebar hierarchy.
 - Deferred destinations retain their product names in the visible navigation;
   availability is disclosed through the disabled control and its tooltip, not
   implementation-plan copy.
@@ -102,13 +103,13 @@ never overwritten by title generation.
 
 ## State coverage
 
-| Surface      | Deterministic coverage                                                                              |
-| ------------ | --------------------------------------------------------------------------------------------------- |
-| Home data    | populated, loading/slow, empty, and recoverable error                                               |
-| Navigation   | expanded, collapsed, mobile bottom bar and partial-width history panel, search, active conversation |
-| Context      | entire library and selected project/paper sources, including search                                 |
-| Conversation | direct answer, tool activity, partial failure, references, complete, cancelled, error               |
-| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check                |
+| Surface      | Deterministic coverage                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------- |
+| Home data    | populated, loading/slow, empty, and recoverable error                                           |
+| Navigation   | expanded, collapsed, mobile bottom bar and full-screen history hub, search, active conversation |
+| Context      | entire library and selected project/paper sources, including search                             |
+| Conversation | direct answer, tool activity, partial failure, references, complete, cancelled, error           |
+| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check            |
 
 The Figma conversation-state frames and Storybook stories map one-to-one:
 
@@ -320,9 +321,10 @@ Figma `20 — Home` also records the phone-specific recent-content contract as
 instead of shrinking the desktop paper and project cards.
 
 The navigation-open acceptance frame is `Home / Mobile / Navigation open`
-(`939:2639`). It fixes the panel at 88% of the viewport with an opaque sidebar
-surface above a lower-z backdrop, leaving a visible dismissal strip instead of
-covering the phone with a transparent full-width layer. Storybook mirrors this
+(`939:2639`). It fills the viewport with an opaque sidebar surface above a
+lower-z backdrop. Account identity and the directional return control stay at
+the top, conversation history scrolls in the middle, and Search, Settings, and
+New conversation stay fixed above the bottom safe area. Storybook mirrors this
 state as `Workspace / Mobile Navigation Open`, including a long account name
 and email so truncation and alignment remain executable acceptance criteria.
 

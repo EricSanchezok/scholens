@@ -5,12 +5,11 @@ import {
   FastArrowRight,
   LogOut,
   Menu,
-  NavArrowRight,
   Settings,
 } from "iconoir-react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -174,13 +173,13 @@ function ConversationGroup({
 function AccountMenu({
   actor,
   collapsed,
-  mobile = false,
+  settingsTrigger = false,
   signingOut,
   onSignOut,
 }: {
   actor: Actor;
   collapsed: boolean;
-  mobile?: boolean;
+  settingsTrigger?: boolean;
   signingOut: boolean;
   onSignOut: () => Promise<void>;
 }) {
@@ -193,56 +192,52 @@ function AccountMenu({
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={t("account.openMenu")}
+          aria-label={
+            settingsTrigger ? t("navigation.settings") : t("account.openMenu")
+          }
           className={cn(
-            "hover:bg-hover flex items-center rounded-[var(--radius-md)] px-2",
+            "hover:bg-hover flex items-center",
             keyboardFocusRing,
-            mobile ? "h-16 w-full gap-2.5" : "h-12",
-            collapsed
-              ? "ml-auto w-10 justify-center"
-              : !mobile && "w-full gap-2",
+            settingsTrigger
+              ? "bg-surface size-12 justify-center rounded-full"
+              : "rounded-[var(--radius-md)] px-2",
+            !settingsTrigger && "h-12",
+            !settingsTrigger &&
+              (collapsed ? "ml-auto w-10 justify-center" : "w-full gap-2"),
           )}
           type="button"
         >
-          <span
-            className={cn(
-              "bg-pressed grid shrink-0 place-items-center rounded-full font-medium",
-              mobile ? "size-8 text-xs" : "text-caption size-6",
-            )}
-          >
-            {initial}
-          </span>
-          {!collapsed && (
-            <span className="min-w-0 flex-1 text-left">
-              <span
-                className={cn(
-                  "text-ui block truncate leading-5",
-                  mobile ? "font-medium" : "font-normal",
-                )}
-              >
-                {name}
+          {settingsTrigger ? (
+            <Icon glyph={Settings} size={20} tone="primary" />
+          ) : (
+            <>
+              <span className="bg-pressed text-caption grid size-6 shrink-0 place-items-center rounded-full font-medium">
+                {initial}
               </span>
-              <span
-                className={cn(
-                  "text-secondary block truncate",
-                  mobile ? "text-xs leading-4" : "text-caption leading-4",
-                )}
-              >
-                {actor.email}
-              </span>
-            </span>
+              {!collapsed && (
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="text-ui block truncate leading-5 font-normal">
+                    {name}
+                  </span>
+                  <span className="text-caption text-secondary block truncate leading-4">
+                    {actor.email}
+                  </span>
+                </span>
+              )}
+            </>
           )}
-          {mobile && <Icon glyph={Settings} size={20} tone="secondary" />}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={collapsed ? "end" : "start"}
+        align={collapsed || settingsTrigger ? "end" : "start"}
         className={cn(
           "shadow-overlay",
-          collapsed ? "w-64" : "w-[var(--radix-dropdown-menu-trigger-width)]",
+          collapsed || settingsTrigger
+            ? "w-64"
+            : "w-[var(--radix-dropdown-menu-trigger-width)]",
         )}
-        side={collapsed ? "right" : "top"}
-        sideOffset={collapsed ? 8 : 4}
+        side={collapsed && !settingsTrigger ? "right" : "top"}
+        sideOffset={collapsed || settingsTrigger ? 8 : 4}
       >
         <DropdownMenuLabel className="flex items-center gap-2.5 px-2 py-2.5">
           <span className="bg-pressed text-foreground grid size-8 shrink-0 place-items-center rounded-full text-xs font-medium">
@@ -294,6 +289,25 @@ function AccountMenu({
   );
 }
 
+function MobileActorIdentity({ actor }: { actor: Actor }) {
+  const name = actorName(actor);
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <span className="bg-pressed grid size-12 shrink-0 place-items-center rounded-full text-sm font-medium">
+        {name.slice(0, 1).toUpperCase()}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-lg leading-6 font-semibold tracking-[-0.01em]">
+          {name}
+        </span>
+        <span className="text-secondary block truncate text-sm leading-5">
+          {actor.email}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function MobileConversationGroup({
   activeConversationId,
   items,
@@ -305,10 +319,11 @@ function MobileConversationGroup({
   onSelect: () => void;
   title: string;
 }) {
+  const format = useFormatter();
   if (items.length === 0) return null;
   return (
-    <section className="grid gap-0.5">
-      <h2 className="text-secondary px-3 pt-3 pb-1 text-xs font-medium">
+    <section className="grid gap-1">
+      <h2 className="text-secondary px-3 pt-4 pb-1 text-sm font-medium">
         {title}
       </h2>
       {items.map((conversation) => (
@@ -317,20 +332,23 @@ function MobileConversationGroup({
             activeConversationId === conversation.id ? "page" : undefined
           }
           className={cn(
-            "text-ui hover:bg-hover flex min-h-11 min-w-0 items-center rounded-[var(--radius-md)] px-3",
+            "hover:bg-hover flex min-h-16 min-w-0 items-center rounded-[var(--radius-lg)] px-3 py-2",
             keyboardFocusRing,
-            activeConversationId === conversation.id && "bg-pressed",
+            activeConversationId === conversation.id && "bg-surface",
           )}
           href={`/?conversation=${conversation.id}`}
           key={conversation.id}
           onClick={onSelect}
         >
-          <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
-          {conversation.scope_label && (
-            <span className="text-caption text-secondary ml-3 max-w-20 truncate">
-              {conversation.scope_label}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-base leading-6">
+              {conversation.title}
             </span>
-          )}
+            <span className="text-secondary block truncate text-xs leading-5">
+              {format.relativeTime(new Date(conversation.updated_at))}
+              {conversation.scope_label && ` · ${conversation.scope_label}`}
+            </span>
+          </span>
         </Link>
       ))}
     </section>
@@ -365,19 +383,10 @@ function MobileNavigation({
 
   return (
     <aside className="bg-sidebar flex h-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
-      <div className="flex h-14 shrink-0 items-center px-4 pr-14">
-        <Link className="text-base font-semibold tracking-[-0.003em]" href="/">
-          Scholens
-        </Link>
+      <div className="flex min-h-20 shrink-0 items-center px-4 pr-16">
+        <MobileActorIdentity actor={actor} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3">
-        <SearchField
-          aria-label={t("navigation.searchConversations")}
-          className="bg-subtle h-11 rounded-[var(--radius-md)] border-transparent text-base"
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder={t("navigation.searchConversations")}
-          value={query}
-        />
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         <MobileConversationGroup
           activeConversationId={activeConversationId}
           items={pinned}
@@ -388,7 +397,7 @@ function MobileNavigation({
           activeConversationId={activeConversationId}
           items={recent}
           onSelect={onSelect}
-          title={t("sidebar.recent")}
+          title={t("sidebar.conversations")}
         />
         {matching.length === 0 && (
           <p className="text-secondary px-3 py-8 text-center text-sm">
@@ -396,14 +405,39 @@ function MobileNavigation({
           </p>
         )}
       </div>
-      <div className="border-line shrink-0 border-t px-3 pb-[max(var(--space-2),env(safe-area-inset-bottom))]">
-        <AccountMenu
-          actor={actor}
-          collapsed={false}
-          mobile
-          onSignOut={onSignOut}
-          signingOut={signingOut}
-        />
+      <div
+        className="bg-sidebar shrink-0 px-3 pt-2 pb-[max(var(--space-3),env(safe-area-inset-bottom))]"
+        data-testid="mobile-navigation-tools"
+      >
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SearchField
+              aria-label={t("navigation.searchConversations")}
+              className="bg-surface h-12 rounded-full border-transparent text-base"
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder={t("navigation.searchConversations")}
+              value={query}
+            />
+          </div>
+          <AccountMenu
+            actor={actor}
+            collapsed={false}
+            onSignOut={onSignOut}
+            settingsTrigger
+            signingOut={signingOut}
+          />
+          <Link
+            aria-label={t("navigation.newChat")}
+            className={cn(
+              "bg-surface hover:bg-hover grid size-12 shrink-0 place-items-center rounded-full",
+              keyboardFocusRing,
+            )}
+            href="/"
+            onClick={onSelect}
+          >
+            <Icon glyph={NewConversationIcon} size={20} tone="primary" />
+          </Link>
+        </div>
       </div>
     </aside>
   );
@@ -676,8 +710,8 @@ export function AppShell({
       </div>
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
-          className="bg-sidebar right-auto left-0 w-[min(88vw,22rem)] max-w-none border-0 border-r p-0 focus:outline-none"
-          closeGlyph={NavArrowRight}
+          className="bg-sidebar inset-0 h-dvh w-full max-w-none border-0 p-0 shadow-none focus:outline-none"
+          closeGlyph={FastArrowRight}
           closeLabel={t("navigation.closeMenu")}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
