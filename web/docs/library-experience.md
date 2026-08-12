@@ -33,15 +33,28 @@ Previous/Next only; cursors are opaque and never decoded by the Web.
 
 ## Papers
 
-Desktop uses a semantic table. Below the desktop breakpoint, Papers uses a
-dedicated stacked list rather than compressing the table. Both compositions
-offer search, tag filtering, sorting, explicit row actions, selection, and
-cursor navigation. A mobile row reserves independent columns for selection,
-paper content, and the action menu. Its title wraps to at most two lines,
+Desktop uses a semantic table. Its search, user-tag filter, sort, and result
+count share one utility row. Every paper owns a stable portrait thumbnail slot
+that consumes the Server-provided `preview_url` and falls back to a document
+preview without shifting the text columns. The selection control reuses that
+same slot: on pointer devices it appears on row hover or keyboard focus and
+remains visible while selected. It is not a permanently visible checkbox
+column. Entering selection replaces the utility row with a batch toolbar above
+the collection; batch actions are never placed in a detached bar below the
+list.
+
+Below the desktop breakpoint, Papers uses a dedicated stacked list rather than
+compressing the table. Mobile has no hover dependency: the row action menu
+starts selection, after which thumbnail slots expose checkboxes and the compact
+batch toolbar remains above the collection. Titles wrap to at most two lines,
 authors and institutions stay on one clipped secondary line, and dates remain
 in their own wrapping metadata row. Long titles and uninterrupted identifiers
 must not create horizontal page scrolling; desktop table titles remain a
 single line.
+
+Library tags are explicit user-owned organizational labels, not model-generated
+keywords. Papers without assigned labels show no synthetic tags; the filter
+only lists labels the user owns, and assigned labels render with the paper.
 
 An accepted ingestion is a first-class row in the same desktop table or mobile
 paper list as completed papers; it is never rendered as a detached status
@@ -87,10 +100,11 @@ source title, and update time from the list response.
 
 Desktop uses a semantic table with fixed column slots. Mobile uses dedicated
 stacked cards so type, source, and update metadata remain readable without
-compressing the table. Kind filters use a desktop popover and mobile bottom
-sheet. Because Reader and Projects destinations are not yet available, the
-open affordance is a disabled “Not available yet” action rather than a link,
-placeholder route, or temporary preview feature.
+compressing the table. Search, kind filter, sort, and count use the same
+responsive utility-row contract as Papers. Kind filters use a desktop popover
+and mobile bottom sheet. Because Reader and Projects destinations are not yet
+available, the open affordance is a disabled “Not available yet” action rather
+than a link, placeholder route, or temporary preview feature.
 
 ## Responsive and feedback contract
 

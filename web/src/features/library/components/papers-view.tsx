@@ -2,12 +2,12 @@
 
 import {
   BookStack,
+  Check,
   Download,
   FilterList,
   Folder,
   Label,
   MoreHoriz,
-  Page,
   RefreshDouble,
   Trash,
   WarningTriangle,
@@ -53,6 +53,7 @@ import {
 import { Badge } from "@/components/ui/display";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
+import { cn } from "@/lib/utilities/cn";
 import type { PaperSort } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
 
@@ -108,6 +109,90 @@ function TagPill({ name }: { name: string }) {
   );
 }
 
+function PaperThumbnail({ paper }: { paper: Paper }) {
+  const [failedPreviewUrl, setFailedPreviewUrl] = React.useState<string | null>(
+    null,
+  );
+  const showPreview =
+    Boolean(paper.preview_url) && failedPreviewUrl !== paper.preview_url;
+
+  return (
+    <span
+      aria-hidden="true"
+      className="border-line bg-subtle relative block h-20 w-14 shrink-0 overflow-hidden rounded-[var(--radius-md)] border"
+      data-paper-thumbnail
+    >
+      {showPreview ? (
+        // The preview is a short-lived, authenticated object-store URL.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          alt=""
+          className="size-full object-cover object-top"
+          onError={() => setFailedPreviewUrl(paper.preview_url)}
+          src={paper.preview_url ?? undefined}
+        />
+      ) : (
+        <span className="absolute inset-2.5 flex flex-col gap-1.5 pt-1">
+          <span className="border-line w-4/5 border-t" />
+          <span className="border-line w-full border-t" />
+          <span className="border-line w-3/4 border-t" />
+          <span className="border-line mt-auto w-full border-t" />
+          <span className="text-secondary text-[0.625rem] font-semibold">
+            PDF
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function IngestionThumbnail() {
+  return (
+    <span
+      aria-hidden="true"
+      className="border-line bg-subtle grid h-20 w-14 shrink-0 place-items-center rounded-[var(--radius-md)] border text-[0.6875rem] font-semibold"
+      data-paper-thumbnail
+    >
+      PDF
+    </span>
+  );
+}
+
+function SelectablePaperThumbnail({
+  checked,
+  label,
+  onCheckedChange,
+  paper,
+  selectionMode = false,
+}: {
+  checked: boolean;
+  label: string;
+  onCheckedChange: (checked: boolean) => void;
+  paper: Paper;
+  selectionMode?: boolean;
+}) {
+  return (
+    <span className="relative block h-20 w-14 shrink-0">
+      <PaperThumbnail paper={paper} />
+      <span
+        className={cn(
+          "bg-surface absolute inset-0 grid place-items-center rounded-[var(--radius-md)] transition-opacity duration-150 motion-reduce:transition-none",
+          checked || selectionMode
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0 md:pointer-events-auto md:group-focus-within/paper:opacity-100 md:group-hover/paper:opacity-100",
+        )}
+        data-selection-overlay
+      >
+        <SelectionCheckbox
+          checked={checked}
+          label={label}
+          onCheckedChange={onCheckedChange}
+        />
+      </span>
+    </span>
+  );
+}
+
 function PaperDetails({ paper }: { paper: Paper }) {
   const metadata = paperMetadata(paper);
   const secondary = [
@@ -139,14 +224,18 @@ function PaperActions({
   onDownload,
   onProject,
   onRemove,
+  onSelect,
   onTags,
   paper,
+  selected = false,
 }: {
   onDownload: () => void;
   onProject: () => void;
   onRemove: () => void;
+  onSelect?: () => void;
   onTags: () => void;
   paper: Paper;
+  selected?: boolean;
 }) {
   const t = useTranslations("Library.papers.actions");
   return (
@@ -160,6 +249,12 @@ function PaperActions({
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {onSelect && (
+          <DropdownMenuItem onSelect={onSelect}>
+            <Icon glyph={Check} size={16} tone="secondary" />
+            {selected ? t("deselect") : t("select")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={onTags}>
           <Icon glyph={Label} size={16} tone="secondary" />
           {t("tags")}
@@ -237,34 +332,29 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
     description = t(`stage.${ingestion.stage}`);
   }
   return (
-    <div className="flex min-w-0 items-start gap-3">
-      <span className="border-line bg-subtle grid size-14 shrink-0 place-items-center rounded-[var(--radius-md)] border text-[0.6875rem] font-semibold">
-        PDF
+    <span className="min-w-0 flex-1">
+      <span className="line-clamp-2 text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
+        {ingestion.displayName}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
-          {ingestion.displayName}
-        </span>
-        <span
-          aria-live="polite"
-          className="text-secondary mt-1 flex items-center gap-1.5 text-xs"
-          role="status"
-        >
-          {active && (
-            <Icon
-              className="animate-spin motion-reduce:animate-none"
-              glyph={RefreshDouble}
-              size={16}
-              tone="secondary"
-            />
-          )}
-          {!active && <Icon glyph={WarningTriangle} size={16} tone="danger" />}
-          <span className={ingestion.state === "failed" ? "text-danger" : ""}>
-            {description}
-          </span>
+      <span
+        aria-live="polite"
+        className="text-secondary mt-1 flex items-center gap-1.5 text-xs"
+        role="status"
+      >
+        {active && (
+          <Icon
+            className="animate-spin motion-reduce:animate-none"
+            glyph={RefreshDouble}
+            size={16}
+            tone="secondary"
+          />
+        )}
+        {!active && <Icon glyph={WarningTriangle} size={16} tone="danger" />}
+        <span className={ingestion.state === "failed" ? "text-danger" : ""}>
+          {description}
         </span>
       </span>
-    </div>
+    </span>
   );
 }
 
@@ -504,6 +594,7 @@ export function PapersView({
   onSortChange,
   onTagFilterChange,
   projects,
+  search,
   sort,
   tagIds,
   tags,
@@ -524,6 +615,7 @@ export function PapersView({
   onSortChange: (sort: PaperSort) => void;
   onTagFilterChange: (tagIds: string[]) => void;
   projects: Project[];
+  search: React.ReactNode;
   sort: PaperSort;
   tagIds: string[];
   tags: TagItem[];
@@ -582,32 +674,103 @@ export function PapersView({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <TagFilter active={tagIds} onChange={onTagFilterChange} tags={tags} />
-        <Select
-          onValueChange={(value) => onSortChange(value as PaperSort)}
-          value={sort}
+      {selected.length > 0 ? (
+        <div
+          aria-label={t("selectionToolbar")}
+          className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4"
+          role="toolbar"
         >
-          <SelectTrigger
-            aria-label={t("sort.label")}
-            className="w-auto min-w-44"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PAPER_SORTS.map((option) => (
-              <SelectItem key={option} value={option}>
-                {t(`sort.${option}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {data && (
-          <span className="text-secondary ml-auto text-sm">
-            {t("count", { count: data.total_count })}
+          <span className="mr-auto min-w-0 text-sm font-semibold">
+            {t("selected", { count: selected.length })}
           </span>
-        )}
-      </div>
+          <Button onClick={() => setSelected([])} size="sm" variant="ghost">
+            {t("clearSelection")}
+          </Button>
+          <div className="hidden items-center gap-2 sm:flex">
+            <Button
+              onClick={() => beginChoice("tags", selected)}
+              size="sm"
+              variant="secondary"
+            >
+              {t("actions.tags")}
+            </Button>
+            <Button
+              onClick={() => beginChoice("project", selected)}
+              size="sm"
+              variant="secondary"
+            >
+              {t("actions.project")}
+            </Button>
+            <Button
+              onClick={() => beginRemoval(selected)}
+              size="sm"
+              variant="danger"
+            >
+              {t("actions.remove")}
+            </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="sm:hidden" size="sm" variant="secondary">
+                {t("batchActions")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => beginChoice("tags", selected)}>
+                <Icon glyph={Label} size={16} tone="secondary" />
+                {t("actions.tags")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => beginChoice("project", selected)}
+              >
+                <Icon glyph={Folder} size={16} tone="secondary" />
+                {t("actions.project")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                destructive
+                onSelect={() => beginRemoval(selected)}
+              >
+                <Icon glyph={Trash} size={16} tone="secondary" />
+                {t("actions.remove")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : (
+        <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center">
+          <div className="min-w-0">{search}</div>
+          <div className="flex min-w-0 items-center gap-2 md:contents">
+            <TagFilter
+              active={tagIds}
+              onChange={onTagFilterChange}
+              tags={tags}
+            />
+            <Select
+              onValueChange={(value) => onSortChange(value as PaperSort)}
+              value={sort}
+            >
+              <SelectTrigger
+                aria-label={t("sort.label")}
+                className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAPER_SORTS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {t(`sort.${option}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {data && (
+              <span className="text-secondary ml-auto shrink-0 text-sm md:ml-2">
+                {t("count", { count: data.total_count })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4">
         {loading && <LoadingState label={t("loading")} />}
@@ -629,22 +792,31 @@ export function PapersView({
         )}
         {!loading && !error && hasRows && (
           <>
-            <div className="border-line bg-surface hidden overflow-hidden rounded-[var(--radius-lg)] border md:block">
+            <div className="border-line bg-surface group/table hidden overflow-hidden rounded-[var(--radius-lg)] border md:block">
               <table className="w-full table-fixed border-collapse text-left">
                 <thead className="bg-subtle text-secondary text-xs font-medium">
                   <tr>
-                    <th className="w-12 px-4 py-3">
-                      <SelectionCheckbox
-                        checked={
-                          allSelected
-                            ? true
-                            : selected.length > 0
-                              ? "indeterminate"
-                              : false
-                        }
-                        label={t("selectAll")}
-                        onCheckedChange={toggleAll}
-                      />
+                    <th className="w-20 px-3 py-3">
+                      <span
+                        className={cn(
+                          "grid w-14 place-items-center transition-opacity duration-150 motion-reduce:transition-none",
+                          selected.length > 0
+                            ? "opacity-100"
+                            : "opacity-0 group-focus-within/table:opacity-100 group-hover/table:opacity-100",
+                        )}
+                      >
+                        <SelectionCheckbox
+                          checked={
+                            allSelected
+                              ? true
+                              : selected.length > 0
+                                ? "indeterminate"
+                                : false
+                          }
+                          label={t("selectAll")}
+                          onCheckedChange={toggleAll}
+                        />
+                      </span>
                     </th>
                     <th className="px-2 py-3 font-medium">
                       {t("columns.paper")}
@@ -666,12 +838,10 @@ export function PapersView({
                       className="transition-opacity duration-150"
                       key={ingestion.id}
                     >
-                      <td className="px-4 py-4 align-top">
-                        <span className="grid size-5 place-items-center">
-                          <Icon glyph={Page} size={20} tone="secondary" />
-                        </span>
+                      <td className="px-3 py-3 align-middle">
+                        <IngestionThumbnail />
                       </td>
-                      <td className="px-2 py-4">
+                      <td className="px-2 py-3 align-middle">
                         <IngestionDetails ingestion={ingestion} />
                       </td>
                       <td className="text-secondary px-3 py-4 align-top text-sm">
@@ -695,32 +865,34 @@ export function PapersView({
                     const id = paper.document.document_id;
                     const metadata = paperMetadata(paper);
                     return (
-                      <tr className="hover:bg-hover" key={id}>
-                        <td className="px-4 py-4 align-top">
-                          <SelectionCheckbox
+                      <tr className="hover:bg-hover group/paper" key={id}>
+                        <td className="px-3 py-3 align-middle">
+                          <SelectablePaperThumbnail
                             checked={selected.includes(id)}
                             label={t("select", { title: metadata.title })}
                             onCheckedChange={(checked) =>
                               toggleOne(id, checked)
                             }
+                            paper={paper}
+                            selectionMode={selected.length > 0}
                           />
                         </td>
-                        <td className="px-2 py-4">
+                        <td className="px-2 py-3 align-middle">
                           <PaperDetails paper={paper} />
                         </td>
-                        <td className="text-secondary px-3 py-4 align-top text-sm">
+                        <td className="text-secondary px-3 py-3 align-middle text-sm">
                           {format.dateTime(new Date(paper.created_at), {
                             dateStyle: "medium",
                           })}
                         </td>
-                        <td className="text-secondary px-3 py-4 align-top text-sm">
+                        <td className="text-secondary px-3 py-3 align-middle text-sm">
                           {metadata.publishDate
                             ? format.dateTime(new Date(metadata.publishDate), {
                                 year: "numeric",
                               })
                             : t("unknown")}
                         </td>
-                        <td className="px-2 py-2 align-top">
+                        <td className="px-2 py-2 align-middle">
                           <PaperActions
                             onDownload={() => onDownload(id)}
                             onProject={() => beginChoice("project", [id])}
@@ -743,6 +915,7 @@ export function PapersView({
                   key={ingestion.id}
                 >
                   <div className="flex items-start gap-3">
+                    <IngestionThumbnail />
                     <div className="min-w-0 flex-1">
                       <IngestionDetails ingestion={ingestion} />
                     </div>
@@ -752,7 +925,7 @@ export function PapersView({
                       onRetry={() => onRetryIngestion(ingestion.id)}
                     />
                   </div>
-                  <div className="text-secondary mt-3 flex gap-3 pl-16 text-xs">
+                  <div className="text-secondary mt-3 flex gap-3 pl-[4.25rem] text-xs">
                     <span>
                       {format.dateTime(new Date(ingestion.createdAt), {
                         dateStyle: "medium",
@@ -767,14 +940,16 @@ export function PapersView({
                 const metadata = paperMetadata(paper);
                 return (
                   <li
-                    className="border-line bg-surface min-w-0 rounded-[var(--radius-lg)] border p-4"
+                    className="border-line bg-surface group/paper min-w-0 rounded-[var(--radius-lg)] border p-4"
                     key={id}
                   >
-                    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
-                      <SelectionCheckbox
+                    <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3">
+                      <SelectablePaperThumbnail
                         checked={selected.includes(id)}
                         label={t("select", { title: metadata.title })}
                         onCheckedChange={(checked) => toggleOne(id, checked)}
+                        paper={paper}
+                        selectionMode={selected.length > 0}
                       />
                       <div className="min-w-0">
                         <PaperDetails paper={paper} />
@@ -783,11 +958,13 @@ export function PapersView({
                         onDownload={() => onDownload(id)}
                         onProject={() => beginChoice("project", [id])}
                         onRemove={() => beginRemoval([id])}
+                        onSelect={() => toggleOne(id, !selected.includes(id))}
                         onTags={() => beginChoice("tags", [id])}
                         paper={paper}
+                        selected={selected.includes(id)}
                       />
                     </div>
-                    <div className="text-secondary mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 pl-8 text-xs">
+                    <div className="text-secondary mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 pl-[4.25rem] text-xs">
                       <span>
                         {format.dateTime(new Date(paper.created_at), {
                           dateStyle: "medium",
@@ -806,35 +983,6 @@ export function PapersView({
           </>
         )}
       </div>
-
-      {selected.length > 0 && (
-        <div className="border-line bg-elevated shadow-overlay sticky bottom-3 z-10 mt-4 flex flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 pl-4">
-          <span className="mr-auto text-sm font-semibold">
-            {t("selected", { count: selected.length })}
-          </span>
-          <Button
-            onClick={() => beginChoice("tags", selected)}
-            size="sm"
-            variant="secondary"
-          >
-            {t("actions.tags")}
-          </Button>
-          <Button
-            onClick={() => beginChoice("project", selected)}
-            size="sm"
-            variant="secondary"
-          >
-            {t("actions.project")}
-          </Button>
-          <Button
-            onClick={() => beginRemoval(selected)}
-            size="sm"
-            variant="danger"
-          >
-            {t("actions.remove")}
-          </Button>
-        </div>
-      )}
 
       {data && (data.previous_cursor || data.next_cursor) && (
         <div className="mt-6 flex justify-end">

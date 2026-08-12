@@ -50,6 +50,7 @@ const meta = {
     onSortChange: () => undefined,
     onTagFilterChange: () => undefined,
     projects: [],
+    search: <div />,
     sort: "added_desc",
     tagIds: [],
     tags: [],

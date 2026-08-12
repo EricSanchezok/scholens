@@ -256,6 +256,9 @@
         "actions": "Actions"
       },
       "selected": "{count, plural, one {# paper selected} other {# papers selected}}",
+      "selectionToolbar": "Paper selection actions",
+      "clearSelection": "Clear",
+      "batchActions": "Actions",
       "previous": "Previous",
       "next": "Next",
       "sort": {
@@ -268,6 +271,8 @@
       },
       "actions": {
         "open": "Actions for {title}",
+        "select": "Select paper",
+        "deselect": "Deselect paper",
         "tags": "Edit tags",
         "project": "Add to project",
         "download": "Download PDF",

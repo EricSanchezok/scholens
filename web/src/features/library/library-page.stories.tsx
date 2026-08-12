@@ -49,6 +49,14 @@ export const Populated: Story = {
     ).toBe(true);
     await expect(canvas.getByRole("table")).toBeVisible();
     await expect(
+      canvas
+        .getAllByText("Transformers")
+        .some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
+    await expect(
+      canvasElement.querySelectorAll("[data-paper-thumbnail]").length,
+    ).toBeGreaterThan(0);
+    await expect(
       canvas.getByRole("button", { name: "Previous" }),
     ).toBeDisabled();
     await expect(canvas.getByRole("button", { name: "Next" })).toBeEnabled();
@@ -90,18 +98,31 @@ export const Error: Story = {
 export const MultiSelect: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const first = await canvas.findByRole("checkbox", {
+    const table = await canvas.findByRole("table");
+    const firstRow = within(table)
+      .getByText("Attention Is All You Need")
+      .closest("tr");
+    await expect(firstRow).not.toBeNull();
+    if (!firstRow) return;
+    const first = within(firstRow).getByRole("checkbox", {
       name: "Select Attention Is All You Need",
     });
+    await userEvent.hover(firstRow);
+    await userEvent.click(first);
     const second = canvas.getByRole("checkbox", {
       name: /Select Retrieval-Augmented Generation/,
     });
-    await userEvent.click(first);
     await userEvent.click(second);
-    await expect(canvas.getByText("2 papers selected")).toBeVisible();
+    const toolbar = canvas.getByRole("toolbar", {
+      name: "Paper selection actions",
+    });
+    await expect(within(toolbar).getByText("2 papers selected")).toBeVisible();
     await expect(
-      canvas.getByRole("button", { name: "Remove from library" }),
+      within(toolbar).getByRole("button", { name: "Remove from library" }),
     ).toBeVisible();
+    await expect(
+      toolbar.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   },
 };
 
@@ -231,11 +252,22 @@ export const Mobile320MultiSelect: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
-      await canvas.findByRole("checkbox", {
-        name: "Select Attention Is All You Need",
+      await canvas.findByRole("button", {
+        name: "Actions for Attention Is All You Need",
       }),
     );
-    await expect(canvas.getByText("1 paper selected")).toBeVisible();
+    await userEvent.click(
+      await within(document.body).findByRole("menuitem", {
+        name: "Select paper",
+      }),
+    );
+    const toolbar = canvas.getByRole("toolbar", {
+      name: "Paper selection actions",
+    });
+    await expect(within(toolbar).getByText("1 paper selected")).toBeVisible();
+    await expect(
+      within(toolbar).getByRole("button", { name: "Actions" }),
+    ).toBeVisible();
   },
 };
 

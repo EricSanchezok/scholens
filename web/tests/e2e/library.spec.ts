@@ -134,11 +134,18 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   const firstPaper = page.getByRole("checkbox", {
     name: "Select Attention Is All You Need",
   });
+  await page
+    .getByRole("row")
+    .filter({ hasText: "Attention Is All You Need" })
+    .hover();
+  await expect(firstPaper).toBeVisible();
   await firstPaper.click();
   await expect(page.getByText("1 paper selected")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Remove from library" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(page.getByText("1 paper selected")).toHaveCount(0);
 
   const searchRequest = page.waitForRequest((request) => {
     const url = new URL(request.url());
@@ -152,7 +159,6 @@ test("supports the Library Papers critical journey", async ({ page }) => {
     .fill("retrieval");
   await searchRequest;
   await expect(page).toHaveURL(/q=retrieval/);
-  await expect(page.getByText("1 paper selected")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page).toHaveURL(/cursor=next-library-page/);

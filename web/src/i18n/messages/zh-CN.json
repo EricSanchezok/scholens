@@ -256,6 +256,9 @@
         "actions": "操作"
       },
       "selected": "已选择 {count} 篇论文",
+      "selectionToolbar": "论文批量操作",
+      "clearSelection": "清除选择",
+      "batchActions": "操作",
       "previous": "上一页",
       "next": "下一页",
       "sort": {
@@ -268,6 +271,8 @@
       },
       "actions": {
         "open": "《{title}》的操作",
+        "select": "选择论文",
+        "deselect": "取消选择",
         "tags": "编辑标签",
         "project": "加入项目",
         "download": "下载 PDF",

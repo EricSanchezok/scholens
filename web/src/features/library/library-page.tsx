@@ -277,16 +277,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
             </TabsTrigger>
           </TabsList>
           <TabsContent className="mt-5 grid min-w-0 gap-4" value="papers">
-            <div className="w-full max-w-md min-w-0">
-              <DebouncedLibrarySearch
-                key={`papers:${parsed.query}`}
-                label={t("papers.search")}
-                onQueryChange={(query) =>
-                  replaceSearch({ cursor: undefined, query })
-                }
-                value={parsed.query}
-              />
-            </div>
             <PapersView
               key={`${parsed.query}:${parsed.sort}:${parsed.cursor ?? ""}:${parsed.tagIds.join(",")}`}
               data={papersQuery.data}
@@ -323,22 +313,22 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 replaceSearch({ cursor: undefined, tagIds })
               }
               projects={projectsQuery.data?.items ?? []}
+              search={
+                <DebouncedLibrarySearch
+                  key={`papers:${parsed.query}`}
+                  label={t("papers.search")}
+                  onQueryChange={(query) =>
+                    replaceSearch({ cursor: undefined, query })
+                  }
+                  value={parsed.query}
+                />
+              }
               sort={parsed.sort as PaperSort}
               tagIds={parsed.tagIds}
               tags={tagsQuery.data?.items ?? []}
             />
           </TabsContent>
           <TabsContent className="mt-5 grid min-w-0 gap-4" value="outputs">
-            <div className="w-full max-w-md min-w-0">
-              <DebouncedLibrarySearch
-                key={`outputs:${parsed.query}`}
-                label={t("outputs.search")}
-                onQueryChange={(query) =>
-                  replaceSearch({ cursor: undefined, query })
-                }
-                value={parsed.query}
-              />
-            </div>
             <OutputsView
               data={outputsQuery.data}
               error={outputsQuery.error}
@@ -352,6 +342,16 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               onRetryLoad={() => void outputsQuery.refetch()}
               onSortChange={(sort: OutputSort) =>
                 replaceSearch({ cursor: undefined, sort })
+              }
+              search={
+                <DebouncedLibrarySearch
+                  key={`outputs:${parsed.query}`}
+                  label={t("outputs.search")}
+                  onQueryChange={(query) =>
+                    replaceSearch({ cursor: undefined, query })
+                  }
+                  value={parsed.query}
+                />
               }
               sort={parsed.sort as OutputSort}
             />

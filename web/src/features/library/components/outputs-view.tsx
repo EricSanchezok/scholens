@@ -165,6 +165,7 @@ export function OutputsView({
   onPrevious,
   onRetryLoad,
   onSortChange,
+  search,
   sort,
 }: {
   data?: OutputList;
@@ -176,6 +177,7 @@ export function OutputsView({
   onPrevious: (cursor: string) => void;
   onRetryLoad: () => void;
   onSortChange: (sort: OutputSort) => void;
+  search: React.ReactNode;
   sort: OutputSort;
 }) {
   const t = useTranslations("Library.outputs");
@@ -184,31 +186,34 @@ export function OutputsView({
 
   return (
     <>
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <KindFilter active={kinds} onChange={onKindFilterChange} />
-        <Select
-          onValueChange={(value) => onSortChange(value as OutputSort)}
-          value={sort}
-        >
-          <SelectTrigger
-            aria-label={t("sort.label")}
-            className="w-auto min-w-44"
+      <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center">
+        <div className="min-w-0">{search}</div>
+        <div className="flex min-w-0 items-center gap-2 md:contents">
+          <KindFilter active={kinds} onChange={onKindFilterChange} />
+          <Select
+            onValueChange={(value) => onSortChange(value as OutputSort)}
+            value={sort}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {OUTPUT_SORTS.map((option) => (
-              <SelectItem key={option} value={option}>
-                {t(`sort.${option}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {data && (
-          <span className="text-secondary ml-auto text-sm">
-            {t("count", { count: data.total_count })}
-          </span>
-        )}
+            <SelectTrigger
+              aria-label={t("sort.label")}
+              className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OUTPUT_SORTS.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`sort.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {data && (
+            <span className="text-secondary ml-auto shrink-0 text-sm md:ml-2">
+              {t("count", { count: data.total_count })}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 min-w-0">
