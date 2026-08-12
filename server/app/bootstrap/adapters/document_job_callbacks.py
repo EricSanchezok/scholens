@@ -4,7 +4,6 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.bootstrap.adapters.upload_repository import (
     upload_reservation_repository,
 )
@@ -17,7 +16,6 @@ from app.modules.integrations.zotero.infrastructure.import_repository import (
 )
 from app.database.database import engine
 from app.database.models import (
-    ConversationScopeType,
     Document,
     DocumentProcessingStatus,
     JobStatus,
@@ -26,16 +24,11 @@ from app.database.models import (
     ProjectPaper,
     ZoteroImportStatus,
 )
-from app.shared.domain import JsonValue
 from app.shared.domain import AppError, FailureKind
 from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
 from app.helpers.celery_config import get_webhook_base_url
 from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
 from app.bootstrap.adapters.document_gc import collect_document_if_due
-from app.modules.papers.application.citation_references import (
-    materialize_summary_references,
-)
-from app.bootstrap.adapters.conversation_repository import conversation_repository
 from app.modules.papers.infrastructure.search_repository import (
     document_search_repository,
 )
@@ -48,9 +41,6 @@ from app.modules.jobs.infrastructure.repository import (
     EnqueueJob,
     PersistedJob,
     job_repository,
-)
-from app.modules.conversations.application.contracts.conversations import (
-    ConversationCreateRequest,
 )
 from app.modules.papers.application.contracts.documents import DocumentUpdate
 from app.modules.jobs.application.contracts import (
@@ -81,14 +71,6 @@ from app.modules.research.application.items import (
     RESEARCH_ANNOTATION_COMMENT_CREATED,
     RESEARCH_HIGHLIGHT_CREATED,
 )
-from app.modules.conversations.application.chat import (
-    CONVERSATION_RESPONSE_COMPLETED,
-    CONVERSATION_RESPONSE_CREATED,
-    CONVERSATION_TURN_CREATED,
-)
-from app.modules.conversations.application.conversations import (
-    CONVERSATION_CREATED,
-)
 from app.modules.integrations.zotero.application.actions import (
     ZOTERO_IMPORT_COMPLETED,
 )
@@ -111,13 +93,10 @@ from app.bootstrap.adapters.research_annotations import (
     create_ai_highlights,
 )
 from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
-from pydantic import TypeAdapter
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
-
-_JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 
 def _complete_pdf_job(
@@ -949,8 +928,8 @@ async def handle_paper_processing_webhook(
                         title=metadata.title,
                         authors=metadata.authors,
                         abstract=metadata.abstract,
-                        summary="",
-                        summary_citations=[],
+                        summary=metadata.summary,
+                        summary_citations=metadata.summary_citations,
                         institutions=metadata.institutions,
                         keywords=metadata.keywords,
                         publish_date=metadata.publish_date,
@@ -988,82 +967,6 @@ async def handle_paper_processing_webhook(
                         )
                         created_highlight_ids = created_highlights.thread_ids
                         created_comment_ids = created_highlights.comment_ids
-
-                summary_conversation_id: uuid.UUID | None = None
-                summary_turn_id: uuid.UUID | None = None
-                summary_response_id: uuid.UUID | None = None
-                if metadata.summary:
-                    with optional_savepoint(
-                        db,
-                        operation="create_summary_conversation",
-                        context={
-                            "job_id": normalized_job_id,
-                            "document_id": str(paper.id),
-                        },
-                    ):
-                        conversation = conversation_repository.create(
-                            db,
-                            request=ConversationCreateRequest(
-                                scope_type=ConversationScopeType.PAPER,
-                                scope_id=paper.id,
-                            ),
-                            user_id=actor.id,
-                            refresh_result=False,
-                        )
-                        summary_content, references = materialize_summary_references(
-                            metadata.summary,
-                            metadata.summary_citations,
-                            document_id=paper.id,
-                            title=paper.title,
-                        )
-                        summary_turn_id = uuid.uuid4()
-                        summary_response_id = uuid.uuid4()
-                        turn_repository.create_turn(
-                            db,
-                            conversation_id=conversation.id,
-                            turn_id=summary_turn_id,
-                            user_id=actor.id,
-                            created_operation_id=operation.trace.operation_id,
-                            correlation_id=operation.trace.correlation_id,
-                            user_query=f"Summarize {paper.title or 'this paper'}",
-                            user_references=None,
-                            scope=[
-                                {
-                                    "kind": "paper",
-                                    "id": str(paper.id),
-                                    "title": paper.title,
-                                }
-                            ],
-                            reasoning_level="standard",
-                            locale="en",
-                            time_zone="UTC",
-                        )
-                        turn_repository.create_response(
-                            db,
-                            conversation_id=conversation.id,
-                            turn_id=summary_turn_id,
-                            response_id=summary_response_id,
-                            user_id=actor.id,
-                            created_operation_id=operation.trace.operation_id,
-                            correlation_id=operation.trace.correlation_id,
-                            generation_kind="initial",
-                        )
-                        turn_repository.complete_response(
-                            db,
-                            conversation_id=conversation.id,
-                            response_id=summary_response_id,
-                            user_id=actor.id,
-                            content=summary_content,
-                            references=(
-                                _JSON_OBJECT.validate_python(
-                                    references.model_dump(mode="json")
-                                )
-                                if references is not None
-                                else None
-                            ),
-                            trace=None,
-                        )
-                        summary_conversation_id = conversation.id
 
                 completed = _complete_pdf_job(
                     db,
@@ -1105,50 +1008,6 @@ async def handle_paper_processing_webhook(
                     )
                     for comment_id in created_comment_ids
                 )
-                if summary_conversation_id is not None:
-                    changes.append(
-                        OperationChange(
-                            action=CONVERSATION_CREATED,
-                            resources=(
-                                ResourceRef(
-                                    "conversation",
-                                    str(summary_conversation_id),
-                                ),
-                            ),
-                        )
-                    )
-                if summary_turn_id is not None and summary_response_id is not None:
-                    changes.extend(
-                        (
-                            OperationChange(
-                                action=CONVERSATION_TURN_CREATED,
-                                resources=(
-                                    ResourceRef(
-                                        "conversation_turn",
-                                        str(summary_turn_id),
-                                    ),
-                                ),
-                            ),
-                            OperationChange(
-                                action=CONVERSATION_RESPONSE_CREATED,
-                                resources=(
-                                    ResourceRef(
-                                        "conversation_response",
-                                        str(summary_response_id),
-                                    ),
-                                ),
-                            ),
-                            OperationChange(
-                                action=CONVERSATION_RESPONSE_COMPLETED,
-                                resources=(
-                                    ResourceRef(
-                                        "conversation_response",
-                                        str(summary_response_id),
-                                    ),
-                                ),
-                            ),
-                        )
-                    )
                 if postprocess_job.created:
                     changes.append(
                         OperationChange(

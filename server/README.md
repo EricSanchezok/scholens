@@ -144,6 +144,11 @@ authority, including concurrent requests. `DELETE
 /api/v1/paper-ingestions/{job_id}` cancels an owned ingestion, and late worker
 callbacks cannot restore it.
 
+The PDF completion callback persists extracted metadata, generated summary,
+and summary citations on the canonical `Document`. Ingestion never creates a
+Conversation, Turn, or Response. A paper-scoped conversation begins only from
+an explicit user action and reads the existing Document-owned context.
+
 # Migrations
 
 This project uses Alembic for database migrations. Commands are run through the

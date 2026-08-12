@@ -7,10 +7,6 @@ from app.llm.grounded_answer import GroundedAnswerStreamParser
 from app.modules.conversations.application.contracts.answer_packet import (
     ExternalAnswerSource,
 )
-from app.modules.papers.application.citation_references import (
-    materialize_summary_references,
-)
-from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.tooling import (
     DocumentSourceCandidate,
     ExternalSourceCandidate,
@@ -430,27 +426,6 @@ def test_grounded_answer_parser_maps_each_marker_to_the_preceding_passage() -> N
     ] == ["First claim.", "Second claim."]
     assert references.annotations[0].source_keys == [1]
     assert references.annotations[1].source_keys == [2, 1]
-
-
-def test_paper_summary_markers_are_materialized_before_conversation_storage() -> None:
-    document_id = uuid4()
-    content, references = materialize_summary_references(
-        "The method is efficient [^4].\n\nA second claim [^8, ^4].",
-        [
-            ResponseCitation(index=4, text="Method excerpt"),
-            ResponseCitation(index=8, text="Second excerpt"),
-        ],
-        document_id=document_id,
-        title="Paper",
-    )
-
-    assert "[^" not in content
-    assert references is not None
-    assert [source.key for source in references.sources] == [1, 2]
-    assert references.annotations[0].source_keys == [1]
-    assert references.annotations[1].source_keys == [2, 1]
-    for annotation in references.annotations:
-        assert content[annotation.start_offset : annotation.end_offset].strip()
 
 
 def test_answer_packet_reports_every_kind_of_budget_truncation(monkeypatch) -> None:

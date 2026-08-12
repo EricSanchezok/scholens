@@ -266,6 +266,12 @@ constraints remain authoritative for repeated and concurrent uploads. `DELETE
 replay and ignore late worker callbacks. The worker reports bounded lifecycle
 stages and heartbeats, while the Server owns terminal timeout/failure policy.
 
+PDF completion persists extracted metadata, generated summary, and summary
+citations on the canonical `Document`. It does not synthesize a paper-scoped
+conversation or a fake user turn. Starting a conversation about a paper is an
+explicit user operation and the conversation references that existing
+Document-owned context.
+
 ## Adding a capability or adapter
 
 1. Define transport-neutral request/response contracts and a port in the

@@ -284,6 +284,18 @@ def test_explicit_commits_are_limited_to_owned_background_transactions() -> None
     assert violations == []
 
 
+def test_pdf_ingestion_callback_never_manufactures_conversations() -> None:
+    path = APP_ROOT / "bootstrap" / "adapters" / "document_job_callbacks.py"
+    forbidden = {
+        imported
+        for imported in _runtime_imports(path)
+        if imported.startswith("app.modules.conversations")
+        or imported == "app.bootstrap.adapters.conversation_repository"
+    }
+
+    assert forbidden == set()
+
+
 def test_agent_and_mcp_share_only_the_canonical_tool_catalog() -> None:
     catalog = APP_ROOT / "tooling" / "workspace.py"
     mcp = APP_ROOT / "transport" / "mcp" / "server.py"

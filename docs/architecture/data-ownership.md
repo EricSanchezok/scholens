@@ -67,7 +67,11 @@ only through the Server's verified application boundary.
 
 ## Library storage and projections
 
-`Document` owns canonical paper metadata and source-object identity.
+`Document` owns canonical paper metadata, generated summary and summary
+citations, and source-object identity. A PDF-processing callback updates those
+document-owned fields; ingestion never creates a Conversation, Turn, or
+Response. Paper-scoped conversations exist only after an explicit user action
+and consume the Document as context rather than owning its canonical summary.
 `LibraryPaper` owns one user's personal membership, metadata overrides, tags,
 status, sharing state, and last-access time. Removing that membership never
 implies deleting a `Document`: Project references and other users' memberships
