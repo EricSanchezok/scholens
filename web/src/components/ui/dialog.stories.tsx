@@ -4,8 +4,11 @@ import { expect, userEvent, within } from "storybook/test";
 import { Button } from "./button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "./dialog";
@@ -17,10 +20,20 @@ function DialogDemo() {
         <Button variant="secondary">Open dialog</Button>
       </DialogTrigger>
       <DialogContent closeLabel="Close dialog">
-        <DialogTitle>Confirm your email</DialogTitle>
-        <DialogDescription>
-          We will send a verification link to your account email.
-        </DialogDescription>
+        <DialogHeader>
+          <DialogTitle>Confirm your email</DialogTitle>
+          <DialogDescription>
+            We will send a verification link to your account email.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <p className="text-secondary text-sm">
+            This content area owns scrolling and preserves the dialog padding.
+          </p>
+        </DialogBody>
+        <DialogFooter>
+          <Button>Send verification link</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

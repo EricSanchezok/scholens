@@ -10,12 +10,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Button,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogHandle,
+  DialogHeader,
   DialogTitle,
   Field,
   FieldControl,
-  FieldDescription,
   FieldLabel,
   FieldMessage,
   IconButton,
@@ -31,7 +33,6 @@ import type { components } from "@/lib/api/generated/schema";
 import { ApiError } from "@/lib/api/errors";
 import type { PreparedPaperUpload } from "../use-paper-ingestions";
 
-type Project = components["schemas"]["ProjectResponse"];
 type Source = components["schemas"]["UploadFromSourceRequest"]["source"];
 type SourceKind = Source["kind"];
 
@@ -53,7 +54,6 @@ async function fileContentDigest(file: File) {
 }
 
 const sourceSchema = z.object({
-  projectId: z.string().optional(),
   sourceKind: z.enum(["doi", "arxiv", "url"]),
   sourceValue: z.string().trim().min(1),
 });
@@ -64,18 +64,15 @@ export function AddPapersDialog({
   onSubmitSource,
   onUploadFiles,
   open,
-  projects,
 }: {
   onOpenChange: (open: boolean) => void;
   onSubmitSource: (input: {
     idempotencyKey: string;
-    projectId?: string;
     signal: AbortSignal;
     source: Source;
   }) => Promise<unknown>;
-  onUploadFiles: (files: PreparedPaperUpload[], projectId?: string) => void;
+  onUploadFiles: (files: PreparedPaperUpload[]) => void;
   open: boolean;
-  projects: Project[];
 }) {
   const t = useTranslations("Library.addPapers");
   const [queue, setQueue] = React.useState<QueuedFile[]>([]);
@@ -90,11 +87,9 @@ export function AddPapersDialog({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const queuedDigests = React.useRef(new Set<string>());
   const form = useForm<SourceForm>({
-    defaultValues: { projectId: "", sourceKind: "doi", sourceValue: "" },
+    defaultValues: { sourceKind: "doi", sourceValue: "" },
     resolver: zodResolver(sourceSchema),
   });
-  const projectId =
-    useWatch({ control: form.control, name: "projectId" }) ?? "";
   const sourceKind =
     useWatch({ control: form.control, name: "sourceKind" }) ?? "doi";
 
@@ -146,7 +141,7 @@ export function AddPapersDialog({
     const valid = queue.filter((item) => !item.errorCode);
     if (valid.length === 0) return;
     const invalid = queue.filter((item) => item.errorCode);
-    onUploadFiles(valid, projectId || undefined);
+    onUploadFiles(valid);
     valid.forEach((item) => queuedDigests.current.delete(item.contentDigest));
     setDuplicateCount(0);
     setQueue(invalid);
@@ -196,7 +191,6 @@ export function AddPapersDialog({
     try {
       await onSubmitSource({
         idempotencyKey,
-        projectId: values.projectId || undefined,
         signal: controller.signal,
         source: { kind: values.sourceKind, value: values.sourceValue },
       });
@@ -237,15 +231,16 @@ export function AddPapersDialog({
   return (
     <Dialog onOpenChange={handleOpenChange} open={open}>
       <DialogContent
-        className="flex max-h-[88dvh] flex-col overflow-hidden lg:max-w-2xl"
+        className="lg:max-w-2xl"
         closeLabel={t("close")}
         placement="responsive-bottom"
       >
-        <div className="border-line shrink-0 border-b px-5 py-5 pr-14 lg:px-6">
+        <DialogHandle />
+        <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 lg:px-6">
+        </DialogHeader>
+        <DialogBody>
           <section className="grid gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("pdfTitle")}</h3>
@@ -388,38 +383,6 @@ export function AddPapersDialog({
                   </FieldMessage>
                 </Field>
               </div>
-              <Field>
-                <FieldLabel>{t("destination")}</FieldLabel>
-                <FieldControl>
-                  <Select
-                    onValueChange={(value) => {
-                      setSourceKey(undefined);
-                      form.setValue(
-                        "projectId",
-                        value === "library" ? "" : value,
-                      );
-                    }}
-                    value={projectId || "library"}
-                  >
-                    <SelectTrigger aria-label={t("destination")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="library">
-                        {t("personalLibrary")}
-                      </SelectItem>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldControl>
-                <FieldDescription>
-                  {t("destinationDescription")}
-                </FieldDescription>
-              </Field>
             </fieldset>
             <div className="flex flex-wrap items-center gap-2">
               <Button loading={sourcePending} type="submit">
@@ -438,7 +401,7 @@ export function AddPapersDialog({
               </p>
             )}
           </form>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

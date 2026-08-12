@@ -5,7 +5,6 @@ export const libraryKeys = {
   conversations: () => [...libraryKeys.all, "conversations"] as const,
   summary: () => [...libraryKeys.all, "summary"] as const,
   tags: () => [...libraryKeys.all, "tags"] as const,
-  projects: () => [...libraryKeys.all, "projects"] as const,
   papers: (
     state: Pick<LibrarySearchState, "cursor" | "query" | "sort" | "tagIds">,
   ) => [...libraryKeys.all, "papers", state] as const,

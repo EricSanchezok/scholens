@@ -5,8 +5,10 @@ import { Button, IconButton } from "./button";
 import { Combobox } from "./combobox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "./dialog";
@@ -146,12 +148,16 @@ export const KeyboardDialog: Story = {
         <Button>Open dialog</Button>
       </DialogTrigger>
       <DialogContent closeLabel="Close dialog">
-        <DialogTitle>Isolated interaction</DialogTitle>
-        <DialogDescription>
-          This dialog can be opened, focused, and dismissed without a product
-          page.
-        </DialogDescription>
-        <Input className="mt-5" placeholder="Focusable field" />
+        <DialogHeader>
+          <DialogTitle>Isolated interaction</DialogTitle>
+          <DialogDescription>
+            This dialog can be opened, focused, and dismissed without a product
+            page.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <Input placeholder="Focusable field" />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   ),

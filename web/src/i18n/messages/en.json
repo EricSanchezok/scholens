@@ -187,7 +187,6 @@
     },
     "common": {
       "close": "Close",
-      "noOptions": "No options available",
       "cancel": "Cancel",
       "actionFailed": "The action could not be completed"
     },
@@ -232,9 +231,6 @@
         "quota": "Your paper or storage allowance has been reached.",
         "serviceUnavailable": "The server could not accept this source. Keep the value and try again."
       },
-      "destination": "Destination",
-      "personalLibrary": "Personal library",
-      "destinationDescription": "Optionally add the paper to a project while importing it.",
       "addSource": "Add source"
     },
     "papers": {
@@ -275,6 +271,8 @@
         "deselect": "Deselect paper",
         "tags": "Edit tags",
         "project": "Add to project",
+        "projectUnavailable": "Add to project · Not available yet",
+        "notAvailable": "Not available yet",
         "download": "Download PDF",
         "remove": "Remove from library",
         "downloadFailed": "The PDF download could not be opened"
@@ -314,17 +312,32 @@
       },
       "filters": {
         "tags": "Tags",
-        "noTags": "No tags yet"
+        "noTags": "No tags yet",
+        "manage": "Manage tags"
       },
       "tagDialog": {
         "title": "Edit tags",
         "description": "Choose the tags to assign to {count, plural, one {this paper} other {these papers}}.",
-        "submit": "Apply tags"
-      },
-      "projectDialog": {
-        "title": "Add to project",
-        "description": "Choose one project for {count, plural, one {this paper} other {these papers}}.",
-        "submit": "Add to project"
+        "submit": "Apply tags",
+        "manageTitle": "Manage tags",
+        "manageDescription": "Create, rename, or delete the tags used across your library.",
+        "newLabel": "New tag name",
+        "newPlaceholder": "New tag",
+        "create": "Create",
+        "listLabel": "Library tags",
+        "renameLabel": "Rename {name}",
+        "saveRename": "Save",
+        "actionsLabel": "Actions for {name}",
+        "rename": "Rename",
+        "delete": "Delete",
+        "emptyTitle": "No tags yet",
+        "emptyDescription": "Create a tag to organize and filter your papers.",
+        "multiHint": "Only tags shared by every selected paper start checked. Saving replaces the tags on all selected papers.",
+        "error": "The tag change could not be saved. Try again.",
+        "done": "Done",
+        "deleteTitle": "Delete tag?",
+        "deleteDescription": "Delete “{name}” and remove it from every paper?",
+        "deleteConfirm": "Delete tag"
       },
       "removeDialog": {
         "title": "Remove from library?",

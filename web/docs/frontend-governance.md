@@ -77,6 +77,22 @@ they merely look close.
    should change, add a meaningful variant or keep the change feature-owned;
    do not add a one-off color class.
 
+### Dialog and sheet structure
+
+Product dialogs compose the shared `DialogContent` with `DialogHeader`,
+`DialogBody`, and `DialogFooter`. Responsive bottom sheets also include the
+shared `DialogHandle`. The primitive owns overlay stacking, maximum dynamic
+viewport height, safe-area padding, close-button placement, scroll containment,
+and the header/body/footer spacing contract. Feature components may choose the
+placement, semantic content, and an intentional maximum width; they must not
+hand-roll an overlay, reserve arbitrary empty height, place actions inside the
+scrolling body, or recreate these slots with page-local padding.
+
+Destructive confirmations use `AlertDialog`. A chooser is implemented only
+when its resource and mutation lifecycle are real. An unfinished dependency
+stays visible as a disabled localized “Not available yet” action and must not
+open an empty dialog backed by fixtures or provisional queries.
+
 ## Adding or changing color, type, spacing, or elevation
 
 1. Name the need as a role, such as `action.disabled-bg` or

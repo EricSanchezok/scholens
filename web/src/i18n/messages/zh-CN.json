@@ -187,7 +187,6 @@
     },
     "common": {
       "close": "关闭",
-      "noOptions": "暂无可选项",
       "cancel": "取消",
       "actionFailed": "未能完成此操作"
     },
@@ -232,9 +231,6 @@
         "quota": "论文数量或存储额度已用完。",
         "serviceUnavailable": "服务器暂时无法接受此来源，输入已保留，请稍后重试。"
       },
-      "destination": "添加到",
-      "personalLibrary": "个人资料库",
-      "destinationDescription": "导入时也可以同时将论文加入一个项目。",
       "addSource": "添加来源"
     },
     "papers": {
@@ -275,6 +271,8 @@
         "deselect": "取消选择",
         "tags": "编辑标签",
         "project": "加入项目",
+        "projectUnavailable": "加入项目 · 尚未开放",
+        "notAvailable": "尚未开放",
         "download": "下载 PDF",
         "remove": "从资料库移除",
         "downloadFailed": "无法打开 PDF 下载"
@@ -314,17 +312,32 @@
       },
       "filters": {
         "tags": "标签",
-        "noTags": "暂无标签"
+        "noTags": "暂无标签",
+        "manage": "管理标签"
       },
       "tagDialog": {
         "title": "编辑标签",
         "description": "为已选择的 {count} 篇论文设置标签。",
-        "submit": "应用标签"
-      },
-      "projectDialog": {
-        "title": "加入项目",
-        "description": "为已选择的 {count} 篇论文选择一个项目。",
-        "submit": "加入项目"
+        "submit": "应用标签",
+        "manageTitle": "管理标签",
+        "manageDescription": "创建、重命名或删除资料库中使用的标签。",
+        "newLabel": "新标签名称",
+        "newPlaceholder": "新标签",
+        "create": "创建",
+        "listLabel": "资料库标签",
+        "renameLabel": "重命名“{name}”",
+        "saveRename": "保存",
+        "actionsLabel": "“{name}”的操作",
+        "rename": "重命名",
+        "delete": "删除",
+        "emptyTitle": "还没有标签",
+        "emptyDescription": "创建标签后，可以用它整理和筛选论文。",
+        "multiHint": "初始只勾选所有已选论文共有的标签；保存后将统一替换这些论文的标签。",
+        "error": "未能保存标签更改，请重试。",
+        "done": "完成",
+        "deleteTitle": "删除标签？",
+        "deleteDescription": "删除“{name}”并从所有论文中移除此标签？",
+        "deleteConfirm": "删除标签"
       },
       "removeDialog": {
         "title": "从资料库移除？",

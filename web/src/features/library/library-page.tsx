@@ -22,12 +22,14 @@ import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
-  addPapersToProject,
-  assignLibraryTags,
+  createLibraryTag,
+  deleteLibraryTag,
   getPaperDownloadUrl,
   libraryKeys,
   libraryQueries,
+  renameLibraryTag,
   removeLibraryPapers,
+  replaceLibraryTagAssignments,
 } from "./api";
 import { AddPapersDialog } from "./components/add-papers-dialog";
 import { OutputsView } from "./components/outputs-view";
@@ -104,7 +106,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const conversationsQuery = useQuery(libraryQueries.conversations());
   const summaryQuery = useQuery(libraryQueries.summary());
   const tagsQuery = useQuery(libraryQueries.tags());
-  const projectsQuery = useQuery(libraryQueries.projects());
   const papersQuery = useQuery({
     ...libraryQueries.papers({
       cursor: parsed.cursor,
@@ -143,30 +144,53 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       ]);
     },
   });
-  const tagMutation = useMutation({
+  const tagAssignmentMutation = useMutation({
     mutationFn: ({
       documentIds,
       tagIds,
     }: {
       documentIds: string[];
       tagIds: string[];
-    }) => assignLibraryTags(documentIds, tagIds),
+    }) => replaceLibraryTagAssignments(documentIds, tagIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: [...libraryKeys.all, "papers"],
       });
     },
   });
-  const projectMutation = useMutation({
-    mutationFn: ({
-      documentIds,
-      projectId,
-    }: {
-      documentIds: string[];
-      projectId: string;
-    }) => addPapersToProject(projectId, documentIds),
+  const createTagMutation = useMutation({
+    mutationFn: createLibraryTag,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: libraryKeys.projects() });
+      await queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
+    },
+  });
+  const renameTagMutation = useMutation({
+    mutationFn: ({ name, tagId }: { name: string; tagId: string }) =>
+      renameLibraryTag(tagId, name),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: libraryKeys.tags() }),
+        queryClient.invalidateQueries({
+          queryKey: [...libraryKeys.all, "papers"],
+        }),
+      ]);
+    },
+  });
+  const deleteTagMutation = useMutation({
+    mutationFn: deleteLibraryTag,
+    onSuccess: async (_data, tagId) => {
+      if (parsed.tagIds.includes(tagId)) {
+        replaceSearch({
+          cursor: undefined,
+          tagIds: parsed.tagIds.filter((id) => id !== tagId),
+        });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: libraryKeys.tags() }),
+        queryClient.invalidateQueries({
+          queryKey: [...libraryKeys.all, "papers"],
+        }),
+      ]);
     },
   });
 
@@ -283,15 +307,15 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               error={papersQuery.error}
               ingestions={ingestion.rows}
               loading={papersQuery.isPending}
-              onAddToProject={(documentIds, projectId) =>
-                runAction(() =>
-                  projectMutation.mutateAsync({ documentIds, projectId }),
-                )
+              onCreateTag={(name) => createTagMutation.mutateAsync(name)}
+              onDeleteTag={(tagId) => deleteTagMutation.mutateAsync(tagId)}
+              onRenameTag={(tagId, name) =>
+                renameTagMutation.mutateAsync({ name, tagId })
               }
-              onAssignTags={(documentIds, tagIds) =>
-                runAction(() =>
-                  tagMutation.mutateAsync({ documentIds, tagIds }),
-                )
+              onReplaceTags={(documentIds, tagIds) =>
+                tagAssignmentMutation
+                  .mutateAsync({ documentIds, tagIds })
+                  .then(() => undefined)
               }
               onDownload={(documentId) => void handleDownload(documentId)}
               onCancelIngestion={(id) =>
@@ -312,7 +336,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               onTagFilterChange={(tagIds) =>
                 replaceSearch({ cursor: undefined, tagIds })
               }
-              projects={projectsQuery.data?.items ?? []}
               search={
                 <DebouncedLibrarySearch
                   key={`papers:${parsed.query}`}
@@ -364,7 +387,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
         onSubmitSource={ingestion.submitSource}
         onUploadFiles={ingestion.startUploads}
         open={addOpen}
-        projects={projectsQuery.data?.items ?? []}
       />
     </WorkspaceShell>
   );

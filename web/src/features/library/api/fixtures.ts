@@ -5,7 +5,6 @@ type LibraryOutput = components["schemas"]["LibraryOutputResponse"];
 type LibraryPaper = components["schemas"]["LibraryPaperListPaperEntry"];
 type LibraryPaperIngestion =
   components["schemas"]["LibraryPaperIngestionResponse"];
-type Project = components["schemas"]["ProjectResponse"];
 type Tag = components["schemas"]["LibraryTagResponse"];
 
 const now = "2026-08-11T08:00:00Z";
@@ -220,41 +219,6 @@ export const libraryOutputs: LibraryOutput[] = [
       title: "Thesis literature review",
     },
     title: "Model comparison",
-  },
-];
-
-export const libraryProjects: Project[] = [
-  {
-    capabilities: {
-      contribute_research: true,
-      create_conversation: true,
-      delete: true,
-      edit_project: true,
-      leave: false,
-      manage_collaborators: true,
-      manage_papers: true,
-      read: true,
-      transfer: true,
-    },
-    created_at: now,
-    description: null,
-    id: "73000000-0000-4000-8000-000000000001",
-    membership: {
-      kind: "owner",
-      permissions: {
-        edit_project: true,
-        manage_collaborators: true,
-        manage_papers: true,
-      },
-    },
-    num_audio_overviews: 0,
-    num_collaborators: 2,
-    num_conversations: 4,
-    num_data_tables: 1,
-    num_papers: 12,
-    owner: { display_name: "Eric", email: "eric@scholens.ai", id: 7 },
-    title: "Thesis literature review",
-    updated_at: now,
   },
 ];
 

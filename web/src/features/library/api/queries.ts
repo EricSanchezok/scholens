@@ -44,18 +44,6 @@ export const libraryQueries = {
         return data;
       },
     }),
-  projects: () =>
-    queryOptions({
-      queryKey: libraryKeys.projects(),
-      queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET("/api/v1/projects", {
-          params: { query: { limit: 100 } },
-          signal,
-        });
-        if (!data) throw new Error("Project response was empty");
-        return data;
-      },
-    }),
   papers: (
     state: Pick<LibrarySearchState, "cursor" | "query" | "sort" | "tagIds">,
   ) =>

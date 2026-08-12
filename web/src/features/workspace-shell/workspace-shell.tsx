@@ -399,7 +399,7 @@ function MobileNavigation({
   const recent = matching.filter((item) => !item.pinned_at).slice(0, 12);
 
   return (
-    <aside className="bg-sidebar flex h-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
+    <aside className="flex h-full flex-col overflow-hidden bg-[var(--color-bg-sidebar)] pt-[env(safe-area-inset-top)]">
       <div className="flex min-h-20 shrink-0 items-center px-4 pr-16">
         <MobileActorIdentity actor={actor} />
       </div>
@@ -423,7 +423,7 @@ function MobileNavigation({
         )}
       </div>
       <div
-        className="bg-sidebar shrink-0 px-3 pt-2 pb-[max(var(--space-3),env(safe-area-inset-bottom))]"
+        className="shrink-0 bg-[var(--color-bg-sidebar)] px-3 pt-2 pb-[max(var(--space-3),env(safe-area-inset-bottom))]"
         data-testid="mobile-navigation-tools"
       >
         <div className="flex items-center gap-2">
@@ -782,7 +782,7 @@ export function WorkspaceShell({
       </div>
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
-          className="bg-sidebar inset-0 h-dvh w-full max-w-none border-0 p-0 shadow-none focus:outline-none"
+          className="inset-0 h-dvh w-full max-w-none border-0 bg-[var(--color-bg-sidebar)] p-0 shadow-none focus:outline-none"
           closeGlyph={FastArrowRight}
           closeLabel={t("navigation.closeMenu")}
           onOpenAutoFocus={(event) => {

@@ -5,7 +5,6 @@ import {
   libraryConversations,
   libraryOutputs,
   libraryPapers,
-  libraryProjects,
   libraryTags,
   processingIngestion,
 } from "../../src/features/library/api/fixtures";
@@ -24,6 +23,7 @@ const actor = {
 };
 
 async function mockLibrary(page: Page) {
+  let tags = [...libraryTags];
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -51,18 +51,43 @@ async function mockLibrary(page: Page) {
       body: JSON.stringify({ paper_count: 27, output_count: 8 }),
     }),
   );
-  await page.route(`${apiPattern}/library/tags`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ items: libraryTags, next_cursor: null }),
-    }),
-  );
-  await page.route(`${apiPattern}/projects**`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ items: libraryProjects, next_cursor: null }),
-    }),
-  );
+  await page.route(`${apiPattern}/library/tags**`, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: tags, next_cursor: null }),
+      });
+    }
+    if (request.method() === "POST" && pathname.endsWith("/library/tags")) {
+      const body = request.postDataJSON() as { name: string };
+      const created = {
+        color: null,
+        id: "71000000-0000-4000-8000-000000000099",
+        name: body.name,
+      };
+      tags = [...tags, created];
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(created),
+      });
+    }
+    if (
+      request.method() === "PUT" &&
+      pathname.endsWith("/library/tags/assignments")
+    ) {
+      const body = request.postDataJSON() as { document_ids: string[] };
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          updated_paper_count: body.document_ids.length,
+        }),
+      });
+    }
+    return route.fallback();
+  });
   await page.route(`${apiPattern}/library/papers**`, (route) => {
     const cursor = new URL(route.request().url()).searchParams.get("cursor");
     return route.fulfill({
@@ -144,7 +169,26 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Remove from library" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Clear", exact: true }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "Add to project · Not available yet",
+    }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Edit tags" }).click();
+  const tagDialog = page.getByRole("dialog");
+  await tagDialog.getByLabel("New tag name").fill("Reading queue");
+  await tagDialog.getByRole("button", { name: "Create" }).click();
+  await expect(tagDialog.getByText("Reading queue")).toBeVisible();
+  const assignmentRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "PUT" &&
+      request.url().endsWith("/api/v1/library/tags/assignments"),
+  );
+  await tagDialog.getByRole("button", { name: "Apply tags" }).click();
+  expect((await assignmentRequest).postDataJSON()).toEqual({
+    document_ids: [libraryPapers[0]!.document.document_id],
+    tag_ids: [libraryTags[0]!.id, "71000000-0000-4000-8000-000000000099"],
+  });
   await expect(page.getByText("1 paper selected")).toHaveCount(0);
 
   const searchRequest = page.waitForRequest((request) => {

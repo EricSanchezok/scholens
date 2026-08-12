@@ -6,7 +6,6 @@ import {
   libraryLongTitlePapers,
   libraryOutputs,
   libraryPapers,
-  libraryProjects,
   libraryTags,
   processingIngestion,
   processingIngestionEntry,
@@ -23,9 +22,6 @@ const populatedHandlers = [
   ),
   http.get(`${api}/library/tags`, () =>
     HttpResponse.json({ items: libraryTags, next_cursor: null }),
-  ),
-  http.get(`${api}/projects`, () =>
-    HttpResponse.json({ items: libraryProjects, next_cursor: null }),
   ),
   http.get(`${api}/library/papers`, () =>
     HttpResponse.json({
@@ -60,14 +56,29 @@ const populatedHandlers = [
     const body = (await request.json()) as { document_ids: string[] };
     return HttpResponse.json({ removed_document_ids: body.document_ids });
   }),
-  http.post(`${api}/library/tags/assignments`, () =>
-    HttpResponse.json({ assigned_count: 1 }),
+  http.post(`${api}/library/tags`, async ({ request }) => {
+    const body = (await request.json()) as { name: string };
+    return HttpResponse.json(
+      { color: null, id: crypto.randomUUID(), name: body.name },
+      { status: 201 },
+    );
+  }),
+  http.patch(`${api}/library/tags/:tagId`, async ({ params, request }) => {
+    const body = (await request.json()) as { name: string };
+    return HttpResponse.json({
+      color: null,
+      id: String(params.tagId),
+      name: body.name,
+    });
+  }),
+  http.delete(
+    `${api}/library/tags/:tagId`,
+    () => new HttpResponse(null, { status: 204 }),
   ),
-  http.post(`${api}/projects/:projectId/papers`, () =>
-    HttpResponse.json({
-      added_document_ids: [libraryPapers[0]!.document.document_id],
-    }),
-  ),
+  http.put(`${api}/library/tags/assignments`, async ({ request }) => {
+    const body = (await request.json()) as { document_ids: string[] };
+    return HttpResponse.json({ updated_paper_count: body.document_ids.length });
+  }),
   http.get(`${api}/papers/:documentId/download-url`, () =>
     HttpResponse.json({ file_url: "https://example.org/paper.pdf" }),
   ),

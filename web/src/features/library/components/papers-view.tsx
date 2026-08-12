@@ -27,10 +27,6 @@ import {
   Button,
   Checkbox,
   CursorPagination,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -39,8 +35,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  RadioGroup,
-  RadioItem,
   Select,
   SelectContent,
   SelectItem,
@@ -56,11 +50,11 @@ import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import type { PaperSort } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
+import { TagManagerDialog, type LibraryTag } from "./tag-manager-dialog";
 
 type Paper = components["schemas"]["LibraryPaperListPaperEntry"];
 type PaperList = components["schemas"]["LibraryPaperListResponse"];
-type TagItem = components["schemas"]["LibraryTagResponse"];
-type Project = components["schemas"]["ProjectResponse"];
+type TagItem = LibraryTag;
 
 const PAPER_SORTS: PaperSort[] = [
   "added_desc",
@@ -222,7 +216,6 @@ function PaperDetails({ paper }: { paper: Paper }) {
 
 function PaperActions({
   onDownload,
-  onProject,
   onRemove,
   onSelect,
   onTags,
@@ -230,7 +223,6 @@ function PaperActions({
   selected = false,
 }: {
   onDownload: () => void;
-  onProject: () => void;
   onRemove: () => void;
   onSelect?: () => void;
   onTags: () => void;
@@ -259,9 +251,10 @@ function PaperActions({
           <Icon glyph={Label} size={16} tone="secondary" />
           {t("tags")}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onProject}>
+        <DropdownMenuItem disabled>
           <Icon glyph={Folder} size={16} tone="secondary" />
           {t("project")}
+          <span className="ml-auto text-xs">{t("notAvailable")}</span>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onDownload}>
           <Icon glyph={Download} size={16} tone="secondary" />
@@ -392,112 +385,19 @@ function IngestionActions({
   );
 }
 
-function ChoiceDialog({
-  description,
-  items,
-  onOpenChange,
-  onSubmit,
-  open,
-  pending,
-  selectionMode = "multiple",
-  submitLabel,
-  title,
-}: {
-  description: string;
-  items: { id: string; label: string }[];
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (ids: string[]) => void;
-  open: boolean;
-  pending: boolean;
-  selectionMode?: "single" | "multiple";
-  submitLabel: string;
-  title: string;
-}) {
-  const t = useTranslations("Library.common");
-  const [selected, setSelected] = React.useState<string[]>([]);
-  function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen) setSelected([]);
-    onOpenChange(nextOpen);
-  }
-  return (
-    <Dialog onOpenChange={handleOpenChange} open={open}>
-      <DialogContent closeLabel={t("close")} placement="responsive-bottom">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-        <div className="my-5 max-h-72 overflow-y-auto">
-          {selectionMode === "single" ? (
-            <RadioGroup
-              className="grid gap-1"
-              onValueChange={(value) => setSelected([value])}
-              value={selected[0]}
-            >
-              {items.map((item) => (
-                <label
-                  className="hover:bg-hover flex min-h-11 items-center gap-3 rounded-[var(--radius-md)] px-2 text-sm"
-                  key={item.id}
-                >
-                  <RadioItem value={item.id} />
-                  {item.label}
-                </label>
-              ))}
-            </RadioGroup>
-          ) : (
-            <div className="grid gap-1">
-              {items.map((item) => (
-                <label
-                  className="hover:bg-hover flex min-h-11 items-center gap-3 rounded-[var(--radius-md)] px-2 text-sm"
-                  key={item.id}
-                >
-                  <SelectionCheckbox
-                    checked={selected.includes(item.id)}
-                    label={item.label}
-                    onCheckedChange={(checked) =>
-                      setSelected((current) =>
-                        checked
-                          ? [...current, item.id]
-                          : current.filter((id) => id !== item.id),
-                      )
-                    }
-                  />
-                  {item.label}
-                </label>
-              ))}
-            </div>
-          )}
-          {items.length === 0 && (
-            <p className="text-secondary py-8 text-center text-sm">
-              {t("noOptions")}
-            </p>
-          )}
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button onClick={() => handleOpenChange(false)} variant="ghost">
-            {t("cancel")}
-          </Button>
-          <Button
-            disabled={selected.length === 0}
-            loading={pending}
-            onClick={() => onSubmit(selected)}
-          >
-            {submitLabel}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function TagFilter({
   active,
   onChange,
+  onManage,
   tags,
 }: {
   active: string[];
   onChange: (tagIds: string[]) => void;
+  onManage: () => void;
   tags: TagItem[];
 }) {
   const t = useTranslations("Library.papers.filters");
-  const body = (
+  const renderBody = (manage: () => void) => (
     <div className="grid gap-1">
       {tags.map((tag) => (
         <label
@@ -521,6 +421,16 @@ function TagFilter({
       {tags.length === 0 && (
         <p className="text-secondary p-3 text-center text-sm">{t("noTags")}</p>
       )}
+      <div className="border-line mt-1 border-t pt-1">
+        <Button
+          className="w-full justify-start"
+          onClick={manage}
+          variant="ghost"
+        >
+          <Icon glyph={Label} size={20} tone="secondary" />
+          {t("manage")}
+        </Button>
+      </div>
     </div>
   );
   return (
@@ -536,13 +446,16 @@ function TagFilter({
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent>{body}</PopoverContent>
+          <PopoverContent>{renderBody(onManage)}</PopoverContent>
         </Popover>
       </div>
       <div className="sm:hidden">
-        <MobileTagFilter activeCount={active.length} title={t("tags")}>
-          {body}
-        </MobileTagFilter>
+        <MobileTagFilter
+          activeCount={active.length}
+          onManage={onManage}
+          renderBody={renderBody}
+          title={t("tags")}
+        />
       </div>
     </>
   );
@@ -550,15 +463,21 @@ function TagFilter({
 
 function MobileTagFilter({
   activeCount,
-  children,
+  onManage,
+  renderBody,
   title,
 }: {
   activeCount: number;
-  children: React.ReactNode;
+  onManage: () => void;
+  renderBody: (onManage: () => void) => React.ReactNode;
   title: string;
 }) {
   const t = useTranslations("Library.common");
   const [open, setOpen] = React.useState(false);
+  function manageTags() {
+    setOpen(false);
+    window.setTimeout(onManage, 0);
+  }
   return (
     <Sheet onOpenChange={setOpen} open={open}>
       <Button onClick={() => setOpen(true)} variant="secondary">
@@ -571,7 +490,7 @@ function MobileTagFilter({
         closeLabel={t("close")}
       >
         <SheetTitle className="mb-4 text-lg font-semibold">{title}</SheetTitle>
-        {children}
+        {renderBody(manageTags)}
       </SheetContent>
     </Sheet>
   );
@@ -582,18 +501,19 @@ export function PapersView({
   error,
   ingestions,
   loading,
-  onAddToProject,
-  onAssignTags,
+  onCreateTag,
+  onDeleteTag,
   onDownload,
   onNext,
   onPrevious,
   onRemove,
+  onRenameTag,
+  onReplaceTags,
   onCancelIngestion,
   onRetryIngestion,
   onRetryLoad,
   onSortChange,
   onTagFilterChange,
-  projects,
   search,
   sort,
   tagIds,
@@ -603,18 +523,19 @@ export function PapersView({
   error?: unknown;
   ingestions: PaperIngestionRow[];
   loading: boolean;
-  onAddToProject: (documentIds: string[], projectId: string) => Promise<void>;
-  onAssignTags: (documentIds: string[], tagIds: string[]) => Promise<void>;
+  onCreateTag: (name: string) => Promise<LibraryTag>;
+  onDeleteTag: (tagId: string) => Promise<void>;
   onDownload: (documentId: string) => void;
   onNext: (cursor: string) => void;
   onPrevious: (cursor: string) => void;
   onRemove: (documentIds: string[]) => Promise<void>;
+  onRenameTag: (tagId: string, name: string) => Promise<LibraryTag>;
+  onReplaceTags: (documentIds: string[], tagIds: string[]) => Promise<void>;
   onCancelIngestion: (id: string) => void;
   onRetryIngestion: (id: string) => void;
   onRetryLoad: () => void;
   onSortChange: (sort: PaperSort) => void;
   onTagFilterChange: (tagIds: string[]) => void;
-  projects: Project[];
   search: React.ReactNode;
   sort: PaperSort;
   tagIds: string[];
@@ -624,7 +545,8 @@ export function PapersView({
   const format = useFormatter();
   const [selected, setSelected] = React.useState<string[]>([]);
   const [actionIds, setActionIds] = React.useState<string[]>([]);
-  const [picker, setPicker] = React.useState<"tags" | "project" | null>(null);
+  const [initialTagIds, setInitialTagIds] = React.useState<string[]>([]);
+  const [tagManagerOpen, setTagManagerOpen] = React.useState(false);
   const [removeOpen, setRemoveOpen] = React.useState(false);
   const [actionPending, setActionPending] = React.useState(false);
 
@@ -650,9 +572,27 @@ export function PapersView({
     );
   }
 
-  function beginChoice(kind: "tags" | "project", ids: string[]) {
+  function beginTagEditing(ids: string[]) {
     setActionIds(ids);
-    setPicker(kind);
+    const matching = papers.filter((paper) =>
+      ids.includes(paper.document.document_id),
+    );
+    setInitialTagIds(
+      matching.reduce<string[]>(
+        (common, paper, index) =>
+          index === 0
+            ? paper.tags.map((tag) => tag.id)
+            : common.filter((id) => paper.tags.some((tag) => tag.id === id)),
+        [],
+      ),
+    );
+    setTagManagerOpen(true);
+  }
+
+  function beginTagManagement() {
+    setActionIds([]);
+    setInitialTagIds([]);
+    setTagManagerOpen(true);
   }
 
   function beginRemoval(ids: string[]) {
@@ -665,7 +605,6 @@ export function PapersView({
     try {
       await action();
       setSelected([]);
-      setPicker(null);
       setRemoveOpen(false);
     } finally {
       setActionPending(false);
@@ -694,7 +633,7 @@ export function PapersView({
           <div className="hidden items-center gap-2 sm:flex">
             <Button
               className="md:h-8 md:min-h-8"
-              onClick={() => beginChoice("tags", selected)}
+              onClick={() => beginTagEditing(selected)}
               size="sm"
               variant="secondary"
             >
@@ -702,11 +641,12 @@ export function PapersView({
             </Button>
             <Button
               className="md:h-8 md:min-h-8"
-              onClick={() => beginChoice("project", selected)}
+              disabled
               size="sm"
+              title={t("actions.notAvailable")}
               variant="secondary"
             >
-              {t("actions.project")}
+              {t("actions.projectUnavailable")}
             </Button>
             <Button
               className="md:h-8 md:min-h-8"
@@ -724,15 +664,13 @@ export function PapersView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => beginChoice("tags", selected)}>
+              <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
                 <Icon glyph={Label} size={16} tone="secondary" />
                 {t("actions.tags")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => beginChoice("project", selected)}
-              >
+              <DropdownMenuItem disabled>
                 <Icon glyph={Folder} size={16} tone="secondary" />
-                {t("actions.project")}
+                {t("actions.projectUnavailable")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 destructive
@@ -751,6 +689,7 @@ export function PapersView({
             <TagFilter
               active={tagIds}
               onChange={onTagFilterChange}
+              onManage={beginTagManagement}
               tags={tags}
             />
             <Select
@@ -903,9 +842,8 @@ export function PapersView({
                         <td className="px-2 py-2 align-middle">
                           <PaperActions
                             onDownload={() => onDownload(id)}
-                            onProject={() => beginChoice("project", [id])}
                             onRemove={() => beginRemoval([id])}
-                            onTags={() => beginChoice("tags", [id])}
+                            onTags={() => beginTagEditing([id])}
                             paper={paper}
                           />
                         </td>
@@ -980,10 +918,9 @@ export function PapersView({
                       </div>
                       <PaperActions
                         onDownload={() => onDownload(id)}
-                        onProject={() => beginChoice("project", [id])}
                         onRemove={() => beginRemoval([id])}
                         onSelect={() => toggleOne(id, !selected.includes(id))}
-                        onTags={() => beginChoice("tags", [id])}
+                        onTags={() => beginTagEditing([id])}
                         paper={paper}
                         selected={selected.includes(id)}
                       />
@@ -1011,33 +948,19 @@ export function PapersView({
         </div>
       )}
 
-      <ChoiceDialog
-        description={t("tagDialog.description", { count: actionIds.length })}
-        items={tags.map((tag) => ({ id: tag.id, label: tag.name }))}
-        onOpenChange={(open) => !open && setPicker(null)}
-        onSubmit={(ids) => void perform(() => onAssignTags(actionIds, ids))}
-        open={picker === "tags"}
-        pending={actionPending}
-        submitLabel={t("tagDialog.submit")}
-        title={t("tagDialog.title")}
-      />
-      <ChoiceDialog
-        description={t("projectDialog.description", {
-          count: actionIds.length,
-        })}
-        items={projects.map((project) => ({
-          id: project.id,
-          label: project.title,
-        }))}
-        onOpenChange={(open) => !open && setPicker(null)}
-        onSubmit={(ids) =>
-          void perform(() => onAddToProject(actionIds, ids[0] ?? ""))
-        }
-        open={picker === "project"}
-        pending={actionPending}
-        selectionMode="single"
-        submitLabel={t("projectDialog.submit")}
-        title={t("projectDialog.title")}
+      <TagManagerDialog
+        documentIds={actionIds}
+        initialTagIds={initialTagIds}
+        onCreate={onCreateTag}
+        onDelete={onDeleteTag}
+        onOpenChange={setTagManagerOpen}
+        onRename={onRenameTag}
+        onSave={async (documentIds, nextTagIds) => {
+          await onReplaceTags(documentIds, nextTagIds);
+          setSelected([]);
+        }}
+        open={tagManagerOpen}
+        tags={tags}
       />
       <AlertDialog onOpenChange={setRemoveOpen} open={removeOpen}>
         <AlertDialogContent>

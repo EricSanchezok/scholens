@@ -51,7 +51,6 @@ export type PaperIngestionRow = {
 type LocalUpload = PaperIngestionRow & {
   file: File;
   idempotencyKey: string;
-  projectId?: string;
 };
 
 const MAX_CONCURRENT_UPLOADS = 3;
@@ -136,7 +135,6 @@ export function usePaperIngestions(
       try {
         const accepted = await uploadPaperFile(item.file, {
           idempotencyKey: item.idempotencyKey,
-          projectId: item.projectId,
           signal: controller.signal,
         });
         await cancelPaperIngestion(accepted.id, controller.signal);
@@ -157,11 +155,9 @@ export function usePaperIngestions(
   const reconcileCancelledSource = React.useCallback(
     async ({
       idempotencyKey,
-      projectId,
       source,
     }: {
       idempotencyKey: string;
-      projectId?: string;
       source: Source;
     }) => {
       const controller = new AbortController();
@@ -172,7 +168,6 @@ export function usePaperIngestions(
       try {
         const accepted = await uploadPaperSource(source, {
           idempotencyKey,
-          projectId,
           signal: controller.signal,
         });
         await cancelPaperIngestion(accepted.id, controller.signal);
@@ -226,7 +221,6 @@ export function usePaperIngestions(
       try {
         const accepted = await uploadPaperFile(item.file, {
           idempotencyKey: item.idempotencyKey,
-          projectId: item.projectId,
           signal: controller.signal,
         });
         if (cancelledLocalIds.current.has(item.id)) {
@@ -263,7 +257,7 @@ export function usePaperIngestions(
   );
 
   const startUploads = React.useCallback(
-    (uploads: PreparedPaperUpload[], projectId?: string) => {
+    (uploads: PreparedPaperUpload[]) => {
       const seenDigests = new Set<string>();
       const distinctUploads = uploads.filter((upload) => {
         if (seenDigests.has(upload.contentDigest)) return false;
@@ -279,7 +273,6 @@ export function usePaperIngestions(
         file: upload.file,
         id: upload.id,
         idempotencyKey: upload.idempotencyKey,
-        projectId,
         sourceKind: "upload",
         stage: index < MAX_CONCURRENT_UPLOADS ? "uploading" : "queued",
         state: index < MAX_CONCURRENT_UPLOADS ? "uploading" : "queued",
@@ -351,12 +344,10 @@ export function usePaperIngestions(
   const submitSource = React.useCallback(
     async ({
       idempotencyKey,
-      projectId,
       signal,
       source,
     }: {
       idempotencyKey: string;
-      projectId?: string;
       signal: AbortSignal;
       source: Source;
     }) => {
@@ -365,7 +356,6 @@ export function usePaperIngestions(
       try {
         const accepted = await uploadPaperSource(source, {
           idempotencyKey,
-          projectId,
           signal,
         });
         if (signal.aborted) {
@@ -379,7 +369,7 @@ export function usePaperIngestions(
         return accepted;
       } catch (error) {
         if (signal.aborted && !acceptedAfterCancellation) {
-          void reconcileCancelledSource({ idempotencyKey, projectId, source });
+          void reconcileCancelledSource({ idempotencyKey, source });
         }
         throw error;
       }

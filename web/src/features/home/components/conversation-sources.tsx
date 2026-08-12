@@ -6,8 +6,11 @@ import * as React from "react";
 
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogHandle,
+  DialogHeader,
   DialogTitle,
   DialogTrigger,
   keyboardFocusRing,
@@ -140,16 +143,16 @@ export function ConversationSources({
         closeLabel={t("closeSources")}
         placement="responsive-bottom"
       >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--color-border-strong)] lg:hidden" />
-        <div className="border-line border-b px-5 pt-5 pr-14 pb-4 lg:px-6">
+        <DialogHandle />
+        <DialogHeader>
           <DialogTitle>
             {t("sourcePanelTitle", { count: sources.length })}
           </DialogTitle>
           <DialogDescription id="conversation-sources-description">
             {t("sourcePanelDescription")}
           </DialogDescription>
-        </div>
-        <div className="max-h-[calc(82dvh-7rem)] overflow-y-auto overscroll-contain lg:max-h-[min(65vh,34rem)]">
+        </DialogHeader>
+        <DialogBody className="p-0 lg:p-0">
           {sources.map((source, index) => (
             <SourceRow
               fallbackTitle={t("reference", { number: index + 1 })}
@@ -158,7 +161,7 @@ export function ConversationSources({
               source={source}
             />
           ))}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

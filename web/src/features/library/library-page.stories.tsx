@@ -122,6 +122,18 @@ export const MultiSelect: Story = {
       within(toolbar).getByRole("button", { name: "Remove from library" }),
     ).toBeVisible();
     await expect(
+      within(toolbar).getByRole("button", {
+        name: "Add to project · Not available yet",
+      }),
+    ).toBeDisabled();
+    await userEvent.click(
+      within(toolbar).getByRole("button", { name: "Edit tags" }),
+    );
+    await expect(
+      await within(document.body).findByRole("heading", { name: "Edit tags" }),
+    ).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect(
       toolbar.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     await expect(

@@ -393,7 +393,9 @@ export const MobileNavigationOpen: Story = {
     await expect(
       Math.abs(dialog.getBoundingClientRect().width - window.innerWidth),
     ).toBeLessThanOrEqual(1);
-    await expect(panel).toHaveClass("bg-sidebar");
+    await expect(getComputedStyle(panel).backgroundColor).not.toBe(
+      "rgba(0, 0, 0, 0)",
+    );
     await expect(overlay).not.toBeNull();
     await expect(Number(getComputedStyle(dialog).zIndex)).toBeGreaterThan(
       Number(getComputedStyle(overlay!).zIndex),

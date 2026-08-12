@@ -61,6 +61,9 @@ The tag manager owns the full label lifecycle: create, rename, delete, and exact
 assignment replacement. Saving an empty selection clears a paper's labels.
 Project assignment remains visibly unavailable until the Projects product slice
 is complete; Library does not query projects or open an empty chooser.
+The manager uses the shared responsive Dialog structure: a contained desktop
+dialog and a safe-area-aware mobile bottom sheet with one scrolling body and a
+fixed action footer. It never reserves blank space to resemble a chooser.
 
 An accepted ingestion is a first-class row in the same desktop table or mobile
 paper list as completed papers; it is never rendered as a detached status
@@ -142,6 +145,7 @@ Papers acceptance lives in section `974:1831` and maps to
 | mobile queued / cancelling  | `1002:1919`, `1002:1970`           | `Mobile390Queued`, `Mobile390Cancelling` |
 | Add papers desktop / mobile | `979:1831`, `979:1938`             | `AddPapers`, mobile viewport review      |
 | duplicate PDF selection     | `1007:2`                           | `AddPapersDuplicateSelection`            |
+| tag assignment / management | shared Library interaction state   | `Tag manager dialog` lifecycle stories   |
 | lifecycle behavior contract | `1002:2021`                        | ingestion-row state stories              |
 
 Figma owns visual intent; Storybook owns executable runtime states. Differences
