@@ -1,16 +1,14 @@
-import type { ReaderDocumentSource, ReaderPanel } from "./reader-types";
+import type { ReaderContextPanel, ReaderDocumentSource } from "./reader-types";
 
 export function parsePositiveInteger(value: string | null, fallback = 1) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : fallback;
 }
 
-export function readReaderPanel(value: string | null): ReaderPanel | undefined {
-  return value === "ask" ||
-    value === "annotations" ||
-    value === "details" ||
-    value === "outline" ||
-    value === "search"
+export function readReaderPanel(
+  value: string | null,
+): ReaderContextPanel | undefined {
+  return value === "ask" || value === "annotations" || value === "details"
     ? value
     : undefined;
 }

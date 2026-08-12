@@ -16,6 +16,8 @@ describe("reader URL state", () => {
 
   it("rejects unknown panel values", () => {
     expect(readReaderPanel("annotations")).toBe("annotations");
+    expect(readReaderPanel("search")).toBeUndefined();
+    expect(readReaderPanel("outline")).toBeUndefined();
     expect(readReaderPanel("translation")).toBeUndefined();
     expect(readReaderPanel(null)).toBeUndefined();
   });

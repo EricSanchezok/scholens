@@ -47,10 +47,16 @@ browser body scroll.
 
 Reader has four independently scrollable regions where applicable:
 
-1. page thumbnails;
+1. document navigation, showing either page thumbnails or the PDF outline;
 2. the PDF page canvas;
 3. the active contextual panel;
 4. the paper-conversation list disclosure.
+
+Search is not a fifth panel. On desktop and mobile it temporarily replaces the
+document toolbar controls with a compact query field, result position, and
+previous/next controls. The PDF remains visible and interactive while search is
+active. On desktop, Outline switches the left document-navigation region from
+Pages to Outline; it never opens a modal or obscures the document.
 
 At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 
@@ -58,8 +64,10 @@ At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 - the top bar contains Back to Library, a truncated paper title, and document
   tools;
 - the PDF remains visible as the primary surface;
-- Ask, Annotations, Details, Search, and Outline open as full-height bottom
-  panels with safe-area padding;
+- Ask, Annotations, and Details open as full-height bottom panels with safe-area
+  padding;
+- Search remains in the compact document toolbar, while Outline uses a
+  full-height document-navigation panel because the thumbnail rail is absent;
 - dismissing a panel preserves page, zoom, search result, draft, selection, and
   active conversation;
 - the soft keyboard resizes the active panel without moving document controls
@@ -73,14 +81,16 @@ The breakpoint changes the information architecture, not only widths.
 The URL is the shareable reading state:
 
 - `page`: one-based current PDF page;
-- `panel`: `ask`, `annotations`, `details`, `search`, `outline`, or omitted;
+- `panel`: `ask`, `annotations`, `details`, or omitted;
 - `conversation`: the active paper-scoped conversation ID, or omitted for the
   local blank state.
 
-Zoom, fit mode, search query, search match index, draft text, active browser
+Zoom, fit mode, desktop document-navigation mode, mobile Outline disclosure,
+search disclosure, search query, search match index, draft text, active browser
 selection, pending turn context, annotation editor state, and panel animation
-state are local. Invalid page and conversation parameters are normalized after
-the document metadata is known and must not produce a second history entry.
+state are local. Invalid page, panel, and conversation parameters are
+normalized after the document metadata is known and must not produce a second
+history entry.
 
 ## PDF surface
 
@@ -209,7 +219,9 @@ Reader remains a vertical feature rather than a second application shell:
   boundary between desktop panes and mobile sheets;
 - `pdf-document-adapter.ts` owns the PDF.js contract, while `pdf-page.tsx` owns
   the Canvas, Text, Annotation, selection, and search-overlay surface;
-- `reader-navigation-panels.tsx` owns document search and outline navigation;
+- `reader-toolbar.tsx` owns the compact, non-modal PDF search experience;
+- `reader-document-navigation.tsx` owns desktop Pages/Outline navigation and
+  the shared outline tree used by the mobile document-navigation panel;
 - `reader-context-panel.tsx` owns Ask, Annotations, Details, and the
   paper-conversation switcher;
 - `features/conversation` owns the shared turn lifecycle, streaming response,

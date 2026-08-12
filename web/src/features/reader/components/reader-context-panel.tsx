@@ -34,9 +34,9 @@ import type { ReaderSelection } from "./pdf-page";
 import type {
   ReaderAnnotation,
   ReaderConversation,
+  ReaderContextPanel,
   ReaderDocument,
   ReaderDocumentSource,
-  ReaderPanel,
 } from "../reader-types";
 
 export function formatReaderFileSize(size: number, locale: string) {
@@ -578,7 +578,7 @@ export function ReaderContextPanel({
   onHighlightUpdate: (id: string, color: string) => Promise<void>;
   onPanelChange: (panel: "ask" | "annotations" | "details") => void;
   onSourceOpen: (source: ReaderDocumentSource) => void;
-  panel: ReaderPanel;
+  panel: ReaderContextPanel;
   reasoningLevel: ReasoningLevel;
   selectedAnnotation?: ReaderAnnotation;
   annotationSelection?: ReaderSelection;
@@ -588,8 +588,7 @@ export function ReaderContextPanel({
   title: string;
 }) {
   const t = useTranslations("Reader");
-  const activePanel =
-    panel === "annotations" || panel === "details" ? panel : "ask";
+  const activePanel = panel;
 
   return (
     <aside
@@ -622,11 +621,11 @@ export function ReaderContextPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {activePanel === "details" ? (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto" tabIndex={0}>
             <ReaderDetailsPanel document={document} title={title} />
           </div>
         ) : activePanel === "annotations" ? (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto" tabIndex={0}>
             <ReaderAnnotationPanel
               annotations={annotations}
               error={annotationsError}

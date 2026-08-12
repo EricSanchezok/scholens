@@ -419,7 +419,11 @@
     "pdfErrorDescription": "The PDF could not be displayed. You can still download the original file.",
     "pdfErrorTitle": "Could not render this PDF",
     "thumbnail": "Open page {page}",
-    "thumbnailRail": "Page thumbnails",
+    "navigation": {
+      "label": "Document navigation",
+      "pages": "Pages",
+      "outline": "Outline"
+    },
     "contextPanel": "Reader context panel",
     "documentCanvas": "PDF document",
     "pdfLink": "Link in PDF",
@@ -445,11 +449,10 @@
       "details": "Details"
     },
     "search": {
+      "close": "Close PDF search",
       "empty": "No matches",
       "next": "Next match",
-      "previous": "Previous match",
-      "results": "{count, plural, one {# match} other {# matches}}",
-      "title": "Search this PDF"
+      "previous": "Previous match"
     },
     "outline": {
       "title": "Document outline",

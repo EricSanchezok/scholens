@@ -148,9 +148,9 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await expect(page.getByText("Authors", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Search PDF" }).click();
-  const search = page.getByRole("searchbox", { name: "Search this PDF" });
+  const search = page.getByRole("textbox", { name: "Search PDF" });
   await search.fill("reasoning");
-  await expect(page.getByText(/match/).first()).toBeVisible();
+  await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(search).toBeHidden();
 
@@ -187,8 +187,6 @@ test("uses an immersive mobile Reader without the Workspace bottom navigation", 
   expect(pageDoesNotOwnViewportScroll).toEqual({ body: true, root: true });
 
   await page.getByRole("button", { name: "Search PDF" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(
-    page.getByRole("searchbox", { name: "Search this PDF" }),
-  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Search PDF" })).toBeVisible();
 });

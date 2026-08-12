@@ -45,13 +45,13 @@ import {
 import { PdfThumbnail } from "./components/pdf-thumbnail";
 import {
   useDesktopReaderPanel,
-  useThumbnailRail,
-} from "./hooks/use-thumbnail-rail";
+  useDocumentNavigationRail,
+} from "./hooks/use-reader-layout";
 import { ReaderContextPanel } from "./components/reader-context-panel";
 import {
+  ReaderDocumentNavigation,
   ReaderOutline,
-  ReaderSearchPanel,
-} from "./components/reader-navigation-panels";
+} from "./components/reader-document-navigation";
 import {
   ReaderToolbar,
   type ReaderToolbarLabels,
@@ -69,7 +69,10 @@ import {
   readReaderPanel,
   readSourcePage,
 } from "./reader-routing";
-import type { ReaderPanel } from "./reader-types";
+import type {
+  ReaderContextPanel as ReaderContextPanelName,
+  ReaderNavigationMode,
+} from "./reader-types";
 
 function ReaderDocumentWorkspace({
   actor,
@@ -98,6 +101,10 @@ function ReaderDocumentWorkspace({
   const [fitMode, setFitMode] = React.useState<ReaderFitMode>("width");
   const [zoom, setZoom] = React.useState(1);
   const [outline, setOutline] = React.useState<PdfOutlineEntry[]>([]);
+  const [navigationMode, setNavigationMode] =
+    React.useState<ReaderNavigationMode>("thumbnails");
+  const [mobileOutlineOpen, setMobileOutlineOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchState, setSearchState] = React.useState<{
     query: string;
@@ -133,7 +140,7 @@ function ReaderDocumentWorkspace({
   const updateLocation = React.useCallback(
     (patch: {
       page?: number;
-      panel?: ReaderPanel | null;
+      panel?: ReaderContextPanelName | null;
       conversation?: string | null;
     }) => {
       const next = new URLSearchParams(searchParams.toString());
@@ -302,7 +309,7 @@ function ReaderDocumentWorkspace({
   const resolveDestination = React.useCallback(
     async (destination: unknown) => {
       const target = await adapter?.resolveDestination(destination);
-      if (target) updateLocation({ page: target, panel: null });
+      if (target) updateLocation({ page: target });
     },
     [adapter, updateLocation],
   );
@@ -328,14 +335,18 @@ function ReaderDocumentWorkspace({
   const toolbarLabels = React.useMemo<ReaderToolbarLabels>(
     () => ({
       download: t("toolbar.download"),
+      closeSearch: t("search.close"),
       fit: t("toolbar.fit"),
       fitPage: t("toolbar.fitPage"),
       fitWidth: t("toolbar.fitWidth"),
       nextPage: t("toolbar.nextPage"),
+      nextSearchResult: t("search.next"),
+      noSearchResults: t("search.empty"),
       openPanel: t("toolbar.openPanel"),
       outline: t("toolbar.outline"),
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
+      previousSearchResult: t("search.previous"),
       returnLibrary: t("returnLibrary"),
       search: t("toolbar.search"),
       zoomIn: t("toolbar.zoomIn"),
@@ -355,7 +366,19 @@ function ReaderDocumentWorkspace({
   const desktopPanelOpen =
     panel === "ask" || panel === "annotations" || panel === "details";
   const useDesktopPanel = useDesktopReaderPanel();
-  const showThumbnailRail = useThumbnailRail();
+  const showDocumentNavigation = useDocumentNavigationRail();
+
+  const closeSearch = React.useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchState(undefined);
+    setSearchIndex(-1);
+  }, []);
+
+  React.useEffect(() => {
+    const rawPanel = searchParams.get("panel");
+    if (rawPanel && !panel) updateLocation({ panel: null });
+  }, [panel, searchParams, updateLocation]);
 
   React.useEffect(() => {
     if (panel === "ask" || panel === "annotations" || panel === "details") {
@@ -458,11 +481,14 @@ function ReaderDocumentWorkspace({
                 metadata={documentMetadata}
                 onDownload={() => void handleDownload()}
                 onFitModeChange={setFitMode}
-                onOpenOutline={() => updateLocation({ panel: "outline" })}
+                onOpenOutline={() => {
+                  if (showDocumentNavigation) setNavigationMode("outline");
+                  else setMobileOutlineOpen(true);
+                }}
                 onOpenPanel={() =>
                   updateLocation({ panel: lastContextPanelRef.current })
                 }
-                onOpenSearch={() => updateLocation({ panel: "search" })}
+                onOpenSearch={() => setSearchOpen(true)}
                 onPageChange={(page) => {
                   setActiveTextSelection(undefined);
                   updateLocation({
@@ -477,14 +503,46 @@ function ReaderDocumentWorkspace({
                 pageCount={pageCount}
                 pageNumber={pageNumber}
                 panelOpen={desktopPanelOpen}
+                search={
+                  searchOpen
+                    ? {
+                        currentIndex: searchIndex,
+                        matchCount: flatSearchResults.length,
+                        onClose: closeSearch,
+                        onMove: (direction) =>
+                          setSearchIndex((current) =>
+                            moveReaderSearchCursor(
+                              current,
+                              flatSearchResults.length,
+                              direction,
+                            ),
+                          ),
+                        onQueryChange: (query) => {
+                          setSearchQuery(query);
+                          setSearchIndex(-1);
+                        },
+                        query: searchQuery,
+                      }
+                    : undefined
+                }
                 title={title}
                 zoom={zoom}
               />
               <div className="flex min-h-0 flex-1">
-                {showThumbnailRail && (
-                  <aside
-                    aria-label={t("thumbnailRail")}
-                    className="border-line bg-canvas w-28 shrink-0 overflow-y-auto border-r p-2"
+                {showDocumentNavigation && (
+                  <ReaderDocumentNavigation
+                    labels={{
+                      emptyOutline: t("outline.empty"),
+                      navigation: t("navigation.label"),
+                      outline: t("navigation.outline"),
+                      pages: t("navigation.pages"),
+                    }}
+                    mode={navigationMode}
+                    onModeChange={setNavigationMode}
+                    onOutlineSelect={(destination) =>
+                      void resolveDestination(destination)
+                    }
+                    outline={outline}
                   >
                     <div className="grid gap-1">
                       {Array.from(
@@ -501,7 +559,7 @@ function ReaderDocumentWorkspace({
                         />
                       ))}
                     </div>
-                  </aside>
+                  </ReaderDocumentNavigation>
                 )}
                 <PdfPage
                   activeTextSelection={activeTextSelection}
@@ -643,67 +701,36 @@ function ReaderDocumentWorkspace({
       </div>
 
       <Sheet
-        onOpenChange={(open) => {
-          if (!open) updateLocation({ panel: null });
-        }}
-        open={panel === "search" || panel === "outline"}
+        onOpenChange={setMobileOutlineOpen}
+        open={!showDocumentNavigation && mobileOutlineOpen}
       >
         <SheetContent
-          className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0 lg:inset-y-0 lg:right-0 lg:left-auto lg:h-full lg:w-[26rem] lg:rounded-none lg:border-l"
+          className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0"
           closeLabel={t("closePanel")}
         >
-          {panel === "search" ? (
-            <ReaderSearchPanel
-              currentIndex={searchIndex}
-              labels={{
-                empty: t("search.empty"),
-                next: t("search.next"),
-                previous: t("search.previous"),
-                results: t("search.results", {
-                  count: flatSearchResults.length,
-                }),
-                title: t("search.title"),
-              }}
-              matchCount={flatSearchResults.length}
-              onMove={(direction) =>
-                setSearchIndex((current) =>
-                  moveReaderSearchCursor(
-                    current,
-                    flatSearchResults.length,
-                    direction,
-                  ),
-                )
-              }
-              onQueryChange={(query) => {
-                setSearchQuery(query);
-                setSearchIndex(-1);
-              }}
-              query={searchQuery}
-            />
-          ) : (
-            <div className="flex h-full flex-col px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-              <SheetTitle className="pr-12 text-lg font-semibold">
-                {t("outline.title")}
-              </SheetTitle>
-              <SheetDescription className="text-muted mt-1 text-sm">
-                {t("outline.description")}
-              </SheetDescription>
-              <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
-                {outline.length > 0 ? (
-                  <ReaderOutline
-                    entries={outline}
-                    onSelect={(destination) =>
-                      void resolveDestination(destination)
-                    }
-                  />
-                ) : (
-                  <p className="text-muted py-12 text-center text-sm">
-                    {t("outline.empty")}
-                  </p>
-                )}
-              </div>
+          <div className="flex h-full flex-col px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <SheetTitle className="pr-12 text-lg font-semibold">
+              {t("outline.title")}
+            </SheetTitle>
+            <SheetDescription className="text-muted mt-1 text-sm">
+              {t("outline.description")}
+            </SheetDescription>
+            <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
+              {outline.length > 0 ? (
+                <ReaderOutline
+                  entries={outline}
+                  onSelect={(destination) => {
+                    setMobileOutlineOpen(false);
+                    void resolveDestination(destination);
+                  }}
+                />
+              ) : (
+                <p className="text-muted py-12 text-center text-sm">
+                  {t("outline.empty")}
+                </p>
+              )}
             </div>
-          )}
+          </div>
         </SheetContent>
       </Sheet>
 

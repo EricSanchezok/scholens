@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-const THUMBNAIL_RAIL_QUERY = "(min-width: 48rem)";
+const DOCUMENT_NAVIGATION_QUERY = "(min-width: 48rem)";
 const DESKTOP_PANEL_QUERY = "(min-width: 64rem)";
 
 function subscribe(query: string, onStoreChange: () => void) {
@@ -32,11 +32,11 @@ function getServerSnapshot() {
 }
 
 /**
- * Keeps the thumbnail tree out of the DOM when the responsive layout hides it.
- * CSS-only hiding still initializes PDF.js canvases and wastes work on phones.
+ * Keeps document navigation out of the DOM when the responsive layout hides it.
+ * CSS-only hiding would still initialize PDF.js thumbnail canvases on phones.
  */
-export function useThumbnailRail() {
-  return useMediaQuery(THUMBNAIL_RAIL_QUERY);
+export function useDocumentNavigationRail() {
+  return useMediaQuery(DOCUMENT_NAVIGATION_QUERY);
 }
 
 /** Prevents a visually hidden mobile Sheet from making the desktop inert. */

@@ -5,14 +5,18 @@ import { ReaderToolbar } from "./reader-toolbar";
 
 const labels = {
   download: "Download PDF",
+  closeSearch: "Close PDF search",
   fit: "Fit",
   fitPage: "Fit page",
   fitWidth: "Fit width",
   nextPage: "Next page",
+  nextSearchResult: "Next match",
+  noSearchResults: "No matches",
   openPanel: "Open context panel",
   outline: "Document outline",
   page: "Page",
   previousPage: "Previous page",
+  previousSearchResult: "Previous match",
   returnLibrary: "Return to library",
   search: "Search PDF",
   zoomIn: "Zoom in",
@@ -64,4 +68,17 @@ export const LargeMobile: Story = {
 
 export const ContextPanelOpen: Story = {
   args: { panelOpen: true },
+};
+
+export const SearchOpen: Story = {
+  args: {
+    search: {
+      currentIndex: 2,
+      matchCount: 8,
+      onClose: fn(),
+      onMove: fn(),
+      onQueryChange: fn(),
+      query: "retrieval",
+    },
+  },
 };
