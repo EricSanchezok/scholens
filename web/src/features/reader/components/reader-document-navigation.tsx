@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import type { PdfOutlineEntry } from "../pdf-document-adapter";
 import type { ReaderNavigationMode } from "../reader-types";
@@ -40,7 +39,6 @@ export function ReaderDocumentNavigation({
   children,
   labels,
   mode,
-  onModeChange,
   onOutlineSelect,
   outline,
 }: {
@@ -48,11 +46,8 @@ export function ReaderDocumentNavigation({
   labels: {
     emptyOutline: string;
     navigation: string;
-    outline: string;
-    pages: string;
   };
   mode: ReaderNavigationMode;
-  onModeChange: (mode: ReaderNavigationMode) => void;
   onOutlineSelect: (destination: unknown) => void;
   outline: PdfOutlineEntry[];
 }) {
@@ -64,24 +59,6 @@ export function ReaderDocumentNavigation({
         mode === "outline" ? "w-64" : "w-28",
       )}
     >
-      <div className="border-line grid h-11 shrink-0 grid-cols-2 gap-1 border-b p-1">
-        <Button
-          className="h-9 min-h-9 px-2 text-xs"
-          onClick={() => onModeChange("thumbnails")}
-          size="sm"
-          variant={mode === "thumbnails" ? "secondary" : "ghost"}
-        >
-          {labels.pages}
-        </Button>
-        <Button
-          className="h-9 min-h-9 px-2 text-xs"
-          onClick={() => onModeChange("outline")}
-          size="sm"
-          variant={mode === "outline" ? "secondary" : "ghost"}
-        >
-          {labels.outline}
-        </Button>
-      </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {mode === "thumbnails" ? (
           children

@@ -343,12 +343,13 @@ function ReaderDocumentWorkspace({
       nextSearchResult: t("search.next"),
       noSearchResults: t("search.empty"),
       openPanel: t("toolbar.openPanel"),
-      outline: t("toolbar.outline"),
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
       previousSearchResult: t("search.previous"),
       returnLibrary: t("returnLibrary"),
       search: t("toolbar.search"),
+      showOutline: t("toolbar.showOutline"),
+      showPages: t("toolbar.showPages"),
       zoomIn: t("toolbar.zoomIn"),
       zoomOut: t("toolbar.zoomOut"),
     }),
@@ -481,9 +482,13 @@ function ReaderDocumentWorkspace({
                 metadata={documentMetadata}
                 onDownload={() => void handleDownload()}
                 onFitModeChange={setFitMode}
-                onOpenOutline={() => {
-                  if (showDocumentNavigation) setNavigationMode("outline");
-                  else setMobileOutlineOpen(true);
+                navigationMode={navigationMode}
+                onToggleNavigation={() => {
+                  if (showDocumentNavigation) {
+                    setNavigationMode((current) =>
+                      current === "outline" ? "thumbnails" : "outline",
+                    );
+                  } else setMobileOutlineOpen(true);
                 }}
                 onOpenPanel={() =>
                   updateLocation({ panel: lastContextPanelRef.current })
@@ -534,11 +539,8 @@ function ReaderDocumentWorkspace({
                     labels={{
                       emptyOutline: t("outline.empty"),
                       navigation: t("navigation.label"),
-                      outline: t("navigation.outline"),
-                      pages: t("navigation.pages"),
                     }}
                     mode={navigationMode}
-                    onModeChange={setNavigationMode}
                     onOutlineSelect={(destination) =>
                       void resolveDestination(destination)
                     }
@@ -599,6 +601,11 @@ function ReaderDocumentWorkspace({
                   onInternalDestination={(destination) =>
                     void resolveDestination(destination)
                   }
+                  onVisiblePageChange={(nextPage) => {
+                    setActiveTextSelection(undefined);
+                    updateLocation({ page: nextPage });
+                  }}
+                  pageCount={pageCount}
                   pageNumber={pageNumber}
                   searchQuery={searchQuery}
                   selectedAnnotationId={selectedAnnotationId}

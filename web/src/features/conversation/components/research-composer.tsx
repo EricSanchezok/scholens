@@ -494,7 +494,12 @@ export function ResearchComposer({
   if (surface === "context-panel") {
     return (
       <form
-        className="border-line bg-surface grid w-full gap-1.5 rounded-[var(--radius-xl)] border p-2 shadow-sm"
+        className={cn(
+          "bg-surface shadow-composer grid w-full gap-1.5 border border-transparent p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
+          expanded
+            ? "rounded-[var(--radius-2xl)]"
+            : "rounded-[var(--radius-full)]",
+        )}
         data-focus-surface
         onSubmit={composerForm.handleSubmit(submit)}
       >

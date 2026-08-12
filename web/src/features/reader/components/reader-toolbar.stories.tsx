@@ -13,12 +13,13 @@ const labels = {
   nextSearchResult: "Next match",
   noSearchResults: "No matches",
   openPanel: "Open context panel",
-  outline: "Document outline",
   page: "Page",
   previousPage: "Previous page",
   previousSearchResult: "Previous match",
   returnLibrary: "Return to library",
   search: "Search PDF",
+  showOutline: "Show document outline",
+  showPages: "Show page thumbnails",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
 };
@@ -31,7 +32,7 @@ const meta = {
     labels,
     onDownload: fn(),
     onFitModeChange: fn(),
-    onOpenOutline: fn(),
+    onToggleNavigation: fn(),
     onOpenPanel: fn(),
     onOpenSearch: fn(),
     onPageChange: fn(),
@@ -40,6 +41,7 @@ const meta = {
     pageCount: 18,
     pageNumber: 4,
     panelOpen: false,
+    navigationMode: "thumbnails",
     title: "Retrieval-Augmented Generation: Foundations and Open Questions",
     metadata: "A. Researcher · 10.1000/rag.2026",
     zoom: 1,
@@ -68,6 +70,10 @@ export const LargeMobile: Story = {
 
 export const ContextPanelOpen: Story = {
   args: { panelOpen: true },
+};
+
+export const OutlineVisible: Story = {
+  args: { navigationMode: "outline" },
 };
 
 export const SearchOpen: Story = {

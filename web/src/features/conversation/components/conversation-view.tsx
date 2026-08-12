@@ -535,7 +535,7 @@ export function ConversationView({
       <div
         className={
           layout === "side-panel"
-            ? "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-4 py-4"
+            ? "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-5 pt-3 pb-6"
             : "flex-1 pt-6 pb-10 lg:py-8"
         }
         data-conversation-scroll-root={
@@ -674,7 +674,7 @@ export function ConversationView({
         <div
           className={
             layout === "side-panel"
-              ? "border-line bg-canvas z-20 shrink-0 border-t p-3"
+              ? "bg-canvas z-20 shrink-0 px-4 pt-2 pb-4"
               : "pointer-events-none sticky bottom-0 z-20 -mx-4 flex justify-center bg-[linear-gradient(to_top,var(--color-bg-canvas)_78%,transparent)] px-4 pt-5 pb-3 min-[390px]:-mx-5 min-[390px]:px-5 sm:-mx-8 lg:mx-0 lg:px-4 lg:pt-10 lg:pb-6"
           }
         >

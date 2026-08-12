@@ -48,15 +48,17 @@ browser body scroll.
 Reader has four independently scrollable regions where applicable:
 
 1. document navigation, showing either page thumbnails or the PDF outline;
-2. the PDF page canvas;
+2. the continuous PDF document canvas;
 3. the active contextual panel;
 4. the paper-conversation list disclosure.
 
 Search is not a fifth panel. On desktop and mobile it temporarily replaces the
 document toolbar controls with a compact query field, result position, and
 previous/next controls. The PDF remains visible and interactive while search is
-active. On desktop, Outline switches the left document-navigation region from
-Pages to Outline; it never opens a modal or obscures the document.
+active. On desktop, one toggle in the document toolbar switches the left
+document-navigation region between page thumbnails and Outline. Its icon and
+accessible name always describe the destination state; it never opens a modal
+or obscures the document.
 
 At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 
@@ -99,9 +101,12 @@ feature-owned `PdfDocumentAdapter`. The worker and main package versions must
 match. PDF code loads on the client and must not enter the server-rendering
 bundle.
 
-The initial surface supports:
+The document surface supports:
 
-- one primary rendered page with previous/next and direct page input;
+- continuous vertical page scrolling with lazy nearby-page rendering;
+- viewport-driven current-page updates in the URL, while previous/next,
+  thumbnails, outline destinations, search results, and direct page input
+  scroll the same document surface;
 - lazy page thumbnails;
 - zoom in/out, fit width, and fit page;
 - PDF text search with result count and previous/next traversal;
@@ -118,8 +123,8 @@ these states do not masquerade as an empty PDF.
 
 Selection has three deliberately separate lifetimes:
 
-- `activeTextSelection` mirrors the browser selection and solely controls the
-  floating toolbar;
+- `activeTextSelection` captures the normalized transient selection, renders
+  its post-pointer overlay, and solely controls the floating toolbar;
 - `pendingTurnContext` is the immutable selection snapshot committed to the Ask
   Composer;
 - `annotationSelection` is the selection snapshot being edited in Annotations.
@@ -130,6 +135,12 @@ and remains inside the rendered page. It contains only the Iconoir icons for
 Ask, Highlight, Note, and Copy; accessible names live in tooltips and
 `aria-label`s rather than visible action text. All four actions use the shared
 control-state and feedback rules.
+
+While the pointer is down, the PDF text layer uses the semantic information
+selection color rather than a neutral page-obscuring wash. After pointer-up,
+Reader replaces the browser-native selection with a normalized overlay that
+remains visible with the floating toolbar until the user acts, presses Escape,
+clicks elsewhere, or moves to another page.
 
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends
@@ -152,7 +163,8 @@ anchor uses one-based page numbers and zero-to-one normalized rectangles.
 ## Paper conversations
 
 Reader lists only conversations whose scope is the current paper. Ask begins
-with a compact current-conversation switcher and a separate New chat icon. The
+with a compact, borderless current-conversation switcher and a separate New chat
+icon. The
 search field and grouped Pinned/Recent list exist only while the switcher is
 open; they are not a permanent row or horizontal pill strip. New chat remains a
 local draft until the first send. Scope filtering and authorization happen on
@@ -162,9 +174,12 @@ locally.
 The Ask message viewport and Composer are two siblings inside the contextual
 panel. Messages own the panel's vertical scroll, while the `context-panel`
 Composer remains docked at the bottom with its input on top and context,
-reasoning, and send controls below. Side-panel presentation may change measure,
-spacing, and docking, but it must reuse the same message, Worklog, answer,
-source, suggestion, retry, and variant components as the workspace layout.
+reasoning, and send controls below. The switcher, message viewport, and Composer
+are separated by spacing rather than stacked card borders; the Composer uses
+the same floating rounded treatment as Home at the narrower panel measure.
+Side-panel presentation may change measure, spacing, and docking, but it must
+reuse the same message, Worklog, answer, source, suggestion, retry, and variant
+components as the workspace layout.
 
 When a selected passage is sent, the turn context contains the document ID,
 page number, selected text, and PDF anchor. A selected annotation is represented

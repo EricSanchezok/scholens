@@ -131,7 +131,7 @@ export function ReaderConversationSwitcher({
   }
 
   return (
-    <div className="border-line flex shrink-0 items-center gap-2 border-b p-3">
+    <div className="flex shrink-0 items-center gap-1 px-3 pt-3 pb-1">
       <Popover
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
@@ -143,7 +143,7 @@ export function ReaderConversationSwitcher({
           <button
             aria-expanded={open}
             className={cn(
-              "border-line hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border px-3 text-left text-sm transition-colors",
+              "hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-2.5 text-left text-sm transition-colors",
               keyboardFocusRing,
             )}
             type="button"
@@ -202,7 +202,12 @@ export function ReaderConversationSwitcher({
           </div>
         </PopoverContent>
       </Popover>
-      <IconButton label={t("new")} onClick={onNew} variant="secondary">
+      <IconButton
+        className="size-10 min-h-10"
+        label={t("new")}
+        onClick={onNew}
+        variant="ghost"
+      >
         <Icon glyph={Plus} size={20} />
       </IconButton>
     </div>
@@ -601,11 +606,16 @@ export function ReaderContextPanel({
       <div className="border-line flex h-14 shrink-0 items-center gap-1 border-b px-3">
         {(["ask", "annotations", "details"] as const).map((item) => (
           <Button
-            className="h-9 min-h-9 px-2"
+            className={cn(
+              "h-9 min-h-9 px-2",
+              activePanel === item && "bg-hover",
+            )}
             key={item}
             onClick={() => onPanelChange(item)}
             size="sm"
-            variant={activePanel === item ? "secondary" : "ghost"}
+            variant="ghost"
+            aria-current={activePanel === item ? "page" : undefined}
+            data-active={activePanel === item || undefined}
           >
             {t(`panels.${item}`)}
           </Button>

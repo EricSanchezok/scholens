@@ -97,6 +97,6 @@ body {
 }
 
 .pdf-text-layer ::selection {
-  background: var(--color-selection-bg);
+  background: var(--color-state-info-bg);
   color: transparent;
 }

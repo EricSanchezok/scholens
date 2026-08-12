@@ -436,10 +436,11 @@
       "fitWidth": "适合宽度",
       "nextPage": "下一页",
       "openPanel": "打开上下文面板",
-      "outline": "论文目录",
       "page": "页码",
       "previousPage": "上一页",
       "search": "搜索 PDF",
+      "showOutline": "显示论文目录",
+      "showPages": "显示页面缩略图",
       "zoomIn": "放大",
       "zoomOut": "缩小"
     },

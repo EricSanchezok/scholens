@@ -7,6 +7,7 @@ import {
   List,
   NavArrowLeft,
   NavArrowRight,
+  Page,
   Search,
   SidebarExpand,
   Xmark,
@@ -41,7 +42,8 @@ export type ReaderToolbarLabels = {
   noSearchResults: string;
   previousSearchResult: string;
   nextSearchResult: string;
-  outline: string;
+  showOutline: string;
+  showPages: string;
   download: string;
   openPanel: string;
   returnLibrary: string;
@@ -54,7 +56,7 @@ export function ReaderToolbar({
   metadata,
   onDownload,
   onFitModeChange,
-  onOpenOutline,
+  onToggleNavigation,
   onOpenPanel,
   onOpenSearch,
   onPageChange,
@@ -63,6 +65,7 @@ export function ReaderToolbar({
   pageCount,
   pageNumber,
   panelOpen,
+  navigationMode,
   title,
   search,
   zoom,
@@ -73,7 +76,7 @@ export function ReaderToolbar({
   metadata?: string;
   onDownload: () => void;
   onFitModeChange: (fit: ReaderFitMode) => void;
-  onOpenOutline: () => void;
+  onToggleNavigation: () => void;
   onOpenPanel: () => void;
   onOpenSearch: () => void;
   onPageChange: (page: number) => void;
@@ -82,6 +85,7 @@ export function ReaderToolbar({
   pageCount: number;
   pageNumber: number;
   panelOpen: boolean;
+  navigationMode: "outline" | "thumbnails";
   search?: {
     currentIndex: number;
     matchCount: number;
@@ -266,11 +270,19 @@ export function ReaderToolbar({
               <Icon glyph={Search} size={20} />
             </IconButton>
             <IconButton
-              label={labels.outline}
-              onClick={onOpenOutline}
+              aria-pressed={navigationMode === "outline"}
+              label={
+                navigationMode === "outline"
+                  ? labels.showPages
+                  : labels.showOutline
+              }
+              onClick={onToggleNavigation}
               variant="ghost"
             >
-              <Icon glyph={List} size={20} />
+              <Icon
+                glyph={navigationMode === "outline" ? Page : List}
+                size={20}
+              />
             </IconButton>
             <IconButton
               className="hidden sm:inline-flex"

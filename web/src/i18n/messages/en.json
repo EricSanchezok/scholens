@@ -436,10 +436,11 @@
       "fitWidth": "Fit width",
       "nextPage": "Next page",
       "openPanel": "Open context panel",
-      "outline": "Document outline",
       "page": "Page",
       "previousPage": "Previous page",
       "search": "Search PDF",
+      "showOutline": "Show document outline",
+      "showPages": "Show page thumbnails",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out"
     },

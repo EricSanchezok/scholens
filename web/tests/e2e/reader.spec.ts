@@ -91,8 +91,25 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Ask" })).toHaveCount(0);
   await expect(
-    page.locator(".shadow-raised.bg-surface > canvas"),
+    page.locator('[data-pdf-page-number="2"] > canvas'),
   ).toBeVisible();
+  await expect(page.locator('[data-pdf-page-number="3"]')).toBeAttached();
+
+  await page.locator('[data-pdf-page-number="3"]').scrollIntoViewIfNeeded();
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("3");
+  await expect(page).toHaveURL(/page=3/);
+
+  await page.getByRole("button", { name: "Previous page" }).click();
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
+
+  const navigationToggle = page.getByRole("button", {
+    name: "Show document outline",
+  });
+  await navigationToggle.click();
+  await expect(
+    page.getByRole("button", { name: "Show page thumbnails" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Show page thumbnails" }).click();
 
   const pageDoesNotOwnViewportScroll = await page.evaluate(() => ({
     body: document.body.scrollHeight <= window.innerHeight,
@@ -102,7 +119,9 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   }));
   expect(pageDoesNotOwnViewportScroll).toEqual({ body: true, root: true });
 
-  const selectableText = page.locator(".pdf-text-layer span").first();
+  const selectableText = page
+    .locator('[data-pdf-page-number="2"] .pdf-text-layer span')
+    .first();
   await expect(selectableText).toBeAttached();
   await selectableText.evaluate((span) => {
     const range = document.createRange();
@@ -116,10 +135,15 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
     name: "Ask about selection",
   });
   await expect(askAboutSelection).toBeVisible();
+  await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toBe("");
   await askAboutSelection.click();
   await expect(page).toHaveURL(/panel=ask/);
   await expect(page.getByText("Selection from page 2")).toBeVisible();
   await expect(askAboutSelection).toHaveCount(0);
+  await expect(page.locator("[data-active-selection-overlay]")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Close panel" }).click();
   await page.getByRole("button", { name: "Open context panel" }).click();
@@ -170,7 +194,7 @@ test("uses an immersive mobile Reader without the Workspace bottom navigation", 
     page.getByRole("button", { name: "Return to library" }),
   ).toBeVisible();
   await expect(
-    page.locator(".shadow-raised.bg-surface > canvas"),
+    page.locator('[data-pdf-page-number="1"] > canvas'),
   ).toBeVisible();
   await expect(page.locator("aside canvas")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Library" })).toHaveCount(0);

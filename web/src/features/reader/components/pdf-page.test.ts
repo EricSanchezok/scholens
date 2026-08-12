@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeReaderSelectionRects } from "./pdf-page";
+import {
+  normalizeReaderSelectionRects,
+  selectReaderViewportPage,
+} from "./pdf-page";
 
 describe("normalizeReaderSelectionRects", () => {
   it("normalizes browser rectangles against the rendered PDF page", () => {
@@ -30,5 +33,25 @@ describe("normalizeReaderSelectionRects", () => {
         { left: 0, top: 0, width: 10, height: 10 },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("selectReaderViewportPage", () => {
+  it("selects the page occupying the largest part of the viewport", () => {
+    expect(
+      selectReaderViewportPage({ top: 100, bottom: 900 }, [
+        { pageNumber: 1, top: -500, bottom: 250 },
+        { pageNumber: 2, top: 266, bottom: 1016 },
+      ]),
+    ).toBe(2);
+  });
+
+  it("uses proximity to the viewport center when pages are equally visible", () => {
+    expect(
+      selectReaderViewportPage({ top: 0, bottom: 800 }, [
+        { pageNumber: 1, top: -200, bottom: 400 },
+        { pageNumber: 2, top: 400, bottom: 900 },
+      ]),
+    ).toBe(2);
   });
 });

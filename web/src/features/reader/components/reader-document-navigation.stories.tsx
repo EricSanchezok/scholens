@@ -47,11 +47,8 @@ const meta = {
     labels: {
       emptyOutline: "This PDF does not include an outline.",
       navigation: "Document navigation",
-      outline: "Outline",
-      pages: "Pages",
     },
     mode: "thumbnails",
-    onModeChange: fn(),
     onOutlineSelect: fn(),
     outline,
   },
