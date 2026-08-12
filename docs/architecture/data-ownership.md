@@ -59,6 +59,11 @@ branch. References, research items, artifacts, and worklog trace belong to a
 concrete response ID. Follow-up suggestions belong to the turn because retries
 and selected variants share the same next-question context.
 
+A turn also owns its typed Reader context. A `paper_selection` captures the
+authorized Document, selected text, one-based page, and normalized PDF anchor;
+a `highlight_thread` captures an authorized Research Item reference. Arbitrary
+reference dictionaries and parallel highlight-ID fields are not persisted.
+
 Only the latest turn may retain multiple completed response variants. Creating
 the next turn removes unselected variants from the previous turn and clears its
 no-longer-visible suggestions. No Identity, Scholight, or Jobs schema owns or
@@ -88,6 +93,12 @@ permission-filtered read projection of Scholens-owned `ResearchItem` rows and
 their existing kind-specific payload tables. Personal, document, and Project
 scope access is resolved by the Server. The Web receives source scope/title as
 projection metadata and must not infer ownership by composing unrelated APIs.
+
+Highlight-thread positions are canonical Research data. PDF selections use
+one-based pages and normalized rectangles; parsed-text selections use validated
+start/end offsets with an optional page projection. Highlight threads are
+private when created or imported unless an authorized visibility mutation
+explicitly shares them.
 
 Paper ingestion jobs retain immutable failure history. A retry creates a new
 `DurableJob` referencing the persisted PDF source and original Project context;

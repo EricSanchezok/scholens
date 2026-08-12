@@ -159,6 +159,42 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_table(
+        "connector_connections",
+        sa.Column("user_id", sa.BigInteger(), nullable=False),
+        sa.Column("provider", sa.Text(), nullable=False),
+        sa.Column("credential_ciphertext", sa.Text(), nullable=False),
+        sa.Column(
+            "enabled",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column("verified_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "provider IN ('anysearch', 'tavily', 'exa', 'firecrawl')",
+            name="ck_connector_connections_provider",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["auth.users.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("user_id", "provider"),
+        schema="scholens",
+    )
+    op.create_table(
         "tool_invocations",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("actor_id", sa.BigInteger(), nullable=False),
@@ -1208,8 +1244,9 @@ def upgrade() -> None:
         sa.Column("created_operation_id", sa.UUID(), nullable=False),
         sa.Column("correlation_id", sa.UUID(), nullable=False),
         sa.Column("user_query", sa.Text(), nullable=False),
+        sa.Column("contexts", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column(
-            "user_references", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+            "suggestions", postgresql.JSONB(astext_type=sa.Text()), nullable=True
         ),
         sa.Column("scope", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("reasoning_level", sa.String(length=16), nullable=False),
@@ -1266,15 +1303,6 @@ def upgrade() -> None:
         sa.Column("references", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("trace", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
-            "suggestions", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
-        sa.Column(
-            "suggestions_status",
-            sa.String(length=16),
-            server_default="idle",
-            nullable=False,
-        ),
-        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
@@ -1289,10 +1317,6 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status IN ('running', 'completed', 'failed', 'cancelled')",
             name="ck_conversation_responses_status",
-        ),
-        sa.CheckConstraint(
-            "suggestions_status IN ('idle', 'pending', 'completed', 'failed')",
-            name="ck_conversation_responses_suggestions_status",
         ),
         sa.ForeignKeyConstraint(
             ["turn_id"], ["scholens.conversation_turns.id"], ondelete="CASCADE"
@@ -2117,6 +2141,7 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("tool_invocations", schema="scholens")
+    op.drop_table("connector_connections", schema="scholens")
     op.drop_index(
         "ix_access_keys_user_revoked",
         table_name="access_keys",

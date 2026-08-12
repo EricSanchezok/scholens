@@ -13,6 +13,7 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationListResponse,
+    ConversationListRequest,
     ConversationTurnsResponse,
     ConversationMoveRequest,
     ConversationResponseVariantResponse,
@@ -39,6 +40,8 @@ conversation_router = APIRouter()
 @conversation_router.get("", response_model=ConversationListResponse)
 def list_conversations(
     archived: bool = False,
+    scope_type: ConversationScopeType | None = None,
+    scope_id: UUID | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
@@ -46,12 +49,17 @@ def list_conversations(
     ),
     current_user: Actor = Depends(get_required_user),
 ) -> ConversationListResponse:
+    request = ConversationListRequest(
+        archived=archived,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        cursor=cursor,
+        limit=limit,
+    )
     return executor.query(
         lambda capabilities: capabilities.conversations.list_page(
             actor=current_user,
-            archived=archived,
-            cursor=cursor,
-            limit=limit,
+            request=request,
         )
     )
 

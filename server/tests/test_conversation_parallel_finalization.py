@@ -158,7 +158,7 @@ class _Conversations:
                 ConversationTurnResponse(
                     id=request.turn_id,
                     user_query=request.user_query,
-                    user_references=None,
+                    contexts=[],
                     scope=None,
                     reasoning_level="standard",
                     locale="en",

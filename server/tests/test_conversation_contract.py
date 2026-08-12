@@ -22,10 +22,16 @@ from app.bootstrap.adapters.conversation_chat_data import (
 from app.modules.conversations.application.chat import ConversationChatScope
 from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
+    ConversationListRequest,
     LibraryPaperContext,
     ConversationMoveRequest,
     SelectedPaperContext,
     ConversationUpdateRequest,
+)
+from app.modules.conversations.application.conversations import (
+    ConversationListPosition,
+    ConversationPage,
+    Conversations,
 )
 from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
@@ -33,7 +39,8 @@ from app.modules.conversations.application.contracts.turns import (
 from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.infrastructure.presenters import serialize_turns
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
-from app.shared.application import Actor
+from app.shared.application import Actor, SignedCursorCodec
+from app.modules.operation_journal.application import OperationJournal
 from app.shared.domain.enums import ConversationScopeType
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
@@ -152,6 +159,8 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
         "document_id",
     } <= set(ConversationContextDocument.__table__.c.keys())
     assert "user_id" not in ConversationTurn.__table__.c
+    assert "contexts" in ConversationTurn.__table__.c
+    assert "user_references" not in ConversationTurn.__table__.c
     assert any(
         constraint.name == "uq_conversation_turns_conversation_sequence"
         for constraint in ConversationTurn.__table__.constraints
@@ -192,6 +201,57 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
     assert "suggestions" not in variant_properties
     assert "suggestions_status" not in variant_properties
     assert "suggestions" in schemas["ConversationTurnResponse"]["properties"]
+    assert "contexts" in schemas["ConversationTurnResponse"]["properties"]
+    assert "user_references" not in schemas["ConversationTurnResponse"]["properties"]
+    create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
+    assert "contexts" in create_properties
+    assert "mentioned_highlight_ids" not in create_properties
+
+
+def test_conversation_list_cursor_is_bound_to_paper_scope() -> None:
+    gateway = MagicMock()
+    next_position = ConversationListPosition(
+        pinned_at=None,
+        updated_at=datetime.now(timezone.utc),
+        conversation_id=uuid.uuid4(),
+    )
+    gateway.list_conversations.return_value = ConversationPage(
+        items=[],
+        next_position=next_position,
+    )
+    service = Conversations(
+        gateway=gateway,
+        list_cursors=SignedCursorCodec(
+            "test-secret",
+            revision="conversation-list-v2",
+            error_code="conversation_cursor_expired",
+        ),
+        turn_cursors=MagicMock(),
+        journal=MagicMock(spec=OperationJournal),
+    )
+    document_id = uuid.uuid4()
+    first_page = service.list_page(
+        actor=_current_user(),
+        request=ConversationListRequest(
+            scope_type=ConversationScopeType.PAPER,
+            scope_id=document_id,
+            limit=20,
+        ),
+    )
+    assert first_page.next_cursor is not None
+    assert gateway.list_conversations.call_args.kwargs["scope_id"] == document_id
+
+    with pytest.raises(AppError) as exc_info:
+        service.list_page(
+            actor=_current_user(),
+            request=ConversationListRequest(
+                scope_type=ConversationScopeType.PAPER,
+                scope_id=uuid.uuid4(),
+                cursor=first_page.next_cursor,
+                limit=20,
+            ),
+        )
+    assert exc_info.value.code == "conversation_cursor_expired"
 
 
 def test_owned_conversation_lookup_filters_id_and_user_in_one_query() -> None:

@@ -173,6 +173,11 @@ completed response variants and permits retry or selection. Starting a newer
 turn deletes the older turn's unselected variants and its now-stale follow-up
 suggestions; persisted history therefore remains linear and bounded.
 
+Reader selections and annotations enter that same aggregate through typed turn
+contexts. Paper-scoped conversation listing is filtered and authorized by the
+Server, and its signed cursor is bound to scope as well as actor and page size;
+the browser never downloads the global collection to filter it locally.
+
 Follow-up suggestions are a non-critical turn sidecar started before answer
 streaming. The model call runs outside an application transaction; the final
 short write locks the conversation and persists only while the turn is still

@@ -466,6 +466,11 @@ def build_conversations(
 ) -> Conversations:
     return Conversations(
         gateway=SqlAlchemyConversationGateway(db),
+        list_cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="conversation-list-v2",
+            error_code="conversation_cursor_expired",
+        ),
         turn_cursors=SignedCursorCodec(
             cursor_secret,
             revision="conversation-turns-v1",

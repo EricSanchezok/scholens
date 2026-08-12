@@ -16,7 +16,6 @@ from app.database.models import (
     Conversation,
     ConversationScopeType,
 )
-from app.shared.domain import JsonValue
 from app.shared.domain import AppError, FailureKind
 from app.helpers.s3 import s3_service
 from app.modules.papers.infrastructure.access import require_document_access
@@ -35,20 +34,23 @@ from app.modules.research.application.contracts import (
     ResearchItemCapabilities,
     ResearchItemResponse,
 )
+from app.modules.research.application.positions import (
+    ResearchPosition,
+    position_columns,
+)
 from pydantic import TypeAdapter
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
+_RESEARCH_POSITION: TypeAdapter[ResearchPosition] = TypeAdapter(ResearchPosition)
+_POSITION_UNSET = object()
 
 
 @dataclass(frozen=True, slots=True)
 class HighlightThreadCreate:
     quote_text: str
-    page_number: int | None
-    start_offset: int | None
-    end_offset: int | None
-    position: dict[str, JsonValue] | None
+    position: ResearchPosition | None
     color: str
     is_shared: bool
     content_role: RoleType
@@ -184,6 +186,7 @@ class ResearchRepository:
         refresh_result: bool = True,
     ) -> ResearchItem:
         require_document_access(db, document_id=document_id, user_id=user_id)
+        page_number, start_offset, end_offset = position_columns(create.position)
         item = ResearchItem(
             kind=ResearchItemKind.HIGHLIGHT_THREAD.value,
             created_by_id=user_id,
@@ -193,10 +196,14 @@ class ResearchRepository:
         )
         item.highlight_thread = HighlightThread(
             quote_text=create.quote_text,
-            page_number=create.page_number,
-            start_offset=create.start_offset,
-            end_offset=create.end_offset,
-            position=create.position,
+            page_number=page_number,
+            start_offset=start_offset,
+            end_offset=end_offset,
+            position=(
+                create.position.model_dump(mode="json")
+                if create.position is not None
+                else None
+            ),
             color=create.color,
             role=create.content_role.value,
             zotero_annotation_key=create.zotero_annotation_key,
@@ -513,9 +520,31 @@ class ResearchRepository:
         if shared is not None and item.is_shared != bool(shared):
             item.is_shared = bool(shared)
             changed = True
-        for field, value in values.items():
-            if getattr(item.highlight_thread, field) != value:
-                setattr(item.highlight_thread, field, value)
+        raw_position = values.pop("position", _POSITION_UNSET)
+        if raw_position is not _POSITION_UNSET:
+            typed_position = (
+                _RESEARCH_POSITION.validate_python(raw_position)
+                if raw_position is not None
+                else None
+            )
+            serialized = (
+                typed_position.model_dump(mode="json")
+                if typed_position is not None
+                else None
+            )
+            page_number, start_offset, end_offset = position_columns(typed_position)
+            for field, anchor_value in {
+                "position": serialized,
+                "page_number": page_number,
+                "start_offset": start_offset,
+                "end_offset": end_offset,
+            }.items():
+                if getattr(item.highlight_thread, field) != anchor_value:
+                    setattr(item.highlight_thread, field, anchor_value)
+                    changed = True
+        for field, update_value in values.items():
+            if getattr(item.highlight_thread, field) != update_value:
+                setattr(item.highlight_thread, field, update_value)
                 changed = True
         if not changed:
             return ResearchItemWrite(value=item, changed=False)
@@ -647,10 +676,13 @@ class ResearchRepository:
         if item.highlight_thread is not None:
             highlight = HighlightThreadContent(
                 quote_text=item.highlight_thread.quote_text,
-                page_number=item.highlight_thread.page_number,
-                start_offset=item.highlight_thread.start_offset,
-                end_offset=item.highlight_thread.end_offset,
-                position=item.highlight_thread.position,
+                position=(
+                    TypeAdapter(ResearchPosition).validate_python(
+                        item.highlight_thread.position
+                    )
+                    if item.highlight_thread.position is not None
+                    else None
+                ),
                 color=item.highlight_thread.color,
                 role=item.highlight_thread.role,
                 comments=[

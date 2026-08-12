@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+import json
 from typing import Protocol
 from uuid import UUID
 
@@ -12,6 +14,7 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationListResponse,
+    ConversationListRequest,
     ConversationTurnsResponse,
     ConversationResponseVariantResponse,
     ConversationMoveRequest,
@@ -23,6 +26,8 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationTurnResponse,
 )
 from app.shared.application import Actor, OperationContext, SignedCursorCodec
+from app.shared.domain import AppError, FailureKind
+from app.shared.domain.enums import ConversationScopeType
 
 CONVERSATION_CREATED = OperationAction("conversation.created")
 CONVERSATION_UPDATED = OperationAction("conversation.updated")
@@ -44,15 +49,30 @@ class ConversationChange[T]:
     changed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationListPosition:
+    pinned_at: datetime | None
+    updated_at: datetime
+    conversation_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationPage:
+    items: list[ConversationSummaryResponse]
+    next_position: ConversationListPosition | None
+
+
 class ConversationGateway(Protocol):
     def list_conversations(
         self,
         *,
         user_id: int,
         archived: bool,
-        cursor: str | None,
+        scope_type: ConversationScopeType | None,
+        scope_id: UUID | None,
+        position: ConversationListPosition | None,
         limit: int,
-    ) -> ConversationListResponse: ...
+    ) -> ConversationPage: ...
 
     def create(
         self,
@@ -131,10 +151,12 @@ class Conversations:
         self,
         *,
         gateway: ConversationGateway,
+        list_cursors: SignedCursorCodec,
         turn_cursors: SignedCursorCodec,
         journal: OperationJournal,
     ) -> None:
         self._gateway = gateway
+        self._list_cursors = list_cursors
         self._turn_cursors = turn_cursors
         self._journal = journal
 
@@ -142,15 +164,61 @@ class Conversations:
         self,
         *,
         actor: Actor,
-        archived: bool,
-        cursor: str | None,
-        limit: int,
+        request: ConversationListRequest,
     ) -> ConversationListResponse:
-        return self._gateway.list_conversations(
+        fingerprint = json.dumps(
+            {
+                "actor_id": actor.id,
+                "archived": request.archived,
+                "scope_type": request.scope_type.value if request.scope_type else None,
+                "scope_id": str(request.scope_id) if request.scope_id else None,
+                "limit": request.limit,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        position: ConversationListPosition | None = None
+        if request.cursor:
+            values = self._list_cursors.decode_keyset(
+                cursor=request.cursor,
+                fingerprint=fingerprint,
+                arity=3,
+            )
+            try:
+                position = ConversationListPosition(
+                    pinned_at=datetime.fromisoformat(values[0]) if values[0] else None,
+                    updated_at=datetime.fromisoformat(values[1]),
+                    conversation_id=UUID(values[2]),
+                )
+            except ValueError as exc:
+                raise AppError(
+                    code="conversation_cursor_expired",
+                    message="Conversation cursor is invalid or expired",
+                    kind=FailureKind.CONFLICT,
+                ) from exc
+        page = self._gateway.list_conversations(
             user_id=actor.id,
-            archived=archived,
-            cursor=cursor,
-            limit=limit,
+            archived=request.archived,
+            scope_type=request.scope_type,
+            scope_id=request.scope_id,
+            position=position,
+            limit=request.limit,
+        )
+        next_cursor = None
+        if page.next_position is not None:
+            next_cursor = self._list_cursors.encode_keyset(
+                fingerprint=fingerprint,
+                values=(
+                    page.next_position.pinned_at.isoformat()
+                    if page.next_position.pinned_at
+                    else "",
+                    page.next_position.updated_at.isoformat(),
+                    str(page.next_position.conversation_id),
+                ),
+            )
+        return ConversationListResponse(
+            items=page.items,
+            next_cursor=next_cursor,
         )
 
     def create(

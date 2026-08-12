@@ -27,6 +27,9 @@ from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.modules.conversations.application.contracts.turns import (
     ConversationTurnCreateRequest,
 )
+from app.modules.conversations.application.contracts.contexts import (
+    HighlightThreadTurnContext,
+)
 from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.modules.papers.infrastructure.repository import document_repository
@@ -199,16 +202,21 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         actor: Actor,
         request: ConversationTurnCreateRequest,
     ) -> MentionScope:
-        if not request.mentioned_highlight_ids:
+        highlight_contexts = [
+            context
+            for context in request.contexts
+            if isinstance(context, HighlightThreadTurnContext)
+        ]
+        if not highlight_contexts:
             return MentionScope(None, None)
 
         snapshot: list[dict[str, JsonValue]] = []
         highlights_by_paper: dict[str, dict[str, JsonValue]] = {}
-        for highlight_id in request.mentioned_highlight_ids or []:
+        for context in highlight_contexts:
             try:
                 item = research_repository.get_highlight_thread_visible(
                     self._session,
-                    thread_id=uuid.UUID(highlight_id),
+                    thread_id=context.thread_id,
                     user_id=actor.id,
                 )
             except AppError:
@@ -250,7 +258,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             highlights.append(
                 {
                     "highlighted_text": highlight.quote_text,
-                    "page_number": highlight.page_number,
+                    "position": highlight.position,
                     "annotations": json_annotations,
                 }
             )
@@ -288,7 +296,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         response_id: uuid.UUID,
         generation_kind: Literal["initial", "retry"],
         user_content: str,
-        user_references: dict[str, JsonValue] | None,
+        contexts: list[dict[str, JsonValue]],
         scope: list[dict[str, JsonValue]] | None,
         reasoning_level: str,
         locale: str,
@@ -304,7 +312,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             created_operation_id=created_operation_id,
             correlation_id=correlation_id,
             user_query=user_content,
-            user_references=user_references,
+            contexts=contexts,
             scope=scope,
             reasoning_level=reasoning_level,
             locale=locale,
@@ -451,22 +459,6 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                 message="Only the latest turn can be retried",
                 kind=FailureKind.CONFLICT,
             )
-        raw_sources = (
-            turn.user_references.get("sources")
-            if isinstance(turn.user_references, dict)
-            else None
-        )
-        sources = raw_sources if isinstance(raw_sources, list) else []
-        user_references = [
-            str(source["reference"])
-            for source in sources
-            if isinstance(source, dict) and source.get("reference") is not None
-        ]
-        mentioned_highlight_ids = [
-            str(item["id"])
-            for item in (turn.scope or [])
-            if item.get("kind") == "highlight" and item.get("id") is not None
-        ]
         return ConversationTurnCreateRequest.model_validate(
             {
                 "turn_id": turn.id,
@@ -474,9 +466,8 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                 "user_query": turn.user_query,
                 "locale": turn.locale,
                 "time_zone": turn.time_zone,
-                "user_references": user_references or None,
+                "contexts": turn.contexts or [],
                 "reasoning_level": turn.reasoning_level,
-                "mentioned_highlight_ids": mentioned_highlight_ids or None,
             }
         )
 

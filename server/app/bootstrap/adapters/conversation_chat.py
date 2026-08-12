@@ -256,17 +256,9 @@ async def stream_conversation_agent(
     if mentions.snapshot is not None:
         scope_snapshot.extend(mentions.snapshot)
 
-    formatted_references = (
-        {
-            "annotations": [],
-            "sources": [
-                {"key": index, "kind": "user", "reference": reference}
-                for index, reference in enumerate(request.user_references, start=1)
-            ],
-        }
-        if request.user_references
-        else None
-    )
+    serialized_contexts = [
+        context.model_dump(mode="json") for context in request.contexts
+    ]
     turn_start = executor.command(
         lambda capabilities: capabilities.conversation_chat_data.start_turn(
             actor=current_user,
@@ -276,11 +268,7 @@ async def stream_conversation_agent(
             response_id=request.response_id,
             generation_kind=generation_kind,
             user_content=request.user_query,
-            user_references=(
-                _JSON_OBJECT.validate_python(formatted_references)
-                if formatted_references is not None
-                else None
-            ),
+            contexts=_JSON_OBJECT_LIST.validate_python(serialized_contexts),
             scope=_JSON_OBJECT_LIST.validate_python(scope_snapshot),
             reasoning_level=request.reasoning_level.value,
             locale=request.locale,
@@ -565,7 +553,7 @@ async def stream_conversation_agent(
         track_event(
             "did_chat_message",
             properties={
-                "has_user_references": bool(request.user_references),
+                "has_turn_context": bool(request.contexts),
                 "has_references": references is not None,
                 "reasoning_level": request.reasoning_level.value,
                 "time_taken": (datetime.now(timezone.utc) - started_at).total_seconds(),

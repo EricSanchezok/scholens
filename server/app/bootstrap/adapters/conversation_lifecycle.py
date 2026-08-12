@@ -8,7 +8,6 @@ from app.database.models import Conversation
 from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
-    ConversationListResponse,
     ConversationMoveRequest,
     ConversationSummaryResponse,
     ConversationUpdateRequest,
@@ -18,7 +17,12 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationTurnResponse,
     ConversationResponseVariantResponse,
 )
-from app.modules.conversations.application.conversations import ConversationChange
+from app.modules.conversations.application.conversations import (
+    ConversationChange,
+    ConversationListPosition,
+    ConversationPage,
+)
+from app.shared.domain.enums import ConversationScopeType
 from app.modules.conversations.infrastructure.presenters import (
     serialize_response,
     serialize_turns,
@@ -57,17 +61,21 @@ class SqlAlchemyConversationGateway:
         *,
         user_id: int,
         archived: bool,
-        cursor: str | None,
+        scope_type: ConversationScopeType | None,
+        scope_id: UUID | None,
+        position: ConversationListPosition | None,
         limit: int,
-    ) -> ConversationListResponse:
-        conversations, next_cursor = conversation_repository.list(
+    ) -> ConversationPage:
+        conversations, has_more = conversation_repository.list(
             self._db,
             user_id=user_id,
             archived=archived,
-            cursor=cursor,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            position=position,
             limit=limit,
         )
-        return ConversationListResponse(
+        return ConversationPage(
             items=[
                 conversation_repository.summarize(
                     self._db,
@@ -75,7 +83,15 @@ class SqlAlchemyConversationGateway:
                 )
                 for conversation in conversations
             ],
-            next_cursor=next_cursor,
+            next_position=(
+                ConversationListPosition(
+                    pinned_at=conversations[-1].pinned_at,
+                    updated_at=conversations[-1].updated_at,
+                    conversation_id=conversations[-1].id,
+                )
+                if has_more and conversations
+                else None
+            ),
         )
 
     def create(

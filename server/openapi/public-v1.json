@@ -1988,7 +1988,7 @@
         "properties": {
           "error": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue-Output"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "title": "Error",
             "type": "object"
@@ -2067,7 +2067,7 @@
         "properties": {
           "references": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue-Output"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "title": "References",
             "type": "object"
@@ -2382,6 +2382,28 @@
         "additionalProperties": false,
         "description": "Create one user turn and its initial generated response.",
         "properties": {
+          "contexts": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "highlight_thread": "#/components/schemas/HighlightThreadTurnContext",
+                  "paper_selection": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                {
+                  "$ref": "#/components/schemas/HighlightThreadTurnContext"
+                }
+              ]
+            },
+            "maxItems": 50,
+            "title": "Contexts",
+            "type": "array"
+          },
           "locale": {
             "enum": [
               "en",
@@ -2389,21 +2411,6 @@
             ],
             "title": "Locale",
             "type": "string"
-          },
-          "mentioned_highlight_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "maxItems": 50,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mentioned Highlight Ids"
           },
           "reasoning_level": {
             "$ref": "#/components/schemas/ReasoningLevel",
@@ -2430,21 +2437,6 @@
             "minLength": 1,
             "title": "User Query",
             "type": "string"
-          },
-          "user_references": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "maxItems": 50,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User References"
           }
         },
         "required": [
@@ -2459,6 +2451,27 @@
       },
       "ConversationTurnResponse": {
         "properties": {
+          "contexts": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "highlight_thread": "#/components/schemas/HighlightThreadTurnContext",
+                  "paper_selection": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                {
+                  "$ref": "#/components/schemas/HighlightThreadTurnContext"
+                }
+              ]
+            },
+            "title": "Contexts",
+            "type": "array"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2488,7 +2501,7 @@
               {
                 "items": {
                   "additionalProperties": {
-                    "$ref": "#/components/schemas/JsonValue-Output"
+                    "$ref": "#/components/schemas/JsonValue"
                   },
                   "type": "object"
                 },
@@ -2537,26 +2550,12 @@
           "user_query": {
             "title": "User Query",
             "type": "string"
-          },
-          "user_references": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User References"
           }
         },
         "required": [
           "id",
           "user_query",
-          "user_references",
+          "contexts",
           "scope",
           "reasoning_level",
           "locale",
@@ -2724,40 +2723,20 @@
             "title": "Color",
             "type": "string"
           },
-          "end_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
-          "page_number": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
           "position": {
-            "anyOf": [
+            "discriminator": {
+              "mapping": {
+                "parsed_text": "#/components/schemas/ParsedTextPosition",
+                "pdf_text": "#/components/schemas/PdfTextPosition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
               {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Input"
-                },
-                "type": "object"
+                "$ref": "#/components/schemas/PdfTextPosition"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/ParsedTextPosition"
               }
             ],
             "title": "Position"
@@ -2769,25 +2748,14 @@
             "type": "string"
           },
           "shared": {
-            "default": true,
+            "default": false,
             "title": "Shared",
             "type": "boolean"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
           }
         },
         "required": [
-          "quote_text"
+          "quote_text",
+          "position"
         ],
         "title": "CreateHighlightThreadRequest",
         "type": "object"
@@ -2903,7 +2871,7 @@
           "citations": {
             "items": {
               "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue-Output"
+                "$ref": "#/components/schemas/JsonValue"
               },
               "type": "object"
             },
@@ -2927,7 +2895,7 @@
           "rows": {
             "items": {
               "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue-Output"
+                "$ref": "#/components/schemas/JsonValue"
               },
               "type": "object"
             },
@@ -3025,7 +2993,7 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
+                  "$ref": "#/components/schemas/JsonValue"
                 },
                 "type": "object"
               },
@@ -3604,35 +3572,24 @@
             "title": "Comments",
             "type": "array"
           },
-          "end_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
-          "page_number": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
           "position": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
                 },
-                "type": "object"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -3647,30 +3604,37 @@
           "role": {
             "title": "Role",
             "type": "string"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
           }
         },
         "required": [
           "quote_text",
-          "page_number",
-          "start_offset",
-          "end_offset",
           "position",
           "color",
           "role",
           "comments"
         ],
         "title": "HighlightThreadContent",
+        "type": "object"
+      },
+      "HighlightThreadTurnContext": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "highlight_thread",
+            "default": "highlight_thread",
+            "title": "Kind",
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "HighlightThreadTurnContext",
         "type": "object"
       },
       "Institution": {
@@ -3910,7 +3874,7 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
+                  "$ref": "#/components/schemas/JsonValue"
                 },
                 "type": "object"
               },
@@ -3972,39 +3936,20 @@
           }
         ]
       },
-      "JsonValue-Input": {
+      "JsonValue": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/JsonScalar"
           },
           {
             "items": {
-              "$ref": "#/components/schemas/JsonValue-Input"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "type": "array"
           },
           {
             "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue-Input"
-            },
-            "type": "object"
-          }
-        ]
-      },
-      "JsonValue-Output": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/JsonScalar"
-          },
-          {
-            "items": {
-              "$ref": "#/components/schemas/JsonValue-Output"
-            },
-            "type": "array"
-          },
-          {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue-Output"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "type": "object"
           }
@@ -5506,6 +5451,44 @@
         "title": "PaperSearchStats",
         "type": "object"
       },
+      "PaperSelectionTurnContext": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/PdfTextPosition"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "paper_selection",
+            "default": "paper_selection",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "selected_text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Selected Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "page_number",
+          "selected_text",
+          "anchor"
+        ],
+        "title": "PaperSelectionTurnContext",
+        "type": "object"
+      },
       "PaperStatus": {
         "enum": [
           "todo",
@@ -5514,6 +5497,114 @@
         ],
         "title": "PaperStatus",
         "type": "string"
+      },
+      "ParsedTextPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "end_offset": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "parsed_text",
+            "default": "parsed_text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Number"
+          },
+          "start_offset": {
+            "minimum": 0.0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_offset",
+          "end_offset"
+        ],
+        "title": "ParsedTextPosition",
+        "type": "object"
+      },
+      "PdfTextPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "pdf_text",
+            "default": "pdf_text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "rects": {
+            "items": {
+              "$ref": "#/components/schemas/PdfTextRect"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Rects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page_number",
+          "rects"
+        ],
+        "title": "PdfTextPosition",
+        "type": "object"
+      },
+      "PdfTextRect": {
+        "additionalProperties": false,
+        "description": "A PDF text rectangle normalized to the page's 0\u20131 coordinate space.",
+        "properties": {
+          "height": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "PdfTextRect",
+        "type": "object"
       },
       "PortalSessionResponse": {
         "properties": {
@@ -6884,17 +6975,6 @@
             ],
             "title": "Document Title"
           },
-          "end_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -6907,16 +6987,30 @@
             "title": "Matching Comments",
             "type": "array"
           },
-          "page_number": {
+          "position": {
             "anyOf": [
               {
-                "type": "integer"
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Page Number"
+            "title": "Position"
           },
           "quote_text": {
             "title": "Quote Text",
@@ -6925,17 +7019,6 @@
           "role": {
             "title": "Role",
             "type": "string"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
           }
         },
         "required": [
@@ -6943,9 +7026,7 @@
           "document_id",
           "document_title",
           "quote_text",
-          "page_number",
-          "start_offset",
-          "end_offset",
+          "position",
           "role",
           "created_at",
           "matching_comments"
@@ -7616,37 +7697,24 @@
             ],
             "title": "Color"
           },
-          "end_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
-          "page_number": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
           "position": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Input"
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
                 },
-                "type": "object"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -7677,18 +7745,6 @@
               }
             ],
             "title": "Shared"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
           }
         },
         "title": "UpdateHighlightThreadRequest",
@@ -9351,6 +9407,39 @@
               "default": false,
               "title": "Archived",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ConversationScopeType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Id"
             }
           },
           {

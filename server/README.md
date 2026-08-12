@@ -90,6 +90,12 @@ Public application routes are under `/api/v1`; provider webhooks are under
 `/webhooks/v1`. `/internal/v1` is reserved for authenticated worker traffic and
 is intentionally not routed by the production edge proxy.
 
+Reader composes the existing Document, Research Item, Conversation, and turn
+stream capabilities. PDF and parsed-text anchors are discriminated application
+contracts, and paper-conversation list cursors are signed against the requested
+scope. Do not add Reader aggregation routes, arbitrary position dictionaries,
+or browser-side conversation authorization.
+
 Conversation turns are created at
 `POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn
 creates another response variant at

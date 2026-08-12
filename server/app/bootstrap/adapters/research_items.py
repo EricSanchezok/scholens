@@ -79,9 +79,6 @@ class SqlAlchemyResearchItemGateway:
             user_id=user_id,
             create=HighlightThreadCreate(
                 quote_text=request.quote_text,
-                page_number=request.page_number,
-                start_offset=request.start_offset,
-                end_offset=request.end_offset,
                 position=request.position,
                 color=request.color,
                 is_shared=request.shared,

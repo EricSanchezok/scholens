@@ -11,6 +11,7 @@ from app.modules.papers.application.contracts.citation import (
     CitationMethod,
 )
 from app.modules.papers.application.contracts.extraction import ResponseCitation
+from app.modules.research.application.positions import ResearchPosition
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -33,10 +34,7 @@ class AnnotationCommentResponse(BaseModel):
 
 class HighlightThreadContent(BaseModel):
     quote_text: str
-    page_number: int | None
-    start_offset: int | None
-    end_offset: int | None
-    position: dict[str, JsonValue] | None
+    position: ResearchPosition | None
     color: str
     role: str
     comments: list[AnnotationCommentResponse]
@@ -130,32 +128,16 @@ class CreateHighlightThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     quote_text: str = Field(min_length=1, max_length=100_000)
-    page_number: int | None = Field(default=None, ge=1)
-    start_offset: int | None = Field(default=None, ge=0)
-    end_offset: int | None = Field(default=None, ge=0)
-    position: dict[str, JsonValue] | None = None
+    position: ResearchPosition
     color: str = Field(default="blue", min_length=1, max_length=32)
-    shared: bool = True
-
-    @model_validator(mode="after")
-    def validate_offsets(self) -> CreateHighlightThreadRequest:
-        if (
-            self.start_offset is not None
-            and self.end_offset is not None
-            and self.end_offset < self.start_offset
-        ):
-            raise ValueError("end_offset must not precede start_offset")
-        return self
+    shared: bool = False
 
 
 class UpdateHighlightThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     quote_text: str | None = Field(default=None, min_length=1, max_length=100_000)
-    page_number: int | None = Field(default=None, ge=1)
-    start_offset: int | None = Field(default=None, ge=0)
-    end_offset: int | None = Field(default=None, ge=0)
-    position: dict[str, JsonValue] | None = None
+    position: ResearchPosition | None = None
     color: str | None = Field(default=None, min_length=1, max_length=32)
     shared: bool | None = None
 

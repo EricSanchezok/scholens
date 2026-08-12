@@ -2399,7 +2399,7 @@ export interface components {
         ConversationStreamErrorEvent: {
             /** Error */
             error: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Response Id
@@ -2421,7 +2421,7 @@ export interface components {
         ConversationStreamReferencesEvent: {
             /** References */
             references: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Response Id
@@ -2548,13 +2548,13 @@ export interface components {
          * @description Create one user turn and its initial generated response.
          */
         ConversationTurnCreateRequest: {
+            /** Contexts */
+            contexts?: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["HighlightThreadTurnContext"])[];
             /**
              * Locale
              * @enum {string}
              */
             locale: "en" | "zh-CN";
-            /** Mentioned Highlight Ids */
-            mentioned_highlight_ids?: string[] | null;
             /** @default standard */
             reasoning_level: components["schemas"]["ReasoningLevel"];
             /**
@@ -2571,11 +2571,11 @@ export interface components {
             turn_id: string;
             /** User Query */
             user_query: string;
-            /** User References */
-            user_references?: string[] | null;
         };
         /** ConversationTurnResponse */
         ConversationTurnResponse: {
+            /** Contexts */
+            contexts: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["HighlightThreadTurnContext"])[];
             /**
              * Id
              * Format: uuid
@@ -2592,7 +2592,7 @@ export interface components {
             responses: components["schemas"]["ConversationResponseVariantResponse"][];
             /** Scope */
             scope: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Selected Response Id */
             selected_response_id: string | null;
@@ -2604,10 +2604,6 @@ export interface components {
             time_zone: string;
             /** User Query */
             user_query: string;
-            /** User References */
-            user_references: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
-            } | null;
         };
         /** ConversationTurnsResponse */
         ConversationTurnsResponse: {
@@ -2655,23 +2651,15 @@ export interface components {
              * @default blue
              */
             color: string;
-            /** End Offset */
-            end_offset?: number | null;
-            /** Page Number */
-            page_number?: number | null;
             /** Position */
-            position?: {
-                [key: string]: components["schemas"]["JsonValue-Input"];
-            } | null;
+            position: components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"];
             /** Quote Text */
             quote_text: string;
             /**
              * Shared
-             * @default true
+             * @default false
              */
             shared: boolean;
-            /** Start Offset */
-            start_offset?: number | null;
         };
         /** CreateJobResponse */
         CreateJobResponse: {
@@ -2703,7 +2691,7 @@ export interface components {
         DataTableContent: {
             /** Citations */
             citations: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Columns */
             columns: string[];
@@ -2711,7 +2699,7 @@ export interface components {
             row_failures: string[];
             /** Rows */
             rows: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Title */
             title: string | null;
@@ -2750,7 +2738,7 @@ export interface components {
             kind: "document";
             /** Locator */
             locator?: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Reference */
             reference: string;
@@ -2915,20 +2903,25 @@ export interface components {
             color: string;
             /** Comments */
             comments: components["schemas"]["AnnotationCommentResponse"][];
-            /** End Offset */
-            end_offset: number | null;
-            /** Page Number */
-            page_number: number | null;
             /** Position */
-            position: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
-            } | null;
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
             /** Quote Text */
             quote_text: string;
             /** Role */
             role: string;
-            /** Start Offset */
-            start_offset: number | null;
+        };
+        /** HighlightThreadTurnContext */
+        HighlightThreadTurnContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "highlight_thread";
+            /**
+             * Thread Id
+             * Format: uuid
+             */
+            thread_id: string;
         };
         /** Institution */
         Institution: {
@@ -2993,7 +2986,7 @@ export interface components {
             project_id: string | null;
             /** Result */
             result: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Started At */
             started_at: string | null;
@@ -3001,11 +2994,8 @@ export interface components {
             status: string;
         };
         JsonScalar: string | number | boolean | null;
-        "JsonValue-Input": components["schemas"]["JsonScalar"] | components["schemas"]["JsonValue-Input"][] | {
-            [key: string]: components["schemas"]["JsonValue-Input"];
-        };
-        "JsonValue-Output": components["schemas"]["JsonScalar"] | components["schemas"]["JsonValue-Output"][] | {
-            [key: string]: components["schemas"]["JsonValue-Output"];
+        JsonValue: components["schemas"]["JsonScalar"] | components["schemas"]["JsonValue"][] | {
+            [key: string]: components["schemas"]["JsonValue"];
         };
         /** Keyword */
         Keyword: {
@@ -3486,11 +3476,69 @@ export interface components {
             /** Total Papers */
             total_papers: number;
         };
+        /** PaperSelectionTurnContext */
+        PaperSelectionTurnContext: {
+            anchor: components["schemas"]["PdfTextPosition"];
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "paper_selection";
+            /** Page Number */
+            page_number: number;
+            /** Selected Text */
+            selected_text: string;
+        };
         /**
          * PaperStatus
          * @enum {string}
          */
         PaperStatus: "todo" | "reading" | "completed";
+        /** ParsedTextPosition */
+        ParsedTextPosition: {
+            /** End Offset */
+            end_offset: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "parsed_text";
+            /** Page Number */
+            page_number?: number | null;
+            /** Start Offset */
+            start_offset: number;
+        };
+        /** PdfTextPosition */
+        PdfTextPosition: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "pdf_text";
+            /** Page Number */
+            page_number: number;
+            /** Rects */
+            rects: components["schemas"]["PdfTextRect"][];
+        };
+        /**
+         * PdfTextRect
+         * @description A PDF text rectangle normalized to the page's 0–1 coordinate space.
+         */
+        PdfTextRect: {
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** PortalSessionResponse */
         PortalSessionResponse: {
             /** Url */
@@ -4009,8 +4057,6 @@ export interface components {
             document_id: string;
             /** Document Title */
             document_title: string | null;
-            /** End Offset */
-            end_offset: number | null;
             /**
              * Id
              * Format: uuid
@@ -4018,14 +4064,12 @@ export interface components {
             id: string;
             /** Matching Comments */
             matching_comments: components["schemas"]["ResearchSearchComment"][];
-            /** Page Number */
-            page_number: number | null;
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
             /** Quote Text */
             quote_text: string;
             /** Role */
             role: string;
-            /** Start Offset */
-            start_offset: number | null;
         };
         /** ResearchVisibilityRequest */
         ResearchVisibilityRequest: {
@@ -4249,20 +4293,12 @@ export interface components {
         UpdateHighlightThreadRequest: {
             /** Color */
             color?: string | null;
-            /** End Offset */
-            end_offset?: number | null;
-            /** Page Number */
-            page_number?: number | null;
             /** Position */
-            position?: {
-                [key: string]: components["schemas"]["JsonValue-Input"];
-            } | null;
+            position?: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
             /** Quote Text */
             quote_text?: string | null;
             /** Shared */
             shared?: boolean | null;
-            /** Start Offset */
-            start_offset?: number | null;
         };
         /**
          * UpdateProfileBody
@@ -5249,6 +5285,8 @@ export interface operations {
         parameters: {
             query?: {
                 archived?: boolean;
+                scope_type?: components["schemas"]["ConversationScopeType"] | null;
+                scope_id?: string | null;
                 cursor?: string | null;
                 limit?: number;
             };

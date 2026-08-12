@@ -8,6 +8,8 @@ from app.modules.research.application.search import (
     ResearchSearchResponse,
     ResearchSearchResult,
 )
+from app.modules.research.application.positions import ResearchPosition
+from pydantic import TypeAdapter
 from app.bootstrap.adapters.research_access import research_item_visible_to
 from app.modules.research.infrastructure.models import (
     AnnotationComment,
@@ -87,9 +89,11 @@ class SqlResearchSearch:
                     document_id=item.document_id,
                     document_title=item.document.title if item.document else None,
                     quote_text=thread.quote_text,
-                    page_number=thread.page_number,
-                    start_offset=thread.start_offset,
-                    end_offset=thread.end_offset,
+                    position=(
+                        TypeAdapter(ResearchPosition).validate_python(thread.position)
+                        if thread.position is not None
+                        else None
+                    ),
                     role=thread.role,
                     created_at=item.created_at,
                     matching_comments=comments,

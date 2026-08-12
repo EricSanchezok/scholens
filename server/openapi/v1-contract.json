@@ -155,9 +155,6 @@
       "delete",
       "post"
     ],
-    "/api/v1/library/papers/{document_id}/tags/{tag_id}": [
-      "delete"
-    ],
     "/api/v1/library/summary": [
       "get"
     ],
@@ -166,7 +163,11 @@
       "post"
     ],
     "/api/v1/library/tags/assignments": [
-      "post"
+      "put"
+    ],
+    "/api/v1/library/tags/{tag_id}": [
+      "delete",
+      "patch"
     ],
     "/api/v1/me": [
       "get"

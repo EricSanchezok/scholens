@@ -267,11 +267,8 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
 
     assert [path.name for path in versions] == [
         "2026_07_28_1030_scholens_initial.py",
-        "2026_07_31_1500_connector_connections.py",
-        "2026_08_11_1700_turn_suggestions.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
-    connector_migration = versions[1].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline
     assert "scholens.document_content_trigger" in baseline
     assert "scholens.document_passages_tsvector_trigger" in baseline
@@ -285,8 +282,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         assert f"NEW.{field}" in baseline
     assert "paper_passages" not in baseline
     assert "discover_searches" not in baseline
-    assert 'down_revision: str | None = "b12d7d620e91"' in connector_migration
-    assert '"connector_connections"' in connector_migration
+    assert '"connector_connections"' in baseline
 
 
 def test_global_discovery_surfaces_are_absent_from_client_sources() -> None:

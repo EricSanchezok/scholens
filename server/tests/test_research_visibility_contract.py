@@ -197,13 +197,45 @@ def test_personal_research_is_always_private() -> None:
     assert not stranger.can_view and not stranger.can_manage
 
 
-def test_highlight_request_is_strict_and_shared_by_default() -> None:
-    request = CreateHighlightThreadRequest.model_validate({"quote_text": "Evidence"})
-    assert request.shared is True
+def test_highlight_request_requires_typed_position_and_is_private_by_default() -> None:
+    request = CreateHighlightThreadRequest.model_validate(
+        {
+            "quote_text": "Evidence",
+            "position": {
+                "kind": "pdf_text",
+                "page_number": 1,
+                "rects": [{"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04}],
+            },
+        }
+    )
+    assert request.shared is False
+
+    with pytest.raises(ValidationError):
+        CreateHighlightThreadRequest.model_validate({"quote_text": "Evidence"})
 
     with pytest.raises(ValidationError):
         CreateHighlightThreadRequest.model_validate(
-            {"quote_text": "Evidence", "project_id": str(uuid.uuid4())}
+            {
+                "quote_text": "Evidence",
+                "position": {
+                    "kind": "pdf_text",
+                    "page_number": 1,
+                    "rects": [{"x": 0.9, "y": 0.2, "width": 0.2, "height": 0.04}],
+                },
+            }
+        )
+
+    with pytest.raises(ValidationError):
+        CreateHighlightThreadRequest.model_validate(
+            {
+                "quote_text": "Evidence",
+                "position": {
+                    "kind": "parsed_text",
+                    "start_offset": 0,
+                    "end_offset": 8,
+                },
+                "project_id": str(uuid.uuid4()),
+            }
         )
     with pytest.raises(ValidationError):
         ResearchVisibilityRequest.model_validate(

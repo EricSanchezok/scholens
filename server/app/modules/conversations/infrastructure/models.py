@@ -92,8 +92,8 @@ class ConversationTurn(Base):
         index=True,
     )
     user_query: Mapped[str] = mapped_column(Text, nullable=False)
-    user_references: Mapped[dict[str, JsonValue] | None] = mapped_column(
-        JSONB, nullable=True
+    contexts: Mapped[list[dict[str, JsonValue]]] = mapped_column(
+        JSONB, nullable=False, default=list
     )
     scope: Mapped[list[dict[str, JsonValue]] | None] = mapped_column(
         JSONB, nullable=True

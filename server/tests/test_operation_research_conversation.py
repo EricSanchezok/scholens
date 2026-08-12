@@ -68,7 +68,16 @@ def test_research_creation_requires_explicit_role_and_journals_change() -> None:
     service = ResearchItems(gateway, journal=journal)
     actor = _actor()
     operation = _operation()
-    request = CreateHighlightThreadRequest(quote_text="Evidence")
+    request = CreateHighlightThreadRequest.model_validate(
+        {
+            "quote_text": "Evidence",
+            "position": {
+                "kind": "parsed_text",
+                "start_offset": 0,
+                "end_offset": 8,
+            },
+        }
+    )
 
     assert (
         service.create_highlight(
@@ -154,6 +163,7 @@ def _conversations(
 ) -> Conversations:
     return Conversations(
         gateway=gateway,
+        list_cursors=MagicMock(),
         turn_cursors=MagicMock(),
         journal=journal,
     )

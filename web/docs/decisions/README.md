@@ -22,6 +22,7 @@ history; add a later ADR that supersedes it.
 - [ADR 0010: Turn suggestions and two-stage response readiness](./0010-turn-suggestions-and-response-ready.md)
 - [ADR 0011: Library projections and signed keyset pagination](./0011-library-projections-and-keyset-pagination.md)
 - [ADR 0012: Atomic paper-ingestion acceptance and cooperative cancellation](./0012-atomic-paper-ingestion-lifecycle.md)
+- [ADR 0013: Reader context and anchor contracts](./0013-reader-context-and-anchor-contracts.md)
 
 ## Template
 

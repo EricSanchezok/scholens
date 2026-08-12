@@ -15,6 +15,7 @@ from app.bootstrap.adapters.research_repository import (
     research_repository,
 )
 from app.modules.papers.application.contracts.extraction import PaperMetadataExtraction
+from app.modules.research.application.positions import ParsedTextPosition
 from app.shared.application import Actor
 from sqlalchemy.orm import Session
 
@@ -95,12 +96,13 @@ def create_ai_highlights(
             user_id=user.id,
             create=HighlightThreadCreate(
                 quote_text=highlight.text,
-                start_offset=offsets[0],
-                end_offset=offsets[1],
-                page_number=page_number,
-                position=None,
+                position=ParsedTextPosition(
+                    start_offset=offsets[0],
+                    end_offset=offsets[1],
+                    page_number=page_number,
+                ),
                 color="blue",
-                is_shared=True,
+                is_shared=False,
                 content_role=RoleType.ASSISTANT,
             ),
             refresh_result=False,

@@ -23,6 +23,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from app.modules.conversations.application.contracts.contexts import TurnContext
 
 
 class LibraryPaperContext(BaseModel):
@@ -143,6 +144,30 @@ class ConversationListResponse(BaseModel):
     next_cursor: str | None
 
 
+class ConversationListRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    archived: bool = False
+    scope_type: ConversationScopeType | None = None
+    scope_id: UUID | None = None
+    cursor: str | None = None
+    limit: int = Field(default=50, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def validate_scope_filter(self) -> ConversationListRequest:
+        if self.scope_type is None:
+            if self.scope_id is not None:
+                raise ValueError("scope_id requires scope_type")
+            return self
+        needs_id = self.scope_type in {
+            ConversationScopeType.PAPER,
+            ConversationScopeType.PROJECT,
+        }
+        if needs_id != (self.scope_id is not None):
+            raise ValueError("scope_id does not match scope_type")
+        return self
+
+
 class ConversationDetailResponse(ConversationSummaryResponse):
     paper_context: PaperContext
     tool_permissions: OrderedWorkspacePermissions
@@ -171,7 +196,7 @@ class ConversationResponseVariantResponse(BaseModel):
 class ConversationTurnResponse(BaseModel):
     id: UUID
     user_query: str
-    user_references: dict[str, JsonValue] | None
+    contexts: list[TurnContext]
     scope: list[dict[str, JsonValue]] | None
     reasoning_level: str
     locale: Literal["en", "zh-CN"]

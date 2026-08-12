@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.shared.domain import JsonValue
 from app.shared.domain.enums import ReasoningLevel
+from app.modules.conversations.application.contracts.contexts import TurnContext
 from app.modules.conversations.application.contracts.conversations import (
     ConversationTurnResponse,
 )
@@ -116,24 +117,8 @@ class ConversationTurnCreateRequest(BaseModel):
     user_query: str = Field(min_length=1, max_length=20_000)
     locale: Literal["en", "zh-CN"]
     time_zone: str = Field(min_length=1, max_length=100)
-    user_references: list[str] | None = Field(default=None, max_length=50)
+    contexts: list[TurnContext] = Field(default_factory=list, max_length=50)
     reasoning_level: ReasoningLevel = ReasoningLevel.STANDARD
-    mentioned_highlight_ids: list[str] | None = Field(default=None, max_length=50)
-
-    @field_validator("mentioned_highlight_ids")
-    @classmethod
-    def validate_mentioned_ids(cls, value: list[str] | None) -> list[str] | None:
-        if value is not None:
-            for item in value:
-                uuid.UUID(item)
-        return value
-
-    @field_validator("user_references")
-    @classmethod
-    def validate_references(cls, value: list[str] | None) -> list[str] | None:
-        if value is not None and any(len(item) > 5_000 for item in value):
-            raise ValueError("Reference text exceeds maximum length")
-        return value
 
     @field_validator("time_zone")
     @classmethod

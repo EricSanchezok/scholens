@@ -12,6 +12,12 @@ from app.bootstrap.adapters.research_repository import (
     HighlightThreadCreate,
     research_repository,
 )
+from app.modules.research.application.positions import (
+    ParsedTextPosition,
+    PdfTextPosition,
+    PdfTextRect,
+    ResearchPosition,
+)
 from app.database.models import RoleType, ZoteroImportSource, ZoteroImportStatus
 from app.llm.utils import find_offsets
 from app.modules.integrations.zotero.infrastructure.import_repository import (
@@ -89,7 +95,7 @@ def _position(
     data: dict[str, Any],
     *,
     page_dimensions: dict[int, tuple[float, float]],
-) -> dict[str, Any] | None:
+) -> PdfTextPosition | None:
     position_raw = data.get("annotationPosition")
     if not position_raw:
         return None
@@ -106,7 +112,7 @@ def _position(
 
     page_number = page_index + 1
     page_width, page_height = page_dimensions.get(page_index, (0.0, 0.0))
-    rects: list[dict[str, float | int]] = []
+    rects: list[PdfTextRect] = []
     for raw_rect in raw_rects:
         try:
             if isinstance(raw_rect, (list, tuple)) and len(raw_rect) >= 4:
@@ -133,33 +139,25 @@ def _position(
                 continue
         except (TypeError, ValueError):
             continue
+        if page_width <= 0 or page_height <= 0:
+            continue
+        normalized_x = max(0.0, min(x1, x2) / page_width)
+        normalized_y = max(0.0, min(y1, y2) / page_height)
+        normalized_width = min(abs(x2 - x1) / page_width, 1 - normalized_x)
+        normalized_height = min(abs(y2 - y1) / page_height, 1 - normalized_y)
+        if normalized_width <= 0 or normalized_height <= 0:
+            continue
         rects.append(
-            {
-                "x1": x1,
-                "y1": y1,
-                "x2": x2,
-                "y2": y2,
-                "width": page_width,
-                "height": page_height,
-                "pageNumber": page_number,
-            }
+            PdfTextRect(
+                x=normalized_x,
+                y=normalized_y,
+                width=normalized_width,
+                height=normalized_height,
+            )
         )
     if not rects:
         return None
-    bounding = {
-        "x1": min(rect["x1"] for rect in rects),
-        "y1": min(rect["y1"] for rect in rects),
-        "x2": max(rect["x2"] for rect in rects),
-        "y2": max(rect["y2"] for rect in rects),
-        "width": page_width,
-        "height": page_height,
-        "pageNumber": page_number,
-    }
-    return {
-        "boundingRect": bounding,
-        "rects": rects,
-        "usePdfCoordinates": True,
-    }
+    return PdfTextPosition(page_number=page_number, rects=rects)
 
 
 def _normalized_annotation(
@@ -252,22 +250,29 @@ def apply_annotation_snapshot(
 
             page_number = get_start_page_from_offset(page_offsets, start_offset)
 
+        position: ResearchPosition | None = _position(
+            data,
+            page_dimensions=dimensions,
+        )
+        if position is None and start_offset is not None and end_offset is not None:
+            position = ParsedTextPosition(
+                start_offset=start_offset,
+                end_offset=end_offset,
+                page_number=page_number,
+            )
         thread = research_repository.create_highlight_thread(
             db,
             document_id=document_id,
             user_id=user.id,
             create=HighlightThreadCreate(
                 quote_text=quote_text,
-                start_offset=start_offset,
-                end_offset=end_offset,
-                page_number=page_number,
-                position=_position(data, page_dimensions=dimensions),
+                position=position,
                 color=_map_color(
                     str(data["annotationColor"])
                     if data.get("annotationColor") is not None
                     else None
                 ),
-                is_shared=True,
+                is_shared=False,
                 content_role=RoleType.USER,
                 zotero_annotation_key=zotero_key,
             ),

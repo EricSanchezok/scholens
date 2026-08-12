@@ -43,6 +43,9 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationStreamAssistantItemStartEvent,
     ConversationStreamReferencesEvent,
 )
+from app.modules.conversations.application.contracts.contexts import (
+    PaperSelectionTurnContext,
+)
 from app.modules.conversations.application.contracts.trace import (
     ConversationActivity,
     ConversationCitationSummary,
@@ -307,7 +310,11 @@ class ScholensConversationAgent:
             tool_access=tool_access,
             context_payload=context_payload,
             direct_sources=direct_sources,
-            user_materials=list(request.user_references or ()),
+            user_materials=[
+                context.selected_text
+                for context in request.contexts
+                if isinstance(context, PaperSelectionTurnContext)
+            ],
             document_source_texts=document_source_texts,
         )
         initial_packet = self._answer_packet(deps)

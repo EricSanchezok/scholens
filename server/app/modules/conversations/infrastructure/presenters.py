@@ -53,7 +53,7 @@ def serialize_turns(
                 {
                     "id": turn.id,
                     "user_query": turn.user_query,
-                    "user_references": turn.user_references,
+                    "contexts": turn.contexts or [],
                     "scope": turn.scope,
                     "reasoning_level": turn.reasoning_level,
                     "locale": turn.locale,
