@@ -59,3 +59,26 @@ export const DisabledPrimary: Story = {
     );
   },
 };
+
+export const DisabledGhost: Story = {
+  render: () => (
+    <div>
+      <IconButton disabled label="Previous page" variant="ghost">
+        <Icon glyph={Plus} size={20} />
+      </IconButton>
+      <span className="bg-transparent" data-transparent-reference />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const button = within(canvasElement).getByRole("button", {
+      name: "Previous page",
+    });
+    const transparentReference = canvasElement.querySelector(
+      "[data-transparent-reference]",
+    );
+    await expect(button).toBeDisabled();
+    await expect(getComputedStyle(button).backgroundColor).toBe(
+      getComputedStyle(transparentReference!).backgroundColor,
+    );
+  },
+};

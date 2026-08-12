@@ -8,18 +8,18 @@ import { cn } from "@/lib/utilities/cn";
 import { keyboardFocusRing } from "./focus";
 
 export const buttonVariants = cva(
-  `inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] border text-sm font-medium transition-colors ${keyboardFocusRing} disabled:pointer-events-none disabled:border-transparent disabled:bg-[var(--color-action-disabled-bg)] disabled:text-disabled disabled:[&_svg]:text-ui-icon-disabled aria-busy:cursor-wait`,
+  `inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] border text-sm font-medium transition-colors ${keyboardFocusRing} disabled:pointer-events-none disabled:border-transparent disabled:text-disabled disabled:[&_svg]:text-ui-icon-disabled aria-busy:cursor-wait`,
   {
     variants: {
       variant: {
         primary:
-          "border-primary bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-hover",
+          "border-primary bg-primary text-primary-foreground hover:bg-primary-hover active:bg-primary-hover disabled:bg-[var(--color-action-disabled-bg)]",
         secondary:
-          "border-line bg-surface text-foreground hover:bg-hover active:bg-pressed",
+          "border-line bg-surface text-foreground hover:bg-hover active:bg-pressed disabled:bg-[var(--color-action-disabled-bg)]",
         ghost:
-          "border-transparent bg-transparent text-foreground hover:bg-hover active:bg-pressed",
+          "border-transparent bg-transparent text-foreground hover:bg-hover active:bg-pressed disabled:bg-transparent",
         danger:
-          "border-[var(--color-danger-border)] bg-state-danger-bg text-danger hover:brightness-95",
+          "border-[var(--color-danger-border)] bg-state-danger-bg text-danger hover:brightness-95 disabled:bg-[var(--color-action-disabled-bg)]",
       },
       size: {
         sm: "h-11 px-3 sm:h-9",

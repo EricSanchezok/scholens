@@ -76,6 +76,14 @@ export const OutlineVisible: Story = {
   args: { navigationMode: "outline" },
 };
 
+export const FirstPage: Story = {
+  args: { pageNumber: 1 },
+};
+
+export const LastPage: Story = {
+  args: { pageNumber: 18 },
+};
+
 export const SearchOpen: Story = {
   args: {
     search: {

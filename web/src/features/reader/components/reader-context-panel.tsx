@@ -3,7 +3,6 @@
 import {
   Check,
   EditPencil,
-  List,
   NavArrowDown,
   Pin,
   Plus,
@@ -292,10 +291,9 @@ export function ReaderAnnotationPanel({
         </section>
       )}
       {annotations.length === 0 && !annotationSelection ? (
-        <div className="grid min-h-48 place-items-center text-center">
+        <div className="grid min-h-48 place-items-center px-6 text-center">
           <div>
-            <Icon glyph={List} size={24} tone="secondary" />
-            <p className="mt-3 text-sm font-medium">{t("emptyTitle")}</p>
+            <p className="text-sm font-medium">{t("emptyTitle")}</p>
             <p className="text-muted mt-1 max-w-64 text-sm">
               {t("emptyDescription")}
             </p>

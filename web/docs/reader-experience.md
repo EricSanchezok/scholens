@@ -107,6 +107,8 @@ The document surface supports:
 - viewport-driven current-page updates in the URL, while previous/next,
   thumbnails, outline destinations, search results, and direct page input
   scroll the same document surface;
+- icon-only page controls retain their footprint at the first and last page,
+  but express the unavailable direction with a muted icon and no filled block;
 - lazy page thumbnails;
 - zoom in/out, fit width, and fit page;
 - PDF text search with result count and previous/next traversal;
@@ -168,6 +170,8 @@ moves to another page.
 Annotation rows and PDF overlays share a single active annotation ID. Choosing
 either representation navigates to and emphasizes the other. A persisted PDF
 anchor uses one-based page numbers and zero-to-one normalized rectangles.
+The empty Annotations panel is a quiet typographic prompt without a decorative
+list icon; the panel tab already provides the necessary context.
 
 ## Paper conversations
 
