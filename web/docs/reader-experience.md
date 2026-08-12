@@ -146,17 +146,17 @@ remain unavailable until their owning features exist.
 Every reusable Reader component needs Storybook coverage and the route needs
 Playwright coverage for the following matrix:
 
-| Surface | Required states |
-| --- | --- |
-| Document | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted |
-| Navigation | first page, middle page, last page, direct page input, fit width, fit page, zoomed |
-| Search and outline | closed, query with no result, one result, multiple results, no outline, nested outline |
-| Selection | selected, Ask context, color menu, note editor, copied, cancelled |
-| Annotations | empty, populated, selected, editing, deleting, permission denied |
-| Ask | local new chat, streaming, response ready, suggestions delayed, historical, retried variants, source open |
-| Conversations | loading, empty, populated, searched, pinned, active, local new chat |
-| Responsive | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion |
-| Appearance | Light, Dark, English, Simplified Chinese, long title, narrow content |
+| Surface            | Required states                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                         |
+| Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                        |
+| Search and outline | closed, query with no result, one result, multiple results, no outline, nested outline                    |
+| Selection          | selected, Ask context, color menu, note editor, copied, cancelled                                         |
+| Annotations        | empty, populated, selected, editing, deleting, permission denied                                          |
+| Ask                | local new chat, streaming, response ready, suggestions delayed, historical, retried variants, source open |
+| Conversations      | loading, empty, populated, searched, pinned, active, local new chat                                       |
+| Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                          |
+| Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                      |
 
 Figma frame names and Storybook story names use the same state terms. Obsolete
 Reader conversation-only mocks and any duplicated answer UI stay archived and

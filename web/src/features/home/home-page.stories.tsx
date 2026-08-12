@@ -394,7 +394,7 @@ export const MobileNavigationOpen: Story = {
       Math.abs(dialog.getBoundingClientRect().width - window.innerWidth),
     ).toBeLessThanOrEqual(1);
     await expect(getComputedStyle(panel).backgroundColor).not.toBe(
-      "rgba(0, 0, 0, 0)",
+      "transparent",
     );
     await expect(overlay).not.toBeNull();
     await expect(Number(getComputedStyle(dialog).zIndex)).toBeGreaterThan(

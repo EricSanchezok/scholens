@@ -201,7 +201,7 @@ export const homeTurns: ConversationTurn[] = [
     reasoning_level: "standard",
     scope: null,
     sequence: 1,
-    user_references: null,
+    contexts: [],
     selected_response_id: "40000000-0000-4000-8000-000000000002",
     suggestions: [
       "How does this compare with a retrieval-only assistant?",

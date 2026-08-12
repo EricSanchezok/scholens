@@ -125,13 +125,15 @@ export const libraryOutputs: LibraryOutput[] = [
       highlight_thread: {
         color: "yellow",
         comments: [],
-        end_offset: 148,
-        page_number: 6,
-        position: null,
+        position: {
+          end_offset: 148,
+          kind: "parsed_text",
+          page_number: 6,
+          start_offset: 64,
+        },
         quote_text:
           "Self-attention connects all positions with a constant number of sequential operations.",
         role: "owner",
-        start_offset: 64,
       },
       id: "76000000-0000-4000-8000-000000000001",
       kind: "highlight_thread",

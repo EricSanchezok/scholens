@@ -8,10 +8,10 @@ import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import {
   ResearchComposer,
+  type ComposerValues,
   type ResearchContext,
   type ReasoningLevel,
-} from "./research-composer";
-import type { ComposerValues } from "../schemas";
+} from "@/features/conversation";
 import type { UseFormReturn } from "react-hook-form";
 import { LibraryIcon, ProjectIcon } from "./home-icons";
 

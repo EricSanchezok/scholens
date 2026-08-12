@@ -2,13 +2,13 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 
 import type { components } from "@/lib/api/generated/schema";
-import { homePapers, homeProjects, homeTurns } from "../api/fixtures";
-import type { LiveTurn } from "../conversation-state";
+import type { LiveTurn } from "@/features/conversation";
 import {
   ConversationView,
   type ConversationResponseVariant,
   type ConversationTurn,
-} from "./conversation-view";
+} from "@/features/conversation";
+import { homePapers, homeProjects, homeTurns } from "../api/fixtures";
 
 type ReferenceBundle = components["schemas"]["ReferenceBundle"];
 
@@ -44,7 +44,7 @@ function turn(
     reasoning_level: "standard",
     scope: null,
     sequence: 1,
-    user_references: null,
+    contexts: [],
     selected_response_id: responses.at(-1)?.id ?? null,
     suggestions: [
       "What is tomorrow’s date?",

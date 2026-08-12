@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
+import { ResearchComposer } from "@/features/conversation";
 import { homePapers, homeProjects } from "../api/fixtures";
-import { ResearchComposer } from "./research-composer";
 
 const meta = {
   title: "Features/Home/Research Composer",

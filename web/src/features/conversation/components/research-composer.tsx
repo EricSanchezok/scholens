@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUp, AtSign, NavArrowDown, Square } from "iconoir-react";
+import { ArrowUp, AtSign, NavArrowDown, Page, Square } from "iconoir-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
@@ -27,7 +27,6 @@ import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { composerSchema, type ComposerValues } from "../schemas";
-import { PaperIcon } from "./home-icons";
 
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
@@ -517,7 +516,7 @@ export function ResearchComposer({
       {context.kind === "selection" && selectionCount > 0 ? (
         <div className="col-span-4 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
           <span className="bg-subtle text-secondary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
-            <Icon glyph={PaperIcon} size={16} tone="secondary" />
+            <Icon glyph={Page} size={16} tone="secondary" />
             {t("context.selectionSummary", { count: selectionCount })}
           </span>
         </div>

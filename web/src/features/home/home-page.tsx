@@ -9,42 +9,37 @@ import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
-  WorkspaceNewChatAction,
-  WorkspaceShell,
-} from "@/features/workspace-shell";
-import { ConversationView } from "./components/conversation-view";
-import {
+  ConversationView,
   conversationFailureFromError,
-  createLiveTurn,
-  reduceLiveTurn,
-  type LiveTurn,
-} from "./conversation-state";
-import { HomeDashboard } from "./components/home-dashboard";
-import { useDesktopLayout } from "./hooks/use-desktop-layout";
-import { useMobileKeyboard } from "./hooks/use-mobile-keyboard";
-import {
+  conversationKeys,
+  conversationQueries,
   createConversation,
+  createLiveTurn,
+  ReasoningMenu,
+  reduceLiveTurn,
+  ResearchComposer,
   selectConversationResponse,
   streamConversationRetry,
   streamConversationTurn,
   updateConversationContext,
-  type ConversationStreamEvent,
-} from "./api/conversations";
-import { homeKeys } from "./api/keys";
-import { homeQueries } from "./api/queries";
-import {
   updateLatestTurnSuggestions,
   upsertConversationTurn,
-  type ConversationTurnsResponse,
-} from "./api/conversation-cache";
-import {
-  ReasoningMenu,
-  ResearchComposer,
   useResearchComposerForm,
+  type ConversationStreamEvent,
+  type ConversationTurn,
+  type ConversationTurnsResponse,
+  type LiveTurn,
   type ReasoningLevel,
   type ResearchContext,
-} from "./components/research-composer";
-import type { ConversationTurn } from "./components/conversation-view";
+} from "@/features/conversation";
+import {
+  WorkspaceNewChatAction,
+  WorkspaceShell,
+} from "@/features/workspace-shell";
+import { HomeDashboard } from "./components/home-dashboard";
+import { useDesktopLayout } from "./hooks/use-desktop-layout";
+import { useMobileKeyboard } from "./hooks/use-mobile-keyboard";
+import { homeQueries } from "./api/queries";
 
 type StreamSession = {
   conversationId: string;
@@ -105,15 +100,15 @@ export function HomeWorkspace({
 
   const activeConversationId = initialConversationId ?? pendingConversationId;
 
-  const conversationsQuery = useQuery(homeQueries.conversations());
+  const conversationsQuery = useQuery(conversationQueries.list());
   const papersQuery = useQuery(homeQueries.papers());
   const projectsQuery = useQuery(homeQueries.projects());
   const conversationQuery = useQuery({
-    ...homeQueries.conversation(activeConversationId ?? ""),
+    ...conversationQueries.detail(activeConversationId ?? ""),
     enabled: Boolean(activeConversationId),
   });
   const turnsQuery = useQuery({
-    ...homeQueries.turns(activeConversationId ?? ""),
+    ...conversationQueries.turns(activeConversationId ?? ""),
     enabled: Boolean(activeConversationId),
   });
 
@@ -184,15 +179,15 @@ export function HomeWorkspace({
       }
       session.ready = true;
       queryClient.setQueryData<ConversationTurnsResponse>(
-        homeKeys.turns(session.conversationId),
+        conversationKeys.turns(session.conversationId),
         (current) => upsertConversationTurn(current, event.turn),
       );
       releaseSubmission(session);
       void queryClient.invalidateQueries({
-        queryKey: homeKeys.conversations(),
+        queryKey: conversationKeys.lists(),
       });
       void queryClient.invalidateQueries({
-        queryKey: homeKeys.conversation(session.conversationId),
+        queryKey: conversationKeys.detail(session.conversationId),
       });
     } else if (event.type === "suggestions") {
       if (
@@ -202,7 +197,7 @@ export function HomeWorkspace({
         return;
       }
       queryClient.setQueryData<ConversationTurnsResponse>(
-        homeKeys.turns(session.conversationId),
+        conversationKeys.turns(session.conversationId),
         (current) =>
           updateLatestTurnSuggestions(
             current,
@@ -219,10 +214,10 @@ export function HomeWorkspace({
     if (event.type === "error") releaseSubmission(session);
     if (event.type === "complete") {
       void queryClient.invalidateQueries({
-        queryKey: homeKeys.conversations(),
+        queryKey: conversationKeys.lists(),
       });
       void queryClient.invalidateQueries({
-        queryKey: homeKeys.conversation(session.conversationId),
+        queryKey: conversationKeys.detail(session.conversationId),
       });
       if (streamSession.current === session) streamSession.current = null;
       setLiveTurn((current) =>
@@ -256,7 +251,7 @@ export function HomeWorkspace({
           [conversation.id]: context,
         }));
         queryClient.setQueryData(
-          homeKeys.conversation(conversation.id),
+          conversationKeys.detail(conversation.id),
           conversation,
         );
         router.replace(`/?conversation=${conversation.id}`, { scroll: false });
@@ -309,10 +304,10 @@ export function HomeWorkspace({
         if (conversationId && session && !session.ready) {
           await Promise.all([
             queryClient.invalidateQueries({
-              queryKey: homeKeys.turns(conversationId),
+              queryKey: conversationKeys.turns(conversationId),
             }),
             queryClient.invalidateQueries({
-              queryKey: homeKeys.conversation(conversationId),
+              queryKey: conversationKeys.detail(conversationId),
             }),
           ]);
         }
@@ -414,7 +409,7 @@ export function HomeWorkspace({
         );
       }
       await queryClient.invalidateQueries({
-        queryKey: homeKeys.turns(activeConversationId),
+        queryKey: conversationKeys.turns(activeConversationId),
       });
     } finally {
       if (streamSession.current === session) {
@@ -433,7 +428,7 @@ export function HomeWorkspace({
       responseId,
     });
     await queryClient.invalidateQueries({
-      queryKey: homeKeys.turns(activeConversationId),
+      queryKey: conversationKeys.turns(activeConversationId),
     });
   }
 

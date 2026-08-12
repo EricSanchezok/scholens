@@ -34,7 +34,7 @@ function readyEvent({
       reasoning_level: "standard",
       scope: null,
       sequence: 1,
-      user_references: null,
+      contexts: [],
       selected_response_id: responseId,
       suggestions,
       responses: [

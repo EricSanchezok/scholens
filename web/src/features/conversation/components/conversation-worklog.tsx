@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BookStack,
   EditPencil,
   LightBulb,
   Link,
@@ -22,7 +23,6 @@ import type {
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
-import { LibraryIcon } from "./home-icons";
 import { MessageContent } from "./message-content";
 
 type ActivityBatch = {
@@ -149,7 +149,7 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
     : category === "search"
       ? Search
       : category === "read"
-        ? LibraryIcon
+        ? BookStack
         : category === "workspace_action"
           ? EditPencil
           : category === "connector"
