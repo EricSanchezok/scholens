@@ -149,6 +149,31 @@ export const AddPapers: Story = {
   },
 };
 
+export const AddPapersDuplicateSelection: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      await within(canvasElement).findByRole("button", { name: "Add papers" }),
+    );
+    const body = within(document.body);
+    const input = await body.findByLabelText("Choose PDFs");
+    const duplicate = new File(["%PDF-1.7 same content"], "same-paper.pdf", {
+      type: "application/pdf",
+    });
+
+    await userEvent.upload(input, [duplicate, duplicate]);
+
+    await expect(
+      await body.findByText(
+        "1 duplicate PDF was ignored. The same content only needs to be uploaded once.",
+      ),
+    ).toBeVisible();
+    await expect(body.getAllByText("same-paper.pdf")).toHaveLength(1);
+    await expect(
+      body.getByRole("button", { name: "Upload 1 file" }),
+    ).toBeVisible();
+  },
+};
+
 export const Mobile390: Story = {
   globals: { viewport: { value: "mobile", isRotated: false } },
   play: async ({ canvasElement }) => {

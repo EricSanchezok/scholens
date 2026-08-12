@@ -19,6 +19,7 @@ type LibraryEntry =
 type Source = components["schemas"]["UploadFromSourceRequest"]["source"];
 
 export type PreparedPaperUpload = {
+  contentDigest: string;
   file: File;
   id: string;
   idempotencyKey: string;
@@ -263,9 +264,16 @@ export function usePaperIngestions(
 
   const startUploads = React.useCallback(
     (uploads: PreparedPaperUpload[], projectId?: string) => {
+      const seenDigests = new Set<string>();
+      const distinctUploads = uploads.filter((upload) => {
+        if (seenDigests.has(upload.contentDigest)) return false;
+        seenDigests.add(upload.contentDigest);
+        return true;
+      });
+      if (distinctUploads.length === 0) return;
       onWillIngest?.();
       const createdAt = new Date().toISOString();
-      const next: LocalUpload[] = uploads.map((upload, index) => ({
+      const next: LocalUpload[] = distinctUploads.map((upload, index) => ({
         createdAt,
         displayName: upload.file.name,
         file: upload.file,

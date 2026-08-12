@@ -39,6 +39,19 @@ type QueuedFile = PreparedPaperUpload & { errorCode?: "fileTooLarge" };
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
+async function fileContentDigest(file: File) {
+  if (file.size > MAX_FILE_BYTES) {
+    return `oversize:${file.name}:${file.size}:${file.lastModified}`;
+  }
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    await file.arrayBuffer(),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 const sourceSchema = z.object({
   projectId: z.string().optional(),
   sourceKind: z.enum(["doi", "arxiv", "url"]),
@@ -66,6 +79,8 @@ export function AddPapersDialog({
 }) {
   const t = useTranslations("Library.addPapers");
   const [queue, setQueue] = React.useState<QueuedFile[]>([]);
+  const [filesChecking, setFilesChecking] = React.useState(false);
+  const [duplicateCount, setDuplicateCount] = React.useState(0);
   const [sourcePending, setSourcePending] = React.useState(false);
   const [sourceError, setSourceError] = React.useState<string>();
   const [sourceController, setSourceController] = React.useState<
@@ -73,6 +88,7 @@ export function AddPapersDialog({
   >();
   const [sourceKey, setSourceKey] = React.useState<string>();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const queuedDigests = React.useRef(new Set<string>());
   const form = useForm<SourceForm>({
     defaultValues: { projectId: "", sourceKind: "doi", sourceValue: "" },
     resolver: zodResolver(sourceSchema),
@@ -82,20 +98,48 @@ export function AddPapersDialog({
   const sourceKind =
     useWatch({ control: form.control, name: "sourceKind" }) ?? "doi";
 
-  function enqueue(files: File[]) {
-    setQueue((items) => [
-      ...items,
-      ...files.map<QueuedFile>((file) => ({
-        errorCode: file.size > MAX_FILE_BYTES ? "fileTooLarge" : undefined,
-        file,
-        id: crypto.randomUUID(),
-        idempotencyKey: crypto.randomUUID(),
-      })),
-    ]);
+  async function enqueue(files: File[]) {
+    setDuplicateCount(0);
+    setFilesChecking(true);
+    try {
+      const candidates = await Promise.all(
+        files.map(async (file) => ({
+          contentDigest: await fileContentDigest(file),
+          file,
+        })),
+      );
+      const accepted: QueuedFile[] = [];
+      let duplicates = 0;
+      for (const candidate of candidates) {
+        if (queuedDigests.current.has(candidate.contentDigest)) {
+          duplicates += 1;
+          continue;
+        }
+        queuedDigests.current.add(candidate.contentDigest);
+        accepted.push({
+          ...candidate,
+          errorCode:
+            candidate.file.size > MAX_FILE_BYTES ? "fileTooLarge" : undefined,
+          id: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+        });
+      }
+      if (accepted.length > 0) {
+        setQueue((items) => [...items, ...accepted]);
+      }
+      setDuplicateCount(duplicates);
+    } finally {
+      setFilesChecking(false);
+    }
   }
 
   function removeQueuedFile(id: string) {
-    setQueue((items) => items.filter((item) => item.id !== id));
+    setDuplicateCount(0);
+    setQueue((items) => {
+      const removed = items.find((item) => item.id === id);
+      if (removed) queuedDigests.current.delete(removed.contentDigest);
+      return items.filter((item) => item.id !== id);
+    });
   }
 
   function submitFiles() {
@@ -103,6 +147,8 @@ export function AddPapersDialog({
     if (valid.length === 0) return;
     const invalid = queue.filter((item) => item.errorCode);
     onUploadFiles(valid, projectId || undefined);
+    valid.forEach((item) => queuedDigests.current.delete(item.contentDigest));
+    setDuplicateCount(0);
     setQueue(invalid);
     if (invalid.length === 0) onOpenChange(false);
   }
@@ -114,6 +160,11 @@ export function AddPapersDialog({
         return t("errors.unavailable");
       case "paper_source_unsafe_address":
         return t("errors.unsafeAddress");
+      case "document_already_in_library":
+      case "document_already_in_project":
+        return t("errors.alreadyInCollection");
+      case "document_upload_in_progress":
+        return t("errors.uploadInProgress");
       case "upload_too_large":
         return t("errors.tooLarge");
       case "invalid_pdf":
@@ -174,7 +225,10 @@ export function AddPapersDialog({
   }, [sourceController]);
 
   function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen) cancelSource();
+    if (!nextOpen) {
+      cancelSource();
+      setDuplicateCount(0);
+    }
     onOpenChange(nextOpen);
   }
 
@@ -205,7 +259,7 @@ export function AddPapersDialog({
               className="sr-only"
               multiple
               onChange={(event) => {
-                enqueue(Array.from(event.currentTarget.files ?? []));
+                void enqueue(Array.from(event.currentTarget.files ?? []));
                 event.currentTarget.value = "";
               }}
               ref={fileInputRef}
@@ -213,12 +267,20 @@ export function AddPapersDialog({
             />
             <Button
               className="justify-self-start"
+              disabled={filesChecking}
               onClick={() => fileInputRef.current?.click()}
               variant="secondary"
             >
               <Icon glyph={Upload} size={20} />
               {t("chooseFiles")}
             </Button>
+            {(filesChecking || duplicateCount > 0) && (
+              <p className="text-secondary text-sm" role="status">
+                {filesChecking
+                  ? t("status.checking")
+                  : t("duplicatesIgnored", { count: duplicateCount })}
+              </p>
+            )}
             {queue.length > 0 && (
               <ul aria-label={t("queueLabel")} className="grid gap-2">
                 {queue.map((item) => (
@@ -261,7 +323,11 @@ export function AddPapersDialog({
               </ul>
             )}
             {waitingCount > 0 && (
-              <Button className="justify-self-start" onClick={submitFiles}>
+              <Button
+                className="justify-self-start"
+                disabled={filesChecking}
+                onClick={submitFiles}
+              >
                 {t("uploadFiles", { count: waitingCount })}
               </Button>
             )}

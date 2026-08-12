@@ -8,13 +8,24 @@ from uuid import uuid4
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.settings import AppSettings
 from app.transport.http.public_v1.documents.router import list_library_papers
-from app.database.models import Document, LibraryPaper, PaperStatus
+from app.database.models import (
+    Document,
+    DurableJob,
+    JobOperation,
+    JobStatus,
+    LibraryPaper,
+    PaperStatus,
+    UploadReservation,
+)
 from app.main import app
 from app.helpers.s3 import s3_service
 from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.papers.infrastructure.library_gateway import (
+    SqlAlchemyPaperLibraryGateway,
     library_paper_response,
 )
+from app.modules.papers.application.contracts.documents import LibraryPaperSort
+from app.modules.papers.application.library import LibraryPageDirection
 from app.shared.application import Actor
 from app.shared.infrastructure import SqlAlchemyApplicationExecutor
 from app.modules.papers.application.contracts.tags import LibraryTagAssignmentRequest
@@ -99,6 +110,88 @@ def test_library_response_returns_private_signed_preview(monkeypatch) -> None:
     assert response.document.document_id == entry.document_id
     assert response.preview_url == "https://signed.example.invalid/preview"
     assert response.metadata_overrides.title == "My title"
+
+
+def test_library_list_projects_one_lifecycle_row_for_an_ingesting_paper() -> None:
+    entry = _entry()
+    job = DurableJob(
+        id=uuid4(),
+        operation=JobOperation.PDF_PROCESS.value,
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        requested_by_id=entry.user_id,
+        project_id=None,
+        document_id=entry.document_id,
+        idempotency_key=f"paper-test:{uuid4()}",
+        status=JobStatus.RUNNING.value,
+        progress_code="parsing",
+        payload={},
+        created_at=entry.created_at,
+    )
+    reservation = UploadReservation(
+        id=job.id,
+        quota_owner_id=entry.user_id,
+        content_sha256=entry.document.sha256,
+        display_name=entry.document.original_filename,
+        source_kind="upload",
+    )
+    reservation.job = job
+    paper_results = MagicMock()
+    paper_results.all.return_value = [entry]
+    reservation_results = MagicMock()
+    reservation_results.all.return_value = [reservation]
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    db.scalars.side_effect = [paper_results, reservation_results]
+
+    page = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+    ).list(
+        user_id=entry.user_id,
+        query=None,
+        tag_ids=(),
+        sort=LibraryPaperSort.ADDED_DESC,
+        limit=20,
+        direction=LibraryPageDirection.FORWARD,
+        position=None,
+    )
+
+    assert page.total_count == 1
+    assert len(page.items) == 1
+    assert page.items[0].entry_type == "ingestion"
+    assert page.items[0].ingestion.document_id == entry.document_id
+    assert len(page.positions) == 1
+
+
+def test_library_list_does_not_replace_a_personal_paper_with_project_work() -> None:
+    entry = _entry()
+    entry.document.preview_s3_key = None
+    paper_results = MagicMock()
+    paper_results.all.return_value = [entry]
+    reservation_results = MagicMock()
+    reservation_results.all.return_value = []
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    db.scalars.side_effect = [paper_results, reservation_results]
+
+    page = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+    ).list(
+        user_id=entry.user_id,
+        query=None,
+        tag_ids=(),
+        sort=LibraryPaperSort.ADDED_DESC,
+        limit=20,
+        direction=LibraryPageDirection.FORWARD,
+        position=None,
+    )
+
+    assert len(page.items) == 1
+    assert page.items[0].entry_type == "paper"
+    reservation_statement = str(db.scalars.call_args_list[1].args[0])
+    assert "jobs.project_id IS NULL" in reservation_statement
 
 
 def test_share_token_is_rotated_and_only_its_hash_is_persisted() -> None:

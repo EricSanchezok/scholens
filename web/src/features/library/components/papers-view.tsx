@@ -200,6 +200,13 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
       case "paper_source_unsafe_address":
         description = t("errors.paper_source_unsafe_address");
         break;
+      case "document_already_in_library":
+      case "document_already_in_project":
+        description = t("errors.document_already_in_collection");
+        break;
+      case "document_upload_in_progress":
+        description = t("errors.document_upload_in_progress");
+        break;
       case "pdf_encrypted":
         description = t("errors.pdf_encrypted");
         break;

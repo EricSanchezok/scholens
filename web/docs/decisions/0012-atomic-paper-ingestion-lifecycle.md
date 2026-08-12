@@ -39,7 +39,14 @@ at stage boundaries. Signed callbacks are idempotent no-ops after cancellation.
 The Papers endpoint returns one discriminated union of completed papers and
 active/failed ingestions. Web renders that union as one canonical table/list,
 uses local state only for pre-acceptance upload progress, and never displays a
-detached processing banner.
+detached processing banner. Each personal membership occupies exactly one
+position in that union: its active or failed ingestion projection replaces the
+normal paper projection until processing completes.
+
+Web hashes selected PDF bytes to collapse duplicate selections before they
+enter the local queue. This is interaction feedback, not an integrity boundary;
+Server content-addressing, quota-owner locking, and membership uniqueness remain
+authoritative for concurrent clients and already-imported documents.
 
 ## Alternatives considered
 

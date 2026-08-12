@@ -7,7 +7,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from app.helpers.s3 import s3_service
-from app.database.models import DurableJob, JobDispatch
+from app.database.models import DurableJob
 from app.modules.papers.application.contracts.documents import (
     DocumentResponse,
     LibraryPaperResponse,
@@ -267,41 +267,48 @@ class SqlAlchemyPaperLibraryGateway:
         entries = entries[:limit]
         if direction is LibraryPageDirection.BACKWARD:
             entries.reverse()
-        responses: list[LibraryPaperListEntry] = [
-            LibraryPaperListPaperEntry.model_validate(
-                library_paper_response(entry).model_dump()
-            )
-            for entry in entries
-        ]
-        if direction is LibraryPageDirection.FORWARD and position is None:
-            reservations = list(
-                self._db.scalars(
-                    select(UploadReservation)
-                    .join(DurableJob, DurableJob.id == UploadReservation.id)
-                    .join(JobDispatch, JobDispatch.job_id == DurableJob.id)
-                    .options(selectinload(UploadReservation.job))
-                    .where(
-                        DurableJob.requested_by_id == user_id,
-                        DurableJob.status.in_(
-                            [
-                                JobStatus.PENDING.value,
-                                JobStatus.RUNNING.value,
-                                JobStatus.FAILED.value,
-                            ]
-                        ),
-                        UploadReservation.superseded_by_id.is_(None),
-                    )
-                    .order_by(DurableJob.created_at.desc(), DurableJob.id.desc())
-                    .limit(20)
-                ).all()
-            )
-            ingestion_responses: list[LibraryPaperListEntry] = [
-                LibraryPaperListIngestionEntry(
-                    ingestion=library_ingestion_response(reservation)
+        reservations_by_document: dict[UUID, UploadReservation] = {}
+        document_ids = [entry.document_id for entry in entries]
+        if document_ids:
+            reservations = self._db.scalars(
+                select(UploadReservation)
+                .join(DurableJob, DurableJob.id == UploadReservation.id)
+                .options(selectinload(UploadReservation.job))
+                .where(
+                    DurableJob.requested_by_id == user_id,
+                    DurableJob.project_id.is_(None),
+                    DurableJob.document_id.in_(document_ids),
+                    DurableJob.status.in_(
+                        [
+                            JobStatus.PENDING.value,
+                            JobStatus.RUNNING.value,
+                            JobStatus.FAILED.value,
+                        ]
+                    ),
+                    UploadReservation.superseded_by_id.is_(None),
                 )
-                for reservation in reservations
-            ]
-            responses = ingestion_responses + responses
+                .order_by(DurableJob.created_at.desc(), DurableJob.id.desc())
+            ).all()
+            for reservation in reservations:
+                document_id = reservation.job.document_id
+                if document_id is not None:
+                    reservations_by_document.setdefault(document_id, reservation)
+
+        responses: list[LibraryPaperListEntry] = []
+        for entry in entries:
+            lifecycle_reservation = reservations_by_document.get(entry.document_id)
+            if lifecycle_reservation is not None:
+                responses.append(
+                    LibraryPaperListIngestionEntry(
+                        ingestion=library_ingestion_response(lifecycle_reservation)
+                    )
+                )
+            else:
+                responses.append(
+                    LibraryPaperListPaperEntry.model_validate(
+                        library_paper_response(entry).model_dump()
+                    )
+                )
         positions = [
             LibraryPagePosition(
                 key=self._paper_key(entry, sort=sort),

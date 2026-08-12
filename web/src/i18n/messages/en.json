@@ -204,8 +204,10 @@
       "removeFile": "Remove {name}",
       "uploadFiles": "Upload {count, plural, one {# file} other {# files}}",
       "status": {
-        "queued": "Ready to upload"
+        "queued": "Ready to upload",
+        "checking": "Checking for duplicate PDFs"
       },
+      "duplicatesIgnored": "{count, plural, one {# duplicate PDF was ignored.} other {# duplicate PDFs were ignored.}} The same content only needs to be uploaded once.",
       "sourceTitle": "DOI, arXiv, or PDF URL",
       "sourceDescription": "Scholens will resolve an open PDF and add it to your library.",
       "sourceType": "Source type",
@@ -225,6 +227,8 @@
         "unsafeAddress": "This address is not allowed. Use a public direct PDF URL.",
         "tooLarge": "This PDF is larger than 50 MB.",
         "invalidPdf": "The source did not return a readable, unencrypted PDF.",
+        "alreadyInCollection": "This paper is already in the selected collection.",
+        "uploadInProgress": "This paper is already being uploaded.",
         "quota": "Your paper or storage allowance has been reached.",
         "serviceUnavailable": "The server could not accept this source. Keep the value and try again."
       },
@@ -294,6 +298,8 @@
           "jobs_submission_failed": "The processing service did not accept this paper.",
           "paper_source_pdf_unavailable": "The source PDF is no longer available.",
           "paper_source_unsafe_address": "The source address is not allowed.",
+          "document_already_in_collection": "This paper is already in the selected collection.",
+          "document_upload_in_progress": "This paper is already being uploaded.",
           "upload_too_large": "This PDF is larger than 50 MB.",
           "upload_quota_exceeded": "Your paper or storage allowance has been reached.",
           "invalid_pdf": "This file is not a readable PDF.",

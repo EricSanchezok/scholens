@@ -199,7 +199,7 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
     {
       name: "remove-before-upload.pdf",
       mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.7\n%%EOF"),
+      buffer: Buffer.from("%PDF-1.7\nremove-before-upload\n%%EOF"),
     },
   ]);
   await expect(dialog.getByText("local-paper.pdf")).toBeVisible();

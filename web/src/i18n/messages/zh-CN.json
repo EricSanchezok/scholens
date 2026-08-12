@@ -204,8 +204,10 @@
       "removeFile": "移除 {name}",
       "uploadFiles": "上传 {count} 个文件",
       "status": {
-        "queued": "等待上传"
+        "queued": "等待上传",
+        "checking": "正在检查重复 PDF"
       },
+      "duplicatesIgnored": "已忽略 {count} 个重复 PDF；相同内容只需上传一次。",
       "sourceTitle": "DOI、arXiv 或 PDF 网址",
       "sourceDescription": "Scholens 会解析开放 PDF，并将其添加到你的资料库。",
       "sourceType": "来源类型",
@@ -225,6 +227,8 @@
         "unsafeAddress": "不允许访问这个地址，请使用公网 PDF 直链。",
         "tooLarge": "此 PDF 超过 50 MB。",
         "invalidPdf": "该来源不是可读取且未加密的 PDF。",
+        "alreadyInCollection": "这篇论文已在所选资料库中。",
+        "uploadInProgress": "这篇论文正在上传，无需重复提交。",
         "quota": "论文数量或存储额度已用完。",
         "serviceUnavailable": "服务器暂时无法接受此来源，输入已保留，请稍后重试。"
       },
@@ -294,6 +298,8 @@
           "jobs_submission_failed": "论文处理服务未接受此任务。",
           "paper_source_pdf_unavailable": "来源 PDF 已不可访问。",
           "paper_source_unsafe_address": "不允许访问该来源地址。",
+          "document_already_in_collection": "这篇论文已在所选资料库中。",
+          "document_upload_in_progress": "这篇论文正在上传，无需重复提交。",
           "upload_too_large": "此 PDF 超过 50 MB。",
           "upload_quota_exceeded": "论文数量或存储额度已用完。",
           "invalid_pdf": "此文件不是可读取的 PDF。",

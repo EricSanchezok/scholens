@@ -64,6 +64,14 @@ When a network interruption makes the acceptance result unknown, Web retries
 or reconciles with the same operation-scoped idempotency key. It never invents
 a second key merely because the first HTTP response was lost.
 
+PDF selection is deduplicated by a browser-computed content digest before the
+queue is created; duplicate content is represented once and the skipped count
+is announced inline. Server-side SHA-256 reservation checks and collection
+uniqueness remain authoritative across tabs, clients, and concurrent requests.
+The Papers list projects each personal membership exactly once: an active or
+failed ingestion replaces that membership's normal row until the job completes,
+rather than appearing as an additional row.
+
 ## Outputs
 
 Outputs renders the Server's canonical Research Item projection. The only
@@ -107,6 +115,7 @@ Papers acceptance lives in section `974:1831` and maps to
 | mobile processing / retry   | `974:2571`, `974:2622`             | `Mobile390Processing`, `Mobile390Failed` |
 | mobile queued / cancelling  | `1002:1919`, `1002:1970`           | `Mobile390Queued`, `Mobile390Cancelling` |
 | Add papers desktop / mobile | `979:1831`, `979:1938`             | `AddPapers`, mobile viewport review      |
+| duplicate PDF selection     | `1007:2`                           | `AddPapersDuplicateSelection`            |
 | lifecycle behavior contract | `1002:2021`                        | ingestion-row state stories              |
 
 Figma owns visual intent; Storybook owns executable runtime states. Differences

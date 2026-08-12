@@ -257,10 +257,14 @@ PDF uploads and source imports share one atomic acceptance boundary. A `202`
 means the personal membership, source reference, durable job, and dispatch
 outbox record are committed and the ingestion is already visible through the
 Papers list union. The response is the canonical ingestion projection rather
-than an upload-only acknowledgement. `DELETE /api/v1/paper-ingestions/{job_id}`
-owns cancellation; cancelled jobs reject replay and ignore late worker
-callbacks. The worker reports bounded lifecycle stages and heartbeats, while
-the Server owns terminal timeout/failure policy.
+than an upload-only acknowledgement. That union emits exactly one row per
+personal membership: an active or failed ingestion replaces the completed
+paper projection instead of being prepended as a second row. Browser content
+hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
+constraints remain authoritative for repeated and concurrent uploads. `DELETE
+/api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
+replay and ignore late worker callbacks. The worker reports bounded lifecycle
+stages and heartbeats, while the Server owns terminal timeout/failure policy.
 
 ## Adding a capability or adapter
 

@@ -41,6 +41,7 @@ function accepted(id: string, displayName: string): Ingestion {
 
 function upload(index: number): PreparedPaperUpload {
   return {
+    contentDigest: `digest-${index}`,
     file: new File([`pdf-${index}`], `paper-${index}.pdf`, {
       type: "application/pdf",
     }),
@@ -118,6 +119,26 @@ describe("usePaperIngestions", () => {
         result.current.rows.find((row) => row.id === "server-2")?.state,
       ).toBe("queued");
     });
+  });
+
+  it("does not start duplicate content twice", async () => {
+    api.uploadPaperFile.mockResolvedValue(accepted("server-1", "paper-1.pdf"));
+    const first = upload(1);
+    const duplicate = {
+      ...upload(2),
+      contentDigest: first.contentDigest,
+    };
+    const { result } = renderHook(() => usePaperIngestions([]), {
+      wrapper: wrapper(),
+    });
+
+    act(() => result.current.startUploads([first, duplicate]));
+
+    await waitFor(() => expect(api.uploadPaperFile).toHaveBeenCalledTimes(1));
+    expect(api.uploadPaperFile).toHaveBeenCalledWith(
+      first.file,
+      expect.objectContaining({ idempotencyKey: first.idempotencyKey }),
+    );
   });
 
   it("removes a queued file without ever starting its request", async () => {

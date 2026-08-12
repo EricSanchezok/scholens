@@ -137,8 +137,12 @@ ingestion row, durable job, and outbox dispatch are committed. If the browser
 loses that response, it reconciles or repeats the same parameters with the same
 `Idempotency-Key`; it must not create a second operation. The Papers list
 returns completed papers and active/failed ingestions as one discriminated
-collection. `DELETE /api/v1/paper-ingestions/{job_id}` cancels an owned
-ingestion, and late worker callbacks cannot restore it.
+collection, with exactly one lifecycle row per personal membership: an active
+or failed ingestion replaces that paper's completed projection until it reaches
+a terminal success state. PDF content SHA-256 is the server-side duplicate
+authority, including concurrent requests. `DELETE
+/api/v1/paper-ingestions/{job_id}` cancels an owned ingestion, and late worker
+callbacks cannot restore it.
 
 # Migrations
 
