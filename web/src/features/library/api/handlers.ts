@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from "msw";
 import {
   failedIngestionEntry,
   libraryConversations,
+  libraryLongTitlePapers,
   libraryOutputs,
   libraryPapers,
   libraryProjects,
@@ -121,6 +122,17 @@ export const libraryHandlers = {
         next_cursor: "next-library-page",
         previous_cursor: null,
         total_count: 27,
+      }),
+    ),
+    ...populatedHandlers,
+  ],
+  longTitles: [
+    http.get(`${api}/library/papers`, () =>
+      HttpResponse.json({
+        items: libraryLongTitlePapers,
+        next_cursor: null,
+        previous_cursor: null,
+        total_count: libraryLongTitlePapers.length,
       }),
     ),
     ...populatedHandlers,

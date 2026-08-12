@@ -36,7 +36,12 @@ Previous/Next only; cursors are opaque and never decoded by the Web.
 Desktop uses a semantic table. Below the desktop breakpoint, Papers uses a
 dedicated stacked list rather than compressing the table. Both compositions
 offer search, tag filtering, sorting, explicit row actions, selection, and
-cursor navigation.
+cursor navigation. A mobile row reserves independent columns for selection,
+paper content, and the action menu. Its title wraps to at most two lines,
+authors and institutions stay on one clipped secondary line, and dates remain
+in their own wrapping metadata row. Long titles and uninterrupted identifiers
+must not create horizontal page scrolling; desktop table titles remain a
+single line.
 
 An accepted ingestion is a first-class row in the same desktop table or mobile
 paper list as completed papers; it is never rendered as a detached status
@@ -112,6 +117,7 @@ Papers acceptance lives in section `974:1831` and maps to
 | 390 populated / empty       | `974:2331`, `974:2379`             | `Mobile390`, `Mobile390Empty`            |
 | 430 loading / filters       | `974:2410`, `974:2469`             | `Mobile430Loading`, `Mobile430Filters`   |
 | 320 error / multi-select    | `974:2438`, `974:2517`             | `Mobile320Error`, `Mobile320MultiSelect` |
+| 320 long-title containment  | responsive runtime acceptance      | `Mobile320LongTitles`                    |
 | mobile processing / retry   | `974:2571`, `974:2622`             | `Mobile390Processing`, `Mobile390Failed` |
 | mobile queued / cancelling  | `1002:1919`, `1002:1970`           | `Mobile390Queued`, `Mobile390Cancelling` |
 | Add papers desktop / mobile | `979:1831`, `979:1938`             | `AddPapers`, mobile viewport review      |

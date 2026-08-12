@@ -118,7 +118,9 @@ function PaperDetails({ paper }: { paper: Paper }) {
     .join(" · ");
   return (
     <div className="min-w-0">
-      <div className="truncate text-sm font-semibold">{metadata.title}</div>
+      <div className="line-clamp-2 text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
+        {metadata.title}
+      </div>
       <div className="text-secondary mt-1 truncate text-xs">
         {secondary || paper.document.original_filename}
       </div>
@@ -240,7 +242,7 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
         PDF
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold">
+        <span className="line-clamp-2 text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
           {ingestion.displayName}
         </span>
         <span
@@ -734,10 +736,10 @@ export function PapersView({
               </table>
             </div>
 
-            <ul className="grid gap-2 md:hidden">
+            <ul className="grid min-w-0 gap-2 md:hidden">
               {ingestions.map((ingestion) => (
                 <li
-                  className="border-line bg-surface rounded-[var(--radius-lg)] border p-4 transition-opacity duration-150"
+                  className="border-line bg-surface min-w-0 rounded-[var(--radius-lg)] border p-4 transition-opacity duration-150"
                   key={ingestion.id}
                 >
                   <div className="flex items-start gap-3">
@@ -765,16 +767,16 @@ export function PapersView({
                 const metadata = paperMetadata(paper);
                 return (
                   <li
-                    className="border-line bg-surface rounded-[var(--radius-lg)] border p-4"
+                    className="border-line bg-surface min-w-0 rounded-[var(--radius-lg)] border p-4"
                     key={id}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3">
                       <SelectionCheckbox
                         checked={selected.includes(id)}
                         label={t("select", { title: metadata.title })}
                         onCheckedChange={(checked) => toggleOne(id, checked)}
                       />
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         <PaperDetails paper={paper} />
                       </div>
                       <PaperActions
@@ -785,7 +787,7 @@ export function PapersView({
                         paper={paper}
                       />
                     </div>
-                    <div className="text-secondary mt-3 flex gap-3 pl-8 text-xs">
+                    <div className="text-secondary mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 pl-8 text-xs">
                       <span>
                         {format.dateTime(new Date(paper.created_at), {
                           dateStyle: "medium",

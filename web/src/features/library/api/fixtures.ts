@@ -96,6 +96,21 @@ export const libraryPapers: LibraryPaper[] = [
   ),
 ];
 
+export const libraryLongTitlePapers: LibraryPaper[] = libraryPapers.map(
+  (item, index) => ({
+    ...item,
+    document: {
+      ...item.document,
+      title:
+        index === 0
+          ? "Holos: A Web-Scale LLM-Based Multi-Agent System for Open-Ended Scientific Collaboration"
+          : index === 1
+            ? "面向开放式科研协作与长期知识积累的超大规模多智能体系统研究"
+            : item.document.title,
+    },
+  }),
+);
+
 const outputBase = {
   capabilities: { delete: true, edit: true, share: true },
   created_at: now,

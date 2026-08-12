@@ -221,6 +221,7 @@ The mobile Dock acceptance inventory extends that mapping:
 | Recent research launcher          | `Workspace / Mobile`                                |
 | Launcher loading                  | `Dashboard / Mobile Recents Loading`                |
 | Launcher error                    | `Dashboard / Mobile Recents Error`                  |
+| Launcher long titles at 320 px    | `Dashboard / Mobile Recents Long Titles`            |
 | Launcher removed after submit     | `Workspace / Mobile Recents Disappear After Submit` |
 | Conversation + Dock               | `Workspace / Mobile Conversation`                   |
 | Keyboard Open                     | `Workspace / Mobile Keyboard Open`                  |
@@ -340,7 +341,11 @@ Figma `20 — Home` also records the phone-specific recent-content contract as
 `Home / Mobile / Recents populated` (`889:3416`), `Recents loading`
 (`889:3456`), `Recents error` (`889:3490`), and `Recents hidden after submit`
 (`889:3521`). These frames intentionally use a single compact launcher list
-instead of shrinking the desktop paper and project cards.
+instead of shrinking the desktop paper and project cards. Each launcher keeps
+its icon in a fixed slot and gives its title a shrinkable content slot. Long
+paper and project titles wrap to at most two lines before clipping; they never
+increase the page's horizontal scroll width. The complete title remains the
+button's accessible name.
 
 The navigation-open acceptance frame is `Home / Mobile / Navigation open`
 (`939:2639`). It fills the viewport with an opaque sidebar surface above a

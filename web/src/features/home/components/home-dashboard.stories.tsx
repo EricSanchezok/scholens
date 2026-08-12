@@ -4,6 +4,23 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { homePapers, homeProjects } from "../api/fixtures";
 import { HomeDashboard } from "./home-dashboard";
 
+const longEnglishPaperTitle =
+  "Holos: A Web-Scale LLM-Based Multi-Agent System for Open-Ended Scientific Collaboration";
+const longCjkPaperTitle =
+  "面向开放式科研协作与长期知识积累的超大规模多智能体系统研究";
+const longTitlePapers = homePapers.map((paper, index) => ({
+  ...paper,
+  document: {
+    ...paper.document,
+    title:
+      index === 0
+        ? longEnglishPaperTitle
+        : index === 1
+          ? longCjkPaperTitle
+          : paper.document.title,
+  },
+}));
+
 const meta = {
   title: "Features/Home/Dashboard",
   component: HomeDashboard,
@@ -80,6 +97,25 @@ export const MobileRecents: Story = {
       project_ids: [],
       document_ids: [homePapers[0]!.document.document_id],
     });
+  },
+};
+
+export const MobileRecentsLongTitles: Story = {
+  args: { papers: longTitlePapers, projects: [] },
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const launcher = await canvas.findByRole("button", {
+      name: new RegExp(longEnglishPaperTitle),
+    });
+    const title = within(launcher).getByText(longEnglishPaperTitle);
+    await expect(getComputedStyle(title).webkitLineClamp).toBe("2");
+    await expect(launcher.scrollWidth).toBeLessThanOrEqual(
+      launcher.clientWidth,
+    );
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
+      canvasElement.clientWidth,
+    );
   },
 };
 

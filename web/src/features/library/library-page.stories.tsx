@@ -5,6 +5,7 @@ import { authHandlers, actor } from "../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
 import { resetRefreshForTests } from "@/lib/api";
 import { libraryHandlers } from "./api/handlers";
+import { libraryLongTitlePapers } from "./api/fixtures";
 import { LibraryWorkspace } from "./library-page";
 
 const meta = {
@@ -189,6 +190,29 @@ export const Mobile390: Story = {
   },
 };
 
+export const Mobile320LongTitles: Story = {
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+  parameters: {
+    msw: { handlers: [...authHandlers.success, ...libraryHandlers.longTitles] },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const titleText = libraryLongTitlePapers[0]!.document.title!;
+    const title = (await canvas.findAllByText(titleText)).find(
+      (candidate) => candidate.closest("li")?.getClientRects().length,
+    );
+    await expect(title).toBeDefined();
+    if (!title) return;
+    const row = title.closest("li");
+    await expect(row).not.toBeNull();
+    await expect(getComputedStyle(title).webkitLineClamp).toBe("2");
+    await expect(row!.scrollWidth).toBeLessThanOrEqual(row!.clientWidth);
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
+      canvasElement.clientWidth,
+    );
+  },
+};
+
 export const Mobile430Filters: Story = {
   globals: { viewport: { value: "largeMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
@@ -197,7 +221,7 @@ export const Mobile430Filters: Story = {
     const body = within(document.body);
     await expect(await body.findByRole("dialog")).toBeVisible();
     await expect(
-      body.getByRole("checkbox", { name: "Transformers" }),
+      await body.findByRole("checkbox", { name: "Transformers" }),
     ).toBeVisible();
   },
 };

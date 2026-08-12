@@ -197,7 +197,7 @@ function MobileRecentLauncher({
                 aria-label={label}
                 aria-pressed={selected}
                 className={cn(
-                  "bg-subtle hover:bg-hover flex min-h-12 max-w-full items-center gap-2.5 rounded-full px-4 text-left text-sm font-medium transition-colors motion-reduce:transition-none",
+                  "bg-subtle hover:bg-hover flex min-h-12 w-fit max-w-full min-w-0 items-center gap-2.5 rounded-full px-4 py-2.5 text-left text-sm font-medium transition-colors motion-reduce:transition-none",
                   keyboardFocusRing,
                   selected && "bg-pressed",
                 )}
@@ -212,11 +212,14 @@ function MobileRecentLauncher({
                 type="button"
               >
                 <Icon
+                  className="shrink-0"
                   glyph={item.kind === "paper" ? LibraryIcon : ProjectIcon}
                   size={item.kind === "paper" ? 20 : 16}
                   tone="secondary"
                 />
-                <span className="truncate">{item.title}</span>
+                <span className="line-clamp-2 min-w-0 flex-1 leading-5 [overflow-wrap:anywhere]">
+                  {item.title}
+                </span>
               </button>
             );
           })}
