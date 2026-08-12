@@ -134,6 +134,9 @@ smaller relevant subset, but the final handoff must state exactly what ran.
 
 - Preserve unrelated user or agent changes in a dirty worktree.
 - Never combine unrelated work in one commit.
+- After a completed change is verified, commit it on the current branch and
+  push that branch to its configured remote so finished work is not left only
+  in the local worktree. Skip either step only when the user explicitly asks.
 - For multi-step implementation, create a verified commit at each coherent
   recovery point when commits are within the requested workflow.
 - Before staging, inspect the exact changed files; do not stage another agent's
