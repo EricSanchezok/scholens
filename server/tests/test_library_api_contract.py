@@ -247,7 +247,10 @@ def test_library_tag_api_uses_library_document_boundaries() -> None:
     assert "/api/v1/library/paper-removals" in paths
     assert "/api/v1/library/tags" in paths
     assert "/api/v1/library/tags/assignments" in paths
-    assert "/api/v1/library/papers/{document_id}/tags/{tag_id}" in paths
+    assert "/api/v1/library/tags/{tag_id}" in paths
+    assert set(paths["/api/v1/library/tags/assignments"]) & {"put"} == {"put"}
+    assert "post" not in paths["/api/v1/library/tags/assignments"]
+    assert "/api/v1/library/papers/{document_id}/tags/{tag_id}" not in paths
     assert not any(path.startswith("/api/v1/paper/tag") for path in paths)
     assert not any(path.startswith("/api/v1/paper/upload") for path in paths)
 
@@ -260,6 +263,12 @@ def test_library_tag_assignment_is_strict_and_bounded() -> None:
         tag_ids=[tag_id],
     )
     assert request.document_ids == [document_id]
+
+    clear_request = LibraryTagAssignmentRequest(
+        document_ids=[document_id],
+        tag_ids=[],
+    )
+    assert clear_request.tag_ids == []
 
     with pytest.raises(ValidationError):
         LibraryTagAssignmentRequest.model_validate(

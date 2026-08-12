@@ -12,6 +12,12 @@ class LibraryTagCreateRequest(BaseModel):
     color: str | None = Field(default=None, max_length=64)
 
 
+class LibraryTagRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=120)
+
+
 class LibraryTagResponse(BaseModel):
     id: UUID
     name: str
@@ -27,7 +33,7 @@ class LibraryTagAssignmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_ids: list[UUID] = Field(min_length=1, max_length=120)
-    tag_ids: list[UUID] = Field(min_length=1, max_length=120)
+    tag_ids: list[UUID] = Field(max_length=120)
 
     @model_validator(mode="after")
     def reject_duplicates(self) -> LibraryTagAssignmentRequest:
@@ -39,4 +45,4 @@ class LibraryTagAssignmentRequest(BaseModel):
 
 
 class LibraryTagAssignmentResponse(BaseModel):
-    assigned_count: int
+    updated_paper_count: int

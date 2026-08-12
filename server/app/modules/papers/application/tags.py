@@ -9,6 +9,7 @@ from app.modules.papers.application.contracts.tags import (
     LibraryTagAssignmentRequest,
     LibraryTagAssignmentResponse,
     LibraryTagCreateRequest,
+    LibraryTagRenameRequest,
     LibraryTagListResponse,
     LibraryTagResponse,
 )
@@ -19,8 +20,9 @@ from app.shared.application.operation_context import OperationContext
 
 
 LIBRARY_TAG_CREATED = OperationAction("library.tag_created")
-LIBRARY_TAGS_ASSIGNED = OperationAction("library.tags_assigned")
-LIBRARY_TAG_UNASSIGNED = OperationAction("library.tag_unassigned")
+LIBRARY_TAG_RENAMED = OperationAction("library.tag_renamed")
+LIBRARY_TAG_DELETED = OperationAction("library.tag_deleted")
+LIBRARY_TAG_ASSIGNMENTS_REPLACED = OperationAction("library.tag_assignments_replaced")
 
 
 class LibraryTagGateway(Protocol):
@@ -33,20 +35,22 @@ class LibraryTagGateway(Protocol):
         request: LibraryTagCreateRequest,
     ) -> LibraryTagResponse: ...
 
-    def assign(
+    def rename(
+        self,
+        *,
+        user_id: int,
+        tag_id: UUID,
+        request: LibraryTagRenameRequest,
+    ) -> LibraryTagResponse: ...
+
+    def delete(self, *, user_id: int, tag_id: UUID) -> None: ...
+
+    def replace_assignments(
         self,
         *,
         user_id: int,
         request: LibraryTagAssignmentRequest,
     ) -> int: ...
-
-    def remove(
-        self,
-        *,
-        user_id: int,
-        document_id: UUID,
-        tag_id: UUID,
-    ) -> None: ...
 
 
 class LibraryTags:
@@ -78,45 +82,58 @@ class LibraryTags:
         )
         return result
 
-    def assign(
+    def rename(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        tag_id: UUID,
+        request: LibraryTagRenameRequest,
+    ) -> LibraryTagResponse:
+        result = self._gateway.rename(
+            user_id=actor.id,
+            tag_id=tag_id,
+            request=request,
+        )
+        self._journal.append(
+            actor=actor,
+            operation=operation,
+            action=LIBRARY_TAG_RENAMED,
+            resources=(ResourceRef(type="library_tag", id=str(result.id)),),
+        )
+        return result
+
+    def delete(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        tag_id: UUID,
+    ) -> None:
+        self._gateway.delete(user_id=actor.id, tag_id=tag_id)
+        self._journal.append(
+            actor=actor,
+            operation=operation,
+            action=LIBRARY_TAG_DELETED,
+            resources=(ResourceRef(type="library_tag", id=str(tag_id)),),
+        )
+
+    def replace_assignments(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         request: LibraryTagAssignmentRequest,
     ) -> LibraryTagAssignmentResponse:
-        assigned_count = self._gateway.assign(
+        updated_paper_count = self._gateway.replace_assignments(
             user_id=actor.id,
             request=request,
         )
-        if assigned_count:
+        if updated_paper_count:
             self._journal.append(
                 actor=actor,
                 operation=operation,
-                action=LIBRARY_TAGS_ASSIGNED,
+                action=LIBRARY_TAG_ASSIGNMENTS_REPLACED,
                 resources=(ResourceRef(type="library", id=str(actor.id)),),
             )
-        return LibraryTagAssignmentResponse(assigned_count=assigned_count)
-
-    def remove(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        document_id: UUID,
-        tag_id: UUID,
-    ) -> None:
-        self._gateway.remove(
-            user_id=actor.id,
-            document_id=document_id,
-            tag_id=tag_id,
-        )
-        self._journal.append(
-            actor=actor,
-            operation=operation,
-            action=LIBRARY_TAG_UNASSIGNED,
-            resources=(
-                ResourceRef(type="document", id=str(document_id)),
-                ResourceRef(type="library_tag", id=str(tag_id)),
-            ),
-        )
+        return LibraryTagAssignmentResponse(updated_paper_count=updated_paper_count)

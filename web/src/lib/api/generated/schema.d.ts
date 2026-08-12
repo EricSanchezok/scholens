@@ -799,23 +799,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/library/papers/{document_id}/tags/{tag_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove Library Tag Assignment */
-        delete: operations["remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/library/summary": {
         parameters: {
             query?: never;
@@ -859,13 +842,31 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
-        /** Assign Library Tags */
-        post: operations["assign_library_tags_api_v1_library_tags_assignments_post"];
+        /** Replace Library Tag Assignments */
+        put: operations["replace_library_tag_assignments_api_v1_library_tags_assignments_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Library Tag */
+        delete: operations["delete_library_tag_api_v1_library_tags__tag_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Library Tag */
+        patch: operations["rename_library_tag_api_v1_library_tags__tag_id__patch"];
         trace?: never;
     };
     "/api/v1/me": {
@@ -3252,8 +3253,8 @@ export interface components {
         };
         /** LibraryTagAssignmentResponse */
         LibraryTagAssignmentResponse: {
-            /** Assigned Count */
-            assigned_count: number;
+            /** Updated Paper Count */
+            updated_paper_count: number;
         };
         /** LibraryTagCreateRequest */
         LibraryTagCreateRequest: {
@@ -3268,6 +3269,11 @@ export interface components {
             items: components["schemas"]["LibraryTagResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /** LibraryTagRenameRequest */
+        LibraryTagRenameRequest: {
+            /** Name */
+            name: string;
         };
         /** LibraryTagResponse */
         LibraryTagResponse: {
@@ -6437,36 +6443,6 @@ export interface operations {
             };
         };
     };
-    remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-                tag_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_library_summary_api_v1_library_summary_get: {
         parameters: {
             query?: never;
@@ -6540,7 +6516,7 @@ export interface operations {
             };
         };
     };
-    assign_library_tags_api_v1_library_tags_assignments_post: {
+    replace_library_tag_assignments_api_v1_library_tags_assignments_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -6554,12 +6530,76 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryTagAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_library_tag_api_v1_library_tags__tag_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_library_tag_api_v1_library_tags__tag_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryTagRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryTagResponse"];
                 };
             };
             /** @description Validation Error */

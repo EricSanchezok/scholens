@@ -239,6 +239,10 @@ The Library exposes two deliberately different collections:
   stable keyset sorting, removal, download, and ingestion operate on that
   membership. Removing a paper removes the personal membership only; shared
   `Document` storage is reclaimed later only when no scope still references it.
+  Tags are user-owned resources with create, rename, and delete lifecycle
+  commands. Assignment updates replace the exact tag set for each selected
+  Library Paper, including an empty set; the API does not expose parallel
+  add-only and per-assignment removal protocols.
 - Outputs are a read projection over the four existing `ResearchItemKind`
   values: `highlight_thread`, `citation`, `audio_overview`, and `data_table`.
   The bootstrap adapter applies the canonical Research visibility predicate

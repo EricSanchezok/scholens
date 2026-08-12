@@ -78,6 +78,11 @@ implies deleting a `Document`: Project references and other users' memberships
 remain authoritative, and orphan cleanup is scheduled outside the request
 transaction.
 
+`PaperTag` owns a user-scoped label name. Renaming or deleting it is authorized
+against that owner; deletion cascades only its Library Paper assignments.
+Library Paper tag edits are exact-set replacements, so clearing the final tag
+does not require a separate compatibility endpoint.
+
 Library Outputs do not introduce another persistence model. They are a
 permission-filtered read projection of Scholens-owned `ResearchItem` rows and
 their existing kind-specific payload tables. Personal, document, and Project

@@ -57,6 +57,10 @@ scrolling; desktop table titles remain a single line.
 Library tags are explicit user-owned organizational labels, not model-generated
 keywords. Papers without assigned labels show no synthetic tags; the filter
 only lists labels the user owns, and assigned labels render with the paper.
+The tag manager owns the full label lifecycle: create, rename, delete, and exact
+assignment replacement. Saving an empty selection clears a paper's labels.
+Project assignment remains visibly unavailable until the Projects product slice
+is complete; Library does not query projects or open an empty chooser.
 
 An accepted ingestion is a first-class row in the same desktop table or mobile
 paper list as completed papers; it is never rendered as a detached status

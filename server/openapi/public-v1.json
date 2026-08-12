@@ -4662,7 +4662,6 @@
               "type": "string"
             },
             "maxItems": 120,
-            "minItems": 1,
             "title": "Tag Ids",
             "type": "array"
           }
@@ -4676,13 +4675,13 @@
       },
       "LibraryTagAssignmentResponse": {
         "properties": {
-          "assigned_count": {
-            "title": "Assigned Count",
+          "updated_paper_count": {
+            "title": "Updated Paper Count",
             "type": "integer"
           }
         },
         "required": [
-          "assigned_count"
+          "updated_paper_count"
         ],
         "title": "LibraryTagAssignmentResponse",
         "type": "object"
@@ -4740,6 +4739,22 @@
           "items"
         ],
         "title": "LibraryTagListResponse",
+        "type": "object"
+      },
+      "LibraryTagRenameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "LibraryTagRenameRequest",
         "type": "object"
       },
       "LibraryTagResponse": {
@@ -11350,54 +11365,6 @@
         "summary": "Share Library Paper"
       }
     },
-    "/api/v1/library/papers/{document_id}/tags/{tag_id}": {
-      "delete": {
-        "operationId": "remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tag_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Tag Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Remove Library Tag Assignment"
-      }
-    },
     "/api/v1/library/summary": {
       "get": {
         "operationId": "get_library_summary_api_v1_library_summary_get",
@@ -11486,8 +11453,8 @@
       }
     },
     "/api/v1/library/tags/assignments": {
-      "post": {
-        "operationId": "assign_library_tags_api_v1_library_tags_assignments_post",
+      "put": {
+        "operationId": "replace_library_tag_assignments_api_v1_library_tags_assignments_put",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11499,7 +11466,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -11525,7 +11492,98 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Assign Library Tags"
+        "summary": "Replace Library Tag Assignments"
+      }
+    },
+    "/api/v1/library/tags/{tag_id}": {
+      "delete": {
+        "operationId": "delete_library_tag_api_v1_library_tags__tag_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Library Tag"
+      },
+      "patch": {
+        "operationId": "rename_library_tag_api_v1_library_tags__tag_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryTagRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryTagResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Rename Library Tag"
       }
     },
     "/api/v1/me": {

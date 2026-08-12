@@ -293,9 +293,9 @@ def test_project_cleanup_jobs_are_journaled_only_when_created() -> None:
     ]
 
 
-def test_library_tag_assignment_uses_library_aggregate_and_skips_noop() -> None:
+def test_library_tag_replacement_uses_library_aggregate_and_skips_noop() -> None:
     gateway = MagicMock()
-    gateway.assign.side_effect = (0, 2)
+    gateway.replace_assignments.side_effect = (0, 2)
     journal, store = _journal()
     tags = LibraryTags(
         cast(LibraryTagGateway, gateway),
@@ -308,11 +308,13 @@ def test_library_tag_assignment_uses_library_aggregate_and_skips_noop() -> None:
         tag_ids=[uuid4(), uuid4()],
     )
 
-    tags.assign(actor=actor, operation=operation, request=request)
+    tags.replace_assignments(actor=actor, operation=operation, request=request)
     assert store.entries == []
 
-    tags.assign(actor=actor, operation=operation, request=request)
-    assert [str(entry.action) for entry in store.entries] == ["library.tags_assigned"]
+    tags.replace_assignments(actor=actor, operation=operation, request=request)
+    assert [str(entry.action) for entry in store.entries] == [
+        "library.tag_assignments_replaced"
+    ]
     assert store.entries[0].resources[0].type == "library"
     assert store.entries[0].resources[0].id == str(actor.id)
 
@@ -342,7 +344,7 @@ def test_workspace_commands_require_provenance_but_queries_do_not() -> None:
             "remove",
             "collect_public",
         },
-        LibraryTags: {"create", "assign", "remove"},
+        LibraryTags: {"create", "rename", "delete", "replace_assignments"},
     }
     queries = {
         Projects: {
