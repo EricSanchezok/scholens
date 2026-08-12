@@ -138,11 +138,13 @@ function ConversationGroup({
   items,
   activeConversationId,
   onSelect,
+  conversationHref,
 }: {
   title: string;
   items: ConversationSummary[];
   activeConversationId?: string;
   onSelect?: () => void;
+  conversationHref?: (conversationId: string) => string;
 }) {
   if (items.length === 0) return null;
 
@@ -161,7 +163,10 @@ function ConversationGroup({
             keyboardFocusRing,
             activeConversationId === conversation.id && "bg-hover",
           )}
-          href={`/?conversation=${conversation.id}`}
+          href={
+            (conversationHref?.(conversation.id) ??
+              `/?conversation=${conversation.id}`) as Route
+          }
           key={conversation.id}
           onClick={onSelect}
         >
@@ -329,11 +334,13 @@ function MobileConversationGroup({
   activeConversationId,
   items,
   onSelect,
+  conversationHref,
   title,
 }: {
   activeConversationId?: string;
   items: ConversationSummary[];
   onSelect: () => void;
+  conversationHref?: (conversationId: string) => string;
   title: string;
 }) {
   const format = useFormatter();
@@ -353,7 +360,10 @@ function MobileConversationGroup({
             keyboardFocusRing,
             activeConversationId === conversation.id && "bg-surface",
           )}
-          href={`/?conversation=${conversation.id}`}
+          href={
+            (conversationHref?.(conversation.id) ??
+              `/?conversation=${conversation.id}`) as Route
+          }
           key={conversation.id}
           onClick={onSelect}
         >
@@ -379,6 +389,7 @@ function MobileNavigation({
   signingOut,
   onSignOut,
   onSelect,
+  conversationHref,
 }: {
   actor: Actor;
   conversations: ConversationSummary[];
@@ -386,6 +397,7 @@ function MobileNavigation({
   signingOut: boolean;
   onSignOut: () => Promise<void>;
   onSelect: () => void;
+  conversationHref?: (conversationId: string) => string;
 }) {
   const t = useTranslations("WorkspaceShell");
   const [query, setQuery] = React.useState("");
@@ -408,12 +420,14 @@ function MobileNavigation({
           activeConversationId={activeConversationId}
           items={pinned}
           onSelect={onSelect}
+          conversationHref={conversationHref}
           title={t("sidebar.pinned")}
         />
         <MobileConversationGroup
           activeConversationId={activeConversationId}
           items={recent}
           onSelect={onSelect}
+          conversationHref={conversationHref}
           title={t("sidebar.conversations")}
         />
         {matching.length === 0 && (
@@ -611,6 +625,7 @@ function Sidebar({
   onCollapsedChange,
   onSignOut,
   onSelect,
+  conversationHref,
 }: {
   actor: Actor;
   conversations: ConversationSummary[];
@@ -621,6 +636,7 @@ function Sidebar({
   onCollapsedChange: (collapsed: boolean) => void;
   onSignOut: () => Promise<void>;
   onSelect?: () => void;
+  conversationHref?: (conversationId: string) => string;
 }) {
   const t = useTranslations("WorkspaceShell");
   const pinned = conversations.filter((item) => item.pinned_at).slice(0, 3);
@@ -629,6 +645,7 @@ function Sidebar({
   return (
     <TooltipProvider delayDuration={250}>
       <aside
+        aria-label={t("navigation.sidebar")}
         className={cn(
           "border-line bg-sidebar flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))] transition-[width] duration-200 ease-out motion-reduce:transition-none",
           collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
@@ -694,6 +711,7 @@ function Sidebar({
               activeConversationId={activeConversationId}
               items={pinned}
               onSelect={onSelect}
+              conversationHref={conversationHref}
               title={t("sidebar.pinned")}
             />
             <div className={pinned.length > 0 ? "mt-2" : undefined}>
@@ -701,6 +719,7 @@ function Sidebar({
                 activeConversationId={activeConversationId}
                 items={recent}
                 onSelect={onSelect}
+                conversationHref={conversationHref}
                 title={t("sidebar.recent")}
               />
             </div>
@@ -739,6 +758,7 @@ export function WorkspaceShell({
   mobileBottomRef,
   mobileViewport,
   showMobileBottomNavigation = true,
+  conversationHref,
   children,
 }: {
   actor: Actor;
@@ -756,6 +776,7 @@ export function WorkspaceShell({
   mobileBottomRef?: React.Ref<HTMLDivElement>;
   mobileViewport?: MobileViewportState;
   showMobileBottomNavigation?: boolean;
+  conversationHref?: (conversationId: string) => string;
   children: React.ReactNode;
 }) {
   const t = useTranslations("WorkspaceShell");
@@ -786,6 +807,7 @@ export function WorkspaceShell({
           onCollapsedChange={onCollapsedChange}
           onSignOut={onSignOut}
           signingOut={signingOut}
+          conversationHref={conversationHref}
         />
       </div>
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
@@ -810,6 +832,7 @@ export function WorkspaceShell({
             onSelect={() => setMobileOpen(false)}
             onSignOut={onSignOut}
             signingOut={signingOut}
+            conversationHref={conversationHref}
           />
         </SheetContent>
       </Sheet>

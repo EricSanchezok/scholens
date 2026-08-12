@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
@@ -10,25 +10,10 @@ import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
   ConversationView,
-  conversationFailureFromError,
-  conversationKeys,
   conversationQueries,
-  createConversation,
-  createLiveTurn,
   ReasoningMenu,
-  reduceLiveTurn,
   ResearchComposer,
-  selectConversationResponse,
-  streamConversationRetry,
-  streamConversationTurn,
-  updateConversationContext,
-  updateLatestTurnSuggestions,
-  upsertConversationTurn,
-  useResearchComposerForm,
-  type ConversationStreamEvent,
-  type ConversationTurn,
-  type ConversationTurnsResponse,
-  type LiveTurn,
+  useConversationSession,
   type ReasoningLevel,
   type ResearchContext,
 } from "@/features/conversation";
@@ -41,27 +26,6 @@ import { useDesktopLayout } from "./hooks/use-desktop-layout";
 import { useMobileKeyboard } from "./hooks/use-mobile-keyboard";
 import { homeQueries } from "./api/queries";
 
-type StreamSession = {
-  conversationId: string;
-  turnId: string;
-  responseId: string;
-  controller: AbortController;
-  started: boolean;
-  ready: boolean;
-  superseded: boolean;
-};
-
-function sameContext(left: ResearchContext, right: ResearchContext) {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === "library" || right.kind === "library") return true;
-  return (
-    [...(left.project_ids ?? [])].sort().join(",") ===
-      [...(right.project_ids ?? [])].sort().join(",") &&
-    [...(left.document_ids ?? [])].sort().join(",") ===
-      [...(right.document_ids ?? [])].sort().join(",")
-  );
-}
-
 export function HomeWorkspace({
   actor,
   initialConversationId,
@@ -72,13 +36,9 @@ export function HomeWorkspace({
   mobileKeyboardOverride?: { open: boolean; viewportHeight?: number };
 }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const toast = useToast();
   const t = useTranslations("Home");
-  const locale = useLocale() === "zh-CN" ? "zh-CN" : "en";
   const { signOut } = useAuthSession();
-  const [pendingConversationId, setPendingConversationId] =
-    React.useState<string>();
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [contextOverrides, setContextOverrides] = React.useState<
@@ -86,358 +46,48 @@ export function HomeWorkspace({
   >({});
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
-  const [liveTurn, setLiveTurn] = React.useState<LiveTurn | null>(null);
-  const [liveTurnConversationId, setLiveTurnConversationId] =
-    React.useState<string>();
-  const [submissionPending, setSubmissionPending] = React.useState(false);
-  const streamSession = React.useRef<StreamSession | null>(null);
-  const submissionInFlight = React.useRef(false);
-  const composerForm = useResearchComposerForm();
   const isDesktop = useDesktopLayout();
   const mobileDockRef = React.useRef<HTMLDivElement>(null);
   const measuredMobileKeyboard = useMobileKeyboard(mobileDockRef, !isDesktop);
   const mobileViewport = mobileKeyboardOverride ?? measuredMobileKeyboard;
 
-  const activeConversationId = initialConversationId ?? pendingConversationId;
-
   const conversationsQuery = useQuery(conversationQueries.list());
   const papersQuery = useQuery(homeQueries.papers());
   const projectsQuery = useQuery(homeQueries.projects());
-  const conversationQuery = useQuery({
-    ...conversationQueries.detail(activeConversationId ?? ""),
-    enabled: Boolean(activeConversationId),
-  });
-  const turnsQuery = useQuery({
-    ...conversationQueries.turns(activeConversationId ?? ""),
-    enabled: Boolean(activeConversationId),
-  });
-
-  React.useEffect(
-    () => () => {
-      const session = streamSession.current;
-      if (session) {
-        session.superseded = true;
-        session.controller.abort();
-      }
-    },
-    [],
-  );
-
   const conversations = conversationsQuery.data?.items ?? [];
   const papers = (papersQuery.data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
   );
   const projects = projectsQuery.data?.items ?? [];
-  const contextKey = activeConversationId ?? "new";
-  const context =
-    contextOverrides[contextKey] ??
-    conversationQuery.data?.paper_context ??
-    ({ kind: "library" } satisfies ResearchContext);
+  const requestedContext = contextOverrides[initialConversationId ?? "new"];
+  const conversation = useConversationSession({
+    conversationId: initialConversationId,
+    context: requestedContext,
+    onConversationCreated: (conversationId) => {
+      setContextOverrides((current) => ({
+        ...current,
+        [conversationId]:
+          requestedContext ?? ({ kind: "library" } satisfies ResearchContext),
+      }));
+      router.replace(`/?conversation=${conversationId}`, { scroll: false });
+    },
+    onCreateError: () =>
+      toast.notify({
+        title: t("conversation.error"),
+        description: t("conversation.retryHint"),
+      }),
+    reasoningLevel,
+    scopeType: "global",
+    updateExistingContext: true,
+  });
+  const contextKey = conversation.activeConversationId ?? "new";
+  const context = conversation.context;
 
   function handleContextChange(nextContext: ResearchContext) {
     setContextOverrides((current) => ({
       ...current,
       [contextKey]: nextContext,
     }));
-  }
-
-  function supersedeReadyStream() {
-    const session = streamSession.current;
-    if (!session?.ready) return;
-    session.superseded = true;
-    streamSession.current = null;
-    session.controller.abort();
-  }
-
-  function releaseSubmission(session: StreamSession) {
-    if (streamSession.current !== session) return;
-    submissionInFlight.current = false;
-    setSubmissionPending(false);
-  }
-
-  function applyStreamEvent(
-    session: StreamSession,
-    event: ConversationStreamEvent,
-  ) {
-    if (streamSession.current !== session || session.superseded) return;
-    if (event.type === "start") {
-      if (
-        event.turn_id !== session.turnId ||
-        event.response_id !== session.responseId
-      ) {
-        return;
-      }
-      session.started = true;
-    } else if (event.type === "response_ready") {
-      if (
-        event.turn.id !== session.turnId ||
-        !event.turn.responses.some(
-          (response) => response.id === session.responseId,
-        )
-      ) {
-        return;
-      }
-      session.ready = true;
-      queryClient.setQueryData<ConversationTurnsResponse>(
-        conversationKeys.turns(session.conversationId),
-        (current) => upsertConversationTurn(current, event.turn),
-      );
-      releaseSubmission(session);
-      void queryClient.invalidateQueries({
-        queryKey: conversationKeys.lists(),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: conversationKeys.detail(session.conversationId),
-      });
-    } else if (event.type === "suggestions") {
-      if (
-        event.turn_id !== session.turnId ||
-        event.response_id !== session.responseId
-      ) {
-        return;
-      }
-      queryClient.setQueryData<ConversationTurnsResponse>(
-        conversationKeys.turns(session.conversationId),
-        (current) =>
-          updateLatestTurnSuggestions(
-            current,
-            event.turn_id,
-            event.suggestions,
-          ),
-      );
-    } else if (event.response_id !== session.responseId) {
-      return;
-    }
-
-    setLiveTurn((current) => reduceLiveTurn(current, event));
-
-    if (event.type === "error") releaseSubmission(session);
-    if (event.type === "complete") {
-      void queryClient.invalidateQueries({
-        queryKey: conversationKeys.lists(),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: conversationKeys.detail(session.conversationId),
-      });
-      if (streamSession.current === session) streamSession.current = null;
-      setLiveTurn((current) =>
-        current?.turnId === session.turnId &&
-        current.responseId === session.responseId
-          ? null
-          : current,
-      );
-    }
-  }
-
-  async function sendMessage(message: string) {
-    if (submissionInFlight.current) return;
-    submissionInFlight.current = true;
-    setSubmissionPending(true);
-    supersedeReadyStream();
-    const previousLiveTurn = liveTurn;
-    const creatingConversation = !activeConversationId;
-    let conversationId = activeConversationId;
-    let session: StreamSession | null = null;
-    try {
-      if (!conversationId) {
-        const conversation = await createConversation({
-          scope_type: "global",
-          paper_context: context,
-        });
-        conversationId = conversation.id;
-        setPendingConversationId(conversation.id);
-        setContextOverrides((current) => ({
-          ...current,
-          [conversation.id]: context,
-        }));
-        queryClient.setQueryData(
-          conversationKeys.detail(conversation.id),
-          conversation,
-        );
-        router.replace(`/?conversation=${conversation.id}`, { scroll: false });
-      } else if (
-        conversationQuery.data &&
-        !sameContext(context, conversationQuery.data.paper_context)
-      ) {
-        await updateConversationContext(conversationId, context);
-      }
-
-      const controller = new AbortController();
-      const turnId = crypto.randomUUID();
-      const responseId = crypto.randomUUID();
-      session = {
-        conversationId,
-        turnId,
-        responseId,
-        controller,
-        started: false,
-        ready: false,
-        superseded: false,
-      };
-      streamSession.current = session;
-      setLiveTurnConversationId(conversationId);
-      setLiveTurn(createLiveTurn(turnId, responseId, message));
-      composerForm.reset();
-      await streamConversationTurn({
-        conversationId,
-        request: {
-          turn_id: turnId,
-          response_id: responseId,
-          user_query: message,
-          locale,
-          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-          reasoning_level: reasoningLevel,
-        },
-        signal: controller.signal,
-        onEvent: (event) => applyStreamEvent(session!, event),
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        if (session && !session.superseded && !session.ready) {
-          const responseId = session.responseId;
-          setLiveTurn((current) =>
-            current?.responseId === responseId
-              ? { ...current, state: "cancelled" }
-              : current,
-          );
-        }
-        if (conversationId && session && !session.ready) {
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: conversationKeys.turns(conversationId),
-            }),
-            queryClient.invalidateQueries({
-              queryKey: conversationKeys.detail(conversationId),
-            }),
-          ]);
-        }
-      } else if (session?.ready) {
-        const responseId = session.responseId;
-        setLiveTurn((current) =>
-          current?.responseId === responseId
-            ? { ...current, state: "complete" }
-            : current,
-        );
-      } else if (session?.started) {
-        const responseId = session.responseId;
-        setLiveTurn((current) =>
-          current?.responseId === responseId
-            ? {
-                ...current,
-                failure: conversationFailureFromError(error),
-                state: "error",
-              }
-            : current,
-        );
-      } else {
-        setLiveTurn(previousLiveTurn);
-        composerForm.setValue("message", message, {
-          shouldDirty: true,
-          shouldValidate: true,
-        });
-        if (creatingConversation) {
-          toast.notify({
-            title: t("conversation.error"),
-            description: t("conversation.retryHint"),
-          });
-        }
-      }
-    } finally {
-      if (!session || streamSession.current === session) {
-        if (streamSession.current === session) streamSession.current = null;
-        submissionInFlight.current = false;
-        setSubmissionPending(false);
-      }
-      setPendingConversationId(undefined);
-    }
-  }
-
-  async function retryResponse(turn: ConversationTurn) {
-    if (!activeConversationId || submissionInFlight.current) return;
-    submissionInFlight.current = true;
-    setSubmissionPending(true);
-    supersedeReadyStream();
-    const previousLiveTurn = liveTurn;
-    const responseId = crypto.randomUUID();
-    const controller = new AbortController();
-    const session: StreamSession = {
-      conversationId: activeConversationId,
-      turnId: turn.id,
-      responseId,
-      controller,
-      started: false,
-      ready: false,
-      superseded: false,
-    };
-    streamSession.current = session;
-    setLiveTurnConversationId(activeConversationId);
-    setLiveTurn(createLiveTurn(turn.id, responseId, turn.user_query, "retry"));
-    try {
-      await streamConversationRetry({
-        conversationId: activeConversationId,
-        turnId: turn.id,
-        request: { response_id: responseId },
-        signal: controller.signal,
-        onEvent: (event) => applyStreamEvent(session, event),
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        if (!session.superseded && !session.ready) {
-          setLiveTurn((current) =>
-            current?.responseId === session.responseId
-              ? { ...current, state: "cancelled" }
-              : current,
-          );
-        }
-      } else if (session.ready) {
-        setLiveTurn((current) =>
-          current?.responseId === session.responseId
-            ? { ...current, state: "complete" }
-            : current,
-        );
-      } else if (!session.started) {
-        setLiveTurn(previousLiveTurn);
-      } else {
-        setLiveTurn((current) =>
-          current?.responseId === session.responseId
-            ? {
-                ...current,
-                failure: conversationFailureFromError(error),
-                state: "error",
-              }
-            : current,
-        );
-      }
-      await queryClient.invalidateQueries({
-        queryKey: conversationKeys.turns(activeConversationId),
-      });
-    } finally {
-      if (streamSession.current === session) {
-        streamSession.current = null;
-        submissionInFlight.current = false;
-        setSubmissionPending(false);
-      }
-    }
-  }
-
-  async function selectResponse(turnId: string, responseId: string) {
-    if (!activeConversationId || submissionInFlight.current) return;
-    await selectConversationResponse({
-      conversationId: activeConversationId,
-      turnId,
-      responseId,
-    });
-    await queryClient.invalidateQueries({
-      queryKey: conversationKeys.turns(activeConversationId),
-    });
-  }
-
-  function useSuggestion(suggestion: string) {
-    composerForm.setValue("message", suggestion, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-    composerForm.setFocus("message");
   }
 
   async function handleSignOut() {
@@ -450,36 +100,34 @@ export function HomeWorkspace({
     }
   }
 
-  const conversationBusy = submissionPending || liveTurn?.state === "streaming";
-  const conversationUnavailable =
-    conversationQuery.isPending ||
-    conversationQuery.isError ||
-    turnsQuery.isError ||
-    conversationQuery.data?.capabilities.send !== true;
   const mobileComposer = !isDesktop ? (
     <ResearchComposer
-      busy={activeConversationId ? conversationBusy : undefined}
-      compact={Boolean(activeConversationId)}
-      context={context}
-      form={composerForm}
-      onContextChange={handleContextChange}
-      onReasoningLevelChange={setReasoningLevel}
-      onStop={
-        activeConversationId
-          ? () => streamSession.current?.controller.abort()
+      busy={
+        conversation.activeConversationId
+          ? conversation.conversationBusy
           : undefined
       }
-      onSubmit={sendMessage}
+      compact={Boolean(conversation.activeConversationId)}
+      context={context}
+      form={conversation.composerForm}
+      onContextChange={handleContextChange}
+      onReasoningLevelChange={setReasoningLevel}
+      onStop={conversation.activeConversationId ? conversation.stop : undefined}
+      onSubmit={conversation.sendMessage}
       papers={papers}
       projects={projects}
       reasoningLevel={reasoningLevel}
-      unavailable={activeConversationId ? conversationUnavailable : undefined}
+      unavailable={
+        conversation.activeConversationId
+          ? conversation.conversationUnavailable
+          : undefined
+      }
     />
   ) : undefined;
 
   return (
     <WorkspaceShell
-      activeConversationId={activeConversationId}
+      activeConversationId={conversation.activeConversationId}
       activeDestination="ask"
       actor={actor}
       collapsed={collapsed}
@@ -499,46 +147,50 @@ export function HomeWorkspace({
       mobileHeaderTrailing={<WorkspaceNewChatAction />}
       mobileViewport={mobileViewport}
     >
-      {activeConversationId ? (
+      {conversation.activeConversationId ? (
         <ConversationView
-          canSend={conversationQuery.data?.capabilities.send === true}
-          composerForm={composerForm}
+          canSend={conversation.canSend}
+          composerForm={conversation.composerForm}
           context={context}
-          error={conversationQuery.isError || turnsQuery.isError}
-          liveTurn={
-            liveTurnConversationId === activeConversationId ? liveTurn : null
+          error={
+            conversation.conversationQuery.isError ||
+            conversation.turnsQuery.isError
           }
-          loading={conversationQuery.isPending || turnsQuery.isPending}
-          submissionPending={submissionPending}
-          turns={turnsQuery.data?.items ?? []}
+          liveTurn={conversation.liveTurn}
+          loading={
+            conversation.conversationQuery.isPending ||
+            conversation.turnsQuery.isPending
+          }
+          submissionPending={conversation.submissionPending}
+          turns={conversation.turnsQuery.data?.items ?? []}
           onContextChange={handleContextChange}
           onReasoningLevelChange={setReasoningLevel}
           onRetry={() => {
-            void conversationQuery.refetch();
-            void turnsQuery.refetch();
+            void conversation.conversationQuery.refetch();
+            void conversation.turnsQuery.refetch();
           }}
-          onRetryResponse={(turn) => void retryResponse(turn)}
+          onRetryResponse={(turn) => void conversation.retryResponse(turn)}
           onSelectResponse={(turnId, responseId) =>
-            void selectResponse(turnId, responseId)
+            void conversation.selectResponse(turnId, responseId)
           }
-          onStop={() => streamSession.current?.controller.abort()}
-          onSubmit={sendMessage}
-          onUseSuggestion={useSuggestion}
+          onStop={conversation.stop}
+          onSubmit={conversation.sendMessage}
+          onUseSuggestion={conversation.useSuggestion}
           papers={papers}
           projects={projects}
           reasoningLevel={reasoningLevel}
-          readOnlyReason={conversationQuery.data?.read_only_reason}
+          readOnlyReason={conversation.conversationQuery.data?.read_only_reason}
           showComposer={isDesktop}
         />
       ) : (
         <HomeDashboard
-          composerForm={composerForm}
+          composerForm={conversation.composerForm}
           context={context}
           onContextChange={handleContextChange}
           onReasoningLevelChange={setReasoningLevel}
           onRetryPapers={() => void papersQuery.refetch()}
           onRetryProjects={() => void projectsQuery.refetch()}
-          onSubmit={sendMessage}
+          onSubmit={conversation.sendMessage}
           papers={papers}
           papersError={papersQuery.isError}
           papersLoading={papersQuery.isPending}

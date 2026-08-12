@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, List, Search } from "iconoir-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "iconoir-react";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -11,21 +11,48 @@ import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
   Button,
   IconButton,
-  SearchField,
   Sheet,
   SheetContent,
   SheetDescription,
   SheetTitle,
+  useToast,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
-import { conversationQueries } from "@/features/conversation";
+import {
+  conversationKeys,
+  conversationQueries,
+  useConversationSession,
+  type ReasoningLevel,
+} from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
-import type { components } from "@/lib/api/generated/schema";
-import { cn } from "@/lib/utilities/cn";
-import { getReaderDownloadUrl, readerQueries } from "./api/queries";
-import { PdfPage, type ReaderFitMode } from "./components/pdf-page";
+import {
+  createReaderComment,
+  createReaderHighlight,
+  deleteReaderComment,
+  deleteReaderHighlight,
+  getReaderDownloadUrl,
+  readerKeys,
+  readerQueries,
+  setReaderConversationPinned,
+  updateReaderComment,
+  updateReaderHighlight,
+} from "./api/queries";
+import {
+  PdfPage,
+  type ReaderFitMode,
+  type ReaderSelection,
+} from "./components/pdf-page";
 import { PdfThumbnail } from "./components/pdf-thumbnail";
+import {
+  useDesktopReaderPanel,
+  useThumbnailRail,
+} from "./hooks/use-thumbnail-rail";
+import { ReaderContextPanel } from "./components/reader-context-panel";
+import {
+  ReaderOutline,
+  ReaderSearchPanel,
+} from "./components/reader-navigation-panels";
 import {
   ReaderToolbar,
   type ReaderToolbarLabels,
@@ -38,53 +65,12 @@ import {
   flattenReaderSearchResults,
   moveReaderSearchCursor,
 } from "./reader-search";
-
-type ReaderPanel = "ask" | "annotations" | "details" | "outline" | "search";
-type ReaderDocument = components["schemas"]["DocumentResponse"];
-
-function parsePositiveInteger(value: string | null, fallback = 1) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : fallback;
-}
-
-function readPanel(value: string | null): ReaderPanel | undefined {
-  return value === "ask" ||
-    value === "annotations" ||
-    value === "details" ||
-    value === "outline" ||
-    value === "search"
-    ? value
-    : undefined;
-}
-
-function ReaderOutline({
-  entries,
-  onSelect,
-}: {
-  entries: PdfOutlineEntry[];
-  onSelect: (destination: unknown) => void;
-}) {
-  return (
-    <ul className="grid gap-0.5">
-      {entries.map((entry, index) => (
-        <li key={`${entry.title}:${index}`}>
-          <button
-            className="hover:bg-hover w-full rounded-[var(--radius-md)] px-2 py-2 text-left text-sm"
-            onClick={() => onSelect(entry.destination)}
-            type="button"
-          >
-            {entry.title}
-          </button>
-          {entry.children.length > 0 && (
-            <div className="border-line ml-3 border-l pl-2">
-              <ReaderOutline entries={entry.children} onSelect={onSelect} />
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
+import {
+  parsePositiveInteger,
+  readReaderPanel,
+  readSourcePage,
+} from "./reader-routing";
+import type { ReaderPanel } from "./reader-types";
 
 function ReaderDocumentWorkspace({
   actor,
@@ -94,8 +80,10 @@ function ReaderDocumentWorkspace({
   documentId: string;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const t = useTranslations("Reader");
+  const toast = useToast();
   const { signOut } = useAuthSession();
   const [collapsed, setCollapsed] = React.useState(true);
   const [signingOut, setSigningOut] = React.useState(false);
@@ -117,22 +105,24 @@ function ReaderDocumentWorkspace({
     results: Awaited<ReturnType<PdfDocumentAdapter["search"]>>;
   }>();
   const [searchIndex, setSearchIndex] = React.useState(-1);
+  const [selection, setSelection] = React.useState<ReaderSelection>();
+  const [selectedAnnotationId, setSelectedAnnotationId] =
+    React.useState<string>();
+  const [reasoningLevel, setReasoningLevel] =
+    React.useState<ReasoningLevel>("standard");
   const documentQuery = useQuery(readerQueries.document(documentId));
+  const annotationsQuery = useQuery(readerQueries.annotations(documentId));
   const conversationsQuery = useQuery(
     conversationQueries.list({ scopeId: documentId, scopeType: "paper" }),
   );
 
   const rawPage = parsePositiveInteger(searchParams.get("page"));
   const pageNumber = Math.min(rawPage, pageCount);
-  const panel = readPanel(searchParams.get("panel"));
+  const panel = readReaderPanel(searchParams.get("panel"));
   const conversationId = searchParams.get("conversation") ?? undefined;
-  const adapter =
-    adapterState?.documentId === documentId ? adapterState.adapter : undefined;
-  const adapterError =
-    adapterErrorState?.documentId === documentId
-      ? adapterErrorState.error
-      : undefined;
-
+  const selectedAnnotation = annotationsQuery.data?.items.find(
+    (item) => item.id === selectedAnnotationId,
+  );
   const updateLocation = React.useCallback(
     (patch: {
       page?: number;
@@ -153,6 +143,72 @@ function ReaderDocumentWorkspace({
     },
     [documentId, router, searchParams],
   );
+  const conversationSession = useConversationSession({
+    context: {
+      kind: "selection",
+      document_ids: [documentId],
+      project_ids: [],
+    },
+    conversationId,
+    getTurnContexts: () => {
+      if (selection) return [{ ...selection, document_id: documentId }];
+      if (selectedAnnotationId) {
+        return [{ kind: "highlight_thread", thread_id: selectedAnnotationId }];
+      }
+      return undefined;
+    },
+    onConversationCreated: (nextConversationId) =>
+      updateLocation({ conversation: nextConversationId, panel: "ask" }),
+    onTurnStarted: () => setSelection(undefined),
+    reasoningLevel,
+    scopeId: documentId,
+    scopeType: "paper",
+  });
+  const adapter =
+    adapterState?.documentId === documentId ? adapterState.adapter : undefined;
+  const adapterError =
+    adapterErrorState?.documentId === documentId
+      ? adapterErrorState.error
+      : undefined;
+
+  async function refreshAnnotations() {
+    await queryClient.invalidateQueries({
+      queryKey: readerKeys.annotations(documentId),
+    });
+  }
+
+  async function createHighlight(comment?: string) {
+    if (!selection) return;
+    const item = await createReaderHighlight(documentId, {
+      color: "yellow",
+      position: selection.anchor,
+      quote_text: selection.selected_text,
+      shared: false,
+    });
+    if (comment?.trim()) await createReaderComment(item.id, comment.trim());
+    await refreshAnnotations();
+    setSelectedAnnotationId(item.id);
+    setSelection(undefined);
+    window.getSelection()?.removeAllRanges();
+  }
+
+  function notifyActionError() {
+    toast.notify({
+      description: t("actions.failedDescription"),
+      title: t("actions.failedTitle"),
+    });
+  }
+
+  async function openAnnotation(annotationId: string) {
+    setSelectedAnnotationId(annotationId);
+    const annotation = annotationsQuery.data?.items.find(
+      (item) => item.id === annotationId,
+    );
+    const position = annotation?.highlight_thread?.position;
+    if (position?.page_number)
+      updateLocation({ page: position.page_number, panel: "annotations" });
+    else updateLocation({ panel: "annotations" });
+  }
 
   const refreshFileUrl = React.useCallback(
     () => getReaderDownloadUrl(documentId),
@@ -233,7 +289,11 @@ function ReaderDocumentWorkspace({
   }
 
   async function handleDownload() {
-    window.open(await refreshFileUrl(), "_blank", "noopener,noreferrer");
+    try {
+      window.open(await refreshFileUrl(), "_blank", "noopener,noreferrer");
+    } catch {
+      notifyActionError();
+    }
   }
 
   const toolbarLabels = React.useMemo<ReaderToolbarLabels>(
@@ -258,6 +318,8 @@ function ReaderDocumentWorkspace({
   const title = document?.title ?? document?.original_filename ?? t("untitled");
   const desktopPanelOpen =
     panel === "ask" || panel === "annotations" || panel === "details";
+  const useDesktopPanel = useDesktopReaderPanel();
+  const showThumbnailRail = useThumbnailRail();
 
   return (
     <WorkspaceShell
@@ -266,6 +328,9 @@ function ReaderDocumentWorkspace({
       actor={actor}
       collapsed={collapsed}
       conversations={conversationsQuery.data?.items ?? []}
+      conversationHref={(id) =>
+        `/reader/${documentId}?panel=ask&conversation=${id}`
+      }
       mobileHeaderCenter={
         <span className="block truncate text-sm font-medium">{title}</span>
       }
@@ -387,43 +452,135 @@ function ReaderDocumentWorkspace({
               zoom={zoom}
             />
             <div className="flex min-h-0 flex-1">
-              <aside className="border-line bg-canvas hidden w-28 shrink-0 overflow-y-auto border-r p-2 md:block">
-                <div className="grid gap-1">
-                  {Array.from(
-                    { length: pageCount },
-                    (_, index) => index + 1,
-                  ).map((number) => (
-                    <PdfThumbnail
-                      adapter={adapter}
-                      current={pageNumber === number}
-                      key={number}
-                      label={t("thumbnail", { page: number })}
-                      onSelect={() => updateLocation({ page: number })}
-                      pageNumber={number}
-                    />
-                  ))}
-                </div>
-              </aside>
+              {showThumbnailRail && (
+                <aside
+                  aria-label={t("thumbnailRail")}
+                  className="border-line bg-canvas w-28 shrink-0 overflow-y-auto border-r p-2"
+                >
+                  <div className="grid gap-1">
+                    {Array.from(
+                      { length: pageCount },
+                      (_, index) => index + 1,
+                    ).map((number) => (
+                      <PdfThumbnail
+                        adapter={adapter}
+                        current={pageNumber === number}
+                        key={number}
+                        label={t("thumbnail", { page: number })}
+                        onSelect={() => updateLocation({ page: number })}
+                        pageNumber={number}
+                      />
+                    ))}
+                  </div>
+                </aside>
+              )}
               <PdfPage
                 adapter={adapter}
+                annotationLinkLabel={t("pdfLink")}
+                annotations={annotationsQuery.data?.items ?? []}
+                canvasLabel={t("documentCanvas")}
                 fitMode={fitMode}
                 loadingLabel={t("renderingPage")}
+                onAnnotationSelect={(id) => void openAnnotation(id)}
+                onAskSelection={() => updateLocation({ panel: "ask" })}
+                onCommentSelection={() => {
+                  setSelectedAnnotationId(undefined);
+                  updateLocation({ panel: "annotations" });
+                }}
+                onHighlightSelection={() => {
+                  void createHighlight().catch(notifyActionError);
+                }}
                 onInternalDestination={(destination) =>
                   void resolveDestination(destination)
                 }
+                onSelectionChange={(nextSelection) => {
+                  setSelectedAnnotationId(undefined);
+                  setSelection(
+                    nextSelection
+                      ? { ...nextSelection, document_id: documentId }
+                      : undefined,
+                  );
+                }}
                 pageNumber={pageNumber}
                 searchQuery={searchQuery}
+                selectedAnnotationId={selectedAnnotationId}
+                selection={selection}
+                selectionLabels={{
+                  ask: t("selection.ask"),
+                  comment: t("selection.comment"),
+                  copy: t("selection.copy"),
+                  copied: t("selection.copied"),
+                  copying: t("selection.copying"),
+                  copyFailed: t("selection.copyFailed"),
+                  highlight: t("selection.highlight"),
+                }}
                 zoom={zoom}
               />
-              {desktopPanelOpen && (
+              {useDesktopPanel && desktopPanelOpen && (
                 <ReaderContextPanel
-                  className="hidden lg:flex"
+                  className="flex"
                   document={document}
+                  annotations={annotationsQuery.data?.items ?? []}
+                  annotationsError={annotationsQuery.isError}
+                  conversationId={conversationSession.activeConversationId}
+                  conversationSession={conversationSession}
+                  conversations={conversationsQuery.data?.items ?? []}
+                  conversationsLoading={conversationsQuery.isPending}
+                  onActionError={notifyActionError}
+                  onAnnotationDelete={async (id) => {
+                    await deleteReaderHighlight(id);
+                    setSelectedAnnotationId(undefined);
+                    await refreshAnnotations();
+                  }}
+                  onAnnotationSelect={(id) => void openAnnotation(id)}
+                  onCommentCreate={async (id, content) => {
+                    await createReaderComment(id, content);
+                    await refreshAnnotations();
+                  }}
+                  onCommentDelete={async (id) => {
+                    await deleteReaderComment(id);
+                    await refreshAnnotations();
+                  }}
+                  onCommentUpdate={async (id, content) => {
+                    await updateReaderComment(id, content);
+                    await refreshAnnotations();
+                  }}
                   onClose={() => updateLocation({ panel: null })}
+                  onConversationChange={(id) =>
+                    updateLocation({ conversation: id, panel: "ask" })
+                  }
+                  onConversationNew={() =>
+                    updateLocation({ conversation: null, panel: "ask" })
+                  }
+                  onConversationPin={async (id, pinned) => {
+                    await setReaderConversationPinned(id, pinned);
+                    await queryClient.invalidateQueries({
+                      queryKey: conversationKeys.lists(),
+                    });
+                  }}
+                  onHighlightCreate={createHighlight}
+                  onHighlightUpdate={async (id, color) => {
+                    await updateReaderHighlight(id, { color });
+                    await refreshAnnotations();
+                  }}
                   onPanelChange={(nextPanel) =>
                     updateLocation({ panel: nextPanel })
                   }
+                  onSourceOpen={(source) => {
+                    const page = readSourcePage(source.locator);
+                    if (source.document_id === documentId) {
+                      updateLocation({ page, panel: "ask" });
+                    } else {
+                      router.push(
+                        `/reader/${source.document_id}${page ? `?page=${page}` : ""}` as Route,
+                      );
+                    }
+                  }}
                   panel={panel ?? "ask"}
+                  reasoningLevel={reasoningLevel}
+                  selectedAnnotation={selectedAnnotation}
+                  selection={selection}
+                  setReasoningLevel={setReasoningLevel}
                   title={title}
                 />
               )}
@@ -439,7 +596,7 @@ function ReaderDocumentWorkspace({
         open={panel === "search" || panel === "outline"}
       >
         <SheetContent
-          className="inset-x-0 top-auto bottom-0 h-[min(82dvh,42rem)] w-full max-w-none rounded-t-[var(--radius-xl)] border-x-0 border-t p-0 lg:inset-y-0 lg:right-0 lg:left-auto lg:h-full lg:w-[26rem] lg:rounded-none lg:border-t-0 lg:border-l"
+          className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0 lg:inset-y-0 lg:right-0 lg:left-auto lg:h-full lg:w-[26rem] lg:rounded-none lg:border-l"
           closeLabel={t("closePanel")}
         >
           {panel === "search" ? (
@@ -471,7 +628,7 @@ function ReaderDocumentWorkspace({
               query={searchQuery}
             />
           ) : (
-            <div className="flex h-full flex-col p-5">
+            <div className="flex h-full flex-col px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
               <SheetTitle className="pr-12 text-lg font-semibold">
                 {t("outline.title")}
               </SheetTitle>
@@ -501,184 +658,78 @@ function ReaderDocumentWorkspace({
         onOpenChange={(open) => {
           if (!open) updateLocation({ panel: null });
         }}
-        open={panel === "ask" || panel === "annotations" || panel === "details"}
+        open={!useDesktopPanel && desktopPanelOpen}
       >
         <SheetContent
-          className="inset-x-0 top-auto bottom-0 h-[min(90dvh,48rem)] w-full max-w-none rounded-t-[var(--radius-xl)] border-x-0 border-t p-0 lg:hidden"
+          className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0"
           closeLabel={t("closePanel")}
         >
           <ReaderContextPanel
             document={document}
+            annotations={annotationsQuery.data?.items ?? []}
+            annotationsError={annotationsQuery.isError}
+            conversationId={conversationSession.activeConversationId}
+            conversationSession={conversationSession}
+            conversations={conversationsQuery.data?.items ?? []}
+            conversationsLoading={conversationsQuery.isPending}
+            onActionError={notifyActionError}
+            onAnnotationDelete={async (id) => {
+              await deleteReaderHighlight(id);
+              setSelectedAnnotationId(undefined);
+              await refreshAnnotations();
+            }}
+            onAnnotationSelect={(id) => void openAnnotation(id)}
+            onCommentCreate={async (id, content) => {
+              await createReaderComment(id, content);
+              await refreshAnnotations();
+            }}
+            onCommentDelete={async (id) => {
+              await deleteReaderComment(id);
+              await refreshAnnotations();
+            }}
+            onCommentUpdate={async (id, content) => {
+              await updateReaderComment(id, content);
+              await refreshAnnotations();
+            }}
             onClose={() => updateLocation({ panel: null })}
+            onConversationChange={(id) =>
+              updateLocation({ conversation: id, panel: "ask" })
+            }
+            onConversationNew={() =>
+              updateLocation({ conversation: null, panel: "ask" })
+            }
+            onConversationPin={async (id, pinned) => {
+              await setReaderConversationPinned(id, pinned);
+              await queryClient.invalidateQueries({
+                queryKey: conversationKeys.lists(),
+              });
+            }}
+            onHighlightCreate={createHighlight}
+            onHighlightUpdate={async (id, color) => {
+              await updateReaderHighlight(id, { color });
+              await refreshAnnotations();
+            }}
             onPanelChange={(nextPanel) => updateLocation({ panel: nextPanel })}
+            onSourceOpen={(source) => {
+              const page = readSourcePage(source.locator);
+              if (source.document_id === documentId) {
+                updateLocation({ page, panel: "ask" });
+              } else {
+                router.push(
+                  `/reader/${source.document_id}${page ? `?page=${page}` : ""}` as Route,
+                );
+              }
+            }}
             panel={panel ?? "ask"}
+            reasoningLevel={reasoningLevel}
+            selectedAnnotation={selectedAnnotation}
+            selection={selection}
+            setReasoningLevel={setReasoningLevel}
             title={title}
           />
         </SheetContent>
       </Sheet>
     </WorkspaceShell>
-  );
-}
-
-function ReaderSearchPanel({
-  currentIndex,
-  labels,
-  matchCount,
-  onMove,
-  onQueryChange,
-  query,
-}: {
-  currentIndex: number;
-  labels: {
-    empty: string;
-    next: string;
-    previous: string;
-    results: string;
-    title: string;
-  };
-  matchCount: number;
-  onMove: (direction: -1 | 1) => void;
-  onQueryChange: (query: string) => void;
-  query: string;
-}) {
-  return (
-    <div className="flex h-full flex-col p-5">
-      <SheetTitle className="pr-12 text-lg font-semibold">
-        {labels.title}
-      </SheetTitle>
-      <SheetDescription className="sr-only">{labels.title}</SheetDescription>
-      <SearchField
-        autoFocus
-        className="mt-5"
-        onChange={(event) => onQueryChange(event.currentTarget.value)}
-        placeholder={labels.title}
-        value={query}
-      />
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p aria-live="polite" className="text-muted text-sm">
-          {query.trim() && matchCount === 0 ? labels.empty : labels.results}
-        </p>
-        <div className="flex gap-1">
-          <IconButton
-            disabled={matchCount === 0}
-            label={labels.previous}
-            onClick={() => onMove(-1)}
-            variant="ghost"
-          >
-            <Icon glyph={ArrowLeft} size={20} />
-          </IconButton>
-          <IconButton
-            disabled={matchCount === 0}
-            label={labels.next}
-            onClick={() => onMove(1)}
-            variant="ghost"
-          >
-            <Icon className="rotate-180" glyph={ArrowLeft} size={20} />
-          </IconButton>
-        </div>
-      </div>
-      {matchCount > 0 && (
-        <p className="text-secondary mt-8 text-center text-sm tabular-nums">
-          {currentIndex + 1} / {matchCount}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ReaderContextPanel({
-  className,
-  document,
-  onClose,
-  onPanelChange,
-  panel,
-  title,
-}: {
-  className?: string;
-  document: ReaderDocument | undefined;
-  onClose: () => void;
-  onPanelChange: (panel: "ask" | "annotations" | "details") => void;
-  panel: ReaderPanel;
-  title: string;
-}) {
-  const t = useTranslations("Reader");
-  const activePanel =
-    panel === "annotations" || panel === "details" ? panel : "ask";
-  return (
-    <aside
-      className={cn(
-        "border-line bg-canvas w-full shrink-0 flex-col border-l lg:w-[23rem]",
-        className ?? "flex",
-      )}
-    >
-      <div className="border-line flex h-14 items-center gap-1 border-b px-3">
-        {(["ask", "annotations", "details"] as const).map((item) => (
-          <Button
-            className="h-9 min-h-9 px-2"
-            key={item}
-            onClick={() => onPanelChange(item)}
-            size="sm"
-            variant={activePanel === item ? "secondary" : "ghost"}
-          >
-            {t(`panels.${item}`)}
-          </Button>
-        ))}
-        <IconButton
-          className="ml-auto lg:hidden"
-          label={t("closePanel")}
-          onClick={onClose}
-          variant="ghost"
-        >
-          <Icon glyph={ArrowLeft} size={20} />
-        </IconButton>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {activePanel === "details" ? (
-          <dl className="grid gap-5 text-sm">
-            <div>
-              <dt className="text-muted">{t("details.title")}</dt>
-              <dd className="mt-1 font-medium">{title}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t("details.authors")}</dt>
-              <dd className="mt-1">
-                {document?.authors?.join(", ") || t("details.unknown")}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t("details.abstract")}</dt>
-              <dd className="mt-1 leading-6">
-                {document?.abstract || t("details.unknown")}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t("details.doi")}</dt>
-              <dd className="mt-1">{document?.doi || t("details.unknown")}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">{t("details.file")}</dt>
-              <dd className="mt-1">{document?.original_filename}</dd>
-            </div>
-          </dl>
-        ) : (
-          <div className="grid min-h-48 place-items-center text-center">
-            <div>
-              <Icon
-                glyph={activePanel === "ask" ? Search : List}
-                size={24}
-                tone="secondary"
-              />
-              <h2 className="mt-3 text-sm font-medium">
-                {t(`phaseFour.${activePanel}.title`)}
-              </h2>
-              <p className="text-muted mt-1 max-w-64 text-sm">
-                {t(`phaseFour.${activePanel}.description`)}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </aside>
   );
 }
 

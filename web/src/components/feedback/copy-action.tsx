@@ -1,8 +1,38 @@
 "use client";
 
 import { Check, Copy, WarningCircle } from "iconoir-react";
+import * as React from "react";
 
-import { TransientActionIconButton } from "./transient-action";
+import {
+  TransientActionIconButton,
+  type TransientActionLabels,
+  useTransientActionFeedback,
+} from "./transient-action";
+
+function writeClipboardText(value: string) {
+  return navigator.clipboard.writeText(value);
+}
+
+export function useCopyActionFeedback({
+  labels,
+  value,
+}: {
+  labels: TransientActionLabels;
+  value: string;
+}) {
+  const { run, status } = useTransientActionFeedback();
+  const copy = React.useCallback(
+    () => run(() => writeClipboardText(value)),
+    [run, value],
+  );
+
+  return {
+    copy,
+    feedbackVisible: status === "success" || status === "error",
+    label: labels[status],
+    status,
+  };
+}
 
 export function CopyActionButton({
   className,
@@ -21,7 +51,7 @@ export function CopyActionButton({
 }) {
   return (
     <TransientActionIconButton
-      action={() => navigator.clipboard.writeText(value)}
+      action={() => writeClipboardText(value)}
       className={className}
       errorGlyph={WarningCircle}
       glyph={Copy}

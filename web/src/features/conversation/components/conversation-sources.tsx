@@ -56,10 +56,14 @@ function SourceRow({
   source,
   selected,
   fallbackTitle,
+  onDocumentOpen,
 }: {
   source: AnswerSource;
   selected: boolean;
   fallbackTitle: string;
+  onDocumentOpen?: (
+    source: components["schemas"]["DocumentAnswerSource"],
+  ) => void;
 }) {
   const t = useTranslations("Home.conversation");
   const meta = sourceMeta(source);
@@ -104,6 +108,17 @@ function SourceRow({
       </a>
     );
   }
+  if (source.kind === "document" && onDocumentOpen) {
+    return (
+      <button
+        className={cn(className, keyboardFocusRing)}
+        onClick={() => onDocumentOpen(source)}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
   return <div className={className}>{content}</div>;
 }
 
@@ -112,11 +127,15 @@ export function ConversationSources({
   open,
   onOpenChange,
   selectedSourceKey,
+  onDocumentOpen,
 }: {
   references: unknown;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedSourceKey?: number;
+  onDocumentOpen?: (
+    source: components["schemas"]["DocumentAnswerSource"],
+  ) => void;
 }) {
   const t = useTranslations("Home.conversation");
   if (!isReferenceBundle(references) || !references.sources?.length) {
@@ -157,6 +176,14 @@ export function ConversationSources({
             <SourceRow
               fallbackTitle={t("reference", { number: index + 1 })}
               key={`${source.kind}-${source.key}`}
+              onDocumentOpen={
+                onDocumentOpen
+                  ? (documentSource) => {
+                      onOpenChange(false);
+                      onDocumentOpen(documentSource);
+                    }
+                  : undefined
+              }
               selected={source.key === selectedSourceKey}
               source={source}
             />

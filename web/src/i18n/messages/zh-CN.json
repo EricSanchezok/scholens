@@ -26,6 +26,7 @@
       "library": "资料库",
       "projects": "项目",
       "primary": "主导航",
+      "sidebar": "工作区侧栏",
       "settings": "设置",
       "collapse": "收起侧栏",
       "expand": "展开侧栏",
@@ -417,6 +418,10 @@
     "pdfErrorDescription": "无法显示 PDF，但你仍可下载原始文件。",
     "pdfErrorTitle": "无法渲染此 PDF",
     "thumbnail": "打开第 {page} 页",
+    "thumbnailRail": "页面缩略图",
+    "contextPanel": "阅读器上下文面板",
+    "documentCanvas": "PDF 文档",
+    "pdfLink": "PDF 中的链接",
     "renderingPage": "正在渲染页面",
     "closePanel": "关闭面板",
     "toolbar": {
@@ -454,19 +459,70 @@
       "title": "标题",
       "authors": "作者",
       "abstract": "摘要",
+      "summary": "概述",
       "doi": "DOI",
       "file": "文件",
-      "unknown": "暂无"
-    },
-    "phaseFour": {
-      "ask": {
-        "title": "向论文提问",
-        "description": "论文对话将在 Reader 下一阶段接入。"
-      },
-      "annotations": {
-        "title": "批注",
-        "description": "高亮与笔记将在 Reader 下一阶段接入。"
+      "journal": "期刊",
+      "publisher": "出版方",
+      "institutions": "机构",
+      "published": "出版时间",
+      "status": "处理状态",
+      "quality": "解析质量",
+      "warning": "解析警告",
+      "unavailable": "暂未开放",
+      "unavailableDescription": "项目归属、共享批注和翻译将在对应功能完成后显示在这里。",
+      "unknown": "暂无",
+      "statuses": {
+        "pending": "等待处理",
+        "processing": "正在处理",
+        "completed": "已完成",
+        "failed": "处理失败"
       }
+    },
+    "selection": {
+      "ask": "基于选区提问",
+      "highlight": "高亮选区",
+      "comment": "添加批注",
+      "copy": "复制选区",
+      "copying": "正在复制",
+      "copied": "已复制",
+      "copyFailed": "复制失败",
+      "context": "第 {page} 页选区"
+    },
+    "actions": {
+      "failedTitle": "Reader 操作失败",
+      "failedDescription": "更改未保存，请重试。"
+    },
+    "conversations": {
+      "search": "搜索当前论文的对话",
+      "new": "新建对话",
+      "loading": "正在加载对话",
+      "empty": "这篇论文还没有对话",
+      "pin": "置顶对话",
+      "unpin": "取消置顶"
+    },
+    "annotations": {
+      "error": "无法加载批注。",
+      "commentPlaceholder": "为这段选区添加笔记",
+      "saveSelection": "保存批注",
+      "emptyTitle": "还没有批注",
+      "emptyDescription": "选择 PDF 中的文字，即可高亮或添加笔记。",
+      "page": "第 {page} 页",
+      "deleteHighlight": "删除批注",
+      "cancel": "取消",
+      "save": "保存",
+      "editComment": "编辑评论",
+      "deleteComment": "删除评论",
+      "replyPlaceholder": "回复这条批注",
+      "add": "添加",
+      "context": "已选批注",
+      "colors": {
+        "yellow": "黄色高亮",
+        "blue": "蓝色高亮",
+        "green": "绿色高亮",
+        "neutral": "中性高亮"
+      },
+      "thread": "批注讨论"
     },
     "session": {
       "checking": "正在打开阅读器",

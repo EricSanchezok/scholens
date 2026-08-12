@@ -26,6 +26,7 @@
       "library": "Library",
       "projects": "Projects",
       "primary": "Primary navigation",
+      "sidebar": "Workspace sidebar",
       "settings": "Settings",
       "collapse": "Collapse sidebar",
       "expand": "Expand sidebar",
@@ -417,6 +418,10 @@
     "pdfErrorDescription": "The PDF could not be displayed. You can still download the original file.",
     "pdfErrorTitle": "Could not render this PDF",
     "thumbnail": "Open page {page}",
+    "thumbnailRail": "Page thumbnails",
+    "contextPanel": "Reader context panel",
+    "documentCanvas": "PDF document",
+    "pdfLink": "Link in PDF",
     "renderingPage": "Rendering page",
     "closePanel": "Close panel",
     "toolbar": {
@@ -454,19 +459,70 @@
       "title": "Title",
       "authors": "Authors",
       "abstract": "Abstract",
+      "summary": "Summary",
       "doi": "DOI",
       "file": "File",
-      "unknown": "Not available"
-    },
-    "phaseFour": {
-      "ask": {
-        "title": "Ask about this paper",
-        "description": "Paper conversations arrive in the next Reader stage."
-      },
-      "annotations": {
-        "title": "Annotations",
-        "description": "Highlights and notes arrive in the next Reader stage."
+      "journal": "Journal",
+      "publisher": "Publisher",
+      "institutions": "Institutions",
+      "published": "Published",
+      "status": "Processing status",
+      "quality": "Parse quality",
+      "warning": "Parse warning",
+      "unavailable": "Not available yet",
+      "unavailableDescription": "Projects, shared annotations, and Translation will appear here when those features are complete.",
+      "unknown": "Not available",
+      "statuses": {
+        "pending": "Pending",
+        "processing": "Processing",
+        "completed": "Completed",
+        "failed": "Failed"
       }
+    },
+    "selection": {
+      "ask": "Ask about selection",
+      "highlight": "Highlight selection",
+      "comment": "Add annotation",
+      "copy": "Copy selection",
+      "copying": "Copying",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "context": "Selection from page {page}"
+    },
+    "actions": {
+      "failedTitle": "Reader action failed",
+      "failedDescription": "Your change was not saved. Please try again."
+    },
+    "conversations": {
+      "search": "Search this paper's conversations",
+      "new": "New conversation",
+      "loading": "Loading conversations",
+      "empty": "No conversations for this paper yet",
+      "pin": "Pin conversation",
+      "unpin": "Unpin conversation"
+    },
+    "annotations": {
+      "error": "Annotations could not be loaded.",
+      "commentPlaceholder": "Add a note to this selection",
+      "saveSelection": "Save annotation",
+      "emptyTitle": "No annotations yet",
+      "emptyDescription": "Select text in the PDF to highlight it or add a note.",
+      "page": "Page {page}",
+      "deleteHighlight": "Delete annotation",
+      "cancel": "Cancel",
+      "save": "Save",
+      "editComment": "Edit comment",
+      "deleteComment": "Delete comment",
+      "replyPlaceholder": "Reply to this annotation",
+      "add": "Add",
+      "context": "Selected annotation",
+      "colors": {
+        "yellow": "Yellow highlight",
+        "blue": "Blue highlight",
+        "green": "Green highlight",
+        "neutral": "Neutral highlight"
+      },
+      "thread": "Annotation thread"
     },
     "session": {
       "checking": "Opening Reader",

@@ -90,6 +90,7 @@ function AssistantMessage({
   onRetryResponse,
   onSelectResponse,
   onUseSuggestion,
+  onDocumentSourceOpen,
 }: {
   entries: ConversationTraceEntry[];
   content: string;
@@ -108,6 +109,9 @@ function AssistantMessage({
   onRetryResponse?: () => void;
   onSelectResponse?: (responseId: string) => void;
   onUseSuggestion?: (suggestion: string) => void;
+  onDocumentSourceOpen?: (
+    source: components["schemas"]["DocumentAnswerSource"],
+  ) => void;
 }) {
   const t = useTranslations("Home.conversation");
   const [sourcesOpen, setSourcesOpen] = React.useState(false);
@@ -224,6 +228,7 @@ function AssistantMessage({
                   </IconButton>
                 )}
                 <ConversationSources
+                  onDocumentOpen={onDocumentSourceOpen}
                   onOpenChange={(open) => {
                     setSourcesOpen(open);
                     if (!open) setSelectedSourceKey(undefined);
@@ -265,6 +270,7 @@ function MessageHistory({
   onRetryResponse,
   onSelectResponse,
   onUseSuggestion,
+  onDocumentSourceOpen,
 }: {
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
@@ -273,6 +279,9 @@ function MessageHistory({
   onRetryResponse: (turn: ConversationTurn) => void;
   onSelectResponse: (turnId: string, responseId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
+  onDocumentSourceOpen?: (
+    source: components["schemas"]["DocumentAnswerSource"],
+  ) => void;
 }) {
   const latestTurnId = turns.at(-1)?.id;
   return (
@@ -316,6 +325,7 @@ function MessageHistory({
                 onUseSuggestion={
                   latestControlsVisible ? onUseSuggestion : undefined
                 }
+                onDocumentSourceOpen={onDocumentSourceOpen}
                 provisionalItems={liveTurn.provisionalItems}
                 references={liveTurn.references}
                 response={liveResponse}
@@ -341,6 +351,7 @@ function MessageHistory({
                 onUseSuggestion={
                   latestControlsVisible ? onUseSuggestion : undefined
                 }
+                onDocumentSourceOpen={onDocumentSourceOpen}
                 references={response.references}
                 response={response}
                 sourceTotal={
@@ -382,6 +393,10 @@ export function ConversationView({
   readOnlyReason,
   composerForm,
   showComposer = true,
+  contextLocked = false,
+  contextLabel,
+  turnContextLabel,
+  onDocumentSourceOpen,
 }: {
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
@@ -404,6 +419,12 @@ export function ConversationView({
   readOnlyReason?: string | null;
   composerForm?: UseFormReturn<ComposerValues>;
   showComposer?: boolean;
+  contextLocked?: boolean;
+  contextLabel?: string;
+  turnContextLabel?: string;
+  onDocumentSourceOpen?: (
+    source: components["schemas"]["DocumentAnswerSource"],
+  ) => void;
 }) {
   const t = useTranslations("Home.conversation");
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -435,7 +456,9 @@ export function ConversationView({
     (liveTurn?.generationKind === "initial" && liveTurn.state === "streaming");
 
   React.useEffect(() => {
-    const scrollRoot = rootRef.current?.closest("main");
+    const scrollRoot =
+      rootRef.current?.closest("[data-conversation-scroll-root]") ??
+      rootRef.current?.closest("main");
     if (!scrollRoot) return;
     const scroller = scrollRoot;
     function updateProximity() {
@@ -523,6 +546,7 @@ export function ConversationView({
               onRetryResponse={onRetryResponse}
               onSelectResponse={onSelectResponse}
               onUseSuggestion={onUseSuggestion}
+              onDocumentSourceOpen={onDocumentSourceOpen}
               suppressLatestControls={suppressLatestControls}
               turns={visibleTurns}
             />
@@ -562,6 +586,7 @@ export function ConversationView({
                   onUseSuggestion={
                     submissionPending ? undefined : onUseSuggestion
                   }
+                  onDocumentSourceOpen={onDocumentSourceOpen}
                   provisionalItems={liveTurn.provisionalItems}
                   references={liveTurn.references}
                   response={liveResponse}
@@ -616,6 +641,9 @@ export function ConversationView({
               projects={projects}
               reasoningLevel={reasoningLevel}
               unavailable={loading || error || !canSend}
+              contextLocked={contextLocked}
+              contextLabel={contextLabel}
+              turnContextLabel={turnContextLabel}
             />
           </div>
         </div>

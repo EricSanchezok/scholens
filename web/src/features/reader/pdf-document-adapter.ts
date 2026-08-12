@@ -120,6 +120,7 @@ export class PdfDocumentAdapter {
 }
 
 export async function renderPdfPage({
+  annotationLinkLabel,
   annotationLayer,
   canvas,
   onInternalDestination,
@@ -128,6 +129,7 @@ export async function renderPdfPage({
   searchQuery,
   textLayer,
 }: {
+  annotationLinkLabel: string;
   annotationLayer: HTMLDivElement;
   canvas: HTMLCanvasElement;
   onInternalDestination: (destination: unknown) => void;
@@ -183,6 +185,7 @@ export async function renderPdfPage({
     );
     const [x1, y1, x2, y2] = [pointX1, pointY1, pointX2, pointY2];
     const link = document.createElement("a");
+    link.setAttribute("aria-label", annotationLinkLabel);
     link.className = "absolute block";
     link.style.left = `${Math.min(x1, x2)}px`;
     link.style.top = `${Math.min(y1, y2)}px`;

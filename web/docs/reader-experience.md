@@ -161,3 +161,22 @@ Playwright coverage for the following matrix:
 Figma frame names and Storybook story names use the same state terms. Obsolete
 Reader conversation-only mocks and any duplicated answer UI stay archived and
 are not acceptance sources.
+
+## Implementation boundary
+
+Reader remains a vertical feature rather than a second application shell:
+
+- `reader-page.tsx` owns route composition, URL state, query wiring, and the
+  boundary between desktop panes and mobile sheets;
+- `pdf-document-adapter.ts` owns the PDF.js contract, while `pdf-page.tsx` owns
+  the Canvas, Text, Annotation, selection, and search-overlay surface;
+- `reader-navigation-panels.tsx` owns document search and outline navigation;
+- `reader-context-panel.tsx` owns Ask, Annotations, Details, and the
+  paper-conversation switcher;
+- `features/conversation` owns the shared turn lifecycle, streaming response,
+  worklog, sources, suggestions, answer actions, and composer used by both Home
+  and Reader.
+
+Reader-specific components may adapt document, page, selection, and annotation
+context, but they must not fork the shared conversation reducer or final-answer
+UI. Likewise, Home and Library must not import Reader internals.

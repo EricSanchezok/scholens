@@ -1,6 +1,12 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
+import type { components } from "@/lib/api/generated/schema";
+
+type CreateHighlightRequest =
+  components["schemas"]["CreateHighlightThreadRequest"];
+type UpdateHighlightRequest =
+  components["schemas"]["UpdateHighlightThreadRequest"];
 
 export const readerKeys = {
   all: ["reader"] as const,
@@ -47,4 +53,79 @@ export async function getReaderDownloadUrl(documentId: string) {
   );
   if (!data) throw new Error("Reader download response was empty");
   return data.file_url;
+}
+
+export async function createReaderHighlight(
+  documentId: string,
+  body: CreateHighlightRequest,
+) {
+  const { data } = await apiClient.POST(
+    "/api/v1/papers/{document_id}/highlight-threads",
+    { params: { path: { document_id: documentId } }, body },
+  );
+  if (!data) throw new Error("Create highlight response was empty");
+  return data;
+}
+
+export async function updateReaderHighlight(
+  threadId: string,
+  body: UpdateHighlightRequest,
+) {
+  const { data } = await apiClient.PATCH(
+    "/api/v1/highlight-threads/{thread_id}",
+    { params: { path: { thread_id: threadId } }, body },
+  );
+  if (!data) throw new Error("Update highlight response was empty");
+  return data;
+}
+
+export async function deleteReaderHighlight(threadId: string) {
+  await apiClient.DELETE("/api/v1/highlight-threads/{thread_id}", {
+    params: { path: { thread_id: threadId } },
+  });
+}
+
+export async function createReaderComment(threadId: string, content: string) {
+  const { data } = await apiClient.POST(
+    "/api/v1/highlight-threads/{thread_id}/comments",
+    {
+      params: { path: { thread_id: threadId } },
+      body: { content },
+    },
+  );
+  if (!data) throw new Error("Create annotation comment response was empty");
+  return data;
+}
+
+export async function updateReaderComment(commentId: string, content: string) {
+  const { data } = await apiClient.PATCH(
+    "/api/v1/annotation-comments/{comment_id}",
+    {
+      params: { path: { comment_id: commentId } },
+      body: { content },
+    },
+  );
+  if (!data) throw new Error("Update annotation comment response was empty");
+  return data;
+}
+
+export async function deleteReaderComment(commentId: string) {
+  await apiClient.DELETE("/api/v1/annotation-comments/{comment_id}", {
+    params: { path: { comment_id: commentId } },
+  });
+}
+
+export async function setReaderConversationPinned(
+  conversationId: string,
+  pinned: boolean,
+) {
+  const { data } = await apiClient.PATCH(
+    "/api/v1/conversations/{conversation_id}",
+    {
+      params: { path: { conversation_id: conversationId } },
+      body: { pinned },
+    },
+  );
+  if (!data) throw new Error("Update conversation response was empty");
+  return data;
 }

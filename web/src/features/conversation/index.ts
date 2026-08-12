@@ -22,3 +22,4 @@ export {
   type ProvisionalAssistantItem,
 } from "./conversation-state";
 export * from "./schemas";
+export * from "./use-conversation-session";

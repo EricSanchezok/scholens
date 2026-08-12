@@ -428,6 +428,9 @@ export function ResearchComposer({
   onSubmit,
   onStop,
   unavailable,
+  contextLocked = false,
+  contextLabel,
+  turnContextLabel,
 }: {
   form?: UseFormReturn<ComposerValues>;
   context: ResearchContext;
@@ -441,6 +444,9 @@ export function ResearchComposer({
   onSubmit: (message: string) => Promise<void>;
   onStop?: () => void;
   unavailable?: boolean;
+  contextLocked?: boolean;
+  contextLabel?: string;
+  turnContextLabel?: string;
 }) {
   const t = useTranslations("Home");
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -513,11 +519,13 @@ export function ResearchComposer({
         {...messageRegistration}
         {...focusHandlers}
       />
-      {context.kind === "selection" && selectionCount > 0 ? (
+      {turnContextLabel ||
+      (context.kind === "selection" && selectionCount > 0) ? (
         <div className="col-span-4 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
           <span className="bg-subtle text-secondary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
             <Icon glyph={Page} size={16} tone="secondary" />
-            {t("context.selectionSummary", { count: selectionCount })}
+            {turnContextLabel ??
+              t("context.selectionSummary", { count: selectionCount })}
           </span>
         </div>
       ) : null}
@@ -529,15 +537,25 @@ export function ResearchComposer({
             : "lg:col-start-1 lg:row-start-1",
         )}
       >
-        <ContextPicker
-          context={context}
-          disabled={unavailable}
-          onChange={onContextChange}
-          onOpenChange={setPickerOpen}
-          open={pickerOpen}
-          papers={papers}
-          projects={projects}
-        />
+        {contextLocked ? (
+          <div
+            aria-label={contextLabel}
+            className="text-secondary grid size-12 shrink-0 place-items-center rounded-full lg:size-11"
+            title={contextLabel}
+          >
+            <Icon glyph={Page} size={20} tone="secondary" />
+          </div>
+        ) : (
+          <ContextPicker
+            context={context}
+            disabled={unavailable}
+            onChange={onContextChange}
+            onOpenChange={setPickerOpen}
+            open={pickerOpen}
+            papers={papers}
+            projects={projects}
+          />
+        )}
       </div>
       <ReasoningMenu
         className={cn(
