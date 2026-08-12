@@ -15,16 +15,26 @@ describe("normalizeReaderSelectionRects", () => {
     ).toEqual([{ x: 0.1, y: 0.1, width: 0.3, height: 0.05 }]);
   });
 
-  it("clips rectangles to normalized bounds and ignores empty rectangles", () => {
+  it("drops page-sized, out-of-page, and empty browser rectangles", () => {
     expect(
       normalizeReaderSelectionRects(
         { left: 100, top: 200, width: 400, height: 800 },
         [
           { left: 0, top: 0, width: 600, height: 1200 },
+          { left: 499, top: 220, width: 20, height: 20 },
           { left: 100, top: 200, width: 0, height: 20 },
         ],
       ),
-    ).toEqual([{ x: 0, y: 0, width: 1, height: 1 }]);
+    ).toEqual([]);
+  });
+
+  it("clips sub-pixel browser overflow at the PDF page edge", () => {
+    expect(
+      normalizeReaderSelectionRects(
+        { left: 100, top: 200, width: 400, height: 800 },
+        [{ left: 420, top: 280, width: 80.5, height: 40 }],
+      ),
+    ).toEqual([{ x: 0.8, y: 0.1, width: 0.2, height: 0.05 }]);
   });
 
   it("does not create anchors for an unmeasurable page", () => {

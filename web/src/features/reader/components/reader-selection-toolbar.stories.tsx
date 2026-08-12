@@ -60,6 +60,22 @@ type Story = StoryObj<typeof meta>;
 
 export const SelectionToolbar: Story = {};
 
+export const LongSelectionNearPageTop: Story = {
+  args: {
+    selection: {
+      ...selection,
+      anchor: {
+        kind: "pdf_text",
+        page_number: 4,
+        rects: [
+          { x: 0.08, y: 0.12, width: 0.84, height: 0.04 },
+          { x: 0.08, y: 0.86, width: 0.76, height: 0.04 },
+        ],
+      },
+    },
+  },
+};
+
 export const HighlightPalette: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

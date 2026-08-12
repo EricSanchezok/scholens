@@ -75,12 +75,30 @@ body {
   color: var(--color-selection-foreground);
 }
 
+/*
+ * Keep this positioning contract aligned with PDF.js' TextLayer styles.
+ * TextLayer emits the custom properties below to make the invisible browser
+ * text match the glyphs painted on the canvas.
+ */
 .pdf-text-layer {
+  color-scheme: only light;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: clip;
+  opacity: 1;
   line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
   text-align: initial;
+  -webkit-text-size-adjust: none;
   text-size-adjust: none;
   transform-origin: 0 0;
   forced-color-adjust: none;
+  caret-color: CanvasText;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
 .pdf-text-layer :is(span, br) {
@@ -89,6 +107,24 @@ body {
   white-space: pre;
   cursor: text;
   transform-origin: 0 0;
+  user-select: text;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height, 0));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1))
+    scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer span[role="img"] {
+  cursor: default;
+  user-select: none;
 }
 
 .pdf-text-layer span[data-search-hit="true"] {
@@ -99,6 +135,10 @@ body {
 .pdf-text-layer ::selection {
   background: var(--color-document-selection-bg);
   color: transparent;
+}
+
+.pdf-text-layer br::selection {
+  background: transparent;
 }
 
 .pdf-selection-overlay {

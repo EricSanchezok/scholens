@@ -130,11 +130,11 @@ Selection has three deliberately separate lifetimes:
 - `annotationSelection` is the selection snapshot being edited in Annotations.
 
 The text-selection toolbar is absent until a real non-collapsed PDF text
-selection exists. It anchors above that selection, flips below when necessary,
-and remains inside the rendered page. It contains only the Iconoir icons for
-Ask, Highlight, Note, and Copy; accessible names live in tooltips and
-`aria-label`s rather than visible action text. All four actions use the shared
-control-state and feedback rules.
+selection exists. It chooses the side with usable space, remains above the PDF
+page stack when it crosses a page gap, and stays horizontally clamped to the
+rendered page. It contains only the Iconoir icons for Ask, Highlight, Note, and
+Copy; accessible names live in tooltips and `aria-label`s rather than visible
+action text. All four actions use the shared control-state and feedback rules.
 
 While the pointer is down, the PDF text layer uses the dedicated translucent
 blue document-selection token. The original Canvas text must remain legible
@@ -142,9 +142,12 @@ through the selection, matching the familiar line-by-line treatment of desktop
 research readers rather than placing an opaque wash over the page. After
 pointer-up, Reader replaces the browser-native selection with a normalized
 overlay using the same token. The browser selection is cleared before this
-overlay appears, overlapping PDF text fragments on the same visual line are
-coalesced, and the remaining geometry is painted once so translucent color can
-never accumulate into darker stripes. The overlay remains visible with the
+overlay appears. Reader preserves PDF.js' complete TextLayer positioning
+contract so the selectable browser glyphs stay aligned with the Canvas glyphs;
+page-sized and out-of-page browser rectangles are rejected rather than clamped
+into false highlights. Overlapping PDF text fragments on the same visual line
+are coalesced, and the remaining geometry is painted once so translucent color
+can never accumulate into darker stripes. The overlay remains visible with the
 floating toolbar until the user acts, presses Escape, clicks elsewhere, or
 moves to another page.
 

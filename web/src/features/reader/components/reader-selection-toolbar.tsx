@@ -106,7 +106,9 @@ export function ReaderSelectionToolbar({
     }),
     { left: 1, right: 0, top: 1, bottom: 0 },
   );
-  const showBelow = bounds.top < 0.14;
+  const spaceAbove = bounds.top;
+  const spaceBelow = 1 - bounds.bottom;
+  const showBelow = spaceAbove < 0.08 || spaceBelow > spaceAbove;
   const left = Math.min(0.88, Math.max(0.12, (bounds.left + bounds.right) / 2));
 
   async function copySelection() {
