@@ -187,7 +187,7 @@ function SelectablePaperThumbnail({
   );
 }
 
-function PaperDetails({ paper }: { paper: Paper }) {
+function PaperDetails({ onOpen, paper }: { onOpen: () => void; paper: Paper }) {
   const metadata = paperMetadata(paper);
   const secondary = [
     ...metadata.authors.slice(0, 2),
@@ -197,9 +197,13 @@ function PaperDetails({ paper }: { paper: Paper }) {
     .join(" · ");
   return (
     <div className="min-w-0">
-      <div className="line-clamp-2 text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
+      <button
+        className="hover:text-secondary line-clamp-2 text-left text-sm leading-5 font-semibold [overflow-wrap:anywhere] transition-colors md:line-clamp-1"
+        onClick={onOpen}
+        type="button"
+      >
         {metadata.title}
-      </div>
+      </button>
       <div className="text-secondary mt-1 truncate text-xs">
         {secondary || paper.document.original_filename}
       </div>
@@ -505,6 +509,7 @@ export function PapersView({
   onDeleteTag,
   onDownload,
   onNext,
+  onOpenPaper,
   onPrevious,
   onRemove,
   onRenameTag,
@@ -526,6 +531,7 @@ export function PapersView({
   onCreateTag: (name: string) => Promise<LibraryTag>;
   onDeleteTag: (tagId: string) => Promise<void>;
   onDownload: (documentId: string) => void;
+  onOpenPaper: (documentId: string) => void;
   onNext: (cursor: string) => void;
   onPrevious: (cursor: string) => void;
   onRemove: (documentIds: string[]) => Promise<void>;
@@ -825,7 +831,10 @@ export function PapersView({
                           />
                         </td>
                         <td className="px-2 py-3 align-middle">
-                          <PaperDetails paper={paper} />
+                          <PaperDetails
+                            onOpen={() => onOpenPaper(id)}
+                            paper={paper}
+                          />
                         </td>
                         <td className="text-secondary px-3 py-3 align-middle text-sm">
                           {format.dateTime(new Date(paper.created_at), {
@@ -898,7 +907,10 @@ export function PapersView({
                         selectionMode={selected.length > 0}
                       />
                       <div className="min-w-0" data-paper-content>
-                        <PaperDetails paper={paper} />
+                        <PaperDetails
+                          onOpen={() => onOpenPaper(id)}
+                          paper={paper}
+                        />
                         <div
                           className="text-secondary mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs"
                           data-paper-mobile-metadata

@@ -554,11 +554,13 @@ function MobileBottomDock({
   activeDestination,
   content,
   keyboardOpen,
+  showNavigation,
   ref,
 }: {
   activeDestination: WorkspaceDestination;
   content?: React.ReactNode;
   keyboardOpen: boolean;
+  showNavigation: boolean;
   ref: React.Ref<HTMLDivElement>;
 }) {
   return (
@@ -576,7 +578,9 @@ function MobileBottomDock({
         className="pointer-events-none absolute right-0 bottom-full left-0 h-5 bg-[linear-gradient(to_top,var(--color-bg-canvas),transparent)]"
       />
       {content && <div className="min-w-0">{content}</div>}
-      {!keyboardOpen && <MobileTabBar activeDestination={activeDestination} />}
+      {!keyboardOpen && showNavigation && (
+        <MobileTabBar activeDestination={activeDestination} />
+      )}
     </div>
   );
 }
@@ -728,11 +732,13 @@ export function WorkspaceShell({
   signingOut,
   onCollapsedChange,
   onSignOut,
+  mobileHeaderLeading,
   mobileHeaderCenter,
   mobileHeaderTrailing,
   mobileBottomContent,
   mobileBottomRef,
   mobileViewport,
+  showMobileBottomNavigation = true,
   children,
 }: {
   actor: Actor;
@@ -743,11 +749,13 @@ export function WorkspaceShell({
   signingOut: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onSignOut: () => Promise<void>;
+  mobileHeaderLeading?: React.ReactNode;
   mobileHeaderCenter?: React.ReactNode;
   mobileHeaderTrailing?: React.ReactNode;
   mobileBottomContent?: React.ReactNode;
   mobileBottomRef?: React.Ref<HTMLDivElement>;
   mobileViewport?: MobileViewportState;
+  showMobileBottomNavigation?: boolean;
   children: React.ReactNode;
 }) {
   const t = useTranslations("WorkspaceShell");
@@ -808,13 +816,15 @@ export function WorkspaceShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-line shrink-0 border-b pt-[env(safe-area-inset-top)] lg:hidden">
           <div className="flex h-16 items-center px-3">
-            <IconButton
-              label={t("navigation.openMenu")}
-              onClick={() => setMobileOpen(true)}
-              variant="ghost"
-            >
-              <Icon glyph={Menu} size={24} />
-            </IconButton>
+            {mobileHeaderLeading ?? (
+              <IconButton
+                label={t("navigation.openMenu")}
+                onClick={() => setMobileOpen(true)}
+                variant="ghost"
+              >
+                <Icon glyph={Menu} size={24} />
+              </IconButton>
+            )}
             <div className="mx-2 min-w-0 flex-1">{mobileHeaderCenter}</div>
             <div className="ml-auto shrink-0">{mobileHeaderTrailing}</div>
           </div>
@@ -825,12 +835,15 @@ export function WorkspaceShell({
         >
           {children}
         </main>
-        <MobileBottomDock
-          activeDestination={activeDestination}
-          content={mobileBottomContent}
-          keyboardOpen={effectiveMobileViewport.open}
-          ref={mobileBottomRef ?? localMobileDockRef}
-        />
+        {(mobileBottomContent || showMobileBottomNavigation) && (
+          <MobileBottomDock
+            activeDestination={activeDestination}
+            content={mobileBottomContent}
+            keyboardOpen={effectiveMobileViewport.open}
+            ref={mobileBottomRef ?? localMobileDockRef}
+            showNavigation={showMobileBottomNavigation}
+          />
+        )}
       </div>
     </div>
   );

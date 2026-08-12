@@ -400,6 +400,81 @@
       "unavailableDescription": "你的资料库仍在这里。服务恢复后请重试。"
     }
   },
+  "Reader": {
+    "untitled": "未命名论文",
+    "returnLibrary": "返回资料库",
+    "library": "资料库",
+    "loadingDocument": "正在打开论文",
+    "tryAgain": "重试",
+    "documentErrorDescription": "无法加载论文记录。",
+    "documentErrorTitle": "无法打开这篇论文",
+    "failedDescription": "解析失败。请返回资料库重试导入。",
+    "failedTitle": "无法处理这篇论文",
+    "processingDescription": "论文解析完成后即可进入阅读器。",
+    "processingTitle": "正在准备论文",
+    "loadingPdf": "正在加载 PDF",
+    "downloadInstead": "下载 PDF",
+    "pdfErrorDescription": "无法显示 PDF，但你仍可下载原始文件。",
+    "pdfErrorTitle": "无法渲染此 PDF",
+    "thumbnail": "打开第 {page} 页",
+    "renderingPage": "正在渲染页面",
+    "closePanel": "关闭面板",
+    "toolbar": {
+      "download": "下载 PDF",
+      "fit": "适配",
+      "fitPage": "适合页面",
+      "fitWidth": "适合宽度",
+      "nextPage": "下一页",
+      "openPanel": "打开上下文面板",
+      "outline": "论文目录",
+      "page": "页码",
+      "previousPage": "上一页",
+      "search": "搜索 PDF",
+      "zoomIn": "放大",
+      "zoomOut": "缩小"
+    },
+    "panels": {
+      "ask": "提问",
+      "annotations": "批注",
+      "details": "详情"
+    },
+    "search": {
+      "empty": "没有匹配结果",
+      "next": "下一个结果",
+      "previous": "上一个结果",
+      "results": "共 {count} 个结果",
+      "title": "搜索这份 PDF"
+    },
+    "outline": {
+      "title": "论文目录",
+      "description": "跳转到论文中的章节。",
+      "empty": "这份 PDF 不包含目录。"
+    },
+    "details": {
+      "title": "标题",
+      "authors": "作者",
+      "abstract": "摘要",
+      "doi": "DOI",
+      "file": "文件",
+      "unknown": "暂无"
+    },
+    "phaseFour": {
+      "ask": {
+        "title": "向论文提问",
+        "description": "论文对话将在 Reader 下一阶段接入。"
+      },
+      "annotations": {
+        "title": "批注",
+        "description": "高亮与笔记将在 Reader 下一阶段接入。"
+      }
+    },
+    "session": {
+      "checking": "正在打开阅读器",
+      "retry": "重试状态检查",
+      "unavailableDescription": "请重新连接服务后重试。",
+      "unavailableTitle": "阅读器暂时不可用"
+    }
+  },
   "AsyncFeedback": {
     "loading": "正在加载",
     "retrying": "正在重试",

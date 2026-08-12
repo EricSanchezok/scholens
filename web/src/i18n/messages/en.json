@@ -400,6 +400,81 @@
       "unavailableDescription": "Your library is still here. Retry when the server is available."
     }
   },
+  "Reader": {
+    "untitled": "Untitled paper",
+    "returnLibrary": "Return to library",
+    "library": "Library",
+    "loadingDocument": "Opening paper",
+    "tryAgain": "Try again",
+    "documentErrorDescription": "The paper record could not be loaded.",
+    "documentErrorTitle": "Could not open this paper",
+    "failedDescription": "Processing failed. Return to Library to retry the import.",
+    "failedTitle": "This paper could not be processed",
+    "processingDescription": "The Reader will be available as soon as parsing finishes.",
+    "processingTitle": "Preparing this paper",
+    "loadingPdf": "Loading PDF",
+    "downloadInstead": "Download PDF",
+    "pdfErrorDescription": "The PDF could not be displayed. You can still download the original file.",
+    "pdfErrorTitle": "Could not render this PDF",
+    "thumbnail": "Open page {page}",
+    "renderingPage": "Rendering page",
+    "closePanel": "Close panel",
+    "toolbar": {
+      "download": "Download PDF",
+      "fit": "Fit",
+      "fitPage": "Fit page",
+      "fitWidth": "Fit width",
+      "nextPage": "Next page",
+      "openPanel": "Open context panel",
+      "outline": "Document outline",
+      "page": "Page",
+      "previousPage": "Previous page",
+      "search": "Search PDF",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out"
+    },
+    "panels": {
+      "ask": "Ask",
+      "annotations": "Annotations",
+      "details": "Details"
+    },
+    "search": {
+      "empty": "No matches",
+      "next": "Next match",
+      "previous": "Previous match",
+      "results": "{count, plural, one {# match} other {# matches}}",
+      "title": "Search this PDF"
+    },
+    "outline": {
+      "title": "Document outline",
+      "description": "Jump to a section in this paper.",
+      "empty": "This PDF does not include an outline."
+    },
+    "details": {
+      "title": "Title",
+      "authors": "Authors",
+      "abstract": "Abstract",
+      "doi": "DOI",
+      "file": "File",
+      "unknown": "Not available"
+    },
+    "phaseFour": {
+      "ask": {
+        "title": "Ask about this paper",
+        "description": "Paper conversations arrive in the next Reader stage."
+      },
+      "annotations": {
+        "title": "Annotations",
+        "description": "Highlights and notes arrive in the next Reader stage."
+      }
+    },
+    "session": {
+      "checking": "Opening Reader",
+      "retry": "Retry session check",
+      "unavailableDescription": "Reconnect to the server, then retry.",
+      "unavailableTitle": "Reader is temporarily unavailable"
+    }
+  },
   "AsyncFeedback": {
     "loading": "Loading",
     "retrying": "Trying again",

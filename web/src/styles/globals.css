@@ -74,3 +74,29 @@ body {
   background: var(--color-selection-bg);
   color: var(--color-selection-foreground);
 }
+
+.pdf-text-layer {
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+  forced-color-adjust: none;
+}
+
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.pdf-text-layer span[data-search-hit="true"] {
+  border-radius: var(--radius-sm);
+  background: var(--color-selection-bg);
+}
+
+.pdf-text-layer ::selection {
+  background: var(--color-selection-bg);
+  color: transparent;
+}

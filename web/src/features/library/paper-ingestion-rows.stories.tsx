@@ -43,6 +43,7 @@ const meta = {
     onCancelIngestion: () => undefined,
     onDownload: () => undefined,
     onNext: () => undefined,
+    onOpenPaper: () => undefined,
     onPrevious: () => undefined,
     onRemove: async () => undefined,
     onRenameTag: async (id: string, name: string) => ({

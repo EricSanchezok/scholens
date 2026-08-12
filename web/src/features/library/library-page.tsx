@@ -322,6 +322,9 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 void runAction(() => ingestion.cancel(id))
               }
               onNext={(cursor) => replaceSearch({ cursor })}
+              onOpenPaper={(documentId) =>
+                router.push(`/reader/${documentId}` as Route)
+              }
               onPrevious={(cursor) => replaceSearch({ cursor })}
               onRemove={(documentIds) =>
                 runAction(() => removeMutation.mutateAsync(documentIds))
