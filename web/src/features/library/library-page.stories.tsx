@@ -99,6 +99,7 @@ export const MultiSelect: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const table = await canvas.findByRole("table");
+    const tableTopBeforeSelection = table.getBoundingClientRect().top;
     const firstRow = within(table)
       .getByText("Attention Is All You Need")
       .closest("tr");
@@ -123,6 +124,9 @@ export const MultiSelect: Story = {
     await expect(
       toolbar.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    await expect(
+      Math.abs(table.getBoundingClientRect().top - tableTopBeforeSelection),
+    ).toBeLessThanOrEqual(1);
   },
 };
 
@@ -208,6 +212,18 @@ export const Mobile390: Story = {
     await expect(
       canvas.getByRole("button", { name: "Add papers" }),
     ).toBeVisible();
+    const card = titles
+      .find((element) => element.closest("li")?.getClientRects().length)
+      ?.closest("li");
+    await expect(card).not.toBeNull();
+    if (!card) return;
+    const content = card.querySelector<HTMLElement>("[data-paper-content]");
+    const metadata = card.querySelector<HTMLElement>(
+      "[data-paper-mobile-metadata]",
+    );
+    await expect(content).not.toBeNull();
+    await expect(metadata).not.toBeNull();
+    await expect(content).toContainElement(metadata);
   },
 };
 

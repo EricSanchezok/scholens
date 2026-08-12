@@ -677,17 +677,23 @@ export function PapersView({
       {selected.length > 0 ? (
         <div
           aria-label={t("selectionToolbar")}
-          className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4"
+          className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
           role="toolbar"
         >
           <span className="mr-auto min-w-0 text-sm font-semibold">
             {t("selected", { count: selected.length })}
           </span>
-          <Button onClick={() => setSelected([])} size="sm" variant="ghost">
+          <Button
+            className="md:h-8 md:min-h-8"
+            onClick={() => setSelected([])}
+            size="sm"
+            variant="ghost"
+          >
             {t("clearSelection")}
           </Button>
           <div className="hidden items-center gap-2 sm:flex">
             <Button
+              className="md:h-8 md:min-h-8"
               onClick={() => beginChoice("tags", selected)}
               size="sm"
               variant="secondary"
@@ -695,6 +701,7 @@ export function PapersView({
               {t("actions.tags")}
             </Button>
             <Button
+              className="md:h-8 md:min-h-8"
               onClick={() => beginChoice("project", selected)}
               size="sm"
               variant="secondary"
@@ -702,6 +709,7 @@ export function PapersView({
               {t("actions.project")}
             </Button>
             <Button
+              className="md:h-8 md:min-h-8"
               onClick={() => beginRemoval(selected)}
               size="sm"
               variant="danger"
@@ -951,8 +959,24 @@ export function PapersView({
                         paper={paper}
                         selectionMode={selected.length > 0}
                       />
-                      <div className="min-w-0">
+                      <div className="min-w-0" data-paper-content>
                         <PaperDetails paper={paper} />
+                        <div
+                          className="text-secondary mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs"
+                          data-paper-mobile-metadata
+                        >
+                          <span>
+                            {format.dateTime(new Date(paper.created_at), {
+                              dateStyle: "medium",
+                            })}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span>
+                            {metadata.publishDate
+                              ? new Date(metadata.publishDate).getUTCFullYear()
+                              : t("unknown")}
+                          </span>
+                        </div>
                       </div>
                       <PaperActions
                         onDownload={() => onDownload(id)}
@@ -963,18 +987,6 @@ export function PapersView({
                         paper={paper}
                         selected={selected.includes(id)}
                       />
-                    </div>
-                    <div className="text-secondary mt-3 flex min-w-0 flex-wrap gap-x-3 gap-y-1 pl-[4.25rem] text-xs">
-                      <span>
-                        {format.dateTime(new Date(paper.created_at), {
-                          dateStyle: "medium",
-                        })}
-                      </span>
-                      <span>
-                        {metadata.publishDate
-                          ? new Date(metadata.publishDate).getUTCFullYear()
-                          : t("unknown")}
-                      </span>
                     </div>
                   </li>
                 );

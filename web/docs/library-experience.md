@@ -40,17 +40,19 @@ preview without shifting the text columns. The selection control reuses that
 same slot: on pointer devices it appears on row hover or keyboard focus and
 remains visible while selected. It is not a permanently visible checkbox
 column. Entering selection replaces the utility row with a batch toolbar above
-the collection; batch actions are never placed in a detached bar below the
-list.
+the collection. Both desktop toolbars occupy the same 44 px layout slot so the
+collection does not move when selection starts. Batch actions are never placed
+in a detached bar below the list.
 
 Below the desktop breakpoint, Papers uses a dedicated stacked list rather than
 compressing the table. Mobile has no hover dependency: the row action menu
 starts selection, after which thumbnail slots expose checkboxes and the compact
 batch toolbar remains above the collection. Titles wrap to at most two lines,
-authors and institutions stay on one clipped secondary line, and dates remain
-in their own wrapping metadata row. Long titles and uninterrupted identifiers
-must not create horizontal page scrolling; desktop table titles remain a
-single line.
+authors and institutions stay on one clipped secondary line, and added and
+published dates stay in the same content column immediately after the paper's
+text metadata. They are not positioned beneath the full thumbnail row. Long
+titles and uninterrupted identifiers must not create horizontal page
+scrolling; desktop table titles remain a single line.
 
 Library tags are explicit user-owned organizational labels, not model-generated
 keywords. Papers without assigned labels show no synthetic tags; the filter
