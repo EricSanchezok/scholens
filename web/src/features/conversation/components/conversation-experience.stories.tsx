@@ -8,6 +8,7 @@ const meta = {
   component: ResearchComposer,
   args: {
     context: { kind: "library" },
+    surface: "workspace",
     onContextChange: fn(),
     onReasoningLevelChange: fn(),
     onStop: fn(),
@@ -32,9 +33,32 @@ type Story = StoryObj<typeof meta>;
 export const Desktop: Story = {};
 
 export const Mobile: Story = {
-  globals: { viewport: { value: "mobile1" } },
+  globals: { viewport: { value: "mobile" } },
 };
 
 export const Streaming: Story = {
   args: { busy: true },
+};
+
+export const ContextPanelSelection: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: ["paper-1"],
+      project_ids: [],
+    },
+    contextLabel: "Retrieval-Augmented Generation",
+    onTurnContextClear: fn(),
+    surface: "context-panel",
+    turnContextLabel: "Page 4 selection",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
 };

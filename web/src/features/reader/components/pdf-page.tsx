@@ -3,11 +3,14 @@
 import type { PDFPageProxy } from "pdfjs-dist";
 import * as React from "react";
 
-import { LoadingState, useCopyActionFeedback } from "@/components/feedback";
-import { Button } from "@/components/ui";
+import { LoadingState } from "@/components/feedback";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
+import {
+  ReaderSelectionToolbar,
+  type ReaderSelectionLabels,
+} from "./reader-selection-toolbar";
 
 export type ReaderFitMode = "width" | "page" | "custom";
 export type ReaderSelection =
@@ -55,13 +58,13 @@ export function PdfPage({
   loadingLabel,
   annotations = [],
   selectedAnnotationId,
-  selection,
+  activeTextSelection,
   selectionLabels,
   onAnnotationSelect,
   onAskSelection,
   onCommentSelection,
   onHighlightSelection,
-  onSelectionChange,
+  onActiveTextSelectionChange,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -74,21 +77,15 @@ export function PdfPage({
   loadingLabel: string;
   annotations?: ReaderAnnotation[];
   selectedAnnotationId?: string;
-  selection?: ReaderSelection;
-  selectionLabels?: {
-    ask: string;
-    comment: string;
-    copy: string;
-    copied: string;
-    copying: string;
-    copyFailed: string;
-    highlight: string;
-  };
+  activeTextSelection?: ReaderSelection;
+  selectionLabels?: ReaderSelectionLabels;
   onAnnotationSelect?: (annotationId: string) => void;
-  onAskSelection?: () => void;
-  onCommentSelection?: () => void;
-  onHighlightSelection?: () => void;
-  onSelectionChange?: (selection: ReaderSelection | undefined) => void;
+  onAskSelection?: (selection: ReaderSelection) => void;
+  onCommentSelection?: (selection: ReaderSelection) => void;
+  onHighlightSelection?: (selection: ReaderSelection, color: string) => void;
+  onActiveTextSelectionChange?: (
+    selection: ReaderSelection | undefined,
+  ) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const pageSurfaceRef = React.useRef<HTMLDivElement>(null);
@@ -105,15 +102,22 @@ export function PdfPage({
   });
   const [pageSize, setPageSize] = React.useState({ height: 1, width: 1 });
   const [renderedKey, setRenderedKey] = React.useState("");
-  const copyFeedback = useCopyActionFeedback({
-    labels: {
-      idle: selectionLabels?.copy ?? "",
-      pending: selectionLabels?.copying ?? "",
-      success: selectionLabels?.copied ?? "",
-      error: selectionLabels?.copyFailed ?? "",
-    },
-    value: selection?.selected_text ?? "",
-  });
+  const clearActiveSelection = React.useCallback(() => {
+    onActiveTextSelectionChange?.(undefined);
+    window.getSelection()?.removeAllRanges();
+  }, [onActiveTextSelectionChange]);
+
+  React.useEffect(() => {
+    clearActiveSelection();
+  }, [clearActiveSelection, pageNumber]);
+
+  React.useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") clearActiveSelection();
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [clearActiveSelection]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -165,8 +169,7 @@ export function PdfPage({
     const annotationLayer = annotationLayerRef.current;
     if (!page || !canvas || !textLayer || !annotationLayer) return;
     let active = true;
-    let cancel: (() => void) | undefined;
-    void renderPdfPage({
+    const renderTask = renderPdfPage({
       annotationLinkLabel,
       annotationLayer,
       canvas,
@@ -175,22 +178,23 @@ export function PdfPage({
       scale,
       searchQuery,
       textLayer,
-    })
-      .then((result) => {
-        cancel = result.cancel;
+    });
+    void renderTask.promise
+      .then(() => {
         if (active) setRenderedKey(`${pageNumber}:${scale}:${searchQuery}`);
       })
       .catch((error: unknown) => {
         if (
           error instanceof Error &&
-          error.name === "RenderingCancelledException"
+          (error.name === "AbortError" ||
+            error.name === "RenderingCancelledException")
         ) {
           return;
         }
       });
     return () => {
       active = false;
-      cancel?.();
+      renderTask.cancel();
     };
   }, [
     annotationLinkLabel,
@@ -205,7 +209,7 @@ export function PdfPage({
     !page || renderedKey !== `${pageNumber}:${scale}:${searchQuery}`;
 
   function captureSelection() {
-    if (!onSelectionChange) return;
+    if (!onActiveTextSelectionChange) return;
     window.setTimeout(() => {
       const browserSelection = window.getSelection();
       const pageSurface = pageSurfaceRef.current;
@@ -231,7 +235,7 @@ export function PdfPage({
       ]);
       const selectedText = browserSelection.toString().trim();
       if (!selectedText || rects.length === 0) return;
-      onSelectionChange({
+      onActiveTextSelectionChange({
         kind: "paper_selection",
         document_id: "",
         page_number: pageNumber,
@@ -250,6 +254,12 @@ export function PdfPage({
     <div
       aria-label={canvasLabel}
       className="bg-subtle relative grid min-h-0 flex-1 overflow-auto overscroll-contain p-4"
+      onPointerDown={(event) => {
+        const target = event.target as HTMLElement;
+        if (!target.closest("[data-reader-selection-toolbar]")) {
+          clearActiveSelection();
+        }
+      }}
       onPointerUp={captureSelection}
       ref={containerRef}
       role="region"
@@ -304,52 +314,20 @@ export function PdfPage({
             ));
           })}
         </div>
-        {selection &&
-          selection.page_number === pageNumber &&
+        {activeTextSelection &&
+          activeTextSelection.page_number === pageNumber &&
           selectionLabels && (
-            <div
-              className="bg-elevated shadow-raised border-line absolute top-3 left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-0.5 rounded-[var(--radius-lg)] border p-1 lg:flex-nowrap lg:rounded-full"
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <Button
-                className="h-8 min-h-8 rounded-full px-3"
-                onClick={onAskSelection}
-                size="sm"
-                variant="ghost"
-              >
-                {selectionLabels.ask}
-              </Button>
-              <Button
-                className="h-8 min-h-8 rounded-full px-3"
-                onClick={onHighlightSelection}
-                size="sm"
-                variant="ghost"
-              >
-                {selectionLabels.highlight}
-              </Button>
-              <Button
-                className="h-8 min-h-8 rounded-full px-3"
-                onClick={onCommentSelection}
-                size="sm"
-                variant="ghost"
-              >
-                {selectionLabels.comment}
-              </Button>
-              <Button
-                aria-busy={copyFeedback.status === "pending" || undefined}
-                className="h-8 min-h-8 rounded-full px-3"
-                disabled={copyFeedback.status === "pending"}
-                onClick={() => {
-                  void copyFeedback.copy().catch(() => undefined);
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                {copyFeedback.label}
-              </Button>
-              <span aria-live="polite" className="sr-only">
-                {copyFeedback.feedbackVisible ? copyFeedback.label : ""}
-              </span>
+            <div data-reader-selection-toolbar>
+              <ReaderSelectionToolbar
+                labels={selectionLabels}
+                onAsk={() => onAskSelection?.(activeTextSelection)}
+                onComment={() => onCommentSelection?.(activeTextSelection)}
+                onCopySettled={clearActiveSelection}
+                onHighlight={(color) =>
+                  onHighlightSelection?.(activeTextSelection, color)
+                }
+                selection={activeTextSelection}
+              />
             </div>
           )}
       </div>

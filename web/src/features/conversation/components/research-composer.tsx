@@ -1,7 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowUp, AtSign, NavArrowDown, Page, Square } from "iconoir-react";
+import {
+  ArrowUp,
+  AtSign,
+  NavArrowDown,
+  Page,
+  Square,
+  Xmark,
+} from "iconoir-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
@@ -34,6 +41,7 @@ export type ResearchContext =
   | components["schemas"]["LibraryPaperContext"]
   | components["schemas"]["SelectedPaperContext"];
 export type ReasoningLevel = components["schemas"]["ReasoningLevel"];
+export type ResearchComposerSurface = "workspace" | "context-panel";
 
 export type ResearchContextDisplay =
   | { kind: "library" }
@@ -338,11 +346,11 @@ export function ReasoningMenu({
   className?: string;
   disabled?: boolean;
   onChange: (level: ReasoningLevel) => void;
-  variant?: "composer" | "mobileHeader";
+  variant?: "composer" | "mobileHeader" | "contextPanel";
   value: ReasoningLevel;
 }) {
   const t = useTranslations("Home");
-  const mobileHeader = variant === "mobileHeader";
+  const compactMenu = variant === "mobileHeader" || variant === "contextPanel";
 
   return (
     <DropdownMenu modal={false}>
@@ -353,7 +361,7 @@ export function ReasoningMenu({
           })}
           className={cn(
             "hover:bg-hover active:bg-pressed flex min-w-0 items-center gap-1.5 text-sm font-medium",
-            mobileHeader
+            compactMenu
               ? "h-11 shrink-0 rounded-[var(--radius-md)] px-3"
               : "h-11 rounded-full px-3",
             keyboardFocusRing,
@@ -369,12 +377,12 @@ export function ReasoningMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={mobileHeader ? "start" : "end"}
+        align={variant === "mobileHeader" ? "start" : "end"}
         className={cn(
           "p-1.5",
-          mobileHeader ? "w-32" : "w-[min(18rem,calc(100vw-1.5rem))]",
+          compactMenu ? "w-32" : "w-[min(18rem,calc(100vw-1.5rem))]",
         )}
-        sideOffset={mobileHeader ? 4 : 8}
+        sideOffset={compactMenu ? 4 : 8}
       >
         <DropdownMenuRadioGroup
           onValueChange={(nextValue) => onChange(nextValue as ReasoningLevel)}
@@ -385,14 +393,14 @@ export function ReasoningMenu({
               <DropdownMenuRadioItem
                 className={cn(
                   "pr-8 pl-3 [&>span:first-child]:right-3 [&>span:first-child]:left-auto",
-                  mobileHeader
+                  compactMenu
                     ? "min-h-11 items-center py-2"
                     : "min-h-16 items-start py-2.5",
                 )}
                 key={level}
                 value={level}
               >
-                {mobileHeader ? (
+                {compactMenu ? (
                   <span className="text-foreground truncate font-medium">
                     {t(`composer.${level}`)}
                   </span>
@@ -422,11 +430,13 @@ export function ResearchComposer({
   projects,
   reasoningLevel,
   busy,
-  compact,
+  intent = "new",
   onContextChange,
   onReasoningLevelChange,
   onSubmit,
   onStop,
+  onTurnContextClear,
+  surface,
   unavailable,
   contextLocked = false,
   contextLabel,
@@ -438,11 +448,13 @@ export function ResearchComposer({
   projects: Project[];
   reasoningLevel: ReasoningLevel;
   busy?: boolean;
-  compact?: boolean;
+  intent?: "new" | "follow-up";
   onContextChange: (context: ResearchContext) => void;
   onReasoningLevelChange: (level: ReasoningLevel) => void;
   onSubmit: (message: string) => Promise<void>;
   onStop?: () => void;
+  onTurnContextClear?: () => void;
+  surface: ResearchComposerSurface;
   unavailable?: boolean;
   contextLocked?: boolean;
   contextLabel?: string;
@@ -474,11 +486,96 @@ export function ResearchComposer({
     await onSubmit(values.message.trim());
   }
 
+  const placeholder =
+    intent === "follow-up"
+      ? t("composer.followUpPlaceholder")
+      : t("composer.placeholder");
+
+  if (surface === "context-panel") {
+    return (
+      <form
+        className="border-line bg-surface grid w-full gap-1.5 rounded-[var(--radius-xl)] border p-2 shadow-sm"
+        data-focus-surface
+        onSubmit={composerForm.handleSubmit(submit)}
+      >
+        <textarea
+          aria-label={placeholder}
+          className="placeholder:text-muted [field-sizing:content] max-h-28 min-h-11 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-6 outline-none focus-visible:outline-none"
+          data-focus-delegate="surface"
+          data-focus-origin={focusOrigin ?? undefined}
+          disabled={busy || unavailable}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void composerForm.handleSubmit(submit)();
+            }
+          }}
+          placeholder={placeholder}
+          rows={1}
+          {...messageRegistration}
+          {...focusHandlers}
+        />
+        <div className="flex min-w-0 items-center gap-1">
+          <div
+            aria-label={contextLabel}
+            className="text-secondary grid size-9 shrink-0 place-items-center rounded-full"
+            role="img"
+            title={contextLabel}
+          >
+            <Icon glyph={AtSign} size={20} tone="secondary" />
+          </div>
+          {turnContextLabel ? (
+            <span className="bg-subtle text-secondary flex max-w-[45%] min-w-0 items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
+              <Icon glyph={Page} size={16} tone="secondary" />
+              <span className="truncate">{turnContextLabel}</span>
+              {onTurnContextClear ? (
+                <button
+                  aria-label={t("composer.removeTurnContext")}
+                  className="hover:bg-hover grid size-6 shrink-0 place-items-center rounded-full"
+                  onClick={onTurnContextClear}
+                  type="button"
+                >
+                  <Icon glyph={Xmark} size={16} tone="secondary" />
+                </button>
+              ) : null}
+            </span>
+          ) : null}
+          <ReasoningMenu
+            className="ml-auto h-9 px-2"
+            disabled={unavailable}
+            onChange={onReasoningLevelChange}
+            value={reasoningLevel}
+            variant="contextPanel"
+          />
+          {busy && onStop ? (
+            <IconButton
+              className="size-9 min-h-9 rounded-full"
+              label={t("composer.stop")}
+              onClick={onStop}
+              type="button"
+            >
+              <Icon glyph={Square} size={16} tone="inverse" />
+            </IconButton>
+          ) : (
+            <IconButton
+              className="size-9 min-h-9 rounded-full"
+              disabled={!composerForm.formState.isValid || busy || unavailable}
+              label={t("composer.submit")}
+              type="submit"
+            >
+              <Icon glyph={ArrowUp} size={16} tone="inverse" />
+            </IconButton>
+          )}
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form
       className={cn(
         "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 rounded-full border p-2",
-        compact ? "max-w-[720px]" : "max-w-[760px]",
+        "max-w-[760px]",
         expanded
           ? "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:rounded-[var(--radius-2xl)] lg:p-3"
           : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-2",
@@ -488,11 +585,7 @@ export function ResearchComposer({
       onSubmit={composerForm.handleSubmit(submit)}
     >
       <textarea
-        aria-label={
-          compact
-            ? t("composer.followUpPlaceholder")
-            : t("composer.placeholder")
-        }
+        aria-label={placeholder}
         className={cn(
           "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 py-3 text-[17px] leading-6 outline-none focus-visible:outline-none lg:max-h-36 lg:text-sm lg:leading-6",
           expanded
@@ -510,11 +603,7 @@ export function ResearchComposer({
             void composerForm.handleSubmit(submit)();
           }
         }}
-        placeholder={
-          compact
-            ? t("composer.followUpPlaceholder")
-            : t("composer.placeholder")
-        }
+        placeholder={placeholder}
         rows={1}
         {...messageRegistration}
         {...focusHandlers}
@@ -541,6 +630,7 @@ export function ResearchComposer({
           <div
             aria-label={contextLabel}
             className="text-secondary grid size-12 shrink-0 place-items-center rounded-full lg:size-11"
+            role="img"
             title={contextLabel}
           >
             <Icon glyph={Page} size={20} tone="secondary" />

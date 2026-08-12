@@ -71,7 +71,8 @@
       "reasoningStrength": "思考强度",
       "reasoningStrengthValue": "思考强度：{value}",
       "standardDescription": "快速、均衡的推理",
-      "deepDescription": "更充分地分析复杂问题"
+      "deepDescription": "更充分地分析复杂问题",
+      "removeTurnContext": "移除选区上下文"
     },
     "context": {
       "title": "添加上下文",
@@ -496,10 +497,14 @@
     "conversations": {
       "search": "搜索当前论文的对话",
       "new": "新建对话",
+      "newDraft": "新对话",
       "loading": "正在加载对话",
       "empty": "这篇论文还没有对话",
       "pin": "置顶对话",
-      "unpin": "取消置顶"
+      "unpin": "取消置顶",
+      "pinned": "置顶",
+      "recent": "最近",
+      "switcher": "对话历史"
     },
     "annotations": {
       "error": "无法加载批注。",

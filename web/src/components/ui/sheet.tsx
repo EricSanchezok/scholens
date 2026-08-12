@@ -17,33 +17,48 @@ export const SheetContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     closeLabel: string;
     closeGlyph?: IconGlyph;
+    showCloseButton?: boolean;
   }
->(({ children, className, closeGlyph = Xmark, closeLabel, ...props }, ref) => (
-  <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay
-      className="fixed inset-0 z-40 bg-[var(--color-overlay-backdrop)]"
-      data-slot="sheet-overlay"
-    />
-    <DialogPrimitive.Content
-      className={cn(
-        "border-line bg-elevated shadow-panel fixed inset-y-0 right-0 z-50 w-[min(90vw,30rem)] border-l p-6",
-        className,
-      )}
-      data-slot="sheet-content"
-      ref={ref}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close asChild>
-        <IconButton
-          className="absolute top-3 right-3"
-          label={closeLabel}
-          variant="ghost"
-        >
-          <Icon glyph={closeGlyph} size={24} />
-        </IconButton>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPrimitive.Portal>
-));
+>(
+  (
+    {
+      children,
+      className,
+      closeGlyph = Xmark,
+      closeLabel,
+      showCloseButton = true,
+      ...props
+    },
+    ref,
+  ) => (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay
+        className="fixed inset-0 z-40 bg-[var(--color-overlay-backdrop)]"
+        data-slot="sheet-overlay"
+      />
+      <DialogPrimitive.Content
+        className={cn(
+          "border-line bg-elevated shadow-panel fixed inset-y-0 right-0 z-50 w-[min(90vw,30rem)] border-l p-6",
+          className,
+        )}
+        data-slot="sheet-content"
+        ref={ref}
+        {...props}
+      >
+        {children}
+        {showCloseButton ? (
+          <DialogPrimitive.Close asChild>
+            <IconButton
+              className="absolute top-3 right-3"
+              label={closeLabel}
+              variant="ghost"
+            >
+              <Icon glyph={closeGlyph} size={24} />
+            </IconButton>
+          </DialogPrimitive.Close>
+        ) : null}
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  ),
+);
 SheetContent.displayName = DialogPrimitive.Content.displayName;

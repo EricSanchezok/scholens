@@ -9,7 +9,6 @@ import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
-  Button,
   IconButton,
   Sheet,
   SheetContent,
@@ -105,9 +104,17 @@ function ReaderDocumentWorkspace({
     results: Awaited<ReturnType<PdfDocumentAdapter["search"]>>;
   }>();
   const [searchIndex, setSearchIndex] = React.useState(-1);
-  const [selection, setSelection] = React.useState<ReaderSelection>();
+  const [activeTextSelection, setActiveTextSelection] =
+    React.useState<ReaderSelection>();
+  const [pendingTurnContext, setPendingTurnContext] =
+    React.useState<ReaderSelection>();
+  const [annotationSelection, setAnnotationSelection] =
+    React.useState<ReaderSelection>();
   const [selectedAnnotationId, setSelectedAnnotationId] =
     React.useState<string>();
+  const lastContextPanelRef = React.useRef<"ask" | "annotations" | "details">(
+    "ask",
+  );
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const documentQuery = useQuery(readerQueries.document(documentId));
@@ -151,7 +158,9 @@ function ReaderDocumentWorkspace({
     },
     conversationId,
     getTurnContexts: () => {
-      if (selection) return [{ ...selection, document_id: documentId }];
+      if (pendingTurnContext) {
+        return [{ ...pendingTurnContext, document_id: documentId }];
+      }
       if (selectedAnnotationId) {
         return [{ kind: "highlight_thread", thread_id: selectedAnnotationId }];
       }
@@ -159,7 +168,10 @@ function ReaderDocumentWorkspace({
     },
     onConversationCreated: (nextConversationId) =>
       updateLocation({ conversation: nextConversationId, panel: "ask" }),
-    onTurnStarted: () => setSelection(undefined),
+    onTurnStarted: () => {
+      setPendingTurnContext(undefined);
+      setSelectedAnnotationId(undefined);
+    },
     reasoningLevel,
     scopeId: documentId,
     scopeType: "paper",
@@ -177,20 +189,37 @@ function ReaderDocumentWorkspace({
     });
   }
 
-  async function createHighlight(comment?: string) {
-    if (!selection) return;
+  async function createHighlight(
+    targetSelection: ReaderSelection | undefined,
+    color = "yellow",
+    comment?: string,
+  ) {
+    if (!targetSelection) return;
     const item = await createReaderHighlight(documentId, {
-      color: "yellow",
-      position: selection.anchor,
-      quote_text: selection.selected_text,
+      color,
+      position: targetSelection.anchor,
+      quote_text: targetSelection.selected_text,
       shared: false,
     });
     if (comment?.trim()) await createReaderComment(item.id, comment.trim());
     await refreshAnnotations();
     setSelectedAnnotationId(item.id);
-    setSelection(undefined);
+    setActiveTextSelection(undefined);
+    setAnnotationSelection(undefined);
     window.getSelection()?.removeAllRanges();
   }
+
+  const handleActiveTextSelectionChange = React.useCallback(
+    (nextSelection: ReaderSelection | undefined) => {
+      setSelectedAnnotationId(undefined);
+      setActiveTextSelection(
+        nextSelection
+          ? { ...nextSelection, document_id: documentId }
+          : undefined,
+      );
+    },
+    [documentId],
+  );
 
   function notifyActionError() {
     toast.notify({
@@ -307,6 +336,7 @@ function ReaderDocumentWorkspace({
       outline: t("toolbar.outline"),
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
+      returnLibrary: t("returnLibrary"),
       search: t("toolbar.search"),
       zoomIn: t("toolbar.zoomIn"),
       zoomOut: t("toolbar.zoomOut"),
@@ -316,10 +346,22 @@ function ReaderDocumentWorkspace({
 
   const document = documentQuery.data;
   const title = document?.title ?? document?.original_filename ?? t("untitled");
+  const documentMetadata = [
+    document?.authors?.[0],
+    document?.doi ?? document?.original_filename,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const desktopPanelOpen =
     panel === "ask" || panel === "annotations" || panel === "details";
   const useDesktopPanel = useDesktopReaderPanel();
   const showThumbnailRail = useThumbnailRail();
+
+  React.useEffect(() => {
+    if (panel === "ask" || panel === "annotations" || panel === "details") {
+      lastContextPanelRef.current = panel;
+    }
+  }, [panel]);
 
   return (
     <WorkspaceShell
@@ -349,26 +391,6 @@ function ReaderDocumentWorkspace({
       signingOut={signingOut}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="border-line bg-canvas hidden h-14 shrink-0 items-center justify-between gap-4 border-b px-4 lg:flex">
-          <button
-            className="min-w-0 text-left"
-            onClick={() => router.push("/library")}
-            type="button"
-          >
-            <span className="text-muted block text-xs">{t("library")}</span>
-            <span className="block max-w-[50vw] truncate text-sm font-medium">
-              {title}
-            </span>
-          </button>
-          <Button
-            onClick={() => updateLocation({ panel: "ask" })}
-            size="sm"
-            variant="secondary"
-          >
-            {t("panels.ask")}
-          </Button>
-        </div>
-
         {documentQuery.isPending && (
           <div className="m-auto w-full max-w-sm p-6">
             <LoadingState label={t("loadingDocument")} />
@@ -428,163 +450,194 @@ function ReaderDocumentWorkspace({
         )}
 
         {adapter && (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <ReaderToolbar
-              fitMode={fitMode}
-              labels={toolbarLabels}
-              onDownload={() => void handleDownload()}
-              onFitModeChange={setFitMode}
-              onOpenOutline={() => updateLocation({ panel: "outline" })}
-              onOpenPanel={() =>
-                updateLocation({ panel: desktopPanelOpen ? null : "ask" })
-              }
-              onOpenSearch={() => updateLocation({ panel: "search" })}
-              onPageChange={(page) =>
-                updateLocation({ page: Math.min(Math.max(page, 1), pageCount) })
-              }
-              onZoomChange={(nextZoom) => {
-                setZoom(nextZoom);
-                setFitMode("custom");
-              }}
-              pageCount={pageCount}
-              pageNumber={pageNumber}
-              panelOpen={desktopPanelOpen}
-              zoom={zoom}
-            />
-            <div className="flex min-h-0 flex-1">
-              {showThumbnailRail && (
-                <aside
-                  aria-label={t("thumbnailRail")}
-                  className="border-line bg-canvas w-28 shrink-0 overflow-y-auto border-r p-2"
-                >
-                  <div className="grid gap-1">
-                    {Array.from(
-                      { length: pageCount },
-                      (_, index) => index + 1,
-                    ).map((number) => (
-                      <PdfThumbnail
-                        adapter={adapter}
-                        current={pageNumber === number}
-                        key={number}
-                        label={t("thumbnail", { page: number })}
-                        onSelect={() => updateLocation({ page: number })}
-                        pageNumber={number}
-                      />
-                    ))}
-                  </div>
-                </aside>
-              )}
-              <PdfPage
-                adapter={adapter}
-                annotationLinkLabel={t("pdfLink")}
-                annotations={annotationsQuery.data?.items ?? []}
-                canvasLabel={t("documentCanvas")}
+          <div className="flex min-h-0 flex-1">
+            <section className="flex min-w-0 flex-1 flex-col">
+              <ReaderToolbar
                 fitMode={fitMode}
-                loadingLabel={t("renderingPage")}
-                onAnnotationSelect={(id) => void openAnnotation(id)}
-                onAskSelection={() => updateLocation({ panel: "ask" })}
-                onCommentSelection={() => {
-                  setSelectedAnnotationId(undefined);
-                  updateLocation({ panel: "annotations" });
-                }}
-                onHighlightSelection={() => {
-                  void createHighlight().catch(notifyActionError);
-                }}
-                onInternalDestination={(destination) =>
-                  void resolveDestination(destination)
+                labels={toolbarLabels}
+                metadata={documentMetadata}
+                onDownload={() => void handleDownload()}
+                onFitModeChange={setFitMode}
+                onOpenOutline={() => updateLocation({ panel: "outline" })}
+                onOpenPanel={() =>
+                  updateLocation({ panel: lastContextPanelRef.current })
                 }
-                onSelectionChange={(nextSelection) => {
-                  setSelectedAnnotationId(undefined);
-                  setSelection(
-                    nextSelection
-                      ? { ...nextSelection, document_id: documentId }
-                      : undefined,
-                  );
+                onOpenSearch={() => updateLocation({ panel: "search" })}
+                onPageChange={(page) => {
+                  setActiveTextSelection(undefined);
+                  updateLocation({
+                    page: Math.min(Math.max(page, 1), pageCount),
+                  });
                 }}
+                onReturn={() => router.push("/library")}
+                onZoomChange={(nextZoom) => {
+                  setZoom(nextZoom);
+                  setFitMode("custom");
+                }}
+                pageCount={pageCount}
                 pageNumber={pageNumber}
-                searchQuery={searchQuery}
-                selectedAnnotationId={selectedAnnotationId}
-                selection={selection}
-                selectionLabels={{
-                  ask: t("selection.ask"),
-                  comment: t("selection.comment"),
-                  copy: t("selection.copy"),
-                  copied: t("selection.copied"),
-                  copying: t("selection.copying"),
-                  copyFailed: t("selection.copyFailed"),
-                  highlight: t("selection.highlight"),
-                }}
+                panelOpen={desktopPanelOpen}
+                title={title}
                 zoom={zoom}
               />
-              {useDesktopPanel && desktopPanelOpen && (
-                <ReaderContextPanel
-                  className="flex"
-                  document={document}
+              <div className="flex min-h-0 flex-1">
+                {showThumbnailRail && (
+                  <aside
+                    aria-label={t("thumbnailRail")}
+                    className="border-line bg-canvas w-28 shrink-0 overflow-y-auto border-r p-2"
+                  >
+                    <div className="grid gap-1">
+                      {Array.from(
+                        { length: pageCount },
+                        (_, index) => index + 1,
+                      ).map((number) => (
+                        <PdfThumbnail
+                          adapter={adapter}
+                          current={pageNumber === number}
+                          key={number}
+                          label={t("thumbnail", { page: number })}
+                          onSelect={() => updateLocation({ page: number })}
+                          pageNumber={number}
+                        />
+                      ))}
+                    </div>
+                  </aside>
+                )}
+                <PdfPage
+                  activeTextSelection={activeTextSelection}
+                  adapter={adapter}
+                  annotationLinkLabel={t("pdfLink")}
                   annotations={annotationsQuery.data?.items ?? []}
-                  annotationsError={annotationsQuery.isError}
-                  conversationId={conversationSession.activeConversationId}
-                  conversationSession={conversationSession}
-                  conversations={conversationsQuery.data?.items ?? []}
-                  conversationsLoading={conversationsQuery.isPending}
-                  onActionError={notifyActionError}
-                  onAnnotationDelete={async (id) => {
-                    await deleteReaderHighlight(id);
-                    setSelectedAnnotationId(undefined);
-                    await refreshAnnotations();
-                  }}
+                  canvasLabel={t("documentCanvas")}
+                  fitMode={fitMode}
+                  loadingLabel={t("renderingPage")}
+                  onActiveTextSelectionChange={handleActiveTextSelectionChange}
                   onAnnotationSelect={(id) => void openAnnotation(id)}
-                  onCommentCreate={async (id, content) => {
-                    await createReaderComment(id, content);
-                    await refreshAnnotations();
-                  }}
-                  onCommentDelete={async (id) => {
-                    await deleteReaderComment(id);
-                    await refreshAnnotations();
-                  }}
-                  onCommentUpdate={async (id, content) => {
-                    await updateReaderComment(id, content);
-                    await refreshAnnotations();
-                  }}
-                  onClose={() => updateLocation({ panel: null })}
-                  onConversationChange={(id) =>
-                    updateLocation({ conversation: id, panel: "ask" })
-                  }
-                  onConversationNew={() =>
-                    updateLocation({ conversation: null, panel: "ask" })
-                  }
-                  onConversationPin={async (id, pinned) => {
-                    await setReaderConversationPinned(id, pinned);
-                    await queryClient.invalidateQueries({
-                      queryKey: conversationKeys.lists(),
+                  onAskSelection={(selection) => {
+                    setPendingTurnContext({
+                      ...selection,
+                      document_id: documentId,
                     });
+                    setActiveTextSelection(undefined);
+                    window.getSelection()?.removeAllRanges();
+                    updateLocation({ panel: "ask" });
                   }}
-                  onHighlightCreate={createHighlight}
-                  onHighlightUpdate={async (id, color) => {
-                    await updateReaderHighlight(id, { color });
-                    await refreshAnnotations();
+                  onCommentSelection={(selection) => {
+                    setAnnotationSelection({
+                      ...selection,
+                      document_id: documentId,
+                    });
+                    setActiveTextSelection(undefined);
+                    setSelectedAnnotationId(undefined);
+                    window.getSelection()?.removeAllRanges();
+                    updateLocation({ panel: "annotations" });
                   }}
-                  onPanelChange={(nextPanel) =>
-                    updateLocation({ panel: nextPanel })
+                  onHighlightSelection={(selection, color) => {
+                    void createHighlight(
+                      { ...selection, document_id: documentId },
+                      color,
+                    ).catch(notifyActionError);
+                  }}
+                  onInternalDestination={(destination) =>
+                    void resolveDestination(destination)
                   }
-                  onSourceOpen={(source) => {
-                    const page = readSourcePage(source.locator);
-                    if (source.document_id === documentId) {
-                      updateLocation({ page, panel: "ask" });
-                    } else {
-                      router.push(
-                        `/reader/${source.document_id}${page ? `?page=${page}` : ""}` as Route,
-                      );
-                    }
+                  pageNumber={pageNumber}
+                  searchQuery={searchQuery}
+                  selectedAnnotationId={selectedAnnotationId}
+                  selectionLabels={{
+                    ask: t("selection.ask"),
+                    colors: {
+                      blue: t("annotations.colors.blue"),
+                      green: t("annotations.colors.green"),
+                      neutral: t("annotations.colors.neutral"),
+                      yellow: t("annotations.colors.yellow"),
+                    },
+                    comment: t("selection.comment"),
+                    copy: t("selection.copy"),
+                    copied: t("selection.copied"),
+                    copying: t("selection.copying"),
+                    copyFailed: t("selection.copyFailed"),
+                    highlight: t("selection.highlight"),
                   }}
-                  panel={panel ?? "ask"}
-                  reasoningLevel={reasoningLevel}
-                  selectedAnnotation={selectedAnnotation}
-                  selection={selection}
-                  setReasoningLevel={setReasoningLevel}
-                  title={title}
+                  zoom={zoom}
                 />
-              )}
-            </div>
+              </div>
+            </section>
+            {useDesktopPanel && desktopPanelOpen && (
+              <ReaderContextPanel
+                annotationSelection={annotationSelection}
+                annotations={annotationsQuery.data?.items ?? []}
+                annotationsError={annotationsQuery.isError}
+                className="flex"
+                conversationId={conversationSession.activeConversationId}
+                conversationSession={conversationSession}
+                conversations={conversationsQuery.data?.items ?? []}
+                conversationsLoading={conversationsQuery.isPending}
+                document={document}
+                onActionError={notifyActionError}
+                onAnnotationDelete={async (id) => {
+                  await deleteReaderHighlight(id);
+                  setSelectedAnnotationId(undefined);
+                  await refreshAnnotations();
+                }}
+                onAnnotationSelect={(id) => void openAnnotation(id)}
+                onClose={() => updateLocation({ panel: null })}
+                onCommentCreate={async (id, content) => {
+                  await createReaderComment(id, content);
+                  await refreshAnnotations();
+                }}
+                onCommentDelete={async (id) => {
+                  await deleteReaderComment(id);
+                  await refreshAnnotations();
+                }}
+                onCommentUpdate={async (id, content) => {
+                  await updateReaderComment(id, content);
+                  await refreshAnnotations();
+                }}
+                onConversationChange={(id) =>
+                  updateLocation({ conversation: id, panel: "ask" })
+                }
+                onConversationNew={() =>
+                  updateLocation({ conversation: null, panel: "ask" })
+                }
+                onConversationPin={async (id, pinned) => {
+                  await setReaderConversationPinned(id, pinned);
+                  await queryClient.invalidateQueries({
+                    queryKey: conversationKeys.lists(),
+                  });
+                }}
+                onHighlightCreate={(comment) =>
+                  createHighlight(annotationSelection, "yellow", comment)
+                }
+                onHighlightUpdate={async (id, color) => {
+                  await updateReaderHighlight(id, { color });
+                  await refreshAnnotations();
+                }}
+                onPanelChange={(nextPanel) =>
+                  updateLocation({ panel: nextPanel })
+                }
+                onSourceOpen={(source) => {
+                  const page = readSourcePage(source.locator);
+                  if (source.document_id === documentId) {
+                    updateLocation({ page, panel: "ask" });
+                  } else {
+                    router.push(
+                      `/reader/${source.document_id}${page ? `?page=${page}` : ""}` as Route,
+                    );
+                  }
+                }}
+                onTurnContextClear={() => {
+                  setPendingTurnContext(undefined);
+                  setSelectedAnnotationId(undefined);
+                }}
+                panel={panel ?? "ask"}
+                pendingTurnContext={pendingTurnContext}
+                reasoningLevel={reasoningLevel}
+                selectedAnnotation={selectedAnnotation}
+                setReasoningLevel={setReasoningLevel}
+                title={title}
+              />
+            )}
           </div>
         )}
       </div>
@@ -663,15 +716,18 @@ function ReaderDocumentWorkspace({
         <SheetContent
           className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0"
           closeLabel={t("closePanel")}
+          showCloseButton={false}
         >
+          <SheetTitle className="sr-only">{t("contextPanel")}</SheetTitle>
           <ReaderContextPanel
-            document={document}
+            annotationSelection={annotationSelection}
             annotations={annotationsQuery.data?.items ?? []}
             annotationsError={annotationsQuery.isError}
             conversationId={conversationSession.activeConversationId}
             conversationSession={conversationSession}
             conversations={conversationsQuery.data?.items ?? []}
             conversationsLoading={conversationsQuery.isPending}
+            document={document}
             onActionError={notifyActionError}
             onAnnotationDelete={async (id) => {
               await deleteReaderHighlight(id);
@@ -704,7 +760,9 @@ function ReaderDocumentWorkspace({
                 queryKey: conversationKeys.lists(),
               });
             }}
-            onHighlightCreate={createHighlight}
+            onHighlightCreate={(comment) =>
+              createHighlight(annotationSelection, "yellow", comment)
+            }
             onHighlightUpdate={async (id, color) => {
               await updateReaderHighlight(id, { color });
               await refreshAnnotations();
@@ -720,10 +778,14 @@ function ReaderDocumentWorkspace({
                 );
               }
             }}
+            onTurnContextClear={() => {
+              setPendingTurnContext(undefined);
+              setSelectedAnnotationId(undefined);
+            }}
             panel={panel ?? "ask"}
+            pendingTurnContext={pendingTurnContext}
             reasoningLevel={reasoningLevel}
             selectedAnnotation={selectedAnnotation}
-            selection={selection}
             setReasoningLevel={setReasoningLevel}
             title={title}
           />

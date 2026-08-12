@@ -16,6 +16,7 @@ export type PdfSearchResult = {
 };
 
 let workerConfigured = false;
+const activeCanvasRenders = new WeakMap<HTMLCanvasElement, Promise<void>>();
 
 async function loadPdfJs() {
   const pdfjs = await import("pdfjs-dist");
@@ -119,7 +120,7 @@ export class PdfDocumentAdapter {
   }
 }
 
-export async function renderPdfPage({
+export function renderPdfPage({
   annotationLinkLabel,
   annotationLayer,
   canvas,
@@ -138,92 +139,126 @@ export async function renderPdfPage({
   searchQuery: string;
   textLayer: HTMLDivElement;
 }) {
-  const pdfjs = await loadPdfJs();
-  const viewport = page.getViewport({ scale });
-  const outputScale = window.devicePixelRatio || 1;
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) throw new Error("Canvas 2D context is unavailable");
+  let cancelled = false;
+  let cancelCanvasRender: (() => void) | undefined;
+  let cancelTextRender: (() => void) | undefined;
 
-  canvas.width = Math.floor(viewport.width * outputScale);
-  canvas.height = Math.floor(viewport.height * outputScale);
-  canvas.style.width = `${viewport.width}px`;
-  canvas.style.height = `${viewport.height}px`;
-
-  const renderTask = page.render({
-    canvas,
-    canvasContext: context,
-    transform:
-      outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
-    viewport,
-  });
-
-  textLayer.replaceChildren();
-  textLayer.style.width = `${viewport.width}px`;
-  textLayer.style.height = `${viewport.height}px`;
-  textLayer.style.setProperty("--scale-factor", `${viewport.scale}`);
-  textLayer.style.setProperty("--user-unit", "1");
-  textLayer.style.setProperty("--total-scale-factor", `${viewport.scale}`);
-  const textContent = await page.getTextContent();
-  const textRenderer = new pdfjs.TextLayer({
-    container: textLayer,
-    textContentSource: textContent,
-    viewport,
-  });
-
-  annotationLayer.replaceChildren();
-  annotationLayer.style.width = `${viewport.width}px`;
-  annotationLayer.style.height = `${viewport.height}px`;
-  for (const annotation of await page.getAnnotations({ intent: "display" })) {
-    if (!annotation.rect || (!annotation.url && !annotation.dest)) continue;
-    const [pointX1, pointY1] = viewport.convertToViewportPoint(
-      annotation.rect[0],
-      annotation.rect[1],
-    );
-    const [pointX2, pointY2] = viewport.convertToViewportPoint(
-      annotation.rect[2],
-      annotation.rect[3],
-    );
-    const [x1, y1, x2, y2] = [pointX1, pointY1, pointX2, pointY2];
-    const link = document.createElement("a");
-    link.setAttribute("aria-label", annotationLinkLabel);
-    link.className = "absolute block";
-    link.style.left = `${Math.min(x1, x2)}px`;
-    link.style.top = `${Math.min(y1, y2)}px`;
-    link.style.width = `${Math.abs(x2 - x1)}px`;
-    link.style.height = `${Math.abs(y2 - y1)}px`;
-    if (annotation.url) {
-      link.href = annotation.url;
-      link.rel = "noreferrer noopener";
-      link.target = "_blank";
-    } else {
-      link.href = "#";
-      link.addEventListener("click", (event) => {
-        event.preventDefault();
-        onInternalDestination(annotation.dest);
-      });
+  function assertActive() {
+    if (cancelled) {
+      throw new DOMException("PDF page render cancelled", "AbortError");
     }
-    annotationLayer.append(link);
   }
 
-  await Promise.all([renderTask.promise, textRenderer.render()]);
-  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-  textRenderer.textDivs.forEach((element, index) => {
-    if (
-      normalizedQuery &&
-      textRenderer.textContentItemsStr[index]
-        ?.toLocaleLowerCase()
-        .includes(normalizedQuery)
-    ) {
-      element.dataset.searchHit = "true";
+  const promise = (async () => {
+    const pdfjs = await loadPdfJs();
+    assertActive();
+    await activeCanvasRenders.get(canvas);
+    assertActive();
+    const viewport = page.getViewport({ scale });
+    const outputScale = window.devicePixelRatio || 1;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("Canvas 2D context is unavailable");
+
+    canvas.width = Math.floor(viewport.width * outputScale);
+    canvas.height = Math.floor(viewport.height * outputScale);
+    canvas.style.width = `${viewport.width}px`;
+    canvas.style.height = `${viewport.height}px`;
+
+    const renderTask = page.render({
+      canvas,
+      canvasContext: context,
+      transform:
+        outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+      viewport,
+    });
+    cancelCanvasRender = () => renderTask.cancel();
+    const canvasSettled = renderTask.promise.then(
+      () => undefined,
+      () => undefined,
+    );
+    activeCanvasRenders.set(canvas, canvasSettled);
+    void canvasSettled.finally(() => {
+      if (activeCanvasRenders.get(canvas) === canvasSettled) {
+        activeCanvasRenders.delete(canvas);
+      }
+    });
+    assertActive();
+
+    textLayer.replaceChildren();
+    textLayer.style.width = `${viewport.width}px`;
+    textLayer.style.height = `${viewport.height}px`;
+    textLayer.style.setProperty("--scale-factor", `${viewport.scale}`);
+    textLayer.style.setProperty("--user-unit", "1");
+    textLayer.style.setProperty("--total-scale-factor", `${viewport.scale}`);
+    const textContent = await page.getTextContent();
+    assertActive();
+    const textRenderer = new pdfjs.TextLayer({
+      container: textLayer,
+      textContentSource: textContent,
+      viewport,
+    });
+    cancelTextRender = () => textRenderer.cancel();
+
+    annotationLayer.replaceChildren();
+    annotationLayer.style.width = `${viewport.width}px`;
+    annotationLayer.style.height = `${viewport.height}px`;
+    const annotations = await page.getAnnotations({ intent: "display" });
+    assertActive();
+    for (const annotation of annotations) {
+      if (!annotation.rect || (!annotation.url && !annotation.dest)) continue;
+      const [pointX1, pointY1] = viewport.convertToViewportPoint(
+        annotation.rect[0],
+        annotation.rect[1],
+      );
+      const [pointX2, pointY2] = viewport.convertToViewportPoint(
+        annotation.rect[2],
+        annotation.rect[3],
+      );
+      const [x1, y1, x2, y2] = [pointX1, pointY1, pointX2, pointY2];
+      const link = document.createElement("a");
+      link.setAttribute("aria-label", annotationLinkLabel);
+      link.className = "absolute block";
+      link.style.left = `${Math.min(x1, x2)}px`;
+      link.style.top = `${Math.min(y1, y2)}px`;
+      link.style.width = `${Math.abs(x2 - x1)}px`;
+      link.style.height = `${Math.abs(y2 - y1)}px`;
+      if (annotation.url) {
+        link.href = annotation.url;
+        link.rel = "noreferrer noopener";
+        link.target = "_blank";
+      } else {
+        link.href = "#";
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          onInternalDestination(annotation.dest);
+        });
+      }
+      annotationLayer.append(link);
     }
-  });
+
+    await Promise.all([renderTask.promise, textRenderer.render()]);
+    assertActive();
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    textRenderer.textDivs.forEach((element, index) => {
+      if (
+        normalizedQuery &&
+        textRenderer.textContentItemsStr[index]
+          ?.toLocaleLowerCase()
+          .includes(normalizedQuery)
+      ) {
+        element.dataset.searchHit = "true";
+      }
+    });
+
+    return { height: viewport.height, width: viewport.width };
+  })();
 
   return {
     cancel() {
-      renderTask.cancel();
-      textRenderer.cancel();
+      cancelled = true;
+      cancelCanvasRender?.();
+      cancelTextRender?.();
     },
-    height: viewport.height,
-    width: viewport.width,
+    promise,
   };
 }

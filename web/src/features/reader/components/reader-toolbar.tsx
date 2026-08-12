@@ -1,9 +1,10 @@
 "use client";
 
 import {
+  ArrowLeft,
   Download,
+  Frame,
   List,
-  NavArrowDown,
   NavArrowLeft,
   NavArrowRight,
   Search,
@@ -14,7 +15,6 @@ import {
 import * as React from "react";
 
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -38,50 +38,72 @@ export type ReaderToolbarLabels = {
   outline: string;
   download: string;
   openPanel: string;
+  returnLibrary: string;
 };
 
 export function ReaderToolbar({
   className,
   fitMode,
   labels,
+  metadata,
   onDownload,
   onFitModeChange,
   onOpenOutline,
   onOpenPanel,
   onOpenSearch,
   onPageChange,
+  onReturn,
   onZoomChange,
   pageCount,
   pageNumber,
   panelOpen,
+  title,
   zoom,
 }: {
   className?: string;
   fitMode: ReaderFitMode;
   labels: ReaderToolbarLabels;
+  metadata?: string;
   onDownload: () => void;
   onFitModeChange: (fit: ReaderFitMode) => void;
   onOpenOutline: () => void;
   onOpenPanel: () => void;
   onOpenSearch: () => void;
   onPageChange: (page: number) => void;
+  onReturn: () => void;
   onZoomChange: (zoom: number) => void;
   pageCount: number;
   pageNumber: number;
   panelOpen: boolean;
+  title: string;
   zoom: number;
 }) {
-  const fitLabel = fitMode === "page" ? labels.fitPage : labels.fitWidth;
   return (
     <div
       aria-label={labels.page}
       className={cn(
-        "border-line bg-surface flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2 sm:px-3",
+        "border-line bg-surface flex h-14 shrink-0 items-center gap-2 border-b px-2 sm:px-3",
         className,
       )}
       role="toolbar"
     >
-      <div className="flex min-w-0 items-center gap-0.5">
+      <div className="hidden min-w-0 flex-1 items-center gap-1 lg:flex">
+        <IconButton
+          label={labels.returnLibrary}
+          onClick={onReturn}
+          variant="ghost"
+        >
+          <Icon glyph={ArrowLeft} size={20} />
+        </IconButton>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{title}</p>
+          {metadata ? (
+            <p className="text-muted truncate text-xs">{metadata}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-0.5">
         <IconButton
           disabled={pageNumber <= 1}
           label={labels.previousPage}
@@ -116,7 +138,7 @@ export function ReaderToolbar({
         </IconButton>
       </div>
 
-      <div className="hidden items-center gap-0.5 sm:flex">
+      <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
         <IconButton
           label={labels.zoomOut}
           onClick={() => onZoomChange(Math.max(zoom - 0.1, 0.5))}
@@ -136,14 +158,12 @@ export function ReaderToolbar({
         </IconButton>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              className="h-9 min-h-9 gap-1 px-2"
-              size="sm"
+            <IconButton
+              label={`${labels.fit}: ${fitMode === "page" ? labels.fitPage : labels.fitWidth}`}
               variant="ghost"
             >
-              {fitLabel}
-              <Icon glyph={NavArrowDown} size={16} tone="secondary" />
-            </Button>
+              <Icon glyph={Frame} size={20} />
+            </IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center">
             <DropdownMenuItem onSelect={() => onFitModeChange("width")}>
@@ -156,7 +176,7 @@ export function ReaderToolbar({
         </DropdownMenu>
       </div>
 
-      <div className="flex items-center gap-0.5">
+      <div className="ml-auto flex shrink-0 items-center gap-0.5 lg:ml-0">
         <IconButton
           label={labels.search}
           onClick={onOpenSearch}
@@ -180,14 +200,15 @@ export function ReaderToolbar({
         >
           <Icon glyph={Download} size={20} />
         </IconButton>
-        <IconButton
-          className="hidden lg:inline-flex"
-          label={labels.openPanel}
-          onClick={onOpenPanel}
-          variant={panelOpen ? "secondary" : "ghost"}
-        >
-          <Icon glyph={SidebarExpand} size={20} />
-        </IconButton>
+        {!panelOpen ? (
+          <IconButton
+            label={labels.openPanel}
+            onClick={onOpenPanel}
+            variant="ghost"
+          >
+            <Icon glyph={SidebarExpand} size={20} />
+          </IconButton>
+        ) : null}
       </div>
     </div>
   );

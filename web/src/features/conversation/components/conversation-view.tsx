@@ -39,6 +39,7 @@ export type ConversationTurn =
   components["schemas"]["ConversationTurnResponse"];
 export type ConversationResponseVariant =
   components["schemas"]["ConversationResponseVariantResponse"];
+export type ConversationViewLayout = "workspace" | "side-panel";
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
 
@@ -372,6 +373,7 @@ function MessageHistory({
 }
 
 export function ConversationView({
+  layout,
   turns,
   liveTurn,
   context,
@@ -396,8 +398,10 @@ export function ConversationView({
   contextLocked = false,
   contextLabel,
   turnContextLabel,
+  onTurnContextClear,
   onDocumentSourceOpen,
 }: {
+  layout: ConversationViewLayout;
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
   context: ResearchContext;
@@ -422,12 +426,14 @@ export function ConversationView({
   contextLocked?: boolean;
   contextLabel?: string;
   turnContextLabel?: string;
+  onTurnContextClear?: () => void;
   onDocumentSourceOpen?: (
     source: components["schemas"]["DocumentAnswerSource"],
   ) => void;
 }) {
   const t = useTranslations("Home.conversation");
   const rootRef = React.useRef<HTMLDivElement>(null);
+  const panelScrollRef = React.useRef<HTMLDivElement>(null);
   const scrollAnchor = React.useRef<HTMLDivElement>(null);
   const nearBottom = React.useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = React.useState(false);
@@ -455,10 +461,17 @@ export function ConversationView({
     submissionPending ||
     (liveTurn?.generationKind === "initial" && liveTurn.state === "streaming");
 
+  const getScroller = React.useCallback(
+    () =>
+      layout === "side-panel"
+        ? panelScrollRef.current
+        : (rootRef.current?.closest("[data-conversation-scroll-root]") ??
+          rootRef.current?.closest("main")),
+    [layout],
+  );
+
   React.useEffect(() => {
-    const scrollRoot =
-      rootRef.current?.closest("[data-conversation-scroll-root]") ??
-      rootRef.current?.closest("main");
+    const scrollRoot = getScroller();
     if (!scrollRoot) return;
     const scroller = scrollRoot;
     function updateProximity() {
@@ -476,7 +489,7 @@ export function ConversationView({
       window.cancelAnimationFrame(initialFrame);
       scroller.removeEventListener("scroll", updateProximity);
     };
-  }, []);
+  }, [getScroller]);
 
   React.useEffect(() => {
     if (!nearBottom.current) {
@@ -512,10 +525,24 @@ export function ConversationView({
 
   return (
     <div
-      className="mx-auto flex min-h-full w-full max-w-[848px] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8"
+      className={
+        layout === "side-panel"
+          ? "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden"
+          : "mx-auto flex min-h-full w-full max-w-[848px] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8"
+      }
       ref={rootRef}
     >
-      <div className="flex-1 pt-6 pb-10 lg:py-8">
+      <div
+        className={
+          layout === "side-panel"
+            ? "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-4 py-4"
+            : "flex-1 pt-6 pb-10 lg:py-8"
+        }
+        data-conversation-scroll-root={
+          layout === "side-panel" ? true : undefined
+        }
+        ref={layout === "side-panel" ? panelScrollRef : undefined}
+      >
         {loading ? (
           <p className="text-muted py-12 text-center text-sm" role="status">
             {t("loading")}
@@ -537,9 +564,21 @@ export function ConversationView({
             </Button>
           </div>
         ) : visibleTurns.length === 0 && !liveTurn ? (
-          <p className="text-muted py-12 text-center text-sm">{t("empty")}</p>
+          <p
+            className={
+              layout === "side-panel"
+                ? "text-muted m-auto px-4 py-12 text-center text-sm"
+                : "text-muted py-12 text-center text-sm"
+            }
+          >
+            {t("empty")}
+          </p>
         ) : (
-          <div className="grid gap-9 lg:gap-8">
+          <div
+            className={
+              layout === "side-panel" ? "grid gap-7" : "grid gap-9 lg:gap-8"
+            }
+          >
             <MessageHistory
               canSend={canSend && liveTurn?.state !== "streaming"}
               liveTurn={liveTurn}
@@ -606,7 +645,13 @@ export function ConversationView({
         )}
       </div>
       {showJumpToLatest && (
-        <div className="pointer-events-none sticky bottom-3 z-10 -mt-15 hidden h-15 justify-center max-lg:flex">
+        <div
+          className={
+            layout === "side-panel"
+              ? "pointer-events-none absolute right-0 bottom-24 left-0 z-10 flex justify-center"
+              : "pointer-events-none sticky bottom-3 z-10 -mt-15 hidden h-15 justify-center max-lg:flex"
+          }
+        >
           <IconButton
             className="bg-elevated shadow-raised pointer-events-auto size-12 rounded-full"
             label={t("jumpToLatest")}
@@ -626,11 +671,22 @@ export function ConversationView({
         </div>
       )}
       {showComposer && (
-        <div className="pointer-events-none sticky bottom-0 z-20 -mx-4 flex justify-center bg-[linear-gradient(to_top,var(--color-bg-canvas)_78%,transparent)] px-4 pt-5 pb-3 min-[390px]:-mx-5 min-[390px]:px-5 sm:-mx-8 lg:mx-0 lg:px-4 lg:pt-10 lg:pb-6">
-          <div className="pointer-events-auto w-full max-w-[720px]">
+        <div
+          className={
+            layout === "side-panel"
+              ? "border-line bg-canvas z-20 shrink-0 border-t p-3"
+              : "pointer-events-none sticky bottom-0 z-20 -mx-4 flex justify-center bg-[linear-gradient(to_top,var(--color-bg-canvas)_78%,transparent)] px-4 pt-5 pb-3 min-[390px]:-mx-5 min-[390px]:px-5 sm:-mx-8 lg:mx-0 lg:px-4 lg:pt-10 lg:pb-6"
+          }
+        >
+          <div
+            className={
+              layout === "side-panel"
+                ? "w-full"
+                : "pointer-events-auto w-full max-w-[720px]"
+            }
+          >
             <ResearchComposer
               busy={submissionPending || liveTurn?.state === "streaming"}
-              compact
               context={context}
               form={composerForm}
               onContextChange={onContextChange}
@@ -643,6 +699,9 @@ export function ConversationView({
               unavailable={loading || error || !canSend}
               contextLocked={contextLocked}
               contextLabel={contextLabel}
+              intent="follow-up"
+              onTurnContextClear={onTurnContextClear}
+              surface={layout === "side-panel" ? "context-panel" : "workspace"}
               turnContextLabel={turnContextLabel}
             />
           </div>

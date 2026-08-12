@@ -380,6 +380,7 @@ export function HomeDashboard({
             papers={papers}
             projects={projects}
             reasoningLevel={reasoningLevel}
+            surface="workspace"
           />
         )}
       </section>

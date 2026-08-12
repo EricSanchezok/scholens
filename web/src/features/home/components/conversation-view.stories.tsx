@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { ComponentProps } from "react";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 
 import type { components } from "@/lib/api/generated/schema";
@@ -191,6 +192,7 @@ const meta = {
   title: "Features/Home/Conversation View",
   component: ConversationView,
   args: {
+    layout: "workspace",
     turns: homeTurns,
     liveTurn: null,
     context: { kind: "library" },
@@ -757,4 +759,53 @@ export const OptimisticTurnDeduplicated: Story = {
       ),
     ).toHaveLength(1);
   },
+};
+
+function SidePanelStory(args: ComponentProps<typeof ConversationView>) {
+  return (
+    <div className="border-line h-dvh w-[23rem] max-w-full border-l">
+      <ConversationView {...args} />
+    </div>
+  );
+}
+
+export const SidePanelEmpty: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: [homePapers[0]!.document.document_id],
+      project_ids: [],
+    },
+    contextLabel: homePapers[0]!.document.title ?? "Current paper",
+    contextLocked: true,
+    layout: "side-panel",
+    turns: [],
+  },
+  render: SidePanelStory,
+};
+
+export const SidePanelStreaming: Story = {
+  args: {
+    ...SidePanelEmpty.args,
+    liveTurn: liveTurn({
+      entries: [{ ...searchActivity, state: "running" }],
+      provisionalItems: [
+        {
+          id: "assistant:side-panel:1",
+          sequence: 2,
+          phase: "provisional",
+          content: "I’m comparing this passage with the paper’s evidence.",
+        },
+      ],
+    }),
+  },
+  render: SidePanelStory,
+};
+
+export const SidePanelReady: Story = {
+  args: {
+    ...SidePanelEmpty.args,
+    turns: [researchTurn()],
+  },
+  render: SidePanelStory,
 };

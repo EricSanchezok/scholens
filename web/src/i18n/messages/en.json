@@ -71,7 +71,8 @@
       "reasoningStrength": "Reasoning strength",
       "reasoningStrengthValue": "Reasoning strength: {value}",
       "standardDescription": "Fast, balanced reasoning",
-      "deepDescription": "More thorough reasoning"
+      "deepDescription": "More thorough reasoning",
+      "removeTurnContext": "Remove selection context"
     },
     "context": {
       "title": "Add context",
@@ -496,10 +497,14 @@
     "conversations": {
       "search": "Search this paper's conversations",
       "new": "New conversation",
+      "newDraft": "New conversation",
       "loading": "Loading conversations",
       "empty": "No conversations for this paper yet",
       "pin": "Pin conversation",
-      "unpin": "Unpin conversation"
+      "unpin": "Unpin conversation",
+      "pinned": "Pinned",
+      "recent": "Recent",
+      "switcher": "Conversation history"
     },
     "annotations": {
       "error": "Annotations could not be loaded.",

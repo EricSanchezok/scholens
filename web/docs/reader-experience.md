@@ -15,10 +15,11 @@ The canonical conversation boundary is
 - The route is `/reader/[documentId]`.
 - Library is the only paper collection. Opening a Library paper enters Reader;
   Reader does not create another paper record or another Library membership.
-- Reader uses the shared conversation experience. Home owns message rendering,
-  ordered stream reduction, Worklog, final-answer actions, suggestions, and the
-  Sources panel. Reader contributes paper, page, selection, and annotation
-  context through explicit adapter props.
+- Reader uses the shared conversation experience. `features/conversation` owns
+  message rendering, ordered stream reduction, Worklog, final-answer actions,
+  suggestions, Sources, and the Composer surfaces used by both Home and Reader.
+  Reader contributes paper, page, selection, and annotation context through
+  explicit adapter props.
 - Opening a paper does not create a conversation. `New chat` enters a local
   blank state and the paper-scoped conversation is created by the first send.
 - Translation and project collaboration are outside this release. Existing
@@ -28,8 +29,19 @@ The canonical conversation boundary is
 ## Layout contract
 
 Desktop Reader is an application viewport rather than a scrolling marketing
-page. The Workspace navigation is a collapsed rail, the PDF canvas is the
-primary region, and the contextual panel is secondary. Toolbars and panels may
+page. After the collapsed Workspace rail, Reader contains two independently
+owned, top-aligned work regions:
+
+1. the document region, whose toolbar combines Back to Library, the truncated
+   paper identity, page controls, view controls, and document actions above the
+   thumbnail rail and PDF canvas;
+2. the contextual region, whose equally tall toolbar contains Ask,
+   Annotations, Details, and Collapse above the active panel.
+
+Reader must not add a full-width paper title row above these regions or a
+separate Ask button outside the contextual panel. The panel width is responsive
+between 23rem and 31.25rem so it remains secondary to the PDF without turning
+conversation content into an unreadably narrow strip. Toolbars and panels may
 be sticky inside their own regions, but the document shell must not make the
 browser body scroll.
 
@@ -65,10 +77,10 @@ The URL is the shareable reading state:
 - `conversation`: the active paper-scoped conversation ID, or omitted for the
   local blank state.
 
-Zoom, fit mode, search query, search match index, draft text, temporary
-selection, open annotation editor, and panel animation state are local. Invalid
-page and conversation parameters are normalized after the document metadata is
-known and must not produce a second history entry.
+Zoom, fit mode, search query, search match index, draft text, active browser
+selection, pending turn context, annotation editor state, and panel animation
+state are local. Invalid page and conversation parameters are normalized after
+the document metadata is known and must not produce a second history entry.
 
 ## PDF surface
 
@@ -94,17 +106,34 @@ these states do not masquerade as an empty PDF.
 
 ## Selection and annotations
 
-The text-selection toolbar contains only Ask, Highlight, Note, and Copy. All
-four actions use the shared control-state and feedback rules.
+Selection has three deliberately separate lifetimes:
 
-- Ask opens the Ask panel and adds a removable context chip; it never sends
+- `activeTextSelection` mirrors the browser selection and solely controls the
+  floating toolbar;
+- `pendingTurnContext` is the immutable selection snapshot committed to the Ask
+  Composer;
+- `annotationSelection` is the selection snapshot being edited in Annotations.
+
+The text-selection toolbar is absent until a real non-collapsed PDF text
+selection exists. It anchors above that selection, flips below when necessary,
+and remains inside the rendered page. It contains only the Iconoir icons for
+Ask, Highlight, Note, and Copy; accessible names live in tooltips and
+`aria-label`s rather than visible action text. All four actions use the shared
+control-state and feedback rules.
+
+- Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
+  browser selection, and adds a removable page chip; it never sends
   automatically.
-- Highlight creates a private highlight by default and may be recolored or
-  deleted by its owner.
-- Note creates or edits a highlight thread and supports comment creation,
+- Highlight first discloses the adjacent color palette, creates a private
+  highlight, then clears the browser selection. It may be recolored or deleted
+  by its owner.
+- Note copies the selection into `annotationSelection`, opens the annotation
+  editor, then clears the browser selection. Threads support comment creation,
   editing, and deletion subject to server capabilities.
-- Copy reports success through the shared copied state and remains keyboard
-  accessible.
+- Copy reports success through the shared copied state, remains keyboard
+  accessible, and dismisses the toolbar after feedback.
+- Clicking outside, Escape, page navigation, or a replacement selection clears
+  only `activeTextSelection`; committed Ask and annotation contexts remain.
 
 Annotation rows and PDF overlays share a single active annotation ID. Choosing
 either representation navigates to and emphasizes the other. A persisted PDF
@@ -112,10 +141,20 @@ anchor uses one-based page numbers and zero-to-one normalized rectangles.
 
 ## Paper conversations
 
-Reader lists only conversations whose scope is the current paper. The list may
-be searched, pinned, switched, or replaced with a local new-chat state. Scope
-filtering and authorization happen on the Server; the Web must not fetch global
-conversations and filter them locally.
+Reader lists only conversations whose scope is the current paper. Ask begins
+with a compact current-conversation switcher and a separate New chat icon. The
+search field and grouped Pinned/Recent list exist only while the switcher is
+open; they are not a permanent row or horizontal pill strip. New chat remains a
+local draft until the first send. Scope filtering and authorization happen on
+the Server; the Web must not fetch global conversations and filter them
+locally.
+
+The Ask message viewport and Composer are two siblings inside the contextual
+panel. Messages own the panel's vertical scroll, while the `context-panel`
+Composer remains docked at the bottom with its input on top and context,
+reasoning, and send controls below. Side-panel presentation may change measure,
+spacing, and docking, but it must reuse the same message, Worklog, answer,
+source, suggestion, retry, and variant components as the workspace layout.
 
 When a selected passage is sent, the turn context contains the document ID,
 page number, selected text, and PDF anchor. A selected annotation is represented
@@ -151,10 +190,10 @@ Playwright coverage for the following matrix:
 | Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                         |
 | Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                        |
 | Search and outline | closed, query with no result, one result, multiple results, no outline, nested outline                    |
-| Selection          | selected, Ask context, color menu, note editor, copied, cancelled                                         |
+| Selection          | toolbar, highlight palette, committed Ask context, note editor, copied, cancelled                         |
 | Annotations        | empty, populated, selected, editing, deleting, permission denied                                          |
 | Ask                | local new chat, streaming, response ready, suggestions delayed, historical, retried variants, source open |
-| Conversations      | loading, empty, populated, searched, pinned, active, local new chat                                       |
+| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                            |
 | Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                          |
 | Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                      |
 

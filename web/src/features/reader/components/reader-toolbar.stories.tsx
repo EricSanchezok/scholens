@@ -13,6 +13,7 @@ const labels = {
   outline: "Document outline",
   page: "Page",
   previousPage: "Previous page",
+  returnLibrary: "Return to library",
   search: "Search PDF",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
@@ -30,10 +31,13 @@ const meta = {
     onOpenPanel: fn(),
     onOpenSearch: fn(),
     onPageChange: fn(),
+    onReturn: fn(),
     onZoomChange: fn(),
     pageCount: 18,
     pageNumber: 4,
     panelOpen: false,
+    title: "Retrieval-Augmented Generation: Foundations and Open Questions",
+    metadata: "A. Researcher · 10.1000/rag.2026",
     zoom: 1,
   },
   parameters: {
@@ -47,7 +51,15 @@ type Story = StoryObj<typeof meta>;
 export const Desktop: Story = {};
 
 export const Narrow: Story = {
-  globals: { viewport: { value: "mobile1" } },
+  globals: { viewport: { value: "mobile" } },
+};
+
+export const SmallMobile: Story = {
+  globals: { viewport: { value: "smallMobile" } },
+};
+
+export const LargeMobile: Story = {
+  globals: { viewport: { value: "largeMobile" } },
 };
 
 export const ContextPanelOpen: Story = {

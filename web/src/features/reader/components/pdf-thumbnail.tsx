@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { RenderTask } from "pdfjs-dist";
 
 import { keyboardFocusRing } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
@@ -43,19 +44,28 @@ export function PdfThumbnail({
     const canvas = canvasRef.current;
     if (!visible || !canvas) return;
     let active = true;
-    void adapter.getPage(pageNumber).then(async (page) => {
-      if (!active) return;
-      const base = page.getViewport({ scale: 1 });
-      const scale = 72 / base.width;
-      const viewport = page.getViewport({ scale });
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context) return;
-      await page.render({ canvas, canvasContext: context, viewport }).promise;
-    });
+    let renderTask: RenderTask | undefined;
+    void adapter
+      .getPage(pageNumber)
+      .then(async (page) => {
+        if (!active) return;
+        const base = page.getViewport({ scale: 1 });
+        const scale = 72 / base.width;
+        const viewport = page.getViewport({ scale });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) return;
+        renderTask = page.render({ canvas, canvasContext: context, viewport });
+        await renderTask.promise;
+      })
+      // Thumbnail rendering is opportunistic. Cancellation is the expected
+      // terminal state when the rail unmounts or the active document changes;
+      // a failed thumbnail must never surface as an unhandled page error.
+      .catch(() => undefined);
     return () => {
       active = false;
+      renderTask?.cancel();
     };
   }, [adapter, pageNumber, visible]);
 

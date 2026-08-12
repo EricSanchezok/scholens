@@ -9,6 +9,7 @@ const meta = {
   component: ResearchComposer,
   args: {
     context: { kind: "library" },
+    surface: "workspace",
     papers: homePapers,
     projects: homeProjects,
     reasoningLevel: "standard",

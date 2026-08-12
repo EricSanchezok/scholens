@@ -1,10 +1,28 @@
 "use client";
 
-import { ArrowLeft, EditPencil, List, Pin, Plus, Trash } from "iconoir-react";
+import {
+  Check,
+  EditPencil,
+  List,
+  NavArrowDown,
+  Pin,
+  Plus,
+  SidebarCollapse,
+  Trash,
+} from "iconoir-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
-import { Button, IconButton, SearchField, Textarea } from "@/components/ui";
+import {
+  Button,
+  IconButton,
+  keyboardFocusRing,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  SearchField,
+  Textarea,
+} from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
   ConversationView,
@@ -35,7 +53,7 @@ export function formatReaderFileSize(size: number, locale: string) {
   }).format(value)} ${units[unit]}`;
 }
 
-function ReaderConversationList({
+export function ReaderConversationSwitcher({
   activeId,
   conversations,
   loading,
@@ -53,62 +71,140 @@ function ReaderConversationList({
   onPinError: () => void;
 }) {
   const t = useTranslations("Reader.conversations");
+  const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const visible = conversations.filter((conversation) =>
     conversation.title.toLocaleLowerCase().includes(normalizedQuery),
   );
+  const pinnedConversations = visible.filter(
+    (conversation) => conversation.pinned_at,
+  );
+  const recentConversations = visible.filter(
+    (conversation) => !conversation.pinned_at,
+  );
 
-  return (
-    <div className="border-line grid shrink-0 gap-2 border-b p-3">
-      <div className="flex items-center gap-2">
-        <SearchField
-          className="h-9"
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          placeholder={t("search")}
-          value={query}
-        />
-        <IconButton label={t("new")} onClick={onNew} variant="secondary">
-          <Icon glyph={Plus} size={20} />
+  const activeConversation = conversations.find(
+    (conversation) => conversation.id === activeId,
+  );
+
+  function renderConversation(conversation: ReaderConversation) {
+    return (
+      <div
+        className={cn(
+          "hover:bg-hover flex min-w-0 items-center rounded-[var(--radius-sm)]",
+          activeId === conversation.id && "bg-accent",
+        )}
+        key={conversation.id}
+      >
+        <button
+          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm"
+          onClick={() => {
+            onChange(conversation.id);
+            setOpen(false);
+          }}
+          type="button"
+        >
+          <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
+          {activeId === conversation.id ? (
+            <Icon glyph={Check} size={16} />
+          ) : null}
+        </button>
+        <IconButton
+          className="size-8 min-h-8"
+          label={conversation.pinned_at ? t("unpin") : t("pin")}
+          onClick={() => {
+            void onPin(conversation.id, !conversation.pinned_at).catch(
+              onPinError,
+            );
+          }}
+          variant="ghost"
+        >
+          <Icon
+            glyph={Pin}
+            size={16}
+            tone={conversation.pinned_at ? undefined : "secondary"}
+          />
         </IconButton>
       </div>
-      <div className="flex max-w-full gap-1 overflow-x-auto pb-0.5">
-        {loading ? (
-          <span className="text-muted px-2 py-2 text-xs">{t("loading")}</span>
-        ) : visible.length === 0 ? (
-          <span className="text-muted px-2 py-2 text-xs">{t("empty")}</span>
-        ) : (
-          visible.map((conversation) => (
-            <div
-              className={cn(
-                "border-line flex shrink-0 items-center rounded-full border",
-                activeId === conversation.id && "bg-accent",
-              )}
-              key={conversation.id}
-            >
-              <button
-                className="max-w-40 truncate py-2 pl-3 text-left text-xs"
-                onClick={() => onChange(conversation.id)}
-                type="button"
-              >
-                {conversation.title}
-              </button>
-              <IconButton
-                className="size-8 min-h-8"
-                label={conversation.pinned_at ? t("unpin") : t("pin")}
-                onClick={() => {
-                  void onPin(conversation.id, !conversation.pinned_at).catch(
-                    onPinError,
-                  );
-                }}
-                variant="ghost"
-              >
-                <Icon glyph={Pin} size={16} />
-              </IconButton>
-            </div>
-          ))
-        )}
-      </div>
+    );
+  }
+
+  return (
+    <div className="border-line flex shrink-0 items-center gap-2 border-b p-3">
+      <Popover
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) setQuery("");
+        }}
+        open={open}
+      >
+        <PopoverTrigger asChild>
+          <button
+            aria-expanded={open}
+            className={cn(
+              "border-line hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border px-3 text-left text-sm transition-colors",
+              keyboardFocusRing,
+            )}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {activeConversation?.title ?? t("newDraft")}
+            </span>
+            <Icon glyph={NavArrowDown} size={16} tone="secondary" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          aria-label={t("switcher")}
+          className="w-[min(21rem,calc(100vw-2rem))] p-2"
+        >
+          <SearchField
+            autoFocus
+            className="h-9"
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder={t("search")}
+            value={query}
+          />
+          <div className="mt-2 max-h-[min(22rem,50vh)] overflow-y-auto">
+            {loading ? (
+              <span className="text-muted block px-2 py-3 text-xs">
+                {t("loading")}
+              </span>
+            ) : visible.length === 0 ? (
+              <span className="text-muted block px-2 py-3 text-xs">
+                {t("empty")}
+              </span>
+            ) : (
+              <div className="grid gap-3">
+                {pinnedConversations.length > 0 ? (
+                  <section>
+                    <p className="text-muted px-2 pb-1 text-xs font-medium">
+                      {t("pinned")}
+                    </p>
+                    <div className="grid gap-0.5">
+                      {pinnedConversations.map(renderConversation)}
+                    </div>
+                  </section>
+                ) : null}
+                {recentConversations.length > 0 ? (
+                  <section>
+                    <p className="text-muted px-2 pb-1 text-xs font-medium">
+                      {t("recent")}
+                    </p>
+                    <div className="grid gap-0.5">
+                      {recentConversations.map(renderConversation)}
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <IconButton label={t("new")} onClick={onNew} variant="secondary">
+        <Icon glyph={Plus} size={20} />
+      </IconButton>
     </div>
   );
 }
@@ -125,7 +221,7 @@ export function ReaderAnnotationPanel({
   onSelect,
   onUpdateColor,
   selectedAnnotation,
-  selection,
+  annotationSelection,
 }: {
   annotations: ReaderAnnotation[];
   error: boolean;
@@ -138,7 +234,7 @@ export function ReaderAnnotationPanel({
   onSelect: (id: string) => void;
   onUpdateColor: (id: string, color: string) => Promise<void>;
   selectedAnnotation?: ReaderAnnotation;
-  selection?: ReaderSelection;
+  annotationSelection?: ReaderSelection;
 }) {
   const t = useTranslations("Reader.annotations");
   const [selectionComment, setSelectionComment] = React.useState("");
@@ -164,10 +260,10 @@ export function ReaderAnnotationPanel({
 
   return (
     <div className="grid gap-4 p-4">
-      {selection && (
+      {annotationSelection && (
         <section className="border-line bg-subtle rounded-[var(--radius-lg)] border p-3">
           <p className="text-secondary line-clamp-4 text-sm leading-5">
-            “{selection.selected_text}”
+            “{annotationSelection.selected_text}”
           </p>
           <Textarea
             className="mt-3 min-h-20"
@@ -190,7 +286,7 @@ export function ReaderAnnotationPanel({
           </Button>
         </section>
       )}
-      {annotations.length === 0 && !selection ? (
+      {annotations.length === 0 && !annotationSelection ? (
         <div className="grid min-h-48 place-items-center text-center">
           <div>
             <Icon glyph={List} size={24} tone="secondary" />
@@ -454,7 +550,9 @@ export function ReaderContextPanel({
   panel,
   reasoningLevel,
   selectedAnnotation,
-  selection,
+  annotationSelection,
+  pendingTurnContext,
+  onTurnContextClear,
   setReasoningLevel,
   title,
 }: {
@@ -483,7 +581,9 @@ export function ReaderContextPanel({
   panel: ReaderPanel;
   reasoningLevel: ReasoningLevel;
   selectedAnnotation?: ReaderAnnotation;
-  selection?: ReaderSelection;
+  annotationSelection?: ReaderSelection;
+  pendingTurnContext?: ReaderSelection;
+  onTurnContextClear: () => void;
   setReasoningLevel: (level: ReasoningLevel) => void;
   title: string;
 }) {
@@ -495,7 +595,7 @@ export function ReaderContextPanel({
     <aside
       aria-label={t("contextPanel")}
       className={cn(
-        "border-line bg-canvas w-full shrink-0 flex-col border-l max-lg:pt-[env(safe-area-inset-top)] max-lg:pb-[env(safe-area-inset-bottom)] lg:w-[23rem]",
+        "border-line bg-canvas h-full w-full shrink-0 flex-col overflow-hidden border-l max-lg:pt-[env(safe-area-inset-top)] max-lg:pb-[env(safe-area-inset-bottom)] lg:w-[clamp(23rem,34vw,31.25rem)]",
         className ?? "flex",
       )}
     >
@@ -512,38 +612,39 @@ export function ReaderContextPanel({
           </Button>
         ))}
         <IconButton
-          className="ml-auto lg:hidden"
+          className="ml-auto"
           label={t("closePanel")}
           onClick={onClose}
           variant="ghost"
         >
-          <Icon glyph={ArrowLeft} size={20} />
+          <Icon glyph={SidebarCollapse} size={20} />
         </IconButton>
       </div>
-      <div
-        className="min-h-0 flex-1 overflow-y-auto"
-        data-conversation-scroll-root={activePanel === "ask" || undefined}
-      >
+      <div className="min-h-0 flex-1 overflow-hidden">
         {activePanel === "details" ? (
-          <ReaderDetailsPanel document={document} title={title} />
+          <div className="h-full overflow-y-auto">
+            <ReaderDetailsPanel document={document} title={title} />
+          </div>
         ) : activePanel === "annotations" ? (
-          <ReaderAnnotationPanel
-            annotations={annotations}
-            error={annotationsError}
-            onActionError={onActionError}
-            onCommentCreate={onCommentCreate}
-            onCommentDelete={onCommentDelete}
-            onCommentUpdate={onCommentUpdate}
-            onCreate={onHighlightCreate}
-            onDelete={onAnnotationDelete}
-            onSelect={onAnnotationSelect}
-            onUpdateColor={onHighlightUpdate}
-            selectedAnnotation={selectedAnnotation}
-            selection={selection}
-          />
+          <div className="h-full overflow-y-auto">
+            <ReaderAnnotationPanel
+              annotations={annotations}
+              error={annotationsError}
+              onActionError={onActionError}
+              onCommentCreate={onCommentCreate}
+              onCommentDelete={onCommentDelete}
+              onCommentUpdate={onCommentUpdate}
+              onCreate={onHighlightCreate}
+              onDelete={onAnnotationDelete}
+              onSelect={onAnnotationSelect}
+              onUpdateColor={onHighlightUpdate}
+              selectedAnnotation={selectedAnnotation}
+              annotationSelection={annotationSelection}
+            />
+          </div>
         ) : (
-          <div className="flex min-h-full flex-col">
-            <ReaderConversationList
+          <div className="flex h-full min-h-0 flex-col">
+            <ReaderConversationSwitcher
               activeId={conversationId}
               conversations={conversations}
               loading={conversationsLoading}
@@ -553,6 +654,7 @@ export function ReaderContextPanel({
               onPinError={onActionError}
             />
             <ConversationView
+              layout="side-panel"
               canSend={conversationSession.canSend}
               composerForm={conversationSession.composerForm}
               context={conversationSession.context}
@@ -577,6 +679,7 @@ export function ReaderContextPanel({
               onStop={conversationSession.stop}
               onSubmit={conversationSession.sendMessage}
               onUseSuggestion={conversationSession.useSuggestion}
+              onTurnContextClear={onTurnContextClear}
               papers={[]}
               projects={[]}
               reasoningLevel={reasoningLevel}
@@ -585,8 +688,10 @@ export function ReaderContextPanel({
               }
               submissionPending={conversationSession.submissionPending}
               turnContextLabel={
-                selection
-                  ? t("selection.context", { page: selection.page_number })
+                pendingTurnContext
+                  ? t("selection.context", {
+                      page: pendingTurnContext.page_number,
+                    })
                   : selectedAnnotation
                     ? t("annotations.context")
                     : undefined

@@ -107,7 +107,6 @@ export function HomeWorkspace({
           ? conversation.conversationBusy
           : undefined
       }
-      compact={Boolean(conversation.activeConversationId)}
       context={context}
       form={conversation.composerForm}
       onContextChange={handleContextChange}
@@ -117,6 +116,8 @@ export function HomeWorkspace({
       papers={papers}
       projects={projects}
       reasoningLevel={reasoningLevel}
+      intent={conversation.activeConversationId ? "follow-up" : "new"}
+      surface="workspace"
       unavailable={
         conversation.activeConversationId
           ? conversation.conversationUnavailable
@@ -149,6 +150,7 @@ export function HomeWorkspace({
     >
       {conversation.activeConversationId ? (
         <ConversationView
+          layout="workspace"
           canSend={conversation.canSend}
           composerForm={conversation.composerForm}
           context={context}
