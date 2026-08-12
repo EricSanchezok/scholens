@@ -31,19 +31,130 @@ type SelectionRect = {
   width: number;
 };
 
+type NormalizedSelectionRect = {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+function coalesceSelectionRects(rects: SelectionRect[]) {
+  const merged: SelectionRect[] = [];
+
+  for (const rect of rects.sort(
+    (left, right) => left.top - right.top || left.left - right.left,
+  )) {
+    const match = merged.find((candidate) => {
+      const verticalOverlap = Math.max(
+        0,
+        Math.min(candidate.top + candidate.height, rect.top + rect.height) -
+          Math.max(candidate.top, rect.top),
+      );
+      const overlapRatio =
+        verticalOverlap / Math.min(candidate.height, rect.height);
+      const horizontalGap = Math.max(
+        0,
+        rect.left - (candidate.left + candidate.width),
+        candidate.left - (rect.left + rect.width),
+      );
+      return (
+        overlapRatio >= 0.55 &&
+        horizontalGap <=
+          Math.max(2, Math.min(candidate.height, rect.height) / 2)
+      );
+    });
+
+    if (!match) {
+      merged.push({ ...rect });
+      continue;
+    }
+
+    const right = Math.max(match.left + match.width, rect.left + rect.width);
+    const bottom = Math.max(match.top + match.height, rect.top + rect.height);
+    match.left = Math.min(match.left, rect.left);
+    match.top = Math.min(match.top, rect.top);
+    match.width = right - match.left;
+    match.height = bottom - match.top;
+  }
+
+  return merged;
+}
+
 export function normalizeReaderSelectionRects(
   pageRect: SelectionRect,
   clientRects: SelectionRect[],
-) {
+): NormalizedSelectionRect[] {
   if (pageRect.width <= 0 || pageRect.height <= 0) return [];
-  return clientRects
-    .filter((rect) => rect.width > 0 && rect.height > 0)
+  const pageRight = pageRect.left + pageRect.width;
+  const pageBottom = pageRect.top + pageRect.height;
+  const clippedRects = clientRects
     .map((rect) => ({
-      x: Math.max(0, Math.min(1, (rect.left - pageRect.left) / pageRect.width)),
-      y: Math.max(0, Math.min(1, (rect.top - pageRect.top) / pageRect.height)),
-      width: Math.max(0, Math.min(1, rect.width / pageRect.width)),
-      height: Math.max(0, Math.min(1, rect.height / pageRect.height)),
-    }));
+      left: Math.max(pageRect.left, Math.min(pageRight, rect.left)),
+      top: Math.max(pageRect.top, Math.min(pageBottom, rect.top)),
+      width:
+        Math.max(pageRect.left, Math.min(pageRight, rect.left + rect.width)) -
+        Math.max(pageRect.left, Math.min(pageRight, rect.left)),
+      height:
+        Math.max(pageRect.top, Math.min(pageBottom, rect.top + rect.height)) -
+        Math.max(pageRect.top, Math.min(pageBottom, rect.top)),
+    }))
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+
+  return coalesceSelectionRects(clippedRects).map((rect) => ({
+    x: (rect.left - pageRect.left) / pageRect.width,
+    y: (rect.top - pageRect.top) / pageRect.height,
+    width: rect.width / pageRect.width,
+    height: rect.height / pageRect.height,
+  }));
+}
+
+function ReaderSelectionOverlay({
+  rects,
+}: {
+  rects: NormalizedSelectionRect[];
+}) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  React.useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    function paintSelection() {
+      if (!canvas) return;
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(bounds.width * pixelRatio);
+      canvas.height = Math.round(bounds.height * pixelRatio);
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      const selectionPath = new Path2D();
+      for (const rect of rects) {
+        selectionPath.rect(
+          rect.x * bounds.width,
+          rect.y * bounds.height,
+          rect.width * bounds.width,
+          rect.height * bounds.height,
+        );
+      }
+      context.fillStyle = getComputedStyle(canvas).color;
+      context.fill(selectionPath);
+    }
+
+    paintSelection();
+    const observer = new ResizeObserver(paintSelection);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [rects]);
+
+  return (
+    <canvas
+      aria-hidden="true"
+      className="pdf-selection-overlay absolute inset-0 size-full"
+      ref={canvasRef}
+    />
+  );
 }
 
 export function selectReaderViewportPage(
@@ -252,15 +363,13 @@ function PdfPageSurface({
       ]);
       const selectedText = browserSelection.toString().trim();
       if (!selectedText || rects.length === 0) return;
+      browserSelection.removeAllRanges();
       onActiveTextSelectionChange({
         kind: "paper_selection",
         document_id: "",
         page_number: pageNumber,
         selected_text: selectedText,
         anchor: { kind: "pdf_text", page_number: pageNumber, rects },
-      });
-      window.requestAnimationFrame(() => {
-        window.getSelection()?.removeAllRanges();
       });
     });
   }
@@ -328,18 +437,7 @@ function PdfPageSurface({
           className="pointer-events-none absolute inset-0 z-20"
           data-active-selection-overlay
         >
-          {activeTextSelection.anchor.rects.map((rect, index) => (
-            <span
-              className="pdf-selection-overlay absolute rounded-[2px]"
-              key={index}
-              style={{
-                height: `${rect.height * 100}%`,
-                left: `${rect.x * 100}%`,
-                top: `${rect.y * 100}%`,
-                width: `${rect.width * 100}%`,
-              }}
-            />
-          ))}
+          <ReaderSelectionOverlay rects={activeTextSelection.anchor.rects} />
         </div>
       ) : null}
       {activeTextSelection &&

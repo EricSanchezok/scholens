@@ -34,6 +34,25 @@ describe("normalizeReaderSelectionRects", () => {
       ]),
     ).toEqual([]);
   });
+
+  it("coalesces overlapping PDF text fragments on the same visual line", () => {
+    expect(
+      normalizeReaderSelectionRects(
+        { left: 0, top: 0, width: 1000, height: 1000 },
+        [
+          { left: 100, top: 100, width: 300, height: 20 },
+          { left: 105, top: 101, width: 290, height: 20 },
+          { left: 405, top: 100, width: 100, height: 20 },
+          { left: 100, top: 130, width: 250, height: 20 },
+          { left: 700, top: 100, width: 100, height: 20 },
+        ],
+      ),
+    ).toEqual([
+      { x: 0.1, y: 0.1, width: 0.405, height: 0.021 },
+      { x: 0.7, y: 0.1, width: 0.1, height: 0.02 },
+      { x: 0.1, y: 0.13, width: 0.25, height: 0.02 },
+    ]);
+  });
 });
 
 describe("selectReaderViewportPage", () => {

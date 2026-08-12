@@ -122,13 +122,20 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   const selectableTextLayer = page.locator(
     '[data-pdf-page-number="2"] .pdf-text-layer',
   );
-  await expect(selectableTextLayer.locator("span").nth(7)).toBeAttached();
+  await expect(
+    selectableTextLayer.locator("span").filter({
+      hasText: "The NLP landscape",
+    }),
+  ).toBeAttached();
   await selectableTextLayer.evaluate((textLayer) => {
     const spans = [...textLayer.querySelectorAll("span")].filter((span) =>
       span.textContent?.trim(),
     );
-    const firstSpan = spans[2];
-    const lastSpan = spans[7];
+    const firstSpan = spans.find((span) =>
+      span.textContent?.includes("The NLP landscape"),
+    );
+    const firstSpanIndex = firstSpan ? spans.indexOf(firstSpan) : -1;
+    const lastSpan = spans[firstSpanIndex + 5];
     if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
     const range = document.createRange();
     range.setStart(firstSpan.firstChild, 0);
@@ -143,12 +150,26 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   });
   await expect(askAboutSelection).toBeVisible();
   await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
+  await expect(
+    page.locator("[data-active-selection-overlay] canvas"),
+  ).toHaveCount(1);
   const selectionColors = await page.evaluate(() => {
     const overlay = document.querySelector(
       "[data-active-selection-overlay] .pdf-selection-overlay",
     );
+    const canvas = overlay instanceof HTMLCanvasElement ? overlay : undefined;
+    const pixels = canvas
+      ?.getContext("2d")
+      ?.getImageData(0, 0, canvas.width, canvas.height).data;
+    let maximumAlpha = 0;
+    if (pixels) {
+      for (let index = 3; index < pixels.length; index += 4) {
+        maximumAlpha = Math.max(maximumAlpha, pixels[index] ?? 0);
+      }
+    }
     return {
-      overlay: overlay ? getComputedStyle(overlay).backgroundColor : "",
+      maximumAlpha,
+      overlay: overlay ? getComputedStyle(overlay).color : "",
       overlayOpacity: overlay ? getComputedStyle(overlay).opacity : "",
     };
   });
@@ -156,6 +177,8 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
     Number(color.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/)?.[1] ?? 1);
   expect(alphaChannel(selectionColors.overlay)).toBeGreaterThanOrEqual(0.25);
   expect(alphaChannel(selectionColors.overlay)).toBeLessThanOrEqual(0.4);
+  expect(selectionColors.maximumAlpha).toBeGreaterThanOrEqual(64);
+  expect(selectionColors.maximumAlpha).toBeLessThanOrEqual(102);
   expect(selectionColors.overlayOpacity).toBe("1");
   await expect
     .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))

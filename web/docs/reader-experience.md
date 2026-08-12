@@ -141,9 +141,12 @@ blue document-selection token. The original Canvas text must remain legible
 through the selection, matching the familiar line-by-line treatment of desktop
 research readers rather than placing an opaque wash over the page. After
 pointer-up, Reader replaces the browser-native selection with a normalized
-overlay using the same token; it remains visible with the floating toolbar
-until the user acts, presses Escape, clicks elsewhere, or moves to another
-page.
+overlay using the same token. The browser selection is cleared before this
+overlay appears, overlapping PDF text fragments on the same visual line are
+coalesced, and the remaining geometry is painted once so translucent color can
+never accumulate into darker stripes. The overlay remains visible with the
+floating toolbar until the user acts, presses Escape, clicks elsewhere, or
+moves to another page.
 
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends
