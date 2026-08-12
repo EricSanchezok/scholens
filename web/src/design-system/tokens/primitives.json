@@ -39,6 +39,9 @@
     "overlay": {
       "12": { "$type": "color", "$value": "#0000001f" },
       "40": { "$type": "color", "$value": "#00000066" }
+    },
+    "document-selection": {
+      "active": { "$type": "color", "$value": "#5b9bd54d" }
     }
   }
 }

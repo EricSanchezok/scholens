@@ -330,7 +330,7 @@ function PdfPageSurface({
         >
           {activeTextSelection.anchor.rects.map((rect, index) => (
             <span
-              className="bg-state-info-bg absolute rounded-[2px] opacity-80"
+              className="pdf-selection-overlay absolute rounded-[2px]"
               key={index}
               style={{
                 height: `${rect.height * 100}%`,

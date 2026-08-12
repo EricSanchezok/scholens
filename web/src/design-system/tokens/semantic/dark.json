@@ -52,6 +52,12 @@
       "bg": { "$type": "color", "$value": "{palette.neutral.900}" },
       "foreground": { "$type": "color", "$value": "{palette.neutral.100}" }
     },
+    "document-selection": {
+      "bg": {
+        "$type": "color",
+        "$value": "{palette.document-selection.active}"
+      }
+    },
     "focus": { "ring": { "$type": "color", "$value": "{palette.neutral.0}" } },
     "overlay": {
       "backdrop": { "$type": "color", "$value": "{palette.overlay.40}" }

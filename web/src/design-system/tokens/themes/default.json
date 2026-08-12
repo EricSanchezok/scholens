@@ -75,6 +75,12 @@
     "overlay": {
       "12": { "$type": "color", "$value": "{primitive.overlay.12}" },
       "40": { "$type": "color", "$value": "{primitive.overlay.40}" }
+    },
+    "document-selection": {
+      "active": {
+        "$type": "color",
+        "$value": "{primitive.document-selection.active}"
+      }
     }
   }
 }

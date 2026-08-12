@@ -136,11 +136,14 @@ Ask, Highlight, Note, and Copy; accessible names live in tooltips and
 `aria-label`s rather than visible action text. All four actions use the shared
 control-state and feedback rules.
 
-While the pointer is down, the PDF text layer uses the semantic information
-selection color rather than a neutral page-obscuring wash. After pointer-up,
-Reader replaces the browser-native selection with a normalized overlay that
-remains visible with the floating toolbar until the user acts, presses Escape,
-clicks elsewhere, or moves to another page.
+While the pointer is down, the PDF text layer uses the dedicated translucent
+blue document-selection token. The original Canvas text must remain legible
+through the selection, matching the familiar line-by-line treatment of desktop
+research readers rather than placing an opaque wash over the page. After
+pointer-up, Reader replaces the browser-native selection with a normalized
+overlay using the same token; it remains visible with the floating toolbar
+until the user acts, presses Escape, clicks elsewhere, or moves to another
+page.
 
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends

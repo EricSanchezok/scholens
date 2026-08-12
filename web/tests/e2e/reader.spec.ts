@@ -119,23 +119,44 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   }));
   expect(pageDoesNotOwnViewportScroll).toEqual({ body: true, root: true });
 
-  const selectableText = page
-    .locator('[data-pdf-page-number="2"] .pdf-text-layer span')
-    .first();
-  await expect(selectableText).toBeAttached();
-  await selectableText.evaluate((span) => {
+  const selectableTextLayer = page.locator(
+    '[data-pdf-page-number="2"] .pdf-text-layer',
+  );
+  await expect(selectableTextLayer.locator("span").nth(7)).toBeAttached();
+  await selectableTextLayer.evaluate((textLayer) => {
+    const spans = [...textLayer.querySelectorAll("span")].filter((span) =>
+      span.textContent?.trim(),
+    );
+    const firstSpan = spans[2];
+    const lastSpan = spans[7];
+    if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
     const range = document.createRange();
-    range.selectNodeContents(span);
+    range.setStart(firstSpan.firstChild, 0);
+    range.setEnd(lastSpan.firstChild, lastSpan.textContent?.length ?? 0);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    span.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    textLayer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
   });
   const askAboutSelection = page.getByRole("button", {
     name: "Ask about selection",
   });
   await expect(askAboutSelection).toBeVisible();
   await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
+  const selectionColors = await page.evaluate(() => {
+    const overlay = document.querySelector(
+      "[data-active-selection-overlay] .pdf-selection-overlay",
+    );
+    return {
+      overlay: overlay ? getComputedStyle(overlay).backgroundColor : "",
+      overlayOpacity: overlay ? getComputedStyle(overlay).opacity : "",
+    };
+  });
+  const alphaChannel = (color: string) =>
+    Number(color.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/)?.[1] ?? 1);
+  expect(alphaChannel(selectionColors.overlay)).toBeGreaterThanOrEqual(0.25);
+  expect(alphaChannel(selectionColors.overlay)).toBeLessThanOrEqual(0.4);
+  expect(selectionColors.overlayOpacity).toBe("1");
   await expect
     .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
     .toBe("");

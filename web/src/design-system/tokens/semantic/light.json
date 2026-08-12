@@ -52,6 +52,12 @@
       "bg": { "$type": "color", "$value": "{palette.neutral.100}" },
       "foreground": { "$type": "color", "$value": "{palette.neutral.950}" }
     },
+    "document-selection": {
+      "bg": {
+        "$type": "color",
+        "$value": "{palette.document-selection.active}"
+      }
+    },
     "focus": {
       "ring": { "$type": "color", "$value": "{palette.neutral.950}" }
     },

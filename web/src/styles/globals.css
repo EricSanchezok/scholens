@@ -96,7 +96,11 @@ body {
   background: var(--color-selection-bg);
 }
 
+.pdf-text-layer ::selection,
+.pdf-selection-overlay {
+  background: var(--color-document-selection-bg);
+}
+
 .pdf-text-layer ::selection {
-  background: var(--color-state-info-bg);
   color: transparent;
 }
