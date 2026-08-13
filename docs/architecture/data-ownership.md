@@ -61,8 +61,9 @@ and selected variants share the same next-question context.
 
 A turn also owns its typed Reader context. A `paper_selection` captures the
 authorized Document, selected text, one-based page, and normalized PDF anchor;
-a `highlight_thread` captures an authorized Research Item reference. Arbitrary
-reference dictionaries and parallel highlight-ID fields are not persisted.
+an `annotation_thread` captures an authorized Research Item reference.
+Arbitrary reference dictionaries and parallel annotation-ID fields are not
+persisted.
 
 Only the latest turn may retain multiple completed response variants. Creating
 the next turn removes unselected variants from the previous turn and clears its
@@ -90,15 +91,25 @@ does not require a separate compatibility endpoint.
 
 Library Outputs do not introduce another persistence model. They are a
 permission-filtered read projection of Scholens-owned `ResearchItem` rows and
-their existing kind-specific payload tables. Personal, document, and Project
-scope access is resolved by the Server. The Web receives source scope/title as
-projection metadata and must not infer ownership by composing unrelated APIs.
+their existing kind-specific payload tables. Audience access is resolved by the
+Server. The Web receives source audience/title as projection metadata and must
+not infer ownership by composing unrelated APIs.
 
-Highlight-thread positions are canonical Research data. PDF selections use
+Research-item audience and annotation target are separate axes. Audience is
+`personal`, `document`, or `project` with the corresponding audience ID, while
+an annotation thread independently owns a required `target_document_id`.
+Annotations allow only personal and Project audiences: a personal thread is
+creator-only and a Project thread is visible only to current members of that
+specific Project. A paper appearing in several Projects never makes one
+Project's annotation visible in another. Citation, audio-overview, and data-
+table outputs retain document or Project audience as their producer requires.
+
+Annotation-thread positions are canonical Research data. PDF selections use
 one-based pages and normalized rectangles; parsed-text selections use validated
-start/end offsets with an optional page projection. Highlight threads are
-private when created or imported unless an authorized visibility mutation
-explicitly shares them.
+start/end offsets with an optional page projection. A thread owns one color,
+immutable audience and zero or more chronological comments. Comments inherit
+the thread audience and own only their content and author. Threads do not
+support recursive comment trees or audience mutation.
 
 Paper ingestion jobs retain immutable failure history. A retry creates a new
 `DurableJob` referencing the persisted PDF source and original Project context;

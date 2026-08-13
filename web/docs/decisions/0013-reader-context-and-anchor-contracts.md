@@ -4,6 +4,10 @@ Status: Accepted
 Date: 2026-08-12
 Owners: Scholens
 
+Reader annotation naming, audience, and collaboration lifecycle are superseded
+by [ADR 0014](./0014-annotation-thread-collaboration.md). The typed anchor and
+conversation-cursor decisions below remain accepted.
+
 ## Context
 
 Reader must restore a selected PDF passage, navigate from an annotation to its

@@ -23,6 +23,7 @@ history; add a later ADR that supersedes it.
 - [ADR 0011: Library projections and signed keyset pagination](./0011-library-projections-and-keyset-pagination.md)
 - [ADR 0012: Atomic paper-ingestion acceptance and cooperative cancellation](./0012-atomic-paper-ingestion-lifecycle.md)
 - [ADR 0013: Reader context and anchor contracts](./0013-reader-context-and-anchor-contracts.md)
+- [ADR 0014: Anchored annotation threads and Project audiences](./0014-annotation-thread-collaboration.md)
 
 ## Template
 

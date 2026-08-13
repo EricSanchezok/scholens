@@ -1,9 +1,10 @@
 # Reader experience
 
-Reader is the document-focused surface for one Library paper. It owns PDF
-navigation, selection, annotations, document details, and the paper-scoped
-conversation entry point. It does not own a second conversation protocol or a
-second Workspace shell.
+Reader is the document-focused surface for one accessible paper. It owns PDF
+navigation, selection, annotation threads, document details, and the
+contextual conversation entry point. A paper may be opened for personal reading
+or inside one Project without creating another Document record. Reader does not
+own a second conversation protocol or a second Workspace shell.
 
 The active desktop acceptance source is Figma
 [`50 — Reader`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=390-2).
@@ -12,7 +13,8 @@ The canonical conversation boundary is
 
 ## Product boundary
 
-- The route is `/reader/[documentId]`.
+- The route is `/reader/[documentId]`; optional `project=<projectId>` identifies
+  the active Project reading context.
 - Library is the only paper collection. Opening a Library paper enters Reader;
   Reader does not create another paper record or another Library membership.
 - Reader uses the shared conversation experience. `features/conversation` owns
@@ -22,9 +24,9 @@ The canonical conversation boundary is
   explicit adapter props.
 - Opening a paper does not create a conversation. `New chat` enters a local
   blank state and the paper-scoped conversation is created by the first send.
-- Translation and project collaboration are outside this release. Existing
-  design affordances identify them as unavailable and never navigate to an
-  empty route.
+- Translation remains outside this release. Reader Project collaboration owns
+  annotation audience and contextual Ask behavior but does not introduce a
+  Project page or shared Conversation resource.
 
 ## Layout contract
 
@@ -86,6 +88,8 @@ The URL is the shareable reading state:
 - `panel`: `ask`, `annotations`, `details`, or omitted;
 - `conversation`: the active paper-scoped conversation ID, or omitted for the
   local blank state.
+- `project`: an accessible Project that contains the Document, or omitted for
+  personal reading.
 
 Zoom, fit mode, desktop document-navigation mode, mobile Outline disclosure,
 search disclosure, search query, search match index, draft text, active browser
@@ -129,7 +133,7 @@ current result uses the stronger current role and scrolls into view when the
 search cursor moves. Search styling never reuses neutral selection or warning
 feedback colors.
 
-## Selection and annotations
+## Selection and annotation threads
 
 Selection has three deliberately separate lifetimes:
 
@@ -137,7 +141,8 @@ Selection has three deliberately separate lifetimes:
   its post-pointer overlay, and solely controls the floating toolbar;
 - `pendingTurnContext` is the immutable selection snapshot committed to the Ask
   Composer;
-- `annotationSelection` is the selection snapshot being edited in Annotations.
+- `annotationSelection` is the selection snapshot being edited as a new
+  annotation thread.
 
 The text-selection toolbar is absent until a real non-collapsed PDF text
 selection exists. It chooses the side with usable space, remains above the PDF
@@ -168,16 +173,21 @@ moves to another page.
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends
   automatically.
-- Highlight first discloses the adjacent color palette, creates a private
-  highlight, then clears the browser selection. The palette contains eight
+- Highlight first discloses the adjacent color palette, creates a thread with
+  no comment, then clears the browser selection. In personal Reader its audience
+  is personal. In Project Reader its audience defaults to personal but may be
+  changed to the current Project before submission. The palette contains eight
   document-specific colors—yellow, red, green, blue, purple, magenta, orange,
   and gray—and never reuses feedback-state background colors. The persisted
   highlight appears immediately after the create response, remains visible
   without requiring the user to select it again, and may be recolored or
   deleted by its owner.
-- Note copies the selection into `annotationSelection`, opens the annotation
-  editor, then clears the browser selection. Threads support comment creation,
-  editing, and deletion subject to server capabilities.
+- Comment copies the selection into `annotationSelection`, opens the annotation
+  editor, then clears the browser selection. The editor atomically creates one
+  thread with its first comment and lets the creator choose the root color. In
+  Project Reader its audience defaults to the current Project but may be changed
+  to personal before submission. Subsequent replies have neither a color nor an
+  audience control.
 - Copy reports success through the shared copied state, remains keyboard
   accessible, and dismisses the toolbar after feedback.
 - Clicking outside, Escape, page navigation, or a replacement selection clears
@@ -186,14 +196,43 @@ moves to another page.
 Annotation rows and PDF overlays share a single active annotation ID. Choosing
 either representation navigates to and emphasizes the other. Active state uses
 a stronger fill only; it never draws a border or ring around every line of a
-multi-line highlight. A persisted PDF anchor uses one-based page numbers and
-zero-to-one normalized rectangles.
+multi-line highlight. Exact-equal anchors are painted once, even when personal
+and Project threads overlap; a count affordance discloses the individual
+threads. A persisted PDF anchor uses one-based page numbers and zero-to-one
+normalized rectangles.
 The empty Annotations panel is a quiet typographic prompt without a decorative
 list icon; the panel tab already provides the necessary context.
 
-## Paper conversations
+One `AnnotationThread` is the only persisted annotation aggregate. Its immutable
+audience is personal or the active Project; it owns the quote, typed position,
+color, creator, status, and a chronological list of comments. A highlight is a
+thread with no comments. Comments inherit the thread audience, never carry a
+color, and are not nested.
 
-Reader lists only conversations whose scope is the current paper. Ask begins
+Personal Reader lists only the current user's personal threads. Project Reader
+combines that user's personal threads with threads belonging to the current
+Project and provides `All`, `Mine`, and Project audience filters plus `Open` and
+`Resolved` status filters. Audience badges use text and icons rather than
+color. Open annotations paint the PDF; resolved Project discussions are hidden
+by default and use a subdued overlay only while the Resolved filter is active.
+
+Project members may reply to open Project threads. The thread author may
+recolor it; its author, the Project owner, and collaborators with Project edit
+permission may resolve or reopen it. People edit and delete only their own
+comments. A thread with another author's reply cannot be hard-deleted, and a
+resolved thread must be reopened before receiving another reply. Personal
+highlights and comment-free Project marks are deleted rather than resolved.
+
+The Annotations query polls every ten seconds only while the panel is visible
+and the document is focused. Window focus and every successful local mutation
+invalidate it immediately. The feature does not imply WebSocket delivery,
+mentions, notifications, unread counts, reactions, or recursive replies.
+
+## Contextual conversations
+
+Reader in personal context lists only conversations whose scope is the current
+paper. Reader in Project context lists the current user's private Project
+conversations whose selected document context includes the open paper. Ask begins
 with a compact, borderless current-conversation switcher and a separate New chat
 action using the shared `NewConversationIcon` (`PageEdit`) from the Workspace
 sidebar. The
@@ -219,8 +258,11 @@ components as the workspace layout.
 
 When a selected passage is sent, the turn context contains the document ID,
 page number, selected text, and PDF anchor. A selected annotation is represented
-by its thread ID. These contexts are persisted with the turn so a historical
-message can restore its reading location.
+by its `annotation_thread` ID. These contexts are persisted with the turn so a
+historical message can restore its reading location. A new Project-context
+conversation is Project-scoped and carries the open paper in its selected
+document context; it remains private conversation history. Changing Project
+clears an incompatible active Conversation while preserving the unsent draft.
 
 The shared conversation contract remains unchanged:
 

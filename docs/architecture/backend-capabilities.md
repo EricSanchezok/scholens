@@ -173,10 +173,13 @@ completed response variants and permits retry or selection. Starting a newer
 turn deletes the older turn's unselected variants and its now-stale follow-up
 suggestions; persisted history therefore remains linear and bounded.
 
-Reader selections and annotations enter that same aggregate through typed turn
-contexts. Paper-scoped conversation listing is filtered and authorized by the
-Server, and its signed cursor is bound to scope as well as actor and page size;
-the browser never downloads the global collection to filter it locally.
+Reader selections and annotation threads enter that same aggregate through
+typed turn contexts. Personal Reader conversations are paper-scoped. Reader
+conversations created while a Project is active remain private to the user but
+are Project-scoped with the open paper in selected document context. Project
+conversation listing may therefore filter by that context document; its signed
+cursor binds actor, Project, context document, and page size. The browser never
+downloads a broader collection to filter it locally.
 
 Follow-up suggestions are a non-critical turn sidecar started before answer
 streaming. The model call runs outside an application transaction; the final
@@ -249,10 +252,11 @@ The Library exposes two deliberately different collections:
   Library Paper, including an empty set; the API does not expose parallel
   add-only and per-assignment removal protocols.
 - Outputs are a read projection over the four existing `ResearchItemKind`
-  values: `highlight_thread`, `citation`, `audio_overview`, and `data_table`.
-  The bootstrap adapter applies the canonical Research visibility predicate
-  across personal, document, and Project scopes and returns source scope/title
-  metadata in one response. The browser does not join permissions itself.
+  values: `annotation_thread`, `citation`, `audio_overview`, and `data_table`.
+  The bootstrap adapter applies canonical audience authorization and returns
+  source audience/title metadata in one response. Annotation threads also carry
+  a target Document independently of their personal or Project audience. The
+  browser does not join permissions itself.
 
 `GET /api/v1/library/summary` returns visible Paper and Output counts. Both list
 endpoints use signed Previous/Next keyset cursors bound to user, collection,

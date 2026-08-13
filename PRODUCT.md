@@ -59,6 +59,33 @@ as one system rather than a collection of separately themed tools.
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
+## Annotations are anchored threads, not separate highlight and comment silos
+
+Reader annotations use one durable mental model across personal reading and
+Project collaboration. An annotation thread owns a stable passage anchor, one
+visual mark and color, an author, an immutable audience, and zero or more
+chronological comments. A highlight is a thread without a comment; commenting
+on a selection creates the same thread with its first comment. Comments do not
+own colors, visibility, or recursively nested reply trees.
+
+Personal annotations remain visible only to their creator. Project annotations
+belong to one specific Project and are visible to its current members; they
+must never become document-global merely because the same paper appears in
+another Project. Leaving a Project immediately removes access to its threads,
+while personal annotations remain independent.
+
+Collaborative discussion protects authored contributions. People edit and
+delete only their own comments. A thread with another person's reply cannot be
+hard-deleted by its creator; Project discussion is concluded by resolving it
+and may later be reopened by an authorized Project editor. Audience is chosen
+when a thread is created and cannot be changed afterward.
+
+In a Project reading context, personal marks and that Project's discussions are
+shown together with explicit audience labels. Highlighting defaults to personal
+because reading marks are often private; starting a comment defaults to the
+current Project because its purpose is discussion. Color classifies the marked
+passage and never stands in for author identity or comment ownership.
+
 Concrete event fields and tool schemas remain implementation contracts, but
 the single-agent behavior and disclosure boundary above are durable product
 requirements.
