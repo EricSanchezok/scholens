@@ -251,6 +251,13 @@ export function useConversationSession({
           conversationKeys.detail(conversation.id),
           conversation,
         );
+        queryClient.setQueryData<ConversationTurnsResponse>(
+          conversationKeys.turns(conversation.id),
+          { items: [], next_cursor: null },
+        );
+        void queryClient.invalidateQueries({
+          queryKey: conversationKeys.lists(),
+        });
         onConversationCreated(conversation.id);
       } else if (
         updateExistingContext &&

@@ -101,6 +101,14 @@ control that initiated the action. Motion is limited to a quiet 150–200 ms
 state transition without bounce or layout movement; reduced-motion retains the
 state change without the transition.
 
+Expected creation and navigation flows follow the same rule. Creating a
+conversation, opening it, and rendering its first turn are one visible state
+transition; do not add a success Toast that merely restates the selected scope
+or destination. Toasts are reserved for failures, access or concurrent-state
+changes that invalidate the visible action, and background completion whose
+result is not otherwise present on the current surface. Copy must describe the
+user-facing consequence rather than an internal routing, cache, or scope event.
+
 ## External component intake
 
 Before accepting external source code:

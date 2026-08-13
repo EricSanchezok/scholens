@@ -519,7 +519,8 @@
       "pinned": "Pinned",
       "recent": "Recent",
       "switcher": "Conversation history",
-      "contextChanged": "Started a new private conversation for this context"
+      "unavailableTitle": "Conversation unavailable here",
+      "unavailableDescription": "It was deleted, access changed, or it belongs to another reading context. Reader opened a new conversation for this paper."
     },
     "projects": {
       "selector": "Reader context",

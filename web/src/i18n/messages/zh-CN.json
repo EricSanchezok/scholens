@@ -519,7 +519,8 @@
       "pinned": "置顶",
       "recent": "最近",
       "switcher": "对话历史",
-      "contextChanged": "已为当前范围新建私有对话"
+      "unavailableTitle": "当前阅读范围无法打开该对话",
+      "unavailableDescription": "该对话可能已被删除、访问权限已变化，或属于其他阅读范围。Reader 已返回这篇论文的新对话。"
     },
     "projects": {
       "selector": "阅读范围",

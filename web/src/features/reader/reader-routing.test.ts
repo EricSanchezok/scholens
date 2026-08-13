@@ -1,10 +1,41 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  conversationBelongsToReaderContext,
   parsePositiveInteger,
   readReaderPanel,
   readSourcePage,
 } from "./reader-routing";
+
+const conversation = {
+  archived_at: null,
+  capabilities: {
+    archive: true,
+    delete: true,
+    detach: false,
+    move: true,
+    pin: true,
+    rename: true,
+    send: true,
+    share: false,
+  },
+  id: "conversation-1",
+  paper_context: {
+    kind: "selection" as const,
+    document_ids: ["document-1"],
+    project_ids: ["project-1"],
+  },
+  pinned_at: null,
+  read_only: false,
+  read_only_reason: null,
+  scope_access: "active" as const,
+  scope_id: "document-1",
+  scope_label: "Paper",
+  scope_type: "paper" as const,
+  title: "Conversation",
+  tool_permissions: [],
+  updated_at: "2026-08-14T00:00:00Z",
+};
 
 describe("reader URL state", () => {
   it("accepts only positive integer page numbers", () => {
@@ -27,5 +58,40 @@ describe("reader URL state", () => {
     expect(readSourcePage({ page: "4" })).toBe(4);
     expect(readSourcePage({ page_number: -1 })).toBeUndefined();
     expect(readSourcePage({ page: "chapter-two" })).toBeUndefined();
+  });
+
+  it("validates an active conversation against the authoritative Reader scope", () => {
+    expect(
+      conversationBelongsToReaderContext({
+        conversation,
+        documentId: "document-1",
+      }),
+    ).toBe(true);
+    expect(
+      conversationBelongsToReaderContext({
+        conversation,
+        documentId: "document-2",
+      }),
+    ).toBe(false);
+
+    const projectConversation = {
+      ...conversation,
+      scope_id: "project-1",
+      scope_type: "project" as const,
+    };
+    expect(
+      conversationBelongsToReaderContext({
+        conversation: projectConversation,
+        documentId: "document-1",
+        projectId: "project-1",
+      }),
+    ).toBe(true);
+    expect(
+      conversationBelongsToReaderContext({
+        conversation: projectConversation,
+        documentId: "document-2",
+        projectId: "project-1",
+      }),
+    ).toBe(false);
   });
 });

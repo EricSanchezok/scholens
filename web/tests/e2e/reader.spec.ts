@@ -352,6 +352,146 @@ async function mockReader(page: Page) {
   );
 }
 
+async function mockReaderConversationCreation(page: Page) {
+  const conversationId = "60000000-0000-4000-8000-000000000001";
+  const answer = "The paper presents a persistent agent runtime.";
+  let persistedTurn: Record<string, unknown> | undefined;
+  const detail = {
+    archived_at: null,
+    capabilities: {
+      archive: true,
+      delete: true,
+      detach: false,
+      move: true,
+      pin: true,
+      rename: true,
+      send: true,
+      share: false,
+    },
+    id: conversationId,
+    paper_context: {
+      kind: "selection",
+      document_ids: [paperDocument.document_id],
+      project_ids: [],
+    },
+    pinned_at: null,
+    read_only: false,
+    read_only_reason: null,
+    scope_access: "active",
+    scope_id: paperDocument.document_id,
+    scope_label: paperDocument.title,
+    scope_type: "paper",
+    title: "New conversation",
+    tool_permissions: [],
+    updated_at: "2026-08-14T00:00:00Z",
+  };
+
+  await page.unroute(`${apiPattern}/conversations**`);
+  await page.route(`${apiPattern}/conversations**`, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.endsWith("/conversations") && request.method() === "POST") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(detail),
+      });
+      return;
+    }
+    if (
+      pathname.endsWith(`/conversations/${conversationId}/turns`) &&
+      request.method() === "POST"
+    ) {
+      const body = request.postDataJSON() as {
+        response_id: string;
+        turn_id: string;
+        user_query: string;
+      };
+      const turn = {
+        contexts: [],
+        id: body.turn_id,
+        locale: "en",
+        reasoning_level: "standard",
+        responses: [
+          {
+            artifacts: null,
+            content: answer,
+            id: body.response_id,
+            references: null,
+            status: "completed",
+            trace: null,
+            variant_index: 0,
+          },
+        ],
+        scope: null,
+        selected_response_id: body.response_id,
+        sequence: 1,
+        suggestions: null,
+        time_zone: "Asia/Shanghai",
+        user_query: body.user_query,
+      };
+      persistedTurn = turn;
+      const events = [
+        {
+          type: "start",
+          conversation_id: conversationId,
+          generation_kind: "initial",
+          response_id: body.response_id,
+          turn_id: body.turn_id,
+          variant_index: 0,
+        },
+        {
+          type: "assistant_item_start",
+          item_id: "assistant-item-1",
+          response_id: body.response_id,
+          sequence: 1,
+        },
+        {
+          type: "assistant_item_delta",
+          delta: answer,
+          item_id: "assistant-item-1",
+          response_id: body.response_id,
+        },
+        { type: "response_ready", turn },
+        {
+          type: "complete",
+          response_id: body.response_id,
+          turn_id: body.turn_id,
+        },
+      ];
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: events
+          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+          .join(""),
+      });
+      return;
+    }
+    if (pathname.endsWith(`/conversations/${conversationId}/turns`)) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: persistedTurn ? [persistedTurn] : [],
+          next_cursor: null,
+        }),
+      });
+      return;
+    }
+    if (pathname.endsWith(`/conversations/${conversationId}`)) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(detail),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], next_cursor: null }),
+    });
+  });
+
+  return { answer, conversationId };
+}
+
 async function selectPdfPassage(page: Page, pageNumber: number) {
   const textLayer = page.locator(
     `[data-pdf-page-number="${pageNumber}"] .pdf-text-layer`,
@@ -958,6 +1098,28 @@ test("filters Project Ask by the current paper and preserves an unsent draft", a
       }),
     )
     .toBe(true);
+});
+
+test("activates a newly created Reader conversation before history refreshes", async ({
+  page,
+}) => {
+  const { answer, conversationId } = await mockReaderConversationCreation(page);
+  const question = "What is the paper's central contribution?";
+  await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
+
+  await page.getByRole("textbox", { name: "Ask a follow-up" }).fill(question);
+  await page.getByRole("button", { name: "Ask Scholens" }).click();
+
+  await expect(page).toHaveURL(
+    new RegExp(`panel=ask.*conversation=${conversationId}`),
+  );
+  await expect(page.getByText(question, { exact: true })).toBeVisible();
+  await expect(page.getByText(answer, { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Started a new private conversation for this context"),
+  ).toHaveCount(0);
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(new RegExp(`conversation=${conversationId}`));
 });
 
 test("uses an immersive mobile Reader without the Workspace bottom navigation", async ({

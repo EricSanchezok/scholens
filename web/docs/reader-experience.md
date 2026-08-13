@@ -303,6 +303,16 @@ conversation is Project-scoped and carries the open paper in its selected
 document context; it remains private conversation history. Changing Project
 clears an incompatible active Conversation while preserving the unsent draft.
 
+The first send creates and activates the scoped Conversation as one operation.
+Reader immediately keeps the new Conversation ID in the URL and renders the
+user turn plus streaming response; a still-stale history query is never
+interpreted as evidence that the Conversation belongs to another context. The
+Conversation detail response is authoritative for scope validation, while the
+history list refreshes independently. Expected creation is not announced by a
+Toast because the active conversation and visible turn are already the
+confirmation. Reader Toasts are limited to failed actions, lost access, or an
+invalid deep link, and must explain the resulting user-visible recovery.
+
 The shared conversation contract remains unchanged:
 
 - ordered streaming and Worklog during execution;

@@ -65,6 +65,7 @@ import { moveReaderSearchCursor } from "./reader-search";
 import { compareReaderAnnotationsBySource } from "./reader-annotations";
 import type { ReaderHighlightColor } from "./reader-highlight-colors";
 import {
+  conversationBelongsToReaderContext,
   parsePositiveInteger,
   readReaderPanel,
   readSourcePage,
@@ -341,26 +342,39 @@ function ReaderDocumentWorkspace({
     updateLocation,
   ]);
 
+  const rejectedConversationRef = React.useRef<string | undefined>(undefined);
   React.useEffect(() => {
-    if (
-      !conversationId ||
-      conversationsQuery.isPending ||
-      !conversationsQuery.data
-    )
-      return;
-    if (
-      conversationsQuery.data?.items.some(
-        (conversation) => conversation.id === conversationId,
-      )
-    ) {
+    if (!conversationId) {
+      rejectedConversationRef.current = undefined;
       return;
     }
+
+    const conversation = conversationSession.conversationQuery.data;
+    const unavailable =
+      conversationSession.conversationQuery.error instanceof ApiError &&
+      conversationSession.conversationQuery.error.status === 404;
+    const outsideContext =
+      conversation !== undefined &&
+      !conversationBelongsToReaderContext({
+        conversation,
+        documentId,
+        projectId,
+      });
+    if (!unavailable && !outsideContext) return;
+    if (rejectedConversationRef.current === conversationId) return;
+
+    rejectedConversationRef.current = conversationId;
     updateLocation({ conversation: null });
-    toast.notify({ title: t("conversations.contextChanged") });
+    toast.notify({
+      description: t("conversations.unavailableDescription"),
+      title: t("conversations.unavailableTitle"),
+    });
   }, [
     conversationId,
-    conversationsQuery.data,
-    conversationsQuery.isPending,
+    conversationSession.conversationQuery.data,
+    conversationSession.conversationQuery.error,
+    documentId,
+    projectId,
     t,
     toast,
     updateLocation,
@@ -609,7 +623,7 @@ function ReaderDocumentWorkspace({
 
   return (
     <WorkspaceShell
-      activeConversationId={conversationId}
+      activeConversationId={conversationSession.activeConversationId}
       activeDestination="library"
       actor={actor}
       collapsed={collapsed}
