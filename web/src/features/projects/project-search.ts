@@ -10,7 +10,7 @@ const outputSortSchema = z.enum([
   "title_desc",
 ]);
 const outputKindSchema = z.enum([
-  "highlight_thread",
+  "annotation_thread",
   "citation",
   "audio_overview",
   "data_table",

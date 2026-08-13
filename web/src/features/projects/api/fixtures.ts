@@ -152,7 +152,9 @@ export const projectOutputFixtures: Output[] = [
   {
     item: {
       audio_overview: null,
-      capabilities: { delete: true, edit: true, share: true },
+      annotation_thread: null,
+      audience: { kind: "project", project_id: projectFixtures[0]!.id },
+      capabilities: { delete: true, edit: true },
       citation: {
         snapshot: {
           confidence: 0.98,
@@ -171,17 +173,14 @@ export const projectOutputFixtures: Output[] = [
       created_at: "2026-08-11T08:00:00Z",
       created_by: { display_name: "Eric Sanchez", id: 7 },
       data_table: null,
-      highlight_thread: null,
       id: "30000000-0000-4000-8000-000000000001",
-      is_shared: true,
       kind: "citation",
-      scope_id: projectFixtures[0]!.id,
-      scope_type: "project",
+      target_document_id: "10000000-0000-4000-8000-000000000001",
       updated_at: "2026-08-12T09:10:00Z",
     },
     source: {
-      scope_id: projectFixtures[0]!.id,
-      scope_type: "project",
+      audience_id: projectFixtures[0]!.id,
+      audience_type: "project",
       title: projectFixtures[0]!.title,
     },
     title: "Attention Is All You Need",

@@ -228,7 +228,7 @@ function ProjectPaperRow({
 }
 
 const outputIcons = {
-  highlight_thread: QuoteIcon,
+  annotation_thread: QuoteIcon,
   citation: CitationIcon,
   audio_overview: AudioIcon,
   data_table: DataTableIcon,
@@ -723,7 +723,7 @@ export function ProjectDetailWorkspace({
                       </SelectItem>
                       {(
                         [
-                          "highlight_thread",
+                          "annotation_thread",
                           "citation",
                           "audio_overview",
                           "data_table",

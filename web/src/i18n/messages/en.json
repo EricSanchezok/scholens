@@ -819,7 +819,7 @@
         "empty": "No research outputs in this project yet.",
         "startChat": "Start a project chat",
         "kinds": {
-          "highlight_thread": "Annotation thread",
+          "annotation_thread": "Annotation thread",
           "citation": "Citation",
           "audio_overview": "Audio overview",
           "data_table": "Data table"

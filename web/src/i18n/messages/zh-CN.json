@@ -819,7 +819,7 @@
         "empty": "项目中还没有研究产物。",
         "startChat": "开始项目对话",
         "kinds": {
-          "highlight_thread": "批注线程",
+          "annotation_thread": "批注线程",
           "citation": "引文",
           "audio_overview": "音频概览",
           "data_table": "数据表"
