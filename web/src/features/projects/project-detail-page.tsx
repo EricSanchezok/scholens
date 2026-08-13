@@ -206,11 +206,13 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function ProjectPaperRow({
   canRemove,
+  onActionTrigger,
   onRemove,
   paper,
   projectId,
 }: {
   canRemove: boolean;
+  onActionTrigger: (trigger: HTMLButtonElement) => void;
   onRemove: (paper: ProjectPaper) => void;
   paper: ProjectPaper;
   projectId: string;
@@ -235,7 +237,11 @@ function ProjectPaperRow({
       {canRemove && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <IconButton label={t("openMenu")} variant="ghost">
+            <IconButton
+              label={t("openMenu")}
+              onClick={(event) => onActionTrigger(event.currentTarget)}
+              variant="ghost"
+            >
               <Icon glyph={MoreIcon} size={20} />
             </IconButton>
           </DropdownMenuTrigger>
@@ -335,6 +341,7 @@ export function ProjectDetailWorkspace({
   const [addPapersOpen, setAddPapersOpen] = React.useState(false);
   const [paperRemoval, setPaperRemoval] =
     React.useState<PaperRemovalImpact | null>(null);
+  const paperRemovalTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const [destructive, setDestructive] = React.useState<
     "delete" | "leave" | null
   >(null);
@@ -657,6 +664,9 @@ export function ProjectDetailWorkspace({
                       <ProjectPaperRow
                         canRemove={project.capabilities.manage_papers}
                         key={paper.document_id}
+                        onActionTrigger={(trigger) => {
+                          paperRemovalTriggerRef.current = trigger;
+                        }}
                         onRemove={(paper) => void requestPaperRemoval(paper)}
                         paper={paper}
                         projectId={projectId}
@@ -769,6 +779,9 @@ export function ProjectDetailWorkspace({
                       <ProjectPaperRow
                         canRemove={project.capabilities.manage_papers}
                         key={paper.document_id}
+                        onActionTrigger={(trigger) => {
+                          paperRemovalTriggerRef.current = trigger;
+                        }}
                         onRemove={(paper) => void requestPaperRemoval(paper)}
                         paper={paper}
                         projectId={projectId}
@@ -966,12 +979,15 @@ export function ProjectDetailWorkspace({
               title: project.title,
             })}
           </AlertDialogDescription>
-          <div className="mt-6 flex justify-end gap-2">
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <AlertDialogCancel asChild>
-              <Button variant="secondary">{t("confirm.cancel")}</Button>
+              <Button className="w-full sm:w-auto" variant="secondary">
+                {t("confirm.cancel")}
+              </Button>
             </AlertDialogCancel>
             <AlertDialogAction asChild>
               <Button
+                className="w-full sm:w-auto"
                 loading={deleteMutation.isPending || leaveMutation.isPending}
                 onClick={() => void confirmDestructive()}
                 variant="danger"
@@ -986,7 +1002,12 @@ export function ProjectDetailWorkspace({
         onOpenChange={(open) => !open && setPaperRemoval(null)}
         open={Boolean(paperRemoval)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            paperRemovalTriggerRef.current?.focus();
+          }}
+        >
           <AlertDialogTitle>
             {t("detail.papers.confirm.title")}
           </AlertDialogTitle>
@@ -997,12 +1018,15 @@ export function ProjectDetailWorkspace({
               title: paperRemoval?.paper.title || t("detail.papers.untitled"),
             })}
           </AlertDialogDescription>
-          <div className="mt-6 flex justify-end gap-2">
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <AlertDialogCancel asChild>
-              <Button variant="secondary">{t("confirm.cancel")}</Button>
+              <Button className="w-full sm:w-auto" variant="secondary">
+                {t("confirm.cancel")}
+              </Button>
             </AlertDialogCancel>
             <AlertDialogAction asChild>
               <Button
+                className="w-full sm:w-auto"
                 loading={removePaperMutation.isPending}
                 onClick={() => void confirmPaperRemoval()}
                 variant="danger"

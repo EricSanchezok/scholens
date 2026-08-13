@@ -101,6 +101,38 @@ export const Papers: Story = {
   },
 };
 
+export const PaperRemovalImpact: Story = {
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: `/projects/${projectId}?view=papers`,
+        pathname: `/projects/${projectId}`,
+        query: { view: "papers" },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      (
+        await canvas.findAllByRole("button", {
+          name: "Open paper actions",
+        })
+      )[0]!,
+    );
+    await userEvent.click(
+      within(document.body).getByRole("menuitem", {
+        name: "Remove from project",
+      }),
+    );
+    const impactDialog = await within(document.body).findByRole("alertdialog");
+    await expect(
+      within(impactDialog).getByText(/2 project annotation threads/),
+    ).toBeVisible();
+  },
+};
+
 export const Outputs: Story = {
   parameters: {
     nextjs: {
