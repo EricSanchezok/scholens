@@ -605,6 +605,13 @@
             "title": "Comment Count",
             "type": "integer"
           },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationCommentResponse"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -706,7 +713,8 @@
           "status",
           "resolved_by",
           "resolved_at",
-          "capabilities"
+          "capabilities",
+          "comments"
         ],
         "title": "AnnotationThreadSummaryResponse",
         "type": "object"

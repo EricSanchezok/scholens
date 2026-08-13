@@ -225,6 +225,14 @@ export function countReaderAnnotationComments(
   );
 }
 
+export function readerAnnotationPaintMode(
+  annotations: ReaderAnnotationSummary[],
+) {
+  return countReaderAnnotationComments(annotations) > 0
+    ? "annotation"
+    : "highlight";
+}
+
 function PdfPageSurface({
   adapter,
   annotationLinkLabel,
@@ -271,7 +279,7 @@ function PdfPageSurface({
   previewAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
-  onAnnotationSelect?: (annotationId: string, anchorIds: string[]) => void;
+  onAnnotationSelect?: (annotationId: string) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
   onHighlightSelection?: (
@@ -510,12 +518,12 @@ function PdfPageSurface({
           );
           const interactionTarget =
             previewGroupItem ?? selectedGroupItem ?? annotation;
-          const anchorIds = group.map((item) => item.id);
           const commentCount = countReaderAnnotationComments(group);
+          const paintMode = readerAnnotationPaintMode(group);
           const markerRect = position.rects[0];
           const resolved = group.every((item) => item.status === "resolved");
           const activateGroup = () =>
-            onAnnotationSelect?.(interactionTarget.id, anchorIds);
+            onAnnotationSelect?.(interactionTarget.id);
 
           return (
             <React.Fragment key={annotation.id}>
@@ -523,22 +531,46 @@ function PdfPageSurface({
                 <button
                   aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
                   className={cn(
-                    "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
+                    "pointer-events-auto absolute rounded-[1px] transition-opacity",
                     keyboardFocusRing,
-                    groupSelected && "opacity-60",
-                    groupPreviewed && "opacity-70",
+                    paintMode === "highlight" &&
+                      "opacity-20 hover:opacity-30 focus-visible:opacity-30",
+                    paintMode === "annotation" &&
+                      "opacity-75 hover:opacity-100 focus-visible:opacity-100",
+                    groupSelected &&
+                      (paintMode === "highlight"
+                        ? "opacity-30"
+                        : "opacity-100"),
+                    groupPreviewed &&
+                      (paintMode === "highlight"
+                        ? "opacity-40"
+                        : "opacity-100"),
                     resolved && "opacity-20 grayscale",
                   )}
                   data-reader-annotation-count={group.length}
                   data-reader-annotation-highlight={interactionTarget.id}
+                  data-reader-annotation-mode={paintMode}
                   data-reader-annotation-previewed={groupPreviewed || undefined}
                   data-reader-annotation-selected={groupSelected || undefined}
                   key={`${annotation.id}:${index}:${group.length}`}
                   onClick={activateGroup}
                   style={{
-                    backgroundColor: readerHighlightColorValue(
-                      interactionTarget.color,
-                    ),
+                    backgroundColor:
+                      paintMode === "highlight"
+                        ? readerHighlightColorValue(interactionTarget.color)
+                        : "transparent",
+                    borderBottomColor:
+                      paintMode === "annotation"
+                        ? readerHighlightColorValue(interactionTarget.color)
+                        : undefined,
+                    borderBottomStyle:
+                      paintMode === "annotation" ? "solid" : undefined,
+                    borderBottomWidth:
+                      paintMode === "annotation"
+                        ? groupSelected || groupPreviewed
+                          ? "3px"
+                          : "2px"
+                        : undefined,
                     height: `${rect.height * 100}%`,
                     left: `${rect.x * 100}%`,
                     top: `${rect.y * 100}%`,
@@ -654,7 +686,7 @@ export function PdfPage({
   previewAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
-  onAnnotationSelect?: (annotationId: string, anchorIds: string[]) => void;
+  onAnnotationSelect?: (annotationId: string) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
   onHighlightSelection?: (

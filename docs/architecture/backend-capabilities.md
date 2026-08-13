@@ -185,13 +185,14 @@ conversation listing may therefore filter by that context document; its signed
 cursor binds actor, Project, context document, and page size. The browser never
 downloads a broader collection to filter it locally.
 
-Reader annotation collections use a summary/detail boundary. The paper-level
-list returns one lightweight thread summary with its derived presentation mode,
-comment count, last activity, status, anchor, and current actor capabilities;
-it does not embed every comment. Filters for audience, presentation mode, and
-status are authorized and applied by the Server, with open threads as the
-default. The thread-detail endpoint returns the canonical ResearchItem
-aggregate and its flat chronological comment timeline. Presentation mode is
+Reader annotation collections return self-contained thread timelines. The
+paper-level list carries each thread's derived presentation mode, ordered
+comments, comment count, last activity, status, anchor, and current actor
+capabilities. It is ordered by source position rather than recent activity, so
+replying or selecting never moves a thread in the document rail. Filters for
+audience, presentation mode, and status are authorized and applied by the
+Server, with open threads as the default. The thread-detail endpoint remains a
+canonical single-thread resource for direct consumers. Presentation mode is
 derived from audience and comment count and is never another persisted source
 of truth.
 

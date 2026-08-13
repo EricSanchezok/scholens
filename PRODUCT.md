@@ -86,6 +86,14 @@ because reading marks are often private; starting a comment defaults to the
 current Project because its purpose is discussion. Color classifies the marked
 passage and never stands in for author identity or comment ownership.
 
+Reader distinguishes those derived modes without splitting the durable model:
+a comment-free Highlight paints one quiet translucent fill, while a Note or
+Discussion uses the same color as an underline so commentary never obscures the
+source. The annotation rail remains ordered by the anchored passage, keeps all
+comments visible as one compact chronological timeline, and reduces the quote
+to a one-line locator; selecting or hovering a card emphasizes the source
+anchor but never changes list order.
+
 The interface derives three presentation modes from that one aggregate: a
 thread with no comments is a highlight; a commented personal thread is a note;
 and a commented Project thread is a discussion. Only Project discussions have

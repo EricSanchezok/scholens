@@ -4,6 +4,7 @@ import {
   countReaderAnnotationComments,
   groupReaderAnnotationsByAnchor,
   normalizeReaderSelectionRects,
+  readerAnnotationPaintMode,
   selectReaderViewportPage,
 } from "./pdf-page";
 import type { ReaderAnnotationSummary } from "../reader-types";
@@ -122,5 +123,19 @@ describe("groupReaderAnnotationsByAnchor", () => {
     ] as ReaderAnnotationSummary[];
 
     expect(countReaderAnnotationComments(annotations)).toBe(5);
+  });
+
+  it("uses fill only for pure highlights and underlines commented anchors", () => {
+    expect(
+      readerAnnotationPaintMode([
+        { id: "highlight", comment_count: 0 },
+      ] as ReaderAnnotationSummary[]),
+    ).toBe("highlight");
+    expect(
+      readerAnnotationPaintMode([
+        { id: "highlight", comment_count: 0 },
+        { id: "note", comment_count: 1 },
+      ] as ReaderAnnotationSummary[]),
+    ).toBe("annotation");
   });
 });

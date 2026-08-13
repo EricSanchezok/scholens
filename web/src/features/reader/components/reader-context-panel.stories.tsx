@@ -121,6 +121,7 @@ function annotationSummary(item: ReaderAnnotation): ReaderAnnotationSummary {
     capabilities: thread.capabilities,
     color: thread.color,
     comment_count: thread.comment_count,
+    comments: thread.comments,
     created_at: item.created_at,
     created_by: item.created_by,
     id: item.id,
@@ -269,7 +270,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const AnnotationThread: Story = {
-  args: { selectedAnnotation: annotation, selectedAnnotationId: annotation.id },
+  args: { selectedAnnotationId: annotation.id },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
     const card = canvasElement.querySelector(
@@ -279,18 +280,24 @@ export const AnnotationThread: Story = {
     await userEvent.hover(card!);
     await expect(args.onPreviewChange).toHaveBeenLastCalledWith(annotation.id);
     await expect(canvas.getByText(/Retrieval quality depends/)).toHaveClass(
-      "line-clamp-2",
+      "truncate",
     );
     await expect(
       canvas.queryByRole("button", { name: "Resolve" }),
     ).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByPlaceholderText("Continue this note"));
-    await expect(canvas.getByRole("button", { name: /^Reply$/ })).toBeVisible();
+    await userEvent.type(
+      canvas.getByPlaceholderText("Continue this note"),
+      "A compact follow-up{enter}",
+    );
+    await expect(args.onCommentCreate).toHaveBeenCalledWith(
+      annotation.id,
+      "A compact follow-up",
+    );
   },
 };
 
 export const AnnotationPaletteDark: Story = {
-  args: { selectedAnnotation: annotation, selectedAnnotationId: annotation.id },
+  args: { selectedAnnotationId: annotation.id },
   globals: { appearance: "dark" },
 };
 
@@ -301,7 +308,6 @@ export const ProjectDiscussionTwoAuthors: Story = {
       id: "50000000-0000-4000-8000-000000000001",
       title: "Agentic Web review",
     },
-    selectedAnnotation: projectAnnotation,
     selectedAnnotationId: projectAnnotation.id,
   },
 };
@@ -314,25 +320,21 @@ export const ProjectDiscussionChinese: Story = {
 export const ProjectDiscussionLongContent: Story = {
   args: {
     ...ProjectDiscussionTwoAuthors.args,
-    annotations: [projectSummary],
-    selectedAnnotation: {
-      ...projectAnnotation,
-      annotation_thread: {
-        ...projectAnnotation.annotation_thread!,
+    annotations: [
+      {
+        ...projectSummary,
         quote_text:
-          `${projectAnnotation.annotation_thread!.quote_text} ` +
+          `${projectSummary.quote_text} ` +
           "The authors then connect this retrieval constraint to evaluation design, deployment cost, and the limits of generalizing from a single benchmark across domains.",
-        comments: projectAnnotation.annotation_thread!.comments.map(
-          (comment, index) => ({
-            ...comment,
-            content:
-              index === 0
-                ? `${comment.content} Please also trace the evidence through the ablation table and record whether the claimed improvement remains significant across every reported dataset.`
-                : comment.content,
-          }),
-        ),
+        comments: projectSummary.comments.map((comment, index) => ({
+          ...comment,
+          content:
+            index === 0
+              ? `${comment.content} Please also trace the evidence through the ablation table and record whether the claimed improvement remains significant across every reported dataset.`
+              : comment.content,
+        })),
       },
-    },
+    ],
     selectedAnnotationId: projectAnnotation.id,
   },
 };
@@ -344,7 +346,6 @@ export const ResolvedProjectDiscussion: Story = {
       id: "50000000-0000-4000-8000-000000000001",
       title: "Agentic Web review",
     },
-    selectedAnnotation: resolvedAnnotation,
     selectedAnnotationId: resolvedAnnotation.id,
     statusFilter: "resolved",
   },
@@ -356,6 +357,7 @@ export const CommentlessPersonalHighlight: Story = {
       {
         ...personalSummary,
         comment_count: 0,
+        comments: [],
         mode: "highlight",
         capabilities: {
           ...personalSummary.capabilities,
@@ -363,14 +365,6 @@ export const CommentlessPersonalHighlight: Story = {
         },
       },
     ],
-  },
-};
-
-export const LoadingSelectedThread: Story = {
-  args: {
-    selectedAnnotation: undefined,
-    selectedAnnotationId: annotation.id,
-    selectedAnnotationLoading: true,
   },
 };
 
@@ -391,19 +385,6 @@ export const ReadOnlyProjectDiscussion: Story = {
     projectContext: {
       id: "50000000-0000-4000-8000-000000000001",
       title: "Agentic Web review",
-    },
-    selectedAnnotation: {
-      ...projectAnnotation,
-      annotation_thread: {
-        ...projectAnnotation.annotation_thread!,
-        capabilities: {
-          delete: false,
-          recolor: false,
-          reopen: false,
-          reply: false,
-          resolve: false,
-        },
-      },
     },
     selectedAnnotationId: projectAnnotation.id,
   },

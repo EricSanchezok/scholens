@@ -33,7 +33,6 @@ export const readerKeys = {
       filters.mode ?? "all",
       filters.status,
     ] as const,
-  annotation: (threadId: string) => ["reader", "annotation", threadId] as const,
 };
 
 export const readerQueries = {
@@ -98,19 +97,6 @@ export const readerQueries = {
         document.hasFocus()
           ? 10_000
           : false,
-      refetchOnWindowFocus: true,
-    }),
-  annotation: (threadId: string) =>
-    queryOptions({
-      queryKey: readerKeys.annotation(threadId),
-      queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET(
-          "/api/v1/annotation-threads/{thread_id}",
-          { params: { path: { thread_id: threadId } }, signal },
-        );
-        if (!data) throw new Error("Reader annotation detail was empty");
-        return data;
-      },
       refetchOnWindowFocus: true,
     }),
 };

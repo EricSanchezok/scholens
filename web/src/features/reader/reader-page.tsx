@@ -62,6 +62,7 @@ import {
   type PdfOutlineEntry,
 } from "./pdf-document-adapter";
 import { moveReaderSearchCursor } from "./reader-search";
+import { compareReaderAnnotationsBySource } from "./reader-annotations";
 import type { ReaderHighlightColor } from "./reader-highlight-colors";
 import {
   parsePositiveInteger,
@@ -127,9 +128,6 @@ function ReaderDocumentWorkspace({
     React.useState<string>();
   const [previewAnnotationId, setPreviewAnnotationId] =
     React.useState<string>();
-  const [selectedAnchorIds, setSelectedAnchorIds] = React.useState<string[]>(
-    [],
-  );
   const [annotationAudienceFilter, setAnnotationAudienceFilter] =
     React.useState<ReaderAnnotationAudienceFilter>("all");
   const [annotationStatusFilter, setAnnotationStatusFilter] =
@@ -163,10 +161,6 @@ function ReaderDocumentWorkspace({
       readReaderPanel(searchParams.get("panel")) === "annotations",
     ),
   );
-  const selectedAnnotationQuery = useQuery({
-    ...readerQueries.annotation(selectedAnnotationId ?? ""),
-    enabled: Boolean(selectedAnnotationId),
-  });
   const conversationsQuery = useQuery(
     conversationQueries.list(
       projectId
@@ -183,15 +177,10 @@ function ReaderDocumentWorkspace({
   const pageNumber = Math.min(rawPage, pageCount);
   const panel = readReaderPanel(searchParams.get("panel"));
   const conversationId = searchParams.get("conversation") ?? undefined;
-  const selectedAnnotation = selectedAnnotationQuery.data;
   const filteredAnnotations = React.useMemo(() => {
     const items = annotationsQuery.data?.items ?? [];
-    return [...items].sort((left, right) => {
-      const leftFocused = selectedAnchorIds.includes(left.id);
-      const rightFocused = selectedAnchorIds.includes(right.id);
-      return Number(rightFocused) - Number(leftFocused);
-    });
-  }, [annotationsQuery.data?.items, selectedAnchorIds]);
+    return [...items].sort(compareReaderAnnotationsBySource);
+  }, [annotationsQuery.data?.items]);
   const updateLocation = React.useCallback(
     (patch: {
       page?: number;
@@ -250,16 +239,9 @@ function ReaderDocumentWorkspace({
       : undefined;
 
   async function refreshAnnotations() {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: readerKeys.annotationLists(documentId),
-      }),
-      selectedAnnotationId
-        ? queryClient.invalidateQueries({
-            queryKey: readerKeys.annotation(selectedAnnotationId),
-          })
-        : Promise.resolve(),
-    ]);
+    await queryClient.invalidateQueries({
+      queryKey: readerKeys.annotationLists(documentId),
+    });
   }
 
   async function createHighlight(
@@ -384,12 +366,8 @@ function ReaderDocumentWorkspace({
     updateLocation,
   ]);
 
-  async function openAnnotation(
-    annotationId: string,
-    anchorIds = [annotationId],
-  ) {
+  async function openAnnotation(annotationId: string) {
     setSelectedAnnotationId(annotationId);
-    setSelectedAnchorIds(anchorIds);
     const annotation = annotationsQuery.data?.items.find(
       (item) => item.id === annotationId,
     );
@@ -544,8 +522,7 @@ function ReaderDocumentWorkspace({
     annotationAudienceFilter,
     annotationModeFilter,
     annotations: filteredAnnotations,
-    annotationsError:
-      annotationsQuery.isError || selectedAnnotationQuery.isError,
+    annotationsError: annotationsQuery.isError,
     annotationStatusFilter,
     conversationId: conversationSession.activeConversationId,
     conversationSession,
@@ -556,12 +533,10 @@ function ReaderDocumentWorkspace({
     onAnnotationAudienceFilterChange: (filter) => {
       setAnnotationAudienceFilter(filter);
       setSelectedAnnotationId(undefined);
-      setSelectedAnchorIds([]);
     },
     onAnnotationModeFilterChange: (mode) => {
       setAnnotationModeFilter(mode);
       setSelectedAnnotationId(undefined);
-      setSelectedAnchorIds([]);
     },
     onAnnotationDelete: async (id) => {
       await deleteReaderAnnotationThread(id);
@@ -578,29 +553,10 @@ function ReaderDocumentWorkspace({
     onAnnotationStatusFilterChange: (status) => {
       setAnnotationStatusFilter(status);
       setSelectedAnnotationId(undefined);
-      setSelectedAnchorIds([]);
     },
     onClose: () => updateLocation({ panel: null }),
     onCommentCreate: async (id, content) => {
-      const comment = await createReaderComment(id, content);
-      queryClient.setQueryData(
-        readerKeys.annotation(id),
-        (current: typeof selectedAnnotation | undefined) => {
-          const thread = current?.annotation_thread;
-          if (!current || !thread) return current;
-          return {
-            ...current,
-            updated_at: comment.created_at,
-            annotation_thread: {
-              ...thread,
-              comment_count: thread.comment_count + 1,
-              comments: [...thread.comments, comment],
-              last_activity_at: comment.created_at,
-              mode: current.audience.kind === "project" ? "discussion" : "note",
-            },
-          };
-        },
-      );
+      await createReaderComment(id, content);
       await refreshAnnotations();
     },
     onCommentDelete: async (id) => {
@@ -646,10 +602,7 @@ function ReaderDocumentWorkspace({
     pendingTurnContext,
     projectContext: activeProject,
     reasoningLevel,
-    selectedAnnotation,
     selectedAnnotationId,
-    selectedAnnotationLoading: selectedAnnotationQuery.isPending,
-    selectedAnnotationUnavailable: selectedAnnotationQuery.isError,
     setReasoningLevel,
     title,
   };
@@ -857,9 +810,7 @@ function ReaderDocumentWorkspace({
                   fitMode={fitMode}
                   loadingLabel={t("renderingPage")}
                   onActiveTextSelectionChange={handleActiveTextSelectionChange}
-                  onAnnotationSelect={(id, anchorIds) =>
-                    void openAnnotation(id, anchorIds)
-                  }
+                  onAnnotationSelect={(id) => void openAnnotation(id)}
                   onAskSelection={(selection) => {
                     setPendingTurnContext({
                       ...selection,

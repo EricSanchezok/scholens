@@ -212,9 +212,9 @@ color, and are not nested.
 Reader presents that aggregate as three modes without persisting another type:
 a zero-comment thread is a Highlight, a commented personal thread is a Note,
 and a commented Project thread is a Discussion. Only Discussions expose open,
-resolve, and reopen language. Annotation collection responses are lightweight
-summaries with count and activity metadata; only the single expanded thread
-loads its complete chronological comments.
+resolve, and reopen language. Annotation collection responses carry the full
+flat chronological timeline for every visible thread so the rail never relies
+on disclosure state or a second detail request to show comments.
 
 Personal Reader lists only the current user's personal threads. Project Reader
 combines that user's personal threads with threads belonging to the current
@@ -231,19 +231,25 @@ summary opens the same thread and centers the exact anchor in the scroll
 viewport. The panel's previous and next actions follow the current filtered
 summary order across pages while keeping the PDF and panel selection in sync.
 
-The annotation panel is a summary list with exactly one expanded thread. A
-collapsed row shows its color marker, a maximum two-line quote locator, page,
-author, audience, mode, comment count, and recent activity. The quote never
-becomes the card's dominant content because the source is already visible in
-the document pane. Hovering a summary or moving keyboard focus into its thread
-temporarily strengthens the exact PDF anchor without scrolling; clicking locks
-the selection and centers the anchor. The expanded thread loads its
-chronological comments, compact-on-rest reply composer, and permitted actions.
-Comments—not the repeated source quote—own the primary visual hierarchy.
-Resolve or reopen stays visible for a Project discussion; recolor, delete, and
-per-comment edit/delete live in semantic overflow menus. The reply draft is
-scoped to its thread, survives failed requests, and submits with `Cmd/Ctrl +
-Enter` as well as the explicit button.
+The annotation panel is one static, source-ordered list. Every card reduces its
+source quote to a single ellipsized locator and always shows the complete flat
+comment timeline; the source is already visible in the document pane, so
+comments own the visual hierarchy. Hovering a card or moving keyboard focus
+into it temporarily strengthens the exact PDF anchor without scrolling;
+clicking locks the selection and centers the anchor without moving the card.
+The one-line reply field stays below its timeline and submits with Enter; it
+has no redundant shortcut hint or visible send button. Resolve or reopen is a
+compact thread action. Recolor and delete live in an opaque overflow menu;
+recolor requires a click and then replaces that menu with a vertical palette,
+never a hover-triggered submenu overlapping destructive actions. Per-comment
+edit and delete remain in each comment's semantic overflow menu. Reply drafts
+remain scoped to their thread and survive failed requests.
+
+A comment-free Highlight paints a low-opacity color fill with no underline. A
+Note or Discussion paints only a colored underline across its anchored text,
+with no fill competing with the paper. Hover, keyboard focus, or selection may
+strengthen the corresponding treatment, but persistent fill remains subtle and
+no per-line boxes are drawn.
 
 Project members may reply to open Project threads. The thread author may
 recolor it; its author, the Project owner, and collaborators with Project edit

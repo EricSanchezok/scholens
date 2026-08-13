@@ -49,7 +49,7 @@ from app.modules.research.application.positions import (
     position_columns,
 )
 from pydantic import TypeAdapter
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import Float, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
@@ -285,6 +285,14 @@ class ResearchRepository:
             .correlate(ResearchItem)
             .scalar_subquery()
         )
+        pdf_anchor_y = cast(
+            AnnotationThread.position["rects"][0]["y"].astext,
+            Float,
+        )
+        pdf_anchor_x = cast(
+            AnnotationThread.position["rects"][0]["x"].astext,
+            Float,
+        )
         statement = (
             select(
                 ResearchItem,
@@ -303,13 +311,20 @@ class ResearchRepository:
             )
             .options(
                 joinedload(ResearchItem.created_by),
-                joinedload(ResearchItem.annotation_thread).joinedload(
-                    AnnotationThread.resolved_by
-                ),
+                joinedload(ResearchItem.annotation_thread)
+                .joinedload(AnnotationThread.resolved_by),
+                joinedload(ResearchItem.annotation_thread)
+                .selectinload(AnnotationThread.comments)
+                .joinedload(AnnotationComment.created_by),
             )
             .order_by(
-                func.coalesce(last_comment_at, ResearchItem.created_at).desc(),
-                ResearchItem.id.desc(),
+                AnnotationThread.page_number.asc().nulls_last(),
+                pdf_anchor_y.asc().nulls_last(),
+                pdf_anchor_x.asc().nulls_last(),
+                AnnotationThread.start_offset.asc().nulls_last(),
+                AnnotationThread.end_offset.asc().nulls_last(),
+                ResearchItem.created_at.asc(),
+                ResearchItem.id.asc(),
             )
         )
         if mode is AnnotationThreadMode.HIGHLIGHT:
@@ -1093,6 +1108,14 @@ class ResearchRepository:
                 reopen=access.can_resolve and thread.status == "resolved",
                 delete=can_delete,
             ),
+            comments=[
+                self.serialize_comment(
+                    comment,
+                    user_id=user_id,
+                    has_audience_access=access.has_audience_access,
+                )
+                for comment in thread.comments
+            ],
         )
 
     @staticmethod

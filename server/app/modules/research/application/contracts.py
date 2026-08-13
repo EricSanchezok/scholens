@@ -107,6 +107,7 @@ class AnnotationThreadSummaryResponse(BaseModel):
     resolved_by: ResearchCreatorResponse | None
     resolved_at: datetime | None
     capabilities: AnnotationThreadCapabilities
+    comments: list[AnnotationCommentResponse]
 
 
 class AnnotationThreadListResponse(BaseModel):

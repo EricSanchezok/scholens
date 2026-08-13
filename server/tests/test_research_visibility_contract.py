@@ -202,6 +202,18 @@ def test_annotation_summary_derives_mode_and_activity(
         role="user",
         status="open",
     )
+    item.annotation_thread.comments = [
+        AnnotationComment(
+            id=uuid.uuid4(),
+            thread_id=item.id,
+            content=f"Comment {index + 1}",
+            role="user",
+            created_by_id=2,
+            created_at=now,
+            updated_at=now,
+        )
+        for index in range(comment_count)
+    ]
     monkeypatch.setattr(
         research_item_policy,
         "require_visible",
@@ -228,6 +240,38 @@ def test_annotation_summary_derives_mode_and_activity(
         expected_mode is AnnotationThreadMode.DISCUSSION
     )
     assert summary.capabilities.delete is True
+    assert [comment.content for comment in summary.comments] == [
+        f"Comment {index + 1}" for index in range(comment_count)
+    ]
+
+
+def test_annotation_list_orders_by_document_position_not_activity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock(spec=Session)
+    db.execute.return_value.unique.return_value = []
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.research_repository.require_document_access",
+        lambda *_args, **_kwargs: object(),
+    )
+    research_repository.list_annotation_summaries(
+        db,
+        document_id=uuid.uuid4(),
+        user_id=2,
+        project_id=None,
+        audience=None,
+        mode=None,
+        status=AnnotationThreadStatus.OPEN,
+    )
+    statement = str(
+        db.execute.call_args.args[0].compile(dialect=postgresql.dialect())
+    )
+
+    assert "annotation_threads.page_number ASC NULLS LAST" in statement
+    assert "CAST" in statement
+    assert "annotation_threads.position" in statement
+    assert "annotation_threads.start_offset ASC NULLS LAST" in statement
+    assert "last_activity_at DESC" not in statement
 
 
 def test_thread_with_other_authors_cannot_be_hard_deleted(

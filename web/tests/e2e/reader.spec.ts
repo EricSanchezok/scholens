@@ -95,6 +95,7 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
     capabilities: thread.capabilities,
     color: thread.color,
     comment_count: thread.comment_count,
+    comments: thread.comments,
     created_at: item.created_at,
     created_by: item.created_by,
     id: item.id,
@@ -249,7 +250,7 @@ async function mockReader(page: Page) {
             resolved_by: null,
           },
         };
-        annotations.unshift(item);
+        annotations.push(item);
         await route.fulfill({
           contentType: "application/json",
           body: JSON.stringify(item),
@@ -628,6 +629,15 @@ test("creates a persistent document highlight with the full color palette", asyn
   expect(persistedAppearance.background).not.toBe("rgba(0, 0, 0, 0)");
   expect(persistedAppearance.background).not.toBe("rgb(255, 255, 255)");
   expect(persistedAppearance.boxShadow).toBe("none");
+  await expect(persistedHighlight.first()).toHaveAttribute(
+    "data-reader-annotation-mode",
+    "highlight",
+  );
+  expect(
+    await persistedHighlight
+      .first()
+      .evaluate((element) => Number(getComputedStyle(element).opacity)),
+  ).toBeLessThanOrEqual(0.3);
   expect(
     await persistedHighlight.evaluateAll((items) =>
       items.every((item) => getComputedStyle(item).boxShadow === "none"),
@@ -726,10 +736,26 @@ test("replies to, resolves, restores, and reopens a Project discussion", async (
   const marker = page.getByRole("button", { name: "1 comment" });
   await expect(marker).toBeVisible();
   await marker.click();
+  const discussionMark = page.locator(
+    '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+  );
+  await expect(discussionMark.first()).toHaveAttribute(
+    "data-reader-annotation-mode",
+    "annotation",
+  );
+  await expect(discussionMark.first()).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  expect(
+    await discussionMark
+      .first()
+      .evaluate((element) => getComputedStyle(element).borderBottomWidth),
+  ).not.toBe("0px");
   await page
     .getByPlaceholder("Reply to this discussion")
     .fill("The evaluation section now confirms the comparison.");
-  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await page.getByPlaceholder("Reply to this discussion").press("Enter");
   await expect(page.getByRole("button", { name: "2 comments" })).toBeVisible({
     timeout: 5_000,
   });
@@ -866,6 +892,26 @@ test("deduplicates exact anchors and reveals resolved Project discussions weakly
   await expect(
     page.getByRole("button", { name: "Annotations" }),
   ).toHaveAttribute("data-active", "true");
+
+  const originalOrder = await page
+    .locator("[data-reader-annotation-card]")
+    .evaluateAll((cards) =>
+      cards.map((card) => card.getAttribute("data-reader-annotation-card")),
+    );
+  await page
+    .locator(
+      '[data-reader-annotation-card="21000000-0000-4000-8000-000000000002"]',
+    )
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-reader-annotation-card]")
+        .evaluateAll((cards) =>
+          cards.map((card) => card.getAttribute("data-reader-annotation-card")),
+        ),
+    )
+    .toEqual(originalOrder);
   await page.getByRole("button", { name: "Filter" }).click();
   await page.getByRole("menuitem", { name: "Resolved discussions" }).click();
   const resolved = page.locator(

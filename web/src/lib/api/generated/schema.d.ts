@@ -1897,6 +1897,8 @@ export interface components {
             color: components["schemas"]["AnnotationColor"];
             /** Comment Count */
             comment_count: number;
+            /** Comments */
+            comments: components["schemas"]["AnnotationCommentResponse"][];
             /**
              * Created At
              * Format: date-time
