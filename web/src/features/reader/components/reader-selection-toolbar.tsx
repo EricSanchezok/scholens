@@ -27,6 +27,7 @@ import {
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
 import type { ReaderSelection } from "./pdf-page";
+import type { ReaderAnnotationAudience } from "../reader-types";
 
 export type ReaderSelectionLabels = {
   ask: string;
@@ -36,6 +37,8 @@ export type ReaderSelectionLabels = {
   copying: string;
   copyFailed: string;
   highlight: string;
+  personal: string;
+  project: string;
   colors: Record<ReaderHighlightColor, string>;
 };
 
@@ -77,16 +80,23 @@ export function ReaderSelectionToolbar({
   onComment,
   onCopySettled,
   onHighlight,
+  projectContext,
   selection,
 }: {
   labels: ReaderSelectionLabels;
   onAsk: () => void;
   onComment: () => void;
   onCopySettled: () => void;
-  onHighlight: (color: ReaderHighlightColor) => void;
+  onHighlight: (
+    color: ReaderHighlightColor,
+    audience: ReaderAnnotationAudience,
+  ) => void;
+  projectContext?: boolean;
   selection: ReaderSelection;
 }) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
+  const [audience, setAudience] =
+    React.useState<ReaderAnnotationAudience>("personal");
   const copyFeedback = useCopyActionFeedback({
     labels: {
       idle: labels.copy,
@@ -170,24 +180,48 @@ export function ReaderSelectionToolbar({
         {paletteOpen ? (
           <div
             aria-label={labels.highlight}
-            className={cn(floatingSurfaceClass, "gap-2 p-2")}
+            className={cn(
+              floatingSurfaceClass,
+              "flex-col gap-2 rounded-[var(--radius-lg)] p-2",
+            )}
             data-reader-selection-toolbar-surface="palette"
             role="group"
             style={{ backgroundColor: "var(--color-bg-elevated)" }}
           >
-            {readerHighlightColors.map((color) => (
-              <button
-                aria-label={labels.colors[color]}
-                className={cn(
-                  "border-control size-6 rounded-full border transition-transform hover:scale-110 motion-reduce:transition-none",
-                  keyboardFocusRing,
-                )}
-                key={color}
-                onClick={() => onHighlight(color)}
-                style={{ backgroundColor: readerHighlightColorValue(color) }}
-                type="button"
-              />
-            ))}
+            {projectContext ? (
+              <div className="bg-subtle grid w-full grid-cols-2 rounded-[var(--radius-md)] p-0.5 text-xs">
+                {(["personal", "project"] as const).map((value) => (
+                  <button
+                    aria-pressed={audience === value}
+                    className={cn(
+                      "rounded-[calc(var(--radius-md)-2px)] px-2 py-1",
+                      audience === value && "bg-surface shadow-raised",
+                      keyboardFocusRing,
+                    )}
+                    key={value}
+                    onClick={() => setAudience(value)}
+                    type="button"
+                  >
+                    {labels[value]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              {readerHighlightColors.map((color) => (
+                <button
+                  aria-label={labels.colors[color]}
+                  className={cn(
+                    "border-control size-6 rounded-full border transition-transform hover:scale-110 motion-reduce:transition-none",
+                    keyboardFocusRing,
+                  )}
+                  key={color}
+                  onClick={() => onHighlight(color, audience)}
+                  style={{ backgroundColor: readerHighlightColorValue(color) }}
+                  type="button"
+                />
+              ))}
+            </div>
           </div>
         ) : null}
       </div>

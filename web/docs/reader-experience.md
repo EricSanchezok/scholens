@@ -300,6 +300,29 @@ Playwright coverage for the following matrix:
 | Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                          |
 | Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                      |
 
+### Figma and Storybook acceptance mapping
+
+The active Figma Reader page above remains the visual-intent source. The
+collaboration contract is executable in Storybook with these state mappings;
+until dedicated collaboration frames receive stable node IDs, reviewers use
+the named `50 — Reader` states rather than inventing links:
+
+| Figma `50 — Reader` state     | Executable acceptance evidence              |
+| ----------------------------- | ------------------------------------------- |
+| Personal highlight            | `CommentlessPersonalHighlight`              |
+| Project discussion            | `ProjectDiscussionTwoAuthors`               |
+| Resolved Project discussion   | `ResolvedProjectDiscussion`                 |
+| Project audience before save  | `ProjectAudience`                           |
+| Project context selector      | `ProjectContext`                            |
+| Light/Dark annotation palette | `AnnotationThread`, `AnnotationPaletteDark` |
+| Narrow annotation composer    | `NarrowSelection`                           |
+
+The Project discussion stories deliberately show flat replies from two
+authors, immutable audience badges, root-only color, and resolve/reopen
+capabilities. The route E2E owns URL restoration, invalid-context fallback,
+atomic first-comment creation, exact-anchor de-duplication, and project-scoped
+Ask filtering.
+
 Figma frame names and Storybook story names use the same state terms. Obsolete
 Reader conversation-only mocks and any duplicated answer UI stay archived and
 are not acceptance sources.

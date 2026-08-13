@@ -9,11 +9,12 @@ import {
   ClosePanelIcon,
   DeleteIcon,
 } from "@/design-system/icons/semantic-icons";
-import { useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
   Button,
+  Badge,
   IconButton,
   keyboardFocusRing,
   Popover,
@@ -38,6 +39,9 @@ import {
 import type { ReaderSelection } from "./pdf-page";
 import type {
   ReaderAnnotation,
+  ReaderAnnotationAudience,
+  ReaderAnnotationAudienceFilter,
+  ReaderAnnotationStatus,
   ReaderConversation,
   ReaderContextPanel,
   ReaderDocument,
@@ -228,8 +232,14 @@ export function ReaderAnnotationPanel({
   onCommentUpdate,
   onCreate,
   onDelete,
+  onStatusChange,
+  onStatusFilterChange,
   onSelect,
   onUpdateColor,
+  audienceFilter,
+  onAudienceFilterChange,
+  projectContext,
+  statusFilter,
   selectedAnnotation,
   annotationSelection,
 }: {
@@ -239,19 +249,36 @@ export function ReaderAnnotationPanel({
   onCommentCreate: (id: string, content: string) => Promise<void>;
   onCommentDelete: (id: string) => Promise<void>;
   onCommentUpdate: (id: string, content: string) => Promise<void>;
-  onCreate: (comment?: string) => Promise<void>;
+  onCreate: (
+    comment: string,
+    color: ReaderHighlightColor,
+    audience: ReaderAnnotationAudience,
+  ) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onStatusChange: (id: string, status: ReaderAnnotationStatus) => Promise<void>;
+  onStatusFilterChange: (status: ReaderAnnotationStatus) => void;
   onSelect: (id: string) => void;
   onUpdateColor: (id: string, color: ReaderHighlightColor) => Promise<void>;
   selectedAnnotation?: ReaderAnnotation;
   annotationSelection?: ReaderSelection;
+  audienceFilter: ReaderAnnotationAudienceFilter;
+  onAudienceFilterChange: (filter: ReaderAnnotationAudienceFilter) => void;
+  projectContext?: { id: string; title: string };
+  statusFilter: ReaderAnnotationStatus;
 }) {
   const t = useTranslations("Reader.annotations");
+  const format = useFormatter();
   const [selectionComment, setSelectionComment] = React.useState("");
   const [replyContent, setReplyContent] = React.useState("");
   const [editingCommentId, setEditingCommentId] = React.useState<string>();
   const [editingContent, setEditingContent] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [selectionColor, setSelectionColor] =
+    React.useState<ReaderHighlightColor>("yellow");
+  const [selectionAudience, setSelectionAudience] =
+    React.useState<ReaderAnnotationAudience>(
+      projectContext ? "project" : "personal",
+    );
 
   async function perform(action: () => Promise<void>) {
     setBusy(true);
@@ -270,8 +297,40 @@ export function ReaderAnnotationPanel({
 
   return (
     <div className="grid gap-4 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {(["all", "mine", "project"] as const).map((filter) =>
+          filter === "project" && !projectContext ? null : (
+            <Button
+              aria-pressed={audienceFilter === filter}
+              key={filter}
+              onClick={() => onAudienceFilterChange(filter)}
+              size="sm"
+              variant={audienceFilter === filter ? "secondary" : "ghost"}
+            >
+              {t(`filters.${filter}`)}
+            </Button>
+          ),
+        )}
+        <div className="border-line ml-auto flex rounded-[var(--radius-md)] border p-0.5">
+          {(["open", "resolved"] as const).map((status) => (
+            <Button
+              aria-pressed={statusFilter === status}
+              className="h-7 min-h-7 px-2"
+              key={status}
+              onClick={() => onStatusFilterChange(status)}
+              size="sm"
+              variant={statusFilter === status ? "secondary" : "ghost"}
+            >
+              {t(`status.${status}`)}
+            </Button>
+          ))}
+        </div>
+      </div>
       {annotationSelection && (
-        <section className="border-line bg-subtle rounded-[var(--radius-lg)] border p-3">
+        <section
+          className="border-line bg-subtle rounded-[var(--radius-lg)] border p-3"
+          key={`${annotationSelection.document_id}:${annotationSelection.page_number}:${projectContext?.id ?? "personal"}`}
+        >
           <p className="text-secondary line-clamp-4 text-sm leading-5">
             “{annotationSelection.selected_text}”
           </p>
@@ -281,12 +340,53 @@ export function ReaderAnnotationPanel({
             placeholder={t("commentPlaceholder")}
             value={selectionComment}
           />
+          {projectContext ? (
+            <div className="bg-canvas border-line mt-3 grid grid-cols-2 rounded-[var(--radius-md)] border p-0.5 text-xs">
+              {(["personal", "project"] as const).map((audience) => (
+                <button
+                  aria-pressed={selectionAudience === audience}
+                  className={cn(
+                    "rounded-[calc(var(--radius-md)-2px)] px-2 py-1.5",
+                    selectionAudience === audience &&
+                      "bg-surface shadow-raised",
+                    keyboardFocusRing,
+                  )}
+                  key={audience}
+                  onClick={() => setSelectionAudience(audience)}
+                  type="button"
+                >
+                  {t(`audience.${audience}`)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="mt-3 flex gap-1.5">
+            {readerHighlightColors.map((color) => (
+              <button
+                aria-label={t(`colors.${color}`)}
+                className={cn(
+                  "border-control size-6 rounded-full border",
+                  selectionColor === color &&
+                    "ring-2 ring-[var(--color-focus-ring)] ring-offset-2 ring-offset-[var(--color-bg-surface)]",
+                  keyboardFocusRing,
+                )}
+                key={color}
+                onClick={() => setSelectionColor(color)}
+                style={{ backgroundColor: readerHighlightColorValue(color) }}
+                type="button"
+              />
+            ))}
+          </div>
           <Button
             className="mt-2 w-full"
-            disabled={busy}
+            disabled={busy || !selectionComment.trim()}
             onClick={() =>
               void perform(async () => {
-                await onCreate(selectionComment.trim() || undefined);
+                await onCreate(
+                  selectionComment.trim(),
+                  selectionColor,
+                  selectionAudience,
+                );
                 setSelectionComment("");
               })
             }
@@ -331,6 +431,25 @@ export function ReaderAnnotationPanel({
                 <span className="mt-1 line-clamp-4 block text-sm leading-5">
                   “{thread.quote_text}”
                 </span>
+                <span className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Badge>
+                    {annotation.audience.kind === "project"
+                      ? (projectContext?.title ?? t("audience.project"))
+                      : t("audience.personal")}
+                  </Badge>
+                  <Badge
+                    tone={thread.status === "resolved" ? "neutral" : "info"}
+                  >
+                    {t(`status.${thread.status}`)}
+                  </Badge>
+                  <span className="text-muted text-xs">
+                    {annotation.created_by.display_name ?? t("unknownAuthor")}
+                  </span>
+                  <span className="text-muted text-xs">·</span>
+                  <span className="text-muted text-xs">
+                    {format.relativeTime(new Date(annotation.created_at))}
+                  </span>
+                </span>
               </button>
               <div className="mt-3 flex items-center gap-1">
                 {readerHighlightColors.map((color) => (
@@ -342,7 +461,7 @@ export function ReaderAnnotationPanel({
                       readReaderHighlightColor(thread.color) === color &&
                         "ring-2 ring-[var(--color-focus-ring)] ring-offset-2 ring-offset-[var(--color-bg-surface)]",
                     )}
-                    disabled={!annotation.capabilities.edit || busy}
+                    disabled={!thread.capabilities.recolor || busy}
                     key={color}
                     onClick={() =>
                       void perform(() => onUpdateColor(annotation.id, color))
@@ -353,7 +472,7 @@ export function ReaderAnnotationPanel({
                     type="button"
                   />
                 ))}
-                {annotation.capabilities.delete && (
+                {thread.capabilities.delete && (
                   <IconButton
                     className="ml-auto size-8 min-h-8"
                     disabled={busy}
@@ -364,6 +483,33 @@ export function ReaderAnnotationPanel({
                     <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                   </IconButton>
                 )}
+                {thread.capabilities.resolve ? (
+                  <Button
+                    className="ml-auto"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(() =>
+                        onStatusChange(annotation.id, "resolved"),
+                      )
+                    }
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("resolve")}
+                  </Button>
+                ) : thread.capabilities.reopen ? (
+                  <Button
+                    className="ml-auto"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(() => onStatusChange(annotation.id, "open"))
+                    }
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {t("reopen")}
+                  </Button>
+                ) : null}
               </div>
               {thread.comments.map((item) => (
                 <div
@@ -406,6 +552,14 @@ export function ReaderAnnotationPanel({
                     </>
                   ) : (
                     <>
+                      <div className="mb-1 flex items-center gap-1.5 text-xs">
+                        <span className="font-medium">
+                          {item.created_by.display_name ?? t("unknownAuthor")}
+                        </span>
+                        <span className="text-muted">
+                          {format.relativeTime(new Date(item.created_at))}
+                        </span>
+                      </div>
                       <p className="text-sm leading-5">{item.content}</p>
                       <div className="mt-1 flex justify-end gap-0.5">
                         {item.can_edit && (
@@ -442,7 +596,7 @@ export function ReaderAnnotationPanel({
                   )}
                 </div>
               ))}
-              {active && (
+              {active && thread.capabilities.reply && (
                 <form
                   className="mt-3 flex gap-2"
                   onSubmit={(event) => {
@@ -552,9 +706,15 @@ export function ReaderContextPanel({
   onConversationPin,
   onHighlightCreate,
   onHighlightUpdate,
+  onAnnotationStatusChange,
+  annotationAudienceFilter,
+  onAnnotationAudienceFilterChange,
+  annotationStatusFilter,
+  onAnnotationStatusFilterChange,
   onPanelChange,
   onSourceOpen,
   panel,
+  projectContext,
   reasoningLevel,
   selectedAnnotation,
   annotationSelection,
@@ -581,11 +741,26 @@ export function ReaderContextPanel({
   onConversationChange: (id: string) => void;
   onConversationNew: () => void;
   onConversationPin: (id: string, pinned: boolean) => Promise<void>;
-  onHighlightCreate: (comment?: string) => Promise<void>;
+  onHighlightCreate: (
+    comment: string,
+    color: ReaderHighlightColor,
+    audience: ReaderAnnotationAudience,
+  ) => Promise<void>;
   onHighlightUpdate: (id: string, color: ReaderHighlightColor) => Promise<void>;
+  onAnnotationStatusChange: (
+    id: string,
+    status: ReaderAnnotationStatus,
+  ) => Promise<void>;
+  annotationAudienceFilter: ReaderAnnotationAudienceFilter;
+  onAnnotationAudienceFilterChange: (
+    filter: ReaderAnnotationAudienceFilter,
+  ) => void;
+  annotationStatusFilter: ReaderAnnotationStatus;
+  onAnnotationStatusFilterChange: (status: ReaderAnnotationStatus) => void;
   onPanelChange: (panel: "ask" | "annotations" | "details") => void;
   onSourceOpen: (source: ReaderDocumentSource) => void;
   panel: ReaderContextPanel;
+  projectContext?: { id: string; title: string };
   reasoningLevel: ReasoningLevel;
   selectedAnnotation?: ReaderAnnotation;
   annotationSelection?: ReaderSelection;
@@ -639,6 +814,8 @@ export function ReaderContextPanel({
         ) : activePanel === "annotations" ? (
           <div className="h-full overflow-y-auto" tabIndex={0}>
             <ReaderAnnotationPanel
+              key={projectContext?.id ?? "personal"}
+              audienceFilter={annotationAudienceFilter}
               annotations={annotations}
               error={annotationsError}
               onActionError={onActionError}
@@ -647,10 +824,15 @@ export function ReaderContextPanel({
               onCommentUpdate={onCommentUpdate}
               onCreate={onHighlightCreate}
               onDelete={onAnnotationDelete}
+              onAudienceFilterChange={onAnnotationAudienceFilterChange}
               onSelect={onAnnotationSelect}
+              onStatusChange={onAnnotationStatusChange}
+              onStatusFilterChange={onAnnotationStatusFilterChange}
               onUpdateColor={onHighlightUpdate}
+              projectContext={projectContext}
               selectedAnnotation={selectedAnnotation}
               annotationSelection={annotationSelection}
+              statusFilter={annotationStatusFilter}
             />
           </div>
         ) : (

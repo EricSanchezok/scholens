@@ -21,8 +21,92 @@ const actor = {
   locale: "en",
 };
 
+function annotationFixture({
+  audience = { kind: "personal" },
+  id,
+  position,
+  status = "open",
+}: {
+  audience?: { kind: "personal" } | { kind: "project"; project_id: string };
+  id: string;
+  position: {
+    kind: "pdf_text";
+    page_number: number;
+    rects: Array<{ height: number; width: number; x: number; y: number }>;
+  };
+  status?: "open" | "resolved";
+}) {
+  return {
+    id,
+    kind: "annotation_thread",
+    audience,
+    target_document_id: paperDocument.document_id,
+    created_at: "2026-08-13T12:00:00Z",
+    updated_at: "2026-08-13T12:00:00Z",
+    created_by: { id: actor.id, display_name: actor.display_name },
+    capabilities: { delete: true, edit: true },
+    annotation_thread: {
+      capabilities: {
+        delete: status === "open",
+        recolor: true,
+        reopen: status === "resolved",
+        reply: status === "open",
+        resolve: status === "open",
+      },
+      color: status === "resolved" ? "gray" : "yellow",
+      comments: [
+        {
+          id: `${id.slice(0, -1)}9`,
+          thread_id: id,
+          content: "Compare this claim with the project benchmark.",
+          role: "user",
+          created_at: "2026-08-13T12:00:00Z",
+          updated_at: "2026-08-13T12:00:00Z",
+          created_by: { id: actor.id, display_name: actor.display_name },
+          can_edit: true,
+          can_delete: true,
+        },
+      ],
+      position,
+      quote_text: "The NLP landscape has recently been revolutionized.",
+      role: "note",
+      status,
+      resolved_at: status === "resolved" ? "2026-08-13T12:05:00Z" : null,
+      resolved_by:
+        status === "resolved"
+          ? { id: actor.id, display_name: actor.display_name }
+          : null,
+    },
+  };
+}
+
 async function mockReader(page: Page) {
-  const highlights: Array<Record<string, unknown>> = [];
+  const annotations: Array<Record<string, unknown>> = [];
+  const project = {
+    id: "50000000-0000-4000-8000-000000000001",
+    title: "Agentic Web review",
+    description: null,
+    created_at: "2026-08-13T12:00:00Z",
+    updated_at: "2026-08-13T12:00:00Z",
+    num_audio_overviews: 0,
+    num_collaborators: 2,
+    num_conversations: 0,
+    num_data_tables: 0,
+    num_papers: 1,
+    owner: { id: 7, display_name: "Eric", email: actor.email },
+    membership: { kind: "owner", permissions: {} },
+    capabilities: {
+      contribute_research: true,
+      create_conversation: true,
+      delete: true,
+      edit_project: true,
+      leave: false,
+      manage_collaborators: true,
+      manage_papers: true,
+      read: true,
+      transfer: true,
+    },
+  };
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -53,6 +137,14 @@ async function mockReader(page: Page) {
       }),
   );
   await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/projects`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: [project], next_cursor: null }),
+      }),
+  );
+  await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/download-url`,
     (route) =>
       route.fulfill({
@@ -64,34 +156,61 @@ async function mockReader(page: Page) {
       }),
   );
   await page.route(
-    `${apiPattern}/papers/${paperDocument.document_id}/highlight-threads`,
+    `${apiPattern}/papers/${paperDocument.document_id}/annotation-threads**`,
     async (route) => {
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON() as {
+          audience: { kind: "personal" | "project"; project_id?: string };
           color: string;
+          initial_comment?: string;
           position: Record<string, unknown>;
           quote_text: string;
-          shared: boolean;
         };
         const item = {
           id: "20000000-0000-4000-8000-000000000001",
-          kind: "highlight_thread",
-          scope_type: "document",
-          scope_id: paperDocument.document_id,
-          is_shared: body.shared,
+          kind: "annotation_thread",
+          audience: body.audience,
+          target_document_id: paperDocument.document_id,
           created_at: "2026-08-13T12:00:00Z",
           updated_at: "2026-08-13T12:00:00Z",
           created_by: { id: actor.id, display_name: actor.display_name },
-          capabilities: { delete: true, edit: true, share: false },
-          highlight_thread: {
+          capabilities: { delete: true, edit: true },
+          annotation_thread: {
+            capabilities: {
+              delete: true,
+              recolor: true,
+              reopen: false,
+              reply: true,
+              resolve: Boolean(body.initial_comment),
+            },
             color: body.color,
-            comments: [],
+            comments: body.initial_comment
+              ? [
+                  {
+                    id: "30000000-0000-4000-8000-000000000001",
+                    thread_id: "20000000-0000-4000-8000-000000000001",
+                    content: body.initial_comment,
+                    role: "user",
+                    created_at: "2026-08-13T12:00:00Z",
+                    updated_at: "2026-08-13T12:00:00Z",
+                    created_by: {
+                      id: actor.id,
+                      display_name: actor.display_name,
+                    },
+                    can_edit: true,
+                    can_delete: true,
+                  },
+                ]
+              : [],
             position: body.position,
             quote_text: body.quote_text,
             role: "note",
+            status: "open",
+            resolved_at: null,
+            resolved_by: null,
           },
         };
-        highlights.unshift(item);
+        annotations.unshift(item);
         await route.fulfill({
           contentType: "application/json",
           body: JSON.stringify(item),
@@ -100,7 +219,7 @@ async function mockReader(page: Page) {
       }
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ items: highlights, next_cursor: null }),
+        body: JSON.stringify({ items: annotations, next_cursor: null }),
       });
     },
   );
@@ -397,6 +516,183 @@ test("creates a persistent document highlight with the full color palette", asyn
     "background-color",
     persistedAppearance.background,
   );
+});
+
+test("refreshes visible annotation discussions on the collaboration interval", async ({
+  page,
+}) => {
+  let annotationReads = 0;
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/annotation-threads**`,
+    async (route) => {
+      if (route.request().method() === "GET") annotationReads += 1;
+      await route.fallback();
+    },
+  );
+  await page.goto(
+    `/reader/${paperDocument.document_id}?page=2&panel=annotations`,
+  );
+
+  await expect.poll(() => annotationReads).toBeGreaterThanOrEqual(1);
+  const initialReads = annotationReads;
+  await expect
+    .poll(() => annotationReads, { timeout: 12_000 })
+    .toBeGreaterThan(initialReads);
+});
+
+test("switches into a Project Reader and creates a project annotation atomically", async ({
+  page,
+}) => {
+  let createdBody: Record<string, unknown> | undefined;
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/annotation-threads**`,
+    async (route) => {
+      if (route.request().method() === "POST") {
+        createdBody = route.request().postDataJSON() as Record<string, unknown>;
+      }
+      await route.fallback();
+    },
+  );
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await page.getByRole("combobox", { name: "Reader context" }).click();
+  await page.getByRole("option", { name: "Agentic Web review" }).click();
+  await expect(page).toHaveURL(/project=50000000-0000-4000-8000-000000000001/);
+
+  await selectPdfPassage(page, 2);
+  await page.getByRole("button", { name: "Add annotation" }).click();
+  await expect(page).toHaveURL(/panel=annotations/);
+  await expect(
+    page.getByRole("button", { name: "Annotations" }),
+  ).toHaveAttribute("data-active", "true");
+  await page
+    .getByPlaceholder("Add a note to this selection")
+    .fill("Compare this claim with the project benchmark.");
+  await page.getByRole("button", { name: "Save annotation" }).click();
+  await expect
+    .poll(() => createdBody)
+    .toEqual(
+      expect.objectContaining({
+        audience: {
+          kind: "project",
+          project_id: "50000000-0000-4000-8000-000000000001",
+        },
+        initial_comment: "Compare this claim with the project benchmark.",
+      }),
+    );
+});
+
+test("falls back from an inaccessible Project Reader context", async ({
+  page,
+}) => {
+  await page.goto(
+    `/reader/${paperDocument.document_id}?project=50000000-0000-4000-8000-000000000099`,
+  );
+
+  await expect(page).not.toHaveURL(/project=/);
+  await expect(
+    page.getByText("Switched to personal reading", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "Reader context" }),
+  ).toHaveText("Personal reading");
+});
+
+test("deduplicates exact anchors and reveals resolved Project discussions weakly", async ({
+  page,
+}) => {
+  const sharedPosition = {
+    kind: "pdf_text" as const,
+    page_number: 2,
+    rects: [{ x: 0.15, y: 0.32, width: 0.55, height: 0.035 }],
+  };
+  const resolvedPosition = {
+    ...sharedPosition,
+    rects: [{ x: 0.15, y: 0.42, width: 0.45, height: 0.035 }],
+  };
+  const projectId = "50000000-0000-4000-8000-000000000001";
+  const seeded = [
+    annotationFixture({
+      id: "21000000-0000-4000-8000-000000000001",
+      position: sharedPosition,
+    }),
+    annotationFixture({
+      audience: { kind: "project", project_id: projectId },
+      id: "21000000-0000-4000-8000-000000000002",
+      position: sharedPosition,
+    }),
+    annotationFixture({
+      audience: { kind: "project", project_id: projectId },
+      id: "21000000-0000-4000-8000-000000000003",
+      position: resolvedPosition,
+      status: "resolved",
+    }),
+  ];
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/annotation-threads**`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: seeded, next_cursor: null }),
+      }),
+  );
+  await page.goto(
+    `/reader/${paperDocument.document_id}?page=2&project=${projectId}`,
+  );
+
+  const grouped = page.locator('[data-reader-annotation-count="2"]');
+  await expect(grouped).toHaveCount(1);
+  await expect(page.locator('[data-reader-annotation-count="1"]')).toHaveCount(
+    0,
+  );
+  await grouped.click();
+  await expect(
+    page.getByRole("button", { name: "Annotations" }),
+  ).toHaveAttribute("data-active", "true");
+  await page.getByRole("button", { name: "Resolved" }).click();
+  const resolved = page.locator(
+    '[data-reader-annotation-highlight="21000000-0000-4000-8000-000000000003"]',
+  );
+  await expect(resolved).toBeVisible();
+  expect(
+    await resolved.evaluate((element) =>
+      Number(getComputedStyle(element).opacity),
+    ),
+  ).toBeLessThan(0.4);
+});
+
+test("filters Project Ask by the current paper and preserves an unsent draft", async ({
+  page,
+}) => {
+  const conversationRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "GET" &&
+      request.url().includes("/api/v1/conversations?")
+    ) {
+      conversationRequests.push(request.url());
+    }
+  });
+  await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
+  const composer = page.getByRole("textbox", { name: "Ask a follow-up" });
+  await composer.fill("Keep this unsent project question");
+  await page.getByRole("combobox", { name: "Reader context" }).click();
+  await page.getByRole("option", { name: "Agentic Web review" }).click();
+
+  await expect(composer).toHaveValue("Keep this unsent project question");
+  await expect
+    .poll(() =>
+      conversationRequests.some((url) => {
+        const requestUrl = new URL(url);
+        return (
+          requestUrl.searchParams.get("scope_type") === "project" &&
+          requestUrl.searchParams.get("scope_id") ===
+            "50000000-0000-4000-8000-000000000001" &&
+          requestUrl.searchParams.get("context_document_id") ===
+            paperDocument.document_id
+        );
+      }),
+    )
+    .toBe(true);
 });
 
 test("uses an immersive mobile Reader without the Workspace bottom navigation", async ({

@@ -510,7 +510,14 @@
       "unpin": "取消置顶",
       "pinned": "置顶",
       "recent": "最近",
-      "switcher": "对话历史"
+      "switcher": "对话历史",
+      "contextChanged": "已为当前范围新建私有对话"
+    },
+    "projects": {
+      "selector": "阅读范围",
+      "personal": "个人阅读",
+      "unavailableTitle": "已切换为个人阅读",
+      "unavailableDescription": "你已无法访问该项目，阅读器已返回个人范围。"
     },
     "annotations": {
       "error": "无法加载批注。",
@@ -527,6 +534,22 @@
       "replyPlaceholder": "回复这条批注",
       "add": "添加",
       "context": "已选批注",
+      "filters": {
+        "all": "全部",
+        "mine": "我的",
+        "project": "项目"
+      },
+      "audience": {
+        "personal": "个人",
+        "project": "项目"
+      },
+      "status": {
+        "open": "进行中",
+        "resolved": "已解决"
+      },
+      "resolve": "解决",
+      "reopen": "重新打开",
+      "unknownAuthor": "未知作者",
       "colors": {
         "yellow": "黄色高亮",
         "red": "红色高亮",

@@ -11,8 +11,14 @@ type UpdateAnnotationRequest =
 export const readerKeys = {
   all: ["reader"] as const,
   document: (documentId: string) => ["reader", "document", documentId] as const,
+  projects: (documentId: string) => ["reader", "projects", documentId] as const,
+  annotationLists: (documentId: string) =>
+    ["reader", "annotations", documentId] as const,
   annotations: (documentId: string, projectId?: string) =>
-    ["reader", "annotations", documentId, projectId ?? "personal"] as const,
+    [
+      ...readerKeys.annotationLists(documentId),
+      projectId ?? "personal",
+    ] as const,
 };
 
 export const readerQueries = {
@@ -32,7 +38,23 @@ export const readerQueries = {
         return status === "pending" || status === "processing" ? 1_500 : false;
       },
     }),
-  annotations: (documentId: string, projectId?: string) =>
+  projects: (documentId: string) =>
+    queryOptions({
+      queryKey: readerKeys.projects(documentId),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET(
+          "/api/v1/papers/{document_id}/projects",
+          { params: { path: { document_id: documentId } }, signal },
+        );
+        if (!data) throw new Error("Reader project response was empty");
+        return data;
+      },
+    }),
+  annotations: (
+    documentId: string,
+    projectId?: string,
+    pollWhenVisible = false,
+  ) =>
     queryOptions({
       queryKey: readerKeys.annotations(documentId, projectId),
       queryFn: async ({ signal }) => {
@@ -49,6 +71,14 @@ export const readerQueries = {
         if (!data) throw new Error("Reader annotation response was empty");
         return data;
       },
+      refetchInterval: () =>
+        pollWhenVisible &&
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible" &&
+        document.hasFocus()
+          ? 10_000
+          : false,
+      refetchOnWindowFocus: true,
     }),
 };
 

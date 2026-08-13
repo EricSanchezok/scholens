@@ -13,6 +13,7 @@ import {
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
 import type { ReaderSearchMatch } from "../reader-search";
+import type { ReaderAnnotationAudience } from "../reader-types";
 import {
   ReaderSelectionToolbar,
   type ReaderSelectionLabels,
@@ -198,6 +199,21 @@ export function selectReaderViewportPage(
   return best?.pageNumber;
 }
 
+export function groupReaderAnnotationsByAnchor(
+  annotations: ReaderAnnotation[],
+): ReaderAnnotation[][] {
+  return [
+    ...annotations
+      .reduce((groups, annotation) => {
+        const position = annotation.annotation_thread?.position;
+        const key = JSON.stringify(position ?? { id: annotation.id });
+        groups.set(key, [...(groups.get(key) ?? []), annotation]);
+        return groups;
+      }, new Map<string, ReaderAnnotation[]>())
+      .values(),
+  ];
+}
+
 function PdfPageSurface({
   adapter,
   annotationLinkLabel,
@@ -221,6 +237,7 @@ function PdfPageSurface({
   onCommentSelection,
   onHighlightSelection,
   onActiveTextSelectionChange,
+  projectContext,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -239,13 +256,15 @@ function PdfPageSurface({
   selectedAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
-  onAnnotationSelect?: (annotationId: string) => void;
+  onAnnotationSelect?: (annotationId: string, anchorIds: string[]) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
   onHighlightSelection?: (
     selection: ReaderSelection,
     color: ReaderHighlightColor,
+    audience: ReaderAnnotationAudience,
   ) => void;
+  projectContext?: boolean;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -430,6 +449,7 @@ function PdfPageSurface({
     const position = annotation.annotation_thread?.position;
     return position?.kind === "pdf_text" && position.page_number === pageNumber;
   });
+  const annotationGroups = groupReaderAnnotationsByAnchor(pageAnnotations);
 
   return (
     <article
@@ -457,24 +477,34 @@ function PdfPageSurface({
         ref={annotationLayerRef}
       />
       <div className="pointer-events-none absolute inset-0 z-10">
-        {pageAnnotations.flatMap((annotation) => {
-          const thread = annotation.annotation_thread;
+        {annotationGroups.flatMap((group) => {
+          const annotation = group[0];
+          const thread = annotation?.annotation_thread;
           const position = thread?.position;
-          if (!thread || position?.kind !== "pdf_text") return [];
+          if (!annotation || !thread || position?.kind !== "pdf_text")
+            return [];
+          const groupSelected = group.some(
+            (item) => item.id === selectedAnnotationId,
+          );
           return position.rects.map((rect, index) => (
             <button
-              aria-label={thread.quote_text}
+              aria-label={`${thread.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
               className={cn(
                 "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
                 keyboardFocusRing,
-                selectedAnnotationId === annotation.id && "opacity-60",
+                groupSelected && "opacity-60",
+                thread.status === "resolved" && "opacity-20 grayscale",
               )}
               data-reader-annotation-highlight={annotation.id}
-              data-reader-annotation-selected={
-                selectedAnnotationId === annotation.id ? "true" : undefined
+              data-reader-annotation-count={group.length}
+              data-reader-annotation-selected={groupSelected || undefined}
+              key={`${annotation.id}:${index}:${group.length}`}
+              onClick={() =>
+                onAnnotationSelect?.(
+                  annotation.id,
+                  group.map((item) => item.id),
+                )
               }
-              key={`${annotation.id}:${index}`}
-              onClick={() => onAnnotationSelect?.(annotation.id)}
               style={{
                 backgroundColor: readerHighlightColorValue(thread.color),
                 height: `${rect.height * 100}%`,
@@ -483,7 +513,13 @@ function PdfPageSurface({
                 width: `${rect.width * 100}%`,
               }}
               type="button"
-            />
+            >
+              {index === 0 && group.length > 1 ? (
+                <span className="bg-foreground text-canvas absolute -top-2 -right-2 grid min-h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold">
+                  {group.length}
+                </span>
+              ) : null}
+            </button>
           ));
         })}
       </div>
@@ -505,9 +541,10 @@ function PdfPageSurface({
               onAsk={() => onAskSelection?.(activeTextSelection)}
               onComment={() => onCommentSelection?.(activeTextSelection)}
               onCopySettled={() => onActiveTextSelectionChange?.(undefined)}
-              onHighlight={(color) =>
-                onHighlightSelection?.(activeTextSelection, color)
+              onHighlight={(color, audience) =>
+                onHighlightSelection?.(activeTextSelection, color, audience)
               }
+              projectContext={projectContext}
               selection={activeTextSelection}
             />
           </div>
@@ -539,6 +576,7 @@ export function PdfPage({
   onCommentSelection,
   onHighlightSelection,
   onActiveTextSelectionChange,
+  projectContext,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -557,13 +595,15 @@ export function PdfPage({
   selectedAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
-  onAnnotationSelect?: (annotationId: string) => void;
+  onAnnotationSelect?: (annotationId: string, anchorIds: string[]) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
   onHighlightSelection?: (
     selection: ReaderSelection,
     color: ReaderHighlightColor,
+    audience: ReaderAnnotationAudience,
   ) => void;
+  projectContext?: boolean;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -683,6 +723,7 @@ export function PdfPage({
               onHighlightSelection={onHighlightSelection}
               onInternalDestination={onInternalDestination}
               pageNumber={number}
+              projectContext={projectContext}
               searchMatches={searchMatches.filter(
                 (match) => match.pageNumber === number,
               )}

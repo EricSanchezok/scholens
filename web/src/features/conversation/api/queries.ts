@@ -12,6 +12,7 @@ export const conversationQueries = {
           params: {
             query: {
               archived: false,
+              context_document_id: filters.contextDocumentId,
               limit: 50,
               scope_type: filters.scopeType,
               scope_id: filters.scopeId,

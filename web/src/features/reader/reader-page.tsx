@@ -69,6 +69,9 @@ import {
 } from "./reader-routing";
 import type {
   ReaderAnnotation,
+  ReaderAnnotationAudience,
+  ReaderAnnotationAudienceFilter,
+  ReaderAnnotationStatus,
   ReaderContextPanel as ReaderContextPanelName,
   ReaderNavigationMode,
 } from "./reader-types";
@@ -83,6 +86,9 @@ function ReaderDocumentWorkspace({
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const locationParamsRef = React.useRef(
+    new URLSearchParams(searchParams.toString()),
+  );
   const t = useTranslations("Reader");
   const toast = useToast();
   const { signOut } = useAuthSession();
@@ -118,15 +124,42 @@ function ReaderDocumentWorkspace({
     React.useState<ReaderSelection>();
   const [selectedAnnotationId, setSelectedAnnotationId] =
     React.useState<string>();
+  const [selectedAnchorIds, setSelectedAnchorIds] = React.useState<string[]>(
+    [],
+  );
+  const [annotationAudienceFilter, setAnnotationAudienceFilter] =
+    React.useState<ReaderAnnotationAudienceFilter>("all");
+  const [annotationStatusFilter, setAnnotationStatusFilter] =
+    React.useState<ReaderAnnotationStatus>("open");
   const lastContextPanelRef = React.useRef<"ask" | "annotations" | "details">(
     "ask",
   );
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const documentQuery = useQuery(readerQueries.document(documentId));
-  const annotationsQuery = useQuery(readerQueries.annotations(documentId));
+  const projectsQuery = useQuery(readerQueries.projects(documentId));
+
+  const projectId = searchParams.get("project") ?? undefined;
+  const activeProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId,
+  );
+  const annotationsQuery = useQuery(
+    readerQueries.annotations(
+      documentId,
+      projectId,
+      readReaderPanel(searchParams.get("panel")) === "annotations",
+    ),
+  );
   const conversationsQuery = useQuery(
-    conversationQueries.list({ scopeId: documentId, scopeType: "paper" }),
+    conversationQueries.list(
+      projectId
+        ? {
+            contextDocumentId: documentId,
+            scopeId: projectId,
+            scopeType: "project",
+          }
+        : { scopeId: documentId, scopeType: "paper" },
+    ),
   );
 
   const rawPage = parsePositiveInteger(searchParams.get("page"));
@@ -136,31 +169,58 @@ function ReaderDocumentWorkspace({
   const selectedAnnotation = annotationsQuery.data?.items.find(
     (item) => item.id === selectedAnnotationId,
   );
+  const filteredAnnotations = React.useMemo(() => {
+    const items = (annotationsQuery.data?.items ?? []).filter((item) => {
+      const thread = item.annotation_thread;
+      if (!thread || thread.status !== annotationStatusFilter) return false;
+      if (annotationAudienceFilter === "mine") {
+        return item.audience.kind === "personal";
+      }
+      if (annotationAudienceFilter === "project") {
+        return item.audience.kind === "project";
+      }
+      return true;
+    });
+    return [...items].sort((left, right) => {
+      const leftFocused = selectedAnchorIds.includes(left.id);
+      const rightFocused = selectedAnchorIds.includes(right.id);
+      return Number(rightFocused) - Number(leftFocused);
+    });
+  }, [
+    annotationAudienceFilter,
+    annotationStatusFilter,
+    annotationsQuery.data?.items,
+    selectedAnchorIds,
+  ]);
   const updateLocation = React.useCallback(
     (patch: {
       page?: number;
       panel?: ReaderContextPanelName | null;
       conversation?: string | null;
+      project?: string | null;
     }) => {
-      const next = new URLSearchParams(searchParams.toString());
+      const next = new URLSearchParams(locationParamsRef.current?.toString());
       if (patch.page !== undefined) next.set("page", String(patch.page));
       if (patch.panel === null) next.delete("panel");
       else if (patch.panel) next.set("panel", patch.panel);
       if (patch.conversation === null) next.delete("conversation");
       else if (patch.conversation) next.set("conversation", patch.conversation);
+      if (patch.project === null) next.delete("project");
+      else if (patch.project) next.set("project", patch.project);
       const query = next.toString();
+      locationParamsRef.current = next;
       router.replace(
         `/reader/${documentId}${query ? `?${query}` : ""}` as Route,
         { scroll: false },
       );
     },
-    [documentId, router, searchParams],
+    [documentId, router],
   );
   const conversationSession = useConversationSession({
     context: {
       kind: "selection",
       document_ids: [documentId],
-      project_ids: [],
+      project_ids: projectId ? [projectId] : [],
     },
     conversationId,
     getTurnContexts: () => {
@@ -179,8 +239,8 @@ function ReaderDocumentWorkspace({
       setSelectedAnnotationId(undefined);
     },
     reasoningLevel,
-    scopeId: documentId,
-    scopeType: "paper",
+    scopeId: projectId ?? documentId,
+    scopeType: projectId ? "project" : "paper",
   });
   const adapter =
     adapterState?.documentId === documentId ? adapterState.adapter : undefined;
@@ -191,7 +251,7 @@ function ReaderDocumentWorkspace({
 
   async function refreshAnnotations() {
     await queryClient.invalidateQueries({
-      queryKey: readerKeys.annotations(documentId),
+      queryKey: readerKeys.annotationLists(documentId),
     });
   }
 
@@ -199,7 +259,7 @@ function ReaderDocumentWorkspace({
     queryClient.setQueryData<{
       items: ReaderAnnotation[];
       next_cursor?: string | null;
-    }>(readerKeys.annotations(documentId), (current) => ({
+    }>(readerKeys.annotations(documentId, projectId), (current) => ({
       items: [
         item,
         ...(current?.items ?? []).filter(({ id }) => id !== item.id),
@@ -212,16 +272,21 @@ function ReaderDocumentWorkspace({
     targetSelection: ReaderSelection | undefined,
     color: ReaderHighlightColor = "yellow",
     comment?: string,
+    audience: ReaderAnnotationAudience = "personal",
   ) {
     if (!targetSelection) return;
     const item = await createReaderAnnotationThread(documentId, {
-      audience: { kind: "personal" },
+      audience:
+        audience === "project" && projectId
+          ? { kind: "project", project_id: projectId }
+          : { kind: "personal" },
       color,
       initial_comment: comment?.trim() || undefined,
       position: targetSelection.anchor,
       quote_text: targetSelection.selected_text,
     });
     cacheAnnotation(item);
+    await refreshAnnotations();
     setSelectedAnnotationId(item.id);
     setActiveTextSelection(undefined);
     setAnnotationSelection(undefined);
@@ -247,8 +312,53 @@ function ReaderDocumentWorkspace({
     });
   }
 
-  async function openAnnotation(annotationId: string) {
+  React.useEffect(() => {
+    if (projectsQuery.isPending || !projectId || activeProject) return;
+    updateLocation({ conversation: null, project: null });
+    toast.notify({
+      description: t("projects.unavailableDescription"),
+      title: t("projects.unavailableTitle"),
+    });
+  }, [
+    activeProject,
+    projectId,
+    projectsQuery.isPending,
+    t,
+    toast,
+    updateLocation,
+  ]);
+
+  React.useEffect(() => {
+    if (
+      !conversationId ||
+      conversationsQuery.isPending ||
+      !conversationsQuery.data
+    )
+      return;
+    if (
+      conversationsQuery.data?.items.some(
+        (conversation) => conversation.id === conversationId,
+      )
+    ) {
+      return;
+    }
+    updateLocation({ conversation: null });
+    toast.notify({ title: t("conversations.contextChanged") });
+  }, [
+    conversationId,
+    conversationsQuery.data,
+    conversationsQuery.isPending,
+    t,
+    toast,
+    updateLocation,
+  ]);
+
+  async function openAnnotation(
+    annotationId: string,
+    anchorIds = [annotationId],
+  ) {
     setSelectedAnnotationId(annotationId);
+    setSelectedAnchorIds(anchorIds);
     const annotation = annotationsQuery.data?.items.find(
       (item) => item.id === annotationId,
     );
@@ -355,6 +465,8 @@ function ReaderDocumentWorkspace({
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
       previousSearchResult: t("search.previous"),
+      projectContext: t("projects.selector"),
+      personalContext: t("projects.personal"),
       returnLibrary: t("returnLibrary"),
       search: t("toolbar.search"),
       showOutline: t("toolbar.showOutline"),
@@ -396,6 +508,84 @@ function ReaderDocumentWorkspace({
     }
   }, [panel]);
 
+  const contextPanelProps: React.ComponentProps<typeof ReaderContextPanel> = {
+    annotationSelection,
+    annotationAudienceFilter,
+    annotations: filteredAnnotations,
+    annotationsError: annotationsQuery.isError,
+    annotationStatusFilter,
+    conversationId: conversationSession.activeConversationId,
+    conversationSession,
+    conversations: conversationsQuery.data?.items ?? [],
+    conversationsLoading: conversationsQuery.isPending,
+    document,
+    onActionError: notifyActionError,
+    onAnnotationAudienceFilterChange: setAnnotationAudienceFilter,
+    onAnnotationDelete: async (id) => {
+      await deleteReaderAnnotationThread(id);
+      setSelectedAnnotationId(undefined);
+      await refreshAnnotations();
+    },
+    onAnnotationSelect: (id) => void openAnnotation(id),
+    onAnnotationStatusChange: async (id, status) => {
+      cacheAnnotation(await updateReaderAnnotationThread(id, { status }));
+      if (status !== annotationStatusFilter) setSelectedAnnotationId(undefined);
+      await refreshAnnotations();
+    },
+    onAnnotationStatusFilterChange: setAnnotationStatusFilter,
+    onClose: () => updateLocation({ panel: null }),
+    onCommentCreate: async (id, content) => {
+      await createReaderComment(id, content);
+      await refreshAnnotations();
+    },
+    onCommentDelete: async (id) => {
+      await deleteReaderComment(id);
+      await refreshAnnotations();
+    },
+    onCommentUpdate: async (id, content) => {
+      await updateReaderComment(id, content);
+      await refreshAnnotations();
+    },
+    onConversationChange: (id) =>
+      updateLocation({ conversation: id, panel: "ask" }),
+    onConversationNew: () =>
+      updateLocation({ conversation: null, panel: "ask" }),
+    onConversationPin: async (id, pinned) => {
+      await setReaderConversationPinned(id, pinned);
+      await queryClient.invalidateQueries({
+        queryKey: conversationKeys.lists(),
+      });
+    },
+    onHighlightCreate: (comment, color, audience) =>
+      createHighlight(annotationSelection, color, comment, audience),
+    onHighlightUpdate: async (id, color) => {
+      cacheAnnotation(await updateReaderAnnotationThread(id, { color }));
+      await refreshAnnotations();
+    },
+    onPanelChange: (nextPanel) => updateLocation({ panel: nextPanel }),
+    onSourceOpen: (source) => {
+      const sourcePage = readSourcePage(source.locator);
+      if (source.document_id === documentId) {
+        updateLocation({ page: sourcePage, panel: "ask" });
+      } else {
+        router.push(
+          `/reader/${source.document_id}${sourcePage ? `?page=${sourcePage}` : ""}` as Route,
+        );
+      }
+    },
+    onTurnContextClear: () => {
+      setPendingTurnContext(undefined);
+      setSelectedAnnotationId(undefined);
+    },
+    panel: panel ?? "ask",
+    pendingTurnContext,
+    projectContext: activeProject,
+    reasoningLevel,
+    selectedAnnotation,
+    setReasoningLevel,
+    title,
+  };
+
   return (
     <WorkspaceShell
       activeConversationId={conversationId}
@@ -404,7 +594,7 @@ function ReaderDocumentWorkspace({
       collapsed={collapsed}
       conversations={conversationsQuery.data?.items ?? []}
       conversationHref={(id) =>
-        `/reader/${documentId}?panel=ask&conversation=${id}`
+        `/reader/${documentId}?panel=ask&conversation=${id}${projectId ? `&project=${projectId}` : ""}`
       }
       mobileHeaderCenter={
         <span className="block truncate text-sm font-medium">{title}</span>
@@ -517,6 +707,20 @@ function ReaderDocumentWorkspace({
                 pageCount={pageCount}
                 pageNumber={pageNumber}
                 panelOpen={desktopPanelOpen}
+                projectContext={{
+                  onChange: (nextProjectId) => {
+                    setSelectedAnnotationId(undefined);
+                    setActiveTextSelection(undefined);
+                    setAnnotationAudienceFilter("all");
+                    setAnnotationStatusFilter("open");
+                    updateLocation({
+                      conversation: null,
+                      project: nextProjectId ?? null,
+                    });
+                  },
+                  options: projectsQuery.data?.items ?? [],
+                  projectId,
+                }}
                 search={
                   searchOpen
                     ? {
@@ -576,12 +780,14 @@ function ReaderDocumentWorkspace({
                   activeTextSelection={activeTextSelection}
                   adapter={adapter}
                   annotationLinkLabel={t("pdfLink")}
-                  annotations={annotationsQuery.data?.items ?? []}
+                  annotations={filteredAnnotations}
                   canvasLabel={t("documentCanvas")}
                   fitMode={fitMode}
                   loadingLabel={t("renderingPage")}
                   onActiveTextSelectionChange={handleActiveTextSelectionChange}
-                  onAnnotationSelect={(id) => void openAnnotation(id)}
+                  onAnnotationSelect={(id, anchorIds) =>
+                    void openAnnotation(id, anchorIds)
+                  }
                   onAskSelection={(selection) => {
                     setPendingTurnContext({
                       ...selection,
@@ -601,10 +807,12 @@ function ReaderDocumentWorkspace({
                     window.getSelection()?.removeAllRanges();
                     updateLocation({ panel: "annotations" });
                   }}
-                  onHighlightSelection={(selection, color) => {
+                  onHighlightSelection={(selection, color, audience) => {
                     void createHighlight(
                       { ...selection, document_id: documentId },
                       color,
+                      undefined,
+                      audience,
                     ).catch(notifyActionError);
                   }}
                   onInternalDestination={(destination) =>
@@ -620,6 +828,7 @@ function ReaderDocumentWorkspace({
                   activeSearchMatch={searchResults[searchIndex]}
                   searchQuery={searchQuery}
                   selectedAnnotationId={selectedAnnotationId}
+                  projectContext={Boolean(activeProject)}
                   selectionLabels={{
                     ask: t("selection.ask"),
                     colors: {
@@ -638,86 +847,15 @@ function ReaderDocumentWorkspace({
                     copying: t("selection.copying"),
                     copyFailed: t("selection.copyFailed"),
                     highlight: t("selection.highlight"),
+                    personal: t("annotations.audience.personal"),
+                    project: t("annotations.audience.project"),
                   }}
                   zoom={zoom}
                 />
               </div>
             </section>
             {useDesktopPanel && desktopPanelOpen && (
-              <ReaderContextPanel
-                annotationSelection={annotationSelection}
-                annotations={annotationsQuery.data?.items ?? []}
-                annotationsError={annotationsQuery.isError}
-                className="flex"
-                conversationId={conversationSession.activeConversationId}
-                conversationSession={conversationSession}
-                conversations={conversationsQuery.data?.items ?? []}
-                conversationsLoading={conversationsQuery.isPending}
-                document={document}
-                onActionError={notifyActionError}
-                onAnnotationDelete={async (id) => {
-                  await deleteReaderAnnotationThread(id);
-                  setSelectedAnnotationId(undefined);
-                  await refreshAnnotations();
-                }}
-                onAnnotationSelect={(id) => void openAnnotation(id)}
-                onClose={() => updateLocation({ panel: null })}
-                onCommentCreate={async (id, content) => {
-                  await createReaderComment(id, content);
-                  await refreshAnnotations();
-                }}
-                onCommentDelete={async (id) => {
-                  await deleteReaderComment(id);
-                  await refreshAnnotations();
-                }}
-                onCommentUpdate={async (id, content) => {
-                  await updateReaderComment(id, content);
-                  await refreshAnnotations();
-                }}
-                onConversationChange={(id) =>
-                  updateLocation({ conversation: id, panel: "ask" })
-                }
-                onConversationNew={() =>
-                  updateLocation({ conversation: null, panel: "ask" })
-                }
-                onConversationPin={async (id, pinned) => {
-                  await setReaderConversationPinned(id, pinned);
-                  await queryClient.invalidateQueries({
-                    queryKey: conversationKeys.lists(),
-                  });
-                }}
-                onHighlightCreate={(comment) =>
-                  createHighlight(annotationSelection, "yellow", comment)
-                }
-                onHighlightUpdate={async (id, color) => {
-                  cacheAnnotation(
-                    await updateReaderAnnotationThread(id, { color }),
-                  );
-                }}
-                onPanelChange={(nextPanel) =>
-                  updateLocation({ panel: nextPanel })
-                }
-                onSourceOpen={(source) => {
-                  const page = readSourcePage(source.locator);
-                  if (source.document_id === documentId) {
-                    updateLocation({ page, panel: "ask" });
-                  } else {
-                    router.push(
-                      `/reader/${source.document_id}${page ? `?page=${page}` : ""}` as Route,
-                    );
-                  }
-                }}
-                onTurnContextClear={() => {
-                  setPendingTurnContext(undefined);
-                  setSelectedAnnotationId(undefined);
-                }}
-                panel={panel ?? "ask"}
-                pendingTurnContext={pendingTurnContext}
-                reasoningLevel={reasoningLevel}
-                selectedAnnotation={selectedAnnotation}
-                setReasoningLevel={setReasoningLevel}
-                title={title}
-              />
+              <ReaderContextPanel {...contextPanelProps} className="flex" />
             )}
           </div>
         )}
@@ -769,77 +907,7 @@ function ReaderDocumentWorkspace({
           showCloseButton={false}
         >
           <SheetTitle className="sr-only">{t("contextPanel")}</SheetTitle>
-          <ReaderContextPanel
-            annotationSelection={annotationSelection}
-            annotations={annotationsQuery.data?.items ?? []}
-            annotationsError={annotationsQuery.isError}
-            conversationId={conversationSession.activeConversationId}
-            conversationSession={conversationSession}
-            conversations={conversationsQuery.data?.items ?? []}
-            conversationsLoading={conversationsQuery.isPending}
-            document={document}
-            onActionError={notifyActionError}
-            onAnnotationDelete={async (id) => {
-              await deleteReaderAnnotationThread(id);
-              setSelectedAnnotationId(undefined);
-              await refreshAnnotations();
-            }}
-            onAnnotationSelect={(id) => void openAnnotation(id)}
-            onCommentCreate={async (id, content) => {
-              await createReaderComment(id, content);
-              await refreshAnnotations();
-            }}
-            onCommentDelete={async (id) => {
-              await deleteReaderComment(id);
-              await refreshAnnotations();
-            }}
-            onCommentUpdate={async (id, content) => {
-              await updateReaderComment(id, content);
-              await refreshAnnotations();
-            }}
-            onClose={() => updateLocation({ panel: null })}
-            onConversationChange={(id) =>
-              updateLocation({ conversation: id, panel: "ask" })
-            }
-            onConversationNew={() =>
-              updateLocation({ conversation: null, panel: "ask" })
-            }
-            onConversationPin={async (id, pinned) => {
-              await setReaderConversationPinned(id, pinned);
-              await queryClient.invalidateQueries({
-                queryKey: conversationKeys.lists(),
-              });
-            }}
-            onHighlightCreate={(comment) =>
-              createHighlight(annotationSelection, "yellow", comment)
-            }
-            onHighlightUpdate={async (id, color) => {
-              cacheAnnotation(
-                await updateReaderAnnotationThread(id, { color }),
-              );
-            }}
-            onPanelChange={(nextPanel) => updateLocation({ panel: nextPanel })}
-            onSourceOpen={(source) => {
-              const page = readSourcePage(source.locator);
-              if (source.document_id === documentId) {
-                updateLocation({ page, panel: "ask" });
-              } else {
-                router.push(
-                  `/reader/${source.document_id}${page ? `?page=${page}` : ""}` as Route,
-                );
-              }
-            }}
-            onTurnContextClear={() => {
-              setPendingTurnContext(undefined);
-              setSelectedAnnotationId(undefined);
-            }}
-            panel={panel ?? "ask"}
-            pendingTurnContext={pendingTurnContext}
-            reasoningLevel={reasoningLevel}
-            selectedAnnotation={selectedAnnotation}
-            setReasoningLevel={setReasoningLevel}
-            title={title}
-          />
+          <ReaderContextPanel {...contextPanelProps} />
         </SheetContent>
       </Sheet>
     </WorkspaceShell>

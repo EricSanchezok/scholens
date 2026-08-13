@@ -23,6 +23,11 @@ import {
   DropdownMenuTrigger,
   IconButton,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
@@ -47,6 +52,8 @@ export type ReaderToolbarLabels = {
   download: string;
   openPanel: string;
   returnLibrary: string;
+  projectContext: string;
+  personalContext: string;
 };
 
 export function ReaderToolbar({
@@ -65,6 +72,7 @@ export function ReaderToolbar({
   pageCount,
   pageNumber,
   panelOpen,
+  projectContext,
   navigationMode,
   title,
   search,
@@ -85,6 +93,11 @@ export function ReaderToolbar({
   pageCount: number;
   pageNumber: number;
   panelOpen: boolean;
+  projectContext?: {
+    onChange: (projectId: string | undefined) => void;
+    options: Array<{ id: string; title: string }>;
+    projectId?: string;
+  };
   navigationMode: "outline" | "thumbnails";
   search?: {
     currentIndex: number;
@@ -121,7 +134,58 @@ export function ReaderToolbar({
               <p className="text-muted truncate text-xs">{metadata}</p>
             ) : null}
           </div>
+          {projectContext && projectContext.options.length > 0 ? (
+            <Select
+              onValueChange={(value) =>
+                projectContext.onChange(
+                  value === "personal" ? undefined : value,
+                )
+              }
+              value={projectContext.projectId ?? "personal"}
+            >
+              <SelectTrigger
+                aria-label={labels.projectContext}
+                className="ml-2 h-9 min-h-9 w-40"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="personal">
+                  {labels.personalContext}
+                </SelectItem>
+                {projectContext.options.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
         </div>
+      ) : null}
+
+      {!search && projectContext && projectContext.options.length > 0 ? (
+        <Select
+          onValueChange={(value) =>
+            projectContext.onChange(value === "personal" ? undefined : value)
+          }
+          value={projectContext.projectId ?? "personal"}
+        >
+          <SelectTrigger
+            aria-label={labels.projectContext}
+            className="h-9 min-h-9 min-w-0 flex-1 lg:hidden"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="personal">{labels.personalContext}</SelectItem>
+            {projectContext.options.map((project) => (
+              <SelectItem key={project.id} value={project.id}>
+                {project.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       ) : null}
 
       {search ? (

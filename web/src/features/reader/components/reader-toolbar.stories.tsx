@@ -17,6 +17,8 @@ const labels = {
   previousPage: "Previous page",
   previousSearchResult: "Previous match",
   returnLibrary: "Return to library",
+  projectContext: "Reader context",
+  personalContext: "Personal reading",
   search: "Search PDF",
   showOutline: "Show document outline",
   showPages: "Show page thumbnails",
@@ -74,6 +76,19 @@ export const ContextPanelOpen: Story = {
 
 export const OutlineVisible: Story = {
   args: { navigationMode: "outline" },
+};
+
+export const ProjectContext: Story = {
+  args: {
+    projectContext: {
+      onChange: fn(),
+      options: [
+        { id: "project-1", title: "Agentic Web review" },
+        { id: "project-2", title: "Dissertation methods" },
+      ],
+      projectId: "project-1",
+    },
+  },
 };
 
 export const FirstPage: Story = {

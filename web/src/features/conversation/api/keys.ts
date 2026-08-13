@@ -1,6 +1,7 @@
 export type ConversationListFilters = {
   scopeType?: "global" | "project" | "paper";
   scopeId?: string;
+  contextDocumentId?: string;
 };
 
 export const conversationKeys = {

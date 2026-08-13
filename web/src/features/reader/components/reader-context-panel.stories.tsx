@@ -66,6 +66,58 @@ const annotation: ReaderAnnotation = {
   },
 };
 
+const projectAnnotation: ReaderAnnotation = {
+  ...annotation,
+  id: "20000000-0000-4000-8000-000000000002",
+  audience: {
+    kind: "project",
+    project_id: "50000000-0000-4000-8000-000000000001",
+  },
+  created_by: { id: 2, display_name: "Mina" },
+  annotation_thread: {
+    ...annotation.annotation_thread!,
+    color: "blue",
+    capabilities: {
+      delete: false,
+      recolor: false,
+      reopen: false,
+      reply: true,
+      resolve: true,
+    },
+    comments: [
+      ...annotation.annotation_thread!.comments,
+      {
+        id: "30000000-0000-4000-8000-000000000002",
+        thread_id: "20000000-0000-4000-8000-000000000002",
+        content: "I found a contrasting result in section seven.",
+        role: "user",
+        created_at: "2026-08-12T10:04:00Z",
+        updated_at: "2026-08-12T10:04:00Z",
+        created_by: { id: 2, display_name: "Mina" },
+        can_edit: false,
+        can_delete: false,
+      },
+    ],
+  },
+};
+
+const resolvedAnnotation: ReaderAnnotation = {
+  ...projectAnnotation,
+  id: "20000000-0000-4000-8000-000000000003",
+  annotation_thread: {
+    ...projectAnnotation.annotation_thread!,
+    status: "resolved",
+    resolved_at: "2026-08-12T11:00:00Z",
+    resolved_by: { id: 1, display_name: "Eric" },
+    capabilities: {
+      ...projectAnnotation.annotation_thread!.capabilities,
+      reply: false,
+      resolve: false,
+      reopen: true,
+    },
+  },
+};
+
 const document: ReaderDocument = {
   document_id: selection.document_id,
   title: "Retrieval-Augmented Generation: Foundations and Open Questions",
@@ -140,6 +192,7 @@ const conversations: ReaderConversation[] = [
 ];
 
 const annotationArgs = {
+  audienceFilter: "all" as const,
   annotations: [annotation],
   error: false,
   onActionError: fn(),
@@ -148,8 +201,12 @@ const annotationArgs = {
   onCommentUpdate: fn(async () => undefined),
   onCreate: fn(async () => undefined),
   onDelete: fn(async () => undefined),
+  onAudienceFilterChange: fn(),
   onSelect: fn(),
+  onStatusChange: fn(async () => undefined),
+  onStatusFilterChange: fn(),
   onUpdateColor: fn(async () => undefined),
+  statusFilter: "open" as const,
 };
 
 const meta = {
@@ -181,6 +238,78 @@ export const AnnotationThread: Story = {
 export const AnnotationPaletteDark: Story = {
   args: { selectedAnnotation: annotation },
   globals: { appearance: "dark" },
+};
+
+export const ProjectDiscussionTwoAuthors: Story = {
+  args: {
+    annotations: [projectAnnotation],
+    projectContext: {
+      id: "50000000-0000-4000-8000-000000000001",
+      title: "Agentic Web review",
+    },
+    selectedAnnotation: projectAnnotation,
+  },
+};
+
+export const ProjectDiscussionChinese: Story = {
+  ...ProjectDiscussionTwoAuthors,
+  globals: { locale: "zh-CN" },
+};
+
+export const ProjectDiscussionLongContent: Story = {
+  args: {
+    ...ProjectDiscussionTwoAuthors.args,
+    annotations: [
+      {
+        ...projectAnnotation,
+        annotation_thread: {
+          ...projectAnnotation.annotation_thread!,
+          quote_text:
+            `${projectAnnotation.annotation_thread!.quote_text} ` +
+            "The authors then connect this retrieval constraint to evaluation design, deployment cost, and the limits of generalizing from a single benchmark across domains.",
+          comments: projectAnnotation.annotation_thread!.comments.map(
+            (comment, index) => ({
+              ...comment,
+              content:
+                index === 0
+                  ? `${comment.content} Please also trace the evidence through the ablation table and record whether the claimed improvement remains significant across every reported dataset.`
+                  : comment.content,
+            }),
+          ),
+        },
+      },
+    ],
+  },
+};
+
+export const ResolvedProjectDiscussion: Story = {
+  args: {
+    annotations: [resolvedAnnotation],
+    projectContext: {
+      id: "50000000-0000-4000-8000-000000000001",
+      title: "Agentic Web review",
+    },
+    selectedAnnotation: resolvedAnnotation,
+    statusFilter: "resolved",
+  },
+};
+
+export const CommentlessPersonalHighlight: Story = {
+  args: {
+    annotations: [
+      {
+        ...annotation,
+        annotation_thread: {
+          ...annotation.annotation_thread!,
+          comments: [],
+          capabilities: {
+            ...annotation.annotation_thread!.capabilities,
+            resolve: false,
+          },
+        },
+      },
+    ],
+  },
 };
 
 export const SelectionReady: Story = {

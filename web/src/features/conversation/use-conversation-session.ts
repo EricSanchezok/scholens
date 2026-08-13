@@ -93,6 +93,8 @@ export function useConversationSession({
   const streamSession = React.useRef<StreamSession | null>(null);
   const submissionInFlight = React.useRef(false);
   const composerForm = useResearchComposerForm();
+  const scopeIdentity = `${scopeType}:${scopeId ?? ""}`;
+  const previousScopeIdentityRef = React.useRef(scopeIdentity);
   const activeConversationId = conversationId ?? createdConversationId;
 
   const conversationQuery = useQuery({
@@ -111,6 +113,18 @@ export function useConversationSession({
   React.useEffect(() => {
     if (conversationId) setCreatedConversationId(undefined);
   }, [conversationId]);
+
+  React.useEffect(() => {
+    if (previousScopeIdentityRef.current === scopeIdentity) return;
+    previousScopeIdentityRef.current = scopeIdentity;
+    setCreatedConversationId(undefined);
+    const session = streamSession.current;
+    if (session) {
+      session.superseded = true;
+      streamSession.current = null;
+      session.controller.abort();
+    }
+  }, [scopeIdentity]);
 
   React.useEffect(
     () => () => {

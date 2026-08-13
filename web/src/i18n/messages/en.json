@@ -510,7 +510,14 @@
       "unpin": "Unpin conversation",
       "pinned": "Pinned",
       "recent": "Recent",
-      "switcher": "Conversation history"
+      "switcher": "Conversation history",
+      "contextChanged": "Started a new private conversation for this context"
+    },
+    "projects": {
+      "selector": "Reader context",
+      "personal": "Personal reading",
+      "unavailableTitle": "Switched to personal reading",
+      "unavailableDescription": "You no longer have access to that project, so Reader returned to your personal context."
     },
     "annotations": {
       "error": "Annotations could not be loaded.",
@@ -527,6 +534,22 @@
       "replyPlaceholder": "Reply to this annotation",
       "add": "Add",
       "context": "Selected annotation",
+      "filters": {
+        "all": "All",
+        "mine": "Mine",
+        "project": "Project"
+      },
+      "audience": {
+        "personal": "Personal",
+        "project": "Project"
+      },
+      "status": {
+        "open": "Open",
+        "resolved": "Resolved"
+      },
+      "resolve": "Resolve",
+      "reopen": "Reopen",
+      "unknownAuthor": "Unknown author",
       "colors": {
         "yellow": "Yellow highlight",
         "red": "Red highlight",

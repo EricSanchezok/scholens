@@ -48,6 +48,8 @@ const meta = {
       copying: "Copying",
       copyFailed: "Copy failed",
       highlight: "Highlight selection",
+      personal: "Personal",
+      project: "Project",
       colors: {
         yellow: "Yellow highlight",
         red: "Red highlight",
@@ -137,4 +139,21 @@ export const HighlightPalette: Story = {
 export const HighlightPaletteDark: Story = {
   globals: { appearance: "dark" },
   play: HighlightPalette.play,
+};
+
+export const ProjectAudience: Story = {
+  args: { projectContext: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Highlight selection" }),
+    );
+    const personal = canvas.getByRole("button", { name: "Personal" });
+    const project = canvas.getByRole("button", { name: "Project" });
+    await expect(personal).toHaveAttribute("aria-pressed", "true");
+    await expect(project).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(project);
+    await expect(personal).toHaveAttribute("aria-pressed", "false");
+    await expect(project).toHaveAttribute("aria-pressed", "true");
+  },
 };

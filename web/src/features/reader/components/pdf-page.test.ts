@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  groupReaderAnnotationsByAnchor,
   normalizeReaderSelectionRects,
   selectReaderViewportPage,
 } from "./pdf-page";
+import type { ReaderAnnotation } from "../reader-types";
 
 describe("normalizeReaderSelectionRects", () => {
   it("normalizes browser rectangles against the rendered PDF page", () => {
@@ -82,5 +84,34 @@ describe("selectReaderViewportPage", () => {
         { pageNumber: 2, top: 400, bottom: 900 },
       ]),
     ).toBe(2);
+  });
+});
+
+describe("groupReaderAnnotationsByAnchor", () => {
+  it("groups an exact shared anchor so the PDF paints it once", () => {
+    const position = {
+      kind: "pdf_text" as const,
+      page_number: 3,
+      rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }],
+    };
+    const annotations = [
+      { id: "personal", annotation_thread: { position } },
+      { id: "project", annotation_thread: { position } },
+      {
+        id: "different",
+        annotation_thread: {
+          position: {
+            ...position,
+            rects: [{ ...position.rects[0]!, y: 0.3 }],
+          },
+        },
+      },
+    ] as ReaderAnnotation[];
+
+    expect(
+      groupReaderAnnotationsByAnchor(annotations).map((group) =>
+        group.map((annotation) => annotation.id),
+      ),
+    ).toEqual([["personal", "project"], ["different"]]);
   });
 });
