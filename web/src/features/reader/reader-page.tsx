@@ -17,6 +17,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
+import { ApiError } from "@/lib/api";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
   conversationKeys,
@@ -68,9 +69,9 @@ import {
   readSourcePage,
 } from "./reader-routing";
 import type {
-  ReaderAnnotation,
   ReaderAnnotationAudience,
   ReaderAnnotationAudienceFilter,
+  ReaderAnnotationMode,
   ReaderAnnotationStatus,
   ReaderContextPanel as ReaderContextPanelName,
   ReaderNavigationMode,
@@ -131,6 +132,8 @@ function ReaderDocumentWorkspace({
     React.useState<ReaderAnnotationAudienceFilter>("all");
   const [annotationStatusFilter, setAnnotationStatusFilter] =
     React.useState<ReaderAnnotationStatus>("open");
+  const [annotationModeFilter, setAnnotationModeFilter] =
+    React.useState<ReaderAnnotationMode>("all");
   const lastContextPanelRef = React.useRef<"ask" | "annotations" | "details">(
     "ask",
   );
@@ -146,10 +149,22 @@ function ReaderDocumentWorkspace({
   const annotationsQuery = useQuery(
     readerQueries.annotations(
       documentId,
-      projectId,
+      {
+        audience:
+          annotationAudienceFilter === "all"
+            ? undefined
+            : annotationAudienceFilter,
+        mode: annotationModeFilter === "all" ? undefined : annotationModeFilter,
+        projectId,
+        status: annotationStatusFilter,
+      },
       readReaderPanel(searchParams.get("panel")) === "annotations",
     ),
   );
+  const selectedAnnotationQuery = useQuery({
+    ...readerQueries.annotation(selectedAnnotationId ?? ""),
+    enabled: Boolean(selectedAnnotationId),
+  });
   const conversationsQuery = useQuery(
     conversationQueries.list(
       projectId
@@ -166,32 +181,15 @@ function ReaderDocumentWorkspace({
   const pageNumber = Math.min(rawPage, pageCount);
   const panel = readReaderPanel(searchParams.get("panel"));
   const conversationId = searchParams.get("conversation") ?? undefined;
-  const selectedAnnotation = annotationsQuery.data?.items.find(
-    (item) => item.id === selectedAnnotationId,
-  );
+  const selectedAnnotation = selectedAnnotationQuery.data;
   const filteredAnnotations = React.useMemo(() => {
-    const items = (annotationsQuery.data?.items ?? []).filter((item) => {
-      const thread = item.annotation_thread;
-      if (!thread || thread.status !== annotationStatusFilter) return false;
-      if (annotationAudienceFilter === "mine") {
-        return item.audience.kind === "personal";
-      }
-      if (annotationAudienceFilter === "project") {
-        return item.audience.kind === "project";
-      }
-      return true;
-    });
+    const items = annotationsQuery.data?.items ?? [];
     return [...items].sort((left, right) => {
       const leftFocused = selectedAnchorIds.includes(left.id);
       const rightFocused = selectedAnchorIds.includes(right.id);
       return Number(rightFocused) - Number(leftFocused);
     });
-  }, [
-    annotationAudienceFilter,
-    annotationStatusFilter,
-    annotationsQuery.data?.items,
-    selectedAnchorIds,
-  ]);
+  }, [annotationsQuery.data?.items, selectedAnchorIds]);
   const updateLocation = React.useCallback(
     (patch: {
       page?: number;
@@ -250,22 +248,16 @@ function ReaderDocumentWorkspace({
       : undefined;
 
   async function refreshAnnotations() {
-    await queryClient.invalidateQueries({
-      queryKey: readerKeys.annotationLists(documentId),
-    });
-  }
-
-  function cacheAnnotation(item: ReaderAnnotation) {
-    queryClient.setQueryData<{
-      items: ReaderAnnotation[];
-      next_cursor?: string | null;
-    }>(readerKeys.annotations(documentId, projectId), (current) => ({
-      items: [
-        item,
-        ...(current?.items ?? []).filter(({ id }) => id !== item.id),
-      ],
-      next_cursor: current?.next_cursor ?? null,
-    }));
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: readerKeys.annotationLists(documentId),
+      }),
+      selectedAnnotationId
+        ? queryClient.invalidateQueries({
+            queryKey: readerKeys.annotation(selectedAnnotationId),
+          })
+        : Promise.resolve(),
+    ]);
   }
 
   async function createHighlight(
@@ -285,7 +277,6 @@ function ReaderDocumentWorkspace({
       position: targetSelection.anchor,
       quote_text: targetSelection.selected_text,
     });
-    cacheAnnotation(item);
     await refreshAnnotations();
     setSelectedAnnotationId(item.id);
     setActiveTextSelection(undefined);
@@ -313,12 +304,42 @@ function ReaderDocumentWorkspace({
     [updateLocation],
   );
 
-  function notifyActionError() {
-    toast.notify({
-      description: t("actions.failedDescription"),
-      title: t("actions.failedTitle"),
-    });
-  }
+  const notifyActionError = React.useCallback(
+    (error?: unknown) => {
+      const code = error instanceof ApiError ? error.code : undefined;
+      const feedback =
+        code === "annotation_thread_resolved"
+          ? {
+              description: t("actions.threadResolvedDescription"),
+              title: t("actions.threadResolvedTitle"),
+            }
+          : code === "annotation_thread_not_found"
+            ? {
+                description: t("actions.threadUnavailableDescription"),
+                title: t("actions.threadUnavailableTitle"),
+              }
+            : code === "annotation_thread_has_other_replies"
+              ? {
+                  description: t("actions.threadHasRepliesDescription"),
+                  title: t("actions.threadHasRepliesTitle"),
+                }
+              : code === "annotation_thread_resolution_denied" ||
+                  code === "annotation_thread_has_no_discussion"
+                ? {
+                    description: t("actions.permissionDeniedDescription"),
+                    title: t("actions.permissionDeniedTitle"),
+                  }
+                : {
+                    description: t("actions.failedDescription"),
+                    title: t("actions.failedTitle"),
+                  };
+      toast.notify({
+        description: feedback.description,
+        title: feedback.title,
+      });
+    },
+    [t, toast],
+  );
 
   React.useEffect(() => {
     if (projectsQuery.isPending || !projectId || activeProject) return;
@@ -370,7 +391,7 @@ function ReaderDocumentWorkspace({
     const annotation = annotationsQuery.data?.items.find(
       (item) => item.id === annotationId,
     );
-    const position = annotation?.annotation_thread?.position;
+    const position = annotation?.position;
     if (position?.page_number)
       updateLocation({ page: position.page_number, panel: "annotations" });
     else updateLocation({ panel: "annotations" });
@@ -519,8 +540,10 @@ function ReaderDocumentWorkspace({
   const contextPanelProps: React.ComponentProps<typeof ReaderContextPanel> = {
     annotationSelection,
     annotationAudienceFilter,
+    annotationModeFilter,
     annotations: filteredAnnotations,
-    annotationsError: annotationsQuery.isError,
+    annotationsError:
+      annotationsQuery.isError || selectedAnnotationQuery.isError,
     annotationStatusFilter,
     conversationId: conversationSession.activeConversationId,
     conversationSession,
@@ -528,7 +551,16 @@ function ReaderDocumentWorkspace({
     conversationsLoading: conversationsQuery.isPending,
     document,
     onActionError: notifyActionError,
-    onAnnotationAudienceFilterChange: setAnnotationAudienceFilter,
+    onAnnotationAudienceFilterChange: (filter) => {
+      setAnnotationAudienceFilter(filter);
+      setSelectedAnnotationId(undefined);
+      setSelectedAnchorIds([]);
+    },
+    onAnnotationModeFilterChange: (mode) => {
+      setAnnotationModeFilter(mode);
+      setSelectedAnnotationId(undefined);
+      setSelectedAnchorIds([]);
+    },
     onAnnotationDelete: async (id) => {
       await deleteReaderAnnotationThread(id);
       setSelectedAnnotationId(undefined);
@@ -536,11 +568,15 @@ function ReaderDocumentWorkspace({
     },
     onAnnotationSelect: (id) => void openAnnotation(id),
     onAnnotationStatusChange: async (id, status) => {
-      cacheAnnotation(await updateReaderAnnotationThread(id, { status }));
+      await updateReaderAnnotationThread(id, { status });
       if (status !== annotationStatusFilter) setSelectedAnnotationId(undefined);
       await refreshAnnotations();
     },
-    onAnnotationStatusFilterChange: setAnnotationStatusFilter,
+    onAnnotationStatusFilterChange: (status) => {
+      setAnnotationStatusFilter(status);
+      setSelectedAnnotationId(undefined);
+      setSelectedAnchorIds([]);
+    },
     onClose: () => updateLocation({ panel: null }),
     onCommentCreate: async (id, content) => {
       await createReaderComment(id, content);
@@ -567,7 +603,7 @@ function ReaderDocumentWorkspace({
     onHighlightCreate: (comment, color, audience) =>
       createHighlight(annotationSelection, color, comment, audience),
     onHighlightUpdate: async (id, color) => {
-      cacheAnnotation(await updateReaderAnnotationThread(id, { color }));
+      await updateReaderAnnotationThread(id, { color });
       await refreshAnnotations();
     },
     onPanelChange: (nextPanel) => updateLocation({ panel: nextPanel }),
@@ -590,6 +626,9 @@ function ReaderDocumentWorkspace({
     projectContext: activeProject,
     reasoningLevel,
     selectedAnnotation,
+    selectedAnnotationId,
+    selectedAnnotationLoading: selectedAnnotationQuery.isPending,
+    selectedAnnotationUnavailable: selectedAnnotationQuery.isError,
     setReasoningLevel,
     title,
   };
@@ -720,6 +759,7 @@ function ReaderDocumentWorkspace({
                     setSelectedAnnotationId(undefined);
                     setActiveTextSelection(undefined);
                     setAnnotationAudienceFilter("all");
+                    setAnnotationModeFilter("all");
                     setAnnotationStatusFilter("open");
                     updateLocation({
                       conversation: null,

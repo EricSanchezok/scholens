@@ -9,6 +9,7 @@ import {
 } from "./reader-context-panel";
 import type {
   ReaderAnnotation,
+  ReaderAnnotationSummary,
   ReaderConversation,
   ReaderDocument,
 } from "../reader-types";
@@ -44,7 +45,10 @@ const annotation: ReaderAnnotation = {
       resolve: true,
     },
     color: "yellow",
+    comment_count: 1,
     quote_text: selection.selected_text,
+    last_activity_at: "2026-08-12T10:01:00Z",
+    mode: "note",
     role: "note",
     status: "open",
     resolved_at: null,
@@ -77,6 +81,7 @@ const projectAnnotation: ReaderAnnotation = {
   annotation_thread: {
     ...annotation.annotation_thread!,
     color: "blue",
+    comment_count: 2,
     capabilities: {
       delete: false,
       recolor: false,
@@ -84,6 +89,8 @@ const projectAnnotation: ReaderAnnotation = {
       reply: true,
       resolve: true,
     },
+    last_activity_at: "2026-08-12T10:04:00Z",
+    mode: "discussion",
     comments: [
       ...annotation.annotation_thread!.comments,
       {
@@ -101,6 +108,37 @@ const projectAnnotation: ReaderAnnotation = {
   },
 };
 
+function annotationSummary(item: ReaderAnnotation): ReaderAnnotationSummary {
+  const thread = item.annotation_thread;
+  if (!thread || !item.target_document_id) {
+    throw new Error("Story annotation requires a document thread");
+  }
+  if (item.audience.kind === "document") {
+    throw new Error("Reader annotations cannot use a document audience");
+  }
+  return {
+    audience: item.audience,
+    capabilities: thread.capabilities,
+    color: thread.color,
+    comment_count: thread.comment_count,
+    created_at: item.created_at,
+    created_by: item.created_by,
+    id: item.id,
+    last_activity_at: thread.last_activity_at,
+    mode: thread.mode,
+    position: thread.position,
+    quote_text: thread.quote_text,
+    resolved_at: thread.resolved_at,
+    resolved_by: thread.resolved_by,
+    role: thread.role,
+    status: thread.status,
+    target_document_id: item.target_document_id,
+  };
+}
+
+const personalSummary = annotationSummary(annotation);
+const projectSummary = annotationSummary(projectAnnotation);
+
 const resolvedAnnotation: ReaderAnnotation = {
   ...projectAnnotation,
   id: "20000000-0000-4000-8000-000000000003",
@@ -117,6 +155,7 @@ const resolvedAnnotation: ReaderAnnotation = {
     },
   },
 };
+const resolvedSummary = annotationSummary(resolvedAnnotation);
 
 const document: ReaderDocument = {
   document_id: selection.document_id,
@@ -193,7 +232,7 @@ const conversations: ReaderConversation[] = [
 
 const annotationArgs = {
   audienceFilter: "all" as const,
-  annotations: [annotation],
+  annotations: [personalSummary],
   error: false,
   onActionError: fn(),
   onCommentCreate: fn(async () => undefined),
@@ -202,6 +241,8 @@ const annotationArgs = {
   onCreate: fn(async () => undefined),
   onDelete: fn(async () => undefined),
   onAudienceFilterChange: fn(),
+  modeFilter: "all" as const,
+  onModeFilterChange: fn(),
   onSelect: fn(),
   onStatusChange: fn(async () => undefined),
   onStatusFilterChange: fn(),
@@ -227,7 +268,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const AnnotationThread: Story = {
-  args: { selectedAnnotation: annotation },
+  args: { selectedAnnotation: annotation, selectedAnnotationId: annotation.id },
   play: async ({ canvasElement }) => {
     await expect(
       within(canvasElement).getByText(/Retrieval quality depends/),
@@ -236,18 +277,19 @@ export const AnnotationThread: Story = {
 };
 
 export const AnnotationPaletteDark: Story = {
-  args: { selectedAnnotation: annotation },
+  args: { selectedAnnotation: annotation, selectedAnnotationId: annotation.id },
   globals: { appearance: "dark" },
 };
 
 export const ProjectDiscussionTwoAuthors: Story = {
   args: {
-    annotations: [projectAnnotation],
+    annotations: [projectSummary],
     projectContext: {
       id: "50000000-0000-4000-8000-000000000001",
       title: "Agentic Web review",
     },
     selectedAnnotation: projectAnnotation,
+    selectedAnnotationId: projectAnnotation.id,
   },
 };
 
@@ -259,37 +301,38 @@ export const ProjectDiscussionChinese: Story = {
 export const ProjectDiscussionLongContent: Story = {
   args: {
     ...ProjectDiscussionTwoAuthors.args,
-    annotations: [
-      {
-        ...projectAnnotation,
-        annotation_thread: {
-          ...projectAnnotation.annotation_thread!,
-          quote_text:
-            `${projectAnnotation.annotation_thread!.quote_text} ` +
-            "The authors then connect this retrieval constraint to evaluation design, deployment cost, and the limits of generalizing from a single benchmark across domains.",
-          comments: projectAnnotation.annotation_thread!.comments.map(
-            (comment, index) => ({
-              ...comment,
-              content:
-                index === 0
-                  ? `${comment.content} Please also trace the evidence through the ablation table and record whether the claimed improvement remains significant across every reported dataset.`
-                  : comment.content,
-            }),
-          ),
-        },
+    annotations: [projectSummary],
+    selectedAnnotation: {
+      ...projectAnnotation,
+      annotation_thread: {
+        ...projectAnnotation.annotation_thread!,
+        quote_text:
+          `${projectAnnotation.annotation_thread!.quote_text} ` +
+          "The authors then connect this retrieval constraint to evaluation design, deployment cost, and the limits of generalizing from a single benchmark across domains.",
+        comments: projectAnnotation.annotation_thread!.comments.map(
+          (comment, index) => ({
+            ...comment,
+            content:
+              index === 0
+                ? `${comment.content} Please also trace the evidence through the ablation table and record whether the claimed improvement remains significant across every reported dataset.`
+                : comment.content,
+          }),
+        ),
       },
-    ],
+    },
+    selectedAnnotationId: projectAnnotation.id,
   },
 };
 
 export const ResolvedProjectDiscussion: Story = {
   args: {
-    annotations: [resolvedAnnotation],
+    annotations: [resolvedSummary],
     projectContext: {
       id: "50000000-0000-4000-8000-000000000001",
       title: "Agentic Web review",
     },
     selectedAnnotation: resolvedAnnotation,
+    selectedAnnotationId: resolvedAnnotation.id,
     statusFilter: "resolved",
   },
 };
@@ -298,18 +341,64 @@ export const CommentlessPersonalHighlight: Story = {
   args: {
     annotations: [
       {
-        ...annotation,
-        annotation_thread: {
-          ...annotation.annotation_thread!,
-          comments: [],
-          capabilities: {
-            ...annotation.annotation_thread!.capabilities,
-            resolve: false,
-          },
+        ...personalSummary,
+        comment_count: 0,
+        mode: "highlight",
+        capabilities: {
+          ...personalSummary.capabilities,
+          resolve: false,
         },
       },
     ],
   },
+};
+
+export const LoadingSelectedThread: Story = {
+  args: {
+    selectedAnnotation: undefined,
+    selectedAnnotationId: annotation.id,
+    selectedAnnotationLoading: true,
+  },
+};
+
+export const ReadOnlyProjectDiscussion: Story = {
+  args: {
+    annotations: [
+      {
+        ...projectSummary,
+        capabilities: {
+          delete: false,
+          recolor: false,
+          reopen: false,
+          reply: false,
+          resolve: false,
+        },
+      },
+    ],
+    projectContext: {
+      id: "50000000-0000-4000-8000-000000000001",
+      title: "Agentic Web review",
+    },
+    selectedAnnotation: {
+      ...projectAnnotation,
+      annotation_thread: {
+        ...projectAnnotation.annotation_thread!,
+        capabilities: {
+          delete: false,
+          recolor: false,
+          reopen: false,
+          reply: false,
+          resolve: false,
+        },
+      },
+    },
+    selectedAnnotationId: projectAnnotation.id,
+  },
+};
+
+export const NarrowProjectDiscussion: Story = {
+  ...ProjectDiscussionTwoAuthors,
+  globals: { viewport: { value: "smallMobile" } },
 };
 
 export const SelectionReady: Story = {

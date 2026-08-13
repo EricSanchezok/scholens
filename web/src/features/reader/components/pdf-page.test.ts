@@ -5,7 +5,7 @@ import {
   normalizeReaderSelectionRects,
   selectReaderViewportPage,
 } from "./pdf-page";
-import type { ReaderAnnotation } from "../reader-types";
+import type { ReaderAnnotationSummary } from "../reader-types";
 
 describe("normalizeReaderSelectionRects", () => {
   it("normalizes browser rectangles against the rendered PDF page", () => {
@@ -95,18 +95,16 @@ describe("groupReaderAnnotationsByAnchor", () => {
       rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }],
     };
     const annotations = [
-      { id: "personal", annotation_thread: { position } },
-      { id: "project", annotation_thread: { position } },
+      { id: "personal", position },
+      { id: "project", position },
       {
         id: "different",
-        annotation_thread: {
-          position: {
-            ...position,
-            rects: [{ ...position.rects[0]!, y: 0.3 }],
-          },
+        position: {
+          ...position,
+          rects: [{ ...position.rects[0]!, y: 0.3 }],
         },
       },
-    ] as ReaderAnnotation[];
+    ] as unknown as ReaderAnnotationSummary[];
 
     expect(
       groupReaderAnnotationsByAnchor(annotations).map((group) =>

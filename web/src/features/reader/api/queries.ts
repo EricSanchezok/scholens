@@ -7,6 +7,17 @@ type CreateAnnotationRequest =
   components["schemas"]["CreateAnnotationThreadRequest"];
 type UpdateAnnotationRequest =
   components["schemas"]["UpdateAnnotationThreadRequest"];
+type AnnotationAudienceFilter =
+  components["schemas"]["AnnotationAudienceFilter"];
+type AnnotationThreadMode = components["schemas"]["AnnotationThreadMode"];
+type AnnotationThreadStatus = components["schemas"]["AnnotationThreadStatus"];
+
+type AnnotationListFilters = {
+  audience?: AnnotationAudienceFilter;
+  mode?: AnnotationThreadMode;
+  projectId?: string;
+  status: AnnotationThreadStatus;
+};
 
 export const readerKeys = {
   all: ["reader"] as const,
@@ -14,11 +25,15 @@ export const readerKeys = {
   projects: (documentId: string) => ["reader", "projects", documentId] as const,
   annotationLists: (documentId: string) =>
     ["reader", "annotations", documentId] as const,
-  annotations: (documentId: string, projectId?: string) =>
+  annotations: (documentId: string, filters: AnnotationListFilters) =>
     [
       ...readerKeys.annotationLists(documentId),
-      projectId ?? "personal",
+      filters.projectId ?? "personal",
+      filters.audience ?? "all",
+      filters.mode ?? "all",
+      filters.status,
     ] as const,
+  annotation: (threadId: string) => ["reader", "annotation", threadId] as const,
 };
 
 export const readerQueries = {
@@ -52,18 +67,23 @@ export const readerQueries = {
     }),
   annotations: (
     documentId: string,
-    projectId?: string,
+    filters: AnnotationListFilters,
     pollWhenVisible = false,
   ) =>
     queryOptions({
-      queryKey: readerKeys.annotations(documentId, projectId),
+      queryKey: readerKeys.annotations(documentId, filters),
       queryFn: async ({ signal }) => {
         const { data } = await apiClient.GET(
           "/api/v1/papers/{document_id}/annotation-threads",
           {
             params: {
               path: { document_id: documentId },
-              query: { project_id: projectId },
+              query: {
+                audience: filters.audience,
+                mode: filters.mode,
+                project_id: filters.projectId,
+                status: filters.status,
+              },
             },
             signal,
           },
@@ -78,6 +98,19 @@ export const readerQueries = {
         document.hasFocus()
           ? 10_000
           : false,
+      refetchOnWindowFocus: true,
+    }),
+  annotation: (threadId: string) =>
+    queryOptions({
+      queryKey: readerKeys.annotation(threadId),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET(
+          "/api/v1/annotation-threads/{thread_id}",
+          { params: { path: { thread_id: threadId } }, signal },
+        );
+        if (!data) throw new Error("Reader annotation detail was empty");
+        return data;
+      },
       refetchOnWindowFocus: true,
     }),
 };

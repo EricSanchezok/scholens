@@ -13,7 +13,10 @@ import {
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
 import type { ReaderSearchMatch } from "../reader-search";
-import type { ReaderAnnotationAudience } from "../reader-types";
+import type {
+  ReaderAnnotationAudience,
+  ReaderAnnotationSummary,
+} from "../reader-types";
 import {
   ReaderSelectionToolbar,
   type ReaderSelectionLabels,
@@ -22,7 +25,6 @@ import {
 export type ReaderFitMode = "width" | "page" | "custom";
 export type ReaderSelection =
   components["schemas"]["PaperSelectionTurnContext"];
-type ReaderAnnotation = components["schemas"]["ResearchItemResponse"];
 
 type SelectionRect = {
   height: number;
@@ -200,16 +202,16 @@ export function selectReaderViewportPage(
 }
 
 export function groupReaderAnnotationsByAnchor(
-  annotations: ReaderAnnotation[],
-): ReaderAnnotation[][] {
+  annotations: ReaderAnnotationSummary[],
+): ReaderAnnotationSummary[][] {
   return [
     ...annotations
       .reduce((groups, annotation) => {
-        const position = annotation.annotation_thread?.position;
+        const position = annotation.position;
         const key = JSON.stringify(position ?? { id: annotation.id });
         groups.set(key, [...(groups.get(key) ?? []), annotation]);
         return groups;
-      }, new Map<string, ReaderAnnotation[]>())
+      }, new Map<string, ReaderAnnotationSummary[]>())
       .values(),
   ];
 }
@@ -252,7 +254,7 @@ function PdfPageSurface({
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   zoom: number;
   loadingLabel: string;
-  annotations?: ReaderAnnotation[];
+  annotations?: ReaderAnnotationSummary[];
   selectedAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
@@ -446,7 +448,7 @@ function PdfPageSurface({
   }
 
   const pageAnnotations = annotations.filter((annotation) => {
-    const position = annotation.annotation_thread?.position;
+    const position = annotation.position;
     return position?.kind === "pdf_text" && position.page_number === pageNumber;
   });
   const annotationGroups = groupReaderAnnotationsByAnchor(pageAnnotations);
@@ -479,21 +481,19 @@ function PdfPageSurface({
       <div className="pointer-events-none absolute inset-0 z-10">
         {annotationGroups.flatMap((group) => {
           const annotation = group[0];
-          const thread = annotation?.annotation_thread;
-          const position = thread?.position;
-          if (!annotation || !thread || position?.kind !== "pdf_text")
-            return [];
+          const position = annotation?.position;
+          if (!annotation || position?.kind !== "pdf_text") return [];
           const groupSelected = group.some(
             (item) => item.id === selectedAnnotationId,
           );
           return position.rects.map((rect, index) => (
             <button
-              aria-label={`${thread.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
+              aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
               className={cn(
                 "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
                 keyboardFocusRing,
                 groupSelected && "opacity-60",
-                thread.status === "resolved" && "opacity-20 grayscale",
+                annotation.status === "resolved" && "opacity-20 grayscale",
               )}
               data-reader-annotation-highlight={annotation.id}
               data-reader-annotation-count={group.length}
@@ -506,7 +506,7 @@ function PdfPageSurface({
                 )
               }
               style={{
-                backgroundColor: readerHighlightColorValue(thread.color),
+                backgroundColor: readerHighlightColorValue(annotation.color),
                 height: `${rect.height * 100}%`,
                 left: `${rect.x * 100}%`,
                 top: `${rect.y * 100}%`,
@@ -591,7 +591,7 @@ export function PdfPage({
   searchQuery: string;
   zoom: number;
   loadingLabel: string;
-  annotations?: ReaderAnnotation[];
+  annotations?: ReaderAnnotationSummary[];
   selectedAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;

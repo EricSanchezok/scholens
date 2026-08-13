@@ -130,7 +130,10 @@ export const libraryOutputs: LibraryOutput[] = [
           resolve: false,
         },
         color: "yellow",
+        comment_count: 0,
         comments: [],
+        last_activity_at: now,
+        mode: "highlight",
         position: {
           end_offset: 148,
           kind: "parsed_text",

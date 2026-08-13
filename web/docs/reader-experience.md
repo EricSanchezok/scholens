@@ -218,10 +218,20 @@ loads its complete chronological comments.
 
 Personal Reader lists only the current user's personal threads. Project Reader
 combines that user's personal threads with threads belonging to the current
-Project and provides `All`, `Mine`, and Project audience filters plus `Open` and
-`Resolved` status filters. Audience badges use text and icons rather than
-color. Open annotations paint the PDF; resolved Project discussions are hidden
-by default and use a subdued overlay only while the Resolved filter is active.
+Project. Its single compact filter menu offers audience (`All`, `Personal`, or
+the current Project), mode (`Highlight`, `Note`, or `Discussion`), and current
+versus resolved discussions. Audience badges use text rather than color. Open
+annotations paint the PDF; resolved Project discussions are hidden by default
+and use a subdued overlay only while the Resolved filter is active.
+
+The annotation panel is a summary list with exactly one expanded thread. A
+collapsed row shows its color marker, quote excerpt, page, author, audience,
+mode, comment count, and recent activity. The expanded thread alone loads and
+shows the full quote, chronological comments, reply composer, and permitted
+actions. Resolve or reopen stays visible for a Project discussion; recolor,
+delete, and per-comment edit/delete live in semantic overflow menus. The reply
+draft is scoped to its thread, survives failed requests, and submits with
+`Cmd/Ctrl + Enter` as well as the explicit button.
 
 Project members may reply to open Project threads. The thread author may
 recolor it; its author, the Project owner, and collaborators with Project edit
