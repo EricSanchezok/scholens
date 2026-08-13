@@ -84,9 +84,8 @@ const populated = [
     `${api}/projects/:projectId/papers/:documentId`,
     ({ request }) => {
       const confirmed =
-        new URL(request.url).searchParams.get(
-          "confirm_delete_annotations",
-        ) === "true";
+        new URL(request.url).searchParams.get("confirm_delete_annotations") ===
+        "true";
       return confirmed
         ? new HttpResponse(null, { status: 204 })
         : HttpResponse.json(

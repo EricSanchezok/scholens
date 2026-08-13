@@ -165,7 +165,9 @@ test("supports the Projects critical journey", async ({ page }) => {
   await page.goto("/projects");
 
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Truthward" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Truthward", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Projects" }).first(),
   ).toHaveAttribute("aria-current", "page");
@@ -183,7 +185,7 @@ test("supports the Projects critical journey", async ({ page }) => {
   await searchRequest;
   await expect(page).toHaveURL(/q=retrieval/);
   await page.getByRole("combobox", { name: "Sort projects" }).click();
-  await page.getByRole("option", { name: "Title A–Z" }).click();
+  await page.getByRole("option", { name: "Name A–Z" }).click();
   await expect(page).toHaveURL(/sort=title_asc/);
 
   await page.getByRole("button", { name: "New project" }).click();
