@@ -25,6 +25,8 @@
   --color-danger-bg: #fff2f0;
   --color-danger-border: #963e38;
   --color-danger-text: #963e38;
+  --color-document-search-current: rgba(242, 184, 75, 0.56);
+  --color-document-search-match: rgba(246, 211, 101, 0.4);
   --color-document-selection-bg: rgba(91, 155, 213, 0.3);
   --color-elevation-composer: rgba(0, 0, 0, 0.12);
   --color-elevation-shadow: rgba(0, 0, 0, 0.4);

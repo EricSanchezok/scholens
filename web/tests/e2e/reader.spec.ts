@@ -219,8 +219,55 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   const search = page.getByRole("textbox", { name: "Search PDF" });
   await search.fill("reasoning");
   await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
-  await page.keyboard.press("Escape");
+  const currentSearchMatch = page.locator(
+    '.pdf-search-match[data-search-match-current="true"]',
+  );
+  await expect(currentSearchMatch.first()).toBeVisible();
+  await expect(currentSearchMatch.first()).toHaveText(/reasoning/i);
+  expect(
+    await currentSearchMatch.first().evaluate((element) => ({
+      hit: element.textContent?.length ?? 0,
+      textItem: element.parentElement?.textContent?.length ?? 0,
+    })),
+  ).toEqual(expect.objectContaining({ hit: "reasoning".length }));
+  expect(
+    await currentSearchMatch
+      .first()
+      .evaluate(
+        (element) =>
+          (element.parentElement?.textContent?.length ?? 0) >
+          (element.textContent?.length ?? 0),
+      ),
+  ).toBe(true);
+  const initialMatchId = await currentSearchMatch
+    .first()
+    .getAttribute("data-search-match-id");
+  const searchColors = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const current = document.querySelector<HTMLElement>(
+      '.pdf-search-match[data-search-match-current="true"]',
+    );
+    const other = document.querySelector<HTMLElement>(
+      '.pdf-search-match:not([data-search-match-current="true"])',
+    );
+    return {
+      current: current ? getComputedStyle(current).backgroundColor : "",
+      currentToken: root
+        .getPropertyValue("--color-document-search-current")
+        .trim(),
+      match: other ? getComputedStyle(other).backgroundColor : "",
+      matchToken: root.getPropertyValue("--color-document-search-match").trim(),
+    };
+  });
+  expect(searchColors.current).not.toBe(searchColors.match);
+  expect(searchColors.currentToken).not.toBe(searchColors.matchToken);
+  await page.getByRole("button", { name: "Next match" }).click();
+  await expect
+    .poll(() => currentSearchMatch.first().getAttribute("data-search-match-id"))
+    .not.toBe(initialMatchId);
+  await page.getByRole("button", { name: "Close PDF search" }).click();
   await expect(search).toBeHidden();
+  await expect(page.locator(".pdf-search-match")).toHaveCount(0);
 
   // Development streams async root metadata independently from the Reader.
   await expect(page).toHaveTitle("Scholens");

@@ -4,15 +4,15 @@ import type {
   PDFPageProxy,
 } from "pdfjs-dist";
 
+import {
+  findReaderPageSearchMatches,
+  type ReaderSearchMatch,
+} from "./reader-search";
+
 export type PdfOutlineEntry = {
   title: string;
   destination: unknown;
   children: PdfOutlineEntry[];
-};
-
-export type PdfSearchResult = {
-  pageNumber: number;
-  count: number;
 };
 
 let workerConfigured = false;
@@ -93,24 +93,22 @@ export class PdfDocumentAdapter {
     return (await this.document.getPageIndex(reference)) + 1;
   }
 
-  async search(query: string): Promise<PdfSearchResult[]> {
-    const normalized = query.trim().toLocaleLowerCase();
-    if (!normalized) return [];
-    const results: PdfSearchResult[] = [];
+  async search(query: string): Promise<ReaderSearchMatch[]> {
+    if (!query.trim()) return [];
+    const results: ReaderSearchMatch[] = [];
     for (let pageNumber = 1; pageNumber <= this.pageCount; pageNumber += 1) {
       const page = await this.getPage(pageNumber);
       const content = await page.getTextContent();
-      const text = content.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .toLocaleLowerCase();
-      let count = 0;
-      let cursor = 0;
-      while ((cursor = text.indexOf(normalized, cursor)) >= 0) {
-        count += 1;
-        cursor += Math.max(normalized.length, 1);
-      }
-      if (count > 0) results.push({ pageNumber, count });
+      results.push(
+        ...findReaderPageSearchMatches({
+          ordinalOffset: results.length,
+          pageNumber,
+          query,
+          textItems: content.items.map((item) =>
+            "str" in item ? item.str : "",
+          ),
+        }),
+      );
     }
     return results;
   }
@@ -121,22 +119,24 @@ export class PdfDocumentAdapter {
 }
 
 export function renderPdfPage({
+  activeSearchMatchId,
   annotationLinkLabel,
   annotationLayer,
   canvas,
   onInternalDestination,
   page,
   scale,
-  searchQuery,
+  searchMatches,
   textLayer,
 }: {
+  activeSearchMatchId?: string;
   annotationLinkLabel: string;
   annotationLayer: HTMLDivElement;
   canvas: HTMLCanvasElement;
   onInternalDestination: (destination: unknown) => void;
   page: PDFPageProxy;
   scale: number;
-  searchQuery: string;
+  searchMatches: ReaderSearchMatch[];
   textLayer: HTMLDivElement;
 }) {
   let cancelled = false;
@@ -238,19 +238,76 @@ export function renderPdfPage({
 
     await Promise.all([renderTask.promise, textRenderer.render()]);
     assertActive();
-    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    textRenderer.textDivs.forEach((element, index) => {
-      if (
-        normalizedQuery &&
-        textRenderer.textContentItemsStr[index]
-          ?.toLocaleLowerCase()
-          .includes(normalizedQuery)
+    const fragments = new Map<
+      number,
+      Array<{
+        active: boolean;
+        end: number;
+        matchId: string;
+        start: number;
+      }>
+    >();
+    for (const match of searchMatches) {
+      for (
+        let itemIndex = match.begin.itemIndex;
+        itemIndex <= match.end.itemIndex;
+        itemIndex += 1
       ) {
-        element.dataset.searchHit = "true";
+        const content = textRenderer.textContentItemsStr[itemIndex] ?? "";
+        const start =
+          itemIndex === match.begin.itemIndex ? match.begin.offset : 0;
+        const end =
+          itemIndex === match.end.itemIndex ? match.end.offset : content.length;
+        if (end <= start) continue;
+        const itemFragments = fragments.get(itemIndex) ?? [];
+        itemFragments.push({
+          active: match.id === activeSearchMatchId,
+          end,
+          matchId: match.id,
+          start,
+        });
+        fragments.set(itemIndex, itemFragments);
       }
-    });
+    }
 
-    return { height: viewport.height, width: viewport.width };
+    let activeSearchElement: HTMLElement | undefined;
+    for (const [itemIndex, itemFragments] of fragments) {
+      const element = textRenderer.textDivs[itemIndex];
+      const content = textRenderer.textContentItemsStr[itemIndex] ?? "";
+      if (!element) continue;
+      element.replaceChildren();
+      let cursor = 0;
+      for (const fragment of itemFragments.sort(
+        (left, right) => left.start - right.start,
+      )) {
+        if (fragment.start > cursor) {
+          element.append(
+            document.createTextNode(content.slice(cursor, fragment.start)),
+          );
+        }
+        const highlight = document.createElement("span");
+        highlight.className = "pdf-search-match";
+        highlight.dataset.searchMatchId = fragment.matchId;
+        if (fragment.active) {
+          highlight.dataset.searchMatchCurrent = "true";
+          activeSearchElement ??= highlight;
+        }
+        highlight.append(
+          document.createTextNode(content.slice(fragment.start, fragment.end)),
+        );
+        element.append(highlight);
+        cursor = fragment.end;
+      }
+      if (cursor < content.length) {
+        element.append(document.createTextNode(content.slice(cursor)));
+      }
+    }
+
+    return {
+      activeSearchElement,
+      height: viewport.height,
+      width: viewport.width,
+    };
   })();
 
   return {

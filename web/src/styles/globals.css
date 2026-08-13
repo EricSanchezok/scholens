@@ -127,9 +127,13 @@ body {
   user-select: none;
 }
 
-.pdf-text-layer span[data-search-hit="true"] {
-  border-radius: var(--radius-sm);
-  background: var(--color-selection-bg);
+.pdf-search-match {
+  border-radius: 0.125rem;
+  background: var(--color-document-search-match);
+}
+
+.pdf-search-match[data-search-match-current="true"] {
+  background: var(--color-document-search-current);
 }
 
 .pdf-text-layer ::selection {

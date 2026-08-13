@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/feedback";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
+import type { ReaderSearchMatch } from "../reader-search";
 import {
   ReaderSelectionToolbar,
   type ReaderSelectionLabels,
@@ -207,6 +208,8 @@ function PdfPageSurface({
   currentPageNumber,
   onInternalDestination,
   pageNumber,
+  searchMatches,
+  activeSearchMatch,
   searchQuery,
   scrollContainerRef,
   zoom,
@@ -228,6 +231,8 @@ function PdfPageSurface({
   fitMode: ReaderFitMode;
   onInternalDestination: (destination: unknown) => void;
   pageNumber: number;
+  searchMatches: ReaderSearchMatch[];
+  activeSearchMatch?: ReaderSearchMatch;
   searchQuery: string;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   zoom: number;
@@ -289,6 +294,20 @@ function PdfPageSurface({
     pageState?.pageNumber === pageNumber ? pageState.page : undefined;
   const shouldRender = renderEnabled || pageNumber === currentPageNumber;
 
+  React.useEffect(() => {
+    if (searchMatches.length > 0) return;
+    const textLayer = textLayerRef.current;
+    if (!textLayer) return;
+    for (const highlight of textLayer.querySelectorAll<HTMLElement>(
+      ".pdf-search-match",
+    )) {
+      highlight.replaceWith(
+        document.createTextNode(highlight.textContent ?? ""),
+      );
+    }
+    for (const textItem of textLayer.children) textItem.normalize();
+  }, [searchMatches.length]);
+
   const scale = React.useMemo(() => {
     if (fitMode === "custom") return zoom;
     const widthScale = Math.max(
@@ -311,18 +330,31 @@ function PdfPageSurface({
       return;
     let active = true;
     const renderTask = renderPdfPage({
+      activeSearchMatchId: activeSearchMatch?.id,
       annotationLinkLabel,
       annotationLayer,
       canvas,
       onInternalDestination,
       page,
       scale,
-      searchQuery,
+      searchMatches,
       textLayer,
     });
     void renderTask.promise
-      .then(() => {
-        if (active) setRenderedKey(`${pageNumber}:${scale}:${searchQuery}`);
+      .then(({ activeSearchElement }) => {
+        if (!active) return;
+        setRenderedKey(
+          `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`,
+        );
+        if (activeSearchElement) {
+          window.requestAnimationFrame(() => {
+            activeSearchElement.scrollIntoView({
+              behavior: "auto",
+              block: "center",
+              inline: "nearest",
+            });
+          });
+        }
       })
       .catch((error: unknown) => {
         if (
@@ -339,17 +371,21 @@ function PdfPageSurface({
     };
   }, [
     annotationLinkLabel,
+    activeSearchMatch?.id,
     onInternalDestination,
     page,
     pageNumber,
     shouldRender,
     scale,
+    searchMatches,
     searchQuery,
   ]);
 
   const rendering =
     shouldRender &&
-    (!page || renderedKey !== `${pageNumber}:${scale}:${searchQuery}`);
+    (!page ||
+      renderedKey !==
+        `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`);
 
   function captureSelection() {
     if (!onActiveTextSelectionChange) return;
@@ -484,6 +520,8 @@ export function PdfPage({
   onVisiblePageChange,
   pageCount,
   pageNumber,
+  searchMatches,
+  activeSearchMatch,
   searchQuery,
   zoom,
   loadingLabel,
@@ -505,6 +543,8 @@ export function PdfPage({
   onVisiblePageChange: (pageNumber: number) => void;
   pageCount: number;
   pageNumber: number;
+  searchMatches: ReaderSearchMatch[];
+  activeSearchMatch?: ReaderSearchMatch;
   searchQuery: string;
   zoom: number;
   loadingLabel: string;
@@ -635,6 +675,14 @@ export function PdfPage({
               onHighlightSelection={onHighlightSelection}
               onInternalDestination={onInternalDestination}
               pageNumber={number}
+              searchMatches={searchMatches.filter(
+                (match) => match.pageNumber === number,
+              )}
+              activeSearchMatch={
+                activeSearchMatch?.pageNumber === number
+                  ? activeSearchMatch
+                  : undefined
+              }
               scrollContainerRef={containerRef}
               searchQuery={searchQuery}
               selectedAnnotationId={selectedAnnotationId}

@@ -58,6 +58,16 @@
         "$value": "{palette.document-selection.active}"
       }
     },
+    "document-search": {
+      "match": {
+        "$type": "color",
+        "$value": "{palette.document-search.match}"
+      },
+      "current": {
+        "$type": "color",
+        "$value": "{palette.document-search.current}"
+      }
+    },
     "focus": { "ring": { "$type": "color", "$value": "{palette.neutral.0}" } },
     "overlay": {
       "backdrop": { "$type": "color", "$value": "{palette.overlay.40}" }

@@ -81,6 +81,16 @@
         "$type": "color",
         "$value": "{primitive.document-selection.active}"
       }
+    },
+    "document-search": {
+      "match": {
+        "$type": "color",
+        "$value": "{primitive.document-search.match}"
+      },
+      "current": {
+        "$type": "color",
+        "$value": "{primitive.document-search.current}"
+      }
     }
   }
 }

@@ -103,6 +103,13 @@ Allowed raw-color exceptions are limited to source images, PDF content, and
 third-party brand marks that must preserve their identity. The surrounding UI
 still uses semantic tokens.
 
+PDF overlays also keep separate semantic roles by behavior. Browser text
+selection uses `color.document-selection.bg`; document search uses
+`color.document-search.match` for every result and
+`color.document-search.current` for the active result. Search colors remain
+translucent because they sit above the rendered PDF canvas and must not hide
+the original glyphs.
+
 ## Runtime contract
 
 ```html

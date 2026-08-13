@@ -60,10 +60,7 @@ import {
   PdfDocumentAdapter,
   type PdfOutlineEntry,
 } from "./pdf-document-adapter";
-import {
-  flattenReaderSearchResults,
-  moveReaderSearchCursor,
-} from "./reader-search";
+import { moveReaderSearchCursor } from "./reader-search";
 import {
   parsePositiveInteger,
   readReaderPanel,
@@ -291,20 +288,17 @@ function ReaderDocumentWorkspace({
     };
   }, [adapter, searchQuery]);
 
-  const flatSearchResults = React.useMemo(
-    () =>
-      flattenReaderSearchResults(
-        searchState?.query === searchQuery ? searchState.results : [],
-      ),
+  const searchResults = React.useMemo(
+    () => (searchState?.query === searchQuery ? searchState.results : []),
     [searchQuery, searchState],
   );
 
   React.useEffect(() => {
-    const activeMatch = flatSearchResults[searchIndex];
+    const activeMatch = searchResults[searchIndex];
     if (activeMatch && activeMatch.pageNumber !== pageNumber) {
       updateLocation({ page: activeMatch.pageNumber });
     }
-  }, [flatSearchResults, pageNumber, searchIndex, updateLocation]);
+  }, [pageNumber, searchIndex, searchResults, updateLocation]);
 
   const resolveDestination = React.useCallback(
     async (destination: unknown) => {
@@ -512,13 +506,13 @@ function ReaderDocumentWorkspace({
                   searchOpen
                     ? {
                         currentIndex: searchIndex,
-                        matchCount: flatSearchResults.length,
+                        matchCount: searchResults.length,
                         onClose: closeSearch,
                         onMove: (direction) =>
                           setSearchIndex((current) =>
                             moveReaderSearchCursor(
                               current,
-                              flatSearchResults.length,
+                              searchResults.length,
                               direction,
                             ),
                           ),
@@ -607,6 +601,8 @@ function ReaderDocumentWorkspace({
                   }}
                   pageCount={pageCount}
                   pageNumber={pageNumber}
+                  searchMatches={searchResults}
+                  activeSearchMatch={searchResults[searchIndex]}
                   searchQuery={searchQuery}
                   selectedAnnotationId={selectedAnnotationId}
                   selectionLabels={{

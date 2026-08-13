@@ -121,6 +121,14 @@ anchors. They are never burned into the PDF. A damaged, encrypted, unavailable,
 processing, failed, or unauthorized document receives its own terminal state;
 these states do not masquerade as an empty PDF.
 
+Search highlights wrap only the matched characters rather than the containing
+PDF.js text fragment. Matches that cross text-fragment boundaries remain one
+logical result, and repeated matches inside one fragment remain separately
+navigable. All results use the translucent document-search match role; the
+current result uses the stronger current role and scrolls into view when the
+search cursor moves. Search styling never reuses neutral selection or warning
+feedback colors.
+
 ## Selection and annotations
 
 Selection has three deliberately separate lifetimes:

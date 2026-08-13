@@ -42,6 +42,10 @@
     },
     "document-selection": {
       "active": { "$type": "color", "$value": "#5b9bd54d" }
+    },
+    "document-search": {
+      "match": { "$type": "color", "$value": "#f6d36566" },
+      "current": { "$type": "color", "$value": "#f2b84b8f" }
     }
   }
 }
