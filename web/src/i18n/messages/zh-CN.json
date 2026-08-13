@@ -504,6 +504,8 @@
       "newDraft": "新对话",
       "loading": "正在加载对话",
       "empty": "这篇论文还没有对话",
+      "emptyTitle": "想从这篇论文中了解什么？",
+      "emptyDescription": "可以询问它的观点、方法或结论，也可以选中原文继续讨论。",
       "pin": "置顶对话",
       "unpin": "取消置顶",
       "pinned": "置顶",

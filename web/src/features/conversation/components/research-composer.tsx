@@ -495,7 +495,7 @@ export function ResearchComposer({
     return (
       <form
         className={cn(
-          "bg-surface shadow-composer grid w-full gap-1.5 border border-transparent p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
+          "border-line bg-surface shadow-composer lg:shadow-raised grid w-full gap-1.5 border p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
           expanded
             ? "rounded-[var(--radius-2xl)]"
             : "rounded-[var(--radius-full)]",

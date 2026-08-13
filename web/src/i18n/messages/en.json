@@ -504,6 +504,8 @@
       "newDraft": "New conversation",
       "loading": "Loading conversations",
       "empty": "No conversations for this paper yet",
+      "emptyTitle": "What would you like to understand?",
+      "emptyDescription": "Ask about this paper’s claims, methods, or conclusions, or select a passage to discuss.",
       "pin": "Pin conversation",
       "unpin": "Unpin conversation",
       "pinned": "Pinned",

@@ -40,6 +40,10 @@ export type ConversationTurn =
 export type ConversationResponseVariant =
   components["schemas"]["ConversationResponseVariantResponse"];
 export type ConversationViewLayout = "workspace" | "side-panel";
+export type ConversationEmptyState = {
+  description: string;
+  title: string;
+};
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type Project = components["schemas"]["ProjectResponse"];
 
@@ -396,6 +400,7 @@ export function ConversationView({
   turnContextLabel,
   onTurnContextClear,
   onDocumentSourceOpen,
+  emptyState,
 }: {
   layout: ConversationViewLayout;
   turns: ConversationTurn[];
@@ -426,6 +431,7 @@ export function ConversationView({
   onDocumentSourceOpen?: (
     source: components["schemas"]["DocumentAnswerSource"],
   ) => void;
+  emptyState?: ConversationEmptyState;
 }) {
   const t = useTranslations("Home.conversation");
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -560,15 +566,26 @@ export function ConversationView({
             </Button>
           </div>
         ) : visibleTurns.length === 0 && !liveTurn ? (
-          <p
+          <div
             className={
               layout === "side-panel"
-                ? "text-muted m-auto px-4 py-12 text-center text-sm"
-                : "text-muted py-12 text-center text-sm"
+                ? "m-auto max-w-[20rem] px-4 py-12 text-center"
+                : "py-12 text-center"
             }
           >
-            {t("empty")}
-          </p>
+            {emptyState ? (
+              <>
+                <p className="text-primary text-base font-medium">
+                  {emptyState.title}
+                </p>
+                <p className="text-muted mt-2 text-sm leading-6">
+                  {emptyState.description}
+                </p>
+              </>
+            ) : (
+              <p className="text-muted text-sm">{t("empty")}</p>
+            )}
+          </div>
         ) : (
           <div
             className={

@@ -778,10 +778,43 @@ export const SidePanelEmpty: Story = {
     },
     contextLabel: homePapers[0]!.document.title ?? "Current paper",
     contextLocked: true,
+    emptyState: {
+      description:
+        "Ask about this paper’s claims, methods, or conclusions, or select a passage to discuss.",
+      title: "What would you like to understand?",
+    },
     layout: "side-panel",
     turns: [],
   },
   render: SidePanelStory,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText("What would you like to understand?"),
+    ).toBeVisible();
+    await expect(
+      canvas.getByText(/paper’s claims, methods, or conclusions/),
+    ).toBeVisible();
+    await expect(canvas.getByRole("textbox")).toBeVisible();
+  },
+};
+
+export const SidePanelEmptySimplifiedChineseDark: Story = {
+  args: {
+    ...SidePanelEmpty.args,
+    emptyState: {
+      description: "可以询问它的观点、方法或结论，也可以选中原文继续讨论。",
+      title: "想从这篇论文中了解什么？",
+    },
+  },
+  globals: { appearance: "dark", locale: "zh-CN" },
+  render: SidePanelStory,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("想从这篇论文中了解什么？")).toBeVisible();
+    await expect(canvas.getByText(/观点、方法或结论/)).toBeVisible();
+    await expect(canvas.getByRole("textbox")).toBeVisible();
+  },
 };
 
 export const SidePanelStreaming: Story = {

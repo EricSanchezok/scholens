@@ -202,7 +202,11 @@ panel. Messages own the panel's vertical scroll, while the `context-panel`
 Composer remains docked at the bottom with its input on top and context,
 reasoning, and send controls below. The switcher, message viewport, and Composer
 are separated by spacing rather than stacked card borders; the Composer uses
-the same floating rounded treatment as Home at the narrower panel measure.
+the same `border-line` resting boundary and desktop raised elevation as Home at
+the narrower panel measure. Its outer surface alone owns keyboard focus.
+An empty paper conversation uses a quiet title and supporting description with
+no decorative icon or suggestion shortcuts; Home retains its existing empty
+behavior through the optional structured-empty-state interface.
 Side-panel presentation may change measure, spacing, and docking, but it must
 reuse the same message, Worklog, answer, source, suggestion, retry, and variant
 components as the workspace layout.

@@ -185,7 +185,22 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
     .toBe("");
   await askAboutSelection.click();
   await expect(page).toHaveURL(/panel=ask/);
+  await expect(
+    page.getByText("What would you like to understand?"),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/paper’s claims, methods, or conclusions/),
+  ).toBeVisible();
   await expect(page.getByText("Selection from page 2")).toBeVisible();
+  const readerComposer = page
+    .getByRole("textbox", { name: "Ask a follow-up" })
+    .locator("xpath=ancestor::form");
+  await expect(readerComposer).toBeVisible();
+  expect(
+    await readerComposer.evaluate(
+      (element) => getComputedStyle(element).borderTopColor,
+    ),
+  ).not.toBe("rgba(0, 0, 0, 0)");
   await expect(askAboutSelection).toHaveCount(0);
   await expect(page.locator("[data-active-selection-overlay]")).toHaveCount(0);
 

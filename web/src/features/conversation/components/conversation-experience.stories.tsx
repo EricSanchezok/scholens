@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { fn } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 
 import { ResearchComposer } from "./research-composer";
 
@@ -61,4 +61,20 @@ export const ContextPanelSelection: Story = {
       </div>
     ),
   ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox");
+    const composer = textbox.closest("form");
+    await expect(composer).not.toBeNull();
+    const restingBorder = getComputedStyle(composer!).borderTopColor;
+    await expect(restingBorder).not.toBe("transparent");
+    await userEvent.tab();
+    await expect(textbox).toHaveFocus();
+    await expect(composer).toHaveAttribute("data-focus-surface");
+  },
+};
+
+export const ContextPanelSelectionDark: Story = {
+  ...ContextPanelSelection,
+  globals: { appearance: "dark" },
 };

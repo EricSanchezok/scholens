@@ -668,6 +668,10 @@ export function ReaderContextPanel({
               contextLabel={title}
               contextLocked
               error={conversationSession.turnsQuery.isError}
+              emptyState={{
+                description: t("conversations.emptyDescription"),
+                title: t("conversations.emptyTitle"),
+              }}
               liveTurn={conversationSession.liveTurn}
               loading={
                 conversationSession.turnsQuery.isPending &&
