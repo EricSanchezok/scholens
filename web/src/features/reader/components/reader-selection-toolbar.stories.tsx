@@ -50,9 +50,13 @@ const meta = {
       highlight: "Highlight selection",
       colors: {
         yellow: "Yellow highlight",
+        red: "Red highlight",
         blue: "Blue highlight",
         green: "Green highlight",
-        neutral: "Neutral highlight",
+        purple: "Purple highlight",
+        magenta: "Magenta highlight",
+        orange: "Orange highlight",
+        gray: "Gray highlight",
       },
     },
     onAsk: fn(),
@@ -116,5 +120,21 @@ export const HighlightPalette: Story = {
       ).toBeVisible(),
     );
     await expectOpaqueFloatingSurface(canvasElement, "palette");
+    const swatches = canvas
+      .getByRole("group", {
+        name: "Highlight selection",
+      })
+      .querySelectorAll("button");
+    await expect(swatches).toHaveLength(8);
+    await expect(
+      new Set(
+        [...swatches].map((swatch) => getComputedStyle(swatch).backgroundColor),
+      ).size,
+    ).toBe(8);
   },
+};
+
+export const HighlightPaletteDark: Story = {
+  globals: { appearance: "dark" },
+  play: HighlightPalette.play,
 };

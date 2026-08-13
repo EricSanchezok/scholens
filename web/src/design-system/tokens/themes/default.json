@@ -91,6 +91,40 @@
         "$type": "color",
         "$value": "{primitive.document-search.current}"
       }
+    },
+    "document-highlight": {
+      "yellow": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.yellow}"
+      },
+      "red": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.red}"
+      },
+      "green": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.green}"
+      },
+      "blue": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.blue}"
+      },
+      "purple": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.purple}"
+      },
+      "magenta": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.magenta}"
+      },
+      "orange": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.orange}"
+      },
+      "gray": {
+        "$type": "color",
+        "$value": "{primitive.document-highlight.gray}"
+      }
     }
   }
 }

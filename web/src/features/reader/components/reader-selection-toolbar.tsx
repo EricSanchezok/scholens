@@ -21,6 +21,11 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
+import {
+  readerHighlightColors,
+  readerHighlightColorValue,
+  type ReaderHighlightColor,
+} from "../reader-highlight-colors";
 import type { ReaderSelection } from "./pdf-page";
 
 export type ReaderSelectionLabels = {
@@ -31,15 +36,8 @@ export type ReaderSelectionLabels = {
   copying: string;
   copyFailed: string;
   highlight: string;
-  colors: Record<"yellow" | "blue" | "green" | "neutral", string>;
+  colors: Record<ReaderHighlightColor, string>;
 };
-
-const colorClasses = {
-  yellow: "bg-state-warning-bg",
-  blue: "bg-state-info-bg",
-  green: "bg-state-success-bg",
-  neutral: "bg-accent",
-} as const;
 
 const floatingSurfaceClass =
   "border-line bg-elevated text-foreground shadow-raised relative isolate z-[1] flex overflow-hidden rounded-full border opacity-100";
@@ -85,7 +83,7 @@ export function ReaderSelectionToolbar({
   onAsk: () => void;
   onComment: () => void;
   onCopySettled: () => void;
-  onHighlight: (color: keyof typeof colorClasses) => void;
+  onHighlight: (color: ReaderHighlightColor) => void;
   selection: ReaderSelection;
 }) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
@@ -177,18 +175,16 @@ export function ReaderSelectionToolbar({
             role="group"
             style={{ backgroundColor: "var(--color-bg-elevated)" }}
           >
-            {(
-              Object.keys(colorClasses) as Array<keyof typeof colorClasses>
-            ).map((color) => (
+            {readerHighlightColors.map((color) => (
               <button
                 aria-label={labels.colors[color]}
                 className={cn(
                   "border-control size-6 rounded-full border transition-transform hover:scale-110 motion-reduce:transition-none",
                   keyboardFocusRing,
-                  colorClasses[color],
                 )}
                 key={color}
                 onClick={() => onHighlight(color)}
+                style={{ backgroundColor: readerHighlightColorValue(color) }}
                 type="button"
               />
             ))}

@@ -169,8 +169,12 @@ moves to another page.
   browser selection, and adds a removable page chip; it never sends
   automatically.
 - Highlight first discloses the adjacent color palette, creates a private
-  highlight, then clears the browser selection. It may be recolored or deleted
-  by its owner.
+  highlight, then clears the browser selection. The palette contains eight
+  document-specific colors—yellow, red, green, blue, purple, magenta, orange,
+  and gray—and never reuses feedback-state background colors. The persisted
+  highlight appears immediately after the create response, remains visible
+  without requiring the user to select it again, and may be recolored or
+  deleted by its owner.
 - Note copies the selection into `annotationSelection`, opens the annotation
   editor, then clears the browser selection. Threads support comment creation,
   editing, and deletion subject to server capabilities.
@@ -180,8 +184,10 @@ moves to another page.
   only `activeTextSelection`; committed Ask and annotation contexts remain.
 
 Annotation rows and PDF overlays share a single active annotation ID. Choosing
-either representation navigates to and emphasizes the other. A persisted PDF
-anchor uses one-based page numbers and zero-to-one normalized rectangles.
+either representation navigates to and emphasizes the other. Active state uses
+a stronger fill only; it never draws a border or ring around every line of a
+multi-line highlight. A persisted PDF anchor uses one-based page numbers and
+zero-to-one normalized rectangles.
 The empty Annotations panel is a quiet typographic prompt without a decorative
 list icon; the panel tab already provides the necessary context.
 

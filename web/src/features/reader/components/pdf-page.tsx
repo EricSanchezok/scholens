@@ -4,9 +4,11 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
+import { keyboardFocusRing } from "@/components/ui";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
+import { readerHighlightColorValue } from "../reader-highlight-colors";
 import type { ReaderSearchMatch } from "../reader-search";
 import {
   ReaderSelectionToolbar,
@@ -17,13 +19,6 @@ export type ReaderFitMode = "width" | "page" | "custom";
 export type ReaderSelection =
   components["schemas"]["PaperSelectionTurnContext"];
 type ReaderAnnotation = components["schemas"]["ResearchItemResponse"];
-
-const highlightTone: Record<string, string> = {
-  blue: "bg-state-info-bg",
-  green: "bg-state-success-bg",
-  yellow: "bg-state-warning-bg",
-  neutral: "bg-accent",
-};
 
 type SelectionRect = {
   height: number;
@@ -464,14 +459,18 @@ function PdfPageSurface({
             <button
               aria-label={thread.quote_text}
               className={cn(
-                "pointer-events-auto absolute rounded-[2px] opacity-45 outline-offset-2 transition-opacity hover:opacity-65",
-                highlightTone[thread.color] ?? highlightTone.blue,
-                selectedAnnotationId === annotation.id &&
-                  "opacity-65 ring-2 ring-[var(--color-border-focus)]",
+                "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
+                keyboardFocusRing,
+                selectedAnnotationId === annotation.id && "opacity-60",
               )}
+              data-reader-annotation-highlight={annotation.id}
+              data-reader-annotation-selected={
+                selectedAnnotationId === annotation.id ? "true" : undefined
+              }
               key={`${annotation.id}:${index}`}
               onClick={() => onAnnotationSelect?.(annotation.id)}
               style={{
+                backgroundColor: readerHighlightColorValue(thread.color),
                 height: `${rect.height * 100}%`,
                 left: `${rect.x * 100}%`,
                 top: `${rect.y * 100}%`,

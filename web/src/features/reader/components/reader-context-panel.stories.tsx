@@ -169,6 +169,11 @@ export const AnnotationThread: Story = {
   },
 };
 
+export const AnnotationPaletteDark: Story = {
+  args: { selectedAnnotation: annotation },
+  globals: { appearance: "dark" },
+};
+
 export const SelectionReady: Story = {
   args: { annotationSelection: selection, annotations: [] },
 };

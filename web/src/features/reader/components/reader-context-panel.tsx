@@ -29,6 +29,11 @@ import {
   type ReasoningLevel,
 } from "@/features/conversation";
 import { cn } from "@/lib/utilities/cn";
+import {
+  readerHighlightColors,
+  readerHighlightColorValue,
+  readReaderHighlightColor,
+} from "../reader-highlight-colors";
 import type { ReaderSelection } from "./pdf-page";
 import type {
   ReaderAnnotation,
@@ -327,28 +332,26 @@ export function ReaderAnnotationPanel({
                 </span>
               </button>
               <div className="mt-3 flex items-center gap-1">
-                {(["yellow", "blue", "green", "neutral"] as const).map(
-                  (color) => (
-                    <button
-                      aria-label={t(`colors.${color}`)}
-                      className={cn(
-                        "border-control size-6 rounded-full border",
-                        color === "yellow" && "bg-state-warning-bg",
-                        color === "blue" && "bg-state-info-bg",
-                        color === "green" && "bg-state-success-bg",
-                        color === "neutral" && "bg-accent",
-                        thread.color === color &&
-                          "ring-2 ring-[var(--color-border-focus)] ring-offset-1",
-                      )}
-                      disabled={!annotation.capabilities.edit || busy}
-                      key={color}
-                      onClick={() =>
-                        void perform(() => onUpdateColor(annotation.id, color))
-                      }
-                      type="button"
-                    />
-                  ),
-                )}
+                {readerHighlightColors.map((color) => (
+                  <button
+                    aria-label={t(`colors.${color}`)}
+                    className={cn(
+                      "border-control size-6 rounded-full border transition-transform hover:scale-105 motion-reduce:transition-none",
+                      keyboardFocusRing,
+                      readReaderHighlightColor(thread.color) === color &&
+                        "ring-2 ring-[var(--color-focus-ring)] ring-offset-2 ring-offset-[var(--color-bg-surface)]",
+                    )}
+                    disabled={!annotation.capabilities.edit || busy}
+                    key={color}
+                    onClick={() =>
+                      void perform(() => onUpdateColor(annotation.id, color))
+                    }
+                    style={{
+                      backgroundColor: readerHighlightColorValue(color),
+                    }}
+                    type="button"
+                  />
+                ))}
                 {annotation.capabilities.delete && (
                   <IconButton
                     className="ml-auto size-8 min-h-8"

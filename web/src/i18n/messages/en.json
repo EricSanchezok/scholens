@@ -529,9 +529,13 @@
       "context": "Selected annotation",
       "colors": {
         "yellow": "Yellow highlight",
+        "red": "Red highlight",
         "blue": "Blue highlight",
         "green": "Green highlight",
-        "neutral": "Neutral highlight"
+        "purple": "Purple highlight",
+        "magenta": "Magenta highlight",
+        "orange": "Orange highlight",
+        "gray": "Gray highlight"
       },
       "thread": "Annotation thread"
     },

@@ -22,6 +22,7 @@ const actor = {
 };
 
 async function mockReader(page: Page) {
+  const highlights: Array<Record<string, unknown>> = [];
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -64,15 +65,75 @@ async function mockReader(page: Page) {
   );
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/highlight-threads`,
-    (route) =>
+    async (route) => {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON() as {
+          color: string;
+          position: Record<string, unknown>;
+          quote_text: string;
+          shared: boolean;
+        };
+        const item = {
+          id: "20000000-0000-4000-8000-000000000001",
+          kind: "highlight_thread",
+          scope_type: "document",
+          scope_id: paperDocument.document_id,
+          is_shared: body.shared,
+          created_at: "2026-08-13T12:00:00Z",
+          updated_at: "2026-08-13T12:00:00Z",
+          created_by: { id: actor.id, display_name: actor.display_name },
+          capabilities: { delete: true, edit: true, share: false },
+          highlight_thread: {
+            color: body.color,
+            comments: [],
+            position: body.position,
+            quote_text: body.quote_text,
+            role: "note",
+          },
+        };
+        highlights.unshift(item);
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(item),
+        });
+        return;
+      }
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ items: [], next_cursor: null }),
-      }),
+        body: JSON.stringify({ items: highlights, next_cursor: null }),
+      });
+    },
   );
   await page.route("**/reader-test.pdf", (route) =>
     route.fulfill({ contentType: "application/pdf", path: pdfPath }),
   );
+}
+
+async function selectPdfPassage(page: Page, pageNumber: number) {
+  const textLayer = page.locator(
+    `[data-pdf-page-number="${pageNumber}"] .pdf-text-layer`,
+  );
+  await expect(
+    textLayer.locator("span").filter({ hasText: "The NLP landscape" }),
+  ).toBeAttached();
+  await textLayer.evaluate((layer) => {
+    const spans = [...layer.querySelectorAll("span")].filter((span) =>
+      span.textContent?.trim(),
+    );
+    const firstSpan = spans.find((span) =>
+      span.textContent?.includes("The NLP landscape"),
+    );
+    const firstSpanIndex = firstSpan ? spans.indexOf(firstSpan) : -1;
+    const lastSpan = spans[firstSpanIndex + 5];
+    if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
+    const range = document.createRange();
+    range.setStart(firstSpan.firstChild, 0);
+    range.setEnd(lastSpan.firstChild, lastSpan.textContent?.length ?? 0);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -127,24 +188,7 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
       hasText: "The NLP landscape",
     }),
   ).toBeAttached();
-  await selectableTextLayer.evaluate((textLayer) => {
-    const spans = [...textLayer.querySelectorAll("span")].filter((span) =>
-      span.textContent?.trim(),
-    );
-    const firstSpan = spans.find((span) =>
-      span.textContent?.includes("The NLP landscape"),
-    );
-    const firstSpanIndex = firstSpan ? spans.indexOf(firstSpan) : -1;
-    const lastSpan = spans[firstSpanIndex + 5];
-    if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
-    const range = document.createRange();
-    range.setStart(firstSpan.firstChild, 0);
-    range.setEnd(lastSpan.firstChild, lastSpan.textContent?.length ?? 0);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    textLayer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
-  });
+  await selectPdfPassage(page, 2);
   const askAboutSelection = page.getByRole("button", {
     name: "Ask about selection",
   });
@@ -224,6 +268,7 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Annotations" }).click();
   await expect(page.getByText("No annotations yet")).toBeVisible();
+
   await page.getByRole("button", { name: "Details" }).click();
   await expect(page.getByText("Authors", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close panel" }).click();
@@ -288,6 +333,70 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await expect(page).toHaveTitle("Scholens");
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("creates a persistent document highlight with the full color palette", async ({
+  page,
+}) => {
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+  await page.locator('[data-pdf-page-number="3"]').scrollIntoViewIfNeeded();
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("3");
+  await page.getByRole("button", { name: "Previous page" }).click();
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
+  await selectPdfPassage(page, 2);
+
+  await page.getByRole("button", { name: "Highlight selection" }).click();
+  const highlightPalette = page.getByRole("group", {
+    name: "Highlight selection",
+  });
+  const swatches = highlightPalette.getByRole("button");
+  await expect(swatches).toHaveCount(8);
+  expect(
+    await swatches.evaluateAll(
+      (items) =>
+        new Set(items.map((item) => getComputedStyle(item).backgroundColor))
+          .size,
+    ),
+  ).toBe(8);
+
+  await highlightPalette
+    .getByRole("button", { name: "Yellow highlight" })
+    .click();
+  const persistedHighlight = page.locator(
+    '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+  );
+  await expect(persistedHighlight.first()).toBeVisible();
+  const persistedAppearance = await persistedHighlight
+    .first()
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      const root = getComputedStyle(document.documentElement);
+      return {
+        background: style.backgroundColor,
+        boxShadow: style.boxShadow,
+        token: root
+          .getPropertyValue("--color-document-highlight-yellow")
+          .trim(),
+      };
+    });
+  expect(persistedAppearance.token).toBe("#ffd400");
+  expect(persistedAppearance.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(persistedAppearance.background).not.toBe("rgb(255, 255, 255)");
+  expect(persistedAppearance.boxShadow).toBe("none");
+  expect(
+    await persistedHighlight.evaluateAll((items) =>
+      items.every((item) => getComputedStyle(item).boxShadow === "none"),
+    ),
+  ).toBe(true);
+  await page.reload();
+  await expect(persistedHighlight.first()).toBeVisible();
+  await expect(persistedHighlight.first()).toHaveCSS(
+    "background-color",
+    persistedAppearance.background,
+  );
 });
 
 test("uses an immersive mobile Reader without the Workspace bottom navigation", async ({

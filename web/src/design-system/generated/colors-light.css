@@ -25,6 +25,14 @@
   --color-danger-bg: #fff2f0;
   --color-danger-border: #963e38;
   --color-danger-text: #963e38;
+  --color-document-highlight-blue: #2ea8e5;
+  --color-document-highlight-gray: #9b9b95;
+  --color-document-highlight-green: #5fb236;
+  --color-document-highlight-magenta: #e56be5;
+  --color-document-highlight-orange: #f19837;
+  --color-document-highlight-purple: #a28ae5;
+  --color-document-highlight-red: #ff6666;
+  --color-document-highlight-yellow: #ffd400;
   --color-document-search-current: rgba(242, 184, 75, 0.56);
   --color-document-search-match: rgba(246, 211, 101, 0.4);
   --color-document-selection-bg: rgba(91, 155, 213, 0.3);

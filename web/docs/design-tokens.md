@@ -109,6 +109,13 @@ Allowed raw-color exceptions are limited to source images, PDF content, and
 third-party brand marks that must preserve their identity. The surrounding UI
 still uses semantic tokens.
 
+Reader annotation colors are document-content roles rather than status roles.
+Define the curated hue set under `document-highlight`, expose every hue through
+the semantic graph in both appearances, and apply opacity at the PDF overlay.
+Do not reuse success, warning, info, selection, or search backgrounds for
+persisted annotations; those roles carry different meaning and are usually too
+subtle to work as annotation swatches.
+
 Icon semantics follow the same indirection rule as colors. Product components
 consume the named registry in `src/design-system/icons/semantic-icons.ts`, not
 raw Iconoir names. The registry is one-to-one: one product meaning resolves to

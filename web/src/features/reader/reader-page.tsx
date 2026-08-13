@@ -67,6 +67,7 @@ import {
   readSourcePage,
 } from "./reader-routing";
 import type {
+  ReaderAnnotation,
   ReaderContextPanel as ReaderContextPanelName,
   ReaderNavigationMode,
 } from "./reader-types";
@@ -193,6 +194,19 @@ function ReaderDocumentWorkspace({
     });
   }
 
+  function cacheAnnotation(item: ReaderAnnotation) {
+    queryClient.setQueryData<{
+      items: ReaderAnnotation[];
+      next_cursor?: string | null;
+    }>(readerKeys.annotations(documentId), (current) => ({
+      items: [
+        item,
+        ...(current?.items ?? []).filter(({ id }) => id !== item.id),
+      ],
+      next_cursor: current?.next_cursor ?? null,
+    }));
+  }
+
   async function createHighlight(
     targetSelection: ReaderSelection | undefined,
     color = "yellow",
@@ -205,8 +219,9 @@ function ReaderDocumentWorkspace({
       quote_text: targetSelection.selected_text,
       shared: false,
     });
+    cacheAnnotation(item);
     if (comment?.trim()) await createReaderComment(item.id, comment.trim());
-    await refreshAnnotations();
+    if (comment?.trim()) await refreshAnnotations();
     setSelectedAnnotationId(item.id);
     setActiveTextSelection(undefined);
     setAnnotationSelection(undefined);
@@ -609,8 +624,12 @@ function ReaderDocumentWorkspace({
                     ask: t("selection.ask"),
                     colors: {
                       blue: t("annotations.colors.blue"),
+                      gray: t("annotations.colors.gray"),
                       green: t("annotations.colors.green"),
-                      neutral: t("annotations.colors.neutral"),
+                      magenta: t("annotations.colors.magenta"),
+                      orange: t("annotations.colors.orange"),
+                      purple: t("annotations.colors.purple"),
+                      red: t("annotations.colors.red"),
                       yellow: t("annotations.colors.yellow"),
                     },
                     comment: t("selection.comment"),
@@ -671,8 +690,7 @@ function ReaderDocumentWorkspace({
                   createHighlight(annotationSelection, "yellow", comment)
                 }
                 onHighlightUpdate={async (id, color) => {
-                  await updateReaderHighlight(id, { color });
-                  await refreshAnnotations();
+                  cacheAnnotation(await updateReaderHighlight(id, { color }));
                 }}
                 onPanelChange={(nextPanel) =>
                   updateLocation({ panel: nextPanel })
@@ -794,8 +812,7 @@ function ReaderDocumentWorkspace({
               createHighlight(annotationSelection, "yellow", comment)
             }
             onHighlightUpdate={async (id, color) => {
-              await updateReaderHighlight(id, { color });
-              await refreshAnnotations();
+              cacheAnnotation(await updateReaderHighlight(id, { color }));
             }}
             onPanelChange={(nextPanel) => updateLocation({ panel: nextPanel })}
             onSourceOpen={(source) => {

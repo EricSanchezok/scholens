@@ -529,9 +529,13 @@
       "context": "已选批注",
       "colors": {
         "yellow": "黄色高亮",
+        "red": "红色高亮",
         "blue": "蓝色高亮",
         "green": "绿色高亮",
-        "neutral": "中性高亮"
+        "purple": "紫色高亮",
+        "magenta": "洋红色高亮",
+        "orange": "橙色高亮",
+        "gray": "灰色高亮"
       },
       "thread": "批注讨论"
     },
