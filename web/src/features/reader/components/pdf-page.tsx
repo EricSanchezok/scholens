@@ -5,6 +5,8 @@ import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
 import { keyboardFocusRing } from "@/components/ui";
+import { CommentIcon } from "@/design-system/icons/semantic-icons";
+import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
@@ -216,9 +218,19 @@ export function groupReaderAnnotationsByAnchor(
   ];
 }
 
+export function countReaderAnnotationComments(
+  annotations: ReaderAnnotationSummary[],
+) {
+  return annotations.reduce(
+    (count, annotation) => count + annotation.comment_count,
+    0,
+  );
+}
+
 function PdfPageSurface({
   adapter,
   annotationLinkLabel,
+  annotationCommentLabel,
   fitMode,
   containerSize,
   currentPageNumber,
@@ -243,6 +255,7 @@ function PdfPageSurface({
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
+  annotationCommentLabel: (count: number) => string;
   containerSize: { height: number; width: number };
   currentPageNumber: number;
   fitMode: ReaderFitMode;
@@ -479,48 +492,75 @@ function PdfPageSurface({
         ref={annotationLayerRef}
       />
       <div className="pointer-events-none absolute inset-0 z-10">
-        {annotationGroups.flatMap((group) => {
+        {annotationGroups.map((group) => {
           const annotation = group[0];
           const position = annotation?.position;
-          if (!annotation || position?.kind !== "pdf_text") return [];
+          if (!annotation || position?.kind !== "pdf_text") return null;
           const groupSelected = group.some(
             (item) => item.id === selectedAnnotationId,
           );
-          return position.rects.map((rect, index) => (
-            <button
-              aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
-              className={cn(
-                "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
-                keyboardFocusRing,
-                groupSelected && "opacity-60",
-                annotation.status === "resolved" && "opacity-20 grayscale",
-              )}
-              data-reader-annotation-highlight={annotation.id}
-              data-reader-annotation-count={group.length}
-              data-reader-annotation-selected={groupSelected || undefined}
-              key={`${annotation.id}:${index}:${group.length}`}
-              onClick={() =>
-                onAnnotationSelect?.(
-                  annotation.id,
-                  group.map((item) => item.id),
-                )
-              }
-              style={{
-                backgroundColor: readerHighlightColorValue(annotation.color),
-                height: `${rect.height * 100}%`,
-                left: `${rect.x * 100}%`,
-                top: `${rect.y * 100}%`,
-                width: `${rect.width * 100}%`,
-              }}
-              type="button"
-            >
-              {index === 0 && group.length > 1 ? (
-                <span className="bg-foreground text-canvas absolute -top-2 -right-2 grid min-h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold">
-                  {group.length}
-                </span>
+          const selectedGroupItem = group.find(
+            (item) => item.id === selectedAnnotationId,
+          );
+          const interactionTarget = selectedGroupItem ?? annotation;
+          const anchorIds = group.map((item) => item.id);
+          const commentCount = countReaderAnnotationComments(group);
+          const markerRect = position.rects[0];
+          const resolved = group.every((item) => item.status === "resolved");
+          const activateGroup = () =>
+            onAnnotationSelect?.(interactionTarget.id, anchorIds);
+
+          return (
+            <React.Fragment key={annotation.id}>
+              {position.rects.map((rect, index) => (
+                <button
+                  aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
+                  className={cn(
+                    "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
+                    keyboardFocusRing,
+                    groupSelected && "opacity-60",
+                    resolved && "opacity-20 grayscale",
+                  )}
+                  data-reader-annotation-count={group.length}
+                  data-reader-annotation-highlight={interactionTarget.id}
+                  data-reader-annotation-selected={groupSelected || undefined}
+                  key={`${annotation.id}:${index}:${group.length}`}
+                  onClick={activateGroup}
+                  style={{
+                    backgroundColor: readerHighlightColorValue(
+                      interactionTarget.color,
+                    ),
+                    height: `${rect.height * 100}%`,
+                    left: `${rect.x * 100}%`,
+                    top: `${rect.y * 100}%`,
+                    width: `${rect.width * 100}%`,
+                  }}
+                  type="button"
+                />
+              ))}
+              {commentCount > 0 && markerRect ? (
+                <button
+                  aria-label={annotationCommentLabel(commentCount)}
+                  className={cn(
+                    "shadow-raised text-caption pointer-events-auto absolute right-2 z-20 inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1.5 font-semibold",
+                    resolved
+                      ? "border-line bg-subtle text-muted border"
+                      : "bg-foreground text-canvas",
+                    keyboardFocusRing,
+                  )}
+                  data-reader-annotation-comment-marker={interactionTarget.id}
+                  onClick={activateGroup}
+                  style={{
+                    top: `${Math.min(Math.max(markerRect.y * 100, 1), 95)}%`,
+                  }}
+                  type="button"
+                >
+                  <Icon glyph={CommentIcon} size={16} />
+                  {commentCount}
+                </button>
               ) : null}
-            </button>
-          ));
+            </React.Fragment>
+          );
         })}
       </div>
       {activeTextSelection?.page_number === pageNumber &&
@@ -556,6 +596,7 @@ function PdfPageSurface({
 export function PdfPage({
   adapter,
   annotationLinkLabel,
+  annotationCommentLabel,
   fitMode,
   canvasLabel,
   onInternalDestination,
@@ -580,6 +621,7 @@ export function PdfPage({
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
+  annotationCommentLabel: (count: number) => string;
   canvasLabel: string;
   fitMode: ReaderFitMode;
   onInternalDestination: (destination: unknown) => void;
@@ -704,6 +746,26 @@ export function PdfPage({
     return () => window.cancelAnimationFrame(alignmentFrameRef.current);
   }, [containerSize.height, containerSize.width, pageNumber]);
 
+  React.useEffect(() => {
+    if (!selectedAnnotationId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = [
+        ...(containerRef.current?.querySelectorAll<HTMLElement>(
+          "[data-reader-annotation-highlight]",
+        ) ?? []),
+      ].find(
+        (element) =>
+          element.dataset.readerAnnotationHighlight === selectedAnnotationId,
+      );
+      target?.scrollIntoView({
+        behavior: "auto",
+        block: "center",
+        inline: "nearest",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [containerSize.height, containerSize.width, selectedAnnotationId]);
+
   return (
     <div
       aria-label={canvasLabel}
@@ -724,6 +786,7 @@ export function PdfPage({
             <PdfPageSurface
               activeTextSelection={activeTextSelection}
               adapter={adapter}
+              annotationCommentLabel={annotationCommentLabel}
               annotationLinkLabel={annotationLinkLabel}
               annotations={annotations}
               containerSize={containerSize}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  countReaderAnnotationComments,
   groupReaderAnnotationsByAnchor,
   normalizeReaderSelectionRects,
   selectReaderViewportPage,
@@ -111,5 +112,15 @@ describe("groupReaderAnnotationsByAnchor", () => {
         group.map((annotation) => annotation.id),
       ),
     ).toEqual([["personal", "project"], ["different"]]);
+  });
+
+  it("aggregates comments across threads that share one anchor", () => {
+    const annotations = [
+      { id: "highlight", comment_count: 0 },
+      { id: "discussion", comment_count: 3 },
+      { id: "note", comment_count: 2 },
+    ] as ReaderAnnotationSummary[];
+
+    expect(countReaderAnnotationComments(annotations)).toBe(5);
   });
 });

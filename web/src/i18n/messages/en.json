@@ -549,6 +549,7 @@
       "reply": "Reply",
       "submitShortcut": "Cmd/Ctrl + Enter",
       "summaryCount": "Annotations ({count})",
+      "commentMarker": "{count, plural, one {# comment} other {# comments}}",
       "previous": "Previous annotation",
       "next": "Next annotation",
       "loadingThread": "Loading discussion…",

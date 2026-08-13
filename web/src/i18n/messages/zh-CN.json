@@ -549,6 +549,7 @@
       "reply": "回复",
       "submitShortcut": "Cmd/Ctrl + Enter",
       "summaryCount": "批注（{count}）",
+      "commentMarker": "{count} 条评论",
       "previous": "上一条批注",
       "next": "下一条批注",
       "loadingThread": "正在加载讨论…",

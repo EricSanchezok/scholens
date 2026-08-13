@@ -579,7 +579,25 @@ function ReaderDocumentWorkspace({
     },
     onClose: () => updateLocation({ panel: null }),
     onCommentCreate: async (id, content) => {
-      await createReaderComment(id, content);
+      const comment = await createReaderComment(id, content);
+      queryClient.setQueryData(
+        readerKeys.annotation(id),
+        (current: typeof selectedAnnotation | undefined) => {
+          const thread = current?.annotation_thread;
+          if (!current || !thread) return current;
+          return {
+            ...current,
+            updated_at: comment.created_at,
+            annotation_thread: {
+              ...thread,
+              comment_count: thread.comment_count + 1,
+              comments: [...thread.comments, comment],
+              last_activity_at: comment.created_at,
+              mode: current.audience.kind === "project" ? "discussion" : "note",
+            },
+          };
+        },
+      );
       await refreshAnnotations();
     },
     onCommentDelete: async (id) => {
@@ -827,6 +845,9 @@ function ReaderDocumentWorkspace({
                 <PdfPage
                   activeTextSelection={activeTextSelection}
                   adapter={adapter}
+                  annotationCommentLabel={(count) =>
+                    t("annotations.commentMarker", { count })
+                  }
                   annotationLinkLabel={t("pdfLink")}
                   annotations={filteredAnnotations}
                   canvasLabel={t("documentCanvas")}

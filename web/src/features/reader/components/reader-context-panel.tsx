@@ -878,12 +878,13 @@ export function ReaderAnnotationPanel({
                           <Textarea
                             className="min-h-20"
                             disabled={replyBusyId === annotation.id}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const value = event.currentTarget.value;
                               setReplyDrafts((current) => ({
                                 ...current,
-                                [annotation.id]: event.currentTarget.value,
-                              }))
-                            }
+                                [annotation.id]: value,
+                              }));
+                            }}
                             onKeyDown={(event) => {
                               if (
                                 (event.metaKey || event.ctrlKey) &&

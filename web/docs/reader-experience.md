@@ -224,6 +224,13 @@ versus resolved discussions. Audience badges use text rather than color. Open
 annotations paint the PDF; resolved Project discussions are hidden by default
 and use a subdued overlay only while the Resolved filter is active.
 
+Commented anchors add one compact count marker at the PDF page edge; pure
+highlights do not. Exact duplicate anchors paint once and aggregate their
+comment count. Selecting either the painted passage, its marker, or a panel
+summary opens the same thread and centers the exact anchor in the scroll
+viewport. The panel's previous and next actions follow the current filtered
+summary order across pages while keeping the PDF and panel selection in sync.
+
 The annotation panel is a summary list with exactly one expanded thread. A
 collapsed row shows its color marker, quote excerpt, page, author, audience,
 mode, comment count, and recent activity. The expanded thread alone loads and

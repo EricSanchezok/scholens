@@ -23,11 +23,13 @@ const actor = {
 
 function annotationFixture({
   audience = { kind: "personal" },
+  comments = ["Compare this claim with the project benchmark."],
   id,
   position,
   status = "open",
 }: {
   audience?: { kind: "personal" } | { kind: "project"; project_id: string };
+  comments?: string[];
   id: string;
   position: {
     kind: "pdf_text";
@@ -54,19 +56,25 @@ function annotationFixture({
         resolve: status === "open",
       },
       color: status === "resolved" ? "gray" : "yellow",
-      comments: [
-        {
-          id: `${id.slice(0, -1)}9`,
-          thread_id: id,
-          content: "Compare this claim with the project benchmark.",
-          role: "user",
-          created_at: "2026-08-13T12:00:00Z",
-          updated_at: "2026-08-13T12:00:00Z",
-          created_by: { id: actor.id, display_name: actor.display_name },
-          can_edit: true,
-          can_delete: true,
-        },
-      ],
+      comment_count: comments.length,
+      last_activity_at: "2026-08-13T12:00:00Z",
+      mode:
+        comments.length === 0
+          ? "highlight"
+          : audience.kind === "project"
+            ? "discussion"
+            : "note",
+      comments: comments.map((content, index) => ({
+        id: `${id.slice(0, -1)}${index + 4}`,
+        thread_id: id,
+        content,
+        role: "user",
+        created_at: "2026-08-13T12:00:00Z",
+        updated_at: "2026-08-13T12:00:00Z",
+        created_by: { id: actor.id, display_name: actor.display_name },
+        can_edit: true,
+        can_delete: true,
+      })),
       position,
       quote_text: "The NLP landscape has recently been revolutionized.",
       role: "note",
@@ -77,6 +85,28 @@ function annotationFixture({
           ? { id: actor.id, display_name: actor.display_name }
           : null,
     },
+  };
+}
+
+function annotationSummary(item: ReturnType<typeof annotationFixture>) {
+  const thread = item.annotation_thread;
+  return {
+    audience: item.audience,
+    capabilities: thread.capabilities,
+    color: thread.color,
+    comment_count: thread.comment_count,
+    created_at: item.created_at,
+    created_by: item.created_by,
+    id: item.id,
+    last_activity_at: thread.last_activity_at,
+    mode: thread.mode,
+    position: thread.position,
+    quote_text: thread.quote_text,
+    resolved_at: thread.resolved_at,
+    resolved_by: thread.resolved_by,
+    role: thread.role,
+    status: thread.status,
+    target_document_id: item.target_document_id,
   };
 }
 
@@ -184,6 +214,13 @@ async function mockReader(page: Page) {
               resolve: Boolean(body.initial_comment),
             },
             color: body.color,
+            comment_count: body.initial_comment ? 1 : 0,
+            last_activity_at: "2026-08-13T12:00:00Z",
+            mode: body.initial_comment
+              ? body.audience.kind === "project"
+                ? "discussion"
+                : "note"
+              : "highlight",
             comments: body.initial_comment
               ? [
                   {
@@ -217,9 +254,93 @@ async function mockReader(page: Page) {
         });
         return;
       }
+      const url = new URL(route.request().url());
+      const status = url.searchParams.get("status") ?? "open";
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ items: annotations, next_cursor: null }),
+        body: JSON.stringify({
+          items: annotations
+            .map((item) => item as ReturnType<typeof annotationFixture>)
+            .filter((item) => item.annotation_thread.status === status)
+            .map((item) => annotationSummary(item)),
+          next_cursor: null,
+        }),
+      });
+    },
+  );
+  await page.route(`${apiPattern}/annotation-threads/*`, async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/comments")) {
+      await route.fallback();
+      return;
+    }
+    const id = route.request().url().split("/").at(-1);
+    const item = annotations.find((annotation) => annotation.id === id) as
+      ReturnType<typeof annotationFixture> | undefined;
+    if (!item) {
+      await route.fulfill({ status: 404 });
+      return;
+    }
+    if (route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON() as {
+        color?: string;
+        status?: "open" | "resolved";
+      };
+      if (body.color) item.annotation_thread.color = body.color;
+      if (body.status) {
+        item.annotation_thread.status = body.status;
+        item.annotation_thread.capabilities.resolve = body.status === "open";
+        item.annotation_thread.capabilities.reopen = body.status === "resolved";
+        item.annotation_thread.capabilities.reply = body.status === "open";
+        item.annotation_thread.resolved_at =
+          body.status === "resolved" ? "2026-08-13T12:05:00Z" : null;
+        item.annotation_thread.resolved_by =
+          body.status === "resolved"
+            ? { id: actor.id, display_name: actor.display_name }
+            : null;
+      }
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(item),
+    });
+  });
+  await page.route(
+    `${apiPattern}/annotation-threads/*/comments`,
+    async (route) => {
+      const segments = new URL(route.request().url()).pathname.split("/");
+      const threadId = segments.at(-2);
+      if (!threadId) {
+        await route.fulfill({ status: 404 });
+        return;
+      }
+      const item = annotations.find(
+        (annotation) => annotation.id === threadId,
+      ) as ReturnType<typeof annotationFixture> | undefined;
+      if (!item) {
+        await route.fulfill({ status: 404 });
+        return;
+      }
+      const content = (route.request().postDataJSON() as { content: string })
+        .content;
+      const comment = {
+        id: `30000000-0000-4000-8000-${String(item.annotation_thread.comments.length + 2).padStart(12, "0")}`,
+        thread_id: threadId,
+        content,
+        role: "user",
+        created_at: "2026-08-13T12:06:00Z",
+        updated_at: "2026-08-13T12:06:00Z",
+        created_by: { id: actor.id, display_name: actor.display_name },
+        can_edit: true,
+        can_delete: true,
+      };
+      item.annotation_thread.comments.push(comment);
+      item.annotation_thread.comment_count += 1;
+      item.annotation_thread.last_activity_at = comment.created_at;
+      item.annotation_thread.mode =
+        item.audience.kind === "project" ? "discussion" : "note";
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(comment),
       });
     },
   );
@@ -581,6 +702,66 @@ test("switches into a Project Reader and creates a project annotation atomically
     );
 });
 
+test("replies to, resolves, restores, and reopens a Project discussion", async ({
+  page,
+}) => {
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await page.getByRole("combobox", { name: "Reader context" }).click();
+  await page.getByRole("option", { name: "Agentic Web review" }).click();
+  await expect(page).toHaveURL(/project=50000000-0000-4000-8000-000000000001/);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] .pdf-text-layer span').first(),
+  ).toBeAttached();
+  await selectPdfPassage(page, 2);
+  const addAnnotation = page.getByRole("button", { name: "Add annotation" });
+  await expect(addAnnotation).toBeVisible();
+  await addAnnotation.click();
+  await page
+    .getByPlaceholder("Add a note to this selection")
+    .fill("Compare this claim with the project benchmark.");
+  await page.getByRole("button", { name: "Save annotation" }).click();
+
+  const marker = page.getByRole("button", { name: "1 comment" });
+  await expect(marker).toBeVisible();
+  await marker.click();
+  await page
+    .getByPlaceholder("Reply to this discussion")
+    .fill("The evaluation section now confirms the comparison.");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(page.getByRole("button", { name: "2 comments" })).toBeVisible({
+    timeout: 5_000,
+  });
+
+  const focusedHighlight = page.locator(
+    '[data-reader-annotation-selected="true"]',
+  );
+  await expect(focusedHighlight.first()).toBeVisible();
+  const focusedBox = await focusedHighlight.first().boundingBox();
+  expect(focusedBox?.y).toBeGreaterThan(80);
+  expect(focusedBox?.y).toBeLessThan(page.viewportSize()!.height - 80);
+
+  await page.getByRole("button", { name: "Resolve" }).click();
+  await expect(
+    page.locator(
+      '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+    ),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByRole("menuitem", { name: "Resolved discussions" }).click();
+  const resolvedHighlight = page.locator(
+    '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+  );
+  await expect(resolvedHighlight.first()).toBeVisible();
+  await resolvedHighlight.first().click();
+  await page.getByRole("button", { name: "Reopen" }).click();
+
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByRole("menuitem", { name: "Current" }).click();
+  await resolvedHighlight.first().click();
+  await expect(page.getByPlaceholder("Reply to this discussion")).toBeVisible();
+});
+
 test("falls back from an inaccessible Project Reader context", async ({
   page,
 }) => {
@@ -629,26 +810,47 @@ test("deduplicates exact anchors and reveals resolved Project discussions weakly
   ];
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/annotation-threads**`,
-    (route) =>
+    (route) => {
+      const status =
+        new URL(route.request().url()).searchParams.get("status") ?? "open";
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ items: seeded, next_cursor: null }),
-      }),
+        body: JSON.stringify({
+          items: seeded
+            .filter((item) => item.annotation_thread.status === status)
+            .map(annotationSummary),
+          next_cursor: null,
+        }),
+      });
+    },
   );
+  await page.route(`${apiPattern}/annotation-threads/*`, (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/comments")) {
+      return route.fallback();
+    }
+    const id = route.request().url().split("/").at(-1);
+    const item = seeded.find((candidate) => candidate.id === id);
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(item),
+    });
+  });
   await page.goto(
     `/reader/${paperDocument.document_id}?page=2&project=${projectId}`,
   );
 
   const grouped = page.locator('[data-reader-annotation-count="2"]');
-  await expect(grouped).toHaveCount(1);
+  await expect(grouped).toHaveCount(sharedPosition.rects.length);
   await expect(page.locator('[data-reader-annotation-count="1"]')).toHaveCount(
     0,
   );
-  await grouped.click();
+  await expect(page.getByRole("button", { name: "2 comments" })).toHaveCount(1);
+  await grouped.first().click();
   await expect(
     page.getByRole("button", { name: "Annotations" }),
   ).toHaveAttribute("data-active", "true");
-  await page.getByRole("button", { name: "Resolved" }).click();
+  await page.getByRole("button", { name: "Filter" }).click();
+  await page.getByRole("menuitem", { name: "Resolved discussions" }).click();
   const resolved = page.locator(
     '[data-reader-annotation-highlight="21000000-0000-4000-8000-000000000003"]',
   );
