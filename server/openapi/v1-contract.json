@@ -278,6 +278,9 @@
       "delete",
       "patch"
     ],
+    "/api/v1/projects/{project_id}/outputs": [
+      "get"
+    ],
     "/api/v1/projects/{project_id}/papers": [
       "get",
       "post"

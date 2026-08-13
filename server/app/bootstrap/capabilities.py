@@ -194,7 +194,11 @@ class ApplicationCapabilities:
 
     @cached_property
     def projects(self) -> Projects:
-        return build_projects(db=self._session, journal=self._journal)
+        return build_projects(
+            db=self._session,
+            cursor_secret=self._settings.paper_search_cursor_secret,
+            journal=self._journal,
+        )
 
     @cached_property
     def research_items(self) -> ResearchItems:

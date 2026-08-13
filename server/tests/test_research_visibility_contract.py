@@ -331,14 +331,12 @@ def test_research_api_exposes_annotation_thread_routes_only() -> None:
 def test_project_summary_counts_project_audience_outputs() -> None:
     db = MagicMock(spec=Session)
     db.scalar.return_value = 0
+
     _project_counts(db, project_id=uuid.uuid4(), current_user_id=73)
-    for statement in (
-        str(db.scalar.call_args_list[2].args[0]),
-        str(db.scalar.call_args_list[3].args[0]),
-    ):
-        assert "research_items.audience_type" in statement
-        assert "research_items.audience_project_id" in statement
-        assert "is_shared" not in statement
+    output_statement = str(db.scalar.call_args_list[2].args[0])
+    assert "research_items.audience_type" in output_statement
+    assert "research_items.audience_project_id" in output_statement
+    assert "is_shared" not in output_statement
 
 
 def test_clean_baseline_contains_annotation_audience_constraints() -> None:

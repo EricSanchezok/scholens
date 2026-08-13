@@ -1,9 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+
+from app.modules.papers.application.contracts.documents import LibraryOutputResponse
+
+
+class ProjectSort(StrEnum):
+    ACTIVITY_DESC = "activity_desc"
+    TITLE_ASC = "title_asc"
+    PAPERS_DESC = "papers_desc"
+
+
+class ProjectPaperSort(StrEnum):
+    ADDED_DESC = "added_desc"
+    TITLE_ASC = "title_asc"
+    PUBLISHED_DESC = "published_desc"
 
 
 class ProjectPermissionSet(BaseModel):
@@ -93,9 +108,9 @@ class ProjectResponse(BaseModel):
     capabilities: ProjectCapabilitiesResponse
     num_papers: int = 0
     num_conversations: int = 0
-    num_audio_overviews: int = 0
-    num_data_tables: int = 0
+    num_outputs: int = 0
     num_collaborators: int = 0
+    activity_at: datetime
     created_at: datetime
     updated_at: datetime
 
@@ -103,6 +118,8 @@ class ProjectResponse(BaseModel):
 class ProjectListResponse(BaseModel):
     items: list[ProjectResponse]
     next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(default=0, ge=0)
 
 
 class ProjectCollaboratorResponse(BaseModel):
@@ -138,7 +155,7 @@ class ProjectInvitationListResponse(BaseModel):
 class ProjectPaperSummaryResponse(BaseModel):
     document_id: UUID
     title: str | None
-    created_at: datetime
+    added_at: datetime
     abstract: str | None
     authors: list[str] | None
     institutions: list[str] | None
@@ -154,6 +171,15 @@ class ProjectPaperSummaryResponse(BaseModel):
 class ProjectPaperListResponse(BaseModel):
     items: list[ProjectPaperSummaryResponse]
     next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(default=0, ge=0)
+
+
+class ProjectOutputListResponse(BaseModel):
+    items: list[LibraryOutputResponse]
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(default=0, ge=0)
 
 
 class ProjectPapersAddedResponse(BaseModel):

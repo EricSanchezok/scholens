@@ -91,6 +91,7 @@ def _projects(
             gateway=cast(ProjectGateway, gateway),
             capacity=MagicMock(),
             signer=MagicMock(),
+            cursors=MagicMock(),
             journal=journal,
         ),
         store,

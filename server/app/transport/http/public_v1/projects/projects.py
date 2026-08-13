@@ -13,6 +13,7 @@ from app.modules.projects.application.contracts import (
     ProjectCreateRequest,
     ProjectListResponse,
     ProjectResponse,
+    ProjectSort,
     ProjectTransferRequest,
     ProjectUpdateRequest,
 )
@@ -50,7 +51,10 @@ def create_project(
 
 @projects_router.get("", response_model=ProjectListResponse)
 def get_projects(
-    limit: int | None = Query(default=None, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=240),
+    sort: ProjectSort = ProjectSort.ACTIVITY_DESC,
+    cursor: str | None = Query(default=None, min_length=1, max_length=2048),
+    limit: int = Query(default=20, ge=1, le=100),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -59,6 +63,9 @@ def get_projects(
     return executor.query(
         lambda capabilities: capabilities.projects.list(
             actor=current_user,
+            query=q,
+            sort=sort,
+            cursor=cursor,
             limit=limit,
         )
     )

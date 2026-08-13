@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, cast
+from uuid import UUID
 
 from app.bootstrap.adapters.research_access import research_item_visible_to
 from app.bootstrap.adapters.research_repository import research_repository
@@ -47,6 +48,7 @@ class SqlAlchemyLibraryOutputsGateway:
         limit: int,
         direction: LibraryPageDirection,
         position: LibraryPagePosition | None,
+        project_id: UUID | None = None,
     ) -> LibraryOutputPage:
         title = self._title_expression()
         source_title = case(
@@ -72,6 +74,13 @@ class SqlAlchemyLibraryOutputsGateway:
             natural_ascending = sort is LibraryOutputSort.TITLE_ASC
 
         filters = [research_item_visible_to(user_id)]
+        if project_id is not None:
+            filters.extend(
+                (
+                    ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                    ResearchItem.audience_project_id == project_id,
+                )
+            )
         if kinds:
             filters.append(ResearchItem.kind.in_([kind.value for kind in kinds]))
         if query is not None:

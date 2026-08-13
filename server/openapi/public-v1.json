@@ -6190,6 +6190,23 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -6213,6 +6230,50 @@
           "permissions"
         ],
         "title": "ProjectMembershipResponse",
+        "type": "object"
+      },
+      "ProjectOutputListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryOutputResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProjectOutputListResponse",
         "type": "object"
       },
       "ProjectOwnerResponse": {
@@ -6285,6 +6346,23 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -6292,6 +6370,15 @@
         ],
         "title": "ProjectPaperListResponse",
         "type": "object"
+      },
+      "ProjectPaperSort": {
+        "enum": [
+          "added_desc",
+          "title_asc",
+          "published_desc"
+        ],
+        "title": "ProjectPaperSort",
+        "type": "string"
       },
       "ProjectPaperSummaryResponse": {
         "properties": {
@@ -6306,6 +6393,11 @@
             ],
             "title": "Abstract"
           },
+          "added_at": {
+            "format": "date-time",
+            "title": "Added At",
+            "type": "string"
+          },
           "authors": {
             "anyOf": [
               {
@@ -6319,11 +6411,6 @@
               }
             ],
             "title": "Authors"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
           },
           "document_id": {
             "format": "uuid",
@@ -6423,7 +6510,7 @@
         "required": [
           "document_id",
           "title",
-          "created_at",
+          "added_at",
           "abstract",
           "authors",
           "institutions",
@@ -6578,6 +6665,11 @@
       },
       "ProjectResponse": {
         "properties": {
+          "activity_at": {
+            "format": "date-time",
+            "title": "Activity At",
+            "type": "string"
+          },
           "capabilities": {
             "$ref": "#/components/schemas/ProjectCapabilitiesResponse"
           },
@@ -6605,11 +6697,6 @@
           "membership": {
             "$ref": "#/components/schemas/ProjectMembershipResponse"
           },
-          "num_audio_overviews": {
-            "default": 0,
-            "title": "Num Audio Overviews",
-            "type": "integer"
-          },
           "num_collaborators": {
             "default": 0,
             "title": "Num Collaborators",
@@ -6620,9 +6707,9 @@
             "title": "Num Conversations",
             "type": "integer"
           },
-          "num_data_tables": {
+          "num_outputs": {
             "default": 0,
-            "title": "Num Data Tables",
+            "title": "Num Outputs",
             "type": "integer"
           },
           "num_papers": {
@@ -6650,11 +6737,21 @@
           "owner",
           "membership",
           "capabilities",
+          "activity_at",
           "created_at",
           "updated_at"
         ],
         "title": "ProjectResponse",
         "type": "object"
+      },
+      "ProjectSort": {
+        "enum": [
+          "activity_desc",
+          "title_asc",
+          "papers_desc"
+        ],
+        "title": "ProjectSort",
+        "type": "string"
       },
       "ProjectTransferRequest": {
         "additionalProperties": false,
@@ -13332,20 +13429,58 @@
         "parameters": [
           {
             "in": "query",
-            "name": "limit",
+            "name": "q",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "maximum": 100,
-                  "minimum": 1,
-                  "type": "integer"
+                  "maxLength": 240,
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Limit"
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSort",
+              "default": "activity_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],
@@ -14091,6 +14226,120 @@
         "summary": "Update Project Collaborator"
       }
     },
+    "/api/v1/projects/{project_id}/outputs": {
+      "get": {
+        "operationId": "get_project_outputs_api_v1_projects__project_id__outputs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/ResearchItemKind"
+              },
+              "title": "Kinds",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LibraryOutputSort",
+              "default": "updated_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOutputListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Project Outputs"
+      }
+    },
     "/api/v1/projects/{project_id}/papers": {
       "get": {
         "operationId": "get_project_papers_api_v1_projects__project_id__papers_get",
@@ -14113,6 +14362,62 @@
               "default": false,
               "title": "Load Urls",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectPaperSort",
+              "default": "added_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],

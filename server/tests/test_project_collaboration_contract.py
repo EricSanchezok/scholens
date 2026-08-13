@@ -472,9 +472,23 @@ def test_project_api_exposes_capabilities_and_invitation_lifecycle() -> None:
     assert "/api/v1/projects/{project_id}/leave" in paths
     assert "/api/v1/projects/{project_id}/papers" in paths
     assert "/api/v1/projects/{project_id}/papers/{document_id}" in paths
+    assert "/api/v1/projects/{project_id}/outputs" in paths
     assert "/api/v1/project-invitations/{token}/accept" in paths
     assert "/api/v1/project-invitations/token/{token}/accept" not in paths
     assert not any("role" in path for path in paths if "project" in path)
+
+    schemas = app.openapi()["components"]["schemas"]
+    project_fields = schemas["ProjectResponse"]["properties"]
+    assert {"num_papers", "num_conversations", "num_outputs", "activity_at"} <= set(
+        project_fields
+    )
+    assert "num_audio_overviews" not in project_fields
+    assert "num_data_tables" not in project_fields
+
+    project_query = paths["/api/v1/projects"]["get"]["parameters"]
+    assert {"q", "sort", "cursor", "limit"} == {
+        parameter["name"] for parameter in project_query
+    }
 
 
 def test_document_and_library_api_expose_canonical_asset_boundaries() -> None:

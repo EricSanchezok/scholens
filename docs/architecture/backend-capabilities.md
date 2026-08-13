@@ -42,6 +42,10 @@ Public resources use canonical identifiers:
   as cursors.
 - Resource creation returns `201`, accepted asynchronous work returns `202`,
   and deletions without a response body return `204`.
+- Project browsing is an aggregate projection: cards expose paper, private
+  conversation, visible output, collaborator, and activity facts without
+  per-project count queries. Project paper and output collections use the same
+  signed, user-and-filter-bound keyset contract as Library collections.
 - Paper ingestion, Zotero imports, and generated artifacts accept
   `Idempotency-Key`. Reusing a key with a different request returns `409`.
 

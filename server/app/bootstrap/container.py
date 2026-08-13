@@ -339,11 +339,19 @@ def build_citation_metadata(
     )
 
 
-def build_projects(*, db: Session, journal: OperationJournal) -> Projects:
+def build_projects(
+    *, db: Session, cursor_secret: str, journal: OperationJournal
+) -> Projects:
     return Projects(
         gateway=SqlAlchemyProjectGateway(db),
         capacity=BillingProjectCapacity(db),
         signer=S3PaperDownloadSigner(),
+        cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="projects-v1",
+            error_code="project_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 
