@@ -191,23 +191,21 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-        <header className="hidden items-end justify-between gap-6 lg:flex">
+      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-10">
+        <header className="hidden items-start justify-between gap-6 lg:flex">
           <div>
-            <h1 className="text-2xl font-semibold tracking-[-0.02em]">
+            <h1 className="text-3xl font-semibold tracking-[-0.02em]">
               {t("title")}
             </h1>
-            <p className="text-secondary mt-2 max-w-2xl text-sm">
-              {t("description")}
-            </p>
+            <p className="text-secondary mt-2 text-sm">{t("description")}</p>
           </div>
           <Button onClick={() => setFormState({ mode: "create" })}>
-            <Icon glyph={AddIcon} size={20} />
+            <Icon glyph={AddIcon} size={20} tone="inverse" />
             {t("actions.create")}
           </Button>
         </header>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem] lg:mt-8">
+        <div className="mt-0 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem] lg:mt-8">
           <SearchControl
             key={state.query}
             label={t("search")}
@@ -231,7 +229,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
           </Select>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-4">
           {projectsQuery.isPending ? (
             <div className="grid gap-4 md:grid-cols-2">
               <LoadingState label={t("feedback.loading")} />
@@ -249,10 +247,6 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
             />
           ) : projectsQuery.data.items.length === 0 ? (
             <AsyncFeedback
-              action={{
-                label: t("actions.create"),
-                onClick: () => setFormState({ mode: "create" }),
-              }}
               description={
                 state.query
                   ? t("empty.searchDescription")

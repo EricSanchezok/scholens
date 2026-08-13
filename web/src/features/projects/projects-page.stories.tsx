@@ -38,9 +38,13 @@ type Story = StoryObj<typeof meta>;
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      await canvas.findByRole("heading", { name: "Projects" }),
-    ).toBeVisible();
+    const heading = await canvas.findByRole("heading", { name: "Projects" });
+    await expect(heading).toBeVisible();
+    await expect(heading).toHaveClass("text-3xl");
+    const createButton = canvas.getByRole("button", { name: "New project" });
+    await expect(createButton.querySelector("svg")).toHaveClass(
+      "text-ui-icon-inverse",
+    );
     await expect(
       await canvas.findByRole("link", { name: "Truthward" }),
     ).toBeVisible();
@@ -53,11 +57,13 @@ export const Empty: Story = {
     msw: { handlers: [...authHandlers.success, ...projectHandlers.empty] },
   },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
     await expect(
-      await within(canvasElement).findByText(
-        "Start your first research project",
-      ),
+      await canvas.findByText("Start your first research project"),
     ).toBeVisible();
+    await expect(
+      canvas.getAllByRole("button", { name: "New project" }),
+    ).toHaveLength(1);
   },
 };
 

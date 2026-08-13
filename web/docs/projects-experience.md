@@ -12,6 +12,9 @@ and the shared Conversation feature.
   private Project-conversation count, visible output count, and computed
   activity time. Figma topic chips are omitted because no Project-tag model
   exists.
+- Project creation has one primary entry per responsive composition: the page
+  header on desktop and the app bar on mobile. Empty and filtered-empty states
+  explain the collection state without repeating the creation action.
 - Project conversations are private to the current member even though their
   starting scope is the shared Project. The existing Conversation runtime is
   reused with `scope_type=project`; Projects does not fork chat behavior.
