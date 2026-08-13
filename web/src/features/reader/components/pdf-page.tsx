@@ -610,6 +610,8 @@ export function PdfPage({
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const activePageRef = React.useRef(0);
+  const pendingPageAlignmentRef = React.useRef<number | undefined>(undefined);
+  const alignmentFrameRef = React.useRef(0);
   const [containerSize, setContainerSize] = React.useState({
     height: 0,
     width: 0,
@@ -649,6 +651,7 @@ export function PdfPage({
     function updateVisiblePage() {
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
+        if (pendingPageAlignmentRef.current !== undefined) return;
         const viewport = scrollContainer.getBoundingClientRect();
         const pages = [
           ...scrollContainer.querySelectorAll<HTMLElement>(
@@ -680,14 +683,26 @@ export function PdfPage({
   }, [onVisiblePageChange]);
 
   React.useEffect(() => {
-    if (activePageRef.current === pageNumber) return;
+    const externallyRequested = activePageRef.current !== pageNumber;
+    const layoutPending = pendingPageAlignmentRef.current === pageNumber;
+    if (!externallyRequested && !layoutPending) return;
     const target = containerRef.current?.querySelector<HTMLElement>(
       `[data-pdf-page-number="${pageNumber}"]`,
     );
     if (!target) return;
+    pendingPageAlignmentRef.current = pageNumber;
+    window.cancelAnimationFrame(alignmentFrameRef.current);
     activePageRef.current = pageNumber;
     target.scrollIntoView({ behavior: "auto", block: "start" });
-  }, [pageNumber]);
+    if (containerSize.height > 0 && containerSize.width > 0) {
+      alignmentFrameRef.current = window.requestAnimationFrame(() => {
+        if (pendingPageAlignmentRef.current === pageNumber) {
+          pendingPageAlignmentRef.current = undefined;
+        }
+      });
+    }
+    return () => window.cancelAnimationFrame(alignmentFrameRef.current);
+  }, [containerSize.height, containerSize.width, pageNumber]);
 
   return (
     <div

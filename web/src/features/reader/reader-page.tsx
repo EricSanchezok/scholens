@@ -305,6 +305,14 @@ function ReaderDocumentWorkspace({
     [documentId],
   );
 
+  const handleVisiblePageChange = React.useCallback(
+    (nextPage: number) => {
+      setActiveTextSelection(undefined);
+      updateLocation({ page: nextPage });
+    },
+    [updateLocation],
+  );
+
   function notifyActionError() {
     toast.notify({
       description: t("actions.failedDescription"),
@@ -818,10 +826,7 @@ function ReaderDocumentWorkspace({
                   onInternalDestination={(destination) =>
                     void resolveDestination(destination)
                   }
-                  onVisiblePageChange={(nextPage) => {
-                    setActiveTextSelection(undefined);
-                    updateLocation({ page: nextPage });
-                  }}
+                  onVisiblePageChange={handleVisiblePageChange}
                   pageCount={pageCount}
                   pageNumber={pageNumber}
                   searchMatches={searchResults}
