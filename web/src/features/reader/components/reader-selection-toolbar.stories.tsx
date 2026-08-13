@@ -17,6 +17,25 @@ const selection: ReaderSelection = {
   },
 };
 
+async function expectOpaqueFloatingSurface(
+  canvasElement: HTMLElement,
+  surfaceName: "actions" | "palette",
+) {
+  const surface = canvasElement.querySelector<HTMLElement>(
+    `[data-reader-selection-toolbar-surface="${surfaceName}"]`,
+  );
+  const reference = canvasElement.querySelector<HTMLElement>(
+    "[data-elevated-surface-reference]",
+  );
+  await expect(surface).not.toBeNull();
+  await expect(reference).not.toBeNull();
+  await expect(getComputedStyle(surface!).backgroundColor).toBe(
+    getComputedStyle(reference!).backgroundColor,
+  );
+  await expect(getComputedStyle(surface!).isolation).toBe("isolate");
+  await expect(getComputedStyle(surface!).opacity).toBe("1");
+}
+
 const meta = {
   title: "Reader/Selection toolbar",
   component: ReaderSelectionToolbar,
@@ -45,6 +64,11 @@ const meta = {
   decorators: [
     (Story) => (
       <div className="bg-canvas relative h-[36rem] w-[28rem] max-w-full border">
+        <span
+          aria-hidden="true"
+          className="bg-elevated pointer-events-none absolute size-px"
+          data-elevated-surface-reference
+        />
         <p className="text-secondary absolute top-[34%] left-[24%] text-sm">
           Selected PDF text
         </p>
@@ -58,7 +82,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const SelectionToolbar: Story = {};
+export const SelectionToolbar: Story = {
+  play: async ({ canvasElement }) => {
+    await expectOpaqueFloatingSurface(canvasElement, "actions");
+  },
+};
 
 export const LongSelectionNearPageTop: Story = {
   args: {
@@ -87,5 +115,6 @@ export const HighlightPalette: Story = {
         canvas.getByRole("button", { name: "Yellow highlight" }),
       ).toBeVisible(),
     );
+    await expectOpaqueFloatingSurface(canvasElement, "palette");
   },
 };

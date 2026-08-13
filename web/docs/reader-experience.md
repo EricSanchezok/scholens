@@ -134,9 +134,11 @@ Selection has three deliberately separate lifetimes:
 The text-selection toolbar is absent until a real non-collapsed PDF text
 selection exists. It chooses the side with usable space, remains above the PDF
 page stack when it crosses a page gap, and stays horizontally clamped to the
-rendered page. It contains only the Iconoir icons for Ask, Highlight, Note, and
-Copy; accessible names live in tooltips and `aria-label`s rather than visible
-action text. All four actions use the shared control-state and feedback rules.
+rendered page. Its actions and color palette always sit on an isolated, fully
+opaque elevated surface so document text cannot show through the controls. It
+contains only the Iconoir icons for Ask, Highlight, Note, and Copy; accessible
+names live in tooltips and `aria-label`s rather than visible action text. All
+four actions use the shared control-state and feedback rules.
 
 While the pointer is down, the PDF text layer uses the dedicated translucent
 blue document-selection token. The original Canvas text must remain legible

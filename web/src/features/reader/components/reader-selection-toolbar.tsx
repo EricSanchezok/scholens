@@ -41,6 +41,9 @@ const colorClasses = {
   neutral: "bg-accent",
 } as const;
 
+const floatingSurfaceClass =
+  "border-line bg-elevated text-foreground shadow-raised relative isolate z-[1] flex overflow-hidden rounded-full border opacity-100";
+
 function ToolbarAction({
   children,
   disabled,
@@ -126,9 +129,7 @@ export function ReaderSelectionToolbar({
   return (
     <TooltipProvider delayDuration={350}>
       <div
-        className={cn(
-          "settled-content-enter pointer-events-auto absolute z-30 flex flex-col items-center gap-1 transition-[opacity,transform] duration-[140ms] motion-reduce:transition-none",
-        )}
+        className="pointer-events-auto absolute isolate z-40 flex flex-col items-center gap-1"
         onPointerDown={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -140,7 +141,11 @@ export function ReaderSelectionToolbar({
           transform: `${showBelow ? "translateY(0.5rem)" : "translateY(calc(-100% - 0.5rem))"} translateX(-50%)`,
         }}
       >
-        <div className="border-line bg-elevated shadow-raised flex items-center gap-0.5 rounded-full border p-1">
+        <div
+          className={cn(floatingSurfaceClass, "gap-0.5 p-1")}
+          data-reader-selection-toolbar-surface="actions"
+          style={{ backgroundColor: "var(--color-bg-elevated)" }}
+        >
           <ToolbarAction label={labels.ask} onClick={onAsk}>
             <Icon glyph={ChatBubbleQuestion} size={20} />
           </ToolbarAction>
@@ -167,8 +172,10 @@ export function ReaderSelectionToolbar({
         {paletteOpen ? (
           <div
             aria-label={labels.highlight}
-            className="border-line bg-elevated shadow-raised flex items-center gap-2 rounded-full border p-2"
+            className={cn(floatingSurfaceClass, "gap-2 p-2")}
+            data-reader-selection-toolbar-surface="palette"
             role="group"
+            style={{ backgroundColor: "var(--color-bg-elevated)" }}
           >
             {(
               Object.keys(colorClasses) as Array<keyof typeof colorClasses>
