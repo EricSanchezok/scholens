@@ -60,7 +60,7 @@ class ConversationChatScope:
 @dataclass(frozen=True, slots=True)
 class MentionScope:
     snapshot: list[dict[str, JsonValue]] | None
-    highlights: list[dict[str, JsonValue]] | None
+    annotation_threads: list[dict[str, JsonValue]] | None
 
 
 @dataclass(frozen=True, slots=True)

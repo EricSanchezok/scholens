@@ -28,7 +28,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationTurnCreateRequest,
 )
 from app.modules.conversations.application.contracts.contexts import (
-    HighlightThreadTurnContext,
+    AnnotationThreadTurnContext,
 )
 from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
@@ -202,30 +202,30 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         actor: Actor,
         request: ConversationTurnCreateRequest,
     ) -> MentionScope:
-        highlight_contexts = [
+        annotation_contexts = [
             context
             for context in request.contexts
-            if isinstance(context, HighlightThreadTurnContext)
+            if isinstance(context, AnnotationThreadTurnContext)
         ]
-        if not highlight_contexts:
+        if not annotation_contexts:
             return MentionScope(None, None)
 
         snapshot: list[dict[str, JsonValue]] = []
-        highlights_by_paper: dict[str, dict[str, JsonValue]] = {}
-        for context in highlight_contexts:
+        annotations_by_paper: dict[str, dict[str, JsonValue]] = {}
+        for context in annotation_contexts:
             try:
-                item = research_repository.get_highlight_thread_visible(
+                item = research_repository.get_annotation_thread_visible(
                     self._session,
                     thread_id=context.thread_id,
                     user_id=actor.id,
                 )
             except AppError:
                 continue
-            highlight = item.highlight_thread
-            if highlight is None or item.document_id is None:
+            thread = item.annotation_thread
+            if thread is None or item.target_document_id is None:
                 continue
-            document_id = str(item.document_id)
-            group = highlights_by_paper.get(document_id)
+            document_id = str(item.target_document_id)
+            group = annotations_by_paper.get(document_id)
             if group is None:
                 paper = document_repository.find_accessible(
                     self._session,
@@ -236,35 +236,35 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                     "document_id": document_id,
                     "paper_title": paper.title if paper else None,
                     "paper_abstract": paper.abstract if paper else None,
-                    "highlights": [],
+                    "annotation_threads": [],
                 }
-                highlights_by_paper[document_id] = group
+                annotations_by_paper[document_id] = group
             annotations = [
-                comment.content for comment in highlight.comments if comment.content
+                comment.content for comment in thread.comments if comment.content
             ]
             json_annotations = cast(list[JsonValue], annotations)
             snapshot.append(
                 {
-                    "kind": "highlight",
+                    "kind": "annotation_thread",
                     "id": str(item.id),
-                    "title": highlight.quote_text,
+                    "title": thread.quote_text,
                     "document_id": document_id,
                     "paper_title": group["paper_title"],
                     "annotations": json_annotations,
                 }
             )
-            highlights = group["highlights"]
-            assert isinstance(highlights, list)
-            highlights.append(
+            annotation_threads = group["annotation_threads"]
+            assert isinstance(annotation_threads, list)
+            annotation_threads.append(
                 {
-                    "highlighted_text": highlight.quote_text,
-                    "position": highlight.position,
+                    "quoted_text": thread.quote_text,
+                    "position": thread.position,
                     "annotations": json_annotations,
                 }
             )
         return MentionScope(
             snapshot=snapshot,
-            highlights=list(highlights_by_paper.values()),
+            annotation_threads=list(annotations_by_paper.values()),
         )
 
     @staticmethod

@@ -233,7 +233,7 @@ async def _events(
             request_operation=operation,
             correlation_id=operation.trace.correlation_id,
             user_operation_id=operation.trace.operation_id,
-            mentioned_highlights=None,
+            mentioned_annotations=None,
         )
     ]
 

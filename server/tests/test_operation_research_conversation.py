@@ -24,7 +24,7 @@ from app.modules.conversations.application.conversations import (
 )
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.research.application.contracts import (
-    CreateHighlightThreadRequest,
+    CreateAnnotationThreadRequest,
     UpdateAnnotationCommentRequest,
 )
 from app.modules.research.application.items import ResearchItemChange, ResearchItems
@@ -64,11 +64,11 @@ def test_research_creation_requires_explicit_role_and_journals_change() -> None:
     gateway = MagicMock()
     journal = MagicMock(spec=OperationJournal)
     response = SimpleNamespace(id=uuid4())
-    gateway.create_highlight.return_value = response
+    gateway.create_annotation_thread.return_value = response
     service = ResearchItems(gateway, journal=journal)
     actor = _actor()
     operation = _operation()
-    request = CreateHighlightThreadRequest.model_validate(
+    request = CreateAnnotationThreadRequest.model_validate(
         {
             "quote_text": "Evidence",
             "position": {
@@ -80,7 +80,7 @@ def test_research_creation_requires_explicit_role_and_journals_change() -> None:
     )
 
     assert (
-        service.create_highlight(
+        service.create_annotation_thread(
             actor=actor,
             operation=operation,
             document_id=uuid4(),
@@ -91,12 +91,16 @@ def test_research_creation_requires_explicit_role_and_journals_change() -> None:
     )
 
     assert (
-        gateway.create_highlight.call_args.kwargs["content_role"] is RoleType.ASSISTANT
+        gateway.create_annotation_thread.call_args.kwargs["content_role"]
+        is RoleType.ASSISTANT
     )
-    assert journal.append.call_args.kwargs["action"] == "research.highlight_created"
+    assert (
+        journal.append.call_args.kwargs["action"]
+        == "research.annotation_thread_created"
+    )
 
     with pytest.raises(TypeError):
-        service.create_highlight(
+        service.create_annotation_thread(
             actor=actor,
             operation=operation,
             document_id=uuid4(),

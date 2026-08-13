@@ -11,6 +11,13 @@
       "delete",
       "patch"
     ],
+    "/api/v1/annotation-threads/{thread_id}": [
+      "delete",
+      "patch"
+    ],
+    "/api/v1/annotation-threads/{thread_id}/comments": [
+      "post"
+    ],
     "/api/v1/auth/change-password": [
       "post"
     ],
@@ -102,13 +109,6 @@
     ],
     "/api/v1/discovery/topics": [
       "get"
-    ],
-    "/api/v1/highlight-threads/{thread_id}": [
-      "delete",
-      "patch"
-    ],
-    "/api/v1/highlight-threads/{thread_id}/comments": [
-      "post"
     ],
     "/api/v1/integrations/zotero/connection": [
       "delete",
@@ -215,6 +215,10 @@
     "/api/v1/papers/{document_id}": [
       "get"
     ],
+    "/api/v1/papers/{document_id}/annotation-threads": [
+      "get",
+      "post"
+    ],
     "/api/v1/papers/{document_id}/audio-overviews": [
       "post"
     ],
@@ -226,10 +230,6 @@
     ],
     "/api/v1/papers/{document_id}/download-url": [
       "get"
-    ],
-    "/api/v1/papers/{document_id}/highlight-threads": [
-      "get",
-      "post"
     ],
     "/api/v1/papers/{document_id}/projects": [
       "get"
@@ -298,8 +298,7 @@
       "post"
     ],
     "/api/v1/research-items/{item_id}": [
-      "delete",
-      "patch"
+      "delete"
     ],
     "/api/v1/search/papers": [
       "post"

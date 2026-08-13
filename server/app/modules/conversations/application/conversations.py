@@ -70,6 +70,7 @@ class ConversationGateway(Protocol):
         archived: bool,
         scope_type: ConversationScopeType | None,
         scope_id: UUID | None,
+        context_document_id: UUID | None,
         position: ConversationListPosition | None,
         limit: int,
     ) -> ConversationPage: ...
@@ -172,6 +173,11 @@ class Conversations:
                 "archived": request.archived,
                 "scope_type": request.scope_type.value if request.scope_type else None,
                 "scope_id": str(request.scope_id) if request.scope_id else None,
+                "context_document_id": (
+                    str(request.context_document_id)
+                    if request.context_document_id
+                    else None
+                ),
                 "limit": request.limit,
             },
             separators=(",", ":"),
@@ -201,6 +207,7 @@ class Conversations:
             archived=request.archived,
             scope_type=request.scope_type,
             scope_id=request.scope_id,
+            context_document_id=request.context_document_id,
             position=position,
             limit=request.limit,
         )

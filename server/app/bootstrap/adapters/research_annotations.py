@@ -1,4 +1,4 @@
-"""Create deterministic AI highlight threads from parsed Document content."""
+"""Create deterministic personal AI annotation threads from parsed content."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-from app.database.models import RoleType
+from app.database.models import ResearchAudienceType, RoleType
 from app.helpers.parser import get_start_page_from_offset
 from app.llm.utils import find_offsets
 from app.modules.papers.infrastructure.repository import document_repository
 from app.bootstrap.adapters.research_repository import (
-    HighlightThreadCreate,
+    AnnotationThreadCreate,
     research_repository,
 )
 from app.modules.papers.application.contracts.extraction import PaperMetadataExtraction
@@ -29,7 +29,7 @@ class ParsedDocumentContent:
 
 
 @dataclass(frozen=True, slots=True)
-class CreatedAiHighlights:
+class CreatedAiAnnotations:
     thread_ids: tuple[uuid.UUID, ...]
     comment_ids: tuple[uuid.UUID, ...]
 
@@ -64,22 +64,23 @@ def require_parsed_content(
     )
 
 
-def create_ai_highlights(
+def create_ai_annotations(
     db: Session,
     *,
     document_id: uuid.UUID,
     metadata: PaperMetadataExtraction,
     user: Actor,
-) -> CreatedAiHighlights:
-    if research_repository.has_assistant_highlight(
+) -> CreatedAiAnnotations:
+    if research_repository.has_assistant_annotation(
         db,
         document_id=document_id,
+        user_id=user.id,
     ):
         logger.info(
-            "research.ai_highlights.duplicate_skipped",
+            "research.ai_annotations.duplicate_skipped",
             extra={"document_id": str(document_id)},
         )
-        return CreatedAiHighlights((), ())
+        return CreatedAiAnnotations((), ())
     content = require_parsed_content(db, document_id=document_id, user=user)
     thread_ids: list[uuid.UUID] = []
     comment_ids: list[uuid.UUID] = []
@@ -90,11 +91,11 @@ def create_ai_highlights(
             if offsets and content.page_offsets
             else None
         )
-        item = research_repository.create_highlight_thread(
+        item = research_repository.create_annotation_thread(
             db,
             document_id=document_id,
             user_id=user.id,
-            create=HighlightThreadCreate(
+            create=AnnotationThreadCreate(
                 quote_text=highlight.text,
                 position=ParsedTextPosition(
                     start_offset=offsets[0],
@@ -102,31 +103,27 @@ def create_ai_highlights(
                     page_number=page_number,
                 ),
                 color="blue",
-                is_shared=False,
+                audience_type=ResearchAudienceType.PERSONAL,
+                audience_project_id=None,
                 content_role=RoleType.ASSISTANT,
+                initial_comment=highlight.annotation,
             ),
             refresh_result=False,
         )
-        comment = research_repository.add_comment(
-            db,
-            thread_id=item.id,
-            user_id=user.id,
-            content=highlight.annotation,
-            content_role=RoleType.ASSISTANT,
-            refresh_result=False,
-        )
         thread_ids.append(item.id)
-        comment_ids.append(comment.id)
+        if item.annotation_thread is None:
+            raise RuntimeError("annotation_item_without_thread")
+        comment_ids.extend(comment.id for comment in item.annotation_thread.comments)
     db.flush()
-    return CreatedAiHighlights(
+    return CreatedAiAnnotations(
         thread_ids=tuple(thread_ids),
         comment_ids=tuple(comment_ids),
     )
 
 
 __all__ = [
-    "CreatedAiHighlights",
+    "CreatedAiAnnotations",
     "ParsedDocumentContent",
-    "create_ai_highlights",
+    "create_ai_annotations",
     "require_parsed_content",
 ]

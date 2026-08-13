@@ -59,7 +59,7 @@ from app.shared.domain.enums import (
     ConversationScopeType,
     DocumentProcessingStatus,
     JobStatus,
-    ResearchScopeType,
+    ResearchAudienceType,
     SubscriptionPlan,
     SubscriptionStatus,
 )
@@ -283,37 +283,48 @@ def test_project_collaborator_cannot_grant_a_permission_they_do_not_have() -> No
 
 
 @pytest.mark.parametrize(
-    ("facts", "can_view", "can_manage"),
+    ("facts", "can_view", "can_manage", "can_resolve"),
     [
         (
             ResearchAccessFacts(
-                ResearchScopeType.PERSONAL,
+                ResearchAudienceType.PERSONAL,
                 is_creator=True,
-                is_shared=False,
-                has_scope_access=True,
+                has_audience_access=True,
             ),
             True,
             True,
+            False,
         ),
         (
             ResearchAccessFacts(
-                ResearchScopeType.DOCUMENT,
+                ResearchAudienceType.DOCUMENT,
                 is_creator=False,
-                is_shared=True,
-                has_scope_access=True,
+                has_audience_access=True,
             ),
             True,
+            False,
             False,
         ),
         (
             ResearchAccessFacts(
-                ResearchScopeType.PROJECT,
+                ResearchAudienceType.PROJECT,
                 is_creator=True,
-                is_shared=True,
-                has_scope_access=False,
+                has_audience_access=False,
+            ),
+            False,
+            False,
+            False,
+        ),
+        (
+            ResearchAccessFacts(
+                ResearchAudienceType.PROJECT,
+                is_creator=False,
+                has_audience_access=True,
+                can_edit_project=True,
             ),
             True,
             False,
+            True,
         ),
     ],
 )
@@ -321,23 +332,24 @@ def test_research_visibility_decisions(
     facts: ResearchAccessFacts,
     can_view: bool,
     can_manage: bool,
+    can_resolve: bool,
 ) -> None:
     decision = evaluate_research_access(facts)
     assert decision.can_view is can_view
     assert decision.can_manage is can_manage
+    assert decision.can_resolve is can_resolve
 
 
 def test_research_creator_becomes_read_only_after_scope_access_is_lost() -> None:
     facts = ResearchAccessFacts(
-        ResearchScopeType.PROJECT,
+        ResearchAudienceType.PROJECT,
         is_creator=True,
-        is_shared=True,
-        has_scope_access=False,
+        has_audience_access=False,
     )
     decision = evaluate_research_access(facts)
     with pytest.raises(AppError) as error:
-        require_research_manager(facts, decision)
-    assert error.value.code == "research_item_scope_access_lost"
+        require_research_manager(decision)
+    assert error.value.code == "research_item_not_found"
 
 
 @pytest.mark.parametrize(

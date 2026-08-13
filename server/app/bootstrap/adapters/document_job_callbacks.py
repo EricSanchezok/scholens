@@ -69,7 +69,7 @@ from app.modules.papers.application.actions import (
 )
 from app.modules.research.application.items import (
     RESEARCH_ANNOTATION_COMMENT_CREATED,
-    RESEARCH_HIGHLIGHT_CREATED,
+    RESEARCH_ANNOTATION_THREAD_CREATED,
 )
 from app.modules.integrations.zotero.application.actions import (
     ZOTERO_IMPORT_COMPLETED,
@@ -90,7 +90,7 @@ from app.bootstrap.adapters.zotero_annotations import (
     apply_persisted_zotero_annotations,
 )
 from app.bootstrap.adapters.research_annotations import (
-    create_ai_highlights,
+    create_ai_annotations,
 )
 from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
 from sqlalchemy import delete, select
@@ -261,8 +261,8 @@ def handle_failed_upload(
     # Refuse to tear down a job that already succeeded. A redelivered Celery
     # task (acks_late) can post a late "failed" webhook after another delivery
     # already built and committed the paper; deleting it here is what caused
-    # the highlights_document_id_fkey violations (highlight inserts racing a paper
-    # delete). A completed job means the paper is good — leave it alone.
+    # annotation target-FK violations (annotation inserts racing a paper delete).
+    # A completed job means the paper is good — leave it alone.
     job = upload_reservation_repository.get(db=db, id=job_id, user=job_user)
     if job and job.job.status == JobStatus.COMPLETED:
         logger.warning(
@@ -948,25 +948,25 @@ async def handle_paper_processing_webhook(
                     refresh_result=False,
                 )
 
-                created_highlight_ids: tuple[uuid.UUID, ...] = ()
+                created_annotation_thread_ids: tuple[uuid.UUID, ...] = ()
                 created_comment_ids: tuple[uuid.UUID, ...] = ()
                 if metadata.highlights:
                     with optional_savepoint(
                         db,
-                        operation="create_ai_highlights",
+                        operation="create_ai_annotations",
                         context={
                             "job_id": normalized_job_id,
                             "document_id": str(paper.id),
                         },
                     ):
-                        created_highlights = create_ai_highlights(
+                        created_annotations = create_ai_annotations(
                             db,
                             document_id=paper.id,
                             metadata=metadata,
                             user=actor,
                         )
-                        created_highlight_ids = created_highlights.thread_ids
-                        created_comment_ids = created_highlights.comment_ids
+                        created_annotation_thread_ids = created_annotations.thread_ids
+                        created_comment_ids = created_annotations.comment_ids
 
                 completed = _complete_pdf_job(
                     db,
@@ -991,10 +991,10 @@ async def handle_paper_processing_webhook(
                     )
                 changes.extend(
                     OperationChange(
-                        action=RESEARCH_HIGHLIGHT_CREATED,
+                        action=RESEARCH_ANNOTATION_THREAD_CREATED,
                         resources=(ResourceRef("research_item", str(thread_id)),),
                     )
-                    for thread_id in created_highlight_ids
+                    for thread_id in created_annotation_thread_ids
                 )
                 changes.extend(
                     OperationChange(

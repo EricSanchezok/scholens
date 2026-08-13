@@ -1,4 +1,4 @@
-"""SQLAlchemy adapter for highlight and annotation search."""
+"""SQLAlchemy adapter for annotation-thread search."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pydantic import TypeAdapter
 from app.bootstrap.adapters.research_access import research_item_visible_to
 from app.modules.research.infrastructure.models import (
     AnnotationComment,
-    HighlightThread,
+    AnnotationThread,
     ResearchItem,
 )
 from app.shared.application import Actor
@@ -34,27 +34,27 @@ class SqlResearchSearch:
         pattern = f"%{request.query.casefold()}%"
         matching_comment = exists(
             select(AnnotationComment.id).where(
-                AnnotationComment.thread_id == HighlightThread.research_item_id,
+                AnnotationComment.thread_id == AnnotationThread.research_item_id,
                 func.lower(AnnotationComment.content).like(pattern),
             )
         )
         statement = (
             select(ResearchItem)
             .join(
-                HighlightThread,
-                HighlightThread.research_item_id == ResearchItem.id,
+                AnnotationThread,
+                AnnotationThread.research_item_id == ResearchItem.id,
             )
             .where(
                 research_item_visible_to(actor.id),
                 or_(
-                    func.lower(HighlightThread.quote_text).like(pattern),
+                    func.lower(AnnotationThread.quote_text).like(pattern),
                     matching_comment,
                 ),
             )
             .options(
-                joinedload(ResearchItem.document),
-                joinedload(ResearchItem.highlight_thread).selectinload(
-                    HighlightThread.comments
+                joinedload(ResearchItem.target_document),
+                joinedload(ResearchItem.annotation_thread).selectinload(
+                    AnnotationThread.comments
                 ),
             )
             .order_by(ResearchItem.created_at.desc(), ResearchItem.id)
@@ -70,8 +70,8 @@ class SqlResearchSearch:
         ).all()
         items: list[ResearchSearchResult] = []
         for item in rows:
-            thread = item.highlight_thread
-            if thread is None or item.document_id is None:
+            thread = item.annotation_thread
+            if thread is None or item.target_document_id is None:
                 continue
             comments = [
                 ResearchSearchComment(
@@ -86,8 +86,12 @@ class SqlResearchSearch:
             items.append(
                 ResearchSearchResult(
                     id=item.id,
-                    document_id=item.document_id,
-                    document_title=item.document.title if item.document else None,
+                    document_id=item.target_document_id,
+                    document_title=(
+                        item.target_document.title
+                        if item.target_document is not None
+                        else None
+                    ),
                     quote_text=thread.quote_text,
                     position=(
                         TypeAdapter(ResearchPosition).validate_python(thread.position)

@@ -42,6 +42,7 @@ def list_conversations(
     archived: bool = False,
     scope_type: ConversationScopeType | None = None,
     scope_id: UUID | None = None,
+    context_document_id: UUID | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
@@ -53,6 +54,7 @@ def list_conversations(
         archived=archived,
         scope_type=scope_type,
         scope_id=scope_id,
+        context_document_id=context_document_id,
         cursor=cursor,
         limit=limit,
     )

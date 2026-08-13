@@ -10,7 +10,7 @@ from app.bootstrap.adapters.research_repository import research_repository
 from app.database.models import (
     CitationOutput,
     Document,
-    HighlightThread,
+    AnnotationThread,
     Project,
     ResearchAudioOverview,
     ResearchDataTable,
@@ -26,7 +26,7 @@ from app.modules.papers.application.library import (
     LibraryPageDirection,
     LibraryPagePosition,
 )
-from app.shared.domain.enums import ResearchItemKind, ResearchScopeType
+from app.shared.domain.enums import ResearchItemKind, ResearchAudienceType
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.elements import ColumnElement
@@ -51,11 +51,11 @@ class SqlAlchemyLibraryOutputsGateway:
         title = self._title_expression()
         source_title = case(
             (
-                ResearchItem.scope_type == ResearchScopeType.DOCUMENT.value,
+                ResearchItem.audience_type == ResearchAudienceType.DOCUMENT.value,
                 func.coalesce(Document.title, Document.original_filename),
             ),
             (
-                ResearchItem.scope_type == ResearchScopeType.PROJECT.value,
+                ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
                 Project.title,
             ),
             else_="Personal Library",
@@ -109,13 +109,13 @@ class SqlAlchemyLibraryOutputsGateway:
             .limit(limit + 1)
             .options(
                 joinedload(ResearchItem.created_by),
-                joinedload(ResearchItem.document),
-                joinedload(ResearchItem.project),
+                joinedload(ResearchItem.audience_document),
+                joinedload(ResearchItem.audience_project),
                 joinedload(ResearchItem.citation),
                 joinedload(ResearchItem.audio_overview),
                 joinedload(ResearchItem.data_table),
-                joinedload(ResearchItem.highlight_thread).selectinload(
-                    HighlightThread.comments
+                joinedload(ResearchItem.annotation_thread).selectinload(
+                    AnnotationThread.comments
                 ),
             )
         )
@@ -148,10 +148,10 @@ class SqlAlchemyLibraryOutputsGateway:
     def _base_statement() -> Select[tuple[ResearchItem]]:
         return (
             select(ResearchItem)
-            .outerjoin(Document, Document.id == ResearchItem.document_id)
-            .outerjoin(Project, Project.id == ResearchItem.project_id)
+            .outerjoin(Document, Document.id == ResearchItem.audience_document_id)
+            .outerjoin(Project, Project.id == ResearchItem.audience_project_id)
             .outerjoin(
-                HighlightThread, HighlightThread.research_item_id == ResearchItem.id
+                AnnotationThread, AnnotationThread.research_item_id == ResearchItem.id
             )
             .outerjoin(
                 CitationOutput, CitationOutput.research_item_id == ResearchItem.id
@@ -175,8 +175,8 @@ class SqlAlchemyLibraryOutputsGateway:
         citation_title = CitationOutput.snapshot["data"]["title"].astext
         return case(
             (
-                ResearchItem.kind == ResearchItemKind.HIGHLIGHT_THREAD.value,
-                func.left(HighlightThread.quote_text, 240),
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                func.left(AnnotationThread.quote_text, 240),
             ),
             (
                 ResearchItem.kind == ResearchItemKind.CITATION.value,
@@ -195,26 +195,33 @@ class SqlAlchemyLibraryOutputsGateway:
 
     def _response(self, item: ResearchItem, *, user_id: int) -> LibraryOutputResponse:
         title = self._title(item)
-        scope_type = ResearchScopeType(item.scope_type)
-        if scope_type is ResearchScopeType.DOCUMENT:
+        audience_type = ResearchAudienceType(item.audience_type)
+        if audience_type is ResearchAudienceType.DOCUMENT:
             source_title = (
-                (item.document.title or item.document.original_filename)
-                if item.document is not None
+                (
+                    item.audience_document.title
+                    or item.audience_document.original_filename
+                )
+                if item.audience_document is not None
                 else "Paper"
             )
-            scope_id = item.document_id
-        elif scope_type is ResearchScopeType.PROJECT:
-            source_title = item.project.title if item.project is not None else "Project"
-            scope_id = item.project_id
+            audience_id = item.audience_document_id
+        elif audience_type is ResearchAudienceType.PROJECT:
+            source_title = (
+                item.audience_project.title
+                if item.audience_project is not None
+                else "Project"
+            )
+            audience_id = item.audience_project_id
         else:
             source_title = "Personal Library"
-            scope_id = None
+            audience_id = None
         return LibraryOutputResponse(
             item=research_repository.serialize(self._db, item=item, user_id=user_id),
             title=title,
             source=LibraryOutputSourceResponse(
-                scope_type=scope_type,
-                scope_id=scope_id,
+                audience_type=audience_type,
+                audience_id=audience_id,
                 title=source_title,
             ),
         )
@@ -227,10 +234,10 @@ class SqlAlchemyLibraryOutputsGateway:
 
     @staticmethod
     def _title(item: ResearchItem) -> str:
-        if item.kind == ResearchItemKind.HIGHLIGHT_THREAD.value:
-            return (item.highlight_thread.quote_text if item.highlight_thread else "")[
-                :240
-            ]
+        if item.kind == ResearchItemKind.ANNOTATION_THREAD.value:
+            return (
+                item.annotation_thread.quote_text if item.annotation_thread else ""
+            )[:240]
         if item.kind == ResearchItemKind.CITATION.value:
             data_value = item.citation.snapshot.get("data") if item.citation else None
             data = (

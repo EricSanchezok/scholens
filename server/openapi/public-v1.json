@@ -315,6 +315,20 @@
         "title": "AddPaperToProjectRequest",
         "type": "object"
       },
+      "AnnotationColor": {
+        "enum": [
+          "yellow",
+          "red",
+          "green",
+          "blue",
+          "purple",
+          "magenta",
+          "orange",
+          "gray"
+        ],
+        "title": "AnnotationColor",
+        "type": "string"
+      },
       "AnnotationCommentResponse": {
         "properties": {
           "can_delete": {
@@ -369,6 +383,156 @@
           "can_delete"
         ],
         "title": "AnnotationCommentResponse",
+        "type": "object"
+      },
+      "AnnotationThreadCapabilities": {
+        "properties": {
+          "delete": {
+            "title": "Delete",
+            "type": "boolean"
+          },
+          "recolor": {
+            "title": "Recolor",
+            "type": "boolean"
+          },
+          "reopen": {
+            "title": "Reopen",
+            "type": "boolean"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "boolean"
+          },
+          "resolve": {
+            "title": "Resolve",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reply",
+          "recolor",
+          "resolve",
+          "reopen",
+          "delete"
+        ],
+        "title": "AnnotationThreadCapabilities",
+        "type": "object"
+      },
+      "AnnotationThreadContent": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/AnnotationThreadCapabilities"
+          },
+          "color": {
+            "$ref": "#/components/schemas/AnnotationColor"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationCommentResponse"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "quote_text": {
+            "title": "Quote Text",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchCreatorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnnotationThreadStatus"
+          }
+        },
+        "required": [
+          "quote_text",
+          "position",
+          "color",
+          "role",
+          "status",
+          "resolved_by",
+          "resolved_at",
+          "capabilities",
+          "comments"
+        ],
+        "title": "AnnotationThreadContent",
+        "type": "object"
+      },
+      "AnnotationThreadStatus": {
+        "enum": [
+          "open",
+          "resolved"
+        ],
+        "title": "AnnotationThreadStatus",
+        "type": "string"
+      },
+      "AnnotationThreadTurnContext": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "annotation_thread",
+            "default": "annotation_thread",
+            "title": "Kind",
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "AnnotationThreadTurnContext",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -2386,7 +2550,7 @@
             "items": {
               "discriminator": {
                 "mapping": {
-                  "highlight_thread": "#/components/schemas/HighlightThreadTurnContext",
+                  "annotation_thread": "#/components/schemas/AnnotationThreadTurnContext",
                   "paper_selection": "#/components/schemas/PaperSelectionTurnContext"
                 },
                 "propertyName": "kind"
@@ -2396,7 +2560,7 @@
                   "$ref": "#/components/schemas/PaperSelectionTurnContext"
                 },
                 {
-                  "$ref": "#/components/schemas/HighlightThreadTurnContext"
+                  "$ref": "#/components/schemas/AnnotationThreadTurnContext"
                 }
               ]
             },
@@ -2455,7 +2619,7 @@
             "items": {
               "discriminator": {
                 "mapping": {
-                  "highlight_thread": "#/components/schemas/HighlightThreadTurnContext",
+                  "annotation_thread": "#/components/schemas/AnnotationThreadTurnContext",
                   "paper_selection": "#/components/schemas/PaperSelectionTurnContext"
                 },
                 "propertyName": "kind"
@@ -2465,7 +2629,7 @@
                   "$ref": "#/components/schemas/PaperSelectionTurnContext"
                 },
                 {
-                  "$ref": "#/components/schemas/HighlightThreadTurnContext"
+                  "$ref": "#/components/schemas/AnnotationThreadTurnContext"
                 }
               ]
             },
@@ -2653,6 +2817,76 @@
         "title": "CreateAnnotationCommentRequest",
         "type": "object"
       },
+      "CreateAnnotationThreadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "discriminator": {
+              "mapping": {
+                "personal": "#/components/schemas/PersonalResearchAudience",
+                "project": "#/components/schemas/ProjectResearchAudience"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonalResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectResearchAudience"
+              }
+            ],
+            "title": "Audience"
+          },
+          "color": {
+            "$ref": "#/components/schemas/AnnotationColor",
+            "default": "yellow"
+          },
+          "initial_comment": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Comment"
+          },
+          "position": {
+            "discriminator": {
+              "mapping": {
+                "parsed_text": "#/components/schemas/ParsedTextPosition",
+                "pdf_text": "#/components/schemas/PdfTextPosition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PdfTextPosition"
+              },
+              {
+                "$ref": "#/components/schemas/ParsedTextPosition"
+              }
+            ],
+            "title": "Position"
+          },
+          "quote_text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Quote Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quote_text",
+          "position"
+        ],
+        "title": "CreateAnnotationThreadRequest",
+        "type": "object"
+      },
       "CreateAudioOverviewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2711,53 +2945,6 @@
           "columns"
         ],
         "title": "CreateDataTableRequest",
-        "type": "object"
-      },
-      "CreateHighlightThreadRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "color": {
-            "default": "blue",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Color",
-            "type": "string"
-          },
-          "position": {
-            "discriminator": {
-              "mapping": {
-                "parsed_text": "#/components/schemas/ParsedTextPosition",
-                "pdf_text": "#/components/schemas/PdfTextPosition"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/PdfTextPosition"
-              },
-              {
-                "$ref": "#/components/schemas/ParsedTextPosition"
-              }
-            ],
-            "title": "Position"
-          },
-          "quote_text": {
-            "maxLength": 100000,
-            "minLength": 1,
-            "title": "Quote Text",
-            "type": "string"
-          },
-          "shared": {
-            "default": false,
-            "title": "Shared",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "quote_text",
-          "position"
-        ],
-        "title": "CreateHighlightThreadRequest",
         "type": "object"
       },
       "CreateJobResponse": {
@@ -3217,6 +3404,27 @@
         "title": "DocumentProcessingStatus",
         "type": "string"
       },
+      "DocumentResearchAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "document",
+            "default": "document",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "DocumentResearchAudience",
+        "type": "object"
+      },
       "DocumentResponse": {
         "properties": {
           "abstract": {
@@ -3557,84 +3765,6 @@
           }
         },
         "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "HighlightThreadContent": {
-        "properties": {
-          "color": {
-            "title": "Color",
-            "type": "string"
-          },
-          "comments": {
-            "items": {
-              "$ref": "#/components/schemas/AnnotationCommentResponse"
-            },
-            "title": "Comments",
-            "type": "array"
-          },
-          "position": {
-            "anyOf": [
-              {
-                "discriminator": {
-                  "mapping": {
-                    "parsed_text": "#/components/schemas/ParsedTextPosition",
-                    "pdf_text": "#/components/schemas/PdfTextPosition"
-                  },
-                  "propertyName": "kind"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/PdfTextPosition"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ParsedTextPosition"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Position"
-          },
-          "quote_text": {
-            "title": "Quote Text",
-            "type": "string"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          }
-        },
-        "required": [
-          "quote_text",
-          "position",
-          "color",
-          "role",
-          "comments"
-        ],
-        "title": "HighlightThreadContent",
-        "type": "object"
-      },
-      "HighlightThreadTurnContext": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "const": "highlight_thread",
-            "default": "highlight_thread",
-            "title": "Kind",
-            "type": "string"
-          },
-          "thread_id": {
-            "format": "uuid",
-            "title": "Thread Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "thread_id"
-        ],
-        "title": "HighlightThreadTurnContext",
         "type": "object"
       },
       "Institution": {
@@ -4061,7 +4191,7 @@
       },
       "LibraryOutputSourceResponse": {
         "properties": {
-          "scope_id": {
+          "audience_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -4071,10 +4201,10 @@
                 "type": "null"
               }
             ],
-            "title": "Scope Id"
+            "title": "Audience Id"
           },
-          "scope_type": {
-            "$ref": "#/components/schemas/ResearchScopeType"
+          "audience_type": {
+            "$ref": "#/components/schemas/ResearchAudienceType"
           },
           "title": {
             "title": "Title",
@@ -4082,8 +4212,8 @@
           }
         },
         "required": [
-          "scope_type",
-          "scope_id",
+          "audience_type",
+          "audience_id",
           "title"
         ],
         "title": "LibraryOutputSourceResponse",
@@ -5606,6 +5736,19 @@
         "title": "PdfTextRect",
         "type": "object"
       },
+      "PersonalResearchAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "personal",
+            "default": "personal",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "PersonalResearchAudience",
+        "type": "object"
+      },
       "PortalSessionResponse": {
         "properties": {
           "url": {
@@ -6412,6 +6555,27 @@
         "title": "ProjectPermissionSet",
         "type": "object"
       },
+      "ProjectResearchAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "project",
+            "default": "project",
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "ProjectResearchAudience",
+        "type": "object"
+      },
       "ProjectResponse": {
         "properties": {
           "capabilities": {
@@ -6655,6 +6819,15 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ResearchAudienceType": {
+        "enum": [
+          "personal",
+          "document",
+          "project"
+        ],
+        "title": "ResearchAudienceType",
+        "type": "string"
+      },
       "ResearchCreatorResponse": {
         "properties": {
           "display_name": {
@@ -6696,14 +6869,9 @@
           "edit": {
             "title": "Edit",
             "type": "boolean"
-          },
-          "share": {
-            "title": "Share",
-            "type": "boolean"
           }
         },
         "required": [
-          "share",
           "edit",
           "delete"
         ],
@@ -6712,7 +6880,7 @@
       },
       "ResearchItemKind": {
         "enum": [
-          "highlight_thread",
+          "annotation_thread",
           "citation",
           "audio_overview",
           "data_table"
@@ -6749,6 +6917,38 @@
       },
       "ResearchItemResponse": {
         "properties": {
+          "annotation_thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnotationThreadContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audience": {
+            "discriminator": {
+              "mapping": {
+                "document": "#/components/schemas/DocumentResearchAudience",
+                "personal": "#/components/schemas/PersonalResearchAudience",
+                "project": "#/components/schemas/ProjectResearchAudience"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonalResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectResearchAudience"
+              }
+            ],
+            "title": "Audience"
+          },
           "audio_overview": {
             "anyOf": [
               {
@@ -6790,29 +6990,15 @@
               }
             ]
           },
-          "highlight_thread": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HighlightThreadContent"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
           },
-          "is_shared": {
-            "title": "Is Shared",
-            "type": "boolean"
-          },
           "kind": {
             "$ref": "#/components/schemas/ResearchItemKind"
           },
-          "scope_id": {
+          "target_document_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -6822,10 +7008,7 @@
                 "type": "null"
               }
             ],
-            "title": "Scope Id"
-          },
-          "scope_type": {
-            "$ref": "#/components/schemas/ResearchScopeType"
+            "title": "Target Document Id"
           },
           "updated_at": {
             "format": "date-time",
@@ -6836,9 +7019,8 @@
         "required": [
           "id",
           "kind",
-          "scope_type",
-          "scope_id",
-          "is_shared",
+          "audience",
+          "target_document_id",
           "created_by",
           "created_at",
           "updated_at",
@@ -6846,15 +7028,6 @@
         ],
         "title": "ResearchItemResponse",
         "type": "object"
-      },
-      "ResearchScopeType": {
-        "enum": [
-          "personal",
-          "document",
-          "project"
-        ],
-        "title": "ResearchScopeType",
-        "type": "string"
       },
       "ResearchSearchComment": {
         "properties": {
@@ -7032,20 +7205,6 @@
           "matching_comments"
         ],
         "title": "ResearchSearchResult",
-        "type": "object"
-      },
-      "ResearchVisibilityRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "shared": {
-            "title": "Shared",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "shared"
-        ],
-        "title": "ResearchVisibilityRequest",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -7681,73 +7840,31 @@
         "title": "UpdateAnnotationCommentRequest",
         "type": "object"
       },
-      "UpdateHighlightThreadRequest": {
+      "UpdateAnnotationThreadRequest": {
         "additionalProperties": false,
         "properties": {
           "color": {
             "anyOf": [
               {
-                "maxLength": 32,
-                "minLength": 1,
-                "type": "string"
+                "$ref": "#/components/schemas/AnnotationColor"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Color"
+            ]
           },
-          "position": {
+          "status": {
             "anyOf": [
               {
-                "discriminator": {
-                  "mapping": {
-                    "parsed_text": "#/components/schemas/ParsedTextPosition",
-                    "pdf_text": "#/components/schemas/PdfTextPosition"
-                  },
-                  "propertyName": "kind"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/PdfTextPosition"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ParsedTextPosition"
-                  }
-                ]
+                "$ref": "#/components/schemas/AnnotationThreadStatus"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Position"
-          },
-          "quote_text": {
-            "anyOf": [
-              {
-                "maxLength": 100000,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quote Text"
-          },
-          "shared": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Shared"
+            ]
           }
         },
-        "title": "UpdateHighlightThreadRequest",
+        "title": "UpdateAnnotationThreadRequest",
         "type": "object"
       },
       "UpdateProfileBody": {
@@ -8608,6 +8725,159 @@
         "summary": "Update Annotation Comment"
       }
     },
+    "/api/v1/annotation-threads/{thread_id}": {
+      "delete": {
+        "operationId": "delete_annotation_thread_api_v1_annotation_threads__thread_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Annotation Thread"
+      },
+      "patch": {
+        "operationId": "update_annotation_thread_api_v1_annotation_threads__thread_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAnnotationThreadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Annotation Thread"
+      }
+    },
+    "/api/v1/annotation-threads/{thread_id}/comments": {
+      "post": {
+        "operationId": "create_annotation_comment_api_v1_annotation_threads__thread_id__comments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnotationCommentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationCommentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Annotation Comment"
+      }
+    },
     "/api/v1/auth/change-password": {
       "post": {
         "operationId": "change_password_api_v1_auth_change_password_post",
@@ -9440,6 +9710,23 @@
                 }
               ],
               "title": "Scope Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "context_document_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Document Id"
             }
           },
           {
@@ -10364,169 +10651,6 @@
           }
         ],
         "summary": "Get Topics"
-      }
-    },
-    "/api/v1/highlight-threads/{thread_id}": {
-      "delete": {
-        "operationId": "delete_highlight_thread_api_v1_highlight_threads__thread_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "thread_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Thread Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "confirm_delete_replies",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Confirm Delete Replies",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Delete Highlight Thread"
-      },
-      "patch": {
-        "operationId": "update_highlight_thread_api_v1_highlight_threads__thread_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "thread_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Thread Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateHighlightThreadRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Update Highlight Thread"
-      }
-    },
-    "/api/v1/highlight-threads/{thread_id}/comments": {
-      "post": {
-        "operationId": "create_annotation_comment_api_v1_highlight_threads__thread_id__comments_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "thread_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Thread Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAnnotationCommentRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnnotationCommentResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Create Annotation Comment"
       }
     },
     "/api/v1/integrations/zotero/connection": {
@@ -12634,6 +12758,121 @@
         "summary": "Get Document"
       }
     },
+    "/api/v1/papers/{document_id}/annotation-threads": {
+      "get": {
+        "operationId": "list_annotation_threads_api_v1_papers__document_id__annotation_threads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItemListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Annotation Threads"
+      },
+      "post": {
+        "operationId": "create_annotation_thread_api_v1_papers__document_id__annotation_threads_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnotationThreadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Annotation Thread"
+      }
+    },
     "/api/v1/papers/{document_id}/audio-overviews": {
       "post": {
         "operationId": "create_document_audio_overview_api_v1_papers__document_id__audio_overviews_post",
@@ -12900,104 +13139,6 @@
           }
         ],
         "summary": "Get Document File Url"
-      }
-    },
-    "/api/v1/papers/{document_id}/highlight-threads": {
-      "get": {
-        "operationId": "list_highlight_threads_api_v1_papers__document_id__highlight_threads_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "List Highlight Threads"
-      },
-      "post": {
-        "operationId": "create_highlight_thread_api_v1_papers__document_id__highlight_threads_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateHighlightThreadRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Create Highlight Thread"
       }
     },
     "/api/v1/papers/{document_id}/projects": {
@@ -14126,6 +14267,16 @@
               "title": "Document Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "confirm_delete_annotations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Confirm Delete Annotations",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -14349,64 +14500,11 @@
           }
         ],
         "summary": "Delete Research Item"
-      },
-      "patch": {
-        "operationId": "update_research_item_api_v1_research_items__item_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "item_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Item Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResearchVisibilityRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Update Research Item"
       }
     },
     "/api/v1/search/papers": {
       "post": {
-        "description": "Search across papers, annotations, and highlights in the user's knowledge base.\n\nReturns a hierarchical view with matching content organized under paper metadata.\nThe search looks through:\n- Document titles, abstracts, and raw content\n- Highlight thread text\n- Annotation comment content\n\nResults are organized by paper, with matching highlights and annotations\nsub-referenced under each paper's metadata.",
+        "description": "Search across papers and annotation threads in the user's knowledge base.\n\nReturns a hierarchical view with matching content organized under paper metadata.\nThe search looks through:\n- Document titles, abstracts, and raw content\n- Annotation thread quote text\n- Annotation comment content\n\nResults are organized by paper, with matching threads and comments\nsub-referenced under each paper's metadata.",
         "operationId": "search_papers_endpoint_api_v1_search_papers_post",
         "requestBody": {
           "content": {
@@ -14450,7 +14548,7 @@
     },
     "/api/v1/search/papers/stats": {
       "get": {
-        "description": "Get statistics about the user's knowledge base for search context.\n\nReturns counts of papers, highlights, and annotations.",
+        "description": "Get statistics about the user's knowledge base for search context.\n\nReturns counts of papers, annotation threads, and comments.",
         "operationId": "get_search_stats_api_v1_search_papers_stats_get",
         "responses": {
           "200": {

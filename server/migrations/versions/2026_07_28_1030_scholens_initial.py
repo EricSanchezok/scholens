@@ -1530,10 +1530,10 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("kind", sa.String(length=32), nullable=False),
         sa.Column("created_by_id", sa.BigInteger(), nullable=True),
-        sa.Column("scope_type", sa.String(length=16), nullable=False),
-        sa.Column("document_id", sa.UUID(), nullable=True),
-        sa.Column("project_id", sa.UUID(), nullable=True),
-        sa.Column("is_shared", sa.Boolean(), server_default="false", nullable=False),
+        sa.Column("audience_type", sa.String(length=16), nullable=False),
+        sa.Column("audience_document_id", sa.UUID(), nullable=True),
+        sa.Column("audience_project_id", sa.UUID(), nullable=True),
+        sa.Column("target_document_id", sa.UUID(), nullable=True),
         sa.Column("source_response_id", sa.UUID(), nullable=True),
         sa.Column("source_job_id", sa.UUID(), nullable=True),
         sa.Column(
@@ -1549,25 +1549,24 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "(scope_type = 'personal' AND document_id IS NULL AND project_id IS NULL) OR (scope_type = 'document' AND document_id IS NOT NULL AND project_id IS NULL) OR (scope_type = 'project' AND project_id IS NOT NULL AND document_id IS NULL)",
-            name="ck_research_items_scope_consistency",
+            "(audience_type = 'personal' AND audience_document_id IS NULL AND audience_project_id IS NULL) OR (audience_type = 'document' AND audience_document_id IS NOT NULL AND audience_project_id IS NULL) OR (audience_type = 'project' AND audience_project_id IS NOT NULL AND audience_document_id IS NULL)",
+            name="ck_research_items_audience_consistency",
         ),
         sa.CheckConstraint(
-            "kind != 'highlight_thread' OR scope_type = 'document'",
-            name="ck_research_items_highlight_document_scope",
-        ),
-        sa.CheckConstraint(
-            "scope_type != 'personal' OR NOT is_shared",
-            name="ck_research_items_personal_private",
+            "kind != 'annotation_thread' OR (target_document_id IS NOT NULL AND audience_type IN ('personal', 'project'))",
+            name="ck_research_items_annotation_audience",
         ),
         sa.ForeignKeyConstraint(
             ["created_by_id"], ["auth.users.id"], ondelete="SET NULL"
         ),
         sa.ForeignKeyConstraint(
-            ["document_id"], ["scholens.documents.id"], ondelete="CASCADE"
+            ["audience_document_id"], ["scholens.documents.id"], ondelete="CASCADE"
         ),
         sa.ForeignKeyConstraint(
-            ["project_id"], ["scholens.projects.id"], ondelete="CASCADE"
+            ["audience_project_id"], ["scholens.projects.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["target_document_id"], ["scholens.documents.id"], ondelete="CASCADE"
         ),
         sa.ForeignKeyConstraint(
             ["source_job_id"], ["scholens.jobs.id"], ondelete="SET NULL"
@@ -1589,16 +1588,23 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_index(
-        "ix_research_items_document_visibility",
+        "ix_research_items_document_audience",
         "research_items",
-        ["document_id", "is_shared", "created_at"],
+        ["audience_document_id", "created_at"],
         unique=False,
         schema="scholens",
     )
     op.create_index(
-        "ix_research_items_project_visibility",
+        "ix_research_items_project_audience",
         "research_items",
-        ["project_id", "is_shared", "created_at"],
+        ["audience_project_id", "created_at"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_index(
+        "ix_research_items_annotation_target",
+        "research_items",
+        ["target_document_id", "created_at"],
         unique=False,
         schema="scholens",
     )
@@ -1668,16 +1674,23 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_table(
-        "highlight_threads",
+        "annotation_threads",
         sa.Column("research_item_id", sa.UUID(), nullable=False),
         sa.Column("quote_text", sa.Text(), nullable=False),
         sa.Column("page_number", sa.Integer(), nullable=True),
         sa.Column("start_offset", sa.Integer(), nullable=True),
         sa.Column("end_offset", sa.Integer(), nullable=True),
         sa.Column("position", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("color", sa.String(length=32), server_default="blue", nullable=False),
+        sa.Column(
+            "color", sa.String(length=32), server_default="yellow", nullable=False
+        ),
         sa.Column("role", sa.String(length=16), server_default="user", nullable=False),
         sa.Column("zotero_annotation_key", sa.String(length=255), nullable=True),
+        sa.Column(
+            "status", sa.String(length=16), server_default="open", nullable=False
+        ),
+        sa.Column("resolved_by_id", sa.BigInteger(), nullable=True),
+        sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -1690,8 +1703,23 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.CheckConstraint(
+            "color IN ('yellow', 'red', 'green', 'blue', 'purple', 'magenta', 'orange', 'gray')",
+            name="ck_annotation_threads_color",
+        ),
+        sa.CheckConstraint(
+            "status IN ('open', 'resolved')",
+            name="ck_annotation_threads_status",
+        ),
+        sa.CheckConstraint(
+            "(status = 'open' AND resolved_by_id IS NULL AND resolved_at IS NULL) OR (status = 'resolved' AND resolved_at IS NOT NULL)",
+            name="ck_annotation_threads_resolution",
+        ),
         sa.ForeignKeyConstraint(
             ["research_item_id"], ["scholens.research_items.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["resolved_by_id"], ["auth.users.id"], ondelete="SET NULL"
         ),
         sa.PrimaryKeyConstraint("research_item_id"),
         schema="scholens",
@@ -1793,7 +1821,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["thread_id"],
-            ["scholens.highlight_threads.research_item_id"],
+            ["scholens.annotation_threads.research_item_id"],
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -1891,16 +1919,21 @@ def downgrade() -> None:
     op.drop_table("annotation_comments", schema="scholens")
     op.drop_table("research_data_tables", schema="scholens")
     op.drop_table("research_audio_overviews", schema="scholens")
-    op.drop_table("highlight_threads", schema="scholens")
+    op.drop_table("annotation_threads", schema="scholens")
     op.drop_table("citation_outputs", schema="scholens")
     op.drop_table("zotero_imported_items", schema="scholens")
     op.drop_index(
-        "ix_research_items_project_visibility",
+        "ix_research_items_annotation_target",
         table_name="research_items",
         schema="scholens",
     )
     op.drop_index(
-        "ix_research_items_document_visibility",
+        "ix_research_items_project_audience",
+        table_name="research_items",
+        schema="scholens",
+    )
+    op.drop_index(
+        "ix_research_items_document_audience",
         table_name="research_items",
         schema="scholens",
     )

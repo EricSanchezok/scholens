@@ -3,6 +3,8 @@
 from app.shared.domain import JsonScalar, JsonValue
 from app.shared.infrastructure.persistence import Base
 from app.shared.domain.enums import (
+    AnnotationColor,
+    AnnotationThreadStatus,
     ConversationScopeType,
     DocumentProcessingStatus,
     HighlightType,
@@ -11,8 +13,8 @@ from app.shared.domain.enums import (
     JobStatus,
     PaperStatus,
     ReasoningLevel,
+    ResearchAudienceType,
     ResearchItemKind,
-    ResearchScopeType,
     RoleType,
     SubscriptionPlan,
     SubscriptionStatus,
@@ -67,7 +69,7 @@ from app.modules.projects.infrastructure.models import (
 from app.modules.research.infrastructure.models import (
     AnnotationComment,
     CitationOutput,
-    HighlightThread,
+    AnnotationThread,
     ResearchAudioOverview,
     ResearchDataTable,
     ResearchItem,
@@ -79,6 +81,8 @@ from app.modules.translations.infrastructure.models import TranslationPreference
 __all__ = [
     "AuthUser",
     "AccessKey",
+    "AnnotationColor",
+    "AnnotationThreadStatus",
     "Base",
     "ConversationScopeType",
     "ConnectorConnection",
@@ -114,10 +118,10 @@ __all__ = [
     "ResearchAudioOverview",
     "ResearchDataTable",
     "ResearchItem",
+    "ResearchAudienceType",
     "ResearchItemKind",
-    "ResearchScopeType",
     "CitationOutput",
-    "HighlightThread",
+    "AnnotationThread",
     "AnnotationComment",
     "RoleType",
     "Subscription",

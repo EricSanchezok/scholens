@@ -25,21 +25,21 @@ class PaperSelectionTurnContext(BaseModel):
         return self
 
 
-class HighlightThreadTurnContext(BaseModel):
+class AnnotationThreadTurnContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["highlight_thread"] = "highlight_thread"
+    kind: Literal["annotation_thread"] = "annotation_thread"
     thread_id: uuid.UUID
 
 
 TurnContext = Annotated[
-    PaperSelectionTurnContext | HighlightThreadTurnContext,
+    PaperSelectionTurnContext | AnnotationThreadTurnContext,
     Field(discriminator="kind"),
 ]
 
 
 __all__ = [
-    "HighlightThreadTurnContext",
+    "AnnotationThreadTurnContext",
     "PaperSelectionTurnContext",
     "TurnContext",
 ]

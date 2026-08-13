@@ -91,7 +91,7 @@ class _ChatData:
         )
 
     def mentions(self, **_: object) -> MentionScope:
-        return MentionScope(snapshot=None, highlights=None)
+        return MentionScope(snapshot=None, annotation_threads=None)
 
     def context(self, **_: object) -> ConversationContextSnapshot:
         return ConversationContextSnapshot(

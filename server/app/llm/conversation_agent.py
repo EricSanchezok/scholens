@@ -257,7 +257,7 @@ class ScholensConversationAgent:
         request_operation: OperationContext,
         correlation_id: uuid.UUID,
         user_operation_id: uuid.UUID,
-        mentioned_highlights: list[dict[str, Any]] | None,
+        mentioned_annotations: list[dict[str, Any]] | None,
     ) -> AsyncGenerator[ConversationAgentStreamEvent, None]:
         started = time.monotonic()
         history = executor.query(
@@ -286,7 +286,7 @@ class ScholensConversationAgent:
         direct_sources = self._direct_sources(
             conversation_scope=conversation_scope,
             context_snapshot=context_snapshot,
-            mentioned_highlights=mentioned_highlights,
+            mentioned_annotations=mentioned_annotations,
         )
         document_source_texts = {
             paper.document_id: tuple(
@@ -960,7 +960,7 @@ class ScholensConversationAgent:
         *,
         conversation_scope: ConversationChatScope,
         context_snapshot: ConversationContextSnapshot,
-        mentioned_highlights: list[dict[str, Any]] | None,
+        mentioned_annotations: list[dict[str, Any]] | None,
     ) -> list[DocumentSourceCandidate]:
         sources: list[DocumentSourceCandidate] = []
         anchor: ChatPaperSnapshot | None = next(
@@ -981,20 +981,20 @@ class ScholensConversationAgent:
                     locator={"origin": "anchor_paper"},
                 )
             )
-        for group in mentioned_highlights or []:
+        for group in mentioned_annotations or []:
             try:
                 document_id = uuid.UUID(str(group["document_id"]))
             except (KeyError, TypeError, ValueError):
                 continue
             title = group.get("paper_title")
-            for highlight in group.get("highlights", []):
-                if not isinstance(highlight, dict):
+            for annotation in group.get("annotation_threads", []):
+                if not isinstance(annotation, dict):
                     continue
-                excerpt = highlight.get("highlighted_text")
+                excerpt = annotation.get("quoted_text")
                 if not isinstance(excerpt, str) or not excerpt.strip():
                     continue
-                locator: dict[str, JsonValue] = {"origin": "highlight"}
-                page_number = highlight.get("page_number")
+                locator: dict[str, JsonValue] = {"origin": "annotation_thread"}
+                page_number = annotation.get("page_number")
                 if isinstance(page_number, int):
                     locator["page_number"] = page_number
                 sources.append(

@@ -443,7 +443,7 @@ async def stream_conversation_agent(
             request_operation=operation,
             correlation_id=turn_start.correlation_id,
             user_operation_id=turn_start.turn_operation_id,
-            mentioned_highlights=mentions.highlights,
+            mentioned_annotations=mentions.annotation_threads,
         ):
             if isinstance(event, ConversationAgentResult):
                 trace = event.trace
@@ -568,8 +568,8 @@ async def stream_conversation_agent(
                 "num_context_projects": sum(
                     item.get("kind") == "project" for item in scope_items
                 ),
-                "num_mentioned_highlights": sum(
-                    item.get("kind") == "highlight" for item in scope_items
+                "num_mentioned_annotations": sum(
+                    item.get("kind") == "annotation_thread" for item in scope_items
                 ),
                 "uses_library_context": (
                     conversation_scope.paper_context.kind == "library"

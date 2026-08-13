@@ -1,4 +1,4 @@
-"""Independent search capability for highlights and their comments."""
+"""Independent search capability for annotation threads and comments."""
 
 from __future__ import annotations
 

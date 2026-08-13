@@ -34,7 +34,7 @@ from app.shared.domain import (
     WorkspacePermission,
     ordered_workspace_permissions,
 )
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, exists, or_, select
 from sqlalchemy.orm import Session
 
 
@@ -418,6 +418,7 @@ class ConversationRepository:
         archived: bool,
         scope_type: ConversationScopeType | None,
         scope_id: uuid.UUID | None,
+        context_document_id: uuid.UUID | None,
         limit: int,
         position: ConversationListPosition | None,
     ) -> tuple[list[Conversation], bool]:
@@ -435,6 +436,15 @@ class ConversationRepository:
                 statement = statement.where(Conversation.document_id == scope_id)
             elif scope_type is ConversationScopeType.PROJECT:
                 statement = statement.where(Conversation.project_id == scope_id)
+        if context_document_id is not None:
+            statement = statement.where(
+                exists(
+                    select(ConversationContextDocument.conversation_id).where(
+                        ConversationContextDocument.conversation_id == Conversation.id,
+                        ConversationContextDocument.document_id == context_document_id,
+                    )
+                )
+            )
         if position:
             pinned_at = position.pinned_at
             updated_at = position.updated_at

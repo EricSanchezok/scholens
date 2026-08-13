@@ -141,7 +141,12 @@ def collect_document_if_due(
                 ResearchItem,
                 ResearchItem.id == ResearchAudioOverview.research_item_id,
             )
-            .where(ResearchItem.document_id == document_id)
+            .where(
+                or_(
+                    ResearchItem.audience_document_id == document_id,
+                    ResearchItem.target_document_id == document_id,
+                )
+            )
         ).all(),
     }
     storage_deletion = schedule_storage_deletion(

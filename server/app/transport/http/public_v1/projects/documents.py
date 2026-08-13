@@ -159,6 +159,7 @@ def get_projects_from_document_id(
 def remove_paper_from_project(
     project_id: UUID,
     document_id: UUID,
+    confirm_delete_annotations: bool = False,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -171,6 +172,7 @@ def remove_paper_from_project(
             operation=operation,
             project_id=project_id,
             document_id=document_id,
+            confirm_delete_annotations=confirm_delete_annotations,
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

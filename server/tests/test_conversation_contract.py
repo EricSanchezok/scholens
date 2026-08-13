@@ -205,7 +205,7 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
     assert "user_references" not in schemas["ConversationTurnResponse"]["properties"]
     create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
     assert "contexts" in create_properties
-    assert "mentioned_highlight_ids" not in create_properties
+    assert "mentioned_thread_ids" not in create_properties
 
 
 def test_conversation_list_cursor_is_bound_to_paper_scope() -> None:
@@ -268,6 +268,42 @@ def test_owned_conversation_lookup_filters_id_and_user_in_one_query() -> None:
     statement = str(db.scalar.call_args.args[0])
     assert "conversations.id" in statement
     assert "conversations.user_id" in statement
+
+
+def test_project_conversation_list_can_filter_current_document() -> None:
+    document_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    request = ConversationListRequest(
+        scope_type=ConversationScopeType.PROJECT,
+        scope_id=project_id,
+        context_document_id=document_id,
+    )
+    assert request.context_document_id == document_id
+
+    db = MagicMock(spec=Session)
+    result = MagicMock()
+    result.all.return_value = []
+    db.scalars.return_value = result
+    conversation_repository.list(
+        db,
+        user_id=73,
+        archived=False,
+        scope_type=ConversationScopeType.PROJECT,
+        scope_id=project_id,
+        context_document_id=document_id,
+        limit=20,
+        position=None,
+    )
+    statement = str(db.scalars.call_args.args[0])
+    assert "conversation_context_documents" in statement
+    assert "conversations.project_id" in statement
+
+    with pytest.raises(ValidationError):
+        ConversationListRequest(
+            scope_type=ConversationScopeType.PAPER,
+            scope_id=document_id,
+            context_document_id=document_id,
+        )
 
 
 def test_paper_conversation_scope_is_immutable(

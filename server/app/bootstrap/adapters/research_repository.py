@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from app.database.models import (
     AnnotationComment,
+    AnnotationColor,
     CitationOutput,
-    HighlightThread,
+    AnnotationThread,
+    AnnotationThreadStatus,
     ResearchItem,
     ResearchItemKind,
-    ResearchScopeType,
+    ResearchAudienceType,
     RoleType,
     Conversation,
     ConversationScopeType,
@@ -25,11 +28,16 @@ from app.bootstrap.adapters.research_access import (
 )
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadCapabilities,
     AudioOverviewContent,
     CitationContent,
     CitationSnapshot,
     DataTableContent,
-    HighlightThreadContent,
+    AnnotationThreadContent,
+    DocumentResearchAudience,
+    PersonalResearchAudience,
+    ProjectResearchAudience,
+    ResearchAudience,
     ResearchCreatorResponse,
     ResearchItemCapabilities,
     ResearchItemResponse,
@@ -39,21 +47,21 @@ from app.modules.research.application.positions import (
     position_columns,
 )
 from pydantic import TypeAdapter
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
-_RESEARCH_POSITION: TypeAdapter[ResearchPosition] = TypeAdapter(ResearchPosition)
-_POSITION_UNSET = object()
 
 
 @dataclass(frozen=True, slots=True)
-class HighlightThreadCreate:
+class AnnotationThreadCreate:
     quote_text: str
     position: ResearchPosition | None
     color: str
-    is_shared: bool
+    audience_type: ResearchAudienceType
+    audience_project_id: uuid.UUID | None
     content_role: RoleType
+    initial_comment: str | None = None
     zotero_annotation_key: str | None = None
 
 
@@ -115,27 +123,67 @@ class ResearchRepository:
         *,
         document_id: uuid.UUID,
         user_id: int,
+        project_id: uuid.UUID | None = None,
         kind: ResearchItemKind | None = None,
     ) -> list[ResearchItem]:
         require_document_access(db, document_id=document_id, user_id=user_id)
-        statement = (
-            select(ResearchItem)
-            .where(
-                ResearchItem.scope_type == ResearchScopeType.DOCUMENT.value,
-                ResearchItem.document_id == document_id,
-                or_(
-                    ResearchItem.is_shared.is_(True),
-                    ResearchItem.created_by_id == user_id,
+        if project_id is not None:
+            from app.modules.projects.infrastructure.access import (
+                require_project_access,
+            )
+            from app.modules.projects.infrastructure.models import ProjectPaper
+
+            require_project_access(db, project_id=project_id, user_id=user_id)
+            if (
+                db.scalar(
+                    select(ProjectPaper.id).where(
+                        ProjectPaper.project_id == project_id,
+                        ProjectPaper.document_id == document_id,
+                    )
+                )
+                is None
+            ):
+                raise AppError(
+                    code="project_document_not_found",
+                    message="Document not found in this Project",
+                    kind=FailureKind.NOT_FOUND,
+                )
+        personal_filter = and_(
+            ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
+            ResearchItem.created_by_id == user_id,
+        )
+        audience_filter = (
+            personal_filter
+            if project_id is None
+            else or_(
+                personal_filter,
+                and_(
+                    ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                    ResearchItem.audience_project_id == project_id,
                 ),
             )
+        )
+        annotation_filter = and_(
+            ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+            ResearchItem.target_document_id == document_id,
+            audience_filter,
+        )
+        document_output_filter = and_(
+            ResearchItem.kind != ResearchItemKind.ANNOTATION_THREAD.value,
+            ResearchItem.audience_type == ResearchAudienceType.DOCUMENT.value,
+            ResearchItem.audience_document_id == document_id,
+        )
+        statement = (
+            select(ResearchItem)
+            .where(or_(annotation_filter, document_output_filter))
             .order_by(ResearchItem.created_at.asc(), ResearchItem.id.asc())
             .options(
                 joinedload(ResearchItem.created_by),
                 joinedload(ResearchItem.citation),
                 joinedload(ResearchItem.audio_overview),
                 joinedload(ResearchItem.data_table),
-                joinedload(ResearchItem.highlight_thread)
-                .selectinload(HighlightThread.comments)
+                joinedload(ResearchItem.annotation_thread)
+                .selectinload(AnnotationThread.comments)
                 .joinedload(AnnotationComment.created_by),
             )
         )
@@ -157,12 +205,8 @@ class ResearchRepository:
             db.scalars(
                 select(ResearchItem)
                 .where(
-                    ResearchItem.scope_type == ResearchScopeType.PROJECT.value,
-                    ResearchItem.project_id == project_id,
-                    or_(
-                        ResearchItem.is_shared.is_(True),
-                        ResearchItem.created_by_id == user_id,
-                    ),
+                    ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                    ResearchItem.audience_project_id == project_id,
                 )
                 .order_by(ResearchItem.created_at.desc(), ResearchItem.id.desc())
                 .options(
@@ -176,25 +220,55 @@ class ResearchRepository:
             .all()
         )
 
-    def create_highlight_thread(
+    def create_annotation_thread(
         self,
         db: Session,
         *,
         document_id: uuid.UUID,
         user_id: int,
-        create: HighlightThreadCreate,
+        create: AnnotationThreadCreate,
         refresh_result: bool = True,
     ) -> ResearchItem:
         require_document_access(db, document_id=document_id, user_id=user_id)
+        if create.audience_type not in {
+            ResearchAudienceType.PERSONAL,
+            ResearchAudienceType.PROJECT,
+        }:
+            raise ValueError("annotation audience must be personal or project")
+        if create.audience_type is ResearchAudienceType.PROJECT:
+            from app.modules.projects.infrastructure.access import (
+                require_project_access,
+            )
+            from app.modules.projects.infrastructure.models import ProjectPaper
+
+            if create.audience_project_id is None:
+                raise ValueError("project annotation requires audience_project_id")
+            require_project_access(
+                db, project_id=create.audience_project_id, user_id=user_id
+            )
+            if (
+                db.scalar(
+                    select(ProjectPaper.id).where(
+                        ProjectPaper.project_id == create.audience_project_id,
+                        ProjectPaper.document_id == document_id,
+                    )
+                )
+                is None
+            ):
+                raise AppError(
+                    code="project_document_not_found",
+                    message="Document not found in this Project",
+                    kind=FailureKind.NOT_FOUND,
+                )
         page_number, start_offset, end_offset = position_columns(create.position)
         item = ResearchItem(
-            kind=ResearchItemKind.HIGHLIGHT_THREAD.value,
+            kind=ResearchItemKind.ANNOTATION_THREAD.value,
             created_by_id=user_id,
-            scope_type=ResearchScopeType.DOCUMENT.value,
-            document_id=document_id,
-            is_shared=create.is_shared,
+            audience_type=create.audience_type.value,
+            audience_project_id=create.audience_project_id,
+            target_document_id=document_id,
         )
-        item.highlight_thread = HighlightThread(
+        item.annotation_thread = AnnotationThread(
             quote_text=create.quote_text,
             page_number=page_number,
             start_offset=start_offset,
@@ -209,6 +283,15 @@ class ResearchRepository:
             zotero_annotation_key=create.zotero_annotation_key,
         )
         db.add(item)
+        db.flush()
+        if create.initial_comment is not None:
+            item.annotation_thread.comments.append(
+                AnnotationComment(
+                    created_by_id=user_id,
+                    content=create.initial_comment,
+                    role=create.content_role.value,
+                )
+            )
         if refresh_result:
             db.flush()
             db.refresh(item)
@@ -216,22 +299,25 @@ class ResearchRepository:
             db.flush()
         return item
 
-    def has_assistant_highlight(
+    def has_assistant_annotation(
         self,
         db: Session,
         *,
         document_id: uuid.UUID,
+        user_id: int,
     ) -> bool:
         return (
             db.scalar(
                 select(ResearchItem.id)
                 .join(
-                    HighlightThread,
-                    HighlightThread.research_item_id == ResearchItem.id,
+                    AnnotationThread,
+                    AnnotationThread.research_item_id == ResearchItem.id,
                 )
                 .where(
-                    ResearchItem.document_id == document_id,
-                    HighlightThread.role == RoleType.ASSISTANT.value,
+                    ResearchItem.target_document_id == document_id,
+                    ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
+                    ResearchItem.created_by_id == user_id,
+                    AnnotationThread.role == RoleType.ASSISTANT.value,
                 )
                 .limit(1)
             )
@@ -245,18 +331,19 @@ class ResearchRepository:
         user_id: int,
         snapshot: CitationSnapshot,
         source_response_id: uuid.UUID,
-        scope_type: ResearchScopeType,
+        scope_type: ResearchAudienceType,
         scope_id: uuid.UUID | None,
     ) -> ResearchItem:
         item = ResearchItem(
             kind=ResearchItemKind.CITATION.value,
             created_by_id=user_id,
-            scope_type=scope_type.value,
-            document_id=(
-                scope_id if scope_type == ResearchScopeType.DOCUMENT else None
+            audience_type=scope_type.value,
+            audience_document_id=(
+                scope_id if scope_type == ResearchAudienceType.DOCUMENT else None
             ),
-            project_id=(scope_id if scope_type == ResearchScopeType.PROJECT else None),
-            is_shared=scope_type != ResearchScopeType.PERSONAL,
+            audience_project_id=(
+                scope_id if scope_type == ResearchAudienceType.PROJECT else None
+            ),
             source_response_id=source_response_id,
         )
         item.citation = CitationOutput(snapshot=snapshot.model_dump(mode="json"))
@@ -274,13 +361,13 @@ class ResearchRepository:
     ) -> list[ResearchItem]:
         scope_type = ConversationScopeType(conversation.scope_type)
         if scope_type == ConversationScopeType.GLOBAL:
-            research_scope = ResearchScopeType.PERSONAL
+            research_scope = ResearchAudienceType.PERSONAL
             scope_id = None
         elif scope_type == ConversationScopeType.PROJECT:
-            research_scope = ResearchScopeType.PROJECT
+            research_scope = ResearchAudienceType.PROJECT
             scope_id = conversation.project_id
         else:
-            research_scope = ResearchScopeType.DOCUMENT
+            research_scope = ResearchAudienceType.DOCUMENT
             scope_id = conversation.document_id
         validated_snapshots = _CITATION_SNAPSHOTS.validate_python(snapshots)
         items = [
@@ -297,7 +384,7 @@ class ResearchRepository:
         db.flush()
         return items
 
-    def get_highlight_thread_visible(
+    def get_annotation_thread_visible(
         self,
         db: Session,
         *,
@@ -308,20 +395,20 @@ class ResearchRepository:
             select(ResearchItem)
             .where(
                 ResearchItem.id == thread_id,
-                ResearchItem.kind == ResearchItemKind.HIGHLIGHT_THREAD.value,
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
                 research_item_visible_to(user_id),
             )
             .options(
-                joinedload(ResearchItem.highlight_thread)
-                .selectinload(HighlightThread.comments)
+                joinedload(ResearchItem.annotation_thread)
+                .selectinload(AnnotationThread.comments)
                 .joinedload(AnnotationComment.created_by),
                 joinedload(ResearchItem.created_by),
             )
         )
         if item is None:
             raise AppError(
-                code="highlight_thread_not_found",
-                message="Highlight thread not found",
+                code="annotation_thread_not_found",
+                message="Annotation thread not found",
                 kind=FailureKind.NOT_FOUND,
             )
         research_item_policy.require_visible(db, item=item, user_id=user_id)
@@ -337,15 +424,15 @@ class ResearchRepository:
         return {
             key
             for key in db.scalars(
-                select(HighlightThread.zotero_annotation_key)
+                select(AnnotationThread.zotero_annotation_key)
                 .join(
                     ResearchItem,
-                    ResearchItem.id == HighlightThread.research_item_id,
+                    ResearchItem.id == AnnotationThread.research_item_id,
                 )
                 .where(
-                    ResearchItem.document_id == document_id,
+                    ResearchItem.target_document_id == document_id,
                     ResearchItem.created_by_id == user_id,
-                    HighlightThread.zotero_annotation_key.isnot(None),
+                    AnnotationThread.zotero_annotation_key.isnot(None),
                 )
             ).all()
             if key is not None
@@ -359,19 +446,19 @@ class ResearchRepository:
         user_id: int,
         quote_text: str,
         page_number: int | None,
-    ) -> HighlightThread | None:
+    ) -> AnnotationThread | None:
         return db.scalar(
-            select(HighlightThread)
+            select(AnnotationThread)
             .join(
                 ResearchItem,
-                ResearchItem.id == HighlightThread.research_item_id,
+                ResearchItem.id == AnnotationThread.research_item_id,
             )
             .where(
-                ResearchItem.document_id == document_id,
+                ResearchItem.target_document_id == document_id,
                 ResearchItem.created_by_id == user_id,
-                HighlightThread.zotero_annotation_key.is_(None),
-                HighlightThread.quote_text == quote_text,
-                HighlightThread.page_number.is_not_distinct_from(page_number),
+                AnnotationThread.zotero_annotation_key.is_(None),
+                AnnotationThread.quote_text == quote_text,
+                AnnotationThread.page_number.is_not_distinct_from(page_number),
             )
             .order_by(ResearchItem.created_at.asc())
             .limit(1)
@@ -381,7 +468,7 @@ class ResearchRepository:
     def set_zotero_annotation_key(
         db: Session,
         *,
-        thread: HighlightThread,
+        thread: AnnotationThread,
         zotero_annotation_key: str,
     ) -> None:
         thread.zotero_annotation_key = zotero_annotation_key
@@ -398,17 +485,25 @@ class ResearchRepository:
         refresh_result: bool = True,
     ) -> AnnotationComment:
         item = self.require_visible(db, item_id=thread_id, user_id=user_id)
-        if item.kind != ResearchItemKind.HIGHLIGHT_THREAD.value:
+        if item.kind != ResearchItemKind.ANNOTATION_THREAD.value:
             raise AppError(
-                code="highlight_thread_not_found",
-                message="Highlight thread not found",
+                code="annotation_thread_not_found",
+                message="Annotation thread not found",
                 kind=FailureKind.NOT_FOUND,
             )
         access = research_item_policy.evaluate(db, item=item, user_id=user_id)
-        if not access.has_scope_access:
+        if not access.has_audience_access:
             raise AppError(
                 code="research_item_scope_access_lost",
                 message="This thread is read-only until scope access is restored",
+                kind=FailureKind.CONFLICT,
+            )
+        if item.annotation_thread is None:
+            raise RuntimeError("annotation_item_without_thread")
+        if item.annotation_thread.status == "resolved":
+            raise AppError(
+                code="annotation_thread_resolved",
+                message="Reopen this thread before replying",
                 kind=FailureKind.CONFLICT,
             )
         comment = AnnotationComment(
@@ -442,6 +537,7 @@ class ResearchRepository:
             .where(
                 AnnotationComment.id == comment_id,
                 AnnotationComment.created_by_id == user_id,
+                research_item_visible_to(user_id),
             )
         )
         if for_update:
@@ -456,43 +552,10 @@ class ResearchRepository:
         item = db.get(ResearchItem, comment.thread_id)
         if item is None:
             raise RuntimeError("annotation_comment_without_research_item")
-        access = research_item_policy.evaluate(db, item=item, user_id=user_id)
-        if not access.has_scope_access:
-            raise AppError(
-                code="research_item_scope_access_lost",
-                message="This comment is read-only until scope access is restored",
-                kind=FailureKind.CONFLICT,
-            )
+        research_item_policy.require_visible(db, item=item, user_id=user_id)
         return comment
 
-    def set_visibility(
-        self,
-        db: Session,
-        *,
-        item_id: uuid.UUID,
-        user_id: int,
-        shared: bool,
-    ) -> ResearchItemWrite[ResearchItem]:
-        item = self.require_creator_owned(
-            db,
-            item_id=item_id,
-            user_id=user_id,
-            for_update=True,
-        )
-        if item.scope_type == ResearchScopeType.PERSONAL.value and shared:
-            raise AppError(
-                code="personal_research_cannot_be_shared",
-                message="Personal research cannot be shared without a target scope",
-                kind=FailureKind.CONFLICT,
-            )
-        if item.is_shared == shared:
-            return ResearchItemWrite(value=item, changed=False)
-        item.is_shared = shared
-        db.flush()
-        db.refresh(item)
-        return ResearchItemWrite(value=item, changed=True)
-
-    def update_highlight_thread(
+    def update_annotation_thread(
         self,
         db: Session,
         *,
@@ -500,51 +563,61 @@ class ResearchRepository:
         user_id: int,
         values: dict[str, object],
     ) -> ResearchItemWrite[ResearchItem]:
-        item = self.require_creator_owned(
-            db,
-            item_id=thread_id,
-            user_id=user_id,
-            for_update=True,
+        item = self.require_visible(
+            db, item_id=thread_id, user_id=user_id, for_update=True
         )
         if (
-            item.kind != ResearchItemKind.HIGHLIGHT_THREAD.value
-            or item.highlight_thread is None
+            item.kind != ResearchItemKind.ANNOTATION_THREAD.value
+            or item.annotation_thread is None
         ):
             raise AppError(
-                code="highlight_thread_not_found",
-                message="Highlight thread not found",
+                code="annotation_thread_not_found",
+                message="Annotation thread not found",
                 kind=FailureKind.NOT_FOUND,
             )
+        access = research_item_policy.evaluate(db, item=item, user_id=user_id)
         changed = False
-        shared = values.pop("shared", None)
-        if shared is not None and item.is_shared != bool(shared):
-            item.is_shared = bool(shared)
-            changed = True
-        raw_position = values.pop("position", _POSITION_UNSET)
-        if raw_position is not _POSITION_UNSET:
-            typed_position = (
-                _RESEARCH_POSITION.validate_python(raw_position)
-                if raw_position is not None
-                else None
-            )
-            serialized = (
-                typed_position.model_dump(mode="json")
-                if typed_position is not None
-                else None
-            )
-            page_number, start_offset, end_offset = position_columns(typed_position)
-            for field, anchor_value in {
-                "position": serialized,
-                "page_number": page_number,
-                "start_offset": start_offset,
-                "end_offset": end_offset,
-            }.items():
-                if getattr(item.highlight_thread, field) != anchor_value:
-                    setattr(item.highlight_thread, field, anchor_value)
-                    changed = True
-        for field, update_value in values.items():
-            if getattr(item.highlight_thread, field) != update_value:
-                setattr(item.highlight_thread, field, update_value)
+        color = values.get("color")
+        status = values.get("status")
+        if color is not None:
+            if not access.can_manage:
+                raise AppError(
+                    code="research_item_permission_denied",
+                    message="Only the creator can recolor this annotation",
+                    kind=FailureKind.PERMISSION_DENIED,
+                )
+            next_color = getattr(color, "value", color)
+            if item.annotation_thread.color != next_color:
+                item.annotation_thread.color = str(next_color)
+                changed = True
+        if status is not None:
+            if item.audience_type != ResearchAudienceType.PROJECT.value:
+                raise AppError(
+                    code="personal_annotation_cannot_be_resolved",
+                    message="Personal annotations are deleted instead of resolved",
+                    kind=FailureKind.CONFLICT,
+                )
+            if not access.can_resolve:
+                raise AppError(
+                    code="annotation_thread_resolution_denied",
+                    message="Project edit permission is required",
+                    kind=FailureKind.PERMISSION_DENIED,
+                )
+            next_status = getattr(status, "value", status)
+            if next_status == "resolved" and not item.annotation_thread.comments:
+                raise AppError(
+                    code="annotation_thread_has_no_discussion",
+                    message="A commentless mark is deleted instead of resolved",
+                    kind=FailureKind.CONFLICT,
+                )
+            if item.annotation_thread.status != next_status:
+                item.annotation_thread.status = str(next_status)
+                if next_status == "resolved":
+                    item.annotation_thread.resolved_by_id = user_id
+                    item.annotation_thread.resolved_at = datetime.now(timezone.utc)
+                else:
+                    item.annotation_thread.resolved_by_id = None
+                    item.annotation_thread.resolved_at = None
                 changed = True
         if not changed:
             return ResearchItemWrite(value=item, changed=False)
@@ -595,7 +668,6 @@ class ResearchRepository:
         *,
         item_id: uuid.UUID,
         user_id: int,
-        confirm_delete_replies: bool = False,
         origin_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
     ) -> None:
@@ -605,7 +677,7 @@ class ResearchRepository:
             user_id=user_id,
             for_update=True,
         )
-        if item.kind == ResearchItemKind.HIGHLIGHT_THREAD.value:
+        if item.kind == ResearchItemKind.ANNOTATION_THREAD.value:
             other_reply_count = int(
                 db.scalar(
                     select(func.count(AnnotationComment.id)).where(
@@ -615,10 +687,10 @@ class ResearchRepository:
                 )
                 or 0
             )
-            if other_reply_count and not confirm_delete_replies:
+            if other_reply_count:
                 raise AppError(
-                    code="highlight_thread_has_other_replies",
-                    message="Confirm deletion of replies from other contributors",
+                    code="annotation_thread_has_other_replies",
+                    message="Resolve this thread to preserve other contributors' replies",
                     kind=FailureKind.CONFLICT,
                     details={"affected_reply_count": other_reply_count},
                 )
@@ -661,37 +733,71 @@ class ResearchRepository:
                 item.created_by.display_name if item.created_by is not None else None
             ),
         )
-        scope_type = ResearchScopeType(item.scope_type)
-        scope_id = (
-            item.document_id
-            if scope_type == ResearchScopeType.DOCUMENT
-            else item.project_id
-            if scope_type == ResearchScopeType.PROJECT
-            else None
-        )
-        highlight: HighlightThreadContent | None = None
+        audience_type = ResearchAudienceType(item.audience_type)
+        audience: ResearchAudience
+        if audience_type is ResearchAudienceType.DOCUMENT:
+            if item.audience_document_id is None:
+                raise RuntimeError("document_audience_without_document")
+            audience = DocumentResearchAudience(document_id=item.audience_document_id)
+        elif audience_type is ResearchAudienceType.PROJECT:
+            if item.audience_project_id is None:
+                raise RuntimeError("project_audience_without_project")
+            audience = ProjectResearchAudience(project_id=item.audience_project_id)
+        else:
+            audience = PersonalResearchAudience()
+        annotation: AnnotationThreadContent | None = None
         citation: CitationContent | None = None
         audio: AudioOverviewContent | None = None
         data_table: DataTableContent | None = None
-        if item.highlight_thread is not None:
-            highlight = HighlightThreadContent(
-                quote_text=item.highlight_thread.quote_text,
+        if item.annotation_thread is not None:
+            resolved_by = item.annotation_thread.resolved_by
+            has_foreign_replies = any(
+                comment.created_by_id != user_id
+                for comment in item.annotation_thread.comments
+            )
+            can_delete_annotation = access.can_manage and not has_foreign_replies
+            annotation = AnnotationThreadContent(
+                quote_text=item.annotation_thread.quote_text,
                 position=(
                     TypeAdapter(ResearchPosition).validate_python(
-                        item.highlight_thread.position
+                        item.annotation_thread.position
                     )
-                    if item.highlight_thread.position is not None
+                    if item.annotation_thread.position is not None
                     else None
                 ),
-                color=item.highlight_thread.color,
-                role=item.highlight_thread.role,
+                color=AnnotationColor(item.annotation_thread.color),
+                role=item.annotation_thread.role,
+                status=AnnotationThreadStatus(item.annotation_thread.status),
+                resolved_by=(
+                    ResearchCreatorResponse(
+                        id=item.annotation_thread.resolved_by_id,
+                        display_name=(
+                            resolved_by.display_name if resolved_by else None
+                        ),
+                    )
+                    if item.annotation_thread.resolved_by_id is not None
+                    else None
+                ),
+                resolved_at=item.annotation_thread.resolved_at,
+                capabilities=AnnotationThreadCapabilities(
+                    reply=access.has_audience_access
+                    and item.annotation_thread.status == "open",
+                    recolor=access.can_manage,
+                    resolve=access.can_resolve
+                    and item.audience_type == ResearchAudienceType.PROJECT.value
+                    and bool(item.annotation_thread.comments)
+                    and item.annotation_thread.status == "open",
+                    reopen=access.can_resolve
+                    and item.annotation_thread.status == "resolved",
+                    delete=can_delete_annotation,
+                ),
                 comments=[
                     self.serialize_comment(
                         comment,
                         user_id=user_id,
-                        has_scope_access=access.has_scope_access,
+                        has_audience_access=access.has_audience_access,
                     )
-                    for comment in item.highlight_thread.comments
+                    for comment in item.annotation_thread.comments
                 ],
             )
         elif item.citation is not None:
@@ -722,18 +828,20 @@ class ResearchRepository:
         return ResearchItemResponse(
             id=item.id,
             kind=ResearchItemKind(item.kind),
-            scope_type=scope_type,
-            scope_id=scope_id,
-            is_shared=item.is_shared,
+            audience=audience,
+            target_document_id=item.target_document_id,
             created_by=creator,
             created_at=item.created_at,
             updated_at=item.updated_at,
             capabilities=ResearchItemCapabilities(
-                share=access.can_manage,
                 edit=access.can_manage,
-                delete=access.can_manage,
+                delete=(
+                    can_delete_annotation
+                    if item.annotation_thread is not None
+                    else access.can_manage
+                ),
             ),
-            highlight_thread=highlight,
+            annotation_thread=annotation,
             citation=citation,
             audio_overview=audio,
             data_table=data_table,
@@ -744,9 +852,9 @@ class ResearchRepository:
         comment: AnnotationComment,
         *,
         user_id: int,
-        has_scope_access: bool,
+        has_audience_access: bool,
     ) -> AnnotationCommentResponse:
-        can_manage = comment.created_by_id == user_id and has_scope_access
+        can_manage = comment.created_by_id == user_id and has_audience_access
         return AnnotationCommentResponse(
             id=comment.id,
             thread_id=comment.thread_id,

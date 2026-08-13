@@ -9,7 +9,7 @@ from uuid import UUID
 
 from app.bootstrap.adapters.research_annotations import require_parsed_content
 from app.bootstrap.adapters.research_repository import (
-    HighlightThreadCreate,
+    AnnotationThreadCreate,
     research_repository,
 )
 from app.modules.research.application.positions import (
@@ -18,7 +18,12 @@ from app.modules.research.application.positions import (
     PdfTextRect,
     ResearchPosition,
 )
-from app.database.models import RoleType, ZoteroImportSource, ZoteroImportStatus
+from app.database.models import (
+    ResearchAudienceType,
+    RoleType,
+    ZoteroImportSource,
+    ZoteroImportStatus,
+)
 from app.llm.utils import find_offsets
 from app.modules.integrations.zotero.infrastructure.import_repository import (
     zotero_import_repository,
@@ -50,10 +55,13 @@ def _map_color(hex_color: str | None) -> str:
         return "yellow"
     palette = {
         "yellow": (255, 235, 59),
+        "red": (244, 67, 54),
         "green": (76, 175, 80),
         "blue": (33, 150, 243),
-        "pink": (233, 30, 99),
+        "magenta": (233, 30, 99),
         "purple": (156, 39, 176),
+        "orange": (255, 152, 0),
+        "gray": (117, 117, 117),
     }
     return min(
         palette,
@@ -260,11 +268,11 @@ def apply_annotation_snapshot(
                 end_offset=end_offset,
                 page_number=page_number,
             )
-        thread = research_repository.create_highlight_thread(
+        research_repository.create_annotation_thread(
             db,
             document_id=document_id,
             user_id=user.id,
-            create=HighlightThreadCreate(
+            create=AnnotationThreadCreate(
                 quote_text=quote_text,
                 position=position,
                 color=_map_color(
@@ -272,19 +280,13 @@ def apply_annotation_snapshot(
                     if data.get("annotationColor") is not None
                     else None
                 ),
-                is_shared=False,
+                audience_type=ResearchAudienceType.PERSONAL,
+                audience_project_id=None,
                 content_role=RoleType.USER,
+                initial_comment=comment or None,
                 zotero_annotation_key=zotero_key,
             ),
         )
-        if comment:
-            research_repository.add_comment(
-                db,
-                thread_id=thread.id,
-                user_id=user.id,
-                content=comment,
-                content_role=RoleType.USER,
-            )
         existing_keys.add(zotero_key)
         applied += 1
     return applied

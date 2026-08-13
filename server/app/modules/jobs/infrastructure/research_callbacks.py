@@ -10,7 +10,7 @@ from app.database.models import (
     ResearchDataTable,
     ResearchItem,
     ResearchItemKind,
-    ResearchScopeType,
+    ResearchAudienceType,
 )
 from app.shared.domain import AppError, FailureKind
 from app.llm.token_credits import llm_usage_context, settle_token_usage
@@ -114,23 +114,22 @@ async def complete_audio_job(
             result=result.model_dump(mode="json"),
         )
         if changed:
-            scope_type = ResearchScopeType(task_payload.scope_type)
+            scope_type = ResearchAudienceType(task_payload.scope_type)
             item = ResearchItem(
                 id=result.research_item_id,
                 kind=ResearchItemKind.AUDIO_OVERVIEW.value,
                 created_by_id=job.requested_by_id,
-                scope_type=scope_type.value,
-                document_id=(
+                audience_type=scope_type.value,
+                audience_document_id=(
                     task_payload.scope_id
-                    if scope_type == ResearchScopeType.DOCUMENT
+                    if scope_type == ResearchAudienceType.DOCUMENT
                     else None
                 ),
-                project_id=(
+                audience_project_id=(
                     task_payload.scope_id
-                    if scope_type == ResearchScopeType.PROJECT
+                    if scope_type == ResearchAudienceType.PROJECT
                     else None
                 ),
-                is_shared=True,
                 source_job_id=job_id,
             )
             item.audio_overview = ResearchAudioOverview(
@@ -220,9 +219,8 @@ async def complete_data_table_job(
                 id=result.research_item_id,
                 kind=ResearchItemKind.DATA_TABLE.value,
                 created_by_id=job.requested_by_id,
-                scope_type=ResearchScopeType.PROJECT.value,
-                project_id=job.project_id,
-                is_shared=True,
+                audience_type=ResearchAudienceType.PROJECT.value,
+                audience_project_id=job.project_id,
                 source_job_id=job_id,
             )
             item.data_table = ResearchDataTable(

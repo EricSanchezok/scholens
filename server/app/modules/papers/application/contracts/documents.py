@@ -9,7 +9,7 @@ from app.shared.domain import JsonValue
 from app.shared.domain.enums import (
     DocumentProcessingStatus,
     PaperStatus,
-    ResearchScopeType,
+    ResearchAudienceType,
 )
 from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.modules.research.application.contracts import ResearchItemResponse
@@ -184,8 +184,8 @@ class LibraryPaperListResponse(BaseModel):
 
 
 class LibraryOutputSourceResponse(BaseModel):
-    scope_type: ResearchScopeType
-    scope_id: UUID | None
+    audience_type: ResearchAudienceType
+    audience_id: UUID | None
     title: str
 
 

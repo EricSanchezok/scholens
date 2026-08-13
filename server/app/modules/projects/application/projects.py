@@ -256,6 +256,7 @@ class ProjectGateway(Protocol):
         document_id: UUID,
         origin_operation_id: UUID,
         correlation_id: UUID,
+        confirm_delete_annotations: bool,
     ) -> ProjectPaperRemoval: ...
 
 
@@ -710,6 +711,7 @@ class Projects:
         operation: OperationContext,
         project_id: UUID,
         document_id: UUID,
+        confirm_delete_annotations: bool = False,
     ) -> None:
         result = self._gateway.remove_document(
             actor=actor,
@@ -717,6 +719,7 @@ class Projects:
             document_id=document_id,
             origin_operation_id=operation.trace.operation_id,
             correlation_id=operation.trace.correlation_id,
+            confirm_delete_annotations=confirm_delete_annotations,
         )
         changes = [
             OperationChange(

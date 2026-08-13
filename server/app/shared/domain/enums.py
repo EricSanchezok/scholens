@@ -93,16 +93,32 @@ class ConversationScopeType(str, Enum):
 
 
 class ResearchItemKind(str, Enum):
-    HIGHLIGHT_THREAD = "highlight_thread"
+    ANNOTATION_THREAD = "annotation_thread"
     CITATION = "citation"
     AUDIO_OVERVIEW = "audio_overview"
     DATA_TABLE = "data_table"
 
 
-class ResearchScopeType(str, Enum):
+class ResearchAudienceType(str, Enum):
     PERSONAL = "personal"
     DOCUMENT = "document"
     PROJECT = "project"
+
+
+class AnnotationThreadStatus(str, Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class AnnotationColor(str, Enum):
+    YELLOW = "yellow"
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+    PURPLE = "purple"
+    MAGENTA = "magenta"
+    ORANGE = "orange"
+    GRAY = "gray"
 
 
 class HighlightType(str, Enum):

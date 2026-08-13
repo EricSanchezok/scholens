@@ -6,7 +6,7 @@ from app.database.models import (
     ConversationResponse,
     ConversationTurn,
     DurableJob,
-    HighlightThread,
+    AnnotationThread,
     Onboarding,
     Document,
     Project,
@@ -126,14 +126,14 @@ class ProjectPaperAdmin(ModelView, model=ProjectPaper):
     column_searchable_list = [ProjectPaper.project_id, ProjectPaper.document_id]
 
 
-class HighlightAdmin(ModelView, model=HighlightThread):
+class AnnotationThreadAdmin(ModelView, model=AnnotationThread):
     column_list = [
-        HighlightThread.research_item_id,
-        HighlightThread.quote_text,
-        HighlightThread.page_number,
-        HighlightThread.role,
+        AnnotationThread.research_item_id,
+        AnnotationThread.quote_text,
+        AnnotationThread.page_number,
+        AnnotationThread.role,
     ]
-    column_searchable_list = [HighlightThread.quote_text]
+    column_searchable_list = [AnnotationThread.quote_text]
 
 
 class PaperAdmin(ModelView, model=Document):
@@ -141,7 +141,7 @@ class PaperAdmin(ModelView, model=Document):
     column_searchable_list = [Document.title]
 
 
-class AnnotationAdmin(ModelView, model=AnnotationComment):
+class AnnotationCommentAdmin(ModelView, model=AnnotationComment):
     column_list = [
         AnnotationComment.id,
         AnnotationComment.thread_id,
@@ -300,8 +300,8 @@ def setup_admin(app: FastAPI) -> None:
     admin.add_view(UserProfileAdmin)
     admin.add_view(OnboardingAdmin)
     admin.add_view(PaperAdmin)
-    admin.add_view(HighlightAdmin)
-    admin.add_view(AnnotationAdmin)
+    admin.add_view(AnnotationThreadAdmin)
+    admin.add_view(AnnotationCommentAdmin)
     admin.add_view(ConversationAdmin)
     admin.add_view(ConversationTurnAdmin)
     admin.add_view(ConversationResponseAdmin)

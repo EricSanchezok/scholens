@@ -150,13 +150,14 @@ class ConversationListRequest(BaseModel):
     archived: bool = False
     scope_type: ConversationScopeType | None = None
     scope_id: UUID | None = None
+    context_document_id: UUID | None = None
     cursor: str | None = None
     limit: int = Field(default=50, ge=1, le=100)
 
     @model_validator(mode="after")
     def validate_scope_filter(self) -> ConversationListRequest:
         if self.scope_type is None:
-            if self.scope_id is not None:
+            if self.scope_id is not None or self.context_document_id is not None:
                 raise ValueError("scope_id requires scope_type")
             return self
         needs_id = self.scope_type in {
@@ -165,6 +166,11 @@ class ConversationListRequest(BaseModel):
         }
         if needs_id != (self.scope_id is not None):
             raise ValueError("scope_id does not match scope_type")
+        if (
+            self.context_document_id is not None
+            and self.scope_type is not ConversationScopeType.PROJECT
+        ):
+            raise ValueError("context_document_id requires project scope")
         return self
 
 

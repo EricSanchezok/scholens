@@ -63,6 +63,7 @@ class SqlAlchemyConversationGateway:
         archived: bool,
         scope_type: ConversationScopeType | None,
         scope_id: UUID | None,
+        context_document_id: UUID | None,
         position: ConversationListPosition | None,
         limit: int,
     ) -> ConversationPage:
@@ -72,6 +73,7 @@ class SqlAlchemyConversationGateway:
             archived=archived,
             scope_type=scope_type,
             scope_id=scope_id,
+            context_document_id=context_document_id,
             position=position,
             limit=limit,
         )

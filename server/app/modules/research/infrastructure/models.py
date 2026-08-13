@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     ARRAY,
     UUID,
     BigInteger,
-    Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -22,7 +23,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.domain import JsonValue
 from app.shared.infrastructure.persistence import Base
-from app.shared.domain.enums import ResearchItemKind, ResearchScopeType
+from app.shared.domain.enums import (
+    AnnotationThreadStatus,
+    ResearchItemKind,
+    ResearchAudienceType,
+)
 
 if TYPE_CHECKING:
     from app.modules.conversations.infrastructure.models import ConversationResponse
@@ -36,32 +41,36 @@ class ResearchItem(Base):
     __tablename__ = "research_items"
     __table_args__ = (
         CheckConstraint(
-            "(scope_type = 'personal' AND document_id IS NULL AND project_id IS NULL) "
-            "OR (scope_type = 'document' AND document_id IS NOT NULL "
-            "AND project_id IS NULL) "
-            "OR (scope_type = 'project' AND project_id IS NOT NULL "
-            "AND document_id IS NULL)",
-            name="ck_research_items_scope_consistency",
+            "color IN ('yellow', 'red', 'green', 'blue', 'purple', "
+            "'magenta', 'orange', 'gray')",
+            name="ck_annotation_threads_color",
         ),
         CheckConstraint(
-            "scope_type != 'personal' OR NOT is_shared",
-            name="ck_research_items_personal_private",
+            "(audience_type = 'personal' AND audience_document_id IS NULL "
+            "AND audience_project_id IS NULL) "
+            "OR (audience_type = 'document' AND audience_document_id IS NOT NULL "
+            "AND audience_project_id IS NULL) "
+            "OR (audience_type = 'project' AND audience_project_id IS NOT NULL "
+            "AND audience_document_id IS NULL)",
+            name="ck_research_items_audience_consistency",
         ),
         CheckConstraint(
-            "kind != 'highlight_thread' OR scope_type = 'document'",
-            name="ck_research_items_highlight_document_scope",
+            "kind != 'annotation_thread' OR "
+            "(target_document_id IS NOT NULL AND audience_type IN ('personal', 'project'))",
+            name="ck_research_items_annotation_audience",
         ),
         Index(
-            "ix_research_items_document_visibility",
-            "document_id",
-            "is_shared",
+            "ix_research_items_document_audience",
+            "audience_document_id",
             "created_at",
         ),
         Index(
-            "ix_research_items_project_visibility",
-            "project_id",
-            "is_shared",
+            "ix_research_items_project_audience",
+            "audience_project_id",
             "created_at",
+        ),
+        Index(
+            "ix_research_items_annotation_target", "target_document_id", "created_at"
         ),
         Index(
             "ix_research_items_creator_activity",
@@ -81,22 +90,21 @@ class ResearchItem(Base):
         ForeignKey("auth.users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    document_id: Mapped[uuid.UUID | None] = mapped_column(
+    audience_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    audience_document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=True,
     )
-    project_id: Mapped[uuid.UUID | None] = mapped_column(
+    audience_project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=True,
     )
-    is_shared: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="false",
+    target_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=True,
     )
     source_response_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -115,15 +123,22 @@ class ResearchItem(Base):
         foreign_keys=[created_by_id],
         back_populates="research_items",
     )
-    document: Mapped["Document | None"] = relationship("Document")
-    project: Mapped["Project | None"] = relationship("Project")
+    audience_document: Mapped["Document | None"] = relationship(
+        "Document", foreign_keys=[audience_document_id]
+    )
+    audience_project: Mapped["Project | None"] = relationship(
+        "Project", foreign_keys=[audience_project_id]
+    )
+    target_document: Mapped["Document | None"] = relationship(
+        "Document", foreign_keys=[target_document_id]
+    )
     source_response: Mapped["ConversationResponse | None"] = relationship(
         "ConversationResponse",
         back_populates="research_items",
     )
     source_job: Mapped["DurableJob | None"] = relationship("DurableJob")
-    highlight_thread: Mapped["HighlightThread | None"] = relationship(
-        "HighlightThread",
+    annotation_thread: Mapped["AnnotationThread | None"] = relationship(
+        "AnnotationThread",
         back_populates="item",
         uselist=False,
         cascade="all, delete-orphan",
@@ -148,8 +163,19 @@ class ResearchItem(Base):
     )
 
 
-class HighlightThread(Base):
-    __tablename__ = "highlight_threads"
+class AnnotationThread(Base):
+    __tablename__ = "annotation_threads"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open', 'resolved')",
+            name="ck_annotation_threads_status",
+        ),
+        CheckConstraint(
+            "(status = 'open' AND resolved_by_id IS NULL AND resolved_at IS NULL) "
+            "OR (status = 'resolved' AND resolved_at IS NOT NULL)",
+            name="ck_annotation_threads_resolution",
+        ),
+    )
 
     research_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -167,8 +193,8 @@ class HighlightThread(Base):
     color: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        default="blue",
-        server_default="blue",
+        default="yellow",
+        server_default="yellow",
     )
     role: Mapped[str] = mapped_column(
         String(16),
@@ -180,16 +206,33 @@ class HighlightThread(Base):
         String(255),
         nullable=True,
     )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=AnnotationThreadStatus.OPEN.value,
+        server_default=AnnotationThreadStatus.OPEN.value,
+    )
+    resolved_by_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("auth.users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     item: Mapped["ResearchItem"] = relationship(
         "ResearchItem",
-        back_populates="highlight_thread",
+        back_populates="annotation_thread",
     )
     comments: Mapped[list["AnnotationComment"]] = relationship(
         "AnnotationComment",
         back_populates="thread",
         cascade="all, delete-orphan",
         order_by="AnnotationComment.created_at",
+    )
+    resolved_by: Mapped["AuthUser | None"] = relationship(
+        "AuthUser", foreign_keys=[resolved_by_id]
     )
 
 
@@ -206,7 +249,7 @@ class AnnotationComment(Base):
     )
     thread_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("highlight_threads.research_item_id", ondelete="CASCADE"),
+        ForeignKey("annotation_threads.research_item_id", ondelete="CASCADE"),
         nullable=False,
     )
     created_by_id: Mapped[int | None] = mapped_column(
@@ -222,8 +265,8 @@ class AnnotationComment(Base):
         server_default="user",
     )
 
-    thread: Mapped["HighlightThread"] = relationship(
-        "HighlightThread",
+    thread: Mapped["AnnotationThread"] = relationship(
+        "AnnotationThread",
         back_populates="comments",
     )
     created_by: Mapped["AuthUser | None"] = relationship(
@@ -313,10 +356,10 @@ class ResearchDataTable(Base):
 __all__ = [
     "AnnotationComment",
     "CitationOutput",
-    "HighlightThread",
+    "AnnotationThread",
     "ResearchAudioOverview",
     "ResearchDataTable",
     "ResearchItem",
     "ResearchItemKind",
-    "ResearchScopeType",
+    "ResearchAudienceType",
 ]
