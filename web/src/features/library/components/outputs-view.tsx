@@ -1,6 +1,12 @@
 "use client";
 
-import { FilterList, Headset, Journal, Quote, TableRows } from "iconoir-react";
+import {
+  FilterIcon,
+  AudioIcon,
+  CitationIcon,
+  QuoteIcon,
+  DataTableIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -44,10 +50,10 @@ const OUTPUT_SORTS: OutputSort[] = [
 ];
 
 const kindIcon: Record<OutputKind, IconGlyph> = {
-  highlight_thread: Quote,
-  citation: Journal,
-  audio_overview: Headset,
-  data_table: TableRows,
+  highlight_thread: QuoteIcon,
+  citation: CitationIcon,
+  audio_overview: AudioIcon,
+  data_table: DataTableIcon,
 };
 
 function outputPreview(output: Output) {
@@ -124,7 +130,7 @@ function KindFilter({
   );
   const trigger = (
     <Button variant="secondary">
-      <Icon glyph={FilterList} size={20} tone="secondary" />
+      <Icon glyph={FilterIcon} size={20} tone="secondary" />
       {t("label")}
       {active.length > 0 && <Badge tone="neutral">{active.length}</Badge>}
     </Button>

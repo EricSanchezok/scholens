@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  NavArrowDown,
-  NavArrowLeft,
-  NavArrowRight,
-  Refresh,
-  WarningTriangle,
-} from "iconoir-react";
+  ExpandIcon,
+  PreviousIcon,
+  NextIcon,
+  RegenerateIcon,
+  WarningIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -178,7 +178,7 @@ function AssistantMessage({
                         }
                         variant="ghost"
                       >
-                        <Icon glyph={NavArrowLeft} size={20} tone="secondary" />
+                        <Icon glyph={PreviousIcon} size={20} tone="secondary" />
                       </IconButton>
                       <span
                         aria-label={t("responseVersion", {
@@ -202,11 +202,7 @@ function AssistantMessage({
                         }
                         variant="ghost"
                       >
-                        <Icon
-                          glyph={NavArrowRight}
-                          size={20}
-                          tone="secondary"
-                        />
+                        <Icon glyph={NextIcon} size={20} tone="secondary" />
                       </IconButton>
                     </div>
                   )}
@@ -225,7 +221,7 @@ function AssistantMessage({
                     onClick={onRetryResponse}
                     variant="ghost"
                   >
-                    <Icon glyph={Refresh} size={16} tone="secondary" />
+                    <Icon glyph={RegenerateIcon} size={16} tone="secondary" />
                   </IconButton>
                 )}
                 <ConversationSources
@@ -552,7 +548,7 @@ export function ConversationView({
             className="grid place-items-center py-12 text-center"
             role="alert"
           >
-            <Icon glyph={WarningTriangle} size={24} tone="secondary" />
+            <Icon glyph={WarningIcon} size={24} tone="secondary" />
             <p className="mt-3 text-sm font-medium">{t("error")}</p>
             <Button
               className="mt-4"
@@ -658,7 +654,7 @@ export function ConversationView({
             onClick={jumpToLatest}
             variant="secondary"
           >
-            <Icon glyph={NavArrowDown} size={20} />
+            <Icon glyph={ExpandIcon} size={20} />
           </IconButton>
         </div>
       )}

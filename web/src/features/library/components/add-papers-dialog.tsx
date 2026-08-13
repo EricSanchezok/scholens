@@ -1,6 +1,12 @@
 "use client";
 
-import { Link, Page, Upload, WarningTriangle, Xmark } from "iconoir-react";
+import {
+  LinkIcon,
+  DocumentIcon,
+  UploadIcon,
+  WarningIcon,
+  DismissIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -266,7 +272,7 @@ export function AddPapersDialog({
               onClick={() => fileInputRef.current?.click()}
               variant="secondary"
             >
-              <Icon glyph={Upload} size={20} />
+              <Icon glyph={UploadIcon} size={20} />
               {t("chooseFiles")}
             </Button>
             {(filesChecking || duplicateCount > 0) && (
@@ -285,7 +291,7 @@ export function AddPapersDialog({
                   >
                     <span className="grid size-5 shrink-0 place-items-center">
                       <Icon
-                        glyph={item.errorCode ? WarningTriangle : Page}
+                        glyph={item.errorCode ? WarningIcon : DocumentIcon}
                         size={20}
                         tone={item.errorCode ? "danger" : "secondary"}
                       />
@@ -311,7 +317,7 @@ export function AddPapersDialog({
                       onClick={() => removeQueuedFile(item.id)}
                       variant="ghost"
                     >
-                      <Icon glyph={Xmark} size={16} tone="secondary" />
+                      <Icon glyph={DismissIcon} size={16} tone="secondary" />
                     </IconButton>
                   </li>
                 ))}
@@ -386,7 +392,7 @@ export function AddPapersDialog({
             </fieldset>
             <div className="flex flex-wrap items-center gap-2">
               <Button loading={sourcePending} type="submit">
-                <Icon glyph={Link} size={20} tone="inverse" />
+                <Icon glyph={LinkIcon} size={20} tone="inverse" />
                 {sourcePending ? t("sourcePending") : t("addSource")}
               </Button>
               {sourcePending && (

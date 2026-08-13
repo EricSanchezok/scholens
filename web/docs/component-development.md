@@ -34,8 +34,16 @@ actually shared.
 
 - Consume semantic Tailwind utilities backed by generated variables.
 - Never write product colors directly in a component.
-- Use the Scholens `Icon` wrapper with Iconoir glyphs. Do not import another
-  icon library or manually redraw a glyph inside product code.
+- Use the Scholens `Icon` wrapper with a named export from
+  `src/design-system/icons/semantic-icons.ts`. Product code under `app/` and
+  `features/` must not import `iconoir-react` directly, import another icon
+  library, or manually redraw a glyph. `design:check` enforces this boundary.
+- Every product meaning has exactly one semantic icon name, and every Iconoir
+  glyph in the registry belongs to exactly one meaning. The same meaning must
+  reuse the same semantic export everywhere; a glyph must not be registered a
+  second time for a conflicting action. Extend the registry before adding a
+  new product icon, and use the generic `AddIcon` only for meaning-neutral
+  addition—not New conversation, Ask, Add annotation, or Edit.
 - Rows and toolbars that mix icons with labels reserve an explicit, fixed-size,
   non-shrinking icon slot and align text in a separate flexible slot. Do not
   rely on each SVG's visible bounds, ad hoc margins, or the label length to

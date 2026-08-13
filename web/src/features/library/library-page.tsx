@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "iconoir-react";
+import { AddIcon } from "@/design-system/icons/semantic-icons";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -256,7 +256,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
           onClick={() => setAddOpen(true)}
           variant="ghost"
         >
-          <Icon glyph={Plus} size={24} />
+          <Icon glyph={AddIcon} size={24} />
         </IconButton>
       }
       onCollapsedChange={setCollapsed}
@@ -272,7 +272,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
             <p className="text-secondary mt-2 text-sm">{t("description")}</p>
           </div>
           <Button onClick={() => setAddOpen(true)}>
-            <Icon glyph={Plus} size={20} tone="inverse" />
+            <Icon glyph={AddIcon} size={20} tone="inverse" />
             {t("addPapers.open")}
           </Button>
         </header>

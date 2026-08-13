@@ -144,9 +144,11 @@ selection exists. It chooses the side with usable space, remains above the PDF
 page stack when it crosses a page gap, and stays horizontally clamped to the
 rendered page. Its actions and color palette always sit on an isolated, fully
 opaque elevated surface so document text cannot show through the controls. It
-contains only the Iconoir icons for Ask, Highlight, Note, and Copy; accessible
-names live in tooltips and `aria-label`s rather than visible action text. All
-four actions use the shared control-state and feedback rules.
+contains only the semantic icons for Ask, Highlight, Add annotation, and Copy;
+Ask uses `AskIcon` (`ChatBubbleQuestion`) while Add annotation uses
+`AddAnnotationIcon` (`Notes`), so their meanings cannot visually collide.
+Accessible names live in tooltips and `aria-label`s rather than visible action
+text. All four actions use the shared control-state and feedback rules.
 
 While the pointer is down, the PDF text layer uses the dedicated translucent
 blue document-selection token. The original Canvas text must remain legible
@@ -187,7 +189,8 @@ list icon; the panel tab already provides the necessary context.
 
 Reader lists only conversations whose scope is the current paper. Ask begins
 with a compact, borderless current-conversation switcher and a separate New chat
-icon. The
+action using the shared `NewConversationIcon` (`PageEdit`) from the Workspace
+sidebar. The
 search field and grouped Pinned/Recent list exist only while the switcher is
 open; they are not a permanent row or horizontal pill strip. New chat remains a
 local draft until the first send. Scope filtering and authorization happen on

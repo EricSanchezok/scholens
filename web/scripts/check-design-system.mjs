@@ -6,6 +6,12 @@ const webRoot = path.resolve(import.meta.dirname, "..");
 const sourceRoot = path.join(webRoot, "src");
 const tokenRoot = path.join(sourceRoot, "design-system", "tokens");
 const generatedRoot = path.join(sourceRoot, "design-system", "generated");
+const semanticIconRegistryPath = path.join(
+  sourceRoot,
+  "design-system",
+  "icons",
+  "semantic-icons.ts",
+);
 
 const readJson = async (filePath) =>
   JSON.parse(await readFile(filePath, "utf8"));
@@ -43,6 +49,59 @@ function lineNumber(contents, index) {
 
 const violations = [];
 const report = (message) => violations.push(message);
+
+const semanticIconRegistrySource = await readFile(
+  semanticIconRegistryPath,
+  "utf8",
+);
+const semanticIconRegistryBody = semanticIconRegistrySource.match(
+  /export const semanticIcons = \{([\s\S]*?)\} as const;/,
+)?.[1];
+if (!semanticIconRegistryBody) {
+  report("src/design-system/icons/semantic-icons.ts: registry is missing");
+} else {
+  const mappings = [
+    ...semanticIconRegistryBody.matchAll(/(\w+Icon):\s*"(\w+)"/g),
+  ].map((match) => ({ semantic: match[1], glyph: match[2] }));
+  const duplicateGlyphs = mappings.filter(
+    ({ glyph }, index) =>
+      mappings.findIndex((mapping) => mapping.glyph === glyph) !== index,
+  );
+  for (const { glyph, semantic } of duplicateGlyphs) {
+    report(
+      `src/design-system/icons/semantic-icons.ts: ${glyph} is registered for more than one semantic (including ${semantic})`,
+    );
+  }
+  const exportedMappings = [
+    ...semanticIconRegistrySource.matchAll(/(\w+)\s+as\s+(\w+Icon)/g),
+  ].map((match) => ({ semantic: match[2], glyph: match[1] }));
+  for (const mapping of mappings) {
+    if (
+      !exportedMappings.some(
+        (candidate) =>
+          candidate.semantic === mapping.semantic &&
+          candidate.glyph === mapping.glyph,
+      )
+    ) {
+      report(
+        `src/design-system/icons/semantic-icons.ts: ${mapping.semantic} must export the registered ${mapping.glyph} glyph`,
+      );
+    }
+  }
+  for (const mapping of exportedMappings) {
+    if (
+      !mappings.some(
+        (candidate) =>
+          candidate.semantic === mapping.semantic &&
+          candidate.glyph === mapping.glyph,
+      )
+    ) {
+      report(
+        `src/design-system/icons/semantic-icons.ts: ${mapping.semantic} export is missing from the semantic registry`,
+      );
+    }
+  }
+}
 
 const primitives = flattenTokens(
   await readJson(path.join(tokenRoot, "primitives.json")),
@@ -201,6 +260,11 @@ for (const filePath of scannedFiles) {
     relativePath.startsWith(`src${path.sep}features${path.sep}`) ||
     relativePath.startsWith(`src${path.sep}app${path.sep}`)
   ) {
+    if (/from\s+["']iconoir-react["']/.test(contents)) {
+      report(
+        `${relativePath}: product code must import a semantic icon from src/design-system/icons/semantic-icons.ts`,
+      );
+    }
     const featureFocusPattern =
       /focus(?:-visible)?:[^\s"'`]*(?:ring|border|shadow|outline-(?!none))/g;
     for (const match of contents.matchAll(featureFocusPattern)) {

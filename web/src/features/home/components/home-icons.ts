@@ -1,4 +1,4 @@
-export { Page as PaperIcon } from "iconoir-react";
+export { DocumentIcon as PaperIcon } from "@/design-system/icons/semantic-icons";
 export {
   AskIcon,
   LibraryIcon,

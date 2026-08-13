@@ -2,13 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  ArrowUp,
-  AtSign,
-  NavArrowDown,
-  Page,
-  Square,
-  Xmark,
-} from "iconoir-react";
+  SendIcon,
+  MentionIcon,
+  ExpandIcon,
+  DocumentIcon,
+  StopIcon,
+  DismissIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useForm, useWatch, type UseFormReturn } from "react-hook-form";
@@ -178,7 +178,7 @@ function ContextPicker({
           title={displayLabel}
           type="button"
         >
-          <Icon glyph={AtSign} size={20} />
+          <Icon glyph={MentionIcon} size={20} />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -372,7 +372,7 @@ export function ReasoningMenu({
         >
           <span className="truncate">{t(`composer.${value}`)}</span>
           <span className="grid size-4 shrink-0 place-items-center">
-            <Icon glyph={NavArrowDown} size={16} tone="secondary" />
+            <Icon glyph={ExpandIcon} size={16} tone="secondary" />
           </span>
         </button>
       </DropdownMenuTrigger>
@@ -527,11 +527,11 @@ export function ResearchComposer({
             role="img"
             title={contextLabel}
           >
-            <Icon glyph={AtSign} size={20} tone="secondary" />
+            <Icon glyph={MentionIcon} size={20} tone="secondary" />
           </div>
           {turnContextLabel ? (
             <span className="bg-subtle text-secondary flex max-w-[45%] min-w-0 items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
-              <Icon glyph={Page} size={16} tone="secondary" />
+              <Icon glyph={DocumentIcon} size={16} tone="secondary" />
               <span className="truncate">{turnContextLabel}</span>
               {onTurnContextClear ? (
                 <button
@@ -540,7 +540,7 @@ export function ResearchComposer({
                   onClick={onTurnContextClear}
                   type="button"
                 >
-                  <Icon glyph={Xmark} size={16} tone="secondary" />
+                  <Icon glyph={DismissIcon} size={16} tone="secondary" />
                 </button>
               ) : null}
             </span>
@@ -559,7 +559,7 @@ export function ResearchComposer({
               onClick={onStop}
               type="button"
             >
-              <Icon glyph={Square} size={16} tone="inverse" />
+              <Icon glyph={StopIcon} size={16} tone="inverse" />
             </IconButton>
           ) : (
             <IconButton
@@ -568,7 +568,7 @@ export function ResearchComposer({
               label={t("composer.submit")}
               type="submit"
             >
-              <Icon glyph={ArrowUp} size={16} tone="inverse" />
+              <Icon glyph={SendIcon} size={16} tone="inverse" />
             </IconButton>
           )}
         </div>
@@ -617,7 +617,7 @@ export function ResearchComposer({
       (context.kind === "selection" && selectionCount > 0) ? (
         <div className="col-span-4 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
           <span className="bg-subtle text-secondary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
-            <Icon glyph={Page} size={16} tone="secondary" />
+            <Icon glyph={DocumentIcon} size={16} tone="secondary" />
             {turnContextLabel ??
               t("context.selectionSummary", { count: selectionCount })}
           </span>
@@ -638,7 +638,7 @@ export function ResearchComposer({
             role="img"
             title={contextLabel}
           >
-            <Icon glyph={Page} size={20} tone="secondary" />
+            <Icon glyph={DocumentIcon} size={20} tone="secondary" />
           </div>
         ) : (
           <ContextPicker
@@ -673,7 +673,7 @@ export function ResearchComposer({
           onClick={onStop}
           type="button"
         >
-          <Icon glyph={Square} size={20} tone="inverse" />
+          <Icon glyph={StopIcon} size={20} tone="inverse" />
         </IconButton>
       ) : (
         <IconButton
@@ -685,7 +685,7 @@ export function ResearchComposer({
           label={t("composer.submit")}
           type="submit"
         >
-          <Icon glyph={ArrowUp} size={20} tone="inverse" />
+          <Icon glyph={SendIcon} size={20} tone="inverse" />
         </IconButton>
       )}
     </form>

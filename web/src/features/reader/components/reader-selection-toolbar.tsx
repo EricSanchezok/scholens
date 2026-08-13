@@ -1,13 +1,13 @@
 "use client";
 
 import {
-  ChatBubbleQuestion,
-  Check,
-  ColorPicker,
-  Copy,
-  EditPencil,
-  WarningCircle,
-} from "iconoir-react";
+  AskIcon,
+  SuccessIcon,
+  HighlightColorIcon,
+  CopyIcon,
+  AddAnnotationIcon,
+  ErrorIcon,
+} from "@/design-system/icons/semantic-icons";
 import * as React from "react";
 
 import { useCopyActionFeedback } from "@/components/feedback";
@@ -121,10 +121,10 @@ export function ReaderSelectionToolbar({
 
   const feedbackGlyph =
     copyFeedback.status === "success"
-      ? Check
+      ? SuccessIcon
       : copyFeedback.status === "error"
-        ? WarningCircle
-        : Copy;
+        ? ErrorIcon
+        : CopyIcon;
 
   return (
     <TooltipProvider delayDuration={350}>
@@ -147,16 +147,16 @@ export function ReaderSelectionToolbar({
           style={{ backgroundColor: "var(--color-bg-elevated)" }}
         >
           <ToolbarAction label={labels.ask} onClick={onAsk}>
-            <Icon glyph={ChatBubbleQuestion} size={20} />
+            <Icon glyph={AskIcon} size={20} />
           </ToolbarAction>
           <ToolbarAction
             label={labels.highlight}
             onClick={() => setPaletteOpen((open) => !open)}
           >
-            <Icon glyph={ColorPicker} size={20} />
+            <Icon glyph={HighlightColorIcon} size={20} />
           </ToolbarAction>
           <ToolbarAction label={labels.comment} onClick={onComment}>
-            <Icon glyph={EditPencil} size={20} />
+            <Icon glyph={AddAnnotationIcon} size={20} />
           </ToolbarAction>
           <ToolbarAction
             disabled={copyFeedback.status === "pending"}

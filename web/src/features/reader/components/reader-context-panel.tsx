@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  Check,
-  EditPencil,
-  NavArrowDown,
-  Pin,
-  Plus,
-  SidebarCollapse,
-  Trash,
-} from "iconoir-react";
+  ConfirmIcon,
+  EditIcon,
+  ExpandIcon,
+  PinIcon,
+  NewConversationIcon,
+  ClosePanelIcon,
+  DeleteIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -106,7 +106,7 @@ export function ReaderConversationSwitcher({
         >
           <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
           {activeId === conversation.id ? (
-            <Icon glyph={Check} size={16} />
+            <Icon glyph={ConfirmIcon} size={16} />
           ) : null}
         </button>
         <IconButton
@@ -120,7 +120,7 @@ export function ReaderConversationSwitcher({
           variant="ghost"
         >
           <Icon
-            glyph={Pin}
+            glyph={PinIcon}
             size={16}
             tone={conversation.pinned_at ? undefined : "secondary"}
           />
@@ -150,7 +150,7 @@ export function ReaderConversationSwitcher({
             <span className="min-w-0 flex-1 truncate font-medium">
               {activeConversation?.title ?? t("newDraft")}
             </span>
-            <Icon glyph={NavArrowDown} size={16} tone="secondary" />
+            <Icon glyph={ExpandIcon} size={16} tone="secondary" />
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -207,7 +207,7 @@ export function ReaderConversationSwitcher({
         onClick={onNew}
         variant="ghost"
       >
-        <Icon glyph={Plus} size={20} />
+        <Icon glyph={NewConversationIcon} size={20} />
       </IconButton>
     </div>
   );
@@ -357,7 +357,7 @@ export function ReaderAnnotationPanel({
                     onClick={() => void perform(() => onDelete(annotation.id))}
                     variant="ghost"
                   >
-                    <Icon glyph={Trash} size={16} tone="secondary" />
+                    <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                   </IconButton>
                 )}
               </div>
@@ -414,11 +414,7 @@ export function ReaderAnnotationPanel({
                             }}
                             variant="ghost"
                           >
-                            <Icon
-                              glyph={EditPencil}
-                              size={16}
-                              tone="secondary"
-                            />
+                            <Icon glyph={EditIcon} size={16} tone="secondary" />
                           </IconButton>
                         )}
                         {item.can_delete && (
@@ -430,7 +426,11 @@ export function ReaderAnnotationPanel({
                             }
                             variant="ghost"
                           >
-                            <Icon glyph={Trash} size={16} tone="secondary" />
+                            <Icon
+                              glyph={DeleteIcon}
+                              size={16}
+                              tone="secondary"
+                            />
                           </IconButton>
                         )}
                       </div>
@@ -624,7 +624,7 @@ export function ReaderContextPanel({
           onClick={onClose}
           variant="ghost"
         >
-          <Icon glyph={SidebarCollapse} size={20} />
+          <Icon glyph={ClosePanelIcon} size={20} />
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">

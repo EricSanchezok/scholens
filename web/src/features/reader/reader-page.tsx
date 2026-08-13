@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "iconoir-react";
+import { BackIcon } from "@/design-system/icons/semantic-icons";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -400,7 +400,7 @@ function ReaderDocumentWorkspace({
           onClick={() => router.push("/library")}
           variant="ghost"
         >
-          <Icon glyph={ArrowLeft} size={24} />
+          <Icon glyph={BackIcon} size={24} />
         </IconButton>
       }
       onCollapsedChange={setCollapsed}

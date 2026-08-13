@@ -1,4 +1,7 @@
-import { CheckCircle, Circle } from "iconoir-react";
+import {
+  SuccessIcon,
+  IncompleteIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 
 import { Icon } from "@/design-system/icons/icon";
@@ -26,7 +29,7 @@ export function PasswordLengthGuidance({ password }: { password: string }) {
       }
     >
       <Icon
-        glyph={complete ? CheckCircle : Circle}
+        glyph={complete ? SuccessIcon : IncompleteIcon}
         size={16}
         tone="secondary"
       />
@@ -61,7 +64,11 @@ export function PasswordMatchGuidance({
           : "text-danger inline-flex items-center gap-1.5"
       }
     >
-      <Icon glyph={matches ? CheckCircle : Circle} size={16} tone="secondary" />
+      <Icon
+        glyph={matches ? SuccessIcon : IncompleteIcon}
+        size={16}
+        tone="secondary"
+      />
       {message}
     </span>
   );

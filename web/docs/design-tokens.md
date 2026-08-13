@@ -103,6 +103,12 @@ Allowed raw-color exceptions are limited to source images, PDF content, and
 third-party brand marks that must preserve their identity. The surrounding UI
 still uses semantic tokens.
 
+Icon semantics follow the same indirection rule as colors. Product components
+consume the named registry in `src/design-system/icons/semantic-icons.ts`, not
+raw Iconoir names. The registry is one-to-one: one product meaning resolves to
+one glyph, and one glyph cannot be assigned to competing meanings. The
+registry test and `design:check` make this contract executable.
+
 PDF overlays also keep separate semantic roles by behavior. Browser text
 selection uses `color.document-selection.bg`; document search uses
 `color.document-search.match` for every result and

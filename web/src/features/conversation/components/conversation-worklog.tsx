@@ -1,15 +1,15 @@
 "use client";
 
 import {
-  BookStack,
-  EditPencil,
-  LightBulb,
-  Link,
-  NavArrowDown,
-  Page,
-  Search,
-  WarningTriangle,
-} from "iconoir-react";
+  LibraryIcon,
+  WorkspaceActionIcon,
+  InsightIcon,
+  LinkIcon,
+  ExpandIcon,
+  DocumentIcon,
+  SearchIcon,
+  WarningIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -145,16 +145,16 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
   );
   const category = categories.size === 1 ? [...categories][0] : undefined;
   const glyph = failed
-    ? WarningTriangle
+    ? WarningIcon
     : category === "search"
-      ? Search
+      ? SearchIcon
       : category === "read"
-        ? BookStack
+        ? LibraryIcon
         : category === "workspace_action"
-          ? EditPencil
+          ? WorkspaceActionIcon
           : category === "connector"
-            ? Link
-            : Page;
+            ? LinkIcon
+            : DocumentIcon;
 
   return (
     <li className="relative flex min-w-0 gap-2.5 py-1 lg:static">
@@ -259,7 +259,7 @@ export function ConversationWorklog({
               "shrink-0 transition-transform duration-150 motion-reduce:transition-none",
               open && "rotate-180",
             )}
-            glyph={NavArrowDown}
+            glyph={ExpandIcon}
             size={16}
             tone="secondary"
           />
@@ -284,7 +284,7 @@ export function ConversationWorklog({
                 key={row.id}
               >
                 <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 place-items-center rounded-full border lg:hidden">
-                  <Icon glyph={LightBulb} size={16} tone="secondary" />
+                  <Icon glyph={InsightIcon} size={16} tone="secondary" />
                 </span>
                 <MessageContent content={row.content} />
               </li>

@@ -1,18 +1,18 @@
 "use client";
 
 import {
-  BookStack,
-  Check,
-  Download,
-  FilterList,
-  Folder,
-  Label,
-  MoreHoriz,
-  RefreshDouble,
-  Trash,
-  WarningTriangle,
-  Xmark,
-} from "iconoir-react";
+  LibraryIcon,
+  ConfirmIcon,
+  DownloadIcon,
+  FilterIcon,
+  ProjectIcon,
+  TagIcon,
+  MoreIcon,
+  RetryIcon,
+  DeleteIcon,
+  WarningIcon,
+  DismissIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -241,31 +241,31 @@ function PaperActions({
           label={t("open", { title: paperMetadata(paper).title })}
           variant="ghost"
         >
-          <Icon glyph={MoreHoriz} size={20} tone="secondary" />
+          <Icon glyph={MoreIcon} size={20} tone="secondary" />
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {onSelect && (
           <DropdownMenuItem onSelect={onSelect}>
-            <Icon glyph={Check} size={16} tone="secondary" />
+            <Icon glyph={ConfirmIcon} size={16} tone="secondary" />
             {selected ? t("deselect") : t("select")}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={onTags}>
-          <Icon glyph={Label} size={16} tone="secondary" />
+          <Icon glyph={TagIcon} size={16} tone="secondary" />
           {t("tags")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled>
-          <Icon glyph={Folder} size={16} tone="secondary" />
+          <Icon glyph={ProjectIcon} size={16} tone="secondary" />
           {t("project")}
           <span className="ml-auto text-xs">{t("notAvailable")}</span>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onDownload}>
-          <Icon glyph={Download} size={16} tone="secondary" />
+          <Icon glyph={DownloadIcon} size={16} tone="secondary" />
           {t("download")}
         </DropdownMenuItem>
         <DropdownMenuItem destructive onSelect={onRemove}>
-          <Icon glyph={Trash} size={16} tone="secondary" />
+          <Icon glyph={DeleteIcon} size={16} tone="secondary" />
           {t("remove")}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -341,12 +341,12 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
         {active && (
           <Icon
             className="animate-spin motion-reduce:animate-none"
-            glyph={RefreshDouble}
+            glyph={RetryIcon}
             size={16}
             tone="secondary"
           />
         )}
-        {!active && <Icon glyph={WarningTriangle} size={16} tone="danger" />}
+        {!active && <Icon glyph={WarningIcon} size={16} tone="danger" />}
         <span className={ingestion.state === "failed" ? "text-danger" : ""}>
           {description}
         </span>
@@ -372,7 +372,7 @@ function IngestionActions({
           {t("retry")}
         </Button>
         <IconButton label={t("remove")} onClick={onCancel} variant="ghost">
-          <Icon glyph={Trash} size={16} tone="secondary" />
+          <Icon glyph={DeleteIcon} size={16} tone="secondary" />
         </IconButton>
       </div>
     );
@@ -384,7 +384,7 @@ function IngestionActions({
       onClick={onCancel}
       variant="ghost"
     >
-      <Icon glyph={Xmark} size={16} tone="secondary" />
+      <Icon glyph={DismissIcon} size={16} tone="secondary" />
     </IconButton>
   );
 }
@@ -431,7 +431,7 @@ function TagFilter({
           onClick={manage}
           variant="ghost"
         >
-          <Icon glyph={Label} size={20} tone="secondary" />
+          <Icon glyph={TagIcon} size={20} tone="secondary" />
           {t("manage")}
         </Button>
       </div>
@@ -443,7 +443,7 @@ function TagFilter({
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="secondary">
-              <Icon glyph={Label} size={20} tone="secondary" />
+              <Icon glyph={TagIcon} size={20} tone="secondary" />
               {t("tags")}
               {active.length > 0 && (
                 <Badge tone="neutral">{active.length}</Badge>
@@ -485,7 +485,7 @@ function MobileTagFilter({
   return (
     <Sheet onOpenChange={setOpen} open={open}>
       <Button onClick={() => setOpen(true)} variant="secondary">
-        <Icon glyph={FilterList} size={20} tone="secondary" />
+        <Icon glyph={FilterIcon} size={20} tone="secondary" />
         {title}
         {activeCount > 0 && <Badge tone="neutral">{activeCount}</Badge>}
       </Button>
@@ -671,18 +671,18 @@ export function PapersView({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
-                <Icon glyph={Label} size={16} tone="secondary" />
+                <Icon glyph={TagIcon} size={16} tone="secondary" />
                 {t("actions.tags")}
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
-                <Icon glyph={Folder} size={16} tone="secondary" />
+                <Icon glyph={ProjectIcon} size={16} tone="secondary" />
                 {t("actions.projectUnavailable")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 destructive
                 onSelect={() => beginRemoval(selected)}
               >
-                <Icon glyph={Trash} size={16} tone="secondary" />
+                <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                 {t("actions.remove")}
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -738,7 +738,7 @@ export function PapersView({
         {!loading && !error && data && !hasRows && (
           <AsyncFeedback
             description={t("emptyDescription")}
-            icon={BookStack}
+            icon={LibraryIcon}
             state="empty"
             title={t("emptyTitle")}
           />

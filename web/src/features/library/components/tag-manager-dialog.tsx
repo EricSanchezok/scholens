@@ -1,6 +1,12 @@
 "use client";
 
-import { EditPencil, Label, MoreHoriz, Plus, Trash } from "iconoir-react";
+import {
+  EditIcon,
+  TagIcon,
+  MoreIcon,
+  AddIcon,
+  DeleteIcon,
+} from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -195,7 +201,7 @@ export function TagManagerDialog({
                 type="submit"
                 variant="secondary"
               >
-                <Icon glyph={Plus} size={20} />
+                <Icon glyph={AddIcon} size={20} />
                 {t("create")}
               </Button>
             </form>
@@ -262,7 +268,7 @@ export function TagManagerDialog({
                       />
                     ) : (
                       <span className="grid size-5 shrink-0 place-items-center">
-                        <Icon glyph={Label} size={20} tone="secondary" />
+                        <Icon glyph={TagIcon} size={20} tone="secondary" />
                       </span>
                     )}
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -275,19 +281,19 @@ export function TagManagerDialog({
                           label={t("actionsLabel", { name: tag.name })}
                           variant="ghost"
                         >
-                          <Icon glyph={MoreHoriz} size={20} tone="secondary" />
+                          <Icon glyph={MoreIcon} size={20} tone="secondary" />
                         </IconButton>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => beginRename(tag)}>
-                          <Icon glyph={EditPencil} size={16} tone="secondary" />
+                          <Icon glyph={EditIcon} size={16} tone="secondary" />
                           {t("rename")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           destructive
                           onSelect={() => setDeleteTarget(tag)}
                         >
-                          <Icon glyph={Trash} size={16} tone="secondary" />
+                          <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                           {t("delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>

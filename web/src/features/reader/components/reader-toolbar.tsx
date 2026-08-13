@@ -1,19 +1,19 @@
 "use client";
 
 import {
-  ArrowLeft,
-  Download,
-  Frame,
-  List,
-  NavArrowLeft,
-  NavArrowRight,
-  Page,
-  Search,
-  SidebarExpand,
-  Xmark,
-  ZoomIn,
-  ZoomOut,
-} from "iconoir-react";
+  BackIcon,
+  DownloadIcon,
+  FitIcon,
+  OutlineIcon,
+  PreviousIcon,
+  NextIcon,
+  DocumentIcon,
+  SearchIcon,
+  OpenPanelIcon,
+  DismissIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from "@/design-system/icons/semantic-icons";
 import * as React from "react";
 
 import {
@@ -113,7 +113,7 @@ export function ReaderToolbar({
             onClick={onReturn}
             variant="ghost"
           >
-            <Icon glyph={ArrowLeft} size={20} />
+            <Icon glyph={BackIcon} size={20} />
           </IconButton>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{title}</p>
@@ -127,7 +127,7 @@ export function ReaderToolbar({
       {search ? (
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <div className="border-line bg-canvas flex h-9 min-w-0 flex-1 items-center rounded-[var(--radius-md)] border pl-2">
-            <Icon glyph={Search} size={20} tone="secondary" />
+            <Icon glyph={SearchIcon} size={20} tone="secondary" />
             <Input
               aria-label={labels.search}
               autoFocus
@@ -168,7 +168,7 @@ export function ReaderToolbar({
             onClick={() => search.onMove(-1)}
             variant="ghost"
           >
-            <Icon glyph={NavArrowLeft} size={20} />
+            <Icon glyph={PreviousIcon} size={20} />
           </IconButton>
           <IconButton
             disabled={search.matchCount === 0}
@@ -176,14 +176,14 @@ export function ReaderToolbar({
             onClick={() => search.onMove(1)}
             variant="ghost"
           >
-            <Icon glyph={NavArrowRight} size={20} />
+            <Icon glyph={NextIcon} size={20} />
           </IconButton>
           <IconButton
             label={labels.closeSearch}
             onClick={search.onClose}
             variant="ghost"
           >
-            <Icon glyph={Xmark} size={20} />
+            <Icon glyph={DismissIcon} size={20} />
           </IconButton>
         </div>
       ) : (
@@ -195,7 +195,7 @@ export function ReaderToolbar({
               onClick={() => onPageChange(pageNumber - 1)}
               variant="ghost"
             >
-              <Icon glyph={NavArrowLeft} size={20} />
+              <Icon glyph={PreviousIcon} size={20} />
             </IconButton>
             <label className="border-line bg-canvas flex h-9 items-center rounded-[var(--radius-md)] border px-2 text-sm">
               <span className="sr-only">{labels.page}</span>
@@ -219,7 +219,7 @@ export function ReaderToolbar({
               onClick={() => onPageChange(pageNumber + 1)}
               variant="ghost"
             >
-              <Icon glyph={NavArrowRight} size={20} />
+              <Icon glyph={NextIcon} size={20} />
             </IconButton>
           </div>
 
@@ -229,7 +229,7 @@ export function ReaderToolbar({
               onClick={() => onZoomChange(Math.max(zoom - 0.1, 0.5))}
               variant="ghost"
             >
-              <Icon glyph={ZoomOut} size={20} />
+              <Icon glyph={ZoomOutIcon} size={20} />
             </IconButton>
             <span className="text-secondary w-12 text-center text-xs tabular-nums">
               {Math.round(zoom * 100)}%
@@ -239,7 +239,7 @@ export function ReaderToolbar({
               onClick={() => onZoomChange(Math.min(zoom + 0.1, 3))}
               variant="ghost"
             >
-              <Icon glyph={ZoomIn} size={20} />
+              <Icon glyph={ZoomInIcon} size={20} />
             </IconButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -247,7 +247,7 @@ export function ReaderToolbar({
                   label={`${labels.fit}: ${fitMode === "page" ? labels.fitPage : labels.fitWidth}`}
                   variant="ghost"
                 >
-                  <Icon glyph={Frame} size={20} />
+                  <Icon glyph={FitIcon} size={20} />
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="center">
@@ -267,7 +267,7 @@ export function ReaderToolbar({
               onClick={onOpenSearch}
               variant="ghost"
             >
-              <Icon glyph={Search} size={20} />
+              <Icon glyph={SearchIcon} size={20} />
             </IconButton>
             <IconButton
               aria-pressed={navigationMode === "outline"}
@@ -280,7 +280,9 @@ export function ReaderToolbar({
               variant="ghost"
             >
               <Icon
-                glyph={navigationMode === "outline" ? Page : List}
+                glyph={
+                  navigationMode === "outline" ? DocumentIcon : OutlineIcon
+                }
                 size={20}
               />
             </IconButton>
@@ -290,7 +292,7 @@ export function ReaderToolbar({
               onClick={onDownload}
               variant="ghost"
             >
-              <Icon glyph={Download} size={20} />
+              <Icon glyph={DownloadIcon} size={20} />
             </IconButton>
             {!panelOpen ? (
               <IconButton
@@ -298,7 +300,7 @@ export function ReaderToolbar({
                 onClick={onOpenPanel}
                 variant="ghost"
               >
-                <Icon glyph={SidebarExpand} size={20} />
+                <Icon glyph={OpenPanelIcon} size={20} />
               </IconButton>
             ) : null}
           </div>

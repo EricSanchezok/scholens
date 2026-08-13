@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  FastArrowLeft,
-  FastArrowRight,
-  LogOut,
-  Menu,
-  Settings,
-} from "iconoir-react";
+  CollapseRailIcon,
+  ExpandRailIcon,
+  SignOutIcon,
+  MenuIcon,
+  SettingsIcon,
+} from "@/design-system/icons/semantic-icons";
 import Link from "next/link";
 import type { Route } from "next";
 import { useFormatter, useTranslations } from "next-intl";
@@ -225,7 +225,7 @@ function AccountMenu({
           type="button"
         >
           {settingsTrigger ? (
-            <Icon glyph={Settings} size={20} tone="primary" />
+            <Icon glyph={SettingsIcon} size={20} tone="primary" />
           ) : (
             <>
               <span
@@ -276,7 +276,7 @@ function AccountMenu({
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled>
-          <Icon glyph={Settings} size={16} tone="secondary" />
+          <Icon glyph={SettingsIcon} size={16} tone="secondary" />
           {t("account.settings")}
         </DropdownMenuItem>
         <DropdownMenuGroup>
@@ -303,7 +303,7 @@ function AccountMenu({
           disabled={signingOut}
           onSelect={() => void onSignOut()}
         >
-          <Icon glyph={LogOut} size={16} tone="secondary" />
+          <Icon glyph={SignOutIcon} size={16} tone="secondary" />
           {signingOut ? t("account.signingOut") : t("account.signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -672,7 +672,7 @@ function Sidebar({
             variant="ghost"
           >
             <Icon
-              glyph={collapsed ? FastArrowRight : FastArrowLeft}
+              glyph={collapsed ? ExpandRailIcon : CollapseRailIcon}
               size={16}
               tone="secondary"
             />
@@ -813,7 +813,7 @@ export function WorkspaceShell({
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
           className="inset-0 h-dvh w-full max-w-none border-0 bg-[var(--color-bg-sidebar)] p-0 shadow-none focus:outline-none"
-          closeGlyph={FastArrowRight}
+          closeGlyph={ExpandRailIcon}
           closeLabel={t("navigation.closeMenu")}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
@@ -845,7 +845,7 @@ export function WorkspaceShell({
                 onClick={() => setMobileOpen(true)}
                 variant="ghost"
               >
-                <Icon glyph={Menu} size={24} />
+                <Icon glyph={MenuIcon} size={24} />
               </IconButton>
             )}
             <div className="mx-2 min-w-0 flex-1">{mobileHeaderCenter}</div>

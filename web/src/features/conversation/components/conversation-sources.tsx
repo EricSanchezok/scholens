@@ -1,6 +1,6 @@
 "use client";
 
-import { Page } from "iconoir-react";
+import { DocumentIcon } from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -153,7 +153,7 @@ export function ConversationSources({
           )}
           type="button"
         >
-          <Icon glyph={Page} size={16} tone="secondary" />
+          <Icon glyph={DocumentIcon} size={16} tone="secondary" />
           {t("sourceSummary", { count: sources.length })}
         </button>
       </DialogTrigger>

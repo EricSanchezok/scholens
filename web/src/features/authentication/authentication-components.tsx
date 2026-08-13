@@ -1,4 +1,8 @@
-import { CheckCircle, Mail, WarningTriangle } from "iconoir-react";
+import {
+  SuccessIcon,
+  EmailIcon,
+  WarningIcon,
+} from "@/design-system/icons/semantic-icons";
 
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
@@ -67,7 +71,7 @@ export function AuthenticationResult({
   tone?: "mail" | "success" | "danger";
 }) {
   const glyph =
-    tone === "mail" ? Mail : tone === "danger" ? WarningTriangle : CheckCircle;
+    tone === "mail" ? EmailIcon : tone === "danger" ? WarningIcon : SuccessIcon;
   return (
     <div className="grid gap-5">
       <div className="border-line bg-subtle grid gap-3 rounded-[var(--radius-lg)] border p-4">

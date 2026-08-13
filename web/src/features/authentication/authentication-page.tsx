@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft } from "iconoir-react";
+import { BackIcon } from "@/design-system/icons/semantic-icons";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -133,7 +133,7 @@ function BackToSignIn({ returnTo }: { returnTo?: string }) {
       className="text-secondary hover:text-foreground inline-flex min-h-11 items-center gap-2 text-sm font-medium"
       href={authenticationHref({ mode: "sign-in", returnTo })}
     >
-      <Icon glyph={ArrowLeft} size={20} tone="secondary" />
+      <Icon glyph={BackIcon} size={20} tone="secondary" />
       {t("backToSignIn")}
     </Link>
   );
