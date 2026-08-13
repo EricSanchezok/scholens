@@ -703,6 +703,155 @@
       "unavailable": "Session service unavailable"
     }
   },
+  "Projects": {
+    "title": "Projects",
+    "description": "Keep papers, conversations, and research outputs together around a shared question.",
+    "search": "Search projects",
+    "actions": {
+      "create": "New project",
+      "open": "Open",
+      "rename": "Rename",
+      "edit": "Edit project",
+      "delete": "Delete",
+      "leave": "Leave project"
+    },
+    "sort": {
+      "label": "Sort projects",
+      "updated": "Last updated",
+      "title": "Name A–Z",
+      "papers": "Most papers"
+    },
+    "metrics": {
+      "papers": "Papers",
+      "conversations": "Conversations",
+      "outputs": "Outputs"
+    },
+    "card": {
+      "noDescription": "No description",
+      "openMenu": "Open project actions",
+      "updated": "Updated {date}"
+    },
+    "empty": {
+      "title": "Start your first research project",
+      "description": "Create a project to collect papers and keep related conversations and outputs in one place.",
+      "searchTitle": "No matching projects",
+      "searchDescription": "Try another search term or clear the search."
+    },
+    "feedback": {
+      "loading": "Loading projects",
+      "retry": "Try again",
+      "errorTitle": "Projects could not be loaded",
+      "errorDescription": "Check your connection and try again.",
+      "actionFailed": "The project action could not be completed"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "form": {
+      "create": {
+        "title": "Create a project",
+        "description": "Give this research workspace a clear focus. You can add papers next.",
+        "action": "Create project"
+      },
+      "edit": {
+        "title": "Edit project",
+        "description": "Update the name and description shown to everyone in the project.",
+        "action": "Save changes"
+      },
+      "fields": {
+        "title": "Project name",
+        "titleError": "Enter a project name",
+        "description": "Description",
+        "descriptionHint": "Optional · describe the question or outcome this project is working toward"
+      },
+      "cancel": "Cancel",
+      "close": "Close project form",
+      "error": "The project could not be saved. Try again."
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "delete": {
+        "title": "Delete this project?",
+        "description": "{title} and its project workspace will be permanently deleted. Papers already in personal libraries remain there.",
+        "action": "Delete project"
+      },
+      "leave": {
+        "title": "Leave this project?",
+        "description": "You will lose access to {title} and its shared research context.",
+        "action": "Leave project"
+      }
+    },
+    "detail": {
+      "back": "Back to projects",
+      "manage": "Manage project",
+      "openChat": "Chat",
+      "closeChat": "Return to project",
+      "errorTitle": "Project could not be opened",
+      "errorDescription": "It may have been removed or you may no longer have access.",
+      "tabs": {
+        "overview": "Overview",
+        "papers": "Papers",
+        "outputs": "Outputs"
+      },
+      "recentPapers": "Recent papers",
+      "recentOutputs": "Recent outputs",
+      "viewAll": "View all",
+      "papers": {
+        "search": "Search project papers",
+        "sortLabel": "Sort project papers",
+        "sortAdded": "Recently added",
+        "sortTitle": "Title A–Z",
+        "sortPublished": "Publication date",
+        "add": "Add papers",
+        "empty": "No papers in this project yet.",
+        "untitled": "Untitled paper",
+        "unknownAuthors": "Authors unavailable",
+        "openReader": "Open in Reader"
+      },
+      "outputs": {
+        "search": "Search project outputs",
+        "kindLabel": "Filter output type",
+        "sortLabel": "Sort project outputs",
+        "allKinds": "All output types",
+        "sortUpdated": "Last updated",
+        "sortTitle": "Title A–Z",
+        "empty": "No research outputs in this project yet.",
+        "startChat": "Start a project chat",
+        "kinds": {
+          "highlight_thread": "Annotation thread",
+          "citation": "Citation",
+          "audio_overview": "Audio overview",
+          "data_table": "Data table"
+        }
+      }
+    },
+    "chat": {
+      "title": "Project chat",
+      "switcher": "Switch project conversation",
+      "new": "New conversation",
+      "emptyTitle": "Explore this project",
+      "emptyDescription": "Ask across the papers and research context collected here."
+    },
+    "addPapers": {
+      "title": "Add papers from Library",
+      "description": "Choose papers from your personal Library to add to this project.",
+      "search": "Search Library papers",
+      "loading": "Loading Library papers…",
+      "empty": "No matching Library papers",
+      "unknownAuthors": "Authors unavailable",
+      "cancel": "Cancel",
+      "close": "Close paper chooser",
+      "action": "Add {count, plural, one {# paper} other {# papers}}",
+      "error": "The selected papers could not be added. Try again."
+    },
+    "session": {
+      "checking": "Checking your session",
+      "retry": "Retry session check",
+      "unavailableTitle": "Projects are temporarily unavailable",
+      "unavailableDescription": "Keep this page open and retry the session check."
+    }
+  },
   "Errors": {
     "unexpected": {
       "title": "Something went wrong",

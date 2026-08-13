@@ -1426,6 +1426,23 @@ export interface paths {
         patch: operations["update_project_collaborator_api_v1_projects__project_id__members__user_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Outputs */
+        get: operations["get_project_outputs_api_v1_projects__project_id__outputs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/papers": {
         parameters: {
             query?: never;
@@ -3760,12 +3777,33 @@ export interface components {
             items: components["schemas"]["ProjectResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
         /** ProjectMembershipResponse */
         ProjectMembershipResponse: {
             /** Kind */
             kind: string;
             permissions: components["schemas"]["ProjectPermissionSet"];
+        };
+        /** ProjectOutputListResponse */
+        ProjectOutputListResponse: {
+            /** Items */
+            items: components["schemas"]["LibraryOutputResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
         /** ProjectOwnerResponse */
         ProjectOwnerResponse: {
@@ -3798,18 +3836,30 @@ export interface components {
             items: components["schemas"]["ProjectPaperSummaryResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
+        /**
+         * ProjectPaperSort
+         * @enum {string}
+         */
+        ProjectPaperSort: "added_desc" | "title_asc" | "published_desc";
         /** ProjectPaperSummaryResponse */
         ProjectPaperSummaryResponse: {
             /** Abstract */
             abstract: string | null;
-            /** Authors */
-            authors: string[] | null;
             /**
-             * Created At
+             * Added At
              * Format: date-time
              */
-            created_at: string;
+            added_at: string;
+            /** Authors */
+            authors: string[] | null;
             /**
              * Document Id
              * Format: uuid
@@ -3900,6 +3950,11 @@ export interface components {
         };
         /** ProjectResponse */
         ProjectResponse: {
+            /**
+             * Activity At
+             * Format: date-time
+             */
+            activity_at: string;
             capabilities: components["schemas"]["ProjectCapabilitiesResponse"];
             /**
              * Created At
@@ -3915,11 +3970,6 @@ export interface components {
             id: string;
             membership: components["schemas"]["ProjectMembershipResponse"];
             /**
-             * Num Audio Overviews
-             * @default 0
-             */
-            num_audio_overviews: number;
-            /**
              * Num Collaborators
              * @default 0
              */
@@ -3930,10 +3980,10 @@ export interface components {
              */
             num_conversations: number;
             /**
-             * Num Data Tables
+             * Num Outputs
              * @default 0
              */
-            num_data_tables: number;
+            num_outputs: number;
             /**
              * Num Papers
              * @default 0
@@ -3948,6 +3998,11 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ProjectSort
+         * @enum {string}
+         */
+        ProjectSort: "activity_desc" | "title_asc" | "papers_desc";
         /** ProjectTransferRequest */
         ProjectTransferRequest: {
             /** New Owner Id */
@@ -7651,7 +7706,10 @@ export interface operations {
     get_projects_api_v1_projects_get: {
         parameters: {
             query?: {
-                limit?: number | null;
+                q?: string | null;
+                sort?: components["schemas"]["ProjectSort"];
+                cursor?: string | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -8135,10 +8193,51 @@ export interface operations {
             };
         };
     };
+    get_project_outputs_api_v1_projects__project_id__outputs_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                kinds?: components["schemas"]["ResearchItemKind"][];
+                sort?: components["schemas"]["LibraryOutputSort"];
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOutputListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_project_papers_api_v1_projects__project_id__papers_get: {
         parameters: {
             query?: {
                 load_urls?: boolean;
+                q?: string | null;
+                sort?: components["schemas"]["ProjectPaperSort"];
+                cursor?: string | null;
+                limit?: number;
             };
             header?: never;
             path: {

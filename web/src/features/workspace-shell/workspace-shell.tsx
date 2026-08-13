@@ -549,17 +549,34 @@ function MobileTabBar({
           {t("library")}
         </span>
       </Link>
-      <button
-        aria-label={`${t("projects")}. ${t("comingSoon")}`}
-        className={cn(itemClassName, "text-muted")}
-        disabled
-        type="button"
+      <Link
+        aria-current={activeDestination === "projects" ? "page" : undefined}
+        className={cn(
+          itemClassName,
+          activeDestination === "projects"
+            ? "text-foreground"
+            : "text-secondary",
+        )}
+        href={"/projects" as Route}
       >
-        <span className="grid size-8 place-items-center">
-          <Icon glyph={ProjectIcon} size={20} tone="secondary" />
+        <span
+          className={cn(
+            "grid size-8 place-items-center rounded-full",
+            activeDestination === "projects" && "bg-primary",
+          )}
+        >
+          <Icon
+            glyph={ProjectIcon}
+            size={20}
+            tone={activeDestination === "projects" ? "inverse" : "secondary"}
+          />
         </span>
-        <span>{t("projects")}</span>
-      </button>
+        <span
+          className={activeDestination === "projects" ? "font-semibold" : ""}
+        >
+          {t("projects")}
+        </span>
+      </Link>
     </nav>
   );
 }
@@ -698,10 +715,10 @@ function Sidebar({
             label={t("navigation.library")}
           />
           <SidebarControl
+            active={activeDestination === "projects"}
             collapsed={collapsed}
-            disabled
-            disabledHint={t("navigation.comingSoon")}
             glyph={ProjectIcon}
+            href="/projects"
             label={t("navigation.projects")}
           />
         </nav>

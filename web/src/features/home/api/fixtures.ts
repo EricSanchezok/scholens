@@ -164,8 +164,8 @@ function project(
     num_papers: paperCount,
     num_conversations: Math.max(1, Math.floor(paperCount / 2)),
     num_collaborators: 2,
-    num_audio_overviews: 0,
-    num_data_tables: 0,
+    num_outputs: 0,
+    activity_at: updatedAt,
     created_at: now,
     updated_at: updatedAt,
   };

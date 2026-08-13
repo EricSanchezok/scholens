@@ -29,6 +29,7 @@ runtime behavior, accessibility, data contracts, and component APIs.
 | [Home experience](./home-experience.md)                                         | Changing the Home shell, composer, recents, or conversation stream   |
 | [Library experience](./library-experience.md)                                   | Changing Papers, Outputs, import, filtering, or Library actions      |
 | [Reader experience](./reader-experience.md)                                     | Changing PDF reading, paper conversations, annotations, or details   |
+| [Projects experience](./projects-experience.md)                                 | Changing Projects lists, details, papers, outputs, or Project chat   |
 | [API development](./api-development.md)                                         | Changing a backend contract or adding a request/query                |
 | [Testing](./testing.md)                                                         | Choosing test scope or adding a network/interaction state            |
 | [New feature checklist](./new-feature-checklist.md)                             | Starting and finishing every product feature                         |

@@ -11,9 +11,8 @@ Home's conversation or composer implementation.
   paper removes only the current actor's membership; project references remain.
 - Outputs are Server-projected Research Items visible through personal, paper,
   and project scope. The Web does not infer permissions or join scopes.
-- Reader and Projects detail destinations are not part of Library. Until those
-  vertical slices exist, dependent open actions say “Not available yet” and do
-  not render a link.
+- Reader and Projects remain separate feature slices. Library output rows do
+  not invent a viewer when their canonical kind has no dedicated destination.
 - The replacement frontend does not import from `client/`, synthesize reports or
   notes, or preserve superseded ingestion contracts.
 
@@ -59,8 +58,9 @@ keywords. Papers without assigned labels show no synthetic tags; the filter
 only lists labels the user owns, and assigned labels render with the paper.
 The tag manager owns the full label lifecycle: create, rename, delete, and exact
 assignment replacement. Saving an empty selection clears a paper's labels.
-Project assignment remains visibly unavailable until the Projects product slice
-is complete; Library does not query projects or open an empty chooser.
+Direct batch assignment from Library is not part of this slice. Papers are
+added from a Project's real Library chooser; Library does not duplicate that
+mutation lifecycle with a second provisional dialog.
 The manager uses the shared responsive Dialog structure: a contained desktop
 dialog and a safe-area-aware mobile bottom sheet with one scrolling body and a
 fixed action footer. It never reserves blank space to resemble a chooser.
@@ -111,9 +111,9 @@ Desktop uses a semantic table with fixed column slots. Mobile uses dedicated
 stacked cards so type, source, and update metadata remain readable without
 compressing the table. Search, kind filter, sort, and count use the same
 responsive utility-row contract as Papers. Kind filters use a desktop popover
-and mobile bottom sheet. Because Reader and Projects destinations are not yet
-available, the open affordance is a disabled “Not available yet” action rather
-than a link, placeholder route, or temporary preview feature.
+and mobile bottom sheet. Kinds without a dedicated viewer keep a disabled “Not
+available yet” action rather than linking to a placeholder route or temporary
+preview feature.
 
 ## Responsive and feedback contract
 
