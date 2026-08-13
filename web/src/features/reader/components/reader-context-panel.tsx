@@ -347,7 +347,10 @@ export function ReaderAnnotationPanel({
   );
 
   return (
-    <div className="grid gap-3 p-3">
+    <div
+      className="grid max-w-full min-w-0 gap-3 overflow-x-hidden p-3"
+      data-reader-annotation-panel
+    >
       <div className="flex min-h-9 items-center gap-1">
         <p className="min-w-0 flex-1 text-sm font-medium">
           {t("summaryCount", { count: annotations.length })}
@@ -538,7 +541,7 @@ export function ReaderAnnotationPanel({
           return (
             <article
               className={cn(
-                "group/thread border-line bg-surface hover:bg-hover focus-within:bg-hover rounded-[var(--radius-lg)] border transition-colors",
+                "group/thread border-line bg-surface hover:bg-hover focus-within:bg-hover max-w-full min-w-0 rounded-[var(--radius-lg)] border transition-colors",
                 active && "bg-subtle",
               )}
               data-reader-annotation-card={annotation.id}
@@ -592,11 +595,12 @@ export function ReaderAnnotationPanel({
                   </span>
                   <span
                     className="text-secondary mt-1.5 block truncate border-l pl-2 text-sm leading-5"
+                    data-reader-annotation-quote
                     style={{
                       borderColor: readerHighlightColorValue(currentColor),
                     }}
                   >
-                    {annotation.quote_text}
+                    <bdi>{annotation.quote_text}</bdi>
                   </span>
                 </button>
                 {annotation.capabilities.resolve ? (
@@ -887,7 +891,7 @@ export function ReaderAnnotationPanel({
                                   </DropdownMenu>
                                 ) : null}
                               </div>
-                              <p className="text-sm leading-5 whitespace-pre-wrap">
+                              <p className="text-sm leading-5 break-words whitespace-pre-wrap">
                                 {item.content}
                               </p>
                             </div>
@@ -1185,7 +1189,11 @@ export function ReaderContextPanel({
             <ReaderDetailsPanel document={document} title={title} />
           </div>
         ) : activePanel === "annotations" ? (
-          <div className="h-full overflow-y-auto" tabIndex={0}>
+          <div
+            className="h-full min-w-0 overflow-x-hidden overflow-y-auto"
+            data-reader-annotations-scroll
+            tabIndex={0}
+          >
             <ReaderAnnotationPanel
               key={projectContext?.id ?? "personal"}
               audienceFilter={annotationAudienceFilter}

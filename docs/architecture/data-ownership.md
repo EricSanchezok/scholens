@@ -82,7 +82,9 @@ and consume the Document as context rather than owning its canonical summary.
 status, sharing state, and last-access time. Removing that membership never
 implies deleting a `Document`: Project references and other users' memberships
 remain authoritative, and orphan cleanup is scheduled outside the request
-transaction.
+transaction. The same removal transaction deletes annotation threads created
+by that user with personal audience and the removed Document as their target.
+It never deletes Project-audience threads or another user's annotations.
 
 `PaperTag` owns a user-scoped label name. Renaming or deleting it is authorized
 against that owner; deletion cascades only its Library Paper assignments.

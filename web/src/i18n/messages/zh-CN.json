@@ -343,7 +343,7 @@
       },
       "removeDialog": {
         "title": "从资料库移除？",
-        "description": "将从个人资料库移除 {count} 篇论文；项目中的引用会继续保留。",
+        "description": "将从个人资料库移除 {count} 篇论文，并删除你在其中创建的个人高亮与笔记；项目引用及项目讨论会继续保留。",
         "cancel": "取消",
         "confirm": "移除"
       }

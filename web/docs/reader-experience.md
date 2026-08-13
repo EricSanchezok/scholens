@@ -237,6 +237,10 @@ comment timeline; the source is already visible in the document pane, so
 comments own the visual hierarchy. Hovering a card or moving keyboard focus
 into it temporarily strengthens the exact PDF anchor without scrolling;
 clicking locks the selection and centers the anchor without moving the card.
+The rail is strictly vertical: neither long quotes, URLs, unbroken comment
+content, nor bidirectional PDF text may widen it or introduce horizontal
+scrolling. The one-line quote remains a locator rather than a second rendering
+of the document.
 The one-line reply field stays below its timeline and submits with Enter; it
 has no redundant shortcut hint or visible send button. Resolve or reopen is a
 compact thread action. Recolor and delete live in an opaque overflow menu;

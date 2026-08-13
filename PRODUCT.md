@@ -74,6 +74,12 @@ must never become document-global merely because the same paper appears in
 another Project. Leaving a Project immediately removes access to its threads,
 while personal annotations remain independent.
 
+Removing a paper from the personal Library also removes that user's personal
+highlights and notes anchored to the paper. This is an intentional personal
+data deletion boundary: adding the same shared Document again starts with a
+clean personal reading layer. Project references, Project discussions, and
+other users' data remain untouched.
+
 Collaborative discussion protects authored contributions. People edit and
 delete only their own comments. A thread with another person's reply cannot be
 hard-deleted by its creator; Project discussion is concluded by resolving it

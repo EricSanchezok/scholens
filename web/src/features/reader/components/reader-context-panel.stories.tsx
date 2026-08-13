@@ -279,9 +279,9 @@ export const AnnotationThread: Story = {
     await expect(card).not.toBeNull();
     await userEvent.hover(card!);
     await expect(args.onPreviewChange).toHaveBeenLastCalledWith(annotation.id);
-    await expect(canvas.getByText(/Retrieval quality depends/)).toHaveClass(
-      "truncate",
-    );
+    await expect(
+      card!.querySelector("[data-reader-annotation-quote]"),
+    ).toHaveClass("truncate");
     await expect(
       canvas.queryByRole("button", { name: "Resolve" }),
     ).not.toBeInTheDocument();
@@ -336,6 +336,19 @@ export const ProjectDiscussionLongContent: Story = {
       },
     ],
     selectedAnnotationId: projectAnnotation.id,
+  },
+  play: async ({ canvasElement }) => {
+    const panel = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-annotation-panel]",
+    );
+    const quote = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-annotation-quote]",
+    );
+    await expect(panel).not.toBeNull();
+    await expect(quote).not.toBeNull();
+    await expect(quote).toHaveClass("truncate");
+    await expect(quote!.scrollWidth).toBeGreaterThan(quote!.clientWidth);
+    await expect(panel!.scrollWidth).toBe(panel!.clientWidth);
   },
 };
 

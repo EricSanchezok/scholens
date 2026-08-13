@@ -81,6 +81,9 @@ from app.modules.papers.infrastructure.library_gateway import (
     SqlAlchemyPaperLibraryGateway,
 )
 from app.bootstrap.adapters.library_outputs import SqlAlchemyLibraryOutputsGateway
+from app.bootstrap.adapters.library_removal import (
+    delete_personal_document_annotations,
+)
 from app.bootstrap.adapters.document_gc import schedule_document_gc
 from app.modules.projects.application.projects import Projects
 from app.bootstrap.adapters.project_gateway import (
@@ -303,6 +306,10 @@ def build_paper_library(
         gateway=SqlAlchemyPaperLibraryGateway(
             db,
             document_removed=partial(schedule_document_gc, db),
+            personal_annotations_removed=partial(
+                delete_personal_document_annotations,
+                db,
+            ),
         ),
         outputs=SqlAlchemyLibraryOutputsGateway(db),
         capacity=BillingLibraryCapacity(db),

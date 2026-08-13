@@ -343,7 +343,7 @@
       },
       "removeDialog": {
         "title": "Remove from library?",
-        "description": "This removes {count, plural, one {the paper} other {# papers}} from your personal library. Project references remain intact.",
+        "description": "This removes {count, plural, one {the paper} other {# papers}} from your personal library and deletes your personal highlights and notes in it. Project references and discussions remain intact.",
         "cancel": "Cancel",
         "confirm": "Remove"
       }

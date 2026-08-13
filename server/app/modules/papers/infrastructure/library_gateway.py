@@ -145,15 +145,21 @@ class DocumentRemoved(Protocol):
     ) -> DocumentGcSchedule | None: ...
 
 
+class PersonalAnnotationsRemoved(Protocol):
+    def __call__(self, *, document_id: UUID, user_id: int) -> None: ...
+
+
 class SqlAlchemyPaperLibraryGateway:
     def __init__(
         self,
         db: Session,
         *,
         document_removed: DocumentRemoved,
+        personal_annotations_removed: PersonalAnnotationsRemoved,
     ) -> None:
         self._db = db
         self._document_removed = document_removed
+        self._personal_annotations_removed = personal_annotations_removed
 
     def list(
         self,
@@ -387,6 +393,10 @@ class SqlAlchemyPaperLibraryGateway:
             document_id=document_id,
             user_id=user_id,
         )
+        self._personal_annotations_removed(
+            document_id=document_id,
+            user_id=user_id,
+        )
         scheduled = self._document_removed(
             document_id=document_id,
             origin_operation_id=origin_operation_id,
@@ -431,6 +441,10 @@ class SqlAlchemyPaperLibraryGateway:
                 kind=FailureKind.NOT_FOUND,
             )
         for entry in entries:
+            self._personal_annotations_removed(
+                document_id=entry.document_id,
+                user_id=user_id,
+            )
             self._db.delete(entry)
         self._db.flush()
         results: dict[UUID, LibraryPaperRemoval] = {}
