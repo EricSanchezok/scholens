@@ -11,13 +11,13 @@ import {
 const apiPattern = "**/api/v1";
 const actor = {
   id: 7,
-  email: "eric@scholens.ai",
+  email: "niexiaohangeric@163.com",
   email_verified: true,
   is_active: true,
   is_admin: false,
   is_blocked: false,
   status: "active",
-  display_name: "Eric",
+  display_name: "EricSanchez",
   locale: "en",
 };
 
@@ -179,14 +179,29 @@ test("opens the context picker and changes its searchable selection", async ({
   ).toBeVisible();
 });
 
-test("keeps sidebar controls vertically anchored while collapsing", async ({
-  page,
-}) => {
+test("preserves compact sidebar density while collapsing", async ({ page }) => {
   await page.goto("/");
   const collapse = page.getByRole("button", { name: "Collapse sidebar" });
   const newChat = page.getByRole("link", { name: "New chat" });
+  const newChatLabel = newChat.getByText("New chat", { exact: true });
   const account = page.getByRole("button", { name: "Open account menu" });
+  const actorName = account.getByText(actor.display_name);
+  const actorEmail = account.getByText(actor.email);
+  const conversation = page.getByText(homeConversations[0]!.title, {
+    exact: true,
+  });
+
   await expect(account.locator("svg")).toHaveCount(0);
+  await expect(newChatLabel).toHaveCSS("font-size", "13px");
+  await expect(actorName).toHaveCSS("font-size", "13px");
+  await expect(conversation).toHaveCSS("font-size", "13px");
+  await expect(actorEmail).toHaveCSS("font-size", "11px");
+  expect(
+    await actorEmail.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+
   const before = {
     newChat: await newChat.evaluate((element) =>
       element.getBoundingClientRect().toJSON(),

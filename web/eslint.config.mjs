@@ -9,6 +9,7 @@ export default defineConfig([
   ...storybook.configs["flat/recommended"],
   globalIgnores([
     ".next/**",
+    ".next-dev/**",
     "storybook-static/**",
     "public/mockServiceWorker.js",
     "src/design-system/generated/**",

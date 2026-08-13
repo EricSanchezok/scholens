@@ -180,6 +180,11 @@ Use separate terminals:
 | UI      | `web/`          | `pnpm storybook` — isolated components on 7306, no Server required           |
 | Observe | `jobs/`         | `./scripts/start_flower.sh` — Flower on 7307 after RabbitMQ is available     |
 
+The Web development server writes its disposable Next.js output to
+`web/.next-dev/`; production verification writes to `web/.next/`. Keeping the
+two directories separate prevents `pnpm build` from replacing CSS and route
+artifacts underneath an active local development server.
+
 Check: [127.0.0.1:7301/docs](http://127.0.0.1:7301/docs),
 [127.0.0.1:7300](http://127.0.0.1:7300), and, when enabled,
 [127.0.0.1:7302](http://127.0.0.1:7302),

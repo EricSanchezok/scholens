@@ -111,9 +111,14 @@ export const DesktopLongContent: Story = {
     const name = within(account).getByText(longIdentityActor.display_name);
     const email = within(account).getByText(longIdentityActor.email);
     const conversation = canvas.getByText(conversations[0]!.title);
+    const newChat = within(
+      canvas.getByRole("link", { name: "New chat" }),
+    ).getByText("New chat");
 
+    await expect(newChat).toHaveStyle({ fontSize: "13px" });
     await expect(name).toHaveStyle({ fontSize: "13px" });
     await expect(conversation).toHaveStyle({ fontSize: "13px" });
+    await expect(email).toHaveStyle({ fontSize: "11px" });
     await expect(email).toBeVisible();
     await expect(email.scrollWidth).toBeLessThanOrEqual(email.clientWidth);
   },

@@ -27,6 +27,7 @@ web/playwright-report/
 # next.js
 client/.next/
 web/.next/
+web/.next-dev/
 web/out/
 web/storybook-static/
 client/out/
