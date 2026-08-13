@@ -211,7 +211,9 @@ async function mockReader(page: Page) {
               recolor: true,
               reopen: false,
               reply: true,
-              resolve: Boolean(body.initial_comment),
+              resolve:
+                body.audience.kind === "project" &&
+                Boolean(body.initial_comment),
             },
             color: body.color,
             comment_count: body.initial_comment ? 1 : 0,
@@ -845,6 +847,21 @@ test("deduplicates exact anchors and reveals resolved Project discussions weakly
     0,
   );
   await expect(page.getByRole("button", { name: "2 comments" })).toHaveCount(1);
+  await page.getByRole("button", { name: "Open context panel" }).click();
+  await page.getByRole("button", { name: "Annotations" }).click();
+  const previewCard = page.locator(
+    '[data-reader-annotation-card="21000000-0000-4000-8000-000000000001"]',
+  );
+  await previewCard.hover();
+  await expect(
+    page.locator(
+      '[data-reader-annotation-highlight="21000000-0000-4000-8000-000000000001"][data-reader-annotation-previewed="true"]',
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Filter" }).hover();
+  await expect(
+    page.locator('[data-reader-annotation-previewed="true"]'),
+  ).toHaveCount(0);
   await grouped.first().click();
   await expect(
     page.getByRole("button", { name: "Annotations" }),

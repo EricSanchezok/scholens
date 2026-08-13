@@ -232,13 +232,18 @@ viewport. The panel's previous and next actions follow the current filtered
 summary order across pages while keeping the PDF and panel selection in sync.
 
 The annotation panel is a summary list with exactly one expanded thread. A
-collapsed row shows its color marker, quote excerpt, page, author, audience,
-mode, comment count, and recent activity. The expanded thread alone loads and
-shows the full quote, chronological comments, reply composer, and permitted
-actions. Resolve or reopen stays visible for a Project discussion; recolor,
-delete, and per-comment edit/delete live in semantic overflow menus. The reply
-draft is scoped to its thread, survives failed requests, and submits with
-`Cmd/Ctrl + Enter` as well as the explicit button.
+collapsed row shows its color marker, a maximum two-line quote locator, page,
+author, audience, mode, comment count, and recent activity. The quote never
+becomes the card's dominant content because the source is already visible in
+the document pane. Hovering a summary or moving keyboard focus into its thread
+temporarily strengthens the exact PDF anchor without scrolling; clicking locks
+the selection and centers the anchor. The expanded thread loads its
+chronological comments, compact-on-rest reply composer, and permitted actions.
+Comments—not the repeated source quote—own the primary visual hierarchy.
+Resolve or reopen stays visible for a Project discussion; recolor, delete, and
+per-comment edit/delete live in semantic overflow menus. The reply draft is
+scoped to its thread, survives failed requests, and submits with `Cmd/Ctrl +
+Enter` as well as the explicit button.
 
 Project members may reply to open Project threads. The thread author may
 recolor it; its author, the Project owner, and collaborators with Project edit

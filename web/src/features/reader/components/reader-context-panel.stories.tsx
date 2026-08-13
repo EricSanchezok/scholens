@@ -42,7 +42,7 @@ const annotation: ReaderAnnotation = {
       recolor: true,
       reopen: false,
       reply: true,
-      resolve: true,
+      resolve: false,
     },
     color: "yellow",
     comment_count: 1,
@@ -243,6 +243,7 @@ const annotationArgs = {
   onAudienceFilterChange: fn(),
   modeFilter: "all" as const,
   onModeFilterChange: fn(),
+  onPreviewChange: fn(),
   onSelect: fn(),
   onStatusChange: fn(async () => undefined),
   onStatusFilterChange: fn(),
@@ -269,10 +270,22 @@ type Story = StoryObj<typeof meta>;
 
 export const AnnotationThread: Story = {
   args: { selectedAnnotation: annotation, selectedAnnotationId: annotation.id },
-  play: async ({ canvasElement }) => {
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const card = canvasElement.querySelector(
+      `[data-reader-annotation-card="${annotation.id}"]`,
+    );
+    await expect(card).not.toBeNull();
+    await userEvent.hover(card!);
+    await expect(args.onPreviewChange).toHaveBeenLastCalledWith(annotation.id);
+    await expect(canvas.getByText(/Retrieval quality depends/)).toHaveClass(
+      "line-clamp-2",
+    );
     await expect(
-      within(canvasElement).getByText(/Retrieval quality depends/),
-    ).toBeVisible();
+      canvas.queryByRole("button", { name: "Resolve" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByPlaceholderText("Continue this note"));
+    await expect(canvas.getByRole("button", { name: /^Reply$/ })).toBeVisible();
   },
 };
 

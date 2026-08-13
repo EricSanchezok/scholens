@@ -125,6 +125,8 @@ function ReaderDocumentWorkspace({
     React.useState<ReaderSelection>();
   const [selectedAnnotationId, setSelectedAnnotationId] =
     React.useState<string>();
+  const [previewAnnotationId, setPreviewAnnotationId] =
+    React.useState<string>();
   const [selectedAnchorIds, setSelectedAnchorIds] = React.useState<string[]>(
     [],
   );
@@ -567,6 +569,7 @@ function ReaderDocumentWorkspace({
       await refreshAnnotations();
     },
     onAnnotationSelect: (id) => void openAnnotation(id),
+    onAnnotationPreviewChange: setPreviewAnnotationId,
     onAnnotationStatusChange: async (id, status) => {
       await updateReaderAnnotationThread(id, { status });
       if (status !== annotationStatusFilter) setSelectedAnnotationId(undefined);
@@ -894,6 +897,7 @@ function ReaderDocumentWorkspace({
                   activeSearchMatch={searchResults[searchIndex]}
                   searchQuery={searchQuery}
                   selectedAnnotationId={selectedAnnotationId}
+                  previewAnnotationId={previewAnnotationId}
                   projectContext={Boolean(activeProject)}
                   selectionLabels={{
                     ask: t("selection.ask"),

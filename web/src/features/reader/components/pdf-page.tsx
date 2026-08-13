@@ -5,8 +5,6 @@ import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
 import { keyboardFocusRing } from "@/components/ui";
-import { CommentIcon } from "@/design-system/icons/semantic-icons";
-import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
@@ -244,6 +242,7 @@ function PdfPageSurface({
   loadingLabel,
   annotations = [],
   selectedAnnotationId,
+  previewAnnotationId,
   activeTextSelection,
   selectionLabels,
   onAnnotationSelect,
@@ -269,6 +268,7 @@ function PdfPageSurface({
   loadingLabel: string;
   annotations?: ReaderAnnotationSummary[];
   selectedAnnotationId?: string;
+  previewAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
   onAnnotationSelect?: (annotationId: string, anchorIds: string[]) => void;
@@ -499,10 +499,17 @@ function PdfPageSurface({
           const groupSelected = group.some(
             (item) => item.id === selectedAnnotationId,
           );
+          const groupPreviewed = group.some(
+            (item) => item.id === previewAnnotationId,
+          );
           const selectedGroupItem = group.find(
             (item) => item.id === selectedAnnotationId,
           );
-          const interactionTarget = selectedGroupItem ?? annotation;
+          const previewGroupItem = group.find(
+            (item) => item.id === previewAnnotationId,
+          );
+          const interactionTarget =
+            previewGroupItem ?? selectedGroupItem ?? annotation;
           const anchorIds = group.map((item) => item.id);
           const commentCount = countReaderAnnotationComments(group);
           const markerRect = position.rects[0];
@@ -519,10 +526,12 @@ function PdfPageSurface({
                     "pointer-events-auto absolute rounded-[1px] opacity-40 transition-opacity hover:opacity-55 focus-visible:opacity-60",
                     keyboardFocusRing,
                     groupSelected && "opacity-60",
+                    groupPreviewed && "opacity-70",
                     resolved && "opacity-20 grayscale",
                   )}
                   data-reader-annotation-count={group.length}
                   data-reader-annotation-highlight={interactionTarget.id}
+                  data-reader-annotation-previewed={groupPreviewed || undefined}
                   data-reader-annotation-selected={groupSelected || undefined}
                   key={`${annotation.id}:${index}:${group.length}`}
                   onClick={activateGroup}
@@ -542,10 +551,8 @@ function PdfPageSurface({
                 <button
                   aria-label={annotationCommentLabel(commentCount)}
                   className={cn(
-                    "shadow-raised text-caption pointer-events-auto absolute right-2 z-20 inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1.5 font-semibold",
-                    resolved
-                      ? "border-line bg-subtle text-muted border"
-                      : "bg-foreground text-canvas",
+                    "shadow-raised text-caption border-line bg-surface text-secondary pointer-events-auto absolute right-2 z-20 inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-full border px-1.5 font-semibold",
+                    resolved && "bg-subtle text-muted opacity-70 grayscale",
                     keyboardFocusRing,
                   )}
                   data-reader-annotation-comment-marker={interactionTarget.id}
@@ -555,7 +562,15 @@ function PdfPageSurface({
                   }}
                   type="button"
                 >
-                  <Icon glyph={CommentIcon} size={16} />
+                  <span
+                    aria-hidden
+                    className="size-2 rounded-full"
+                    style={{
+                      backgroundColor: readerHighlightColorValue(
+                        interactionTarget.color,
+                      ),
+                    }}
+                  />
                   {commentCount}
                 </button>
               ) : null}
@@ -610,6 +625,7 @@ export function PdfPage({
   loadingLabel,
   annotations = [],
   selectedAnnotationId,
+  previewAnnotationId,
   activeTextSelection,
   selectionLabels,
   onAnnotationSelect,
@@ -635,6 +651,7 @@ export function PdfPage({
   loadingLabel: string;
   annotations?: ReaderAnnotationSummary[];
   selectedAnnotationId?: string;
+  previewAnnotationId?: string;
   activeTextSelection?: ReaderSelection;
   selectionLabels?: ReaderSelectionLabels;
   onAnnotationSelect?: (annotationId: string, anchorIds: string[]) => void;
@@ -813,6 +830,7 @@ export function PdfPage({
               scrollContainerRef={containerRef}
               searchQuery={searchQuery}
               selectedAnnotationId={selectedAnnotationId}
+              previewAnnotationId={previewAnnotationId}
               selectionLabels={selectionLabels}
               zoom={zoom}
             />

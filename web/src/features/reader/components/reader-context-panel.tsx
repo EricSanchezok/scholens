@@ -21,7 +21,6 @@ import * as React from "react";
 
 import {
   Button,
-  Badge,
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -261,6 +260,7 @@ export function ReaderAnnotationPanel({
   modeFilter,
   onModeFilterChange,
   onSelect,
+  onPreviewChange,
   onUpdateColor,
   audienceFilter,
   onAudienceFilterChange,
@@ -289,6 +289,7 @@ export function ReaderAnnotationPanel({
   modeFilter: ReaderAnnotationMode;
   onModeFilterChange: (mode: ReaderAnnotationMode) => void;
   onSelect: (id: string) => void;
+  onPreviewChange: (id: string | undefined) => void;
   onUpdateColor: (id: string, color: ReaderHighlightColor) => Promise<void>;
   selectedAnnotation?: ReaderAnnotation;
   selectedAnnotationId?: string;
@@ -310,6 +311,7 @@ export function ReaderAnnotationPanel({
   const [editingContent, setEditingContent] = React.useState("");
   const [busyAction, setBusyAction] = React.useState<string>();
   const [replyBusyId, setReplyBusyId] = React.useState<string>();
+  const [composerExpandedId, setComposerExpandedId] = React.useState<string>();
   const [pendingDelete, setPendingDelete] = React.useState<
     { id: string; kind: "comment" | "thread" } | undefined
   >();
@@ -542,73 +544,165 @@ export function ReaderAnnotationPanel({
               ? annotation.audience.kind === "project"
                 ? t("startDiscussion")
                 : t("addNote")
-              : t("replyPlaceholder");
+              : annotation.mode === "note"
+                ? t("continueNote")
+                : t("replyPlaceholder");
+          const composerExpanded =
+            composerExpandedId === annotation.id || Boolean(replyDraft);
           return (
             <article
               className={cn(
-                "border-line overflow-hidden rounded-[var(--radius-lg)] border transition-colors",
+                "group/thread border-line bg-surface hover:bg-hover focus-within:bg-hover overflow-hidden rounded-[var(--radius-lg)] border transition-colors",
                 active && "bg-subtle",
               )}
+              data-reader-annotation-card={annotation.id}
               key={annotation.id}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  onPreviewChange(undefined);
+                }
+              }}
+              onFocusCapture={() => onPreviewChange(annotation.id)}
+              onMouseEnter={() => onPreviewChange(annotation.id)}
+              onMouseLeave={() => onPreviewChange(undefined)}
             >
-              <button
-                className={cn("w-full p-3 text-left", keyboardFocusRing)}
-                onClick={() => onSelect(annotation.id)}
-                type="button"
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{
-                      backgroundColor: readerHighlightColorValue(currentColor),
-                    }}
-                  />
-                  <span className="text-muted text-xs">
-                    {t("page", { page: annotation.position?.page_number ?? 1 })}
-                  </span>
-                  <span className="text-muted ml-auto text-xs">
-                    {format.relativeTime(new Date(annotation.last_activity_at))}
-                  </span>
-                </span>
-                <span
+              <div className="flex items-start gap-2 px-3 pt-3">
+                <button
                   className={cn(
-                    "mt-1.5 block text-sm leading-5",
-                    active ? "line-clamp-6" : "line-clamp-3",
+                    "min-w-0 flex-1 rounded-[var(--radius-sm)] text-left",
+                    keyboardFocusRing,
                   )}
+                  onClick={() => onSelect(annotation.id)}
+                  type="button"
                 >
-                  “{annotation.quote_text}”
-                </span>
-                <span className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <Badge>
-                    {annotation.audience.kind === "project"
-                      ? (projectContext?.title ?? t("audience.project"))
-                      : t("audience.personal")}
-                  </Badge>
-                  <Badge>{t(`modes.${annotation.mode}`)}</Badge>
-                  {annotation.mode === "discussion" ? (
-                    <Badge
-                      tone={
-                        annotation.status === "resolved" ? "neutral" : "info"
-                      }
-                    >
-                      {t(`status.${annotation.status}`)}
-                    </Badge>
-                  ) : null}
-                  {annotation.comment_count > 0 ? (
-                    <span className="text-muted inline-flex items-center gap-1 text-xs">
-                      <Icon glyph={CommentIcon} size={16} />
-                      {annotation.comment_count}
+                  <span className="text-secondary flex min-w-0 items-center gap-1.5 text-xs">
+                    <span
+                      aria-hidden
+                      className="h-3 w-1 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor:
+                          readerHighlightColorValue(currentColor),
+                      }}
+                    />
+                    <span className="text-foreground truncate font-medium">
+                      {annotation.audience.kind === "project"
+                        ? (projectContext?.title ?? t("audience.project"))
+                        : t("audience.personal")}
+                      {" · "}
+                      {t(`modes.${annotation.mode}`)}
                     </span>
-                  ) : null}
-                  <span className="text-muted text-xs">
-                    {annotation.created_by.display_name ?? t("unknownAuthor")}
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">
+                      {t("page", {
+                        page: annotation.position?.page_number ?? 1,
+                      })}
+                    </span>
+                    {annotation.mode === "discussion" &&
+                    annotation.status === "resolved" ? (
+                      <span className="text-success shrink-0">
+                        {t("status.resolved")}
+                      </span>
+                    ) : null}
                   </span>
-                </span>
-              </button>
+                  <span
+                    className="text-secondary mt-2 line-clamp-2 block border-l pl-2 text-sm leading-5"
+                    style={{
+                      borderColor: readerHighlightColorValue(currentColor),
+                    }}
+                  >
+                    {annotation.quote_text}
+                  </span>
+                  <span className="text-secondary mt-2 flex items-center gap-1.5 text-xs">
+                    <span className="truncate">
+                      {annotation.created_by.display_name ?? t("unknownAuthor")}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">
+                      {format.relativeTime(
+                        new Date(annotation.last_activity_at),
+                      )}
+                    </span>
+                    {annotation.comment_count > 0 ? (
+                      <span className="ml-auto inline-flex shrink-0 items-center gap-1">
+                        <Icon glyph={CommentIcon} size={16} />
+                        {annotation.comment_count}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+                {active &&
+                thread &&
+                (thread.capabilities.recolor || thread.capabilities.delete) ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <IconButton
+                        className="-mt-1 size-8 min-h-8 shrink-0"
+                        label={t("moreActions")}
+                        variant="ghost"
+                      >
+                        <Icon glyph={MoreIcon} size={20} tone="secondary" />
+                      </IconButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {thread.capabilities.recolor ? (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Icon
+                              glyph={HighlightColorIcon}
+                              size={16}
+                              tone="secondary"
+                            />
+                            {t("changeColor")}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="min-w-0 p-2">
+                            <div className="flex gap-2">
+                              {readerHighlightColors.map((color) => (
+                                <button
+                                  aria-label={t(`colors.${color}`)}
+                                  className={cn(
+                                    "border-control size-7 rounded-full border",
+                                    keyboardFocusRing,
+                                    currentColor === color &&
+                                      "ring-2 ring-[var(--color-focus-ring)] ring-offset-2 ring-offset-[var(--color-bg-elevated)]",
+                                  )}
+                                  key={color}
+                                  onClick={() =>
+                                    void perform("color", () =>
+                                      onUpdateColor(annotation.id, color),
+                                    )
+                                  }
+                                  style={{
+                                    backgroundColor:
+                                      readerHighlightColorValue(color),
+                                  }}
+                                  type="button"
+                                />
+                              ))}
+                            </div>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      ) : null}
+                      {thread.capabilities.delete ? (
+                        <DropdownMenuItem
+                          destructive
+                          onSelect={() =>
+                            setPendingDelete({
+                              id: annotation.id,
+                              kind: "thread",
+                            })
+                          }
+                        >
+                          <Icon glyph={DeleteIcon} size={16} />
+                          {t("deleteHighlight")}
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+              </div>
 
               {active ? (
-                <div className="border-line-subtle border-t px-3 pb-3">
+                <div className="px-3 pb-3">
                   {selectedAnnotationUnavailable ? (
                     <div className="py-5 text-center">
                       <p className="font-medium">{t("unavailableThread")}</p>
@@ -622,116 +716,42 @@ export function ReaderAnnotationPanel({
                     </p>
                   ) : (
                     <>
-                      <div className="flex items-center gap-1 py-2">
-                        {thread.capabilities.resolve ? (
-                          <Button
-                            className="mr-auto"
-                            loading={busyAction === "resolve"}
-                            onClick={() =>
-                              void perform("resolve", () =>
-                                onStatusChange(annotation.id, "resolved"),
-                              )
-                            }
-                            size="sm"
-                            variant="ghost"
-                          >
-                            <Icon glyph={ConfirmIcon} size={16} />
-                            {t("resolve")}
-                          </Button>
-                        ) : thread.capabilities.reopen ? (
-                          <Button
-                            className="mr-auto"
-                            loading={busyAction === "reopen"}
-                            onClick={() =>
-                              void perform("reopen", () =>
-                                onStatusChange(annotation.id, "open"),
-                              )
-                            }
-                            size="sm"
-                            variant="secondary"
-                          >
-                            <Icon glyph={ReopenIcon} size={16} />
-                            {t("reopen")}
-                          </Button>
-                        ) : (
-                          <span className="mr-auto" />
-                        )}
-                        {thread.capabilities.recolor ||
-                        thread.capabilities.delete ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <IconButton
-                                className="size-9 min-h-9"
-                                label={t("moreActions")}
-                                variant="ghost"
-                              >
-                                <Icon
-                                  glyph={MoreIcon}
-                                  size={20}
-                                  tone="secondary"
-                                />
-                              </IconButton>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {thread.capabilities.recolor ? (
-                                <DropdownMenuSub>
-                                  <DropdownMenuSubTrigger>
-                                    <Icon
-                                      glyph={HighlightColorIcon}
-                                      size={16}
-                                      tone="secondary"
-                                    />
-                                    {t("changeColor")}
-                                  </DropdownMenuSubTrigger>
-                                  <DropdownMenuSubContent className="min-w-0 p-2">
-                                    <div className="flex gap-2">
-                                      {readerHighlightColors.map((color) => (
-                                        <button
-                                          aria-label={t(`colors.${color}`)}
-                                          className={cn(
-                                            "border-control size-7 rounded-full border",
-                                            keyboardFocusRing,
-                                            currentColor === color &&
-                                              "ring-2 ring-[var(--color-focus-ring)] ring-offset-2 ring-offset-[var(--color-bg-elevated)]",
-                                          )}
-                                          key={color}
-                                          onClick={() =>
-                                            void perform("color", () =>
-                                              onUpdateColor(
-                                                annotation.id,
-                                                color,
-                                              ),
-                                            )
-                                          }
-                                          style={{
-                                            backgroundColor:
-                                              readerHighlightColorValue(color),
-                                          }}
-                                          type="button"
-                                        />
-                                      ))}
-                                    </div>
-                                  </DropdownMenuSubContent>
-                                </DropdownMenuSub>
-                              ) : null}
-                              {thread.capabilities.delete ? (
-                                <DropdownMenuItem
-                                  destructive
-                                  onSelect={() =>
-                                    setPendingDelete({
-                                      id: annotation.id,
-                                      kind: "thread",
-                                    })
-                                  }
-                                >
-                                  <Icon glyph={DeleteIcon} size={16} />
-                                  {t("deleteHighlight")}
-                                </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : null}
-                      </div>
+                      {thread.capabilities.resolve ||
+                      thread.capabilities.reopen ? (
+                        <div className="mt-3 flex items-center gap-1">
+                          {thread.capabilities.resolve ? (
+                            <Button
+                              className="mr-auto"
+                              loading={busyAction === "resolve"}
+                              onClick={() =>
+                                void perform("resolve", () =>
+                                  onStatusChange(annotation.id, "resolved"),
+                                )
+                              }
+                              size="sm"
+                              variant="ghost"
+                            >
+                              <Icon glyph={ConfirmIcon} size={16} />
+                              {t("resolve")}
+                            </Button>
+                          ) : thread.capabilities.reopen ? (
+                            <Button
+                              className="mr-auto"
+                              loading={busyAction === "reopen"}
+                              onClick={() =>
+                                void perform("reopen", () =>
+                                  onStatusChange(annotation.id, "open"),
+                                )
+                              }
+                              size="sm"
+                              variant="secondary"
+                            >
+                              <Icon glyph={ReopenIcon} size={16} />
+                              {t("reopen")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       {thread.status === "resolved" && thread.resolved_at ? (
                         <p className="text-muted border-line-subtle border-b pb-3 text-xs">
@@ -746,120 +766,146 @@ export function ReaderAnnotationPanel({
                         </p>
                       ) : null}
 
-                      {thread.comments.length === 0 ? (
-                        <p className="text-muted py-3 text-sm">
-                          {t("noComments")}
-                        </p>
-                      ) : null}
                       {thread.comments.map((item) => (
                         <div
-                          className="border-line-subtle mt-3 border-t pt-3"
+                          className="group/comment relative mt-4 grid grid-cols-[2rem_minmax(0,1fr)] gap-x-2.5"
                           key={item.id}
                         >
                           {editingCommentId === item.id ? (
                             <>
-                              <Textarea
-                                className="min-h-16"
-                                onChange={(event) =>
-                                  setEditingContent(event.currentTarget.value)
-                                }
-                                value={editingContent}
-                              />
-                              <div className="mt-2 flex justify-end gap-1">
-                                <Button
-                                  onClick={() => setEditingCommentId(undefined)}
-                                  size="sm"
-                                  variant="ghost"
-                                >
-                                  {t("cancel")}
-                                </Button>
-                                <Button
-                                  disabled={!editingContent.trim()}
-                                  loading={busyAction === `edit:${item.id}`}
-                                  onClick={() =>
-                                    void perform(
-                                      `edit:${item.id}`,
-                                      async () => {
-                                        await onCommentUpdate(
-                                          item.id,
-                                          editingContent.trim(),
-                                        );
-                                        setEditingCommentId(undefined);
-                                      },
-                                    )
+                              <span
+                                aria-hidden
+                                className="bg-pressed text-secondary grid size-8 place-items-center rounded-full text-xs font-medium"
+                              >
+                                {(
+                                  item.created_by.display_name ??
+                                  t("unknownAuthor")
+                                )
+                                  .trim()
+                                  .charAt(0)
+                                  .toLocaleUpperCase()}
+                              </span>
+                              <div className="min-w-0">
+                                <Textarea
+                                  className="min-h-16"
+                                  onChange={(event) =>
+                                    setEditingContent(event.currentTarget.value)
                                   }
-                                  size="sm"
-                                >
-                                  {t("save")}
-                                </Button>
+                                  value={editingContent}
+                                />
+                                <div className="mt-2 flex justify-end gap-1">
+                                  <Button
+                                    onClick={() =>
+                                      setEditingCommentId(undefined)
+                                    }
+                                    size="sm"
+                                    variant="ghost"
+                                  >
+                                    {t("cancel")}
+                                  </Button>
+                                  <Button
+                                    disabled={!editingContent.trim()}
+                                    loading={busyAction === `edit:${item.id}`}
+                                    onClick={() =>
+                                      void perform(
+                                        `edit:${item.id}`,
+                                        async () => {
+                                          await onCommentUpdate(
+                                            item.id,
+                                            editingContent.trim(),
+                                          );
+                                          setEditingCommentId(undefined);
+                                        },
+                                      )
+                                    }
+                                    size="sm"
+                                  >
+                                    {t("save")}
+                                  </Button>
+                                </div>
                               </div>
                             </>
                           ) : (
                             <>
-                              <div className="mb-1 flex items-center gap-1.5 text-xs">
-                                <span className="font-medium">
-                                  {item.created_by.display_name ??
-                                    t("unknownAuthor")}
-                                </span>
-                                <span className="text-muted">
-                                  {format.relativeTime(
-                                    new Date(item.created_at),
-                                  )}
-                                </span>
-                              </div>
-                              <p className="text-sm leading-5">
-                                {item.content}
-                              </p>
-                              {item.can_edit || item.can_delete ? (
-                                <div className="mt-1 flex justify-end">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <IconButton
-                                        className="size-8 min-h-8"
-                                        label={t("commentActions")}
-                                        variant="ghost"
-                                      >
-                                        <Icon
-                                          glyph={MoreIcon}
-                                          size={16}
-                                          tone="secondary"
-                                        />
-                                      </IconButton>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      {item.can_edit ? (
-                                        <DropdownMenuItem
-                                          onSelect={() => {
-                                            setEditingCommentId(item.id);
-                                            setEditingContent(item.content);
-                                          }}
+                              <span
+                                aria-hidden
+                                className="bg-pressed text-secondary grid size-8 place-items-center rounded-full text-xs font-medium"
+                              >
+                                {(
+                                  item.created_by.display_name ??
+                                  t("unknownAuthor")
+                                )
+                                  .trim()
+                                  .charAt(0)
+                                  .toLocaleUpperCase()}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex min-h-8 items-center gap-1.5 text-xs">
+                                  <span className="truncate font-medium">
+                                    {item.created_by.display_name ??
+                                      t("unknownAuthor")}
+                                  </span>
+                                  <span className="text-secondary shrink-0">
+                                    {format.relativeTime(
+                                      new Date(item.created_at),
+                                    )}
+                                  </span>
+                                  {item.can_edit || item.can_delete ? (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <IconButton
+                                          className="ml-auto size-8 min-h-8 opacity-100 transition-opacity data-[state=open]:opacity-100 sm:opacity-0 sm:group-focus-within/comment:opacity-100 sm:group-hover/comment:opacity-100"
+                                          label={t("commentActions")}
+                                          variant="ghost"
                                         >
                                           <Icon
-                                            glyph={EditIcon}
+                                            glyph={MoreIcon}
                                             size={16}
                                             tone="secondary"
                                           />
-                                          {t("editComment")}
-                                        </DropdownMenuItem>
-                                      ) : null}
-                                      {item.can_delete ? (
-                                        <DropdownMenuItem
-                                          destructive
-                                          onSelect={() =>
-                                            setPendingDelete({
-                                              id: item.id,
-                                              kind: "comment",
-                                            })
-                                          }
-                                        >
-                                          <Icon glyph={DeleteIcon} size={16} />
-                                          {t("deleteComment")}
-                                        </DropdownMenuItem>
-                                      ) : null}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
+                                        </IconButton>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        {item.can_edit ? (
+                                          <DropdownMenuItem
+                                            onSelect={() => {
+                                              setEditingCommentId(item.id);
+                                              setEditingContent(item.content);
+                                            }}
+                                          >
+                                            <Icon
+                                              glyph={EditIcon}
+                                              size={16}
+                                              tone="secondary"
+                                            />
+                                            {t("editComment")}
+                                          </DropdownMenuItem>
+                                        ) : null}
+                                        {item.can_delete ? (
+                                          <DropdownMenuItem
+                                            destructive
+                                            onSelect={() =>
+                                              setPendingDelete({
+                                                id: item.id,
+                                                kind: "comment",
+                                              })
+                                            }
+                                          >
+                                            <Icon
+                                              glyph={DeleteIcon}
+                                              size={16}
+                                            />
+                                            {t("deleteComment")}
+                                          </DropdownMenuItem>
+                                        ) : null}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  ) : null}
                                 </div>
-                              ) : null}
+                                <p className="text-sm leading-5">
+                                  {item.content}
+                                </p>
+                              </div>
                             </>
                           )}
                         </div>
@@ -867,7 +913,7 @@ export function ReaderAnnotationPanel({
 
                       {thread.capabilities.reply ? (
                         <form
-                          className="border-line-subtle mt-3 border-t pt-3"
+                          className="mt-4"
                           onSubmit={(event) => {
                             event.preventDefault();
                             if (selectedAnnotation) {
@@ -876,8 +922,12 @@ export function ReaderAnnotationPanel({
                           }}
                         >
                           <Textarea
-                            className="min-h-20"
+                            className={cn(
+                              "resize-none transition-[min-height]",
+                              composerExpanded ? "min-h-20" : "min-h-11 py-2.5",
+                            )}
                             disabled={replyBusyId === annotation.id}
+                            onFocus={() => setComposerExpandedId(annotation.id)}
                             onChange={(event) => {
                               const value = event.currentTarget.value;
                               setReplyDrafts((current) => ({
@@ -899,23 +949,25 @@ export function ReaderAnnotationPanel({
                             placeholder={replyPrompt}
                             value={replyDraft}
                           />
-                          <div className="mt-2 flex items-center justify-between gap-3">
-                            <span className="text-muted text-xs">
-                              {t("submitShortcut")}
-                            </span>
-                            <Button
-                              disabled={!replyDraft.trim()}
-                              loading={replyBusyId === annotation.id}
-                              size="sm"
-                              type="submit"
-                            >
-                              {annotation.mode === "highlight"
-                                ? annotation.audience.kind === "project"
-                                  ? t("start")
-                                  : t("add")
-                                : t("reply")}
-                            </Button>
-                          </div>
+                          {composerExpanded ? (
+                            <div className="mt-2 flex items-center justify-between gap-3">
+                              <span className="text-secondary text-xs">
+                                {t("submitShortcut")}
+                              </span>
+                              <Button
+                                disabled={!replyDraft.trim()}
+                                loading={replyBusyId === annotation.id}
+                                size="sm"
+                                type="submit"
+                              >
+                                {annotation.mode === "highlight"
+                                  ? annotation.audience.kind === "project"
+                                    ? t("start")
+                                    : t("add")
+                                  : t("reply")}
+                              </Button>
+                            </div>
+                          ) : null}
                         </form>
                       ) : null}
                     </>
@@ -1042,6 +1094,7 @@ export function ReaderContextPanel({
   document,
   onActionError,
   onAnnotationDelete,
+  onAnnotationPreviewChange,
   onAnnotationSelect,
   onClose,
   onCommentCreate,
@@ -1084,6 +1137,7 @@ export function ReaderContextPanel({
   document: ReaderDocument | undefined;
   onActionError: (error?: unknown) => void;
   onAnnotationDelete: (id: string) => Promise<void>;
+  onAnnotationPreviewChange: (id: string | undefined) => void;
   onAnnotationSelect: (id: string) => void;
   onClose: () => void;
   onCommentCreate: (id: string, content: string) => Promise<void>;
@@ -1183,6 +1237,7 @@ export function ReaderContextPanel({
               onDelete={onAnnotationDelete}
               onAudienceFilterChange={onAnnotationAudienceFilterChange}
               onModeFilterChange={onAnnotationModeFilterChange}
+              onPreviewChange={onAnnotationPreviewChange}
               onSelect={onAnnotationSelect}
               onStatusChange={onAnnotationStatusChange}
               onStatusFilterChange={onAnnotationStatusFilterChange}
