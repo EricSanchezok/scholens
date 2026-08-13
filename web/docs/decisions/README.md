@@ -24,6 +24,7 @@ history; add a later ADR that supersedes it.
 - [ADR 0012: Atomic paper-ingestion acceptance and cooperative cancellation](./0012-atomic-paper-ingestion-lifecycle.md)
 - [ADR 0013: Reader context and anchor contracts](./0013-reader-context-and-anchor-contracts.md)
 - [ADR 0014: Anchored annotation threads and Project audiences](./0014-annotation-thread-collaboration.md)
+- [ADR 0015: Durable Reader selection translation](./0015-durable-reader-selection-translation.md)
 
 ## Template
 

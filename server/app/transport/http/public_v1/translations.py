@@ -72,7 +72,7 @@ def update_translation_preferences(
 
 
 @paper_translations_router.post(
-    "/{document_id}/translations",
+    "/{document_id}/selection-translations",
     response_class=TranslationEventStreamResponse,
     responses={
         200: {

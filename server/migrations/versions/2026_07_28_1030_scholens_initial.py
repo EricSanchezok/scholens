@@ -557,6 +557,12 @@ def upgrade() -> None:
     op.create_table(
         "translation_preferences",
         sa.Column("user_id", sa.BigInteger(), nullable=False),
+        sa.Column(
+            "source_language",
+            sa.String(length=35),
+            server_default="auto",
+            nullable=False,
+        ),
         sa.Column("target_language", sa.String(length=35), nullable=False),
         sa.Column("custom_instructions", sa.Text(), nullable=True),
         sa.Column(
@@ -578,6 +584,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
+            "source_language = 'auto' OR "
+            "(length(source_language) BETWEEN 2 AND 35 "
+            "AND source_language = btrim(source_language))",
+            name="ck_translation_preferences_source_language",
+        ),
+        sa.CheckConstraint(
             "length(target_language) BETWEEN 2 AND 35 "
             "AND target_language = btrim(target_language)",
             name="ck_translation_preferences_language",
@@ -590,6 +602,49 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["user_id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id"),
+        schema="scholens",
+    )
+    op.create_table(
+        "translation_results",
+        sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("identity_key", sa.String(length=64), nullable=False),
+        sa.Column("context_kind", sa.String(length=24), nullable=False),
+        sa.Column("document_id", sa.UUID(), nullable=False),
+        sa.Column("block_id", sa.String(length=128), nullable=True),
+        sa.Column("target_language", sa.String(length=35), nullable=False),
+        sa.Column("source_hash", sa.String(length=64), nullable=False),
+        sa.Column("instructions_hash", sa.String(length=64), nullable=False),
+        sa.Column("prompt_revision", sa.String(length=64), nullable=False),
+        sa.Column("profile_revision", sa.String(length=64), nullable=False),
+        sa.Column("translated_text", sa.Text(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "context_kind IN ('selection', 'reflow_block')",
+            name="ck_translation_results_context_kind",
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"], ["scholens.documents.id"], ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("identity_key"),
+        schema="scholens",
+    )
+    op.create_index(
+        op.f("ix_scholens_translation_results_document_id"),
+        "translation_results",
+        ["document_id"],
+        unique=False,
         schema="scholens",
     )
     op.create_table(
@@ -2135,6 +2190,12 @@ def downgrade() -> None:
     )
     op.drop_table("zotero_oauth_pending", schema="scholens")
     op.drop_table("zotero_connections", schema="scholens")
+    op.drop_index(
+        op.f("ix_scholens_translation_results_document_id"),
+        table_name="translation_results",
+        schema="scholens",
+    )
+    op.drop_table("translation_results", schema="scholens")
     op.drop_table("translation_preferences", schema="scholens")
     op.drop_table("user_profiles", schema="scholens")
     op.drop_table("token_weekly_usage", schema="scholens")

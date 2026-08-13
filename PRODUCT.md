@@ -59,6 +59,28 @@ as one system rather than a collection of separately themed tools.
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
+## Reading transformations preserve the paper as source of truth
+
+Translation and reading reflow are derived views of an authorized paper. They
+must never overwrite the uploaded PDF, alter its canonical metadata, or become
+an alternate paper record. PDF remains the default reading view; derived views
+exist to reduce interaction cost, especially on narrow mobile screens where
+selection-based tools are difficult to operate.
+
+Interface locale and paper-content language are independent preferences. A
+reader may use an English interface while translating a paper into Chinese, or
+the reverse. Selection translation starts only from an explicit selection and
+may run automatically after that selection stabilizes. Full-paper translation
+is lazy at the visible content-block boundary so the product does not spend
+credits on unread text.
+
+Completed translation is durable and reusable. Its identity includes the
+normalized source, language direction, custom instructions, prompt revision,
+and AI runtime profile revision. A cache hit is free and does not consume a
+second provider request; raw selected source text is not retained in the cache.
+Access to a cached result is always re-authorized against the paper before the
+result is returned.
+
 ## Annotations are anchored threads, not separate highlight and comment silos
 
 Reader annotations use one durable mental model across personal reading and

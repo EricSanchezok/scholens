@@ -31,7 +31,6 @@ class AppSettings(BaseSettings):
         min_length=32,
     )
     ai_limit_redis_url: str | None = None
-    translation_cache_redis_url: str | None = None
     connector_credential_encryption_key: str = _DEVELOPMENT_CONNECTOR_KEY
     scholight_mcp_url: str = "https://scholight.sanchezcloud.net/api/mcp"
     scholight_mcp_delegation_jwt_secret: str | None = None

@@ -20,6 +20,7 @@ import type {
 import {
   ReaderSelectionToolbar,
   type ReaderSelectionLabels,
+  type ReaderSelectionTranslationPreview,
 } from "./reader-selection-toolbar";
 
 export type ReaderFitMode = "width" | "page" | "custom";
@@ -257,8 +258,11 @@ function PdfPageSurface({
   onAskSelection,
   onCommentSelection,
   onHighlightSelection,
+  onOpenTranslation,
+  onTranslateSelection,
   onActiveTextSelectionChange,
   projectContext,
+  translationPreview,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -287,7 +291,10 @@ function PdfPageSurface({
     color: ReaderHighlightColor,
     audience: ReaderAnnotationAudience,
   ) => void;
+  onOpenTranslation?: () => void;
+  onTranslateSelection?: (selection: ReaderSelection) => void;
   projectContext?: boolean;
+  translationPreview?: ReaderSelectionTranslationPreview;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -631,8 +638,11 @@ function PdfPageSurface({
               onHighlight={(color, audience) =>
                 onHighlightSelection?.(activeTextSelection, color, audience)
               }
+              onOpenTranslation={() => onOpenTranslation?.()}
+              onTranslate={() => onTranslateSelection?.(activeTextSelection)}
               projectContext={projectContext}
               selection={activeTextSelection}
+              translationPreview={translationPreview}
             />
           </div>
         )}
@@ -664,8 +674,11 @@ export function PdfPage({
   onAskSelection,
   onCommentSelection,
   onHighlightSelection,
+  onOpenTranslation,
+  onTranslateSelection,
   onActiveTextSelectionChange,
   projectContext,
+  translationPreview,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -694,7 +707,10 @@ export function PdfPage({
     color: ReaderHighlightColor,
     audience: ReaderAnnotationAudience,
   ) => void;
+  onOpenTranslation?: () => void;
+  onTranslateSelection?: (selection: ReaderSelection) => void;
   projectContext?: boolean;
+  translationPreview?: ReaderSelectionTranslationPreview;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -848,6 +864,8 @@ export function PdfPage({
               onAskSelection={onAskSelection}
               onCommentSelection={onCommentSelection}
               onHighlightSelection={onHighlightSelection}
+              onOpenTranslation={onOpenTranslation}
+              onTranslateSelection={onTranslateSelection}
               onInternalDestination={onInternalDestination}
               pageNumber={number}
               projectContext={projectContext}
@@ -864,6 +882,7 @@ export function PdfPage({
               selectedAnnotationId={selectedAnnotationId}
               previewAnnotationId={previewAnnotationId}
               selectionLabels={selectionLabels}
+              translationPreview={translationPreview}
               zoom={zoom}
             />
           ),

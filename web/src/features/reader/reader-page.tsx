@@ -48,7 +48,10 @@ import {
   useDesktopReaderPanel,
   useDocumentNavigationRail,
 } from "./hooks/use-reader-layout";
-import { ReaderContextPanel } from "./components/reader-context-panel";
+import {
+  ReaderContextPanel,
+  type ReaderContextPanelProps,
+} from "./components/reader-context-panel";
 import {
   ReaderDocumentNavigation,
   ReaderOutline,
@@ -70,6 +73,7 @@ import {
   readReaderPanel,
   readSourcePage,
 } from "./reader-routing";
+import { ReaderTranslationPanel, useReaderTranslation } from "./translation";
 import type {
   ReaderAnnotationAudience,
   ReaderAnnotationAudienceFilter,
@@ -125,6 +129,8 @@ function ReaderDocumentWorkspace({
     React.useState<ReaderSelection>();
   const [annotationSelection, setAnnotationSelection] =
     React.useState<ReaderSelection>();
+  const [annotationInitialComment, setAnnotationInitialComment] =
+    React.useState<string>();
   const [selectedAnnotationId, setSelectedAnnotationId] =
     React.useState<string>();
   const [previewAnnotationId, setPreviewAnnotationId] =
@@ -135,13 +141,15 @@ function ReaderDocumentWorkspace({
     React.useState<ReaderAnnotationStatus>("open");
   const [annotationModeFilter, setAnnotationModeFilter] =
     React.useState<ReaderAnnotationMode>("all");
-  const lastContextPanelRef = React.useRef<"ask" | "annotations" | "details">(
-    "ask",
-  );
+  const lastContextPanelRef = React.useRef<ReaderContextPanelName>("ask");
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const documentQuery = useQuery(readerQueries.document(documentId));
   const projectsQuery = useQuery(readerQueries.projects(documentId));
+  const translation = useReaderTranslation({
+    documentId,
+    selection: activeTextSelection,
+  });
 
   const projectId = searchParams.get("project") ?? undefined;
   const activeProject = projectsQuery.data?.items.find(
@@ -266,6 +274,7 @@ function ReaderDocumentWorkspace({
     setSelectedAnnotationId(item.id);
     setActiveTextSelection(undefined);
     setAnnotationSelection(undefined);
+    setAnnotationInitialComment(undefined);
     window.getSelection()?.removeAllRanges();
   }
 
@@ -509,7 +518,10 @@ function ReaderDocumentWorkspace({
     .filter(Boolean)
     .join(" · ");
   const desktopPanelOpen =
-    panel === "ask" || panel === "annotations" || panel === "details";
+    panel === "ask" ||
+    panel === "annotations" ||
+    panel === "translation" ||
+    panel === "details";
   const useDesktopPanel = useDesktopReaderPanel();
   const showDocumentNavigation = useDocumentNavigationRail();
 
@@ -526,13 +538,25 @@ function ReaderDocumentWorkspace({
   }, [panel, searchParams, updateLocation]);
 
   React.useEffect(() => {
-    if (panel === "ask" || panel === "annotations" || panel === "details") {
+    if (panel) {
       lastContextPanelRef.current = panel;
     }
   }, [panel]);
 
-  const contextPanelProps: React.ComponentProps<typeof ReaderContextPanel> = {
+  React.useEffect(() => {
+    if (
+      translation.state.status !== "streaming" ||
+      translation.state.trigger !== "auto" ||
+      window.matchMedia("(min-width: 64rem)").matches
+    ) {
+      return;
+    }
+    updateLocation({ panel: "translation" });
+  }, [translation.state.status, translation.state.trigger, updateLocation]);
+
+  const contextPanelProps: ReaderContextPanelProps = {
     annotationSelection,
+    annotationInitialComment,
     annotationAudienceFilter,
     annotationModeFilter,
     annotations: filteredAnnotations,
@@ -591,8 +615,10 @@ function ReaderDocumentWorkspace({
         queryKey: conversationKeys.lists(),
       });
     },
-    onHighlightCreate: (comment, color, audience) =>
-      createHighlight(annotationSelection, color, comment, audience),
+    onHighlightCreate: async (comment, color, audience) => {
+      await createHighlight(annotationSelection, color, comment, audience);
+      setAnnotationInitialComment(undefined);
+    },
     onHighlightUpdate: async (id, color) => {
       await updateReaderAnnotationThread(id, { color });
       await refreshAnnotations();
@@ -619,6 +645,23 @@ function ReaderDocumentWorkspace({
     selectedAnnotationId,
     setReasoningLevel,
     title,
+    translationPanel: (
+      <ReaderTranslationPanel
+        onAnnotate={(selection, translatedText) => {
+          setAnnotationSelection(selection);
+          setAnnotationInitialComment(translatedText);
+          updateLocation({ panel: "annotations" });
+        }}
+        onPreferencesChange={translation.updatePreferences}
+        onRetry={() => void translation.retry()}
+        onTranslate={() => void translation.translate("manual")}
+        preferences={translation.effectivePreferences}
+        preferencesError={translation.preferencesError}
+        preferencesLoading={translation.preferencesLoading}
+        preferencesSaving={translation.preferencesSaving}
+        state={translation.state}
+      />
+    ),
   };
 
   return (
@@ -839,6 +882,7 @@ function ReaderDocumentWorkspace({
                       ...selection,
                       document_id: documentId,
                     });
+                    setAnnotationInitialComment(undefined);
                     setActiveTextSelection(undefined);
                     setSelectedAnnotationId(undefined);
                     window.getSelection()?.removeAllRanges();
@@ -851,6 +895,13 @@ function ReaderDocumentWorkspace({
                       undefined,
                       audience,
                     ).catch(notifyActionError);
+                  }}
+                  onOpenTranslation={() =>
+                    updateLocation({ panel: "translation" })
+                  }
+                  onTranslateSelection={() => {
+                    updateLocation({ panel: "translation" });
+                    void translation.translate("manual");
                   }}
                   onInternalDestination={(destination) =>
                     void resolveDestination(destination)
@@ -884,7 +935,26 @@ function ReaderDocumentWorkspace({
                     highlight: t("selection.highlight"),
                     personal: t("annotations.audience.personal"),
                     project: t("annotations.audience.project"),
+                    translate: t("selection.translate"),
+                    translating: t("translation.status.translating"),
+                    translationFailed: t("translation.errors.title"),
+                    viewTranslation: t("panels.translation"),
                   }}
+                  translationPreview={
+                    activeTextSelection &&
+                    translation.state.selection?.selected_text ===
+                      activeTextSelection.selected_text &&
+                    translation.state.selection.page_number ===
+                      activeTextSelection.page_number &&
+                    (translation.state.status === "streaming" ||
+                      translation.state.status === "completed" ||
+                      translation.state.status === "error")
+                      ? {
+                          status: translation.state.status,
+                          text: translation.state.translatedText,
+                        }
+                      : undefined
+                  }
                   zoom={zoom}
                 />
               </div>

@@ -36,7 +36,7 @@ Public resources use canonical identifiers:
 - `document_id` identifies a paper everywhere. Association-row identifiers
   are named explicitly and are never presented as paper identifiers.
 - Collections return `{ "items": [...], "next_cursor": "...",
-  "previous_cursor": "...", "total_count": 0 }` when bidirectional navigation
+"previous_cursor": "...", "total_count": 0 }` when bidirectional navigation
   is part of the product. Cursors are opaque, signed, user- and query-bound
   keysets with a stable identifier tie-breaker; offset values are not disguised
   as cursors.
@@ -195,6 +195,22 @@ Server, with open threads as the default. The thread-detail endpoint remains a
 canonical single-thread resource for direct consumers. Presentation mode is
 derived from audience and comment count and is never another persisted source
 of truth.
+
+Reader selection translation is a paper-authorized streaming workflow.
+`GET|PUT /api/v1/me/translation-preferences` owns source language, target
+language, custom instructions, and automatic-selection behavior;
+`POST /api/v1/papers/{document_id}/selection-translations` streams standard
+`start`, `delta`, `complete`, and `error` events. The workflow checks paper
+access before looking up a durable result, so shared result reuse never becomes
+an authorization side channel.
+
+Completed translations are persisted without source text. Their SHA-256
+identity binds document, normalized source, title, language direction,
+instructions, prompt revision, and AI profile revision. PostgreSQL owns the
+completed result; Redis owns only rate limits, concurrency leases, and a short
+single-flight lease. Cache hits bypass provider quota and AI capacity checks.
+Only the request holding the single-flight lease may call the provider and
+settle usage.
 
 Follow-up suggestions are a non-critical turn sidecar started before answer
 streaming. The model call runs outside an application transaction; the final

@@ -1218,7 +1218,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/papers/{document_id}/translations": {
+    "/api/v1/papers/{document_id}/selection-translations": {
         parameters: {
             query?: never;
             header?: never;
@@ -1228,7 +1228,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Stream Paper Translation */
-        post: operations["stream_paper_translation_api_v1_papers__document_id__translations_post"];
+        post: operations["stream_paper_translation_api_v1_papers__document_id__selection_translations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4439,6 +4439,8 @@ export interface components {
             auto_translate_selection: boolean;
             /** Custom Instructions */
             custom_instructions: string | null;
+            /** Source Language */
+            source_language: string;
             /** Target Language */
             target_language: string;
         };
@@ -4448,6 +4450,8 @@ export interface components {
             auto_translate_selection: boolean;
             /** Custom Instructions */
             custom_instructions?: string | null;
+            /** Source Language */
+            source_language: string;
             /** Target Language */
             target_language: string;
         };
@@ -7742,7 +7746,7 @@ export interface operations {
             };
         };
     };
-    stream_paper_translation_api_v1_papers__document_id__translations_post: {
+    stream_paper_translation_api_v1_papers__document_id__selection_translations_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -6,10 +6,10 @@ This document defines the Scholens-specific database and deployment contract.
 
 ## Storage ownership
 
-| Owner | Responsibilities | PostgreSQL ownership | Explicitly excluded |
-| --- | --- | --- | --- |
+| Owner                   | Responsibilities                                                                                                                                                                                | PostgreSQL ownership                                                                                                            | Explicitly excluded                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `sanchezcloud-identity` | Email identity, passwords, verification, global account status, lockout, public Account ID, shared avatar references, connected clients, security events, audience tokens, and refresh families | `auth.users`, `auth.refresh_tokens`, `auth.user_clients`, `auth.user_avatars`, `auth.security_events`, `auth.schema_migrations` | Product roles, blocks, subscriptions, quotas, usage, documents, projects |
-| Scholens | Documents, projects, collaboration, product profile/admin/block state, subscriptions, connectors, and usage | `scholens.*` including `scholens.schema_migrations` | Identity migrations, Scholight state, and Scholight Zilliz collections |
+| Scholens                | Documents, projects, collaboration, product profile/admin/block state, subscriptions, connectors, and usage                                                                                     | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
 
 Both schemas share the `sanchezcloud` database but have independent owners and migration
 ledgers. `public` contains no application tables. Scholens rows may reference the internal
@@ -112,6 +112,14 @@ start/end offsets with an optional page projection. A thread owns one color,
 immutable audience and zero or more chronological comments. Comments inherit
 the thread audience and own only their content and author. Threads do not
 support recursive comment trees or audience mutation.
+
+Translation preferences are user-owned Scholens data and are independent from
+the interface locale. Translation results are document-derived Scholens data:
+they own the translated text plus hashed request identity, language, prompt,
+and AI-profile revisions. They never own or duplicate raw selection source
+text. Deleting the source Document cascades its derived translation results.
+Redis does not own completed translations; it owns only short-lived capacity
+and single-flight coordination.
 
 Paper ingestion jobs retain immutable failure history. A retry creates a new
 `DurableJob` referencing the persisted PDF source and original Project context;

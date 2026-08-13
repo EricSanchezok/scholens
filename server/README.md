@@ -96,6 +96,15 @@ contracts, and paper-conversation list cursors are signed against the requested
 scope. Do not add Reader aggregation routes, arbitrary position dictionaries,
 or browser-side conversation authorization.
 
+Reader content translation uses
+`GET|PUT /api/v1/me/translation-preferences` and
+`POST /api/v1/papers/{document_id}/selection-translations`. Translation emits
+standard Server-Sent Events named `start`, `delta`, `complete`, and `error`.
+The server re-authorizes the paper before durable-result lookup, persists only
+the source hash and translated result, and uses Redis only for capacity and
+single-flight coordination. A durable result hit does not consume Token Credits
+or provider capacity.
+
 Conversation turns are created at
 `POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn
 creates another response variant at

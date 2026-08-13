@@ -14,6 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class TranslationPreferencesUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    source_language: str = Field(
+        json_schema_extra={"maxLength": MAX_LANGUAGE_TAG_CHARS}
+    )
     target_language: str = Field(
         json_schema_extra={"maxLength": MAX_LANGUAGE_TAG_CHARS}
     )
@@ -23,13 +26,13 @@ class TranslationPreferencesUpdateRequest(BaseModel):
     )
     auto_translate_selection: bool
 
-    @field_validator("target_language")
+    @field_validator("source_language", "target_language")
     @classmethod
-    def guard_target_language_size(cls, value: str) -> str:
+    def guard_language_size(cls, value: str) -> str:
         if len(value) > MAX_LANGUAGE_TAG_CHARS:
             raise AppError(
                 code="translation_language_invalid",
-                message="Target language is invalid",
+                message="Translation language is invalid",
                 kind=FailureKind.INVALID_ARGUMENT,
             )
         return value
@@ -47,6 +50,7 @@ class TranslationPreferencesUpdateRequest(BaseModel):
 
 
 class TranslationPreferencesResponse(BaseModel):
+    source_language: str
     target_language: str
     custom_instructions: str | None
     auto_translate_selection: bool

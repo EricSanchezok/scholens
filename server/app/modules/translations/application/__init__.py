@@ -5,8 +5,10 @@ from .contracts import (
 )
 from .ports import (
     PreparedTranslation,
-    TranslationCache,
-    TranslationCacheValue,
+    TranslationResultIdentity,
+    TranslationResultStore,
+    TranslationResultValue,
+    TranslationSingleFlight,
     TranslationCapacity,
     TranslationCapacityLease,
     TranslationEntitlements,
@@ -22,8 +24,10 @@ from .translations import Translations
 
 __all__ = [
     "PreparedTranslation",
-    "TranslationCache",
-    "TranslationCacheValue",
+    "TranslationResultIdentity",
+    "TranslationResultStore",
+    "TranslationResultValue",
+    "TranslationSingleFlight",
     "TranslationCapacity",
     "TranslationCapacityLease",
     "TranslationEntitlements",

@@ -8066,12 +8066,17 @@
             ],
             "title": "Custom Instructions"
           },
+          "source_language": {
+            "title": "Source Language",
+            "type": "string"
+          },
           "target_language": {
             "title": "Target Language",
             "type": "string"
           }
         },
         "required": [
+          "source_language",
           "target_language",
           "custom_instructions",
           "auto_translate_selection"
@@ -8098,6 +8103,11 @@
             "maxLength": 2000,
             "title": "Custom Instructions"
           },
+          "source_language": {
+            "maxLength": 35,
+            "title": "Source Language",
+            "type": "string"
+          },
           "target_language": {
             "maxLength": 35,
             "title": "Target Language",
@@ -8105,6 +8115,7 @@
           }
         },
         "required": [
+          "source_language",
           "target_language",
           "auto_translate_selection"
         ],
@@ -13617,9 +13628,9 @@
         "summary": "List Document Research Items"
       }
     },
-    "/api/v1/papers/{document_id}/translations": {
+    "/api/v1/papers/{document_id}/selection-translations": {
       "post": {
-        "operationId": "stream_paper_translation_api_v1_papers__document_id__translations_post",
+        "operationId": "stream_paper_translation_api_v1_papers__document_id__selection_translations_post",
         "parameters": [
           {
             "in": "path",

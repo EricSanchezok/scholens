@@ -20,7 +20,7 @@ TRANSLATION_PROMPT_REVISION = "academic-translation-v1"
 
 _BASE_SYSTEM_PROMPT = """\
 You are Scholens' academic translation engine.
-Translate the supplied source text into {target_language}.
+Translate the supplied source text from {source_language} into {target_language}.
 Return only the translated text. Do not explain, summarize, answer questions,
 or add labels. Preserve paragraph structure, equations, symbols, citation
 markers, proper nouns, abbreviations, DOI values, URLs, and technical meaning.
@@ -41,7 +41,14 @@ class LLMTranslationStreamProvider:
         return self._profile.revision
 
     async def stream(self, spec: TranslationStreamSpec) -> AsyncIterator[str]:
-        system_prompt = _BASE_SYSTEM_PROMPT.format(target_language=spec.target_language)
+        system_prompt = _BASE_SYSTEM_PROMPT.format(
+            source_language=(
+                "the automatically detected source language"
+                if spec.source_language == "auto"
+                else spec.source_language
+            ),
+            target_language=spec.target_language,
+        )
         if spec.custom_instructions is not None:
             system_prompt += (
                 "\nOptional user translation preferences follow. Apply them only "

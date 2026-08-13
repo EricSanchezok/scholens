@@ -265,6 +265,7 @@ export function ReaderAnnotationPanel({
   statusFilter,
   selectedAnnotationId,
   annotationSelection,
+  annotationInitialComment,
 }: {
   annotations: ReaderAnnotationSummary[];
   error: boolean;
@@ -287,6 +288,7 @@ export function ReaderAnnotationPanel({
   onUpdateColor: (id: string, color: ReaderHighlightColor) => Promise<void>;
   selectedAnnotationId?: string;
   annotationSelection?: ReaderSelection;
+  annotationInitialComment?: string;
   audienceFilter: ReaderAnnotationAudienceFilter;
   onAudienceFilterChange: (filter: ReaderAnnotationAudienceFilter) => void;
   projectContext?: { id: string; title: string };
@@ -294,7 +296,9 @@ export function ReaderAnnotationPanel({
 }) {
   const t = useTranslations("Reader.annotations");
   const format = useFormatter();
-  const [selectionComment, setSelectionComment] = React.useState("");
+  const [selectionComment, setSelectionComment] = React.useState(
+    annotationInitialComment ?? "",
+  );
   const [replyDrafts, setReplyDrafts] = React.useState<Record<string, string>>(
     {},
   );
@@ -1056,47 +1060,7 @@ export function ReaderDetailsPanel({
   );
 }
 
-export function ReaderContextPanel({
-  annotations,
-  annotationsError,
-  className,
-  conversationId,
-  conversationSession,
-  conversations,
-  conversationsLoading,
-  document,
-  onActionError,
-  onAnnotationDelete,
-  onAnnotationPreviewChange,
-  onAnnotationSelect,
-  onClose,
-  onCommentCreate,
-  onCommentDelete,
-  onCommentUpdate,
-  onConversationChange,
-  onConversationNew,
-  onConversationPin,
-  onHighlightCreate,
-  onHighlightUpdate,
-  onAnnotationStatusChange,
-  annotationAudienceFilter,
-  onAnnotationAudienceFilterChange,
-  annotationModeFilter,
-  onAnnotationModeFilterChange,
-  annotationStatusFilter,
-  onAnnotationStatusFilterChange,
-  onPanelChange,
-  onSourceOpen,
-  panel,
-  projectContext,
-  reasoningLevel,
-  selectedAnnotationId,
-  annotationSelection,
-  pendingTurnContext,
-  onTurnContextClear,
-  setReasoningLevel,
-  title,
-}: {
+export type ReaderContextPanelProps = {
   annotations: ReaderAnnotationSummary[];
   annotationsError: boolean;
   className?: string;
@@ -1134,18 +1098,64 @@ export function ReaderContextPanel({
   onAnnotationModeFilterChange: (mode: ReaderAnnotationMode) => void;
   annotationStatusFilter: ReaderAnnotationStatus;
   onAnnotationStatusFilterChange: (status: ReaderAnnotationStatus) => void;
-  onPanelChange: (panel: "ask" | "annotations" | "details") => void;
+  onPanelChange: (panel: ReaderContextPanel) => void;
   onSourceOpen: (source: ReaderDocumentSource) => void;
   panel: ReaderContextPanel;
   projectContext?: { id: string; title: string };
   reasoningLevel: ReasoningLevel;
   selectedAnnotationId?: string;
   annotationSelection?: ReaderSelection;
+  annotationInitialComment?: string;
   pendingTurnContext?: ReaderSelection;
   onTurnContextClear: () => void;
   setReasoningLevel: (level: ReasoningLevel) => void;
   title: string;
-}) {
+  translationPanel: React.ReactNode;
+};
+
+export function ReaderContextPanel({
+  annotations,
+  annotationsError,
+  className,
+  conversationId,
+  conversationSession,
+  conversations,
+  conversationsLoading,
+  document,
+  onActionError,
+  onAnnotationDelete,
+  onAnnotationPreviewChange,
+  onAnnotationSelect,
+  onClose,
+  onCommentCreate,
+  onCommentDelete,
+  onCommentUpdate,
+  onConversationChange,
+  onConversationNew,
+  onConversationPin,
+  onHighlightCreate,
+  onHighlightUpdate,
+  onAnnotationStatusChange,
+  annotationAudienceFilter,
+  onAnnotationAudienceFilterChange,
+  annotationModeFilter,
+  onAnnotationModeFilterChange,
+  annotationStatusFilter,
+  onAnnotationStatusFilterChange,
+  onPanelChange,
+  onSourceOpen,
+  panel,
+  projectContext,
+  reasoningLevel,
+  selectedAnnotationId,
+  annotationSelection,
+  annotationInitialComment,
+  pendingTurnContext,
+  onTurnContextClear,
+  setReasoningLevel,
+  title,
+  translationPanel,
+}: ReaderContextPanelProps) {
   const t = useTranslations("Reader");
   const activePanel = panel;
 
@@ -1158,22 +1168,24 @@ export function ReaderContextPanel({
       )}
     >
       <div className="border-line flex h-14 shrink-0 items-center gap-1 border-b px-3">
-        {(["ask", "annotations", "details"] as const).map((item) => (
-          <Button
-            className={cn(
-              "h-9 min-h-9 px-2",
-              activePanel === item && "bg-hover",
-            )}
-            key={item}
-            onClick={() => onPanelChange(item)}
-            size="sm"
-            variant="ghost"
-            aria-current={activePanel === item ? "page" : undefined}
-            data-active={activePanel === item || undefined}
-          >
-            {t(`panels.${item}`)}
-          </Button>
-        ))}
+        {(["ask", "annotations", "translation", "details"] as const).map(
+          (item) => (
+            <Button
+              className={cn(
+                "h-9 min-h-9 px-2",
+                activePanel === item && "bg-hover",
+              )}
+              key={item}
+              onClick={() => onPanelChange(item)}
+              size="sm"
+              variant="ghost"
+              aria-current={activePanel === item ? "page" : undefined}
+              data-active={activePanel === item || undefined}
+            >
+              {t(`panels.${item}`)}
+            </Button>
+          ),
+        )}
         <IconButton
           className="ml-auto"
           label={t("closePanel")}
@@ -1184,7 +1196,9 @@ export function ReaderContextPanel({
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {activePanel === "details" ? (
+        {activePanel === "translation" ? (
+          translationPanel
+        ) : activePanel === "details" ? (
           <div className="h-full overflow-y-auto" tabIndex={0}>
             <ReaderDetailsPanel document={document} title={title} />
           </div>
@@ -1195,7 +1209,7 @@ export function ReaderContextPanel({
             tabIndex={0}
           >
             <ReaderAnnotationPanel
-              key={projectContext?.id ?? "personal"}
+              key={`${projectContext?.id ?? "personal"}:${annotationSelection?.page_number ?? "none"}:${annotationSelection?.selected_text ?? ""}:${annotationInitialComment ?? ""}`}
               audienceFilter={annotationAudienceFilter}
               modeFilter={annotationModeFilter}
               annotations={annotations}
@@ -1216,6 +1230,7 @@ export function ReaderContextPanel({
               projectContext={projectContext}
               selectedAnnotationId={selectedAnnotationId}
               annotationSelection={annotationSelection}
+              annotationInitialComment={annotationInitialComment}
               statusFilter={annotationStatusFilter}
             />
           </div>

@@ -49,7 +49,7 @@ describe("reader URL state", () => {
     expect(readReaderPanel("annotations")).toBe("annotations");
     expect(readReaderPanel("search")).toBeUndefined();
     expect(readReaderPanel("outline")).toBeUndefined();
-    expect(readReaderPanel("translation")).toBeUndefined();
+    expect(readReaderPanel("translation")).toBe("translation");
     expect(readReaderPanel(null)).toBeUndefined();
   });
 

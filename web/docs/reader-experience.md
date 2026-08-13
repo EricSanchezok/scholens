@@ -10,6 +10,9 @@ The active desktop acceptance source is Figma
 [`50 — Reader`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=390-2).
 The canonical conversation boundary is
 [`Reader conversation contract v2`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=910-2).
+Selection translation follows
+[`51 — Translation`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=720-965)
+for hierarchy and states while code owns responsive containment and accessibility.
 
 ## Product boundary
 
@@ -21,12 +24,13 @@ The canonical conversation boundary is
   message rendering, ordered stream reduction, Worklog, final-answer actions,
   suggestions, Sources, and the Composer surfaces used by both Home and Reader.
   Reader contributes paper, page, selection, and annotation context through
-  explicit adapter props.
+  explicit adapter props. Reader translation is a separate content tool and
+  never enters the shared conversation reducer.
 - Opening a paper does not create a conversation. `New chat` enters a local
   blank state and the paper-scoped conversation is created by the first send.
-- Translation remains outside this release. Reader Project collaboration owns
-  annotation audience and contextual Ask behavior but does not introduce a
-  Project page or shared Conversation resource.
+- Selection translation is available in personal and Project reading contexts.
+  It re-authorizes the paper independently of annotation audience and never
+  creates a shared Conversation resource.
 
 ## Layout contract
 
@@ -38,7 +42,7 @@ owned, top-aligned work regions:
    paper identity, page controls, view controls, and document actions above the
    thumbnail rail and PDF canvas;
 2. the contextual region, whose equally tall toolbar contains Ask,
-   Annotations, Details, and Collapse above the active panel.
+   Annotations, Translate, Details, and Collapse above the active panel.
 
 Reader must not add a full-width paper title row above these regions or a
 separate Ask button outside the contextual panel. The panel width is responsive
@@ -68,8 +72,8 @@ At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 - the top bar contains Back to Library, a truncated paper title, and document
   tools;
 - the PDF remains visible as the primary surface;
-- Ask, Annotations, and Details open as full-height bottom panels with safe-area
-  padding;
+- Ask, Annotations, Translate, and Details open as full-height bottom panels
+  with safe-area padding;
 - Search remains in the compact document toolbar, while Outline uses a
   full-height document-navigation panel because the thumbnail rail is absent;
 - dismissing a panel preserves page, zoom, search result, draft, selection, and
@@ -85,7 +89,7 @@ The breakpoint changes the information architecture, not only widths.
 The URL is the shareable reading state:
 
 - `page`: one-based current PDF page;
-- `panel`: `ask`, `annotations`, `details`, or omitted;
+- `panel`: `ask`, `annotations`, `translation`, `details`, or omitted;
 - `conversation`: the active paper-scoped conversation ID, or omitted for the
   local blank state.
 - `project`: an accessible Project that contains the Document, or omitted for
@@ -149,11 +153,12 @@ selection exists. It chooses the side with usable space, remains above the PDF
 page stack when it crosses a page gap, and stays horizontally clamped to the
 rendered page. Its actions and color palette always sit on an isolated, fully
 opaque elevated surface so document text cannot show through the controls. It
-contains only the semantic icons for Ask, Highlight, Add annotation, and Copy;
+contains only the semantic icons for Ask, Translate, Highlight, Add annotation,
+and Copy;
 Ask uses `AskIcon` (`ChatBubbleQuestion`) while Add annotation uses
 `AddAnnotationIcon` (`Notes`), so their meanings cannot visually collide.
 Accessible names live in tooltips and `aria-label`s rather than visible action
-text. All four actions use the shared control-state and feedback rules.
+text. All five actions use the shared control-state and feedback rules.
 
 While the pointer is down, the PDF text layer uses the dedicated translucent
 blue document-selection token. The original Canvas text must remain legible
@@ -173,6 +178,13 @@ moves to another page.
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends
   automatically.
+- Translate opens the Translate panel and streams a translation for the exact
+  normalized selection. When automatic selection translation is enabled, an
+  unchanged selection waits 300 ms before starting. A replacement selection,
+  page change, Escape, or component unmount aborts the stale request. Desktop
+  shows a compact result beside the toolbar; mobile opens the full-height panel
+  instead of covering the selected source. Completed translations may be
+  copied or inserted as the editable initial comment of a new annotation.
 - Highlight first discloses the adjacent color palette, creates a thread with
   no comment, then clears the browser selection. In personal Reader its audience
   is personal. In Project Reader its audience defaults to personal but may be
@@ -333,8 +345,9 @@ open that paper's Reader route. External sources open a new browser tab.
 Details presents only canonical document data: title, authors, abstract, DOI,
 journal or venue, publication date, file information, parsing status, and
 quality. Missing values use explicit unknown or unavailable copy rather than
-invented metadata. Project membership, collaborative sharing, and Translation
-remain unavailable until their owning features exist.
+invented metadata. Project membership and collaborative sharing remain
+unavailable until their owning features exist. Translation preferences and
+results belong to the Translate panel rather than document metadata.
 
 ## Acceptance matrix
 
@@ -346,7 +359,8 @@ Playwright coverage for the following matrix:
 | Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                         |
 | Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                        |
 | Search and outline | closed, query with no result, one result, multiple results, no outline, nested outline                    |
-| Selection          | toolbar, highlight palette, committed Ask context, note editor, copied, cancelled                         |
+| Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled    |
+| Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                      |
 | Annotations        | empty, populated, selected, editing, deleting, permission denied                                          |
 | Ask                | local new chat, streaming, response ready, suggestions delayed, historical, retried variants, source open |
 | Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                            |
@@ -369,6 +383,9 @@ the named `50 — Reader` states rather than inventing links:
 | Project context selector      | `ProjectContext`                            |
 | Light/Dark annotation palette | `AnnotationThread`, `AnnotationPaletteDark` |
 | Narrow annotation composer    | `NarrowSelection`                           |
+| Selection translation states  | `Ready`, `Streaming`, `CompletedAndCached`  |
+| Mobile translation            | `NarrowMobile`                              |
+| Dark translation              | `CompletedDark`                             |
 
 The Project discussion stories deliberately show flat replies from two
 authors, immutable audience badges, root-only color, and resolve/reopen
@@ -391,8 +408,10 @@ Reader remains a vertical feature rather than a second application shell:
 - `reader-toolbar.tsx` owns the compact, non-modal PDF search experience;
 - `reader-document-navigation.tsx` owns desktop Pages/Outline navigation and
   the shared outline tree used by the mobile document-navigation panel;
-- `reader-context-panel.tsx` owns Ask, Annotations, Details, and the
-  paper-conversation switcher;
+- `reader-context-panel.tsx` owns contextual navigation and composes Ask,
+  Annotations, Translate, Details, and the paper-conversation switcher;
+- `translation/` owns translation preferences, the standard SSE adapter, the
+  selection lifecycle controller, and translation panel states;
 - `features/conversation` owns the shared turn lifecycle, streaming response,
   worklog, sources, suggestions, answer actions, and composer used by both Home
   and Reader.

@@ -50,6 +50,10 @@ const meta = {
       highlight: "Highlight selection",
       personal: "Personal",
       project: "Project",
+      translate: "Translate selection",
+      translating: "Translating",
+      translationFailed: "Translation failed",
+      viewTranslation: "View translation",
       colors: {
         yellow: "Yellow highlight",
         red: "Red highlight",
@@ -65,11 +69,13 @@ const meta = {
     onComment: fn(),
     onCopySettled: fn(),
     onHighlight: fn(),
+    onOpenTranslation: fn(),
+    onTranslate: fn(),
     selection,
   },
   decorators: [
     (Story) => (
-      <div className="bg-canvas relative h-[36rem] w-[28rem] max-w-full border">
+      <div className="bg-canvas relative mx-auto h-[36rem] w-[28rem] max-w-[100vw] border">
         <span
           aria-hidden="true"
           className="bg-elevated pointer-events-none absolute size-px"
@@ -82,7 +88,7 @@ const meta = {
       </div>
     ),
   ],
-  parameters: { layout: "centered" },
+  parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof ReaderSelectionToolbar>;
 
 export default meta;
@@ -91,6 +97,24 @@ type Story = StoryObj<typeof meta>;
 export const SelectionToolbar: Story = {
   play: async ({ canvasElement }) => {
     await expectOpaqueFloatingSurface(canvasElement, "actions");
+  },
+};
+
+export const StreamingTranslation: Story = {
+  args: {
+    translationPreview: {
+      status: "streaming",
+      text: "检索质量取决于排序",
+    },
+  },
+};
+
+export const CompletedTranslation: Story = {
+  args: {
+    translationPreview: {
+      status: "completed",
+      text: "检索质量取决于排序和上下文构建。",
+    },
   },
 };
 

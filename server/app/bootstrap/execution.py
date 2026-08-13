@@ -306,19 +306,24 @@ def create_translation_workflow(
     settings: AppSettings,
     diagnostic_recorder: DiagnosticSnapshotRecorder,
 ) -> TranslationWorkflow:
-    from app.modules.translations.infrastructure.cache import RedisTranslationCache
+    from app.database.database import SessionLocal
     from app.modules.translations.infrastructure.capacity import (
         RedisTranslationCapacity,
     )
     from app.modules.translations.infrastructure.provider import (
         LLMTranslationStreamProvider,
     )
+    from app.modules.translations.infrastructure.result_store import (
+        SqlTranslationResultStore,
+    )
+    from app.modules.translations.infrastructure.singleflight import (
+        RedisTranslationSingleFlight,
+    )
 
     return TranslationWorkflow(
         executor=executor,
-        cache=RedisTranslationCache(
-            settings.translation_cache_redis_url or settings.ai_limit_redis_url
-        ),
+        result_store=SqlTranslationResultStore(SessionLocal),
+        singleflight=RedisTranslationSingleFlight(settings.ai_limit_redis_url),
         provider=LLMTranslationStreamProvider(),
         capacity=RedisTranslationCapacity(
             redis_url=settings.ai_limit_redis_url,

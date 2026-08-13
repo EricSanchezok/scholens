@@ -13,6 +13,7 @@ from app.shared.application import Actor
 
 @dataclass(frozen=True, slots=True)
 class TranslationPreferencesRecord:
+    source_language: str
     target_language: str
     custom_instructions: str | None
     auto_translate_selection: bool
@@ -38,6 +39,7 @@ class PreparedTranslation:
     document_id: UUID
     paper_title: str | None
     source_text: str
+    source_language: str
     target_language: str
     custom_instructions: str | None
 
@@ -46,6 +48,7 @@ class PreparedTranslation:
 class TranslationStreamSpec:
     paper_title: str | None
     source_text: str
+    source_language: str
     target_language: str
     custom_instructions: str | None
 
@@ -71,16 +74,36 @@ class TranslationStreamFailure(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class TranslationCacheValue:
+class TranslationResultValue:
     translated_text: str
     target_language: str
 
 
-class TranslationCache(Protocol):
-    async def get(self, key: str) -> TranslationCacheValue | None: ...
+class TranslationResultStore(Protocol):
+    async def get(self, key: str) -> TranslationResultValue | None: ...
 
-    async def set(self, key: str, value: TranslationCacheValue) -> None: ...
+    async def set(
+        self,
+        *,
+        identity: TranslationResultIdentity,
+        value: TranslationResultValue,
+    ) -> None: ...
 
+
+@dataclass(frozen=True, slots=True)
+class TranslationResultIdentity:
+    key: str
+    context_kind: str
+    document_id: UUID
+    block_id: str | None
+    target_language: str
+    source_hash: str
+    instructions_hash: str
+    prompt_revision: str
+    profile_revision: str
+
+
+class TranslationSingleFlight(Protocol):
     async def acquire(self, key: str) -> str | None: ...
 
     async def release(self, key: str, lease_token: str) -> None: ...

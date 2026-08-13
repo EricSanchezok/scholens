@@ -18,7 +18,8 @@ from app.llm.token_credits import current_usage_context
 from app.main import app
 from app.modules.translations.application import (
     PreparedTranslation,
-    TranslationCacheValue,
+    TranslationResultIdentity,
+    TranslationResultValue,
     TranslationCapacityLease,
     TranslationPreferencesRecord,
     TranslationPreferencesUpdateRequest,
@@ -30,14 +31,17 @@ from app.modules.translations.application import (
     Translations,
 )
 from app.modules.translations.domain import (
-    TranslationCacheIdentity,
+    TranslationFingerprint,
     normalize_language_tag,
     normalize_source_text,
-    translation_cache_key,
+    translation_identity_key,
     translation_instructions_hash,
     translation_paper_title_hash,
 )
-from app.modules.translations.infrastructure.cache import RedisTranslationCache
+from app.modules.translations.infrastructure.singleflight import (
+    RedisTranslationSingleFlight,
+)
+from app.modules.translations.infrastructure.models import TranslationResult
 from app.shared.application import (
     Actor,
     CredentialKind,
@@ -117,7 +121,8 @@ def test_translation_preferences_default_and_update_are_normalized() -> None:
     )
 
     defaults = translations.preferences(actor=_actor(locale="de-DE"))
-    assert defaults.target_language == "de-DE"
+    assert defaults.source_language == "auto"
+    assert defaults.target_language == "zh-CN"
     assert defaults.custom_instructions is None
     assert defaults.auto_translate_selection is True
 
@@ -125,11 +130,13 @@ def test_translation_preferences_default_and_update_are_normalized() -> None:
         actor=_actor(),
         operation=_operation(),
         request=TranslationPreferencesUpdateRequest(
+            source_language="auto",
             target_language="EN-us",
             custom_instructions="  Preserve English terms.  ",
             auto_translate_selection=False,
         ),
     )
+    assert updated.source_language == "auto"
     assert updated.target_language == "en-US"
     assert updated.custom_instructions == "Preserve English terms."
     assert updated.auto_translate_selection is False
@@ -148,6 +155,7 @@ def test_translation_preferences_reject_invalid_language() -> None:
             actor=_actor(),
             operation=_operation(),
             request=TranslationPreferencesUpdateRequest(
+                source_language="auto",
                 target_language="not_a_language",
                 custom_instructions=None,
                 auto_translate_selection=True,
@@ -176,6 +184,7 @@ def test_translation_business_limits_use_stable_application_errors() -> None:
             actor=_actor(),
             operation=_operation(),
             request=TranslationPreferencesUpdateRequest(
+                source_language="auto",
                 target_language="zh-CN",
                 custom_instructions="x" * 2_001,
                 auto_translate_selection=True,
@@ -190,43 +199,58 @@ def test_translation_normalization_and_cache_identity_are_deterministic() -> Non
         "  Retrieval-\r\naugmented   generation\n\n Works. "
     ) == ("Retrieval-augmented generation\n\nWorks.")
     document_id = uuid4()
-    identity = TranslationCacheIdentity(
+    identity = TranslationFingerprint(
         schema_revision="v1",
         prompt_revision="p1",
         model_revision="m1",
         document_id=document_id,
         paper_title_hash=translation_paper_title_hash("Paper title"),
         source_text="source",
+        source_language="auto",
         target_language="zh-CN",
         custom_instructions_hash=translation_instructions_hash(None),
     )
-    assert translation_cache_key(identity) == translation_cache_key(identity)
-    assert "source" not in translation_cache_key(identity)
-    changed_title = TranslationCacheIdentity(
+    assert translation_identity_key(identity) == translation_identity_key(identity)
+    assert "source" not in translation_identity_key(identity)
+    changed_title = TranslationFingerprint(
         schema_revision=identity.schema_revision,
         prompt_revision=identity.prompt_revision,
         model_revision=identity.model_revision,
         document_id=identity.document_id,
         paper_title_hash=translation_paper_title_hash("Updated title"),
         source_text=identity.source_text,
+        source_language=identity.source_language,
         target_language=identity.target_language,
         custom_instructions_hash=identity.custom_instructions_hash,
     )
-    assert translation_cache_key(identity) != translation_cache_key(changed_title)
+    assert translation_identity_key(identity) != translation_identity_key(changed_title)
+
+
+def test_persistent_translation_results_never_store_source_text() -> None:
+    column_names = {column.name for column in TranslationResult.__table__.columns}
+
+    assert "source_hash" in column_names
+    assert "translated_text" in column_names
+    assert "source_text" not in column_names
 
 
 class _Cache:
-    def __init__(self, value: TranslationCacheValue | None = None) -> None:
+    def __init__(self, value: TranslationResultValue | None = None) -> None:
         self.value = value
-        self.set_values: list[TranslationCacheValue] = []
+        self.set_values: list[TranslationResultValue] = []
         self.released: list[tuple[str, str]] = []
         self.get_calls = 0
 
-    async def get(self, key: str) -> TranslationCacheValue | None:
+    async def get(self, key: str) -> TranslationResultValue | None:
         self.get_calls += 1
         return self.value
 
-    async def set(self, key: str, value: TranslationCacheValue) -> None:
+    async def set(
+        self,
+        *,
+        identity: TranslationResultIdentity,
+        value: TranslationResultValue,
+    ) -> None:
         self.value = value
         self.set_values.append(value)
 
@@ -306,6 +330,7 @@ class _Translations:
             document_id=document_id,
             paper_title=paper_title,
             source_text=request.text,
+            source_language="auto",
             target_language="zh-CN",
             custom_instructions=None,
         )
@@ -365,7 +390,7 @@ async def _events(
 async def test_cached_translation_skips_provider_quota_and_concurrency() -> None:
     capabilities = _Capabilities()
     cache = _Cache(
-        TranslationCacheValue(
+        TranslationResultValue(
             translated_text="缓存译文",
             target_language="zh-CN",
         )
@@ -374,7 +399,8 @@ async def test_cached_translation_skips_provider_quota_and_concurrency() -> None
     capacity = _Capacity()
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(capabilities)),
-        cache=cache,
+        result_store=cache,
+        singleflight=cache,
         provider=provider,
         capacity=capacity,
     )
@@ -392,20 +418,22 @@ async def test_cached_translation_skips_provider_quota_and_concurrency() -> None
     assert events[0].data["cache_hit"] is True
     assert provider.calls == []
     assert capabilities.translations.token_checks == 0
+    assert capacity.rate_checks == 0
     assert capacity.acquisitions == 0
 
 
 @pytest.mark.asyncio
 async def test_paper_access_is_checked_before_cache_lookup() -> None:
     cache = _Cache(
-        TranslationCacheValue(
+        TranslationResultValue(
             translated_text="must not leak",
             target_language="zh-CN",
         )
     )
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(_DeniedCapabilities())),
-        cache=cache,
+        result_store=cache,
+        singleflight=cache,
         provider=_Provider(),
         capacity=_Capacity(),
     )
@@ -433,7 +461,8 @@ async def test_streaming_translation_uses_shared_usage_context_and_caches_comple
     capacity = _Capacity()
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(capabilities)),
-        cache=cache,
+        result_store=cache,
+        singleflight=cache,
         provider=provider,
         capacity=capacity,
     )
@@ -455,6 +484,7 @@ async def test_streaming_translation_uses_shared_usage_context_and_caches_comple
     ]
     assert provider.usage_feature == "translation"
     assert capabilities.translations.token_checks == 1
+    assert capacity.rate_checks == 1
     assert cache.set_values[0].translated_text == "译文"
     assert capacity.releases == 1
     assert len(cache.released) == 1
@@ -466,7 +496,8 @@ async def test_authorized_users_share_the_same_completed_translation_cache() -> 
     provider = _Provider()
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(_Capabilities())),
-        cache=cache,
+        result_store=cache,
+        singleflight=cache,
         provider=provider,
         capacity=_Capacity(),
     )
@@ -502,7 +533,8 @@ async def test_cancelled_translation_releases_capacity_without_caching_partial_t
     capacity = _Capacity()
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(capabilities)),
-        cache=cache,
+        result_store=cache,
+        singleflight=cache,
         provider=_Provider(chunks=("partial", "unused")),
         capacity=capacity,
     )
@@ -547,7 +579,8 @@ async def test_stream_failures_preserve_semantic_error_codes(
 ) -> None:
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(_Capabilities())),
-        cache=_Cache(),
+        result_store=_Cache(),
+        singleflight=_Cache(),
         provider=_FailingProvider(kind),
         capacity=_Capacity(),
     )
@@ -569,7 +602,8 @@ async def test_stream_failures_preserve_semantic_error_codes(
 async def test_empty_translation_is_reported_as_invalid_result() -> None:
     workflow = TranslationWorkflow(
         executor=cast(Any, _Executor(_Capabilities())),
-        cache=_Cache(),
+        result_store=_Cache(),
+        singleflight=_Cache(),
         provider=_Provider(chunks=()),
         capacity=_Capacity(),
     )
@@ -640,23 +674,19 @@ class _RedisStub:
     ) -> None:
         self.value = value
         self.error = error
-        self.deleted: list[str] = []
 
-    async def get(self, key: str) -> str | None:
+    async def set(self, *args: object, **kwargs: object) -> bool:
         if self.error is not None:
             raise self.error
-        return self.value
-
-    async def delete(self, key: str) -> None:
-        self.deleted.append(key)
+        return True
 
 
 @pytest.mark.asyncio
-async def test_translation_cache_is_bounded_and_fails_open() -> None:
+async def test_translation_singleflight_is_bounded_and_fails_open() -> None:
     with patch(
-        "app.modules.translations.infrastructure.cache.Redis.from_url"
+        "app.modules.translations.infrastructure.singleflight.Redis.from_url"
     ) as from_url:
-        cache = RedisTranslationCache("redis://cache")
+        singleflight = RedisTranslationSingleFlight("redis://cache")
 
     from_url.assert_called_once_with(
         "redis://cache",
@@ -666,14 +696,9 @@ async def test_translation_cache_is_bounded_and_fails_open() -> None:
         retry_on_timeout=False,
     )
 
-    corrupt = _RedisStub(value='{"translated_text": 12}')
-    cache._client = cast(Any, corrupt)
-    assert await cache.get("cache-key") is None
-    assert corrupt.deleted == ["cache-key"]
-
     unavailable = _RedisStub(error=RedisConnectionError("offline"))
-    cache._client = cast(Any, unavailable)
-    assert await cache.get("cache-key") is None
+    singleflight._client = cast(Any, unavailable)
+    assert await singleflight.acquire("cache-key") is not None
 
 
 @pytest.mark.asyncio
@@ -687,9 +712,9 @@ async def test_translation_sse_uses_standard_event_framing() -> None:
 
 
 def test_translation_openapi_declares_event_stream_response() -> None:
-    response = app.openapi()["paths"]["/api/v1/papers/{document_id}/translations"][
-        "post"
-    ]["responses"]["200"]
+    response = app.openapi()["paths"][
+        "/api/v1/papers/{document_id}/selection-translations"
+    ]["post"]["responses"]["200"]
 
     assert set(response["content"]) == {"text/event-stream"}
     assert response["content"]["text/event-stream"]["schema"] == {"type": "string"}

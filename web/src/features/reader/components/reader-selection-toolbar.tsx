@@ -7,6 +7,7 @@ import {
   CopyIcon,
   AddAnnotationIcon,
   ErrorIcon,
+  TranslationIcon,
 } from "@/design-system/icons/semantic-icons";
 import * as React from "react";
 
@@ -39,7 +40,16 @@ export type ReaderSelectionLabels = {
   highlight: string;
   personal: string;
   project: string;
+  translate: string;
+  translating: string;
+  translationFailed: string;
+  viewTranslation: string;
   colors: Record<ReaderHighlightColor, string>;
+};
+
+export type ReaderSelectionTranslationPreview = {
+  status: "streaming" | "completed" | "error";
+  text: string;
 };
 
 const floatingSurfaceClass =
@@ -80,8 +90,11 @@ export function ReaderSelectionToolbar({
   onComment,
   onCopySettled,
   onHighlight,
+  onOpenTranslation,
+  onTranslate,
   projectContext,
   selection,
+  translationPreview,
 }: {
   labels: ReaderSelectionLabels;
   onAsk: () => void;
@@ -91,8 +104,11 @@ export function ReaderSelectionToolbar({
     color: ReaderHighlightColor,
     audience: ReaderAnnotationAudience,
   ) => void;
+  onOpenTranslation: () => void;
+  onTranslate: () => void;
   projectContext?: boolean;
   selection: ReaderSelection;
+  translationPreview?: ReaderSelectionTranslationPreview;
 }) {
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [audience, setAudience] =
@@ -157,6 +173,9 @@ export function ReaderSelectionToolbar({
           <ToolbarAction label={labels.ask} onClick={onAsk}>
             <Icon glyph={AskIcon} size={20} />
           </ToolbarAction>
+          <ToolbarAction label={labels.translate} onClick={onTranslate}>
+            <Icon glyph={TranslationIcon} size={20} />
+          </ToolbarAction>
           <ToolbarAction
             label={labels.highlight}
             onClick={() => setPaletteOpen((open) => !open)}
@@ -177,6 +196,32 @@ export function ReaderSelectionToolbar({
             {copyFeedback.feedbackVisible ? copyFeedback.label : ""}
           </span>
         </div>
+        {translationPreview ? (
+          <button
+            aria-label={labels.viewTranslation}
+            className={cn(
+              "border-line bg-elevated shadow-raised hidden w-80 max-w-[min(20rem,80vw)] rounded-[var(--radius-lg)] border p-3 text-left lg:block",
+              keyboardFocusRing,
+            )}
+            data-reader-selection-translation-preview
+            onClick={onOpenTranslation}
+            type="button"
+          >
+            <span className="text-muted block text-xs font-medium">
+              {translationPreview.status === "streaming"
+                ? labels.translating
+                : translationPreview.status === "error"
+                  ? labels.translationFailed
+                  : labels.viewTranslation}
+            </span>
+            <span className="mt-1 block max-h-24 overflow-hidden text-sm leading-6">
+              {translationPreview.text ||
+                (translationPreview.status === "error"
+                  ? labels.translationFailed
+                  : labels.translating)}
+            </span>
+          </button>
+        ) : null}
         {paletteOpen ? (
           <div
             aria-label={labels.highlight}

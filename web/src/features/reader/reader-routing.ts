@@ -12,7 +12,10 @@ export function parsePositiveInteger(value: string | null, fallback = 1) {
 export function readReaderPanel(
   value: string | null,
 ): ReaderContextPanel | undefined {
-  return value === "ask" || value === "annotations" || value === "details"
+  return value === "ask" ||
+    value === "annotations" ||
+    value === "translation" ||
+    value === "details"
     ? value
     : undefined;
 }

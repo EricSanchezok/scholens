@@ -1,5 +1,11 @@
 import type { components } from "@/lib/api/generated/schema";
-import { apiClient, authenticatedFetch, toApiError } from "@/lib/api";
+import {
+  apiClient,
+  authenticatedFetch,
+  consumeServerSentEvents,
+  parseServerSentEventBlock,
+  toApiError,
+} from "@/lib/api";
 import { clientEnvironment } from "@/lib/env/client";
 
 export type ConversationStreamEvent =
@@ -50,12 +56,12 @@ export async function updateConversationContext(
 export function parseConversationEventBlock(
   block: string,
 ): ConversationStreamEvent | undefined {
-  const data = block
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trimStart())
-    .join("\n");
-  if (!data) return undefined;
+  const event = parseServerSentEventBlock(block);
+  if (!event) return undefined;
+  return parseConversationEventData(event.data);
+}
+
+function parseConversationEventData(data: string): ConversationStreamEvent {
   const value: unknown = JSON.parse(data);
   if (
     !value ||
@@ -94,35 +100,21 @@ async function streamConversation({
     },
   );
   if (!response.ok) throw await toApiError(response);
-  if (!response.body) throw new Error("Conversation stream response was empty");
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let completed = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const blocks = buffer.split(/\r?\n\r?\n/);
-    buffer = blocks.pop() ?? "";
-    for (const block of blocks) {
-      const event = parseConversationEventBlock(block);
-      if (!event || completed) continue;
+  await consumeServerSentEvents({
+    response,
+    onEvent: (message) => {
+      if (completed) return;
+      const event = parseConversationEventData(message.data);
       onEvent(event);
-      if (event.type === "complete" || event.type === "error") completed = true;
-    }
-    if (done) break;
+      if (event.type === "complete" || event.type === "error") {
+        completed = true;
+      }
+    },
+  });
+  if (!completed) {
+    throw new Error("Conversation stream ended unexpectedly");
   }
-
-  const trailing = parseConversationEventBlock(buffer);
-  if (trailing && !completed) {
-    onEvent(trailing);
-    if (trailing.type === "complete" || trailing.type === "error") {
-      completed = true;
-    }
-  }
-  if (!completed) throw new Error("Conversation stream ended unexpectedly");
 }
 
 export function streamConversationTurn({

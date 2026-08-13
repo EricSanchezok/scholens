@@ -76,7 +76,10 @@ from app.modules.research.infrastructure.models import (
 )
 from app.modules.billing.infrastructure.models import StripeWebhookEvent, Subscription
 from app.database.models.tool_invocation import ToolInvocation
-from app.modules.translations.infrastructure.models import TranslationPreference
+from app.modules.translations.infrastructure.models import (
+    TranslationPreference,
+    TranslationResult,
+)
 
 __all__ = [
     "AuthUser",
@@ -133,6 +136,7 @@ __all__ = [
     "TokenWeeklyUsage",
     "ToolInvocation",
     "TranslationPreference",
+    "TranslationResult",
     "UserProfile",
     "ZoteroConnection",
     "ZoteroImportSource",

@@ -446,6 +446,7 @@
     "panels": {
       "ask": "Ask",
       "annotations": "Annotations",
+      "translation": "Translate",
       "details": "Details"
     },
     "search": {
@@ -485,6 +486,7 @@
     },
     "selection": {
       "ask": "Ask about selection",
+      "translate": "Translate selection",
       "highlight": "Highlight selection",
       "comment": "Add annotation",
       "copy": "Copy selection",
@@ -492,6 +494,65 @@
       "copied": "Copied",
       "copyFailed": "Copy failed",
       "context": "Selection from page {page}"
+    },
+    "translation": {
+      "sourceLanguage": "From",
+      "targetLanguage": "To",
+      "selectedText": "Selected text",
+      "languages": {
+        "auto": "Detect language",
+        "en": "English",
+        "zh-CN": "Simplified Chinese",
+        "zh-TW": "Traditional Chinese",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "de": "German",
+        "fr": "French",
+        "es": "Spanish"
+      },
+      "autoSelection": {
+        "title": "Translate selections automatically",
+        "description": "Start after the selection stays unchanged for a moment."
+      },
+      "empty": {
+        "title": "Select text to translate",
+        "description": "Choose a passage in the PDF. The translation appears here without changing the document."
+      },
+      "ready": {
+        "title": "Ready to translate",
+        "description": "Use Translate below, or turn on automatic selection translation."
+      },
+      "status": {
+        "translating": "Translating",
+        "completed": "Translation",
+        "cached": "Saved result"
+      },
+      "actions": {
+        "translate": "Translate selection",
+        "copy": "Copy translation",
+        "copying": "Copying",
+        "copied": "Copied",
+        "copyFailed": "Copy failed",
+        "annotate": "Add as annotation",
+        "retry": "Try again"
+      },
+      "errors": {
+        "title": "Translation was not completed",
+        "quota": "Your Token Credits are exhausted. Cached translations remain available.",
+        "busy": "Translation is busy right now. Wait a moment and try again.",
+        "inProgress": "The same passage is already being translated. Try again shortly.",
+        "provider": "The translation service is temporarily unavailable.",
+        "access": "This paper is no longer available in your library.",
+        "generic": "Something interrupted the translation. Try again."
+      },
+      "preferencesError": "Translation preferences could not be saved. Your previous preferences are still active.",
+      "instructions": {
+        "title": "Translation preferences",
+        "label": "Custom instructions",
+        "placeholder": "For example: keep technical terms in English.",
+        "description": "Applied to new translations. Changing this creates a new cached result.",
+        "save": "Save instructions"
+      }
     },
     "actions": {
       "failedTitle": "Reader action failed",

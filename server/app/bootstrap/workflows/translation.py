@@ -11,11 +11,13 @@ from app.bootstrap.capabilities import ApplicationCapabilities
 from app.llm.token_credits import llm_usage_context
 from app.modules.translations.application import (
     PreparedTranslation,
-    TranslationCache,
-    TranslationCacheValue,
     TranslationCapacity,
     TranslationCapacityLease,
     TranslationRequest,
+    TranslationResultIdentity,
+    TranslationResultStore,
+    TranslationResultValue,
+    TranslationSingleFlight,
     TranslationStreamEvent,
     TranslationStreamFailure,
     TranslationStreamFailureKind,
@@ -24,10 +26,11 @@ from app.modules.translations.application import (
 )
 from app.modules.translations.domain import (
     MAX_TRANSLATED_TEXT_CHARS,
-    TranslationCacheIdentity,
-    translation_cache_key,
+    TranslationFingerprint,
+    translation_identity_key,
     translation_instructions_hash,
     translation_paper_title_hash,
+    translation_source_hash,
     validate_translated_text,
 )
 from app.shared.application import (
@@ -48,9 +51,9 @@ from scholens_observability import (
 
 logger = logging.getLogger(__name__)
 
-TRANSLATION_CACHE_SCHEMA_REVISION = "translation-cache-v1"
-SINGLE_FLIGHT_WAIT_ATTEMPTS = 20
-SINGLE_FLIGHT_WAIT_SECONDS = 0.1
+TRANSLATION_RESULT_SCHEMA_REVISION = "translation-result-v1"
+SINGLE_FLIGHT_WAIT_ATTEMPTS = 120
+SINGLE_FLIGHT_WAIT_SECONDS = 0.25
 _STREAM_FAILURE_DETAILS = {
     TranslationStreamFailureKind.PROVIDER_UNAVAILABLE: (
         "translation_provider_unavailable",
@@ -72,13 +75,15 @@ class TranslationWorkflow:
         self,
         *,
         executor: ApplicationExecutor[ApplicationCapabilities],
-        cache: TranslationCache,
+        result_store: TranslationResultStore,
+        singleflight: TranslationSingleFlight,
         provider: TranslationStreamProvider,
         capacity: TranslationCapacity,
         diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
     ) -> None:
         self._executor = executor
-        self._cache = cache
+        self._result_store = result_store
+        self._singleflight = singleflight
         self._provider = provider
         self._capacity = capacity
         self._diagnostic_recorder = (
@@ -102,37 +107,54 @@ class TranslationWorkflow:
                 request=request,
             )
         )
-        await self._capacity.enforce_rate(
-            user_id=actor.id,
-            client_ip=client_ip,
+        fingerprint = TranslationFingerprint(
+            schema_revision=TRANSLATION_RESULT_SCHEMA_REVISION,
+            prompt_revision=self._provider.prompt_revision(),
+            model_revision=self._provider.model_revision(),
+            document_id=prepared.document_id,
+            paper_title_hash=translation_paper_title_hash(prepared.paper_title),
+            source_text=prepared.source_text,
+            source_language=prepared.source_language,
+            target_language=prepared.target_language,
+            custom_instructions_hash=translation_instructions_hash(
+                prepared.custom_instructions
+            ),
         )
-        cache_key = translation_cache_key(
-            TranslationCacheIdentity(
-                schema_revision=TRANSLATION_CACHE_SCHEMA_REVISION,
-                prompt_revision=self._provider.prompt_revision(),
-                model_revision=self._provider.model_revision(),
-                document_id=prepared.document_id,
-                paper_title_hash=translation_paper_title_hash(prepared.paper_title),
-                source_text=prepared.source_text,
-                target_language=prepared.target_language,
-                custom_instructions_hash=translation_instructions_hash(
-                    prepared.custom_instructions
-                ),
-            )
+        identity_key = translation_identity_key(fingerprint)
+        result_identity = TranslationResultIdentity(
+            key=identity_key,
+            context_kind="selection",
+            document_id=prepared.document_id,
+            block_id=None,
+            target_language=prepared.target_language,
+            source_hash=translation_source_hash(prepared.source_text),
+            instructions_hash=fingerprint.custom_instructions_hash,
+            prompt_revision=fingerprint.prompt_revision,
+            profile_revision=fingerprint.model_revision,
         )
-        cached = await self._cache.get(cache_key)
+        cached = await self._result_store.get(identity_key)
         if cached is not None:
             return _cached_stream(cached)
 
-        lease_token = await self._cache.acquire(cache_key)
+        lease_token = await self._singleflight.acquire(identity_key)
         if lease_token is None:
             for _ in range(SINGLE_FLIGHT_WAIT_ATTEMPTS):
                 await asyncio.sleep(SINGLE_FLIGHT_WAIT_SECONDS)
-                cached = await self._cache.get(cache_key)
+                cached = await self._result_store.get(identity_key)
                 if cached is not None:
                     return _cached_stream(cached)
+            raise AppError(
+                code="translation_in_progress",
+                message="An identical translation is still in progress",
+                kind=FailureKind.CONFLICT,
+                retryable=True,
+            )
 
         try:
+            await self._capacity.enforce_rate(
+                user_id=actor.id,
+                client_ip=client_ip,
+            )
             self._executor.query(
                 lambda capabilities: capabilities.translations.require_token_credits(
                     actor=actor
@@ -144,14 +166,14 @@ class TranslationWorkflow:
             )
         except BaseException:
             if lease_token is not None:
-                await self._cache.release(cache_key, lease_token)
+                await self._singleflight.release(identity_key, lease_token)
             raise
 
         return self._provider_stream(
             actor=actor,
             operation=operation,
             prepared=prepared,
-            cache_key=cache_key,
+            result_identity=result_identity,
             cache_lease_token=lease_token,
             capacity_lease=capacity_lease,
         )
@@ -162,7 +184,7 @@ class TranslationWorkflow:
         actor: Actor,
         operation: OperationContext,
         prepared: PreparedTranslation,
-        cache_key: str,
+        result_identity: TranslationResultIdentity,
         cache_lease_token: str | None,
         capacity_lease: TranslationCapacityLease,
     ) -> AsyncIterator[TranslationStreamEvent]:
@@ -185,6 +207,7 @@ class TranslationWorkflow:
                     TranslationStreamSpec(
                         paper_title=prepared.paper_title,
                         source_text=prepared.source_text,
+                        source_language=prepared.source_language,
                         target_language=prepared.target_language,
                         custom_instructions=prepared.custom_instructions,
                     )
@@ -198,9 +221,9 @@ class TranslationWorkflow:
                         data={"text": chunk},
                     )
             translated_text = validate_translated_text("".join(chunks))
-            await self._cache.set(
-                cache_key,
-                TranslationCacheValue(
+            await self._result_store.set(
+                identity=result_identity,
+                value=TranslationResultValue(
                     translated_text=translated_text,
                     target_language=prepared.target_language,
                 ),
@@ -256,7 +279,7 @@ class TranslationWorkflow:
         finally:
             await self._capacity.release(capacity_lease)
             if cache_lease_token is not None:
-                await self._cache.release(cache_key, cache_lease_token)
+                await self._singleflight.release(result_identity.key, cache_lease_token)
 
     def _error_event(
         self,
@@ -349,7 +372,7 @@ def _prepare_translation(
 
 
 async def _cached_stream(
-    value: TranslationCacheValue,
+    value: TranslationResultValue,
 ) -> AsyncIterator[TranslationStreamEvent]:
     yield TranslationStreamEvent(
         event="start",

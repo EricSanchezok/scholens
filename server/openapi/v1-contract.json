@@ -238,7 +238,7 @@
     "/api/v1/papers/{document_id}/research-items": [
       "get"
     ],
-    "/api/v1/papers/{document_id}/translations": [
+    "/api/v1/papers/{document_id}/selection-translations": [
       "post"
     ],
     "/api/v1/project-invitations/{token}/accept": [

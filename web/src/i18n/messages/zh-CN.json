@@ -446,6 +446,7 @@
     "panels": {
       "ask": "提问",
       "annotations": "批注",
+      "translation": "翻译",
       "details": "详情"
     },
     "search": {
@@ -485,6 +486,7 @@
     },
     "selection": {
       "ask": "基于选区提问",
+      "translate": "翻译选区",
       "highlight": "高亮选区",
       "comment": "添加批注",
       "copy": "复制选区",
@@ -492,6 +494,65 @@
       "copied": "已复制",
       "copyFailed": "复制失败",
       "context": "第 {page} 页选区"
+    },
+    "translation": {
+      "sourceLanguage": "原文",
+      "targetLanguage": "译为",
+      "selectedText": "选中的原文",
+      "languages": {
+        "auto": "自动检测",
+        "en": "英语",
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "ja": "日语",
+        "ko": "韩语",
+        "de": "德语",
+        "fr": "法语",
+        "es": "西班牙语"
+      },
+      "autoSelection": {
+        "title": "自动翻译选区",
+        "description": "选区短暂停留不变后自动开始翻译。"
+      },
+      "empty": {
+        "title": "选择文字开始翻译",
+        "description": "在 PDF 中选择一段文字，译文会显示在这里，不会改变论文原文。"
+      },
+      "ready": {
+        "title": "选区已准备好",
+        "description": "点击下方翻译按钮，或开启自动翻译选区。"
+      },
+      "status": {
+        "translating": "正在翻译",
+        "completed": "译文",
+        "cached": "已缓存"
+      },
+      "actions": {
+        "translate": "翻译选区",
+        "copy": "复制译文",
+        "copying": "正在复制",
+        "copied": "已复制",
+        "copyFailed": "复制失败",
+        "annotate": "添加为批注",
+        "retry": "重试"
+      },
+      "errors": {
+        "title": "翻译未完成",
+        "quota": "Token Credits 已用完；已缓存的译文仍可继续查看。",
+        "busy": "当前翻译请求较多，请稍后重试。",
+        "inProgress": "相同选区正在翻译，请稍后重试。",
+        "provider": "翻译服务暂时不可用。",
+        "access": "这篇论文已不在你的文库中。",
+        "generic": "翻译被意外中断，请重试。"
+      },
+      "preferencesError": "翻译偏好保存失败，之前的设置仍然有效。",
+      "instructions": {
+        "title": "翻译偏好",
+        "label": "自定义要求",
+        "placeholder": "例如：专业术语保留英文。",
+        "description": "应用于之后的新翻译；修改后会生成新的缓存结果。",
+        "save": "保存要求"
+      }
     },
     "actions": {
       "failedTitle": "Reader 操作失败",
