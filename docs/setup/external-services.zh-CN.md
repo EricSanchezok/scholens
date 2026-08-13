@@ -144,15 +144,17 @@ Scholens 调用 `POST /v1/audio/speech` 创建异步语音任务，并轮询任�
 
 官方资料：[MOSS Voice 文档](https://platform.mosi.cn/docs/getting-started/overview/)。
 
-## 5. DeepSeek
+## 5. AI 模型提供商
 
-在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建 API Key，并写入 `server/.env` 与 `jobs/.env`：
+Scholens 使用 `provider:model` 选择模型，由 Pydantic AI 解析到对应提供商；当前默认模型来自 DeepSeek，但业务代码不依赖 DeepSeek。若使用当前默认值，在 [DeepSeek 开放平台](https://platform.deepseek.com/) 创建 API Key，并写入 `server/.env` 与 `jobs/.env`：
 
 ```dotenv
-DEEPSEEK_API_KEY=
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_STANDARD_MODEL=deepseek-v4-flash
-DEEPSEEK_DEEP_MODEL=deepseek-v4-pro
+SCHOLENS_AI_DEEPSEEK_API_KEY=
+SCHOLENS_AI_DEEPSEEK_BASE_URL=https://api.deepseek.com
+SCHOLENS_AI_STANDARD_MODEL=deepseek:deepseek-v4-flash
+SCHOLENS_AI_DEEP_MODEL=deepseek:deepseek-v4-pro
+SCHOLENS_AI_TRANSLATION_MODEL=deepseek:deepseek-v4-flash
+SCHOLENS_AI_REFLOW_MODEL=deepseek:deepseek-v4-flash
 ```
 
 API Key 只保存在未提交的 `.env` 或生产密钥服务中，不要粘贴到聊天、Issue、日志或 Git 历史。模型 ID 可能调整，上线前应再次核对 [DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)。

@@ -1,4 +1,4 @@
-"""DeepSeek narrative generation and MOSS Voice synthesis."""
+"""AI narrative generation and MOSS Voice synthesis."""
 
 from __future__ import annotations
 

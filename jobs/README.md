@@ -66,7 +66,7 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
-├── llm_client.py    # DeepSeek jobs client
+├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py
 └── webhook_signing.py
 ```
@@ -85,7 +85,7 @@ Production requires:
 - Redis through `CELERY_RESULT_BACKEND` and optionally `PDF_PARSE_REDIS_URL`
 - S3 credentials and bucket names
 - `MINERU_API_TOKEN`
-- `DEEPSEEK_API_KEY`
+- the `SCHOLENS_AI_*` profile variables and the selected provider credential
 - `JOBS_WEBHOOK_SIGNING_SECRET`
 
 Development may omit `MINERU_API_TOKEN`; PDF ingestion then runs explicitly in

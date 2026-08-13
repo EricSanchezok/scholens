@@ -172,7 +172,10 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_URL",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
-        "DEEPSEEK_API_KEY",
+        "SCHOLENS_AI_DEEPSEEK_API_KEY",
+        "SCHOLENS_AI_STANDARD_MODEL",
+        "SCHOLENS_AI_TRANSLATION_MODEL",
+        "SCHOLENS_AI_REFLOW_MODEL",
         "MINERU_API_TOKEN",
         "MOSS_API_KEY",
         "MOSS_MAX_AUDIO_BYTES",
@@ -189,7 +192,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
     assert "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS:" in compose
     assert "SCHOLENS_CONNECTOR_CREDENTIAL_ENCRYPTION_KEY=" in runtime
     assert "SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET=" in runtime
-    assert "SCHOLENS_DEEPSEEK_API_KEY=" in runtime
+    assert "SCHOLENS_AI_DEEPSEEK_API_KEY=" in runtime
     assert "SCHOLENS_MINERU_API_TOKEN=" in runtime
     assert "SCHOLENS_MOSS_API_KEY=" in runtime
     assert "SCHOLENS_MOSS_MAX_AUDIO_BYTES=" in runtime
@@ -198,7 +201,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
     assert "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY:" in compose
     assert "SCHOLIGHT_MCP_URL:" in compose
     assert "MOSS_MAX_AUDIO_BYTES:" in compose
-    assert "DEEPSEEK_STRUCTURED_RETRIES:" in compose
+    assert "SCHOLENS_AI_STRUCTURED_RETRIES:" in compose
     assert "PAPER_SEARCH_CURSOR_SECRET:" in compose
     for legacy_variable in (
         "GEMINI_API_KEY",
@@ -206,10 +209,18 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
         "AZURE_OPENAI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "SCHOLENS_DEEPSEEK_API_KEY",
         "SCHOLIGHT_ACCESS_KEY",
         "JOBS_INTERNAL_SECRET",
     ):
-        assert legacy_variable not in catalog + runtime + compose + ci
+        assert (
+            re.search(
+                rf"(?m)^\s*{re.escape(legacy_variable)}\s*[=:]",
+                catalog + runtime + compose + ci,
+            )
+            is None
+        )
     assert "EXA_API_KEY" not in catalog + runtime + compose
     assert "FIRECRAWL_API_KEY" not in catalog + runtime + compose
 

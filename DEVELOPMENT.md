@@ -68,7 +68,7 @@ the private file in its own working directory:
 | ------------------- | ------------------------------------------------------- |
 | `server/.env`       | Database, sanchezcloud-identity, MOSS, API integrations |
 | `jobs/.env`         | MinerU, background processing, webhook delivery         |
-| Both Python files   | S3, DeepSeek, broker URLs, webhook signing secret       |
+| Both Python files   | S3, AI profiles, broker URLs, webhook signing secret    |
 | `web/.env.local`    | canonical `NEXT_PUBLIC_*` browser configuration         |
 | `client/.env.local` | legacy comparison client configuration                  |
 
@@ -77,7 +77,7 @@ exposes `NEXT_PUBLIC_*` values to browser code, but keeping secrets out of the
 client build context is the safer operational boundary.
 
 **Must match across server and jobs:** `CELERY_BROKER_URL`, S3/AWS bucket vars,
-`DEEPSEEK_*`, and `JOBS_WEBHOOK_SIGNING_SECRET`. Server needs
+`SCHOLENS_AI_*`, and `JOBS_WEBHOOK_SIGNING_SECRET`. Server needs
 `CELERY_API_URL=http://127.0.0.1:7302`; jobs needs
 `WEBHOOK_BASE_URL=http://127.0.0.1:7301`.
 
@@ -86,7 +86,7 @@ client build context is the safer operational boundary.
 | Variable                                                                                          | Where                                                  |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `DATABASE_URL`                                                                                    | server                                                 |
-| `DEEPSEEK_API_KEY`                                                                                | server, jobs                                           |
+| `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)        |
 | `MINERU_API_TOKEN`                                                                                | jobs                                                   |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                  |
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`                                                      | server + jobs                                          |

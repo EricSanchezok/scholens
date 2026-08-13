@@ -44,8 +44,12 @@ def settle_jobs_usage(user_id: int, events: list[TokenUsageEventPayload]) -> Non
             operation_id=event.operation_id,
         ):
             settle_token_usage(
+                provider=event.provider,
                 model=event.model,
-                reasoning_level=event.reasoning_level,
+                ai_profile=event.ai_profile,
+                thinking=event.thinking,
+                thinking_effort=event.thinking_effort,
+                profile_revision=event.profile_revision,
                 provider_request_id=event.provider_request_id,
                 prompt_tokens=event.prompt_tokens,
                 completion_tokens=event.completion_tokens,

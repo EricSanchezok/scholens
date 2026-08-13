@@ -11,7 +11,7 @@ from typing import Any
 # Schema export never performs live provider calls, but composition imports
 # validate that provider configuration exists. Stable sentinels keep export
 # deterministic without reading developer secrets.
-os.environ.setdefault("DEEPSEEK_API_KEY", "openapi-export")
+os.environ.setdefault("SCHOLENS_AI_DEEPSEEK_API_KEY", "openapi-export")
 os.environ.setdefault("STRIPE_API_KEY", "sk_openapi_export")
 os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_openapi_export")
 os.environ.setdefault("STRIPE_MONTHLY_PRICE_ID", "price_openapi_monthly")

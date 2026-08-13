@@ -44,6 +44,7 @@ dependencies = [
     "redis>=5.2",
     "cryptography>=48.0.1",
     "scholens-observability",
+    "scholens-ai",
     "opentelemetry-instrumentation-fastapi>=0.50b0,<1",
     "opentelemetry-instrumentation-httpx>=0.50b0,<1",
     "opentelemetry-instrumentation-requests>=0.50b0,<1",
@@ -54,6 +55,7 @@ dependencies = [
 
 [tool.uv.sources]
 scholens-observability = { path = "../packages/scholens_observability" }
+scholens-ai = { path = "../packages/scholens_ai" }
 
 [project.scripts]
 start = "app.cli:start"

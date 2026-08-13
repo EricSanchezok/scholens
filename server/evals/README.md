@@ -25,7 +25,7 @@ Results are written to `evals/results/eval_data_table.json`.
 
 ## ResearchQA archive
 
-The ResearchQA benchmark predates Scholens's DeepSeek-only runtime and its
+The ResearchQA benchmark predates Scholens's provider-neutral AI runtime and its
 current sanchezcloud-identity/database contracts. Its paper remains in
 [`paper.md`](paper.md), and the published dataset is available at
 [`khoj-ai/ResearchQA`](https://huggingface.co/datasets/khoj-ai/ResearchQA).

@@ -231,7 +231,7 @@ async def process_pdf_file(
                 status_callback=status_callback,
             )
             if not metadata.title:
-                raise ValueError("DeepSeek metadata extraction returned no title")
+                raise ValueError("AI metadata extraction returned no title")
 
         return PDFProcessingResult(
             success=True,

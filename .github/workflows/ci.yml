@@ -262,7 +262,7 @@ jobs:
           SCHOLENS_ALIYUN_DM_ACCOUNT_NAME: sender@example.invalid
           SCHOLENS_S3_BUCKET_NAME: fixture-bucket
           SCHOLENS_CLOUDFLARE_BUCKET_NAME: fixture-bucket.s3.us-east-1.amazonaws.com
-          SCHOLENS_DEEPSEEK_API_KEY: fixture
+          SCHOLENS_AI_DEEPSEEK_API_KEY: fixture
           SCHOLENS_MINERU_API_TOKEN: fixture
           SCHOLENS_MOSS_API_KEY: fixture
           SCHOLENS_MOSS_VOICE_ID: fixture
@@ -461,7 +461,8 @@ jobs:
                );
              INSERT INTO scholens.token_usage_events
                (id, user_id, week_start, idempotency_key, operation_id,
-                feature, provider, model, reasoning_level, prompt_tokens,
+                feature, provider, model, ai_profile, thinking, thinking_effort,
+                profile_revision, prompt_tokens,
                 completion_tokens, reasoning_tokens, cache_hit_tokens,
                 cache_miss_tokens, total_tokens, status)
                VALUES (
@@ -475,6 +476,9 @@ jobs:
                  'deepseek',
                  'fixture-model',
                  'standard',
+                 'disabled',
+                 'none',
+                 'fixture-profile-revision',
                  11,
                  6,
                  0,

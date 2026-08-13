@@ -10,8 +10,12 @@ from app.llm.token_credits import llm_usage_context, settle_token_usage
 
 def _settle() -> bool:
     return settle_token_usage(
+        provider="deepseek",
         model="standard-model",
-        reasoning_level="standard",
+        ai_profile="standard",
+        thinking="disabled",
+        thinking_effort="none",
+        profile_revision="profile-v1",
         prompt_tokens=100,
         completion_tokens=80,
         reasoning_tokens=50,
@@ -74,8 +78,12 @@ def test_unknown_usage_is_audited_without_incrementing_weekly_total() -> None:
         llm_usage_context(user_id=42, feature="chat", operation_id="chat-1"),
     ):
         recorded = settle_token_usage(
+            provider="deepseek",
             model="standard-model",
-            reasoning_level="standard",
+            ai_profile="standard",
+            thinking="disabled",
+            thinking_effort="none",
+            profile_revision="profile-v1",
             prompt_tokens=0,
             completion_tokens=0,
             total_tokens=0,

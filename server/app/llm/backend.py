@@ -13,6 +13,7 @@ from typing import Any, Generic, Iterator, Protocol, Sequence, TypeVar, cast
 
 import openai
 from app.database.models import ReasoningLevel
+from app.llm.pydantic_models import profile_for_reasoning
 from app.llm.token_credits import settle_token_usage
 from app.modules.papers.application.contracts.extraction import (
     FileContent,
@@ -23,10 +24,10 @@ from app.modules.papers.application.contracts.extraction import (
 )
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from scholens_observability import add_counter, instrumented_span, record_histogram
+from scholens_ai import AIProfile, AIThinkingMode
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-_DEEPSEEK_MAX_OUTPUT_TOKENS = 384 * 1024
 
 
 class LLMUsageSettlementError(RuntimeError):
@@ -170,76 +171,106 @@ def _completion_detail(usage: Any, name: str) -> int:
     return _usage_value(details, name)
 
 
-class DeepSeekBackend(LLMBackend):
-    """DeepSeek-only implementation over its documented OpenAI-compatible API."""
+class ProfiledChatBackend(LLMBackend):
+    """Synchronous adapter for Scholens profiles using chat-compatible providers.
+
+    New orchestration uses Pydantic AI directly. This adapter remains intentionally
+    narrow for synchronous citation recovery and title generation.
+    """
 
     def __init__(self) -> None:
-        api_key = os.getenv("DEEPSEEK_API_KEY")
-        if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY environment variable is required")
-        self._client = openai.OpenAI(
-            api_key=api_key,
-            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-            timeout=float(os.getenv("DEEPSEEK_REQUEST_TIMEOUT_SECONDS", "120")),
-            max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "2")),
-        )
-        self._default_model = os.getenv("DEEPSEEK_STANDARD_MODEL", "deepseek-v4-flash")
-        self._deep_model = os.getenv("DEEPSEEK_DEEP_MODEL", "deepseek-v4-pro")
-        self._max_output_tokens = int(
-            os.getenv(
-                "DEEPSEEK_MAX_OUTPUT_TOKENS",
-                str(_DEEPSEEK_MAX_OUTPUT_TOKENS),
+        self._profiles = {
+            level: profile_for_reasoning(level)
+            for level in (ReasoningLevel.STANDARD, ReasoningLevel.DEEP)
+        }
+        self._clients = {
+            level: self._new_client(profile)
+            for level, profile in self._profiles.items()
+        }
+        self._max_output_tokens = self._profiles[
+            ReasoningLevel.STANDARD
+        ].max_output_tokens
+
+    @staticmethod
+    def _new_client(profile: AIProfile) -> openai.OpenAI:
+        if profile.provider not in {"deepseek", "openai", "moonshotai"}:
+            raise ValueError(
+                f"Profile {profile.name.value} selects {profile.provider}, which "
+                "does not expose the synchronous chat-compatible interface"
             )
+        prefix = f"SCHOLENS_AI_{profile.provider.upper()}"
+        api_key = os.getenv(f"{prefix}_API_KEY")
+        if not api_key:
+            raise ValueError(f"{prefix}_API_KEY is required")
+        default_base_urls = {
+            "deepseek": "https://api.deepseek.com",
+            "moonshotai": "https://api.moonshot.ai/v1",
+        }
+        return openai.OpenAI(
+            api_key=api_key,
+            base_url=os.getenv(
+                f"{prefix}_BASE_URL", default_base_urls.get(profile.provider)
+            ),
+            timeout=profile.request_timeout_seconds,
+            max_retries=profile.max_retries,
         )
 
+    def _profile(self, reasoning_level: ReasoningLevel) -> AIProfile:
+        return self._profiles[reasoning_level]
+
     def _model(self, reasoning_level: ReasoningLevel) -> str:
-        if reasoning_level == ReasoningLevel.DEEP:
-            return self._deep_model
-        return self._default_model
+        return self._profile(reasoning_level).model_id
+
+    def _client(self, reasoning_level: ReasoningLevel) -> openai.OpenAI:
+        return self._clients[reasoning_level]
 
     def model_revision(
         self,
         reasoning_level: ReasoningLevel = ReasoningLevel.STANDARD,
     ) -> str:
-        return f"deepseek:{self._model(reasoning_level)}"
+        return self._profile(reasoning_level).revision
 
     def _thinking_body(self, reasoning_level: ReasoningLevel) -> dict[str, Any]:
-        if reasoning_level == ReasoningLevel.DEEP:
+        profile = self._profile(reasoning_level)
+        if profile.thinking is AIThinkingMode.ENABLED:
             return {
                 "thinking": {"type": "enabled"},
-                "reasoning_effort": "max",
+                "reasoning_effort": profile.thinking_effort.value,
             }
         return {"thinking": {"type": "disabled"}}
 
     def _settle(
         self,
         *,
-        model: str,
-        reasoning_level: ReasoningLevel,
+        profile: AIProfile,
         response_id: str | None,
         usage: Any,
     ) -> None:
         try:
             if usage is None:
-                logger.warning("llm.usage.missing", extra={"model": model})
+                logger.warning("llm.usage.missing", extra={"model": profile.model_id})
                 settle_token_usage(
-                    model=model,
-                    reasoning_level=reasoning_level.value,
+                    provider=profile.provider,
+                    model=profile.model_id,
+                    ai_profile=profile.name.value,
+                    thinking=profile.thinking.value,
+                    thinking_effort=profile.thinking_effort.value,
+                    profile_revision=profile.revision,
                     provider_request_id=response_id,
                     prompt_tokens=0,
                     completion_tokens=0,
                     total_tokens=0,
                     idempotency_key=(
-                        f"deepseek:{response_id}" if response_id else None
+                        f"{profile.provider}:{response_id}" if response_id else None
                     ),
                     status="unknown",
                 )
                 add_counter(
                     "scholens.llm.usage_unknown",
                     attributes={
-                        "provider": "deepseek",
-                        "model": model,
-                        "reasoning": reasoning_level.value,
+                        "provider": profile.provider,
+                        "model": profile.model_id,
+                        "ai_profile": profile.name.value,
                     },
                 )
                 return
@@ -251,8 +282,12 @@ class DeepSeekBackend(LLMBackend):
                 "cache_miss": _usage_value(usage, "prompt_cache_miss_tokens"),
             }
             settle_token_usage(
-                model=model,
-                reasoning_level=reasoning_level.value,
+                provider=profile.provider,
+                model=profile.model_id,
+                ai_profile=profile.name.value,
+                thinking=profile.thinking.value,
+                thinking_effort=profile.thinking_effort.value,
+                profile_revision=profile.revision,
                 provider_request_id=response_id,
                 prompt_tokens=_usage_value(usage, "prompt_tokens"),
                 completion_tokens=_usage_value(usage, "completion_tokens"),
@@ -260,7 +295,9 @@ class DeepSeekBackend(LLMBackend):
                 cache_hit_tokens=_usage_value(usage, "prompt_cache_hit_tokens"),
                 cache_miss_tokens=_usage_value(usage, "prompt_cache_miss_tokens"),
                 total_tokens=_usage_value(usage, "total_tokens"),
-                idempotency_key=(f"deepseek:{response_id}" if response_id else None),
+                idempotency_key=(
+                    f"{profile.provider}:{response_id}" if response_id else None
+                ),
             )
             for token_kind, token_count in token_values.items():
                 if token_count > 0:
@@ -268,16 +305,16 @@ class DeepSeekBackend(LLMBackend):
                         "scholens.llm.tokens",
                         token_count,
                         attributes={
-                            "provider": "deepseek",
-                            "model": model,
-                            "reasoning": reasoning_level.value,
+                            "provider": profile.provider,
+                            "model": profile.model_id,
+                            "ai_profile": profile.name.value,
                             "token_kind": token_kind,
                         },
                     )
         except Exception as exc:
             add_counter(
                 "scholens.llm.usage_settlement_failures",
-                attributes={"provider": "deepseek"},
+                attributes={"provider": profile.provider},
             )
             raise LLMUsageSettlementError(
                 "LLM token usage could not be settled"
@@ -294,6 +331,7 @@ class DeepSeekBackend(LLMBackend):
         schema: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
+        profile = self._profile(reasoning_level)
         model = self._model(reasoning_level)
         prompt = system_prompt or ""
         if schema:
@@ -320,13 +358,13 @@ class DeepSeekBackend(LLMBackend):
             with instrumented_span(
                 "llm.generate",
                 attributes={
-                    "gen_ai.system": "deepseek",
+                    "gen_ai.system": profile.provider,
                     "gen_ai.request.model": model,
                     "scholens.reasoning_level": reasoning_level.value,
                     "scholens.llm.streaming": False,
                 },
             ):
-                response = self._client.chat.completions.create(
+                response = self._client(reasoning_level).chat.completions.create(
                     model=model,
                     messages=messages,
                     extra_body=self._thinking_body(reasoning_level),
@@ -337,9 +375,9 @@ class DeepSeekBackend(LLMBackend):
             raise
         finally:
             attributes = {
-                "provider": "deepseek",
+                "provider": profile.provider,
                 "model": model,
-                "reasoning": reasoning_level.value,
+                "ai_profile": profile.name.value,
                 "streaming": False,
                 "status": status,
             }
@@ -357,11 +395,10 @@ class DeepSeekBackend(LLMBackend):
                 },
             )
         if not response.choices:
-            raise ValueError("DeepSeek returned no choices")
+            raise ValueError("AI provider returned no choices")
         message = response.choices[0].message
         self._settle(
-            model=model,
-            reasoning_level=reasoning_level,
+            profile=profile,
             response_id=getattr(response, "id", None),
             usage=response.usage,
         )
@@ -407,6 +444,7 @@ class DeepSeekBackend(LLMBackend):
         file: FileContent | None = None,
         **kwargs: Any,
     ) -> Iterator[StreamChunk]:
+        profile = self._profile(reasoning_level)
         model = self._model(reasoning_level)
         messages = self._prepare_messages(
             history=history,
@@ -431,13 +469,13 @@ class DeepSeekBackend(LLMBackend):
                 with instrumented_span(
                     "llm.stream",
                     attributes={
-                        "gen_ai.system": "deepseek",
+                        "gen_ai.system": profile.provider,
                         "gen_ai.request.model": model,
                         "scholens.reasoning_level": reasoning_level.value,
                         "scholens.llm.streaming": True,
                     },
                 ):
-                    stream = self._client.chat.completions.create(
+                    stream = self._client(reasoning_level).chat.completions.create(
                         model=model,
                         messages=messages,
                         stream=True,
@@ -456,8 +494,7 @@ class DeepSeekBackend(LLMBackend):
                         if chunk.usage is not None:
                             usage_received = True
                             self._settle(
-                                model=model,
-                                reasoning_level=reasoning_level,
+                                profile=profile,
                                 response_id=response_id,
                                 usage=chunk.usage,
                             )
@@ -492,8 +529,7 @@ class DeepSeekBackend(LLMBackend):
                 if not usage_received:
                     try:
                         self._settle(
-                            model=model,
-                            reasoning_level=reasoning_level,
+                            profile=profile,
                             response_id=response_id,
                             usage=None,
                         )
@@ -504,9 +540,9 @@ class DeepSeekBackend(LLMBackend):
                             "llm.usage_settlement.failed_after_stream_error"
                         )
                 attributes = {
-                    "provider": "deepseek",
+                    "provider": profile.provider,
                     "model": model,
-                    "reasoning": reasoning_level.value,
+                    "ai_profile": profile.name.value,
                     "streaming": True,
                     "status": status,
                 }
@@ -531,18 +567,18 @@ class DeepSeekBackend(LLMBackend):
                         "scholens.llm.time_to_first_chunk",
                         (first_chunk_at - started) * 1000,
                         attributes={
-                            "provider": "deepseek",
+                            "provider": profile.provider,
                             "model": model,
-                            "reasoning": reasoning_level.value,
+                            "ai_profile": profile.name.value,
                         },
                     )
                     record_histogram(
                         "scholens.llm.max_chunk_gap",
                         max_chunk_gap_ms,
                         attributes={
-                            "provider": "deepseek",
+                            "provider": profile.provider,
                             "model": model,
-                            "reasoning": reasoning_level.value,
+                            "ai_profile": profile.name.value,
                         },
                     )
 
@@ -565,7 +601,7 @@ class DeepSeekBackend(LLMBackend):
             elif isinstance(item, FileContent):
                 if item.text_fallback is None:
                     raise ValueError(
-                        "FileContent.text_fallback is required for DeepSeek"
+                        "FileContent.text_fallback is required by this chat adapter"
                     )
                 filename = item.filename or "document.pdf"
                 parts.append(
@@ -646,11 +682,11 @@ class DeepSeekBackend(LLMBackend):
 @lru_cache(maxsize=1)
 def get_llm_backend() -> LLMBackend:
     """Return the process-wide backend and its reusable HTTP connection pool."""
-    return DeepSeekBackend()
+    return ProfiledChatBackend()
 
 
 __all__ = [
-    "DeepSeekBackend",
+    "ProfiledChatBackend",
     "FileContent",
     "LLMResponse",
     "LLMBackend",

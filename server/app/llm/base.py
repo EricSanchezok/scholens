@@ -42,7 +42,7 @@ class BaseLLMClient:
     ) -> LLMResponse:
         start_time = time.time()
         structured_retries = (
-            int(os.getenv("DEEPSEEK_STRUCTURED_RETRIES", "2"))
+            int(os.getenv("SCHOLENS_AI_STRUCTURED_RETRIES", "2"))
             if response_model is not None
             else 0
         )

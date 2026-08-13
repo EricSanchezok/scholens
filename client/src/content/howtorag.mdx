@@ -28,7 +28,7 @@ In a perfect world, our models would `get_paper_content` their way through the w
 
 Both search tools return source locations in their results, so they can be used with `get_paper_content_range`, which allows the model to inspect a focused section. The model is given a few iterations for retrieving evidence or carrying out an explicit workspace action before it finalizes and responds.
 
-The same internal DeepSeek backend now handles tool orchestration and final
+The same configured AI backend now handles tool orchestration and final
 answers. Scholens exposes only standard and deep reasoning levels; model names
 and provider credentials remain server-side so the backend can evolve without
 changing the client API.

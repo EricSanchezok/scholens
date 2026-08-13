@@ -131,7 +131,7 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
             summary="The paper's canonical summary.[^1]",
             summary_citations=[citation],
         ),
-        parser_backend="pymupdf",
+        parser_backend="pymupdf4llm",
         parser_quality="full",
         parser_version="test-parser",
     )
@@ -202,7 +202,7 @@ async def test_terminal_pdf_callback_does_not_rewrite_document(
         raw_content="Parsed paper content",
         page_offset_map={1: [0, 20]},
         metadata=PaperMetadataExtraction(title="Paper"),
-        parser_backend="pymupdf",
+        parser_backend="pymupdf4llm",
         parser_quality="full",
         parser_version="test-parser",
     )

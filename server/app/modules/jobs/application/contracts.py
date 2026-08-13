@@ -47,8 +47,12 @@ class TokenUsageEventPayload(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=160)
     operation_id: str = Field(min_length=1, max_length=128)
     feature: str = Field(min_length=1, max_length=64)
+    provider: str = Field(min_length=1, max_length=32)
     model: str = Field(min_length=1, max_length=128)
-    reasoning_level: str = Field(pattern="^(standard|deep)$")
+    ai_profile: str = Field(min_length=1, max_length=32)
+    thinking: Literal["disabled", "enabled"]
+    thinking_effort: Literal["none", "low", "medium", "high", "max"]
+    profile_revision: str = Field(min_length=1, max_length=64)
     provider_request_id: str | None = Field(default=None, max_length=160)
     prompt_tokens: int = Field(ge=0)
     completion_tokens: int = Field(ge=0)

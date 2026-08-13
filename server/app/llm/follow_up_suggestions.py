@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from app.llm.pydantic_models import build_deepseek_chat_model
+from app.llm.pydantic_models import build_chat_model
 from app.shared.domain.enums import ReasoningLevel
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models import Model
 
 _MAX_PROMPT_TEXT_CHARS = 12_000
 _MAX_SUGGESTION_CHARS = 160
@@ -104,10 +104,10 @@ class FollowUpSuggestionGenerator:
 
     def __init__(
         self,
-        model_factory: Callable[[], OpenAIChatModel] | None = None,
+        model_factory: Callable[[], Model] | None = None,
     ) -> None:
         self._model_factory = model_factory or (
-            lambda: build_deepseek_chat_model(
+            lambda: build_chat_model(
                 ReasoningLevel.STANDARD,
                 max_output_tokens=512,
             )

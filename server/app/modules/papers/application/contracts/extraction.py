@@ -196,7 +196,7 @@ class FileContent(BaseModel):
     mime_type: str
     filename: str | None = None
     type: Literal["file"] = "file"
-    # Plain-text equivalent consumed by the DeepSeek backend. PDF extraction is
+    # Plain-text equivalent consumed by the configured AI backend. PDF extraction is
     # completed by MinerU before model calls.
     text_fallback: str | None = None
 

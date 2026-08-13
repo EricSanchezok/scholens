@@ -23,7 +23,7 @@ from app.llm.grounded_answer import (
     GroundedAnswerStreamParser,
     grounded_citation_instructions,
 )
-from app.llm.pydantic_models import build_deepseek_chat_model
+from app.llm.pydantic_models import build_chat_model, profile_for_reasoning
 from app.llm.token_credits import settle_token_usage
 from app.modules.conversations.application.chat import (
     ChatPaperSnapshot,
@@ -242,7 +242,7 @@ class ScholensConversationAgent:
         self._connector_tools = connector_tools
         self._operation_factory = operation_factory
         self._clock = clock
-        self._model_factory = model_factory or build_deepseek_chat_model
+        self._model_factory = model_factory or build_chat_model
 
     async def stream(
         self,
@@ -331,6 +331,7 @@ class ScholensConversationAgent:
             citation_instructions=grounded_citation_instructions(nonce),
         )
         tools = self._tools(deps)
+        profile = profile_for_reasoning(request.reasoning_level)
         model = self._model_factory(request.reasoning_level)
         agent: Agent[_ConversationAgentDependencies, str] = Agent(
             model,
@@ -564,9 +565,8 @@ class ScholensConversationAgent:
                             )
                     self._settle_usage(
                         result=result,
-                        request=request,
                         turn_id=request.turn_id,
-                        model_name=model.model_name,
+                        profile=profile,
                     )
                     usage_settled = True
                     trace = self._trace(
@@ -589,8 +589,12 @@ class ScholensConversationAgent:
         finally:
             if not usage_settled:
                 settle_token_usage(
-                    model=getattr(model, "model_name", "deepseek:unknown"),
-                    reasoning_level=request.reasoning_level.value,
+                    provider=profile.provider,
+                    model=profile.model_id,
+                    ai_profile=profile.name.value,
+                    thinking=profile.thinking.value,
+                    thinking_effort=profile.thinking_effort.value,
+                    profile_revision=profile.revision,
                     provider_request_id=None,
                     prompt_tokens=0,
                     completion_tokens=0,
@@ -1149,16 +1153,19 @@ Initial server-validated answer material:
     def _settle_usage(
         *,
         result: Any,
-        request: ConversationTurnCreateRequest,
         turn_id: uuid.UUID,
-        model_name: str,
+        profile: Any,
     ) -> None:
         usage = result.usage
         total = usage.input_tokens + usage.output_tokens
         response = result.response
         settle_token_usage(
-            model=model_name,
-            reasoning_level=request.reasoning_level.value,
+            provider=profile.provider,
+            model=profile.model_id,
+            ai_profile=profile.name.value,
+            thinking=profile.thinking.value,
+            thinking_effort=profile.thinking_effort.value,
+            profile_revision=profile.revision,
             provider_request_id=response.provider_response_id,
             prompt_tokens=usage.input_tokens,
             completion_tokens=usage.output_tokens,
@@ -1172,9 +1179,9 @@ Initial server-validated answer material:
             "scholens.llm.requests",
             usage.requests,
             attributes={
-                "provider": "deepseek",
-                "model": model_name,
-                "reasoning": request.reasoning_level.value,
+                "provider": profile.provider,
+                "model": profile.model_id,
+                "ai_profile": profile.name.value,
                 "streaming": True,
                 "status": "success",
             },
