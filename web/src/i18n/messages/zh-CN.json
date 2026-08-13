@@ -804,6 +804,15 @@
         "sortTitle": "标题 A–Z",
         "sortPublished": "发表日期",
         "add": "添加论文",
+        "openMenu": "打开论文操作",
+        "remove": "从项目中移除",
+        "removed": "已从项目中移除论文",
+        "removeFailed": "无法移除这篇论文",
+        "confirm": {
+          "title": "移除论文及其项目批注？",
+          "description": "移除“{title}”将永久删除 {threads} 个项目批注线程及其中的 {comments} 条评论。个人批注和 Library 访问不受影响。",
+          "action": "移除论文及批注"
+        },
         "empty": "项目中还没有论文。",
         "untitled": "未命名论文",
         "unknownAuthors": "暂无作者信息",

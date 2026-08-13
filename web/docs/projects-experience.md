@@ -16,8 +16,10 @@ and the shared Conversation feature.
   starting scope is the shared Project. The existing Conversation runtime is
   reused with `scope_type=project`; Projects does not fork chat behavior.
 - Papers open Reader at `/reader/[documentId]?project=[projectId]`. Adding
-  papers selects real personal Library memberships. Removal remains absent
-  until Reader's collaborative-annotation impact contract is available.
+  papers selects real personal Library memberships. Removing a paper first
+  probes the Server's collaborative-annotation impact contract; if Project
+  threads exist, the member must confirm the reported thread and comment
+  counts before the destructive retry is sent.
 - Outputs use the canonical Research Item kinds. Types without a dedicated
   viewer are truthful list rows rather than fake links.
 - Archive is not exposed because there is no archived-project collection or
@@ -46,6 +48,10 @@ remain usable at 320px.
 - `GET /api/v1/projects/{projectId}/outputs` applies the same search, kind,
   sort, visibility, and cursor semantics as Library Outputs while restricting
   the collection to one authorized Project.
+- `DELETE /api/v1/projects/{projectId}/papers/{documentId}` is attempted
+  without confirmation first. A `project_document_has_annotations` conflict
+  opens an impact dialog; only the explicit retry sends
+  `confirm_delete_annotations=true`.
 
 ## Figma and Storybook acceptance
 

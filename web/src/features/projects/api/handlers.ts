@@ -80,6 +80,27 @@ const populated = [
   http.post(`${api}/projects/:projectId/papers`, () =>
     HttpResponse.json({ added_count: 1, existing_count: 0 }, { status: 201 }),
   ),
+  http.delete(
+    `${api}/projects/:projectId/papers/:documentId`,
+    ({ request }) => {
+      const confirmed =
+        new URL(request.url).searchParams.get(
+          "confirm_delete_annotations",
+        ) === "true";
+      return confirmed
+        ? new HttpResponse(null, { status: 204 })
+        : HttpResponse.json(
+            {
+              code: "project_document_has_annotations",
+              details: { comment_count: 5, thread_count: 2 },
+              kind: "conflict",
+              message: "Confirm annotation deletion",
+              retryable: false,
+            },
+            { status: 409 },
+          );
+    },
+  ),
 ];
 
 export const projectHandlers = {

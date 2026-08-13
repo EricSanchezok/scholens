@@ -81,6 +81,23 @@ export const Papers: Story = {
       }),
     ).toBeVisible();
     await userEvent.keyboard("{Escape}");
+    await userEvent.click(
+      canvas.getAllByRole("button", { name: "Open paper actions" })[0]!,
+    );
+    await userEvent.click(
+      within(document.body).getByRole("menuitem", {
+        name: "Remove from project",
+      }),
+    );
+    const impactDialog = await within(document.body).findByRole("alertdialog");
+    await expect(
+      within(impactDialog).getByText(/2 project annotation threads/),
+    ).toBeVisible();
+    await userEvent.click(
+      within(impactDialog).getByRole("button", {
+        name: "Remove paper and annotations",
+      }),
+    );
   },
 };
 

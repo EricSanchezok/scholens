@@ -42,6 +42,7 @@ import {
   BackIcon,
   CitationIcon,
   DataTableIcon,
+  DeleteIcon,
   EditIcon,
   MoreIcon,
   QuoteIcon,
@@ -53,6 +54,7 @@ import {
   type ReasoningLevel,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import { ApiError } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
 import {
   addProjectPapers,
@@ -60,6 +62,7 @@ import {
   leaveProject,
   projectKeys,
   projectQueries,
+  removeProjectPaper,
   updateProject,
 } from "./api";
 import { AddProjectPapersDialog } from "./components/add-project-papers-dialog";
@@ -202,29 +205,83 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 
 function ProjectPaperRow({
+  canRemove,
+  onRemove,
   paper,
   projectId,
 }: {
+  canRemove: boolean;
+  onRemove: (paper: ProjectPaper) => void;
   paper: ProjectPaper;
   projectId: string;
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <Link
-      className="border-line hover:bg-hover grid gap-2 border-b px-1 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-      href={`/reader/${paper.document_id}?project=${projectId}` as Route}
-    >
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-medium">
-          {paper.title || t("untitled")}
+    <div className="border-line grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b px-1 py-2 last:border-b-0">
+      <Link
+        className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        href={`/reader/${paper.document_id}?project=${projectId}` as Route}
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">
+            {paper.title || t("untitled")}
+          </span>
+          <span className="text-muted mt-1 block truncate text-xs">
+            {paper.authors?.join(", ") || t("unknownAuthors")}
+          </span>
         </span>
-        <span className="text-muted mt-1 block truncate text-xs">
-          {paper.authors?.join(", ") || t("unknownAuthors")}
-        </span>
-      </span>
-      <span className="text-muted text-xs">{t("openReader")}</span>
-    </Link>
+        <span className="text-muted text-xs">{t("openReader")}</span>
+      </Link>
+      {canRemove && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton label={t("openMenu")} variant="ghost">
+              <Icon glyph={MoreIcon} size={20} />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem destructive onSelect={() => onRemove(paper)}>
+              <Icon glyph={DeleteIcon} size={16} />
+              {t("remove")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
   );
+}
+
+type PaperRemovalImpact = {
+  commentCount: number;
+  paper: ProjectPaper;
+  threadCount: number;
+};
+
+function paperRemovalImpact(
+  error: unknown,
+  paper: ProjectPaper,
+): PaperRemovalImpact | undefined {
+  if (
+    !(error instanceof ApiError) ||
+    error.code !== "project_document_has_annotations"
+  ) {
+    return undefined;
+  }
+  const response =
+    error.details && typeof error.details === "object"
+      ? (error.details as Record<string, unknown>)
+      : undefined;
+  const details =
+    response?.details && typeof response.details === "object"
+      ? (response.details as Record<string, unknown>)
+      : undefined;
+  return {
+    commentCount:
+      typeof details?.comment_count === "number" ? details.comment_count : 0,
+    paper,
+    threadCount:
+      typeof details?.thread_count === "number" ? details.thread_count : 0,
+  };
 }
 
 const outputIcons = {
@@ -276,6 +333,8 @@ export function ProjectDetailWorkspace({
   const [signingOut, setSigningOut] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [addPapersOpen, setAddPapersOpen] = React.useState(false);
+  const [paperRemoval, setPaperRemoval] =
+    React.useState<PaperRemovalImpact | null>(null);
   const [destructive, setDestructive] = React.useState<
     "delete" | "leave" | null
   >(null);
@@ -332,6 +391,23 @@ export function ProjectDetailWorkspace({
       ]);
     },
   });
+  const removePaperMutation = useMutation({
+    mutationFn: ({
+      confirmDeleteAnnotations,
+      documentId,
+    }: {
+      confirmDeleteAnnotations: boolean;
+      documentId: string;
+    }) => removeProjectPaper(projectId, documentId, confirmDeleteAnnotations),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: projectKeys.detail(projectId),
+        }),
+        queryClient.invalidateQueries({ queryKey: projectKeys.lists() }),
+      ]);
+    },
+  });
   const deleteMutation = useMutation({
     mutationFn: () => deleteProject(projectId),
   });
@@ -357,6 +433,34 @@ export function ProjectDetailWorkspace({
       router.replace("/projects");
     } catch {
       toast.notify({ title: t("feedback.actionFailed") });
+    }
+  }
+
+  async function requestPaperRemoval(paper: ProjectPaper) {
+    try {
+      await removePaperMutation.mutateAsync({
+        confirmDeleteAnnotations: false,
+        documentId: paper.document_id,
+      });
+      toast.notify({ title: t("detail.papers.removed") });
+    } catch (error) {
+      const impact = paperRemovalImpact(error, paper);
+      if (impact) setPaperRemoval(impact);
+      else toast.notify({ title: t("detail.papers.removeFailed") });
+    }
+  }
+
+  async function confirmPaperRemoval() {
+    if (!paperRemoval) return;
+    try {
+      await removePaperMutation.mutateAsync({
+        confirmDeleteAnnotations: true,
+        documentId: paperRemoval.paper.document_id,
+      });
+      setPaperRemoval(null);
+      toast.notify({ title: t("detail.papers.removed") });
+    } catch {
+      toast.notify({ title: t("detail.papers.removeFailed") });
     }
   }
 
@@ -551,7 +655,9 @@ export function ProjectDetailWorkspace({
                   <div className="border-line bg-surface rounded-[var(--radius-xl)] border px-4">
                     {papersQuery.data?.items.slice(0, 3).map((paper) => (
                       <ProjectPaperRow
+                        canRemove={project.capabilities.manage_papers}
                         key={paper.document_id}
+                        onRemove={(paper) => void requestPaperRemoval(paper)}
                         paper={paper}
                         projectId={projectId}
                       />
@@ -661,7 +767,9 @@ export function ProjectDetailWorkspace({
                   ) : (
                     papersQuery.data.items.map((paper) => (
                       <ProjectPaperRow
+                        canRemove={project.capabilities.manage_papers}
                         key={paper.document_id}
+                        onRemove={(paper) => void requestPaperRemoval(paper)}
                         paper={paper}
                         projectId={projectId}
                       />
@@ -869,6 +977,37 @@ export function ProjectDetailWorkspace({
                 variant="danger"
               >
                 {t(`confirm.${destructive ?? "delete"}.action`)}
+              </Button>
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        onOpenChange={(open) => !open && setPaperRemoval(null)}
+        open={Boolean(paperRemoval)}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>
+            {t("detail.papers.confirm.title")}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("detail.papers.confirm.description", {
+              comments: paperRemoval?.commentCount ?? 0,
+              threads: paperRemoval?.threadCount ?? 0,
+              title: paperRemoval?.paper.title || t("detail.papers.untitled"),
+            })}
+          </AlertDialogDescription>
+          <div className="mt-6 flex justify-end gap-2">
+            <AlertDialogCancel asChild>
+              <Button variant="secondary">{t("confirm.cancel")}</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                loading={removePaperMutation.isPending}
+                onClick={() => void confirmPaperRemoval()}
+                variant="danger"
+              >
+                {t("detail.papers.confirm.action")}
               </Button>
             </AlertDialogAction>
           </div>

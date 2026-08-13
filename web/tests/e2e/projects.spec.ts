@@ -24,6 +24,7 @@ const actor = {
 
 async function mockProjects(page: Page) {
   let activeProject = projectFixtures[0]!;
+  let paperRemoved = false;
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -89,6 +90,25 @@ async function mockProjects(page: Page) {
         body: JSON.stringify(activeProject),
       });
     }
+    if (request.method() === "DELETE" && path.includes("/papers/")) {
+      const confirmed =
+        url.searchParams.get("confirm_delete_annotations") === "true";
+      if (confirmed) {
+        paperRemoved = true;
+        return route.fulfill({ status: 204 });
+      }
+      return route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "project_document_has_annotations",
+          details: { comment_count: 5, thread_count: 2 },
+          kind: "conflict",
+          message: "Confirm annotation deletion",
+          retryable: false,
+        }),
+      });
+    }
     if (request.method() === "DELETE") return route.fulfill({ status: 204 });
     if (request.method() === "POST" && path.endsWith("/papers")) {
       return route.fulfill({
@@ -101,7 +121,7 @@ async function mockProjects(page: Page) {
       return route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          items: projectPaperFixtures,
+          items: paperRemoved ? [] : projectPaperFixtures,
           next_cursor: null,
           previous_cursor: null,
           total_count: projectPaperFixtures.length,
@@ -205,6 +225,29 @@ test("supports the Projects critical journey", async ({ page }) => {
     "href",
     `/reader/${projectPaperFixtures[0]!.document_id}?project=${activeProjectId}`,
   );
+
+  await page
+    .getByRole("button", { name: "Open paper actions" })
+    .first()
+    .click();
+  await page.getByRole("menuitem", { name: "Remove from project" }).click();
+  const impactDialog = page.getByRole("alertdialog");
+  await expect(impactDialog).toContainText("2 project annotation threads");
+  const confirmedRemoval = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return (
+      request.method() === "DELETE" &&
+      url.pathname.includes("/papers/") &&
+      url.searchParams.get("confirm_delete_annotations") === "true"
+    );
+  });
+  await impactDialog
+    .getByRole("button", { name: "Remove paper and annotations" })
+    .click();
+  await confirmedRemoval;
+  await expect(
+    page.getByRole("link", { name: /Attention Is All You Need/ }),
+  ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Manage project" }).click();
   await page.getByRole("menuitem", { name: "Edit project" }).click();

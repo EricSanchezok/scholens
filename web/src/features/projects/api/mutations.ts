@@ -47,3 +47,16 @@ export async function addProjectPapers(
   if (!data) throw new Error("Project paper add response was empty");
   return data;
 }
+
+export async function removeProjectPaper(
+  projectId: string,
+  documentId: string,
+  confirmDeleteAnnotations = false,
+) {
+  await apiClient.DELETE("/api/v1/projects/{project_id}/papers/{document_id}", {
+    params: {
+      path: { document_id: documentId, project_id: projectId },
+      query: { confirm_delete_annotations: confirmDeleteAnnotations },
+    },
+  });
+}

@@ -804,6 +804,15 @@
         "sortTitle": "Title A–Z",
         "sortPublished": "Publication date",
         "add": "Add papers",
+        "openMenu": "Open paper actions",
+        "remove": "Remove from project",
+        "removed": "Paper removed from project",
+        "removeFailed": "The paper could not be removed",
+        "confirm": {
+          "title": "Remove this paper and its project annotations?",
+          "description": "Removing “{title}” will permanently delete {threads, plural, one {# project annotation thread} other {# project annotation threads}} and {comments, plural, one {# comment} other {# comments}}. Personal annotations and Library access are not affected.",
+          "action": "Remove paper and annotations"
+        },
         "empty": "No papers in this project yet.",
         "untitled": "Untitled paper",
         "unknownAuthors": "Authors unavailable",
