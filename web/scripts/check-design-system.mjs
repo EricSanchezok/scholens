@@ -200,6 +200,19 @@ const generatedFoundation = await readFile(
   path.join(generatedRoot, "dimensions.css"),
   "utf8",
 );
+const tailwindImportIndex = globals.indexOf('@import "tailwindcss";');
+const foundationImportIndex = globals.indexOf(
+  '@import "../design-system/generated/dimensions.css";',
+);
+if (
+  foundationImportIndex === -1 ||
+  tailwindImportIndex === -1 ||
+  foundationImportIndex > tailwindImportIndex
+) {
+  report(
+    "src/styles/globals.css: generated Tailwind theme aliases must be imported before tailwindcss so semantic utilities are emitted",
+  );
+}
 if (!generatedFoundation.includes("@theme inline")) {
   report(
     "src/design-system/generated/dimensions.css: Tailwind adapter was not generated",

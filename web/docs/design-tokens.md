@@ -87,6 +87,14 @@ interface density in a running development server. Do not replace them with
 component-local pixel sizes. `design:check` requires every typography alias to
 have both its theme mapping and its stable utility registration.
 
+`src/styles/globals.css` imports generated `dimensions.css` before
+`tailwindcss`. This order is part of the build contract: Tailwind must discover
+the generated `@theme inline` aliases before it emits semantic utilities such
+as `bg-primary`, `bg-elevated`, `text-foreground`, and `border-line`.
+`design:check` rejects an inverted order because it can leave raw token
+variables present while silently removing the component utility rules that
+consume them.
+
 Interactive descendants inherit the state of their shared control. In
 particular, an icon inside a disabled button resolves to the shared disabled
 icon role even when its enabled state is inverse. Composite controls may

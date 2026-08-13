@@ -1,7 +1,7 @@
-@import "tailwindcss";
 @import "../design-system/generated/dimensions.css";
 @import "../design-system/generated/colors-light.css";
 @import "../design-system/generated/colors-dark.css";
+@import "tailwindcss";
 
 @layer base {
   * {

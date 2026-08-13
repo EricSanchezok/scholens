@@ -37,6 +37,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+function resolveColor(value: string, property: "backgroundColor" | "color") {
+  const reference = document.createElement("span");
+  reference.style[property] = value;
+  document.body.append(reference);
+  const resolved = getComputedStyle(reference)[property];
+  reference.remove();
+  return resolved;
+}
+
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -175,15 +184,37 @@ export const FailedWithRetry: Story = {
 export const AddPapers: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(
-      await canvas.findByRole("button", { name: "Add papers" }),
+    const openButton = await canvas.findByRole("button", {
+      name: "Add papers",
+    });
+    await expect(getComputedStyle(openButton).backgroundColor).toBe(
+      resolveColor("var(--color-action-primary)", "backgroundColor"),
     );
+    await expect(getComputedStyle(openButton).color).toBe(
+      resolveColor("var(--color-action-primary-foreground)", "color"),
+    );
+    await userEvent.click(openButton);
     const body = within(document.body);
+    const dialog = await body.findByRole("dialog");
+    const overlay = document.querySelector<HTMLElement>(
+      '[data-slot="dialog-overlay"]',
+    );
     await expect(
       await body.findByRole("heading", { name: "Add papers" }),
     ).toBeVisible();
     await expect(body.getByText("PDF files")).toBeVisible();
     await expect(body.getByText("DOI, arXiv, or PDF URL")).toBeVisible();
+    await expect(getComputedStyle(dialog).backgroundColor).toBe(
+      resolveColor("var(--color-bg-elevated)", "backgroundColor"),
+    );
+    await expect(getComputedStyle(dialog).borderTopStyle).toBe("solid");
+    await expect(getComputedStyle(dialog).borderTopColor).toBe(
+      resolveColor("var(--color-border-default)", "color"),
+    );
+    await expect(overlay).not.toBeNull();
+    await expect(getComputedStyle(overlay!).backgroundColor).toBe(
+      resolveColor("var(--color-overlay-backdrop)", "backgroundColor"),
+    );
   },
 };
 
