@@ -70,6 +70,24 @@ body {
   container-type: inline-size;
 }
 
+/*
+ * Keep compact product typography in the stable root stylesheet. The generated
+ * token file may be rewritten while a development server is running; these
+ * utilities must remain registered while their values continue to come from
+ * semantic tokens.
+ */
+@utility text-caption {
+  font-size: var(--type-caption);
+}
+
+@utility text-sidebar-label {
+  font-size: var(--type-sidebar);
+}
+
+@utility text-ui {
+  font-size: var(--type-ui);
+}
+
 ::selection {
   background: var(--color-selection-bg);
   color: var(--color-selection-foreground);

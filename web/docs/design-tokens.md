@@ -79,7 +79,13 @@ recipe at the call site.
 
 The Tailwind `@theme` adapter is appended to generated `dimensions.css`. Add or
 rename an alias in `src/design-system/adapters/tailwind.json`; never recreate an
-`@theme` table in global CSS.
+`@theme` table in global CSS. Typography aliases additionally have small stable
+`@utility` registrations in `src/styles/globals.css`. Their values still come
+from generated semantic variables, but keeping the registrations outside the
+generated file prevents a concurrent token regeneration from changing compact
+interface density in a running development server. Do not replace them with
+component-local pixel sizes. `design:check` requires every typography alias to
+have both its theme mapping and its stable utility registration.
 
 Interactive descendants inherit the state of their shared control. In
 particular, an icon inside a disabled button resolves to the shared disabled

@@ -205,6 +205,24 @@ if (!generatedFoundation.includes("@theme inline")) {
     "src/design-system/generated/dimensions.css: Tailwind adapter was not generated",
   );
 }
+for (const [name, target] of Object.entries(adapter.fontSizes)) {
+  const targetVariable = target.replaceAll(".", "-");
+  const themeMapping = `--text-${name}: var(--${targetVariable});`;
+  if (!generatedFoundation.includes(themeMapping)) {
+    report(
+      `src/design-system/generated/dimensions.css: text-${name} theme mapping was not generated`,
+    );
+  }
+  const stableUtilityPattern = new RegExp(
+    `@utility\\s+text-${name}\\s*\\{[^}]*font-size:\\s*var\\(--${targetVariable}\\);?[^}]*\\}`,
+    "s",
+  );
+  if (!stableUtilityPattern.test(globals)) {
+    report(
+      `src/styles/globals.css: stable text-${name} utility must bind to --${targetVariable}`,
+    );
+  }
+}
 if (globals.includes("@theme")) {
   report(
     "src/styles/globals.css: @theme aliases are generated; do not maintain them here",
