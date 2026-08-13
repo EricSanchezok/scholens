@@ -250,5 +250,22 @@ uv run alembic upgrade head  # intentional no-op/idempotency check
 uv run alembic check         # must report no new upgrade operations
 ```
 
+A schema reset also removes every runtime grant on the dropped objects. After
+the migration checks pass, re-run the reviewed, idempotent grant contract as
+the local database owner before starting Server:
+
+```bash
+cd ..
+psql "$LOCAL_DATABASE_ADMIN_URL" \
+  -v auth_migrator_role=auth_migrator \
+  -v product_migrator_role=scholens_migrator \
+  -v app_role=scholens_app \
+  -f deploy/production/bootstrap-db.sql
+```
+
+Do not grant ownership to `scholens_app` or grant it either migration ledger.
+The bootstrap intentionally leaves the operation journal append-only and is
+safe to re-run after both Identity and product migrations.
+
 The migration role must own `scholens` and have read/write access required by
 product foreign keys, but it must not own or have `CREATE` on `auth`.
