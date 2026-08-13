@@ -129,7 +129,10 @@ function KindFilter({
     </div>
   );
   const trigger = (
-    <Button variant="secondary">
+    <Button
+      className="bg-subtle hover:border-line rounded-full border-transparent"
+      variant="secondary"
+    >
       <Icon glyph={FilterIcon} size={20} tone="secondary" />
       {t("label")}
       {active.length > 0 && <Badge tone="neutral">{active.length}</Badge>}
@@ -202,7 +205,7 @@ export function OutputsView({
           >
             <SelectTrigger
               aria-label={t("sort.label")}
-              className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+              className="bg-subtle hover:border-line min-w-0 flex-1 rounded-full border-transparent md:w-auto md:min-w-44 md:flex-none"
             >
               <SelectValue />
             </SelectTrigger>
@@ -241,9 +244,9 @@ export function OutputsView({
         )}
         {!loading && !error && outputs.length > 0 && (
           <>
-            <div className="border-line bg-surface hidden overflow-hidden rounded-[var(--radius-lg)] border md:block">
+            <div className="border-line hidden border-y md:block">
               <table className="w-full table-fixed border-collapse text-left">
-                <thead className="bg-subtle text-secondary text-xs font-medium">
+                <thead className="text-muted text-xs font-medium">
                   <tr>
                     <th className="px-4 py-3 font-medium">
                       {t("columns.output")}
@@ -295,10 +298,10 @@ export function OutputsView({
               </table>
             </div>
 
-            <ul className="grid min-w-0 gap-2 md:hidden">
+            <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
               {outputs.map((output) => (
                 <li
-                  className="border-line bg-surface min-w-0 overflow-hidden rounded-[var(--radius-lg)] border p-4"
+                  className="min-w-0 overflow-hidden py-4"
                   key={output.item.id}
                 >
                   <OutputIdentity output={output} />

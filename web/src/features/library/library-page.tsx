@@ -70,6 +70,7 @@ function DebouncedLibrarySearch({
   return (
     <SearchField
       aria-label={label}
+      className="bg-subtle hover:border-line rounded-full border-transparent"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
       value={input}
@@ -263,10 +264,10 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-10">
+      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-9">
         <header className="hidden items-start justify-between gap-6 lg:flex">
           <div>
-            <h1 className="text-3xl font-semibold tracking-[-0.02em]">
+            <h1 className="text-2xl font-semibold tracking-[-0.02em]">
               {t("title")}
             </h1>
             <p className="text-secondary mt-2 text-sm">{t("description")}</p>

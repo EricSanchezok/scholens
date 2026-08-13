@@ -91,7 +91,10 @@ export const ContextPicker: Story = {
     await expect(
       await body.findByRole("heading", { name: "Add context" }),
     ).toBeVisible();
+    await expect(body.queryByRole("searchbox")).not.toBeInTheDocument();
+    await expect(body.queryByRole("checkbox")).not.toBeInTheDocument();
     await userEvent.click(body.getByRole("switch", { name: "Entire library" }));
+    await expect(body.getByRole("searchbox")).toBeVisible();
     await userEvent.type(body.getByRole("searchbox"), "RAG");
     await expect(
       body.getByRole("checkbox", { name: /RAG evaluation/ }),

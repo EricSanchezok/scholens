@@ -41,6 +41,10 @@ the deliberately deferred boundaries.
   target while using a compact avatar and horizontal inset so a normal full
   email has width headroom across browser font metrics rather than merely
   fitting one reference screenshot.
+- The desktop sidebar is one continuous canvas rail separated from content by
+  one quiet boundary. Navigation, history, and account controls do not become
+  independent cards; only the current or hovered row receives a rounded local
+  surface. This keeps the shell visually continuous with Library and Projects.
 - The phone navigation hub fills the viewport and owns an opaque sidebar
   surface above a lower stacking-level backdrop. Its history is independently
   scrollable between fixed account and utility regions. Visible controls retain
@@ -292,8 +296,10 @@ gutters, bottom safe area, and stacking layer. The Composer and navigation are
 separated by 4 px inside the Dock rather than behaving as independent floating
 surfaces; a non-layout 20 px fade softens the transition from scrolling content.
 Only one real Composer is mounted at a time. On desktop it rests as a rounded
-single-line bar and expands to a rounded panel for multiline input or selected
-sources. On phones it stays one compact row above primary navigation: the
+single-line bar and expands to a rounded panel only when the written prompt
+becomes multiline or long. Selected sources add one compact, truncated context
+rail without turning the Composer into a tall card. On phones it stays one
+compact row above primary navigation: the
 Iconoir AtSign context trigger anchors the left, the input owns the flexible
 middle slot, and the circular submit or stop action anchors the right. The
 context trigger's accessible name and native title carry the current library,
@@ -302,6 +308,10 @@ one text-only radio menu from the phone header or desktop Composer instead of a
 segmented toggle. The phone menu is a compact two-label list; the desktop menu
 retains one supporting description per mode. Decorative mode icons do not
 repeat the labels. The separate selected-source chip remains desktop-only.
+Entire Library is mutually exclusive with selected projects and papers. While
+it is active, the context picker hides search and item selection rather than
+showing controls that cannot affect the scope; switching it off restores the
+explicit project and paper chooser.
 The canonical responsive Composer contract is Figma node
 [`923:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=923-2628),
 `Matrix / Composer v2`. It supersedes earlier isolated Composer compositions;

@@ -85,7 +85,7 @@ function SidebarControl({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? accessibleLabel : undefined}
       className={cn(
-        "hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-md)] font-medium transition-colors",
+        "hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium transition-colors",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active && "bg-hover",
@@ -105,7 +105,7 @@ function SidebarControl({
       aria-disabled={disabled || undefined}
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
-        "flex h-10 items-center gap-2 rounded-[var(--radius-md)] font-medium",
+        "flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
@@ -159,7 +159,7 @@ function ConversationGroup({
             activeConversationId === conversation.id ? "page" : undefined
           }
           className={cn(
-            "text-sidebar-label hover:bg-hover flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2",
+            "text-sidebar-label hover:bg-hover flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-lg)] px-2",
             keyboardFocusRing,
             activeConversationId === conversation.id && "bg-hover",
           )}
@@ -215,7 +215,7 @@ function AccountMenu({
             keyboardFocusRing,
             settingsTrigger
               ? "bg-surface size-12 justify-center rounded-full"
-              : "rounded-[var(--radius-md)]",
+              : "rounded-[var(--radius-lg)]",
             !settingsTrigger && "h-12",
             !settingsTrigger &&
               (collapsed
@@ -664,7 +664,7 @@ function Sidebar({
       <aside
         aria-label={t("navigation.sidebar")}
         className={cn(
-          "border-line bg-sidebar flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))] transition-[width] duration-200 ease-out motion-reduce:transition-none",
+          "border-line bg-canvas flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))] transition-[width] duration-200 ease-out motion-reduce:transition-none",
           collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
         )}
       >

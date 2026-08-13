@@ -63,6 +63,34 @@ export const MultiplePapersScope: Story = {
   },
 };
 
+export const DesktopSelectedContext: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      project_ids: [],
+      document_ids: [homePapers[0]!.document.document_id],
+    },
+  },
+  globals: {
+    locale: "zh-CN",
+    viewport: { value: "desktop", isRotated: false },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByRole("textbox", { name: "问任何问题" });
+    const form = composer.closest("form");
+    await expect(form).not.toBeNull();
+    if (!form) return;
+    await expect(form).toHaveAttribute("data-has-context", "true");
+    await expect(form).toHaveAttribute("data-expanded", "false");
+    await expect(canvas.getByText("1 个来源")).toBeVisible();
+    await expect(form.getBoundingClientRect().height).toBeLessThan(112);
+    await expect(
+      Number.parseFloat(getComputedStyle(form).borderRadius),
+    ).toBeGreaterThanOrEqual(999);
+  },
+};
+
 export const LongProjectScope: Story = {
   args: {
     projects: [

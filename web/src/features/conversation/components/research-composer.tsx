@@ -195,118 +195,130 @@ function ContextPicker({
           <Switch
             checked={context.kind === "library"}
             id={librarySwitchId}
-            onCheckedChange={(checked) =>
+            onCheckedChange={(checked) => {
+              if (checked) setQuery("");
               onChange(
                 checked
                   ? { kind: "library" }
                   : { kind: "selection", project_ids: [], document_ids: [] },
-              )
-            }
+              );
+            }}
           />
         </div>
-        <SearchField
-          aria-label={t("search")}
-          className="h-10"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("search")}
-          value={query}
-        />
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          {visibleProjects.length > 0 && (
-            <section className="grid gap-2">
-              <h3 className="text-secondary text-xs">{t("projects")}</h3>
-              {visibleProjects.map((project) => {
-                const checked = selectedProjects.includes(project.id);
-                return (
-                  <label
-                    className={cn(
-                      "hover:bg-hover flex cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] p-2",
-                      checked && "bg-subtle",
-                    )}
-                    key={project.id}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={context.kind === "library"}
-                      onCheckedChange={(value) =>
-                        updateSelection(
-                          "project_ids",
-                          project.id,
-                          value === true,
-                        )
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="text-ui block truncate font-medium">
-                        {project.title}
-                      </span>
-                      <span className="text-secondary mt-1 block text-xs">
-                        {project.num_papers} · {project.num_conversations}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </section>
+        {context.kind !== "library" ? (
+          <>
+            <SearchField
+              aria-label={t("search")}
+              className="h-10"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("search")}
+              value={query}
+            />
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              {visibleProjects.length > 0 && (
+                <section className="grid gap-2">
+                  <h3 className="text-secondary text-xs">{t("projects")}</h3>
+                  {visibleProjects.map((project) => {
+                    const checked = selectedProjects.includes(project.id);
+                    return (
+                      <label
+                        className={cn(
+                          "hover:bg-hover flex cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] p-2",
+                          checked && "bg-subtle",
+                        )}
+                        key={project.id}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) =>
+                            updateSelection(
+                              "project_ids",
+                              project.id,
+                              value === true,
+                            )
+                          }
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="text-ui block truncate font-medium">
+                            {project.title}
+                          </span>
+                          <span className="text-secondary mt-1 block text-xs">
+                            {project.num_papers} · {project.num_conversations}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </section>
+              )}
+              {visiblePapers.length > 0 && (
+                <section className="grid gap-2">
+                  <h3 className="text-secondary text-xs">{t("papers")}</h3>
+                  {visiblePapers.map((paper) => {
+                    const checked = selectedDocuments.includes(
+                      paper.document.document_id,
+                    );
+                    const title =
+                      paper.metadata_overrides.title ??
+                      paper.document.title ??
+                      paper.document.original_filename;
+                    const authors = paper.document.authors
+                      ?.slice(0, 2)
+                      .join(", ");
+                    return (
+                      <label
+                        className={cn(
+                          "hover:bg-hover flex cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] p-2",
+                          checked && "bg-subtle",
+                        )}
+                        key={paper.document.document_id}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) =>
+                            updateSelection(
+                              "document_ids",
+                              paper.document.document_id,
+                              value === true,
+                            )
+                          }
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="text-ui block truncate font-medium">
+                            {title}
+                          </span>
+                          <span className="text-secondary mt-1 block truncate text-xs">
+                            {authors ||
+                              paper.document.journal ||
+                              paper.document.original_filename}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </section>
+              )}
+              {visibleProjects.length === 0 && visiblePapers.length === 0 && (
+                <p className="text-muted py-8 text-center text-sm">
+                  {t("noMatches")}
+                </p>
+              )}
+            </div>
+          </>
+        ) : null}
+        <div
+          className={cn(
+            "flex items-center gap-3 pt-1",
+            context.kind !== "library" && "border-line border-t pt-3",
           )}
-          {visiblePapers.length > 0 && (
-            <section className="grid gap-2">
-              <h3 className="text-secondary text-xs">{t("papers")}</h3>
-              {visiblePapers.map((paper) => {
-                const checked = selectedDocuments.includes(
-                  paper.document.document_id,
-                );
-                const title =
-                  paper.metadata_overrides.title ??
-                  paper.document.title ??
-                  paper.document.original_filename;
-                const authors = paper.document.authors?.slice(0, 2).join(", ");
-                return (
-                  <label
-                    className={cn(
-                      "hover:bg-hover flex cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] p-2",
-                      checked && "bg-subtle",
-                    )}
-                    key={paper.document.document_id}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={context.kind === "library"}
-                      onCheckedChange={(value) =>
-                        updateSelection(
-                          "document_ids",
-                          paper.document.document_id,
-                          value === true,
-                        )
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="text-ui block truncate font-medium">
-                        {title}
-                      </span>
-                      <span className="text-secondary mt-1 block truncate text-xs">
-                        {authors ||
-                          paper.document.journal ||
-                          paper.document.original_filename}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </section>
+        >
+          {context.kind !== "library" ? (
+            <span className="text-ui min-w-0 flex-1 font-medium">
+              {t("selected", { count: selectionCount })}
+            </span>
+          ) : (
+            <span className="flex-1" />
           )}
-          {visibleProjects.length === 0 && visiblePapers.length === 0 && (
-            <p className="text-muted py-8 text-center text-sm">
-              {t("noMatches")}
-            </p>
-          )}
-        </div>
-        <div className="border-line flex items-center gap-3 border-t pt-3">
-          <span className="text-ui min-w-0 flex-1 font-medium">
-            {context.kind === "library"
-              ? t("librarySelected")
-              : t("selected", { count: selectionCount })}
-          </span>
           {context.kind === "selection" && selectionCount > 0 && (
             <Button
               className="min-h-9 px-2"
@@ -477,10 +489,9 @@ export function ResearchComposer({
     context.kind === "selection"
       ? (context.project_ids?.length ?? 0) + (context.document_ids?.length ?? 0)
       : 0;
+  const hasContext = Boolean(turnContextLabel) || selectionCount > 0;
   const expanded =
-    selectionCount > 0 ||
-    messageValue.includes("\n") ||
-    messageValue.trim().length > 88;
+    messageValue.includes("\n") || messageValue.trim().length > 88;
 
   async function submit(values: ComposerValues) {
     await onSubmit(values.message.trim());
@@ -586,6 +597,7 @@ export function ResearchComposer({
           : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-2",
       )}
       data-expanded={expanded}
+      data-has-context={hasContext || undefined}
       data-focus-surface
       onSubmit={composerForm.handleSubmit(submit)}
     >
@@ -615,11 +627,18 @@ export function ResearchComposer({
       />
       {turnContextLabel ||
       (context.kind === "selection" && selectionCount > 0) ? (
-        <div className="col-span-4 row-start-2 hidden flex-wrap gap-1.5 lg:flex">
-          <span className="bg-subtle text-secondary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
+        <div
+          className={cn(
+            "row-start-2 hidden min-w-0 pt-0.5 lg:flex",
+            expanded ? "col-span-4 col-start-1" : "col-span-2 col-start-2 pr-2",
+          )}
+        >
+          <span className="bg-subtle text-secondary inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
             <Icon glyph={DocumentIcon} size={16} tone="secondary" />
-            {turnContextLabel ??
-              t("context.selectionSummary", { count: selectionCount })}
+            <span className="truncate">
+              {turnContextLabel ??
+                t("context.selectionSummary", { count: selectionCount })}
+            </span>
           </span>
         </div>
       ) : null}

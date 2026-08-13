@@ -53,6 +53,14 @@ text metadata. They are not positioned beneath the full thumbnail row. Long
 titles and uninterrupted identifiers must not create horizontal page
 scrolling; desktop table titles remain a single line.
 
+The Library collection uses one flat editorial surface rather than placing a
+table inside a rounded card. Search, filter, and sort are compact pill controls;
+the collection owns only its top and bottom boundary, while rows are separated
+by quiet dividers and reveal a local hover surface. Mobile keeps the same
+border ownership with one divided list instead of a stack of repeated cards.
+This visual contract also applies to Outputs so switching tabs does not change
+the page's interface dialect.
+
 Library tags are explicit user-owned organizational labels, not model-generated
 keywords. Papers without assigned labels show no synthetic tags; the filter
 only lists labels the user owns, and assigned labels render with the paper.

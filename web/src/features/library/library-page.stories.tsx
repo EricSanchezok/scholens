@@ -57,6 +57,18 @@ export const Populated: Story = {
       titles.some((element) => element.getClientRects().length > 0),
     ).toBe(true);
     await expect(canvas.getByRole("table")).toBeVisible();
+    const tableSurface = canvas.getByRole("table").parentElement;
+    await expect(tableSurface).not.toBeNull();
+    if (tableSurface) {
+      await expect(getComputedStyle(tableSurface).borderLeftWidth).toBe("0px");
+      await expect(getComputedStyle(tableSurface).borderTopWidth).toBe("1px");
+      await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
+    }
+    const searchRadius = Number.parseFloat(
+      getComputedStyle(canvas.getByRole("searchbox", { name: "Search papers" }))
+        .borderRadius,
+    );
+    await expect(searchRadius).toBeGreaterThan(1_000);
     await expect(
       canvas
         .getAllByText("Transformers")

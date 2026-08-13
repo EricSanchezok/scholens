@@ -442,7 +442,10 @@ function TagFilter({
       <div className="hidden sm:block">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="secondary">
+            <Button
+              className="bg-subtle hover:border-line rounded-full border-transparent"
+              variant="secondary"
+            >
               <Icon glyph={TagIcon} size={20} tone="secondary" />
               {t("tags")}
               {active.length > 0 && (
@@ -704,7 +707,7 @@ export function PapersView({
             >
               <SelectTrigger
                 aria-label={t("sort.label")}
-                className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+                className="bg-subtle hover:border-line min-w-0 flex-1 rounded-full border-transparent md:w-auto md:min-w-44 md:flex-none"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -745,9 +748,9 @@ export function PapersView({
         )}
         {!loading && !error && hasRows && (
           <>
-            <div className="border-line bg-surface group/table hidden overflow-hidden rounded-[var(--radius-lg)] border md:block">
+            <div className="border-line group/table hidden border-y md:block">
               <table className="w-full table-fixed border-collapse text-left">
-                <thead className="bg-subtle text-secondary text-xs font-medium">
+                <thead className="text-muted text-xs font-medium">
                   <tr>
                     <th className="w-20 px-3 py-3">
                       <span
@@ -863,10 +866,10 @@ export function PapersView({
               </table>
             </div>
 
-            <ul className="grid min-w-0 gap-2 md:hidden">
+            <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
               {ingestions.map((ingestion) => (
                 <li
-                  className="border-line bg-surface min-w-0 rounded-[var(--radius-lg)] border p-4 transition-opacity duration-150"
+                  className="min-w-0 py-4 transition-opacity duration-150"
                   key={ingestion.id}
                 >
                   <div className="flex items-start gap-3">
@@ -894,10 +897,7 @@ export function PapersView({
                 const id = paper.document.document_id;
                 const metadata = paperMetadata(paper);
                 return (
-                  <li
-                    className="border-line bg-surface group/paper min-w-0 rounded-[var(--radius-lg)] border p-4"
-                    key={id}
-                  >
+                  <li className="group/paper min-w-0 py-4" key={id}>
                     <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3">
                       <SelectablePaperThumbnail
                         checked={selected.includes(id)}
