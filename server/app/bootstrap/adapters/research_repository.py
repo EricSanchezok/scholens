@@ -19,6 +19,7 @@ from app.database.models import (
     Conversation,
     ConversationScopeType,
 )
+from app.shared.domain.enums import AnnotationAudienceFilter, AnnotationThreadMode
 from app.shared.domain import AppError, FailureKind
 from app.helpers.s3 import s3_service
 from app.modules.papers.infrastructure.access import require_document_access
@@ -29,6 +30,7 @@ from app.bootstrap.adapters.research_access import (
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
     AnnotationThreadCapabilities,
+    AnnotationThreadSummaryResponse,
     AudioOverviewContent,
     CitationContent,
     CitationSnapshot,
@@ -94,6 +96,25 @@ class ResearchRepository:
                 kind=FailureKind.NOT_FOUND,
             )
         research_item_policy.require_visible(db, item=item, user_id=user_id)
+        return item
+
+    def get_annotation_thread(
+        self,
+        db: Session,
+        *,
+        thread_id: uuid.UUID,
+        user_id: int,
+    ) -> ResearchItem:
+        item = self.require_visible(db, item_id=thread_id, user_id=user_id)
+        if (
+            item.kind != ResearchItemKind.ANNOTATION_THREAD.value
+            or item.annotation_thread is None
+        ):
+            raise AppError(
+                code="annotation_thread_not_found",
+                message="Annotation thread not found",
+                kind=FailureKind.NOT_FOUND,
+            )
         return item
 
     def require_creator_owned(
@@ -190,6 +211,133 @@ class ResearchRepository:
         if kind is not None:
             statement = statement.where(ResearchItem.kind == kind.value)
         return list(db.scalars(statement).unique().all())
+
+    def list_annotation_summaries(
+        self,
+        db: Session,
+        *,
+        document_id: uuid.UUID,
+        user_id: int,
+        project_id: uuid.UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+    ) -> list[AnnotationThreadSummaryResponse]:
+        require_document_access(db, document_id=document_id, user_id=user_id)
+        if project_id is not None:
+            from app.modules.projects.infrastructure.access import (
+                require_project_access,
+            )
+            from app.modules.projects.infrastructure.models import ProjectPaper
+
+            require_project_access(db, project_id=project_id, user_id=user_id)
+            if (
+                db.scalar(
+                    select(ProjectPaper.id).where(
+                        ProjectPaper.project_id == project_id,
+                        ProjectPaper.document_id == document_id,
+                    )
+                )
+                is None
+            ):
+                raise AppError(
+                    code="project_document_not_found",
+                    message="Document not found in this Project",
+                    kind=FailureKind.NOT_FOUND,
+                )
+
+        personal_filter = and_(
+            ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
+            ResearchItem.created_by_id == user_id,
+        )
+        project_filter = and_(
+            ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+            ResearchItem.audience_project_id == project_id,
+        )
+        audience_filter = (
+            personal_filter
+            if project_id is None
+            else or_(personal_filter, project_filter)
+        )
+        if audience is AnnotationAudienceFilter.PERSONAL:
+            audience_filter = personal_filter
+        elif audience is AnnotationAudienceFilter.PROJECT:
+            audience_filter = project_filter
+
+        comment_count = (
+            select(func.count(AnnotationComment.id))
+            .where(AnnotationComment.thread_id == ResearchItem.id)
+            .correlate(ResearchItem)
+            .scalar_subquery()
+        )
+        last_comment_at = (
+            select(func.max(AnnotationComment.updated_at))
+            .where(AnnotationComment.thread_id == ResearchItem.id)
+            .correlate(ResearchItem)
+            .scalar_subquery()
+        )
+        foreign_reply_count = (
+            select(func.count(AnnotationComment.id))
+            .where(
+                AnnotationComment.thread_id == ResearchItem.id,
+                AnnotationComment.created_by_id.is_distinct_from(user_id),
+            )
+            .correlate(ResearchItem)
+            .scalar_subquery()
+        )
+        statement = (
+            select(
+                ResearchItem,
+                comment_count.label("comment_count"),
+                func.coalesce(last_comment_at, ResearchItem.created_at).label(
+                    "last_activity_at"
+                ),
+                foreign_reply_count.label("foreign_reply_count"),
+            )
+            .join(AnnotationThread)
+            .where(
+                ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                ResearchItem.target_document_id == document_id,
+                audience_filter,
+                AnnotationThread.status == status.value,
+            )
+            .options(
+                joinedload(ResearchItem.created_by),
+                joinedload(ResearchItem.annotation_thread).joinedload(
+                    AnnotationThread.resolved_by
+                ),
+            )
+            .order_by(
+                func.coalesce(last_comment_at, ResearchItem.created_at).desc(),
+                ResearchItem.id.desc(),
+            )
+        )
+        if mode is AnnotationThreadMode.HIGHLIGHT:
+            statement = statement.where(comment_count == 0)
+        elif mode is AnnotationThreadMode.NOTE:
+            statement = statement.where(
+                ResearchItem.audience_type == ResearchAudienceType.PERSONAL.value,
+                comment_count > 0,
+            )
+        elif mode is AnnotationThreadMode.DISCUSSION:
+            statement = statement.where(
+                ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                comment_count > 0,
+            )
+
+        return [
+            self.serialize_annotation_summary(
+                db,
+                item=item,
+                user_id=user_id,
+                comment_count=int(count),
+                last_activity_at=last_activity_at_value,
+                has_foreign_replies=int(foreign_count) > 0,
+            )
+            for item, count, last_activity_at_value, foreign_count in db.execute(
+                statement
+            ).unique()
+        ]
 
     def list_for_project(
         self,
@@ -751,6 +899,20 @@ class ResearchRepository:
         data_table: DataTableContent | None = None
         if item.annotation_thread is not None:
             resolved_by = item.annotation_thread.resolved_by
+            comment_count = len(item.annotation_thread.comments)
+            annotation_mode = (
+                AnnotationThreadMode.HIGHLIGHT
+                if comment_count == 0
+                else (
+                    AnnotationThreadMode.DISCUSSION
+                    if item.audience_type == ResearchAudienceType.PROJECT.value
+                    else AnnotationThreadMode.NOTE
+                )
+            )
+            last_activity_at = max(
+                (comment.updated_at for comment in item.annotation_thread.comments),
+                default=item.created_at,
+            )
             has_foreign_replies = any(
                 comment.created_by_id != user_id
                 for comment in item.annotation_thread.comments
@@ -767,6 +929,9 @@ class ResearchRepository:
                 ),
                 color=AnnotationColor(item.annotation_thread.color),
                 role=item.annotation_thread.role,
+                mode=annotation_mode,
+                comment_count=comment_count,
+                last_activity_at=last_activity_at,
                 status=AnnotationThreadStatus(item.annotation_thread.status),
                 resolved_by=(
                     ResearchCreatorResponse(
@@ -845,6 +1010,89 @@ class ResearchRepository:
             citation=citation,
             audio_overview=audio,
             data_table=data_table,
+        )
+
+    def serialize_annotation_summary(
+        self,
+        db: Session,
+        *,
+        item: ResearchItem,
+        user_id: int,
+        comment_count: int,
+        last_activity_at: datetime,
+        has_foreign_replies: bool,
+    ) -> AnnotationThreadSummaryResponse:
+        if item.annotation_thread is None or item.target_document_id is None:
+            raise RuntimeError("annotation_summary_without_thread")
+        access = research_item_policy.require_visible(
+            db,
+            item=item,
+            user_id=user_id,
+        )
+        thread = item.annotation_thread
+        audience: PersonalResearchAudience | ProjectResearchAudience
+        if item.audience_type == ResearchAudienceType.PROJECT.value:
+            if item.audience_project_id is None:
+                raise RuntimeError("project_annotation_without_project")
+            audience = ProjectResearchAudience(project_id=item.audience_project_id)
+            mode = (
+                AnnotationThreadMode.DISCUSSION
+                if comment_count > 0
+                else AnnotationThreadMode.HIGHLIGHT
+            )
+        else:
+            audience = PersonalResearchAudience()
+            mode = (
+                AnnotationThreadMode.NOTE
+                if comment_count > 0
+                else AnnotationThreadMode.HIGHLIGHT
+            )
+        resolved_by = thread.resolved_by
+        can_delete = access.can_manage and not has_foreign_replies
+        return AnnotationThreadSummaryResponse(
+            id=item.id,
+            audience=audience,
+            target_document_id=item.target_document_id,
+            created_by=ResearchCreatorResponse(
+                id=item.created_by_id,
+                display_name=(
+                    item.created_by.display_name
+                    if item.created_by is not None
+                    else None
+                ),
+            ),
+            created_at=item.created_at,
+            quote_text=thread.quote_text,
+            position=(
+                TypeAdapter(ResearchPosition).validate_python(thread.position)
+                if thread.position is not None
+                else None
+            ),
+            color=AnnotationColor(thread.color),
+            role=thread.role,
+            mode=mode,
+            comment_count=comment_count,
+            last_activity_at=last_activity_at,
+            status=AnnotationThreadStatus(thread.status),
+            resolved_by=(
+                ResearchCreatorResponse(
+                    id=thread.resolved_by_id,
+                    display_name=(resolved_by.display_name if resolved_by else None),
+                )
+                if thread.resolved_by_id is not None
+                else None
+            ),
+            resolved_at=thread.resolved_at,
+            capabilities=AnnotationThreadCapabilities(
+                reply=access.has_audience_access and thread.status == "open",
+                recolor=access.can_manage,
+                resolve=access.can_resolve
+                and item.audience_type == ResearchAudienceType.PROJECT.value
+                and comment_count > 0
+                and thread.status == "open",
+                reopen=access.can_resolve and thread.status == "resolved",
+                delete=can_delete,
+            ),
         )
 
     @staticmethod

@@ -8,6 +8,7 @@ from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadListResponse,
     CreateAnnotationCommentRequest,
     CreateAnnotationThreadRequest,
     DeleteResearchItemResponse,
@@ -17,7 +18,12 @@ from app.modules.research.application.contracts import (
     UpdateAnnotationThreadRequest,
 )
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
-from app.shared.domain.enums import RoleType
+from app.shared.domain.enums import (
+    AnnotationAudienceFilter,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    RoleType,
+)
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
@@ -69,22 +75,30 @@ def list_project_research_items(
 
 @document_research_router.get(
     "/{document_id}/annotation-threads",
-    response_model=ResearchItemListResponse,
+    response_model=AnnotationThreadListResponse,
 )
 def list_annotation_threads(
     document_id: UUID,
     project_id: UUID | None = Query(default=None),
+    audience: AnnotationAudienceFilter | None = Query(default=None),
+    mode: AnnotationThreadMode | None = Query(default=None),
+    annotation_status: AnnotationThreadStatus = Query(
+        default=AnnotationThreadStatus.OPEN,
+        alias="status",
+    ),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
-) -> ResearchItemListResponse:
+) -> AnnotationThreadListResponse:
     return executor.query(
-        lambda capabilities: capabilities.research_items.list_document(
+        lambda capabilities: capabilities.research_items.list_annotation_threads(
             actor=current_user,
             document_id=document_id,
             project_id=project_id,
-            annotations_only=True,
+            audience=audience,
+            mode=mode,
+            status=annotation_status,
         )
     )
 
@@ -133,6 +147,25 @@ def update_annotation_thread(
             operation=operation,
             thread_id=thread_id,
             request=request,
+        )
+    )
+
+
+@research_router.get(
+    "/annotation-threads/{thread_id}",
+    response_model=ResearchItemResponse,
+)
+def get_annotation_thread(
+    thread_id: UUID,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+) -> ResearchItemResponse:
+    return executor.query(
+        lambda capabilities: capabilities.research_items.get_annotation_thread(
+            actor=current_user,
+            thread_id=thread_id,
         )
     )
 

@@ -10,6 +10,8 @@ from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import OperationAction, ResourceRef
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadListResponse,
+    AnnotationThreadSummaryResponse,
     CreateAnnotationCommentRequest,
     CreateAnnotationThreadRequest,
     DeleteResearchItemResponse,
@@ -19,7 +21,12 @@ from app.modules.research.application.contracts import (
     UpdateAnnotationThreadRequest,
 )
 from app.shared.application import Actor, OperationContext
-from app.shared.domain.enums import RoleType
+from app.shared.domain.enums import (
+    AnnotationAudienceFilter,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    RoleType,
+)
 
 RESEARCH_ANNOTATION_THREAD_CREATED = OperationAction(
     "research.annotation_thread_created"
@@ -64,6 +71,24 @@ class ResearchItemGateway(Protocol):
         user_id: int,
         project_id: UUID,
     ) -> list[ResearchItemResponse]: ...
+
+    def list_annotation_threads(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        project_id: UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+    ) -> list[AnnotationThreadSummaryResponse]: ...
+
+    def get_annotation_thread(
+        self,
+        *,
+        user_id: int,
+        thread_id: UUID,
+    ) -> ResearchItemResponse: ...
 
     def create_annotation_thread(
         self,
@@ -149,6 +174,38 @@ class ResearchItems:
                 user_id=actor.id,
                 project_id=project_id,
             )
+        )
+
+    def list_annotation_threads(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+        project_id: UUID | None = None,
+        audience: AnnotationAudienceFilter | None = None,
+        mode: AnnotationThreadMode | None = None,
+        status: AnnotationThreadStatus = AnnotationThreadStatus.OPEN,
+    ) -> AnnotationThreadListResponse:
+        return AnnotationThreadListResponse(
+            items=self._gateway.list_annotation_threads(
+                user_id=actor.id,
+                document_id=document_id,
+                project_id=project_id,
+                audience=audience,
+                mode=mode,
+                status=status,
+            )
+        )
+
+    def get_annotation_thread(
+        self,
+        *,
+        actor: Actor,
+        thread_id: UUID,
+    ) -> ResearchItemResponse:
+        return self._gateway.get_annotation_thread(
+            user_id=actor.id,
+            thread_id=thread_id,
         )
 
     def create_annotation_thread(

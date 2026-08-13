@@ -7,6 +7,7 @@ from uuid import UUID
 from app.shared.domain import JsonValue
 from app.shared.domain.enums import (
     AnnotationColor,
+    AnnotationThreadMode,
     AnnotationThreadStatus,
     ResearchItemKind,
 )
@@ -79,11 +80,38 @@ class AnnotationThreadContent(BaseModel):
     position: ResearchPosition | None
     color: AnnotationColor
     role: str
+    mode: AnnotationThreadMode
+    comment_count: int = Field(ge=0)
+    last_activity_at: datetime
     status: AnnotationThreadStatus
     resolved_by: ResearchCreatorResponse | None
     resolved_at: datetime | None
     capabilities: AnnotationThreadCapabilities
     comments: list[AnnotationCommentResponse]
+
+
+class AnnotationThreadSummaryResponse(BaseModel):
+    id: UUID
+    audience: AnnotationAudience
+    target_document_id: UUID
+    created_by: ResearchCreatorResponse
+    created_at: datetime
+    quote_text: str
+    position: ResearchPosition | None
+    color: AnnotationColor
+    role: str
+    mode: AnnotationThreadMode
+    comment_count: int = Field(ge=0)
+    last_activity_at: datetime
+    status: AnnotationThreadStatus
+    resolved_by: ResearchCreatorResponse | None
+    resolved_at: datetime | None
+    capabilities: AnnotationThreadCapabilities
+
+
+class AnnotationThreadListResponse(BaseModel):
+    items: list[AnnotationThreadSummaryResponse]
+    next_cursor: str | None = None
 
 
 class CitationSnapshot(BaseModel):

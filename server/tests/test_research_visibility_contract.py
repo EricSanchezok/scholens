@@ -28,6 +28,7 @@ from app.database.models import (
 )
 from app.main import app
 from app.modules.research.application.contracts import (
+    AnnotationThreadMode,
     AnnotationThreadStatus,
     CitationSnapshot,
     CreateAnnotationThreadRequest,
@@ -172,6 +173,61 @@ def test_thread_creation_atomically_attaches_initial_flat_comment(
     assert [comment.content for comment in item.annotation_thread.comments] == [
         "This matters."
     ]
+
+
+@pytest.mark.parametrize(
+    ("audience_type", "comment_count", "expected_mode"),
+    [
+        (ResearchAudienceType.PERSONAL, 0, AnnotationThreadMode.HIGHLIGHT),
+        (ResearchAudienceType.PROJECT, 0, AnnotationThreadMode.HIGHLIGHT),
+        (ResearchAudienceType.PERSONAL, 1, AnnotationThreadMode.NOTE),
+        (ResearchAudienceType.PROJECT, 2, AnnotationThreadMode.DISCUSSION),
+    ],
+)
+def test_annotation_summary_derives_mode_and_activity(
+    monkeypatch: pytest.MonkeyPatch,
+    audience_type: ResearchAudienceType,
+    comment_count: int,
+    expected_mode: AnnotationThreadMode,
+) -> None:
+    now = datetime.now(timezone.utc)
+    item = _item(creator_id=2, audience_type=audience_type)
+    item.kind = ResearchItemKind.ANNOTATION_THREAD.value
+    item.target_document_id = uuid.uuid4()
+    item.created_at = now
+    item.updated_at = now
+    item.annotation_thread = AnnotationThread(
+        quote_text="Evidence",
+        color="yellow",
+        role="user",
+        status="open",
+    )
+    monkeypatch.setattr(
+        research_item_policy,
+        "require_visible",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            has_audience_access=True,
+            can_manage=True,
+            can_resolve=audience_type is ResearchAudienceType.PROJECT,
+        ),
+    )
+
+    summary = research_repository.serialize_annotation_summary(
+        MagicMock(spec=Session),
+        item=item,
+        user_id=2,
+        comment_count=comment_count,
+        last_activity_at=now,
+        has_foreign_replies=False,
+    )
+
+    assert summary.mode is expected_mode
+    assert summary.comment_count == comment_count
+    assert summary.last_activity_at == now
+    assert summary.capabilities.resolve is (
+        expected_mode is AnnotationThreadMode.DISCUSSION
+    )
+    assert summary.capabilities.delete is True
 
 
 def test_thread_with_other_authors_cannot_be_hard_deleted(

@@ -209,6 +209,13 @@ color, creator, status, and a chronological list of comments. A highlight is a
 thread with no comments. Comments inherit the thread audience, never carry a
 color, and are not nested.
 
+Reader presents that aggregate as three modes without persisting another type:
+a zero-comment thread is a Highlight, a commented personal thread is a Note,
+and a commented Project thread is a Discussion. Only Discussions expose open,
+resolve, and reopen language. Annotation collection responses are lightweight
+summaries with count and activity metadata; only the single expanded thread
+loads its complete chronological comments.
+
 Personal Reader lists only the current user's personal threads. Project Reader
 combines that user's personal threads with threads belonging to the current
 Project and provides `All`, `Mine`, and Project audience filters plus `Open` and

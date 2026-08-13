@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadSummaryResponse,
     CreateAnnotationCommentRequest,
     CreateAnnotationThreadRequest,
     ResearchItemResponse,
@@ -17,7 +18,14 @@ from app.bootstrap.adapters.research_repository import (
     AnnotationThreadCreate,
     research_repository,
 )
-from app.shared.domain.enums import ResearchItemKind, ResearchAudienceType, RoleType
+from app.shared.domain.enums import (
+    AnnotationAudienceFilter,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    ResearchItemKind,
+    ResearchAudienceType,
+    RoleType,
+)
 from sqlalchemy.orm import Session
 
 
@@ -65,6 +73,41 @@ class SqlAlchemyResearchItemGateway:
                 user_id=user_id,
             )
         ]
+
+    def list_annotation_threads(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        project_id: UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+    ) -> list[AnnotationThreadSummaryResponse]:
+        return research_repository.list_annotation_summaries(
+            self._db,
+            document_id=document_id,
+            user_id=user_id,
+            project_id=project_id,
+            audience=audience,
+            mode=mode,
+            status=status,
+        )
+
+    def get_annotation_thread(
+        self,
+        *,
+        user_id: int,
+        thread_id: UUID,
+    ) -> ResearchItemResponse:
+        return self._serialize(
+            item=research_repository.get_annotation_thread(
+                self._db,
+                thread_id=thread_id,
+                user_id=user_id,
+            ),
+            user_id=user_id,
+        )
 
     def create_annotation_thread(
         self,

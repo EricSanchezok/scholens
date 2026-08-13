@@ -110,6 +110,17 @@ class AnnotationThreadStatus(str, Enum):
     RESOLVED = "resolved"
 
 
+class AnnotationThreadMode(str, Enum):
+    HIGHLIGHT = "highlight"
+    NOTE = "note"
+    DISCUSSION = "discussion"
+
+
+class AnnotationAudienceFilter(str, Enum):
+    PERSONAL = "personal"
+    PROJECT = "project"
+
+
 class AnnotationColor(str, Enum):
     YELLOW = "yellow"
     RED = "red"

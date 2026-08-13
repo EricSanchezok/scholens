@@ -13,6 +13,7 @@
     ],
     "/api/v1/annotation-threads/{thread_id}": [
       "delete",
+      "get",
       "patch"
     ],
     "/api/v1/annotation-threads/{thread_id}/comments": [

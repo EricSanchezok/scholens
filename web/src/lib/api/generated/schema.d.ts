@@ -46,7 +46,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Annotation Thread */
+        get: operations["get_annotation_thread_api_v1_annotation_threads__thread_id__get"];
         put?: never;
         post?: never;
         /** Delete Annotation Thread */
@@ -1792,6 +1793,11 @@ export interface components {
             document_ids: string[];
         };
         /**
+         * AnnotationAudienceFilter
+         * @enum {string}
+         */
+        AnnotationAudienceFilter: "personal" | "project";
+        /**
          * AnnotationColor
          * @enum {string}
          */
@@ -1845,8 +1851,16 @@ export interface components {
         AnnotationThreadContent: {
             capabilities: components["schemas"]["AnnotationThreadCapabilities"];
             color: components["schemas"]["AnnotationColor"];
+            /** Comment Count */
+            comment_count: number;
             /** Comments */
             comments: components["schemas"]["AnnotationCommentResponse"][];
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            mode: components["schemas"]["AnnotationThreadMode"];
             /** Position */
             position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
             /** Quote Text */
@@ -1858,11 +1872,64 @@ export interface components {
             role: string;
             status: components["schemas"]["AnnotationThreadStatus"];
         };
+        /** AnnotationThreadListResponse */
+        AnnotationThreadListResponse: {
+            /** Items */
+            items: components["schemas"]["AnnotationThreadSummaryResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * AnnotationThreadMode
+         * @enum {string}
+         */
+        AnnotationThreadMode: "highlight" | "note" | "discussion";
         /**
          * AnnotationThreadStatus
          * @enum {string}
          */
         AnnotationThreadStatus: "open" | "resolved";
+        /** AnnotationThreadSummaryResponse */
+        AnnotationThreadSummaryResponse: {
+            /** Audience */
+            audience: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
+            capabilities: components["schemas"]["AnnotationThreadCapabilities"];
+            color: components["schemas"]["AnnotationColor"];
+            /** Comment Count */
+            comment_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["ResearchCreatorResponse"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            mode: components["schemas"]["AnnotationThreadMode"];
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
+            /** Quote Text */
+            quote_text: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            resolved_by: components["schemas"]["ResearchCreatorResponse"] | null;
+            /** Role */
+            role: string;
+            status: components["schemas"]["AnnotationThreadStatus"];
+            /**
+             * Target Document Id
+             * Format: uuid
+             */
+            target_document_id: string;
+        };
         /** AnnotationThreadTurnContext */
         AnnotationThreadTurnContext: {
             /**
@@ -4725,6 +4792,37 @@ export interface operations {
             };
         };
     };
+    get_annotation_thread_api_v1_annotation_threads__thread_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_annotation_thread_api_v1_annotation_threads__thread_id__delete: {
         parameters: {
             query?: never;
@@ -7376,6 +7474,9 @@ export interface operations {
         parameters: {
             query?: {
                 project_id?: string | null;
+                audience?: components["schemas"]["AnnotationAudienceFilter"] | null;
+                mode?: components["schemas"]["AnnotationThreadMode"] | null;
+                status?: components["schemas"]["AnnotationThreadStatus"];
             };
             header?: never;
             path: {
@@ -7391,7 +7492,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResearchItemListResponse"];
+                    "application/json": components["schemas"]["AnnotationThreadListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -86,6 +86,13 @@ because reading marks are often private; starting a comment defaults to the
 current Project because its purpose is discussion. Color classifies the marked
 passage and never stands in for author identity or comment ownership.
 
+The interface derives three presentation modes from that one aggregate: a
+thread with no comments is a highlight; a commented personal thread is a note;
+and a commented Project thread is a discussion. Only Project discussions have
+an open/resolved lifecycle. Personal highlights and notes remain reference
+material rather than tasks, and comment-free Project marks are removed rather
+than resolved.
+
 Concrete event fields and tool schemas remain implementation contracts, but
 the single-agent behavior and disclosure boundary above are durable product
 requirements.
