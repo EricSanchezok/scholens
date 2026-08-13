@@ -3,16 +3,16 @@ import { queryOptions } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
 
-type CreateHighlightRequest =
-  components["schemas"]["CreateHighlightThreadRequest"];
-type UpdateHighlightRequest =
-  components["schemas"]["UpdateHighlightThreadRequest"];
+type CreateAnnotationRequest =
+  components["schemas"]["CreateAnnotationThreadRequest"];
+type UpdateAnnotationRequest =
+  components["schemas"]["UpdateAnnotationThreadRequest"];
 
 export const readerKeys = {
   all: ["reader"] as const,
   document: (documentId: string) => ["reader", "document", documentId] as const,
-  annotations: (documentId: string) =>
-    ["reader", "annotations", documentId] as const,
+  annotations: (documentId: string, projectId?: string) =>
+    ["reader", "annotations", documentId, projectId ?? "personal"] as const,
 };
 
 export const readerQueries = {
@@ -32,13 +32,19 @@ export const readerQueries = {
         return status === "pending" || status === "processing" ? 1_500 : false;
       },
     }),
-  annotations: (documentId: string) =>
+  annotations: (documentId: string, projectId?: string) =>
     queryOptions({
-      queryKey: readerKeys.annotations(documentId),
+      queryKey: readerKeys.annotations(documentId, projectId),
       queryFn: async ({ signal }) => {
         const { data } = await apiClient.GET(
-          "/api/v1/papers/{document_id}/highlight-threads",
-          { params: { path: { document_id: documentId } }, signal },
+          "/api/v1/papers/{document_id}/annotation-threads",
+          {
+            params: {
+              path: { document_id: documentId },
+              query: { project_id: projectId },
+            },
+            signal,
+          },
         );
         if (!data) throw new Error("Reader annotation response was empty");
         return data;
@@ -55,39 +61,39 @@ export async function getReaderDownloadUrl(documentId: string) {
   return data.file_url;
 }
 
-export async function createReaderHighlight(
+export async function createReaderAnnotationThread(
   documentId: string,
-  body: CreateHighlightRequest,
+  body: CreateAnnotationRequest,
 ) {
   const { data } = await apiClient.POST(
-    "/api/v1/papers/{document_id}/highlight-threads",
+    "/api/v1/papers/{document_id}/annotation-threads",
     { params: { path: { document_id: documentId } }, body },
   );
   if (!data) throw new Error("Create highlight response was empty");
   return data;
 }
 
-export async function updateReaderHighlight(
+export async function updateReaderAnnotationThread(
   threadId: string,
-  body: UpdateHighlightRequest,
+  body: UpdateAnnotationRequest,
 ) {
   const { data } = await apiClient.PATCH(
-    "/api/v1/highlight-threads/{thread_id}",
+    "/api/v1/annotation-threads/{thread_id}",
     { params: { path: { thread_id: threadId } }, body },
   );
   if (!data) throw new Error("Update highlight response was empty");
   return data;
 }
 
-export async function deleteReaderHighlight(threadId: string) {
-  await apiClient.DELETE("/api/v1/highlight-threads/{thread_id}", {
+export async function deleteReaderAnnotationThread(threadId: string) {
+  await apiClient.DELETE("/api/v1/annotation-threads/{thread_id}", {
     params: { path: { thread_id: threadId } },
   });
 }
 
 export async function createReaderComment(threadId: string, content: string) {
   const { data } = await apiClient.POST(
-    "/api/v1/highlight-threads/{thread_id}/comments",
+    "/api/v1/annotation-threads/{thread_id}/comments",
     {
       params: { path: { thread_id: threadId } },
       body: { content },

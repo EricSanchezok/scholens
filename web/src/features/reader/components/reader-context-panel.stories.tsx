@@ -28,18 +28,27 @@ const selection: ReaderSelection = {
 
 const annotation: ReaderAnnotation = {
   id: "20000000-0000-4000-8000-000000000001",
-  kind: "highlight_thread",
-  scope_type: "document",
-  scope_id: selection.document_id,
-  is_shared: false,
+  kind: "annotation_thread",
+  audience: { kind: "personal" },
+  target_document_id: selection.document_id,
   created_at: "2026-08-12T10:00:00Z",
   updated_at: "2026-08-12T10:00:00Z",
   created_by: { id: 1, display_name: "Eric" },
-  capabilities: { delete: true, edit: true, share: false },
-  highlight_thread: {
+  capabilities: { delete: true, edit: true },
+  annotation_thread: {
+    capabilities: {
+      delete: true,
+      recolor: true,
+      reopen: false,
+      reply: true,
+      resolve: true,
+    },
     color: "yellow",
     quote_text: selection.selected_text,
     role: "note",
+    status: "open",
+    resolved_at: null,
+    resolved_by: null,
     position: selection.anchor,
     comments: [
       {

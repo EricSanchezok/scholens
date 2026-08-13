@@ -37,7 +37,7 @@ type Output = components["schemas"]["LibraryOutputResponse"];
 type OutputList = components["schemas"]["LibraryOutputListResponse"];
 
 const OUTPUT_KINDS: OutputKind[] = [
-  "highlight_thread",
+  "annotation_thread",
   "citation",
   "audio_overview",
   "data_table",
@@ -50,7 +50,7 @@ const OUTPUT_SORTS: OutputSort[] = [
 ];
 
 const kindIcon: Record<OutputKind, IconGlyph> = {
-  highlight_thread: QuoteIcon,
+  annotation_thread: QuoteIcon,
   citation: CitationIcon,
   audio_overview: AudioIcon,
   data_table: DataTableIcon,
@@ -58,8 +58,8 @@ const kindIcon: Record<OutputKind, IconGlyph> = {
 
 function outputPreview(output: Output) {
   const item = output.item;
-  if (item.kind === "highlight_thread") {
-    return item.highlight_thread?.quote_text;
+  if (item.kind === "annotation_thread") {
+    return item.annotation_thread?.quote_text;
   }
   if (item.kind === "citation") {
     return item.citation?.snapshot.data.title;
@@ -276,7 +276,7 @@ export function OutputsView({
                           {output.source.title}
                         </span>
                         <span className="text-secondary mt-1 block text-xs">
-                          {t(`scope.${output.source.scope_type}`)}
+                          {t(`scope.${output.source.audience_type}`)}
                         </span>
                       </td>
                       <td className="text-secondary px-3 py-4 text-sm">
@@ -307,7 +307,7 @@ export function OutputsView({
                       <span className="text-foreground block truncate font-medium">
                         {output.source.title}
                       </span>
-                      {t(`scope.${output.source.scope_type}`)}
+                      {t(`scope.${output.source.audience_type}`)}
                     </span>
                     <span>
                       {format.dateTime(new Date(output.item.updated_at), {

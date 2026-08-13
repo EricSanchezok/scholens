@@ -27,15 +27,15 @@ import {
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
   createReaderComment,
-  createReaderHighlight,
+  createReaderAnnotationThread,
   deleteReaderComment,
-  deleteReaderHighlight,
+  deleteReaderAnnotationThread,
   getReaderDownloadUrl,
   readerKeys,
   readerQueries,
   setReaderConversationPinned,
   updateReaderComment,
-  updateReaderHighlight,
+  updateReaderAnnotationThread,
 } from "./api/queries";
 import {
   PdfPage,
@@ -61,6 +61,7 @@ import {
   type PdfOutlineEntry,
 } from "./pdf-document-adapter";
 import { moveReaderSearchCursor } from "./reader-search";
+import type { ReaderHighlightColor } from "./reader-highlight-colors";
 import {
   parsePositiveInteger,
   readReaderPanel,
@@ -167,7 +168,7 @@ function ReaderDocumentWorkspace({
         return [{ ...pendingTurnContext, document_id: documentId }];
       }
       if (selectedAnnotationId) {
-        return [{ kind: "highlight_thread", thread_id: selectedAnnotationId }];
+        return [{ kind: "annotation_thread", thread_id: selectedAnnotationId }];
       }
       return undefined;
     },
@@ -209,19 +210,18 @@ function ReaderDocumentWorkspace({
 
   async function createHighlight(
     targetSelection: ReaderSelection | undefined,
-    color = "yellow",
+    color: ReaderHighlightColor = "yellow",
     comment?: string,
   ) {
     if (!targetSelection) return;
-    const item = await createReaderHighlight(documentId, {
+    const item = await createReaderAnnotationThread(documentId, {
+      audience: { kind: "personal" },
       color,
+      initial_comment: comment?.trim() || undefined,
       position: targetSelection.anchor,
       quote_text: targetSelection.selected_text,
-      shared: false,
     });
     cacheAnnotation(item);
-    if (comment?.trim()) await createReaderComment(item.id, comment.trim());
-    if (comment?.trim()) await refreshAnnotations();
     setSelectedAnnotationId(item.id);
     setActiveTextSelection(undefined);
     setAnnotationSelection(undefined);
@@ -252,7 +252,7 @@ function ReaderDocumentWorkspace({
     const annotation = annotationsQuery.data?.items.find(
       (item) => item.id === annotationId,
     );
-    const position = annotation?.highlight_thread?.position;
+    const position = annotation?.annotation_thread?.position;
     if (position?.page_number)
       updateLocation({ page: position.page_number, panel: "annotations" });
     else updateLocation({ panel: "annotations" });
@@ -656,7 +656,7 @@ function ReaderDocumentWorkspace({
                 document={document}
                 onActionError={notifyActionError}
                 onAnnotationDelete={async (id) => {
-                  await deleteReaderHighlight(id);
+                  await deleteReaderAnnotationThread(id);
                   setSelectedAnnotationId(undefined);
                   await refreshAnnotations();
                 }}
@@ -690,7 +690,9 @@ function ReaderDocumentWorkspace({
                   createHighlight(annotationSelection, "yellow", comment)
                 }
                 onHighlightUpdate={async (id, color) => {
-                  cacheAnnotation(await updateReaderHighlight(id, { color }));
+                  cacheAnnotation(
+                    await updateReaderAnnotationThread(id, { color }),
+                  );
                 }}
                 onPanelChange={(nextPanel) =>
                   updateLocation({ panel: nextPanel })
@@ -778,7 +780,7 @@ function ReaderDocumentWorkspace({
             document={document}
             onActionError={notifyActionError}
             onAnnotationDelete={async (id) => {
-              await deleteReaderHighlight(id);
+              await deleteReaderAnnotationThread(id);
               setSelectedAnnotationId(undefined);
               await refreshAnnotations();
             }}
@@ -812,7 +814,9 @@ function ReaderDocumentWorkspace({
               createHighlight(annotationSelection, "yellow", comment)
             }
             onHighlightUpdate={async (id, color) => {
-              cacheAnnotation(await updateReaderHighlight(id, { color }));
+              cacheAnnotation(
+                await updateReaderAnnotationThread(id, { color }),
+              );
             }}
             onPanelChange={(nextPanel) => updateLocation({ panel: nextPanel })}
             onSourceOpen={(source) => {

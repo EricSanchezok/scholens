@@ -111,10 +111,9 @@ export const libraryLongTitlePapers: LibraryPaper[] = libraryPapers.map(
 );
 
 const outputBase = {
-  capabilities: { delete: true, edit: true, share: true },
+  capabilities: { delete: true, edit: true },
   created_at: now,
   created_by: { display_name: "Eric", id: 7 },
-  is_shared: false,
   updated_at: now,
 };
 
@@ -122,7 +121,14 @@ export const libraryOutputs: LibraryOutput[] = [
   {
     item: {
       ...outputBase,
-      highlight_thread: {
+      annotation_thread: {
+        capabilities: {
+          delete: true,
+          recolor: true,
+          reopen: false,
+          reply: true,
+          resolve: false,
+        },
         color: "yellow",
         comments: [],
         position: {
@@ -134,15 +140,21 @@ export const libraryOutputs: LibraryOutput[] = [
         quote_text:
           "Self-attention connects all positions with a constant number of sequential operations.",
         role: "owner",
+        status: "open",
+        resolved_at: null,
+        resolved_by: null,
+      },
+      audience: {
+        document_id: libraryPapers[0]!.document.document_id,
+        kind: "document",
       },
       id: "76000000-0000-4000-8000-000000000001",
-      kind: "highlight_thread",
-      scope_id: libraryPapers[0]!.document.document_id,
-      scope_type: "document",
+      kind: "annotation_thread",
+      target_document_id: libraryPapers[0]!.document.document_id,
     },
     source: {
-      scope_id: libraryPapers[0]!.document.document_id,
-      scope_type: "document",
+      audience_id: libraryPapers[0]!.document.document_id,
+      audience_type: "document",
       title: "Attention Is All You Need",
     },
     title: "Architecture notes",
@@ -165,12 +177,16 @@ export const libraryOutputs: LibraryOutput[] = [
           style_display: "APA 7th",
         },
       },
+      audience: { kind: "personal" },
       id: "76000000-0000-4000-8000-000000000002",
       kind: "citation",
-      scope_id: null,
-      scope_type: "personal",
+      target_document_id: libraryPapers[0]!.document.document_id,
     },
-    source: { scope_id: null, scope_type: "personal", title: "My library" },
+    source: {
+      audience_id: null,
+      audience_type: "personal",
+      title: "My library",
+    },
     title: "Transformer citation",
   },
   {
@@ -185,14 +201,17 @@ export const libraryOutputs: LibraryOutput[] = [
           "A concise comparison of dense and sparse retrieval methods.",
         voice_id: "scholens-neutral",
       },
+      audience: {
+        kind: "project",
+        project_id: "73000000-0000-4000-8000-000000000001",
+      },
       id: "76000000-0000-4000-8000-000000000003",
       kind: "audio_overview",
-      scope_id: "73000000-0000-4000-8000-000000000001",
-      scope_type: "project",
+      target_document_id: libraryPapers[1]!.document.document_id,
     },
     source: {
-      scope_id: "73000000-0000-4000-8000-000000000001",
-      scope_type: "project",
+      audience_id: "73000000-0000-4000-8000-000000000001",
+      audience_type: "project",
       title: "Thesis literature review",
     },
     title: "Retrieval methods overview",
@@ -210,14 +229,17 @@ export const libraryOutputs: LibraryOutput[] = [
         ],
         title: "Model comparison",
       },
+      audience: {
+        kind: "project",
+        project_id: "73000000-0000-4000-8000-000000000001",
+      },
       id: "76000000-0000-4000-8000-000000000004",
       kind: "data_table",
-      scope_id: "73000000-0000-4000-8000-000000000001",
-      scope_type: "project",
+      target_document_id: libraryPapers[1]!.document.document_id,
     },
     source: {
-      scope_id: "73000000-0000-4000-8000-000000000001",
-      scope_type: "project",
+      audience_id: "73000000-0000-4000-8000-000000000001",
+      audience_type: "project",
       title: "Thesis literature review",
     },
     title: "Model comparison",

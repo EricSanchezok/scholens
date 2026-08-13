@@ -102,7 +102,7 @@ rather than appearing as an additional row.
 ## Outputs
 
 Outputs renders the Server's canonical Research Item projection. The only
-supported kinds are `highlight_thread`, `citation`, `audio_overview`, and
+supported kinds are `annotation_thread`, `citation`, `audio_overview`, and
 `data_table`; the Web neither invents additional output models nor reconstructs
 scope permissions from other endpoints. Each item carries its source scope,
 source title, and update time from the list response.

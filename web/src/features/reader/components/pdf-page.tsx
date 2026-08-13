@@ -8,7 +8,10 @@ import { keyboardFocusRing } from "@/components/ui";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
-import { readerHighlightColorValue } from "../reader-highlight-colors";
+import {
+  readerHighlightColorValue,
+  type ReaderHighlightColor,
+} from "../reader-highlight-colors";
 import type { ReaderSearchMatch } from "../reader-search";
 import {
   ReaderSelectionToolbar,
@@ -239,7 +242,10 @@ function PdfPageSurface({
   onAnnotationSelect?: (annotationId: string) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
-  onHighlightSelection?: (selection: ReaderSelection, color: string) => void;
+  onHighlightSelection?: (
+    selection: ReaderSelection,
+    color: ReaderHighlightColor,
+  ) => void;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -421,7 +427,7 @@ function PdfPageSurface({
   }
 
   const pageAnnotations = annotations.filter((annotation) => {
-    const position = annotation.highlight_thread?.position;
+    const position = annotation.annotation_thread?.position;
     return position?.kind === "pdf_text" && position.page_number === pageNumber;
   });
 
@@ -452,7 +458,7 @@ function PdfPageSurface({
       />
       <div className="pointer-events-none absolute inset-0 z-10">
         {pageAnnotations.flatMap((annotation) => {
-          const thread = annotation.highlight_thread;
+          const thread = annotation.annotation_thread;
           const position = thread?.position;
           if (!thread || position?.kind !== "pdf_text") return [];
           return position.rects.map((rect, index) => (
@@ -554,7 +560,10 @@ export function PdfPage({
   onAnnotationSelect?: (annotationId: string) => void;
   onAskSelection?: (selection: ReaderSelection) => void;
   onCommentSelection?: (selection: ReaderSelection) => void;
-  onHighlightSelection?: (selection: ReaderSelection, color: string) => void;
+  onHighlightSelection?: (
+    selection: ReaderSelection,
+    color: ReaderHighlightColor,
+  ) => void;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;

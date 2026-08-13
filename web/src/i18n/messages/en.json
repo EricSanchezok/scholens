@@ -377,14 +377,14 @@
       "filters": {
         "label": "Types",
         "kind": {
-          "highlight_thread": "Annotations",
+          "annotation_thread": "Annotations",
           "citation": "Citations",
           "audio_overview": "Audio overviews",
           "data_table": "Data tables"
         }
       },
       "kind": {
-        "highlight_thread": "Annotations",
+        "annotation_thread": "Annotations",
         "citation": "Citations",
         "audio_overview": "Audio overviews",
         "data_table": "Data tables"

@@ -21,7 +21,7 @@ export const outputSortSchema = z.enum([
 export type OutputSort = z.infer<typeof outputSortSchema>;
 
 export const outputKindSchema = z.enum([
-  "highlight_thread",
+  "annotation_thread",
   "citation",
   "audio_overview",
   "data_table",

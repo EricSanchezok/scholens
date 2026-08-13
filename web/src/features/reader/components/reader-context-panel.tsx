@@ -33,6 +33,7 @@ import {
   readerHighlightColors,
   readerHighlightColorValue,
   readReaderHighlightColor,
+  type ReaderHighlightColor,
 } from "../reader-highlight-colors";
 import type { ReaderSelection } from "./pdf-page";
 import type {
@@ -241,7 +242,7 @@ export function ReaderAnnotationPanel({
   onCreate: (comment?: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onSelect: (id: string) => void;
-  onUpdateColor: (id: string, color: string) => Promise<void>;
+  onUpdateColor: (id: string, color: ReaderHighlightColor) => Promise<void>;
   selectedAnnotation?: ReaderAnnotation;
   annotationSelection?: ReaderSelection;
 }) {
@@ -306,7 +307,7 @@ export function ReaderAnnotationPanel({
         </div>
       ) : (
         annotations.map((annotation) => {
-          const thread = annotation.highlight_thread;
+          const thread = annotation.annotation_thread;
           if (!thread) return null;
           const active = selectedAnnotation?.id === annotation.id;
           return (
@@ -581,7 +582,7 @@ export function ReaderContextPanel({
   onConversationNew: () => void;
   onConversationPin: (id: string, pinned: boolean) => Promise<void>;
   onHighlightCreate: (comment?: string) => Promise<void>;
-  onHighlightUpdate: (id: string, color: string) => Promise<void>;
+  onHighlightUpdate: (id: string, color: ReaderHighlightColor) => Promise<void>;
   onPanelChange: (panel: "ask" | "annotations" | "details") => void;
   onSourceOpen: (source: ReaderDocumentSource) => void;
   panel: ReaderContextPanel;

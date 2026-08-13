@@ -377,14 +377,14 @@
       "filters": {
         "label": "类型",
         "kind": {
-          "highlight_thread": "标注",
+          "annotation_thread": "标注",
           "citation": "引用",
           "audio_overview": "音频概览",
           "data_table": "数据表"
         }
       },
       "kind": {
-        "highlight_thread": "标注",
+        "annotation_thread": "标注",
         "citation": "引用",
         "audio_overview": "音频概览",
         "data_table": "数据表"

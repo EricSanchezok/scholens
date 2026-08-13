@@ -39,6 +39,41 @@ export interface paths {
         patch: operations["update_annotation_comment_api_v1_annotation_comments__comment_id__patch"];
         trace?: never;
     };
+    "/api/v1/annotation-threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Annotation Thread */
+        delete: operations["delete_annotation_thread_api_v1_annotation_threads__thread_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Annotation Thread */
+        patch: operations["update_annotation_thread_api_v1_annotation_threads__thread_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/annotation-threads/{thread_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Annotation Comment */
+        post: operations["create_annotation_comment_api_v1_annotation_threads__thread_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-password": {
         parameters: {
             query?: never;
@@ -531,41 +566,6 @@ export interface paths {
         get: operations["get_topics_api_v1_discovery_topics_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/highlight-threads/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Highlight Thread */
-        delete: operations["delete_highlight_thread_api_v1_highlight_threads__thread_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Highlight Thread */
-        patch: operations["update_highlight_thread_api_v1_highlight_threads__thread_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/highlight-threads/{thread_id}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Annotation Comment */
-        post: operations["create_annotation_comment_api_v1_highlight_threads__thread_id__comments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1097,6 +1097,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/papers/{document_id}/annotation-threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Annotation Threads */
+        get: operations["list_annotation_threads_api_v1_papers__document_id__annotation_threads_get"];
+        put?: never;
+        /** Create Annotation Thread */
+        post: operations["create_annotation_thread_api_v1_papers__document_id__annotation_threads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/papers/{document_id}/audio-overviews": {
         parameters: {
             query?: never;
@@ -1159,24 +1177,6 @@ export interface paths {
         get: operations["get_document_file_url_api_v1_papers__document_id__download_url_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/papers/{document_id}/highlight-threads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Highlight Threads */
-        get: operations["list_highlight_threads_api_v1_papers__document_id__highlight_threads_get"];
-        put?: never;
-        /** Create Highlight Thread */
-        post: operations["create_highlight_thread_api_v1_papers__document_id__highlight_threads_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1543,8 +1543,7 @@ export interface paths {
         delete: operations["delete_research_item_api_v1_research_items__item_id__delete"];
         options?: never;
         head?: never;
-        /** Update Research Item */
-        patch: operations["update_research_item_api_v1_research_items__item_id__patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/v1/search/papers": {
@@ -1558,15 +1557,15 @@ export interface paths {
         put?: never;
         /**
          * Search Papers Endpoint
-         * @description Search across papers, annotations, and highlights in the user's knowledge base.
+         * @description Search across papers and annotation threads in the user's knowledge base.
          *
          *     Returns a hierarchical view with matching content organized under paper metadata.
          *     The search looks through:
          *     - Document titles, abstracts, and raw content
-         *     - Highlight thread text
+         *     - Annotation thread quote text
          *     - Annotation comment content
          *
-         *     Results are organized by paper, with matching highlights and annotations
+         *     Results are organized by paper, with matching threads and comments
          *     sub-referenced under each paper's metadata.
          */
         post: operations["search_papers_endpoint_api_v1_search_papers_post"];
@@ -1587,7 +1586,7 @@ export interface paths {
          * Get Search Stats
          * @description Get statistics about the user's knowledge base for search context.
          *
-         *     Returns counts of papers, highlights, and annotations.
+         *     Returns counts of papers, annotation threads, and comments.
          */
         get: operations["get_search_stats_api_v1_search_papers_stats_get"];
         put?: never;
@@ -1775,6 +1774,11 @@ export interface components {
             /** Document Ids */
             document_ids: string[];
         };
+        /**
+         * AnnotationColor
+         * @enum {string}
+         */
+        AnnotationColor: "yellow" | "red" | "green" | "blue" | "purple" | "magenta" | "orange" | "gray";
         /** AnnotationCommentResponse */
         AnnotationCommentResponse: {
             /** Can Delete */
@@ -1806,6 +1810,54 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** AnnotationThreadCapabilities */
+        AnnotationThreadCapabilities: {
+            /** Delete */
+            delete: boolean;
+            /** Recolor */
+            recolor: boolean;
+            /** Reopen */
+            reopen: boolean;
+            /** Reply */
+            reply: boolean;
+            /** Resolve */
+            resolve: boolean;
+        };
+        /** AnnotationThreadContent */
+        AnnotationThreadContent: {
+            capabilities: components["schemas"]["AnnotationThreadCapabilities"];
+            color: components["schemas"]["AnnotationColor"];
+            /** Comments */
+            comments: components["schemas"]["AnnotationCommentResponse"][];
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
+            /** Quote Text */
+            quote_text: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            resolved_by: components["schemas"]["ResearchCreatorResponse"] | null;
+            /** Role */
+            role: string;
+            status: components["schemas"]["AnnotationThreadStatus"];
+        };
+        /**
+         * AnnotationThreadStatus
+         * @enum {string}
+         */
+        AnnotationThreadStatus: "open" | "resolved";
+        /** AnnotationThreadTurnContext */
+        AnnotationThreadTurnContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "annotation_thread";
+            /**
+             * Thread Id
+             * Format: uuid
+             */
+            thread_id: string;
         };
         /** ApiErrorResponse */
         ApiErrorResponse: {
@@ -2549,7 +2601,7 @@ export interface components {
          */
         ConversationTurnCreateRequest: {
             /** Contexts */
-            contexts?: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["HighlightThreadTurnContext"])[];
+            contexts?: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["AnnotationThreadTurnContext"])[];
             /**
              * Locale
              * @enum {string}
@@ -2575,7 +2627,7 @@ export interface components {
         /** ConversationTurnResponse */
         ConversationTurnResponse: {
             /** Contexts */
-            contexts: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["HighlightThreadTurnContext"])[];
+            contexts: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["AnnotationThreadTurnContext"])[];
             /**
              * Id
              * Format: uuid
@@ -2626,6 +2678,19 @@ export interface components {
             /** Content */
             content: string;
         };
+        /** CreateAnnotationThreadRequest */
+        CreateAnnotationThreadRequest: {
+            /** Audience */
+            audience?: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
+            /** @default yellow */
+            color: components["schemas"]["AnnotationColor"];
+            /** Initial Comment */
+            initial_comment?: string | null;
+            /** Position */
+            position: components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"];
+            /** Quote Text */
+            quote_text: string;
+        };
         /** CreateAudioOverviewRequest */
         CreateAudioOverviewRequest: {
             /** Additional Instructions */
@@ -2643,23 +2708,6 @@ export interface components {
             columns: string[];
             /** Title */
             title?: string | null;
-        };
-        /** CreateHighlightThreadRequest */
-        CreateHighlightThreadRequest: {
-            /**
-             * Color
-             * @default blue
-             */
-            color: string;
-            /** Position */
-            position: components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"];
-            /** Quote Text */
-            quote_text: string;
-            /**
-             * Shared
-             * @default false
-             */
-            shared: boolean;
         };
         /** CreateJobResponse */
         CreateJobResponse: {
@@ -2793,6 +2841,19 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentResearchAudience */
+        DocumentResearchAudience: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "document";
+        };
         /** DocumentResponse */
         DocumentResponse: {
             /** Abstract */
@@ -2896,32 +2957,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /** HighlightThreadContent */
-        HighlightThreadContent: {
-            /** Color */
-            color: string;
-            /** Comments */
-            comments: components["schemas"]["AnnotationCommentResponse"][];
-            /** Position */
-            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
-            /** Quote Text */
-            quote_text: string;
-            /** Role */
-            role: string;
-        };
-        /** HighlightThreadTurnContext */
-        HighlightThreadTurnContext: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "highlight_thread";
-            /**
-             * Thread Id
-             * Format: uuid
-             */
-            thread_id: string;
         };
         /** Institution */
         Institution: {
@@ -3031,9 +3066,9 @@ export interface components {
         LibraryOutputSort: "updated_desc" | "updated_asc" | "title_asc" | "title_desc";
         /** LibraryOutputSourceResponse */
         LibraryOutputSourceResponse: {
-            /** Scope Id */
-            scope_id: string | null;
-            scope_type: components["schemas"]["ResearchScopeType"];
+            /** Audience Id */
+            audience_id: string | null;
+            audience_type: components["schemas"]["ResearchAudienceType"];
             /** Title */
             title: string;
         };
@@ -3539,6 +3574,14 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** PersonalResearchAudience */
+        PersonalResearchAudience: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "personal";
+        };
         /** PortalSessionResponse */
         PortalSessionResponse: {
             /** Url */
@@ -3842,6 +3885,19 @@ export interface components {
              */
             manage_papers: boolean;
         };
+        /** ProjectResearchAudience */
+        ProjectResearchAudience: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "project";
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectResponse */
         ProjectResponse: {
             capabilities: components["schemas"]["ProjectCapabilitiesResponse"];
@@ -3942,6 +3998,11 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * ResearchAudienceType
+         * @enum {string}
+         */
+        ResearchAudienceType: "personal" | "document" | "project";
         /** ResearchCreatorResponse */
         ResearchCreatorResponse: {
             /** Display Name */
@@ -3955,14 +4016,12 @@ export interface components {
             delete: boolean;
             /** Edit */
             edit: boolean;
-            /** Share */
-            share: boolean;
         };
         /**
          * ResearchItemKind
          * @enum {string}
          */
-        ResearchItemKind: "highlight_thread" | "citation" | "audio_overview" | "data_table";
+        ResearchItemKind: "annotation_thread" | "citation" | "audio_overview" | "data_table";
         /** ResearchItemListResponse */
         ResearchItemListResponse: {
             /** Items */
@@ -3972,6 +4031,9 @@ export interface components {
         };
         /** ResearchItemResponse */
         ResearchItemResponse: {
+            annotation_thread?: components["schemas"]["AnnotationThreadContent"] | null;
+            /** Audience */
+            audience: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["DocumentResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
             audio_overview?: components["schemas"]["AudioOverviewContent"] | null;
             capabilities: components["schemas"]["ResearchItemCapabilities"];
             citation?: components["schemas"]["CitationContent"] | null;
@@ -3982,29 +4044,20 @@ export interface components {
             created_at: string;
             created_by: components["schemas"]["ResearchCreatorResponse"];
             data_table?: components["schemas"]["DataTableContent"] | null;
-            highlight_thread?: components["schemas"]["HighlightThreadContent"] | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** Is Shared */
-            is_shared: boolean;
             kind: components["schemas"]["ResearchItemKind"];
-            /** Scope Id */
-            scope_id: string | null;
-            scope_type: components["schemas"]["ResearchScopeType"];
+            /** Target Document Id */
+            target_document_id: string | null;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
         };
-        /**
-         * ResearchScopeType
-         * @enum {string}
-         */
-        ResearchScopeType: "personal" | "document" | "project";
         /** ResearchSearchComment */
         ResearchSearchComment: {
             /** Content */
@@ -4070,11 +4123,6 @@ export interface components {
             quote_text: string;
             /** Role */
             role: string;
-        };
-        /** ResearchVisibilityRequest */
-        ResearchVisibilityRequest: {
-            /** Shared */
-            shared: boolean;
         };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
@@ -4289,16 +4337,10 @@ export interface components {
             /** Content */
             content: string;
         };
-        /** UpdateHighlightThreadRequest */
-        UpdateHighlightThreadRequest: {
-            /** Color */
-            color?: string | null;
-            /** Position */
-            position?: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
-            /** Quote Text */
-            quote_text?: string | null;
-            /** Shared */
-            shared?: boolean | null;
+        /** UpdateAnnotationThreadRequest */
+        UpdateAnnotationThreadRequest: {
+            color?: components["schemas"]["AnnotationColor"] | null;
+            status?: components["schemas"]["AnnotationThreadStatus"] | null;
         };
         /**
          * UpdateProfileBody
@@ -4610,6 +4652,107 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationCommentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_thread_api_v1_annotation_threads__thread_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_thread_api_v1_annotation_threads__thread_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAnnotationThreadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_comment_api_v1_annotation_threads__thread_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnnotationCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5287,6 +5430,7 @@ export interface operations {
                 archived?: boolean;
                 scope_type?: components["schemas"]["ConversationScopeType"] | null;
                 scope_id?: string | null;
+                context_document_id?: string | null;
                 cursor?: string | null;
                 limit?: number;
             };
@@ -5824,109 +5968,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TopicListResponse"];
-                };
-            };
-        };
-    };
-    delete_highlight_thread_api_v1_highlight_threads__thread_id__delete: {
-        parameters: {
-            query?: {
-                confirm_delete_replies?: boolean;
-            };
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeleteResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_highlight_thread_api_v1_highlight_threads__thread_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateHighlightThreadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_annotation_comment_api_v1_highlight_threads__thread_id__comments_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateAnnotationCommentRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationCommentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -7276,6 +7317,74 @@ export interface operations {
             };
         };
     };
+    list_annotation_threads_api_v1_papers__document_id__annotation_threads_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_thread_api_v1_papers__document_id__annotation_threads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnnotationThreadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_document_audio_overview_api_v1_papers__document_id__audio_overviews_post: {
         parameters: {
             query?: never;
@@ -7400,72 +7509,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentFileUrlResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_highlight_threads_api_v1_papers__document_id__highlight_threads_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_highlight_thread_api_v1_papers__document_id__highlight_threads_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateHighlightThreadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8193,7 +8236,9 @@ export interface operations {
     };
     remove_paper_from_project_api_v1_projects__project_id__papers__document_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                confirm_delete_annotations?: boolean;
+            };
             header?: never;
             path: {
                 project_id: string;
@@ -8337,41 +8382,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_research_item_api_v1_research_items__item_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResearchVisibilityRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemResponse"];
                 };
             };
             /** @description Validation Error */
