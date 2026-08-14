@@ -132,7 +132,17 @@ Do not edit generated files directly. Change their source and regenerate them.
 
 ## Verification
 
-Run checks proportional to the change. The full replacement-frontend gate is:
+Run checks proportional to the change through the side-effect-free root runner:
+
+```bash
+./scripts/run-gates.sh <server|jobs|shared-packages|web|client|deployment|docs|all>
+```
+
+The runner verifies an already provisioned checkout. It never installs
+dependencies, starts services, or applies migrations. CI invokes these same
+lanes and protects `main` through the aggregate `all checks passed` result.
+
+The full replacement-frontend lane expands to:
 
 ```bash
 cd web

@@ -214,6 +214,26 @@ how to add, modify, and delete pages, modules, components, tokens, themes, and
 their Figma/Storybook acceptance evidence. Run `pnpm design:check` after any
 styling, token, theme, adapter, component-state, or Storybook-global change.
 
+## Quality gates
+
+The repository exposes one canonical, side-effect-free gate interface:
+
+```bash
+./scripts/run-gates.sh <server|jobs|shared-packages|web|client|deployment|docs|all>
+```
+
+Run it from the repository root after explicitly preparing the locked
+environments in the setup section above. The runner validates only: it does not
+install or update dependencies, start local services, apply migrations, or
+modify product data. Use the narrowest affected lane during development and
+`all` for repository-wide governance or before a cross-repository `main`
+merge. CI provisions its own environments and then calls these same lanes, so
+the executable contract cannot drift from the documented commands.
+
+Detailed leaf checks and test ownership remain in the owning service guides.
+The `docs` lane validates repository documentation and ADR structure; it is
+also included in the Web lane because Web owns the documentation checker.
+
 ## Pre-release schema policy
 
 Scholens is currently pre-release. A breaking product schema or public API

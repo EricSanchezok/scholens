@@ -403,19 +403,62 @@ def test_caddy_contract_hides_internal_health_and_routes_same_origin_api() -> No
 
 def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    gate_runner = (ROOT / "scripts" / "run-gates.sh").read_text(encoding="utf-8")
 
     assert "tags: scholens-api:ci" in workflow
     assert "for _ in 1 2; do" in workflow
     assert "sanchezcloud-identity migrate" in workflow
     assert "python -m app.scripts.migrate_product" in workflow
-    assert "uv run mypy app" in workflow
-    assert "uv run mypy src" in workflow
-    assert "uv run ruff format --check app tests migrations" in workflow
-    assert "uv run ruff format --check src tests" in workflow
     assert "scholens-api:ci alembic check" in workflow
-    assert "window is not defined|document is not defined" in workflow
     assert "CREATE TABLE auth.product_migrator_must_not_create" in workflow
     assert "CREATE TABLE scholens.auth_migrator_must_not_create" in workflow
+
+    for lane in (
+        "server",
+        "jobs",
+        "shared-packages",
+        "web",
+        "client",
+        "deployment",
+    ):
+        assert f"./scripts/run-gates.sh {lane}" in workflow
+
+    assert '"$environment/mypy" app' in gate_runner
+    assert '"$environment/mypy" src' in gate_runner
+    assert '"$environment/ruff" format --check app tests migrations' in gate_runner
+    assert '"$environment/ruff" format --check src tests' in gate_runner
+    assert "window is not defined|document is not defined" in gate_runner
+
+
+def test_ci_has_one_stable_aggregate_required_check() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "all-checks-passed:" in workflow
+    assert "name: all checks passed" in workflow
+    for dependency in (
+        "server",
+        "jobs",
+        "shared-packages",
+        "web",
+        "client",
+        "deployment-contract",
+    ):
+        assert f"      - {dependency}" in workflow
+
+
+def test_root_gate_runner_has_no_provisioning_or_runtime_side_effects() -> None:
+    gate_runner = (ROOT / "scripts" / "run-gates.sh").read_text(encoding="utf-8")
+
+    for forbidden_command in (
+        "uv sync",
+        "pnpm install",
+        "yarn install",
+        "alembic upgrade",
+        "migrate_product",
+        "docker compose up",
+        "pnpm dev",
+    ):
+        assert forbidden_command not in gate_runner
 
 
 def test_external_actions_are_pinned_to_full_commit_shas() -> None:
