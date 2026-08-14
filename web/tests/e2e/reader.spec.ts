@@ -672,24 +672,29 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
   await expect(
     textLayer.locator("span").filter({ hasText: "The NLP landscape" }),
   ).toBeAttached();
-  await textLayer.evaluate((layer) => {
-    const spans = [...layer.querySelectorAll("span")].filter((span) =>
-      span.textContent?.trim(),
-    );
-    const firstSpan = spans.find((span) =>
-      span.textContent?.includes("The NLP landscape"),
-    );
-    const firstSpanIndex = firstSpan ? spans.indexOf(firstSpan) : -1;
-    const lastSpan = spans[firstSpanIndex + 5];
-    if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
-    const range = document.createRange();
-    range.setStart(firstSpan.firstChild, 0);
-    range.setEnd(lastSpan.firstChild, lastSpan.textContent?.length ?? 0);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
-  });
+  await expect(async () => {
+    await textLayer.evaluate((layer) => {
+      const spans = [...layer.querySelectorAll("span")].filter((span) =>
+        span.textContent?.trim(),
+      );
+      const firstSpan = spans.find((span) =>
+        span.textContent?.includes("The NLP landscape"),
+      );
+      const firstSpanIndex = firstSpan ? spans.indexOf(firstSpan) : -1;
+      const lastSpan = spans[firstSpanIndex + 5];
+      if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
+      const range = document.createRange();
+      range.setStart(firstSpan.firstChild, 0);
+      range.setEnd(lastSpan.firstChild, lastSpan.textContent?.length ?? 0);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    });
+    await expect(
+      page.getByRole("button", { name: "Highlight selection" }),
+    ).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 8_000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -1360,7 +1365,10 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
   await expect(page).toHaveURL(/translate=full/);
   await expect(page.getByText("基于证据的学术阅读")).toBeVisible();
   await expect(
-    page.getByText("Evidence-driven academic reading", { exact: true }),
+    page.getByRole("heading", {
+      name: "Evidence-driven academic reading",
+      exact: true,
+    }),
   ).toBeVisible();
 
   await settings.getByRole("combobox", { name: "Display" }).click();
