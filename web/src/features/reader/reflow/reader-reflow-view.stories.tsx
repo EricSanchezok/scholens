@@ -36,11 +36,15 @@ function block(
     id,
     index: 0,
     kind,
-    page_number: 1,
     presentation_status: "verbatim",
     render_markdown: source,
-    source_markdown: source,
-    source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.2 },
+    source_spans: [
+      {
+        page_number: 1,
+        source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.2 },
+        source_text: source,
+      },
+    ],
     ...overrides,
   };
 }
@@ -112,7 +116,13 @@ const blocks: DocumentReflowBlock[] = [
   }),
   block("references", "references", "## References\nAjith et al. (2026).", {
     index: 16,
-    page_number: 12,
+    source_spans: [
+      {
+        page_number: 12,
+        source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.2 },
+        source_text: "References Ajith et al. (2026).",
+      },
+    ],
   }),
 ];
 

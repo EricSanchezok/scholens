@@ -63,9 +63,7 @@ export function ReaderReflowSurface({
         .filter((block) => block.kind === "heading")
         .map((block) => ({
           id: block.id,
-          label: reflowMarkdownPlainText(
-            block.render_markdown || block.source_markdown,
-          ),
+          label: reflowMarkdownPlainText(block.render_markdown),
         }))
         .filter((item) => item.label.length > 0),
     [completedReflow?.blocks],

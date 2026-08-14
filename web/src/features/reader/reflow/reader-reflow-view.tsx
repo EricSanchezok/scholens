@@ -64,15 +64,15 @@ const createMarkdownComponents = (figurePlaceholder: string): Components => ({
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="mt-9 text-2xl leading-tight font-semibold tracking-[-0.02em]">
+    <h2 className="text-2xl leading-tight font-semibold tracking-[-0.02em]">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mt-8 text-xl leading-snug font-semibold">{children}</h3>
+    <h3 className="text-xl leading-snug font-semibold">{children}</h3>
   ),
   h4: ({ children }) => (
-    <h4 className="mt-7 text-lg leading-snug font-semibold">{children}</h4>
+    <h4 className="text-lg leading-snug font-semibold">{children}</h4>
   ),
   img: ({ alt }) => (
     <span className="border-line bg-subtle text-secondary block rounded-[var(--radius-lg)] border px-5 py-10 text-center text-sm">
@@ -135,6 +135,10 @@ export function reflowMarkdownPlainText(markdown: string) {
     .replace(/[`*_#>|$[\]{}]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function primaryReflowSource(block: DocumentReflowBlock) {
+  return block.source_spans[0];
 }
 
 function MarkdownBlock({
@@ -292,9 +296,11 @@ function ReflowBlock({
     !translatable ||
     fullTranslationDisplay === "bilingual" ||
     !translatedText;
-  const source = block.render_markdown || block.source_markdown;
+  const source = block.render_markdown;
+  const primarySource = primaryReflowSource(block);
+  const pageNumber = primarySource?.page_number;
   const metadataVisible =
-    block.page_number !== null || block.presentation_status === "repaired";
+    pageNumber !== undefined || block.presentation_status === "repaired";
 
   return (
     <section
@@ -306,8 +312,8 @@ function ReflowBlock({
       className={cn(
         "group min-w-0 scroll-mt-24",
         block.kind === "title" && "mt-1",
-        block.kind === "abstract" && "mt-4",
-        block.kind === "caption" && "-mt-3",
+        block.kind === "heading" && "mt-5 sm:mt-7",
+        block.kind === "caption" && "-mt-4",
       )}
       data-presentation-status={block.presentation_status}
       data-reflow-block={block.id}
@@ -320,18 +326,21 @@ function ReflowBlock({
             "relative min-w-0 [font-family:var(--font-reading-serif)]",
             block.kind === "eyebrow" &&
               "text-muted font-sans text-xs font-medium tracking-[0.08em] uppercase",
+            block.kind === "title" && "mb-1",
             ["authors", "affiliations"].includes(block.kind) &&
               "text-secondary font-sans text-sm leading-6",
             block.kind === "abstract" &&
-              "border-line rounded-[var(--radius-lg)] border px-5 py-5 text-[1.02rem] leading-[1.72] sm:px-6",
+              "text-[1rem] leading-[1.68] sm:text-[1.02rem] sm:leading-[1.72]",
             block.kind === "keywords" &&
               "text-secondary font-sans text-sm leading-6",
             block.kind === "paragraph" &&
-              "text-[1.0625rem] leading-[1.75] sm:text-[1.075rem]",
+              "text-[1rem] leading-[1.65] sm:text-[1.0625rem] sm:leading-[1.75]",
             ["list", "quote", "footnote", "references"].includes(block.kind) &&
-              "text-[1.02rem] leading-[1.72]",
+              "text-[1rem] leading-[1.65] sm:text-[1.02rem] sm:leading-[1.72]",
+            block.kind === "equation" &&
+              "my-1 max-w-full text-[0.98rem] leading-relaxed",
             block.kind === "caption" &&
-              "text-secondary px-3 text-center font-sans text-sm leading-6",
+              "text-secondary mx-auto max-w-[40rem] px-3 text-center font-sans text-sm leading-6",
           )}
         >
           <span className="sr-only">{labels.original}</span>
@@ -341,14 +350,14 @@ function ReflowBlock({
               <p className="text-muted mt-1 text-sm leading-6">
                 {labels.degradedDescription}
               </p>
-              {block.page_number && onOpenPdfPage ? (
+              {pageNumber && onOpenPdfPage ? (
                 <Button
                   className="mt-3"
-                  onClick={() => onOpenPdfPage(block.page_number!)}
+                  onClick={() => onOpenPdfPage(pageNumber)}
                   size="sm"
                   variant="secondary"
                 >
-                  {labels.openPdfPage(block.page_number)}
+                  {labels.openPdfPage(pageNumber)}
                 </Button>
               ) : null}
             </div>
@@ -369,17 +378,17 @@ function ReflowBlock({
           )}
 
           {metadataVisible && block.presentation_status !== "degraded" ? (
-            <div className="text-muted mt-2 flex min-h-5 items-center gap-2 font-sans text-xs opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+            <div className="bg-canvas border-line text-muted pointer-events-none absolute top-full right-0 z-10 mt-1 flex items-center gap-2 rounded-[var(--radius-sm)] border px-2 py-1 font-sans text-xs opacity-0 shadow-sm transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
               {block.presentation_status === "repaired" ? (
                 <span>{labels.repaired}</span>
               ) : null}
-              {block.page_number && onOpenPdfPage ? (
+              {pageNumber && onOpenPdfPage ? (
                 <button
                   className="hover:text-foreground underline-offset-4 hover:underline"
-                  onClick={() => onOpenPdfPage(block.page_number!)}
+                  onClick={() => onOpenPdfPage(pageNumber)}
                   type="button"
                 >
-                  {labels.openPdfPage(block.page_number)}
+                  {labels.openPdfPage(pageNumber)}
                 </button>
               ) : null}
             </div>
@@ -452,7 +461,7 @@ function PaperInformation({
 }) {
   if (blocks.length === 0) return null;
   return (
-    <details className="border-line rounded-[var(--radius-lg)] border px-4 py-3">
+    <details className="border-line border-y py-3">
       <summary className="cursor-pointer list-none font-sans text-sm font-medium [&::-webkit-details-marker]:hidden">
         {title}
       </summary>
@@ -526,13 +535,13 @@ export function ReaderReflowView({
   return (
     <div
       className={cn(
-        "bg-canvas min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto",
+        "bg-canvas min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-x-none",
         className,
       )}
     >
       <article
         aria-label={labels.document}
-        className="mx-auto grid w-full max-w-[46rem] min-w-0 grid-cols-[minmax(0,1fr)] gap-6 px-5 pt-10 pb-[max(5rem,env(safe-area-inset-bottom))] sm:gap-7 sm:px-8 sm:pt-14"
+        className="mx-auto grid w-full max-w-[46rem] min-w-0 grid-cols-[minmax(0,1fr)] gap-5 px-5 pt-9 pb-[max(5rem,env(safe-area-inset-bottom))] sm:gap-6 sm:px-8 sm:pt-12"
       >
         {blocks.map((block, index) => {
           if (index === firstInfoIndex) {

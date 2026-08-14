@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DocumentReflowBlock } from "./api";
 import {
   isTranslatableReflowBlock,
+  primaryReflowSource,
   reflowMarkdownPlainText,
   sanitizeAcademicMarkdown,
 } from "./reader-reflow-view";
@@ -15,11 +16,15 @@ function block(kind: DocumentReflowBlock["kind"]): DocumentReflowBlock {
     id: kind,
     index: 0,
     kind,
-    page_number: 1,
     presentation_status: "verbatim",
     render_markdown: "source",
-    source_markdown: "source",
-    source_rect: null,
+    source_spans: [
+      {
+        page_number: 1,
+        source_rect: { height: 0.1, width: 0.7, x: 0.15, y: 0.2 },
+        source_text: "source",
+      },
+    ],
   };
 }
 
@@ -47,5 +52,9 @@ describe("academic reflow rendering", () => {
     expect(isTranslatableReflowBlock(block("equation"), false)).toBe(false);
     expect(isTranslatableReflowBlock(block("references"), false)).toBe(false);
     expect(isTranslatableReflowBlock(block("references"), true)).toBe(true);
+  });
+
+  it("uses the first evidence span for PDF navigation", () => {
+    expect(primaryReflowSource(block("paragraph"))?.page_number).toBe(1);
   });
 });

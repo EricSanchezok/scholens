@@ -21,6 +21,16 @@ const actor = {
   locale: "en",
 };
 
+const reflowSourceSpan = (
+  pageNumber: number,
+  sourceText: string,
+  sourceRect: { height: number; width: number; x: number; y: number },
+) => ({
+  page_number: pageNumber,
+  source_rect: sourceRect,
+  source_text: sourceText,
+});
+
 const reflowBlocks = [
   {
     asset_id: null,
@@ -29,11 +39,16 @@ const reflowBlocks = [
     id: "reflow-title",
     index: 0,
     kind: "title",
-    page_number: 1,
     presentation_status: "verbatim",
     render_markdown: "# Evidence-driven academic reading",
-    source_markdown: "# Evidence-driven academic reading",
-    source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.12 },
+    source_spans: [
+      reflowSourceSpan(1, "Evidence-driven academic reading", {
+        height: 0.08,
+        width: 0.72,
+        x: 0.14,
+        y: 0.12,
+      }),
+    ],
   },
   {
     asset_id: null,
@@ -42,11 +57,16 @@ const reflowBlocks = [
     id: "reflow-authors",
     index: 1,
     kind: "authors",
-    page_number: 1,
     presentation_status: "repaired",
     render_markdown: "Ada Researcher<sup>1</sup> · Lin Scholar<sup>2</sup>",
-    source_markdown: "Ada Researcher<sup>1</sup> · Lin Scholar<sup>2</sup>",
-    source_rect: { height: 0.05, width: 0.72, x: 0.14, y: 0.21 },
+    source_spans: [
+      reflowSourceSpan(1, "Ada Researcher¹ · Lin Scholar²", {
+        height: 0.05,
+        width: 0.72,
+        x: 0.14,
+        y: 0.21,
+      }),
+    ],
   },
   {
     asset_id: null,
@@ -55,11 +75,16 @@ const reflowBlocks = [
     id: "reflow-method",
     index: 2,
     kind: "heading",
-    page_number: 2,
     presentation_status: "verbatim",
     render_markdown: "## 1 Method",
-    source_markdown: "## 1 Method",
-    source_rect: { height: 0.05, width: 0.72, x: 0.14, y: 0.12 },
+    source_spans: [
+      reflowSourceSpan(2, "1 Method", {
+        height: 0.05,
+        width: 0.72,
+        x: 0.14,
+        y: 0.12,
+      }),
+    ],
   },
   {
     asset_id: null,
@@ -68,13 +93,16 @@ const reflowBlocks = [
     id: "reflow-paragraph",
     index: 3,
     kind: "paragraph",
-    page_number: 2,
     presentation_status: "verbatim",
     render_markdown:
       "The reconstruction keeps every claim traceable to visible PDF evidence.",
-    source_markdown:
-      "The reconstruction keeps every claim traceable to visible PDF evidence.",
-    source_rect: { height: 0.12, width: 0.72, x: 0.14, y: 0.2 },
+    source_spans: [
+      reflowSourceSpan(
+        2,
+        "The reconstruction keeps every claim traceable to visible PDF evidence.",
+        { height: 0.12, width: 0.72, x: 0.14, y: 0.2 },
+      ),
+    ],
   },
   {
     asset_id: null,
@@ -83,13 +111,17 @@ const reflowBlocks = [
     id: "reflow-table",
     index: 4,
     kind: "table",
-    page_number: 2,
     presentation_status: "verbatim",
     render_markdown:
       "| Evidence source | Coverage | Confidence | Review state |\n| --- | ---: | ---: | --- |\n| PDF region | 100% | 0.98 | verified |",
-    source_markdown:
-      "| Evidence source | Coverage | Confidence | Review state |\n| --- | ---: | ---: | --- |\n| PDF region | 100% | 0.98 | verified |",
-    source_rect: { height: 0.18, width: 0.72, x: 0.14, y: 0.36 },
+    source_spans: [
+      reflowSourceSpan(2, "Evidence source Coverage Confidence Review state", {
+        height: 0.18,
+        width: 0.72,
+        x: 0.14,
+        y: 0.36,
+      }),
+    ],
   },
 ];
 
@@ -461,8 +493,8 @@ async function mockReaderReflow(page: Page) {
           document_id: paperDocument.document_id,
           error_code: null,
           job_id: "70000000-0000-4000-8000-000000000001",
-          profile_revision: "reflow-profile-v2",
-          prompt_revision: "reflow-evidence-v2",
+          parser_revision: "mineru-content-list-v1",
+          pipeline_revision: "mineru-continuous-ast-v1",
           status: "completed",
           updated_at: "2026-08-14T00:00:00Z",
           warnings: [],
