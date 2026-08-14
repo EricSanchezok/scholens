@@ -224,11 +224,13 @@ The repository exposes one canonical, side-effect-free gate interface:
 
 Run it from the repository root after explicitly preparing the locked
 environments in the setup section above. The runner validates only: it does not
-install or update dependencies, start local services, apply migrations, or
-modify product data. Use the narrowest affected lane during development and
-`all` for repository-wide governance or before a cross-repository `main`
-merge. CI provisions its own environments and then calls these same lanes, so
-the executable contract cannot drift from the documented commands.
+install or update dependencies, start persistent local services, apply
+migrations, or modify product data. Browser-test runners may create and clean
+up an ephemeral web server for their lane. Use the narrowest affected lane
+during development and `all` for repository-wide governance or before a
+cross-repository `main` merge. CI provisions its own environments and then
+calls these same lanes, so the executable contract cannot drift from the
+documented commands.
 
 Detailed leaf checks and test ownership remain in the owning service guides.
 The `docs` lane validates repository documentation and ADR structure; it is

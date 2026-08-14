@@ -72,10 +72,11 @@ The root gate runner is the canonical command interface:
 ```
 
 It verifies an already prepared checkout and has no dependency-installation,
-migration, or service-startup side effects. Use the narrowest relevant target
-during development. Run `all` for repository-wide governance, dependency, or
-release-contract work and before a main merge whose changes span the complete
-repository.
+migration, or persistent service-startup side effects. Browser-test runners
+may create and clean up an ephemeral web server inside their lane. Use the
+narrowest relevant target during development. Run `all` for repository-wide
+governance, dependency, or release-contract work and before a main merge whose
+changes span the complete repository.
 
 The owning guides describe individual leaf commands and test responsibilities.
 In particular, Web changes distinguish Unit, Storybook browser, and Playwright

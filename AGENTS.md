@@ -139,8 +139,10 @@ Run checks proportional to the change through the side-effect-free root runner:
 ```
 
 The runner verifies an already provisioned checkout. It never installs
-dependencies, starts services, or applies migrations. CI invokes these same
-lanes and protects `main` through the aggregate `all checks passed` result.
+dependencies, starts persistent development services, or applies migrations.
+Browser-test runners may create and clean up an ephemeral web server for their
+lane. CI invokes these same lanes and protects `main` through the aggregate
+`all checks passed` result.
 
 The full replacement-frontend lane expands to:
 

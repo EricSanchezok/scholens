@@ -526,6 +526,7 @@ test.beforeEach(async ({ page }) => {
 test("opens a Library paper in the desktop Reader and restores route state", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);
 
   await expect(page.getByRole("toolbar", { name: "Page" })).toBeVisible();

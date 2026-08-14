@@ -204,7 +204,8 @@ product-only reset procedure is documented in
 # Tests
 
 Run the complete Server quality gate from the repository root. The runner has
-no dependency-installation, migration, or service-startup side effects:
+no dependency-installation, migration, or persistent service-startup side
+effects:
 
 ```bash
 ./scripts/run-gates.sh server

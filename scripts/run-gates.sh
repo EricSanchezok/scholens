@@ -20,7 +20,9 @@ Available lanes:
   all
 
 The runner only verifies an already-provisioned workspace. It never installs
-dependencies, starts services, or applies database migrations.
+dependencies, starts persistent development services, or applies database
+migrations. Browser-test runners may create and clean up an ephemeral web
+server for the duration of their lane.
 EOF
 }
 

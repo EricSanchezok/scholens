@@ -118,7 +118,7 @@ uv sync
 ```
 
 Run the complete Jobs quality gate from the repository root. The runner has no
-dependency-installation, migration, or service-startup side effects:
+dependency-installation, migration, or persistent service-startup side effects:
 
 ```bash
 ./scripts/run-gates.sh jobs
