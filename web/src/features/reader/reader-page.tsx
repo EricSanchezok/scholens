@@ -41,6 +41,7 @@ import {
 import {
   PdfPage,
   type ReaderFitMode,
+  type ReaderPdfSourceTarget,
   type ReaderSelection,
 } from "./components/pdf-page";
 import { PdfThumbnail } from "./components/pdf-thumbnail";
@@ -155,6 +156,8 @@ function ReaderDocumentWorkspace({
   const [reflowOutline, setReflowOutline] = React.useState<
     ReaderReflowOutlineItem[]
   >([]);
+  const [reflowSourceTarget, setReflowSourceTarget] =
+    React.useState<ReaderPdfSourceTarget>();
   const documentQuery = useQuery(readerQueries.document(documentId));
   const projectsQuery = useQuery(readerQueries.projects(documentId));
   const translation = useReaderTranslation({
@@ -1039,6 +1042,7 @@ function ReaderDocumentWorkspace({
                             }
                           : undefined
                       }
+                      sourceTarget={reflowSourceTarget}
                       zoom={zoom}
                     />
                   ) : null}
@@ -1047,9 +1051,13 @@ function ReaderDocumentWorkspace({
                       documentId={documentId}
                       fullTranslationEnabled={fullTranslationEnabled}
                       onOutlineChange={setReflowOutline}
-                      onOpenPdfPage={(page) =>
-                        updateLocation({ page, view: "pdf" })
-                      }
+                      onOpenPdfSource={(source) => {
+                        setReflowSourceTarget(source);
+                        updateLocation({
+                          page: source.page_number,
+                          view: "pdf",
+                        });
+                      }}
                       onTranslationStatusChange={setFullTranslationStatus}
                       preferences={translation.effectivePreferences}
                       targetLanguage={

@@ -159,7 +159,7 @@ const meta = {
     fullTranslationDisplay: "bilingual",
     fullTranslationEnabled: false,
     labels,
-    onOpenPdfPage: fn(),
+    onOpenPdfSource: fn(),
     onRequestTranslation: fn(),
     onRetryTranslation: fn(),
     showTranslationMarker: true,

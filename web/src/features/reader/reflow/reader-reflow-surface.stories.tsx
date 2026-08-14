@@ -126,7 +126,7 @@ const meta = {
     documentId: "completed-document",
     fullTranslationEnabled: false,
     onOutlineChange: fn(),
-    onOpenPdfPage: fn(),
+    onOpenPdfSource: fn(),
     onTranslationStatusChange: fn(),
     preferences: {
       auto_translate_selection: true,

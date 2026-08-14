@@ -14,6 +14,7 @@ import {
   reflowQueries,
   type DocumentReflowAsset,
   type DocumentReflowBlock,
+  type DocumentReflowSourceSpan,
 } from "./api";
 import type { ReflowBlockTranslationState } from "./use-reflow-translations";
 
@@ -233,7 +234,7 @@ function ReflowBlock({
   fullTranslationDisplay,
   fullTranslationEnabled,
   labels,
-  onOpenPdfPage,
+  onOpenPdfSource,
   onRequestTranslation,
   onRetryTranslation,
   showTranslationMarker,
@@ -247,7 +248,7 @@ function ReflowBlock({
   fullTranslationDisplay: "bilingual" | "translation_only";
   fullTranslationEnabled: boolean;
   labels: ReaderReflowLabels;
-  onOpenPdfPage?: (page: number) => void;
+  onOpenPdfSource?: (source: DocumentReflowSourceSpan) => void;
   onRequestTranslation: (blockId: string) => void;
   onRetryTranslation: (blockId: string) => void;
   showTranslationMarker: boolean;
@@ -350,10 +351,10 @@ function ReflowBlock({
               <p className="text-muted mt-1 text-sm leading-6">
                 {labels.degradedDescription}
               </p>
-              {pageNumber && onOpenPdfPage ? (
+              {pageNumber && primarySource && onOpenPdfSource ? (
                 <Button
                   className="mt-3"
-                  onClick={() => onOpenPdfPage(pageNumber)}
+                  onClick={() => onOpenPdfSource(primarySource)}
                   size="sm"
                   variant="secondary"
                 >
@@ -382,10 +383,10 @@ function ReflowBlock({
               {block.presentation_status === "repaired" ? (
                 <span>{labels.repaired}</span>
               ) : null}
-              {pageNumber && onOpenPdfPage ? (
+              {pageNumber && primarySource && onOpenPdfSource ? (
                 <button
                   className="hover:text-foreground underline-offset-4 hover:underline"
-                  onClick={() => onOpenPdfPage(pageNumber)}
+                  onClick={() => onOpenPdfSource(primarySource)}
                   type="button"
                 >
                   {labels.openPdfPage(pageNumber)}
@@ -480,7 +481,7 @@ export function ReaderReflowView({
   fullTranslationDisplay,
   fullTranslationEnabled,
   labels,
-  onOpenPdfPage,
+  onOpenPdfSource,
   onRequestTranslation,
   onRetryTranslation,
   showTranslationMarker,
@@ -495,7 +496,7 @@ export function ReaderReflowView({
   fullTranslationDisplay: "bilingual" | "translation_only";
   fullTranslationEnabled: boolean;
   labels: ReaderReflowLabels;
-  onOpenPdfPage?: (page: number) => void;
+  onOpenPdfSource?: (source: DocumentReflowSourceSpan) => void;
   onRequestTranslation: (blockId: string) => void;
   onRetryTranslation: (blockId: string) => void;
   showTranslationMarker: boolean;
@@ -522,7 +523,7 @@ export function ReaderReflowView({
       fullTranslationEnabled={fullTranslationEnabled}
       key={block.id}
       labels={labels}
-      onOpenPdfPage={onOpenPdfPage}
+      onOpenPdfSource={onOpenPdfSource}
       onRequestTranslation={onRequestTranslation}
       onRetryTranslation={onRetryTranslation}
       showTranslationMarker={showTranslationMarker}

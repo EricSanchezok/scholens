@@ -19,6 +19,8 @@ export type DocumentReflowBlock =
   components["schemas"]["DocumentReflowBlockResponse"];
 export type DocumentReflowAsset =
   components["schemas"]["DocumentReflowAssetResponse"];
+export type DocumentReflowSourceSpan =
+  components["schemas"]["ReflowSourceSpanPayload"];
 
 export const reflowKeys = {
   all: ["reader", "reflow"] as const,

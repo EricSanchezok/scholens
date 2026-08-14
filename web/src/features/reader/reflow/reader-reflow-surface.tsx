@@ -12,6 +12,7 @@ import {
   ReaderReflowView,
   reflowMarkdownPlainText,
 } from "./reader-reflow-view";
+import type { DocumentReflowSourceSpan } from "./api";
 import { useReflowTranslations } from "./use-reflow-translations";
 import type {
   FullTranslationStatus,
@@ -27,7 +28,7 @@ export function ReaderReflowSurface({
   documentId,
   fullTranslationEnabled,
   onOutlineChange,
-  onOpenPdfPage,
+  onOpenPdfSource,
   onTranslationStatusChange,
   preferences,
   targetLanguage,
@@ -36,7 +37,7 @@ export function ReaderReflowSurface({
   documentId: string;
   fullTranslationEnabled: boolean;
   onOutlineChange?: (items: ReaderReflowOutlineItem[]) => void;
-  onOpenPdfPage: (page: number) => void;
+  onOpenPdfSource: (source: DocumentReflowSourceSpan) => void;
   onTranslationStatusChange?: (status: FullTranslationStatus) => void;
   preferences?: TranslationPreferences;
   targetLanguage: string;
@@ -166,7 +167,7 @@ export function ReaderReflowSurface({
         translationFailed: t("translationFailed"),
         translationMarker: t("translationMarker"),
       }}
-      onOpenPdfPage={onOpenPdfPage}
+      onOpenPdfSource={onOpenPdfSource}
       onRequestTranslation={translations.request}
       onRetryTranslation={translations.retry}
       showTranslationMarker={preferences?.show_translation_marker ?? true}

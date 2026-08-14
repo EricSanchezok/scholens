@@ -167,3 +167,7 @@ body {
 .pdf-selection-overlay {
   color: var(--color-document-selection-bg);
 }
+
+[data-reflow-source-overlay] .pdf-selection-overlay {
+  color: var(--color-document-search-current);
+}
