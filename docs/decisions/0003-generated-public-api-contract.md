@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-02
 
-## Context
+## Problem
 
 The backend will continue evolving during the frontend rewrite. Handwritten
 frontend DTOs would silently diverge, while generating types from a running
@@ -21,6 +21,14 @@ Treat `server/openapi/public-v1.json` as the committed public API snapshot.
 - Feature code owns query keys and domain-facing adapters; it does not handwrite
   backend wire types.
 - The frontend build never requires a running backend.
+
+## Alternatives considered
+
+- **Maintain handwritten frontend DTOs.** They can compile while silently
+  diverging from FastAPI and therefore move contract failures to runtime.
+- **Generate types from a running Server during frontend builds.** This makes
+  builds dependent on mutable local service state and prevents deterministic
+  review of the exact public contract.
 
 ## Consequences
 

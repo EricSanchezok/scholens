@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-02
 Owners: Scholens web
 
-## Context
+## Problem
 
 The replacement frontend needs English and Simplified Chinese before product
 routes are built. It needs Server Component support, typed ICU messages,

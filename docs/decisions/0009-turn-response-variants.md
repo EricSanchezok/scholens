@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-08
 Owners: Scholens
 
-## Context
+## Problem
 
 A conversational user prompt can be regenerated, but a flat sequence of user
 and assistant messages cannot represent which generated answer is selected,

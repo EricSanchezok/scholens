@@ -6,8 +6,16 @@ const repositoryRoot = path.resolve(import.meta.dirname, "..", "..");
 const webRoot = path.join(repositoryRoot, "web");
 const documentationRoots = [
   path.join(repositoryRoot, "AGENTS.md"),
+  path.join(repositoryRoot, "CONTRIBUTING.md"),
   path.join(repositoryRoot, "DEVELOPMENT.md"),
   path.join(repositoryRoot, "PRODUCT.md"),
+  path.join(repositoryRoot, "README.md"),
+  path.join(repositoryRoot, "docs"),
+  path.join(repositoryRoot, "packages"),
+  path.join(repositoryRoot, "server", "README.md"),
+  path.join(repositoryRoot, "jobs", "README.md"),
+  path.join(repositoryRoot, "client", "README.md"),
+  path.join(repositoryRoot, "deploy", "production"),
   path.join(webRoot, "README.md"),
   path.join(webRoot, "docs"),
 ];
@@ -93,7 +101,7 @@ for (const filePath of activePortDocs) {
   }
 }
 
-const decisionsDirectory = path.join(webRoot, "docs", "decisions");
+const decisionsDirectory = path.join(repositoryRoot, "docs", "decisions");
 const decisionFiles = (await readdir(decisionsDirectory))
   .filter((name) => /^\d{4}-.+\.md$/.test(name))
   .sort();
@@ -103,7 +111,21 @@ const decisionIndex = await readFile(
 );
 for (const decisionFile of decisionFiles) {
   if (!decisionIndex.includes(`./${decisionFile}`)) {
-    violations.push(`web/docs/decisions/README.md: missing ${decisionFile}`);
+    violations.push(`docs/decisions/README.md: missing ${decisionFile}`);
+  }
+  const decisionContents = await readFile(
+    path.join(decisionsDirectory, decisionFile),
+    "utf8",
+  );
+  for (const heading of [
+    "## Problem",
+    "## Decision",
+    "## Alternatives considered",
+    "## Consequences",
+  ]) {
+    if (!decisionContents.includes(heading)) {
+      violations.push(`docs/decisions/${decisionFile}: missing ${heading}`);
+    }
   }
 }
 

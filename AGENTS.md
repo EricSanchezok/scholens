@@ -11,12 +11,14 @@ Always read the documents relevant to the task before editing:
 | Area                                            | Required reading                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Product behavior or terminology                 | [`PRODUCT.md`](./PRODUCT.md)                                                               |
+| Branch, commit, PR, and review workflow         | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                     |
 | Local services, ports, environment, or commands | [`DEVELOPMENT.md`](./DEVELOPMENT.md)                                                       |
 | Replacement frontend (`web/`)                   | [`web/docs/README.md`](./web/docs/README.md) and its task-specific guide                   |
 | Backend API or domain behavior                  | [`server/README.md`](./server/README.md)                                                   |
 | Background processing                           | [`jobs/README.md`](./jobs/README.md)                                                       |
 | Data or service ownership                       | [`docs/architecture/data-ownership.md`](./docs/architecture/data-ownership.md)             |
 | Current backend capabilities                    | [`docs/architecture/backend-capabilities.md`](./docs/architecture/backend-capabilities.md) |
+| Architecture decision rationale                 | [`docs/decisions/README.md`](./docs/decisions/README.md)                                   |
 | Production deployment                           | [`deploy/production/README.md`](./deploy/production/README.md)                             |
 
 For new `web/` product work, also complete
@@ -93,6 +95,29 @@ Do not mechanically recreate Figma layers or absolute coordinates. Figma owns
 layout intent, visual hierarchy, interaction states, and acceptance; code owns
 responsive behavior, accessibility, runtime contracts, and component APIs.
 
+## Documentation responsibilities
+
+Keep each fact in one canonical place instead of copying it across guides:
+
+- `AGENTS.md` contains mandatory guardrails and navigation for agents.
+- `CONTRIBUTING.md` contains the human development, branch, commit, and PR
+  workflow.
+- `DEVELOPMENT.md` contains environment setup, fixed ports, and executable
+  local commands.
+- product, architecture, service, and feature documents describe the current
+  behavior of the repository.
+- package READMEs describe that package's public contract, consumers,
+  dependency direction, and limitations.
+- ADRs under `docs/decisions/` record why a consequential choice was made,
+  including alternatives and consequences; they do not replace current-state
+  documentation.
+- PRs record the scope and actual verification for ordinary changes.
+- postmortems are reserved for serious incidents or repeated regressions.
+
+When behavior changes, update the canonical current-state document in the same
+commit. Add or amend an ADR only when the reasoning or architectural boundary
+changes.
+
 ## Generated artifacts
 
 Do not edit generated files directly. Change their source and regenerate them.
@@ -141,7 +166,7 @@ smaller relevant subset, but the final handoff must state exactly what ran.
   recovery point when commits are within the requested workflow.
 - Before staging, inspect the exact changed files; do not stage another agent's
   work merely because it is present.
-- Architecture changes require an ADR under `web/docs/decisions/` or the
+- Architecture changes require an ADR under `docs/decisions/` or the
   appropriate service-level architecture documentation.
 - Every code, configuration, or workflow change requires an explicit
   documentation-impact check. Documentation must change in the same commit as

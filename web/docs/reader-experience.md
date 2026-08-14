@@ -14,7 +14,7 @@ Selection translation follows
 [`51 — Translation`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=720-965)
 for hierarchy and states while code owns responsive containment and accessibility.
 AI reflow and full translation extend the same document region according to
-[ADR 0016](./decisions/0016-lossless-reader-reflow-and-lazy-translation.md).
+[ADR 0016](../../docs/decisions/0016-lossless-reader-reflow-and-lazy-translation.md).
 
 ## Product boundary
 

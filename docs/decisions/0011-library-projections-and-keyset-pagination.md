@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-11
 Owners: Scholens
 
-## Context
+## Problem
 
 Library needs a personal Papers collection and a cross-scope Outputs collection.
 The existing Figma pagination implied page numbers, while the Server needs

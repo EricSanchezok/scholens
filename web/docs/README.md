@@ -8,7 +8,7 @@ purpose is to keep the codebase easy to change as product routes are added.
 When two sources disagree, use this order:
 
 1. Executable contracts: TypeScript, generated schemas, tests, and CI.
-2. Architecture decisions in `docs/decisions/`.
+2. Repository architecture decisions in [`docs/decisions/`](../../docs/decisions/README.md).
 3. The engineering guides in this directory.
 4. Figma annotations and product notes.
 
@@ -33,7 +33,7 @@ runtime behavior, accessibility, data contracts, and component APIs.
 | [API development](./api-development.md)                                         | Changing a backend contract or adding a request/query                |
 | [Testing](./testing.md)                                                         | Choosing test scope or adding a network/interaction state            |
 | [New feature checklist](./new-feature-checklist.md)                             | Starting and finishing every product feature                         |
-| [Architecture decisions](./decisions/README.md)                                 | Deliberately changing a rule in this handbook                        |
+| [Architecture decisions](../../docs/decisions/README.md)                        | Deliberately changing a foundational repository or frontend rule     |
 | [Governance audit](./audits/2026-08-04-frontend-governance-audit.md)            | Reviewing the baseline risks and completed remediation               |
 | [Conversation harness audit](./audits/2026-08-08-conversation-harness-audit.md) | Reviewing ordered-stream invariants and completed cleanup            |
 

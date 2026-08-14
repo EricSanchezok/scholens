@@ -19,14 +19,14 @@ The PDF worker follows one explicit, local-first pipeline:
    - **Digital PDF** (≥80% of uploads: arXiv, journal, most conference PDFs)
      stays local:
      a. `pymupdf4llm` extracts page-chunked Markdown with exact per-page
-        offsets (primary engine);
+     offsets (primary engine);
      b. on failure, `markitdown` is tried as a second engine and is persisted
-        as `text_only` because its output has no page boundaries (offsets are
-        approximated from the local page analysis);
+     as `text_only` because its output has no page boundaries (offsets are
+     approximated from the local page analysis);
      c. if both local engines fail, MinerU rescues the document (OCR can
-        recover misclassified or malformed PDFs);
+     recover misclassified or malformed PDFs);
      d. if the MinerU rescue fails or times out, the deterministic per-page
-        text from step 2 is persisted as `text_only` with exact offsets.
+     text from step 2 is persisted as `text_only` with exact offsets.
 4. Store Markdown and preview; only the MinerU path produces an audit archive
    (`mineru-result.zip`).
 5. Extract metadata with DeepSeek unless the caller supplied authoritative
@@ -111,14 +111,30 @@ configuration is absent.
 
 ## Local commands
 
-Install and verify:
+Install dependencies when setting up the service:
 
 ```bash
 uv sync
+```
+
+Run the complete Jobs quality gate from the repository root. The runner has no
+dependency-installation, migration, or service-startup side effects:
+
+```bash
+./scripts/run-gates.sh jobs
+```
+
+The equivalent service-local checks are:
+
+```bash
+uv run ruff format --check src tests
 uv run ruff check src tests
-uv run mypy src/pdf src/schemas.py src/tasks.py
+uv run mypy src
 uv run pytest -q
 ```
+
+Use `uv run ruff format src tests` deliberately when formatting; verification
+commands never rewrite source.
 
 Start the local stack:
 

@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-12
 Owners: Scholens
 
-## Context
+## Problem
 
 PDF upload and source import previously exposed several authorities: an upload
 could return before its Library membership and durable job were committed,

@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-14
 Owners: Scholens
 
-## Context
+## Problem
 
 The PDF canvas is accurate and remains the canonical desktop reading surface,
 but fixed paper geometry is costly on phones. Pinch zoom, horizontal scanning,

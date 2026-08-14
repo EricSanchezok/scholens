@@ -5,7 +5,7 @@
 - Superseded in part: the development-port allocation in this record is replaced
   by [ADR 0006](./0006-local-development-port-contract.md).
 
-## Context
+## Problem
 
 The legacy `client/` reflects an older product model and backend contract. Sharing
 components or business code with it would make the replacement inherit those
@@ -22,6 +22,15 @@ Build the replacement frontend entirely under the root `web/` directory.
   frontend compatibility layer.
 - Product functionality is rebuilt as vertical feature slices when its backend
   contract and interaction design are ready.
+
+## Alternatives considered
+
+- **Evolve the legacy application in place.** This would preserve its product
+  assumptions and backend coupling, preventing the replacement from converging
+  on the new product model independently.
+- **Share selected runtime or product components across both frontends.** This
+  would obscure the migration boundary and create a compatibility surface that
+  has to survive until the legacy application is retired.
 
 ## Consequences
 

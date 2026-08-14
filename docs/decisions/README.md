@@ -1,12 +1,34 @@
 # Architecture Decision Records
 
-Use a short ADR when deliberately changing a foundational rule: adding a global
-state library, another primitive or icon system, a shared UI package, a private
-registry, a cross-feature event mechanism, a new token authority, or a different
-API transport.
+This directory is the repository-wide record of consequential engineering
+decisions. An ADR explains **why** Scholens selected a durable architecture,
+product-contract, data-ownership, runtime, or development-governance rule and
+what alternatives it rejected. It is not the current operating manual.
 
-Name records `NNNN-short-decision-name.md`. Once accepted, do not rewrite the
-history; add a later ADR that supersedes it.
+Current facts have one canonical home:
+
+- repository and service architecture belongs under `docs/architecture/` or
+  the owning service README;
+- frontend feature behavior belongs in `web/docs/*-experience.md` and shared
+  frontend rules belong in the Web engineering handbook;
+- shared-package public behavior, consumers, and limitations belong in that
+  package's README;
+- local commands and environment behavior belong in `DEVELOPMENT.md`;
+- production operations belong in `deploy/production/README.md`.
+
+Write an ADR before deliberately changing a foundational rule such as adding a
+global state library, a primitive or icon system, a shared package, a
+cross-service event mechanism, a token authority, an API transport, a durable
+data owner, or a release boundary. Ordinary bug fixes, local refactors, and
+implementation details belong in the pull request and affected current-state
+documentation instead.
+
+Name records `NNNN-short-decision-name.md`. Every new or superseding ADR must
+contain `Problem`, `Decision`, `Alternatives considered`, and `Consequences`.
+`Validation` is optional but recommended when a machine-checkable acceptance
+signal exists. Once accepted, do not rewrite the substantive decision history;
+add a later ADR that supersedes it. Mechanical format or link repairs must not
+change what the accepted record decided.
 
 ## Accepted decisions
 
@@ -36,7 +58,7 @@ Status: Proposed | Accepted | Superseded
 Date: YYYY-MM-DD
 Owners: names or team
 
-## Context
+## Problem
 
 What concrete problem and constraints require a decision?
 

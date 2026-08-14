@@ -1,10 +1,17 @@
 # Scholens Web Foundation
 
-`web/` is the independent replacement frontend. It does not import from the
-legacy `client/`. The first product entry is the complete authentication
-lifecycle at `/login`; the authenticated Home vertical slice is implemented at
-`/`. Library, Projects, Reader, and later product routes remain deliberately
-unimplemented until their own vertical slices begin.
+`web/` is the canonical Scholens frontend. It is an independent application and
+does not import from the legacy `client/`. The implemented product surface
+includes the authentication lifecycle at `/login`, authenticated Home at `/`,
+Library at `/library`, Projects at `/projects` and `/projects/[projectId]`, and
+Reader at `/reader/[documentId]`.
+
+Canonical source ownership does not yet mean production cutover. The current
+production Release and Compose path still builds and serves `client/`; see
+[`deploy/production/README.md`](../deploy/production/README.md). Do not remove
+the legacy application or claim that `web/` is production-deployable until a
+separate reviewed cutover changes the image, proxy, health-check, rollback, and
+release contracts together.
 
 ## Local commands
 
@@ -65,6 +72,6 @@ test:
 - [`new-feature-checklist.md`](./docs/new-feature-checklist.md): the required
   checklist for every new vertical slice.
 
-Architecture exceptions require a short decision record in
-[`docs/decisions/`](./docs/decisions/README.md); they must not be hidden inside a
-feature implementation.
+Architecture exceptions require a short decision record in the repository-wide
+[`docs/decisions/`](../docs/decisions/README.md); they must not be hidden inside
+a feature implementation.

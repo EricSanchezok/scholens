@@ -124,4 +124,5 @@ an API response for the UI.
 Refactors within these boundaries do not require a decision record. Introducing
 a new state library, second primitive system, second icon set, cross-feature
 event bus, UI package, registry, or different token authority does. Record the
-decision before implementation using the template in `docs/decisions/`.
+decision before implementation using the template in
+[`docs/decisions/`](../../docs/decisions/README.md).

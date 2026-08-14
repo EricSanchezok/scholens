@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-11
 Owners: Scholens
 
-## Context
+## Problem
 
 The old client waited for answer persistence, synchronous title generation, a
 second suggestion request, and a turn refetch before showing response actions.

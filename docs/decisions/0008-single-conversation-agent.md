@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-05
 
-## Context
+## Problem
 
 The former Conversation runtime forced every request through a tool-selection
 model call and then a separate final-answer call. Its public stream exposed
@@ -60,6 +60,18 @@ Use one Pydantic AI agent loop for every Conversation scope.
 - The previous tool loop, final-answer model call, `finish_tool_use`, search
   fallback, iteration prompts, and legacy trace parser are removed without a
   compatibility layer.
+
+## Alternatives considered
+
+- **Keep a routing model followed by a separate answer model.** This forces a
+  tool-selection call for ordinary questions, duplicates model orchestration,
+  and retains two independently evolving output paths.
+- **Create separate agent runtimes for Home, Projects, and Reader.** This would
+  duplicate tool policy, event semantics, persistence, and safety behavior
+  instead of composing each surface over one authorized runtime.
+- **Expose raw provider and tool diagnostics to clients.** Those events are not
+  a stable public product contract and can reveal reasoning, arguments, or
+  provider-specific details.
 
 ## Consequences
 

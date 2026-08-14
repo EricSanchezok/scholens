@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-02
 
-## Context
+## Problem
 
 Scholens needs multiple themes and Light/Dark appearances without visual drift
 between Figma, application components, Tailwind utilities, and Storybook.
@@ -22,6 +22,15 @@ After the initial Figma calibration, DTCG JSON under
 - Theme and Appearance remain independent dimensions.
 - Figma continues to express visual intent and receives synchronized values
   through an explicit token update workflow.
+
+## Alternatives considered
+
+- **Let Figma remain the numeric runtime source.** Application builds would
+  depend on an external mutable file and repository review could not prove the
+  exact values being shipped.
+- **Maintain theme values directly in CSS or components.** This would create
+  competing authorities and make Light/Dark, themes, and Storybook drift from
+  one another.
 
 ## Consequences
 

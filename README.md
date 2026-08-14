@@ -55,6 +55,7 @@ For the hardened AWS/EC2 deployment that shares SanchezCloud accounts with Schol
 Contributions are welcome! To get a local development environment running:
 
 - **[AGENTS.md](./AGENTS.md)** — repository boundaries and required engineering documentation for coding agents.
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** — branch, commit, pull-request, documentation, and verification workflow.
 - **[DEVELOPMENT.md](./DEVELOPMENT.md)** — full setup guide: prerequisites, environment variables, ports, and how to start the local stack.
 - **[web/README.md](./web/README.md)** — the replacement Next.js application and engineering handbook.
 - **[server/README.md](./server/README.md)** — the FastAPI backend.

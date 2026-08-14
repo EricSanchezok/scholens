@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-04
 
-## Context
+## Problem
 
 The repository already used DTCG sources for color and dimensions, but the
 Tailwind semantic aliases were maintained manually in global CSS. Repeated

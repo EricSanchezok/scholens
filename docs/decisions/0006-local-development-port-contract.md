@@ -5,7 +5,7 @@ Date: 2026-08-04
 Owners: Scholens maintainers
 Supersedes: the port allocation in ADR 0001
 
-## Context
+## Problem
 
 Scholens is developed alongside Account Center, Scholight, and Synergy. Reusing
 common framework defaults such as `3000` made it easy to connect a browser,

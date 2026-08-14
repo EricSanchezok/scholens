@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-02
 Owners: Scholens web
 
-## Context
+## Problem
 
 The replacement frontend needs session bootstrap, typed authenticated requests,
 refresh-token rotation, multi-tab behavior, and a distinct unavailable state

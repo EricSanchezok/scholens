@@ -24,9 +24,7 @@ uv sync
 source .venv/bin/activate
 ```
 
-2. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
-
-3. Set up environment variables from the repository-level catalog. Copy only
+2. Set up environment variables from the repository-level catalog. Copy only
    the Server section; the root file is not itself a runtime file.
 
 ```bash
@@ -34,9 +32,10 @@ touch .env
 ```
 
 At minimum, point `DATABASE_URL` at a `sanchezcloud` database with migrated
-`auth` and `scholens` schemas, then replace the placeholder provider keys for
-the features you want to exercise. See [`../DEVELOPMENT.md`](../DEVELOPMENT.md)
-for the shared-local-account and AWS RDS distinction.
+`auth` and `scholens` schemas, then configure only the opt-in model, search,
+mail, and storage providers needed for the feature you are exercising. See
+[`../DEVELOPMENT.md`](../DEVELOPMENT.md) for the provider catalog, shared-local
+account, and AWS RDS distinction.
 
 The backend exposes one versioned capability surface and shares its application
 use cases with Agent adapters and the authenticated `/mcp` server. Architecture rules,
@@ -204,17 +203,32 @@ product-only reset procedure is documented in
 
 # Tests
 
-Run the complete Server quality gate from the `server` directory:
+Run the complete Server quality gate from the repository root. The runner has
+no dependency-installation, migration, or service-startup side effects:
 
 ```bash
+./scripts/run-gates.sh server
+```
+
+The equivalent service-local checks are:
+
+```bash
+uv run ruff format --check app tests migrations
 uv run ruff check app tests migrations
 uv run mypy app
 uv run pytest -q
 ```
 
+The root gate and CI additionally reject known debug and superseded import
+patterns in Server business code. Use `uv run ruff format app tests migrations`
+deliberately when formatting; verification commands never rewrite source.
+
 ## Chat with Knowledge Base
 
-We have an `Ask` page, which allows you to ask questions across your entire knowledge base. AI-generated responses come with inline citations which will link to the original papers and show the text citation. Deep-linking is not yet available, but is planned.
+The Home conversation surface can ask questions across the authorized knowledge
+base. AI-generated responses carry validated inline citations that open the
+source panel; paper and Reader context use the canonical typed source and anchor
+contracts described above.
 
 The response agent is one contextual Pydantic AI runtime with access to the
 authorized subset of the canonical workspace and connector tools:

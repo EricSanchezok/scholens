@@ -8,7 +8,7 @@ Reader annotation naming, audience, and collaboration lifecycle are superseded
 by [ADR 0014](./0014-annotation-thread-collaboration.md). The typed anchor and
 conversation-cursor decisions below remain accepted.
 
-## Context
+## Problem
 
 Reader must restore a selected PDF passage, navigate from an annotation to its
 exact page region, and limit conversation history to one paper. The previous

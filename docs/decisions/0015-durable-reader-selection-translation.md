@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-14
 Owners: Scholens
 
-## Context
+## Problem
 
 Reader already produced normalized PDF selections for Ask and annotations, but
 translation was absent from the replacement frontend. A short-lived Redis

@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-13
 Owners: Scholens
 
-## Context
+## Problem
 
 Reader currently presents Highlight and Add annotation as separate actions,
 while the Server stores both as one highlight root with optional comments. Its
