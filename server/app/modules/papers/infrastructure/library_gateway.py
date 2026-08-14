@@ -391,6 +391,28 @@ class SqlAlchemyPaperLibraryGateway:
             or 0
         )
 
+    def ingestion_counts(self, *, user_id: int) -> tuple[int, int]:
+        rows = self._db.execute(
+            select(DurableJob.status, func.count(DurableJob.id))
+            .join(UploadReservation, UploadReservation.id == DurableJob.id)
+            .where(
+                DurableJob.requested_by_id == user_id,
+                DurableJob.project_id.is_(None),
+                DurableJob.status.in_(
+                    [
+                        JobStatus.PENDING.value,
+                        JobStatus.RUNNING.value,
+                        JobStatus.FAILED.value,
+                    ]
+                ),
+                UploadReservation.superseded_by_id.is_(None),
+            )
+            .group_by(DurableJob.status)
+        ).all()
+        by_status = {str(status): int(count) for status, count in rows}
+        attention_count = by_status.get(JobStatus.FAILED.value, 0)
+        return sum(by_status.values()), attention_count
+
     def get(self, *, user_id: int, document_id: UUID) -> LibraryPaperResponse:
         return library_paper_response(
             document_repository.require_library_paper_by_document(

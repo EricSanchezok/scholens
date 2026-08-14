@@ -79,7 +79,10 @@ banner. `uploading` is local-only. The Server's atomic `202` response begins the
 canonical lifecycle at `queued`, after which `parsing`, `extracting`, `indexing`,
 and `finalizing` update that row without changing its identity or layout.
 Completed ingestion becomes a normal paper row. Failed ingestion preserves its
-source, stable error code, Retry, and remove/cancel actions.
+source, filename, failed lifecycle stage, stable safe error code, Retry, and
+remove/cancel actions. The header separates successful Paper count from active
+or failed import count and calls out failures that require attention; processing
+rows are never counted as successful Papers.
 
 The client polls only while a visible ingestion is active and stops after a
 terminal state. Progress heartbeats and Server-owned deadlines prevent an
@@ -105,7 +108,10 @@ is announced inline. Server-side SHA-256 reservation checks and collection
 uniqueness remain authoritative across tabs, clients, and concurrent requests.
 The Papers list projects each personal membership exactly once: an active or
 failed ingestion replaces that membership's normal row until the job completes,
-rather than appearing as an additional row.
+rather than appearing as an additional row. An accepted reservation without a
+Document is pinned at the beginning of the first forward page until it completes
+or the user removes it, so a concurrently accepted second upload cannot vanish
+behind Paper pagination.
 
 ## Outputs
 

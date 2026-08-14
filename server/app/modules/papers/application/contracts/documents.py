@@ -204,6 +204,8 @@ class LibraryOutputListResponse(BaseModel):
 
 class LibrarySummaryResponse(BaseModel):
     paper_count: int = Field(ge=0)
+    ingestion_count: int = Field(ge=0)
+    attention_count: int = Field(ge=0)
     output_count: int = Field(ge=0)
 
 

@@ -53,6 +53,41 @@ def _actor() -> Actor:
     )
 
 
+@pytest.mark.parametrize(
+    ("reason", "progress_code", "expected"),
+    [
+        (
+            "paper_ingestion_metadata_failed",
+            "parsing",
+            "paper_ingestion_metadata_failed",
+        ),
+        ("pdf_content_insufficient", "parsing", "pdf_content_insufficient"),
+        (
+            "provider leaked a private diagnostic",
+            "indexing",
+            "paper_ingestion_indexing_failed",
+        ),
+        (
+            "provider leaked a private diagnostic",
+            None,
+            "paper_ingestion_parsing_failed",
+        ),
+    ],
+)
+def test_pdf_failure_code_preserves_safe_codes_and_hides_private_diagnostics(
+    reason: str,
+    progress_code: str | None,
+    expected: str,
+) -> None:
+    assert (
+        document_job_callbacks._safe_pdf_failure_code(
+            reason=reason,
+            progress_code=progress_code,
+        )
+        == expected
+    )
+
+
 @pytest.mark.asyncio
 async def test_pdf_completion_persists_summary_without_creating_conversation(
     monkeypatch: pytest.MonkeyPatch,

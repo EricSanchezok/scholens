@@ -279,6 +279,29 @@ def test_library_list_includes_an_unattached_upload_reservation() -> None:
     assert len(page.positions) == 1
 
 
+def test_library_summary_counts_active_and_failed_ingestions() -> None:
+    rows = MagicMock()
+    rows.all.return_value = [
+        (JobStatus.RUNNING.value, 2),
+        (JobStatus.PENDING.value, 1),
+        (JobStatus.FAILED.value, 3),
+    ]
+    db = MagicMock(spec=Session)
+    db.execute.return_value = rows
+
+    ingestion_count, attention_count = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+        personal_annotations_removed=MagicMock(),
+    ).ingestion_counts(user_id=1)
+
+    assert ingestion_count == 6
+    assert attention_count == 3
+    statement = str(db.execute.call_args.args[0])
+    assert "upload_reservations.superseded_by_id IS NULL" in statement
+    assert "jobs.project_id IS NULL" in statement
+
+
 def test_library_removal_deletes_only_the_actor_personal_annotation_threads(
     monkeypatch,
 ) -> None:

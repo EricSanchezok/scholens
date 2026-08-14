@@ -308,9 +308,10 @@ The Library exposes two deliberately different collections:
   a target Document independently of their personal or Project audience. The
   browser does not join permissions itself.
 
-`GET /api/v1/library/summary` returns visible Paper and Output counts. Both list
-endpoints use signed Previous/Next keyset cursors bound to user, collection,
-filters, sort, and limit. Paper sources enter through the discriminated
+`GET /api/v1/library/summary` returns successful Paper and Output counts plus
+the number of current ingestion lifecycles and failed ingestions that require
+attention. Both list endpoints use signed Previous/Next keyset cursors bound to
+user, collection, filters, sort, and limit. Paper sources enter through the discriminated
 `POST /api/v1/paper-ingestions/sources` contract (`doi`, `arxiv`, or direct PDF
 `url`); URL resolution and PDF validation remain server-owned. Failed jobs are
 retried by creating a new durable job from the persisted source, never by
@@ -322,8 +323,12 @@ outbox record are committed and the ingestion is already visible through the
 Papers list union. The response is the canonical ingestion projection rather
 than an upload-only acknowledgement. That union emits exactly one row per
 personal membership: an active or failed ingestion replaces the completed
-paper projection instead of being prepended as a second row. Browser content
-hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
+paper projection instead of being prepended as a second row. Unattached active
+or failed reservations are pinned before completed rows on the first forward
+page so every accepted file remains observable before it owns a Document.
+Failed rows expose the preserved filename, bounded lifecycle stage, safe error
+code, Retry, and remove actions; provider diagnostics stay server-side. Browser
+content hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
 constraints remain authoritative for repeated and concurrent uploads. `DELETE
 /api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
 replay and ignore late worker callbacks. The worker reports bounded lifecycle

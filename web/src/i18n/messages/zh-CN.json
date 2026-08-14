@@ -243,6 +243,7 @@
       "emptyTitle": "没有找到论文",
       "emptyDescription": "调整筛选条件，或添加一篇论文开始使用资料库。",
       "count": "共 {count} 篇论文",
+      "ingestionCount": " · {count} 个导入任务{attentionCount, plural, =0 {} other {（# 个需处理）}}",
       "selectAll": "选择当前页全部论文",
       "select": "选择《{title}》",
       "unknown": "未知",
@@ -283,6 +284,7 @@
         "cancel": "取消处理",
         "remove": "移除失败的导入",
         "pending": "待完成",
+        "failedAt": "在“{stage}”阶段失败",
         "status": {
           "retrying": "正在重新导入",
           "cancelling": "正在取消导入"
@@ -308,6 +310,13 @@
           "upload_quota_exceeded": "论文数量或存储额度已用完。",
           "invalid_pdf": "此文件不是可读取的 PDF。",
           "pdf_encrypted": "暂不支持加密 PDF。",
+          "pdf_content_insufficient": "PDF 中没有足够的可读取内容。",
+          "pdf_processing_timeout": "处理耗时过长，来源已保留，可直接重试。",
+          "paper_ingestion_downloading_failed": "未能从安全存储中读取 PDF。",
+          "paper_ingestion_parsing_failed": "MinerU 未能可靠解析此 PDF。",
+          "paper_ingestion_metadata_failed": "正文已读取，但论文元数据提取失败。",
+          "paper_ingestion_indexing_failed": "正文已读取，但搜索索引建立失败。",
+          "paper_ingestion_finalizing_failed": "处理结果已生成，但未能写入资料库。",
           "unknown": "处理失败，来源已保留，可直接重试。"
         }
       },

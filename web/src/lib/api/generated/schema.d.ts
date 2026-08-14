@@ -3510,6 +3510,10 @@ export interface components {
         };
         /** LibrarySummaryResponse */
         LibrarySummaryResponse: {
+            /** Attention Count */
+            attention_count: number;
+            /** Ingestion Count */
+            ingestion_count: number;
             /** Output Count */
             output_count: number;
             /** Paper Count */

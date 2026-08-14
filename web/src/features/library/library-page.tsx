@@ -303,10 +303,12 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
           </TabsList>
           <TabsContent className="mt-5 grid min-w-0 gap-4" value="papers">
             <PapersView
+              attentionCount={summaryQuery.data?.attention_count ?? 0}
               key={`${parsed.query}:${parsed.sort}:${parsed.cursor ?? ""}:${parsed.tagIds.join(",")}`}
               data={papersQuery.data}
               error={papersQuery.error}
               ingestions={ingestion.rows}
+              ingestionCount={summaryQuery.data?.ingestion_count ?? 0}
               loading={papersQuery.isPending}
               onCreateTag={(name) => createTagMutation.mutateAsync(name)}
               onDeleteTag={(tagId) => deleteTagMutation.mutateAsync(tagId)}
@@ -350,6 +352,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                   value={parsed.query}
                 />
               }
+              paperCount={summaryQuery.data?.paper_count ?? 0}
               sort={parsed.sort as PaperSort}
               tagIds={parsed.tagIds}
               tags={tagsQuery.data?.items ?? []}

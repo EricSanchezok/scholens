@@ -168,7 +168,9 @@ loses that response, it reconciles or repeats the same parameters with the same
 returns completed papers and active/failed ingestions as one discriminated
 collection, with exactly one lifecycle row per personal membership: an active
 or failed ingestion replaces that paper's completed projection until it reaches
-a terminal success state. PDF content SHA-256 is the server-side duplicate
+a terminal success state. The Library summary reports successful papers
+separately from current and failed ingestions, and unattached reservations stay
+visible at the beginning of the first forward page. PDF content SHA-256 is the server-side duplicate
 authority, including concurrent requests. `DELETE
 /api/v1/paper-ingestions/{job_id}` cancels an owned ingestion, and late worker
 callbacks cannot restore it.
