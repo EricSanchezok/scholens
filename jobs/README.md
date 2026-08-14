@@ -118,8 +118,14 @@ configuration is absent.
 Install dependencies when setting up the service:
 
 ```bash
-uv sync
+uv sync --frozen --group dev
 ```
+
+Rerun this command after moving the checkout or when `jobs/.venv` contains a
+stale interpreter path. Do not point Jobs at or copy a virtual environment
+from another worktree; each checkout is rebuilt from `jobs/uv.lock`. If an
+installed launcher still references the old absolute path, force a lockfile-
+identical rebuild with `uv sync --frozen --group dev --reinstall`.
 
 Run the complete Jobs quality gate from the repository root. The runner has no
 dependency-installation, migration, or persistent service-startup side effects:
