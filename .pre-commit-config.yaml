@@ -1,24 +1,31 @@
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-added-large-files
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
         exclude: (demo\.gif|^server/evals/seed_data/)
 
--   repo: https://github.com/psf/black
-    rev: 24.3.0  # Use the latest version
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
     hooks:
-    -   id: black
-        language_version: python3
-        files: ^server/
-        # Optional args: --line-length=100
+      - id: ruff-check
+        name: ruff check (Python workspaces)
+        args: [--fix]
+        files: ^(server|jobs|packages)/.*\.py$
+      - id: ruff-format
+        name: ruff format (Python workspaces)
+        files: ^(server|jobs|packages)/.*\.py$
 
--   repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+  - repo: local
     hooks:
-    -   id: isort
-        files: ^server/
-        args: ["--profile", "black"]
+      - id: scholens-workspace-contract
+        name: Scholens workspace contract
+        entry: packages/.venv/bin/python scripts/check_workspace.py
+        language: system
+        pass_filenames: false
+        files: >-
+          ^(packages/|server/(pyproject\.toml|uv\.lock)$|jobs/(pyproject\.toml|uv\.lock)$|scripts/check_workspace\.py$)

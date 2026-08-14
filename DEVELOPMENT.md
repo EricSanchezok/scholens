@@ -140,6 +140,7 @@ git clone <your-scholens-fork-url> scholens && cd scholens
 # Install dependencies (first time or after lockfile changes)
 cd server && uv sync
 cd ../jobs && uv sync
+cd ../packages && uv sync --frozen --all-packages
 cd ../client && corepack yarn install
 cd ../web && corepack enable && pnpm install --frozen-lockfile
 

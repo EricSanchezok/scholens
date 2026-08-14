@@ -260,7 +260,9 @@ def _validate(value: object, *, path: str) -> JsonValue:
         for raw_key, item in value.items():
             key = str(raw_key)
             if _is_forbidden_key(key):
-                raise ValueError(f"Security-sensitive diagnostic key rejected at {path}.{key}")
+                raise ValueError(
+                    f"Security-sensitive diagnostic key rejected at {path}.{key}"
+                )
             validated[key] = _validate(item, path=f"{path}.{key}")
         return validated
     raise TypeError(f"Unsupported diagnostic value at {path}: {type(value).__name__}")
@@ -290,7 +292,9 @@ def build_snapshot(
             "content_sha256": hashlib.sha256(encoded).hexdigest(),
             "section_sizes": {
                 key: len(
-                    json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+                    json.dumps(
+                        value, ensure_ascii=False, separators=(",", ":")
+                    ).encode()
                 )
                 for key, value in validated.items()
             },

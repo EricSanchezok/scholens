@@ -18,6 +18,7 @@ Always read the documents relevant to the task before editing:
 | Background processing                           | [`jobs/README.md`](./jobs/README.md)                                                       |
 | Data or service ownership                       | [`docs/architecture/data-ownership.md`](./docs/architecture/data-ownership.md)             |
 | Current backend capabilities                    | [`docs/architecture/backend-capabilities.md`](./docs/architecture/backend-capabilities.md) |
+| Shared Python packages                          | [`packages/README.md`](./packages/README.md)                                               |
 | Architecture decision rationale                 | [`docs/decisions/README.md`](./docs/decisions/README.md)                                   |
 | Production deployment                           | [`deploy/production/README.md`](./deploy/production/README.md)                             |
 

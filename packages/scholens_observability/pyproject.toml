@@ -13,6 +13,7 @@ name = "scholens-observability"
 version = "0.1.0"
 requires-python = ">=3.12"
 description = "Shared, business-agnostic observability runtime for Scholens services"
+readme = "README.md"
 dependencies = [
     "opentelemetry-api>=1.30,<2",
     "opentelemetry-sdk>=1.30,<2",

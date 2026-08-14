@@ -16,12 +16,8 @@ from typing import Any, Mapping, cast
 
 import httpx
 from openai import AsyncOpenAI
-from pydantic_ai.models import Model, ModelSettings, infer_model
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.deepseek import DeepSeekProvider
-from pydantic_ai.providers.google import GoogleProvider
-from pydantic_ai.providers.moonshotai import MoonshotAIProvider
-from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai import ModelSettings
+from pydantic_ai.models import Model, infer_model
 
 PROFILE_SCHEMA_REVISION = "scholens-ai-profile-v1"
 DEFAULT_MAX_OUTPUT_TOKENS = 384 * 1024
@@ -235,6 +231,9 @@ def _provider(profile: AIProfile) -> Any:
     api_key = _require_api_key(profile)
     base_url = os.getenv(_provider_environment_key(profile.provider, "BASE_URL"))
     if profile.provider in {"deepseek", "openai"}:
+        from pydantic_ai.providers.deepseek import DeepSeekProvider
+        from pydantic_ai.providers.openai import OpenAIProvider
+
         if profile.provider == "deepseek" and base_url is None:
             base_url = "https://api.deepseek.com"
         client = AsyncOpenAI(
@@ -247,14 +246,20 @@ def _provider(profile: AIProfile) -> Any:
             return DeepSeekProvider(openai_client=client)
         return OpenAIProvider(openai_client=client)
     if profile.provider == "moonshotai":
+        from pydantic_ai.providers.moonshotai import MoonshotAIProvider
+
         return MoonshotAIProvider(api_key=api_key, http_client=_http_client(profile))
     if profile.provider == "anthropic":
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+
         return AnthropicProvider(
             api_key=api_key,
             base_url=base_url,
             http_client=_http_client(profile),
         )
     if profile.provider == "google":
+        from pydantic_ai.providers.google import GoogleProvider
+
         return GoogleProvider(
             api_key=api_key,
             base_url=base_url,

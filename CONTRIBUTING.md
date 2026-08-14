@@ -87,6 +87,12 @@ Record the exact commands and outcomes in the pull request. Real-provider smoke
 tests are opt-in and never replace deterministic tests. A skipped, unavailable,
 or credential-gated check must be reported explicitly.
 
+The repository also provides an opt-in `pre-commit` configuration for staged
+whitespace, YAML/TOML, large-file, Ruff, and shared-workspace checks. Enable it
+explicitly with `pre-commit install` after preparing the documented Python
+environments. Hooks stay intentionally fast and never replace the affected
+surface gate or CI.
+
 ## Pull requests
 
 A pull request should contain one clear outcome and enough evidence to review
