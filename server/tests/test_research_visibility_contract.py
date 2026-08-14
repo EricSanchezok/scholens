@@ -263,9 +263,7 @@ def test_annotation_list_orders_by_document_position_not_activity(
         mode=None,
         status=AnnotationThreadStatus.OPEN,
     )
-    statement = str(
-        db.execute.call_args.args[0].compile(dialect=postgresql.dialect())
-    )
+    statement = str(db.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
 
     assert "annotation_threads.page_number ASC NULLS LAST" in statement
     assert "CAST" in statement

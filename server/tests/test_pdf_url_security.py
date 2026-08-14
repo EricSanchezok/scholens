@@ -151,9 +151,7 @@ def test_pdf_url_revalidates_each_redirect_and_accepts_public_pdf(
     monkeypatch.setattr("app.helpers.parser.httpx.Client", lambda **_kwargs: client)
     monkeypatch.setattr("app.helpers.parser._validate_public_http_url", validate)
 
-    valid, content, error = validate_url_and_fetch_pdf(
-        "https://papers.example/start"
-    )
+    valid, content, error = validate_url_and_fetch_pdf("https://papers.example/start")
 
     assert valid is True
     assert content.startswith(b"%PDF-")
@@ -169,7 +167,9 @@ def test_pdf_url_revalidates_each_redirect_and_accepts_public_pdf(
     ("response", "expected"),
     [
         (
-            _StreamingResponse(body=b"<html>not a pdf</html>", content_type="text/html"),
+            _StreamingResponse(
+                body=b"<html>not a pdf</html>", content_type="text/html"
+            ),
             "content type",
         ),
         (

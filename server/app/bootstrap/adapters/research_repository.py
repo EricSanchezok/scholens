@@ -311,8 +311,9 @@ class ResearchRepository:
             )
             .options(
                 joinedload(ResearchItem.created_by),
-                joinedload(ResearchItem.annotation_thread)
-                .joinedload(AnnotationThread.resolved_by),
+                joinedload(ResearchItem.annotation_thread).joinedload(
+                    AnnotationThread.resolved_by
+                ),
                 joinedload(ResearchItem.annotation_thread)
                 .selectinload(AnnotationThread.comments)
                 .joinedload(AnnotationComment.created_by),

@@ -120,9 +120,7 @@ def test_personal_submission_persists_identity_before_broker_publish(
     task_kwargs = add_dispatch.call_args.kwargs["kwargs"]
     assert task_kwargs["s3_object_key"] == document.s3_object_key
     assert task_kwargs["claim_url"].endswith(f"/jobs/{upload_job.id}/claim")
-    assert task_kwargs["progress_url"].endswith(
-        f"/jobs/{upload_job.id}/progress"
-    )
+    assert task_kwargs["progress_url"].endswith(f"/jobs/{upload_job.id}/progress")
 
 
 def test_project_submission_consumes_reserved_project_destination(

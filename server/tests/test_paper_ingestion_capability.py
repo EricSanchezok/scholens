@@ -225,9 +225,7 @@ async def test_paper_source_resolver_rejects_non_arxiv_hosts() -> None:
     resolver = DefaultPaperSourceResolver()
 
     with pytest.raises(AppError) as raised:
-        await resolver.resolve(
-            kind="arxiv", value="https://example.com/abs/2401.01234"
-        )
+        await resolver.resolve(kind="arxiv", value="https://example.com/abs/2401.01234")
 
     assert raised.value.code == "paper_source_pdf_unavailable"
 
