@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+from app.modules.translations.application.contracts import FullTranslationDisplay
 from app.modules.translations.application.ports import (
     TranslationPreferencesRecord,
 )
@@ -62,7 +65,9 @@ def _record(model: TranslationPreference) -> TranslationPreferencesRecord:
         target_language=model.target_language,
         custom_instructions=model.custom_instructions,
         auto_translate_selection=model.auto_translate_selection,
-        full_translation_display=model.full_translation_display,
+        full_translation_display=cast(
+            FullTranslationDisplay, model.full_translation_display
+        ),
         translate_references=model.translate_references,
         show_translation_marker=model.show_translation_marker,
     )

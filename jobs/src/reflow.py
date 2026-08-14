@@ -6,7 +6,7 @@ import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import pymupdf
 from scholens_ai import AIProfileName, resolve_profile
@@ -269,7 +269,9 @@ def _locate_unit(page: pymupdf.Page, markdown: str) -> ReflowSourceRect | None:
         needle = " ".join(words[:size])
         if not needle:
             continue
-        matches = page.search_for(needle)
+        # PyMuPDF exposes search_for at runtime, while the maintained stub
+        # package still omits it from Page.
+        matches = cast(Any, page).search_for(needle)
         if matches:
             rect = matches[0]
             return _normal_rect(rect, page.rect)
@@ -285,7 +287,12 @@ def _page_crop(page: pymupdf.Page, rect: ReflowSourceRect | None) -> bytes:
             (rect.x + rect.width) * page.rect.width,
             (rect.y + rect.height) * page.rect.height,
         )
-        clip = clip + (-12, -12, 12, 12)
+        clip = pymupdf.Rect(
+            clip.x0 - 12,
+            clip.y0 - 12,
+            clip.x1 + 12,
+            clip.y1 + 12,
+        )
         clip &= page.rect
     return page.get_pixmap(matrix=pymupdf.Matrix(1.5, 1.5), clip=clip).tobytes("png")
 
@@ -324,12 +331,15 @@ def _extract_assets(
 ) -> list[DocumentReflowAsset]:
     assets: list[DocumentReflowAsset] = []
     seen: set[tuple[int, int, int, int, str]] = set()
-    for page_index, page in enumerate(document):
+    for page_index in range(document.page_count):
+        page = document[page_index]
         page_area = page.rect.width * page.rect.height
         candidates: list[
             tuple[pymupdf.Rect, bytes, str, str, int, int, ReflowAssetKind]
         ] = []
-        for info in page.get_image_info(xrefs=True):
+        # These Page APIs are available in the pinned runtime even though the
+        # external stubs do not yet describe them.
+        for info in cast(Any, page).get_image_info(xrefs=True):
             xref = int(info.get("xref") or 0)
             bbox = pymupdf.Rect(info["bbox"])
             width = int(info.get("width") or 0)
@@ -342,7 +352,7 @@ def _extract_assets(
                 or bbox.width * bbox.height > page_area * 0.9
             ):
                 continue
-            extracted: dict[str, Any] = document.extract_image(xref)
+            extracted = document.extract_image(xref)
             data = bytes(extracted["image"])
             extension = str(extracted.get("ext") or "png").lower()
             content_type = (
@@ -355,7 +365,7 @@ def _extract_assets(
         # Render only substantial, bounded drawing clusters and cap candidates
         # per page to prevent logos and decoration from flooding the document.
         try:
-            clusters = list(page.cluster_drawings())
+            clusters = list(cast(Any, page).cluster_drawings())
         except (AttributeError, RuntimeError, ValueError):
             clusters = []
         for bbox in sorted(clusters, key=lambda rect: rect.y0)[:6]:

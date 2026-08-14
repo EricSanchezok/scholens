@@ -21,6 +21,78 @@ const actor = {
   locale: "en",
 };
 
+const reflowBlocks = [
+  {
+    asset_id: null,
+    group_id: null,
+    heading_level: 1,
+    id: "reflow-title",
+    index: 0,
+    kind: "title",
+    page_number: 1,
+    presentation_status: "verbatim",
+    render_markdown: "# Evidence-driven academic reading",
+    source_markdown: "# Evidence-driven academic reading",
+    source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.12 },
+  },
+  {
+    asset_id: null,
+    group_id: "paper-information",
+    heading_level: null,
+    id: "reflow-authors",
+    index: 1,
+    kind: "authors",
+    page_number: 1,
+    presentation_status: "repaired",
+    render_markdown: "Ada Researcher<sup>1</sup> · Lin Scholar<sup>2</sup>",
+    source_markdown: "Ada Researcher<sup>1</sup> · Lin Scholar<sup>2</sup>",
+    source_rect: { height: 0.05, width: 0.72, x: 0.14, y: 0.21 },
+  },
+  {
+    asset_id: null,
+    group_id: null,
+    heading_level: 2,
+    id: "reflow-method",
+    index: 2,
+    kind: "heading",
+    page_number: 2,
+    presentation_status: "verbatim",
+    render_markdown: "## 1 Method",
+    source_markdown: "## 1 Method",
+    source_rect: { height: 0.05, width: 0.72, x: 0.14, y: 0.12 },
+  },
+  {
+    asset_id: null,
+    group_id: null,
+    heading_level: null,
+    id: "reflow-paragraph",
+    index: 3,
+    kind: "paragraph",
+    page_number: 2,
+    presentation_status: "verbatim",
+    render_markdown:
+      "The reconstruction keeps every claim traceable to visible PDF evidence.",
+    source_markdown:
+      "The reconstruction keeps every claim traceable to visible PDF evidence.",
+    source_rect: { height: 0.12, width: 0.72, x: 0.14, y: 0.2 },
+  },
+  {
+    asset_id: null,
+    group_id: null,
+    heading_level: null,
+    id: "reflow-table",
+    index: 4,
+    kind: "table",
+    page_number: 2,
+    presentation_status: "verbatim",
+    render_markdown:
+      "| Evidence source | Coverage | Confidence | Review state |\n| --- | ---: | ---: | --- |\n| PDF region | 100% | 0.98 | verified |",
+    source_markdown:
+      "| Evidence source | Coverage | Confidence | Review state |\n| --- | ---: | ---: | --- |\n| PDF region | 100% | 0.98 | verified |",
+    source_rect: { height: 0.18, width: 0.72, x: 0.14, y: 0.36 },
+  },
+];
+
 function annotationFixture({
   audience = { kind: "personal" },
   comments = ["Compare this claim with the project benchmark."],
@@ -352,6 +424,75 @@ async function mockReader(page: Page) {
   );
 }
 
+async function mockReaderReflow(page: Page) {
+  let preferences = {
+    auto_translate_selection: true,
+    custom_instructions: null as string | null,
+    full_translation_display: "bilingual",
+    show_translation_marker: true,
+    source_language: "auto",
+    target_language: "zh-CN",
+    translate_references: false,
+  };
+
+  await page.route(
+    `${apiPattern}/me/translation-preferences`,
+    async (route) => {
+      if (route.request().method() === "PUT") {
+        preferences = {
+          ...preferences,
+          ...(route.request().postDataJSON() as Partial<typeof preferences>),
+        };
+      }
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(preferences),
+      });
+    },
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/reflow`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          assets: [],
+          blocks: reflowBlocks,
+          document_id: paperDocument.document_id,
+          error_code: null,
+          job_id: "70000000-0000-4000-8000-000000000001",
+          profile_revision: "reflow-profile-v2",
+          prompt_revision: "reflow-evidence-v2",
+          status: "completed",
+          updated_at: "2026-08-14T00:00:00Z",
+          warnings: [],
+        }),
+      }),
+  );
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/reflow/blocks/*/translations`,
+    async (route) => {
+      const blockId = new URL(route.request().url()).pathname.split("/").at(-2);
+      const translations: Record<string, string> = {
+        "reflow-method": "## 1 方法",
+        "reflow-paragraph": "重建结果让每一项主张都可追溯到 PDF 中可见的证据。",
+        "reflow-table":
+          "| 证据来源 | 覆盖率 | 置信度 | 审核状态 |\n| --- | ---: | ---: | --- |\n| PDF 区域 | 100% | 0.98 | 已验证 |",
+        "reflow-title": "# 基于证据的学术阅读",
+      };
+      const text = translations[blockId ?? ""] ?? "译文";
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: [
+          `event: start\ndata: ${JSON.stringify({ cache_hit: true, target_language: "zh-CN" })}\n\n`,
+          `event: delta\ndata: ${JSON.stringify({ text })}\n\n`,
+          `event: complete\ndata: ${JSON.stringify({ cache_hit: true })}\n\n`,
+        ].join(""),
+      });
+    },
+  );
+}
+
 async function mockReaderConversationCreation(page: Page) {
   const conversationId = "60000000-0000-4000-8000-000000000001";
   const answer = "The paper presents a persistent agent runtime.";
@@ -632,7 +773,7 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await expect(askAboutSelection).toHaveCount(0);
   await expect(page.locator("[data-active-selection-overlay]")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Close panel" }).click();
+  await page.getByRole("button", { name: "Close context panel" }).click();
   await page.getByRole("button", { name: "Open context panel" }).click();
   await expect(page).toHaveURL(/panel=ask/);
   await expect(
@@ -655,7 +796,7 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
 
   await page.getByRole("button", { name: "Details" }).click();
   await expect(page.getByText("Authors", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close panel" }).click();
+  await page.getByRole("button", { name: "Close context panel" }).click();
   await page.getByRole("button", { name: "Open context panel" }).click();
   await expect(page.getByText("Authors", { exact: true })).toBeVisible();
 
@@ -1153,3 +1294,106 @@ test("uses an immersive mobile Reader without the Workspace bottom navigation", 
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Search PDF" })).toBeVisible();
 });
+
+test("keeps full translation in the toolbar and renders traceable bilingual reflow", async ({
+  page,
+}) => {
+  await mockReaderReflow(page);
+  await page.goto(`/reader/${paperDocument.document_id}?view=reflow`);
+
+  await expect(
+    page.getByRole("heading", { name: "Evidence-driven academic reading" }),
+  ).toBeVisible();
+  await expect(page.getByText("<sup>", { exact: false })).toHaveCount(0);
+  await expect(page.locator('[data-reflow-kind="authors"] .katex')).toHaveCount(
+    2,
+  );
+  await expect(
+    page
+      .getByRole("toolbar", { name: "Page" })
+      .getByText("Full translation", { exact: true }),
+  ).toHaveCount(1);
+  await expect(page.getByText("Full translation", { exact: true })).toHaveCount(
+    1,
+  );
+
+  await page
+    .getByRole("button", { name: "Full translation: Not enabled" })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Full translation" });
+  await expect(settings).toBeVisible();
+  await settings
+    .getByRole("switch", { name: "Enable full translation" })
+    .click();
+  await expect(page).toHaveURL(/translate=full/);
+  await expect(page.getByText("基于证据的学术阅读")).toBeVisible();
+  await expect(
+    page.getByText("Evidence-driven academic reading", { exact: true }),
+  ).toBeVisible();
+
+  await settings.getByRole("combobox", { name: "Display" }).click();
+  await page.getByRole("option", { name: "Translation only" }).click();
+  await expect(page.getByText("基于证据的学术阅读")).toBeVisible();
+  await expect(
+    page.getByText("Evidence-driven academic reading", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
+});
+
+test("explains why full translation is unavailable in the PDF view", async ({
+  page,
+}) => {
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  const translation = page.getByRole("button", {
+    name: "Full translation: Not enabled",
+  });
+  await expect(translation).toBeDisabled();
+  await expect(translation).toHaveAttribute(
+    "title",
+    "Switch to AI reflow to use full translation",
+  );
+});
+
+test("keeps the context-panel control pinned to the viewport edge", async ({
+  page,
+}) => {
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  const open = page.getByRole("button", { name: "Open context panel" });
+  const before = await open.boundingBox();
+  expect(before).not.toBeNull();
+  await open.click();
+  const close = page.getByRole("button", { name: "Close context panel" });
+  const after = await close.boundingBox();
+  expect(after).not.toBeNull();
+  expect(Math.abs((before?.x ?? 0) - (after?.x ?? 0))).toBeLessThanOrEqual(2);
+});
+
+for (const width of [320, 390]) {
+  test(`uses a bottom sheet without Reader-wide horizontal scrolling at ${width}px`, async ({
+    page,
+  }) => {
+    await mockReaderReflow(page);
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`/reader/${paperDocument.document_id}?view=reflow`);
+
+    await page
+      .getByRole("button", { name: "Full translation: Not enabled" })
+      .click();
+    const sheet = page.getByRole("dialog", { name: "Full translation" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText("Display", { exact: true })).toBeVisible();
+
+    const overflow = await page.evaluate(() => ({
+      body: document.body.scrollWidth - document.body.clientWidth,
+      root:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    }));
+    expect(overflow.body).toBeLessThanOrEqual(0);
+    expect(overflow.root).toBeLessThanOrEqual(0);
+    await expect(page.locator('[data-reflow-kind="table"]')).toHaveCount(1);
+
+    const results = await new AxeBuilder({ page }).exclude("canvas").analyze();
+    expect(results.violations).toEqual([]);
+  });
+}

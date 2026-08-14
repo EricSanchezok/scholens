@@ -10,7 +10,6 @@ import {
   DocumentIcon,
   SearchIcon,
   OpenPanelIcon,
-  ClosePanelIcon,
   DismissIcon,
   MoreIcon,
   ZoomInIcon,
@@ -388,7 +387,7 @@ export function ReaderToolbar({
             </div>
           ) : null}
 
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 lg:ml-0">
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
             {view === "pdf" ? (
               <>
                 <IconButton
@@ -487,17 +486,16 @@ export function ReaderToolbar({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <IconButton
-              aria-pressed={panelOpen}
-              label={panelOpen ? labels.closePanel : labels.openPanel}
-              onClick={onOpenPanel}
-              variant="ghost"
-            >
-              <Icon
-                glyph={panelOpen ? ClosePanelIcon : OpenPanelIcon}
-                size={20}
-              />
-            </IconButton>
+            {!panelOpen ? (
+              <IconButton
+                aria-pressed={false}
+                label={labels.openPanel}
+                onClick={onOpenPanel}
+                variant="ghost"
+              >
+                <Icon glyph={OpenPanelIcon} size={20} />
+              </IconButton>
+            ) : null}
           </div>
         </>
       )}

@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Protocol
 from uuid import UUID
 
+from app.modules.translations.application.contracts import FullTranslationDisplay
 from app.shared.application import Actor
 
 
@@ -17,7 +18,7 @@ class TranslationPreferencesRecord:
     target_language: str
     custom_instructions: str | None
     auto_translate_selection: bool
-    full_translation_display: str
+    full_translation_display: FullTranslationDisplay
     translate_references: bool
     show_translation_marker: bool
 
