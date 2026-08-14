@@ -57,6 +57,11 @@ conversation content into an unreadably narrow strip. Toolbars and panels may
 be sticky inside their own regions, but the document shell must not make the
 browser body scroll.
 
+The contextual panel disclosure occupies one stable far-right toolbar slot.
+When the panel is closed that slot opens it; when the panel is open the same
+screen edge closes it. Toggling the panel must not move the pointer target or
+place the open action beside whichever document tool happens to be last.
+
 Reader has four independently scrollable regions where applicable:
 
 1. document navigation, showing either page thumbnails or the PDF outline;
