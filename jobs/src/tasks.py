@@ -464,6 +464,7 @@ def generate_document_reflow_task(
         markdown = s3_service.download_file_to_bytes(parsed.canonical_s3_key).decode(
             "utf-8"
         )
+        pdf_bytes = s3_service.download_file_to_bytes(parsed.pdf_s3_key)
         with collect_token_usage(task_id) as usage:
             usage_events = usage.events
             result = asyncio.run(
@@ -471,7 +472,11 @@ def generate_document_reflow_task(
                     document_id=parsed.document_id,
                     title=parsed.title,
                     markdown=markdown,
+                    pdf_bytes=pdf_bytes,
                     page_offset_map=parsed.page_offset_map,
+                    write_asset=lambda data, key, content_type: (
+                        s3_service.upload_bytes_to_key(data, key, content_type)
+                    ),
                 )
             )
         payload = {

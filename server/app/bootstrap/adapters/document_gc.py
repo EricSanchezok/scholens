@@ -18,6 +18,7 @@ from app.database.models import (
 )
 from app.helpers.celery_config import get_webhook_base_url
 from app.modules.jobs.infrastructure.repository import EnqueueJob, job_repository
+from app.modules.reflows.infrastructure.models import DocumentReflowAsset
 from app.bootstrap.adapters.storage_cleanup import (
     ScheduledStorageDeletion,
     schedule_storage_deletion,
@@ -135,6 +136,11 @@ def collect_document_if_due(
         document.preview_s3_key,
         document.parser_markdown_s3_key,
         document.parser_archive_s3_key,
+        *db.scalars(
+            select(DocumentReflowAsset.object_key).where(
+                DocumentReflowAsset.document_id == document_id
+            )
+        ).all(),
         *db.scalars(
             select(ResearchAudioOverview.s3_object_key)
             .join(

@@ -18,8 +18,10 @@ from app.modules.operation_journal.domain import OperationChange, ResourceRef
 from app.modules.papers.infrastructure.models import Document
 from app.modules.reflows.infrastructure.models import (
     DocumentReflow,
+    DocumentReflowAsset,
     DocumentReflowBlock,
 )
+from app.bootstrap.adapters.storage_cleanup import schedule_storage_deletion
 from app.modules.reflows.application.reflows import (
     DOCUMENT_REFLOW_COMPLETED,
     DOCUMENT_REFLOW_FAILED,
@@ -119,12 +121,19 @@ def complete_document_reflow(
     )
     indexes = [block.index for block in result.blocks]
     block_ids = [block.id for block in result.blocks]
+    asset_ids = [asset.id for asset in result.assets]
+    asset_id_set = set(asset_ids)
     if (
         result.document_id != document.id
         or result.source_hash != expected_hash
         or block_content_hash != expected_hash
         or indexes != list(range(len(result.blocks)))
         or len(set(block_ids)) != len(block_ids)
+        or len(asset_id_set) != len(asset_ids)
+        or any(
+            block.asset_id is not None and block.asset_id not in asset_id_set
+            for block in result.blocks
+        )
     ):
         raise AppError(
             code="document_reflow_result_invalid",
@@ -132,7 +141,26 @@ def complete_document_reflow(
             kind=FailureKind.UNPROCESSABLE,
         )
 
+    old_asset_keys = {asset.object_key for asset in artifact.assets}
+    new_asset_keys = {asset.object_key for asset in result.assets}
     artifact.blocks.clear()
+    artifact.assets.clear()
+    artifact.assets.extend(
+        DocumentReflowAsset(
+            id=asset.id,
+            document_id=document.id,
+            object_key=asset.object_key,
+            kind=asset.kind,
+            content_type=asset.content_type,
+            width=asset.width,
+            height=asset.height,
+            page_number=asset.page_number,
+            source_rect=asset.source_rect.model_dump(mode="json"),
+            checksum=asset.checksum,
+        )
+        for asset in result.assets
+    )
+    db.flush()
     artifact.blocks.extend(
         DocumentReflowBlock(
             id=block.id,
@@ -140,10 +168,24 @@ def complete_document_reflow(
             block_index=block.index,
             kind=block.kind,
             source_markdown=block.source_markdown,
+            render_markdown=block.render_markdown,
+            group_id=block.group_id,
             heading_level=block.heading_level,
             page_number=block.page_number,
+            source_rect=(
+                block.source_rect.model_dump(mode="json") if block.source_rect else None
+            ),
+            presentation_status=block.presentation_status,
+            asset_id=block.asset_id,
         )
         for block in result.blocks
+    )
+    schedule_storage_deletion(
+        db,
+        object_keys=old_asset_keys - new_asset_keys,
+        idempotency_key=f"document-reflow:{document.id}:{artifact.attempt_count}",
+        origin_operation_id=job.origin_operation_id,
+        correlation_id=job.correlation_id,
     )
     artifact.status = "completed"
     artifact.source_hash = result.source_hash

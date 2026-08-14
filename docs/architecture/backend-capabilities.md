@@ -52,7 +52,9 @@ Public resources use canonical identifiers:
 The reviewed public surface is stored in
 `server/openapi/v1-contract.json`. A contract test fails whenever a route is
 added, removed, renamed, or changes method without an intentional snapshot
-update.
+update. `python -m app.scripts.export_public_openapi` regenerates both the full
+public schema and this reduced route/method review surface; reviewers must still
+confirm that every resulting public route is intentional.
 
 ## Module rules
 
@@ -94,10 +96,12 @@ failure -> command: fail/release
 
 Document reflow follows the durable form of this rule. PDF or Zotero completion
 commits the canonical Document update, reflow artifact, DurableJob, and dispatch
-outbox together, then a dedicated worker performs AI classification outside the
-transaction. The signed callback resumes a short SYSTEM operation and validates
-lossless source identity before replacing the artifact's ordered blocks. Reflow
-failure is independent from PDF ingestion success.
+outbox together, then a dedicated worker combines canonical Markdown with PDF
+text, geometry, and extracted visual assets outside the transaction. The signed
+callback resumes a short SYSTEM operation, validates exact source coverage and
+asset references, then atomically replaces the artifact's ordered blocks and
+assets. Reflow failure, including an isolated visual-repair failure, remains
+independent from PDF ingestion success.
 
 Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and
 Zotero import/sync follow this shape. Agent and MCP paper tools obtain a fresh

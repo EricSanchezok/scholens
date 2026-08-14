@@ -155,6 +155,9 @@ SCHOLENS_AI_STANDARD_MODEL=deepseek:deepseek-v4-flash
 SCHOLENS_AI_DEEP_MODEL=deepseek:deepseek-v4-pro
 SCHOLENS_AI_TRANSLATION_MODEL=deepseek:deepseek-v4-flash
 SCHOLENS_AI_REFLOW_MODEL=deepseek:deepseek-v4-flash
+# 可选：只用于公式、表格或乱码冲突的 PDF 视觉修复；未配置时单块降级。
+SCHOLENS_AI_OPENAI_API_KEY=
+SCHOLENS_AI_REFLOW_REPAIR_MODEL=openai:gpt-4.1-mini
 ```
 
 API Key 只保存在未提交的 `.env` 或生产密钥服务中，不要粘贴到聊天、Issue、日志或 Git 历史。模型 ID 可能调整，上线前应再次核对 [DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)。

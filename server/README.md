@@ -111,8 +111,11 @@ failed artifact may be retried with
 `POST /api/v1/papers/{document_id}/reflow/retries`. PDF completion schedules a
 separate DurableJob and outbox dispatch, but reflow scheduling or execution
 failure never changes the successful PDF processing state. Callback completion
-persists blocks only after the ordered content fingerprint matches the
-canonical parser Markdown. Reflow is a derived reading layout, not another PDF
+persists blocks and derived assets only after exact source coverage, asset
+references, page coordinates, and the canonical Markdown fingerprint validate.
+`GET /api/v1/papers/{document_id}/reflow/assets/{asset_id}/url` authorizes the
+paper again before returning a short-lived derived-asset URL; object keys remain
+private. Reflow is an evidence-bound reading reconstruction, not another PDF
 parser or metadata authority.
 
 Conversation turns are created at

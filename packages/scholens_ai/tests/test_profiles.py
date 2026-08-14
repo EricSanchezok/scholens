@@ -19,6 +19,7 @@ def test_default_profiles_are_explicit_and_workload_specific() -> None:
     deep = resolve_profile(AIProfileName.DEEP, environment={})
     translation = resolve_profile(AIProfileName.TRANSLATION, environment={})
     reflow = resolve_profile(AIProfileName.REFLOW, environment={})
+    reflow_repair = resolve_profile(AIProfileName.REFLOW_REPAIR, environment={})
 
     assert standard.model == "deepseek:deepseek-v4-flash"
     assert standard.thinking is AIThinkingMode.DISABLED
@@ -27,6 +28,8 @@ def test_default_profiles_are_explicit_and_workload_specific() -> None:
     assert deep.thinking_effort is AIThinkingEffort.MAX
     assert translation.thinking is AIThinkingMode.DISABLED
     assert reflow.thinking is AIThinkingMode.DISABLED
+    assert reflow_repair.model == "openai:gpt-4.1-mini"
+    assert reflow_repair.thinking is AIThinkingMode.DISABLED
 
 
 def test_profile_revision_is_stable_and_covers_runtime_policy() -> None:

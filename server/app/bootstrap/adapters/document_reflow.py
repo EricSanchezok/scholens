@@ -8,20 +8,27 @@ from uuid import UUID, uuid4
 
 from app.modules.jobs.application.contracts import (
     DocumentReflowTaskPayload,
+    ReflowAssetKind,
     ReflowBlockKind,
+    ReflowPresentationStatus,
+    ReflowSourceRectPayload,
 )
 from app.modules.jobs.application.jobs import EnqueueJobCommand
 from app.modules.jobs.infrastructure.application_gateway import SqlAlchemyJobsGateway
 from app.modules.papers.infrastructure.models import Document
 from app.modules.reflows.application.contracts import (
     DocumentReflowBlockResponse,
+    DocumentReflowAssetResponse,
+    DocumentReflowAssetUrlResponse,
     DocumentReflowResponse,
     DocumentReflowStatus,
 )
 from app.modules.reflows.infrastructure.models import (
     DocumentReflow,
+    DocumentReflowAsset,
     DocumentReflowBlock,
 )
+from app.helpers.s3 import s3_service
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind, JsonValue
 from app.shared.domain.enums import JobOperation, JobStatus
@@ -43,6 +50,7 @@ class SqlDocumentReflowGateway:
             .where(DocumentReflow.document_id == document_id)
             .options(
                 selectinload(DocumentReflow.blocks),
+                selectinload(DocumentReflow.assets),
                 selectinload(DocumentReflow.job),
             )
         )
@@ -63,6 +71,7 @@ class SqlDocumentReflowGateway:
             status = "processing"
         else:
             status = "pending"
+        expose_artifact = status == "completed"
         return DocumentReflowResponse(
             document_id=artifact.document_id,
             status=status,
@@ -77,11 +86,41 @@ class SqlDocumentReflowGateway:
                     index=block.block_index,
                     kind=cast(ReflowBlockKind, block.kind),
                     source_markdown=block.source_markdown,
+                    render_markdown=block.render_markdown,
+                    group_id=block.group_id,
                     heading_level=block.heading_level,
                     page_number=block.page_number,
+                    source_rect=(
+                        ReflowSourceRectPayload.model_validate(block.source_rect)
+                        if block.source_rect
+                        else None
+                    ),
+                    presentation_status=cast(
+                        ReflowPresentationStatus, block.presentation_status
+                    ),
+                    asset_id=block.asset_id,
                 )
                 for block in artifact.blocks
-            ],
+            ]
+            if expose_artifact
+            else [],
+            assets=[
+                DocumentReflowAssetResponse(
+                    id=asset.id,
+                    kind=cast(ReflowAssetKind, asset.kind),
+                    content_type=asset.content_type,
+                    width=asset.width,
+                    height=asset.height,
+                    page_number=asset.page_number,
+                    source_rect=ReflowSourceRectPayload.model_validate(
+                        asset.source_rect
+                    ),
+                    checksum=asset.checksum,
+                )
+                for asset in artifact.assets
+            ]
+            if expose_artifact
+            else [],
             updated_at=artifact.updated_at,
         )
 
@@ -111,8 +150,40 @@ class SqlDocumentReflowGateway:
             index=block.block_index,
             kind=cast(ReflowBlockKind, block.kind),
             source_markdown=block.source_markdown,
+            render_markdown=block.render_markdown,
+            group_id=block.group_id,
             heading_level=block.heading_level,
             page_number=block.page_number,
+            source_rect=(
+                ReflowSourceRectPayload.model_validate(block.source_rect)
+                if block.source_rect
+                else None
+            ),
+            presentation_status=cast(
+                ReflowPresentationStatus, block.presentation_status
+            ),
+            asset_id=block.asset_id,
+        )
+
+    def get_asset_url(
+        self, *, document_id: UUID, asset_id: str
+    ) -> DocumentReflowAssetUrlResponse | None:
+        asset = self._db.scalar(
+            select(DocumentReflowAsset)
+            .join(DocumentReflow)
+            .where(
+                DocumentReflowAsset.document_id == document_id,
+                DocumentReflowAsset.id == asset_id,
+                DocumentReflow.status == "completed",
+            )
+        )
+        if asset is None:
+            return None
+        expires_in = 900
+        return DocumentReflowAssetUrlResponse(
+            asset_id=asset.id,
+            url=s3_service.generate_presigned_url(asset.object_key, expires_in),
+            expires_in=expires_in,
         )
 
     def ensure(
@@ -165,6 +236,7 @@ class SqlDocumentReflowGateway:
             document_id=document.id,
             title=document.title or document.original_filename,
             canonical_s3_key=document.parser_markdown_s3_key,
+            pdf_s3_key=document.s3_object_key,
             page_offset_map=document.page_offset_map or {},
         )
         payload = _JSON_OBJECT.validate_python(payload_model.model_dump(mode="json"))
@@ -199,7 +271,6 @@ class SqlDocumentReflowGateway:
             artifact.warnings = []
             artifact.error_code = None
             artifact.completed_at = None
-            artifact.blocks.clear()
             artifact.updated_at = datetime.now(UTC)
         self._db.flush()
         refreshed = self._load(document_id)

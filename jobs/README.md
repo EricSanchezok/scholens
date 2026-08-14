@@ -59,17 +59,21 @@ cleared after Server acknowledges the result.
 
 After Server accepts a successful PDF callback, it dispatches a separate
 `generate_document_reflow` task to the `reflow` queue. The worker downloads the
-already-persisted canonical Markdown; it does not parse the PDF again and does
-not alter the parser order above. Source units preserve fenced code and display
-math, and requests are bounded to 20,000 source characters.
+already-persisted canonical Markdown and original PDF. Source units preserve
+fenced code and display math while PDF evidence supplies page geometry, images,
+vector regions, and bounded visual crops. The worker does not alter canonical
+Markdown or parser ownership.
 
-The provider-neutral `reflow` profile classifies layout roles only. Every AI
-response must contain each supplied source index exactly once and in ascending
-order. A malformed response or provider failure falls back for that chunk to a
-deterministic local classification and records `ai_chunk_fallback:<index>`.
-Stable block IDs, exact source Markdown, page projections, source fingerprint,
-prompt revision, profile revision, and warnings return through the signed
-generic job callback. Server is the persistence authority.
+The provider-neutral `reflow` profile classifies semantic roles. Deterministic
+normalization repairs safe presentation defects such as HTML residue and line
+wraps. Only ambiguous equations, tables, replacement characters, and structure
+conflicts use the independent multimodal `reflow_repair` profile with a matching
+PDF crop. Repairs must pass source coverage and confidence validation; otherwise
+only that block is marked degraded and Reader returns the user to the PDF.
+Stable block and asset IDs, exact source Markdown, safe render Markdown, page
+coordinates, presentation status, source fingerprint, profile revisions, and
+warnings return through the signed callback. Server remains persistence
+authority.
 
 ## Code layout
 

@@ -3609,8 +3609,106 @@
         "title": "DocumentProcessingStatus",
         "type": "string"
       },
+      "DocumentReflowAssetResponse": {
+        "properties": {
+          "checksum": {
+            "title": "Checksum",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "raster",
+              "vector",
+              "composite",
+              "table_preview"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "source_rect": {
+            "$ref": "#/components/schemas/ReflowSourceRectPayload"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "content_type",
+          "width",
+          "height",
+          "page_number",
+          "source_rect",
+          "checksum"
+        ],
+        "title": "DocumentReflowAssetResponse",
+        "type": "object"
+      },
+      "DocumentReflowAssetUrlResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "url",
+          "expires_in"
+        ],
+        "title": "DocumentReflowAssetUrlResponse",
+        "type": "object"
+      },
       "DocumentReflowBlockResponse": {
         "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
           "heading_level": {
             "anyOf": [
               {
@@ -3632,8 +3730,12 @@
           },
           "kind": {
             "enum": [
+              "eyebrow",
               "title",
               "authors",
+              "affiliations",
+              "abstract",
+              "keywords",
               "heading",
               "paragraph",
               "list",
@@ -3641,7 +3743,9 @@
               "equation",
               "table",
               "figure",
+              "caption",
               "code",
+              "footnote",
               "references"
             ],
             "title": "Kind",
@@ -3658,9 +3762,32 @@
             ],
             "title": "Page Number"
           },
+          "presentation_status": {
+            "enum": [
+              "verbatim",
+              "repaired",
+              "degraded"
+            ],
+            "title": "Presentation Status",
+            "type": "string"
+          },
+          "render_markdown": {
+            "title": "Render Markdown",
+            "type": "string"
+          },
           "source_markdown": {
             "title": "Source Markdown",
             "type": "string"
+          },
+          "source_rect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReflowSourceRectPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3668,14 +3795,26 @@
           "index",
           "kind",
           "source_markdown",
+          "render_markdown",
+          "group_id",
           "heading_level",
-          "page_number"
+          "page_number",
+          "source_rect",
+          "presentation_status",
+          "asset_id"
         ],
         "title": "DocumentReflowBlockResponse",
         "type": "object"
       },
       "DocumentReflowResponse": {
         "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentReflowAssetResponse"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
           "blocks": {
             "items": {
               "$ref": "#/components/schemas/DocumentReflowBlockResponse"
@@ -3758,6 +3897,7 @@
           "profile_revision",
           "warnings",
           "blocks",
+          "assets",
           "updated_at"
         ],
         "title": "DocumentReflowResponse",
@@ -7243,6 +7383,43 @@
           }
         },
         "title": "ReferenceBundle",
+        "type": "object"
+      },
+      "ReflowSourceRectPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "ReflowSourceRectPayload",
         "type": "object"
       },
       "RegisterRequest": {
@@ -13781,6 +13958,63 @@
           }
         ],
         "summary": "Get Document Reflow",
+        "tags": [
+          "reflows"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow/assets/{asset_id}/url": {
+      "get": {
+        "operationId": "get_document_reflow_asset_url_api_v1_papers__document_id__reflow_assets__asset_id__url_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowAssetUrlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Document Reflow Asset Url",
         "tags": [
           "reflows"
         ]

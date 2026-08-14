@@ -1218,6 +1218,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/papers/{document_id}/reflow/assets/{asset_id}/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Reflow Asset Url */
+        get: operations["get_document_reflow_asset_url_api_v1_papers__document_id__reflow_assets__asset_id__url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
         parameters: {
             query?: never;
@@ -2978,8 +2995,42 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentReflowAssetResponse */
+        DocumentReflowAssetResponse: {
+            /** Checksum */
+            checksum: string;
+            /** Content Type */
+            content_type: string;
+            /** Height */
+            height: number;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "raster" | "vector" | "composite" | "table_preview";
+            /** Page Number */
+            page_number: number;
+            source_rect: components["schemas"]["ReflowSourceRectPayload"];
+            /** Width */
+            width: number;
+        };
+        /** DocumentReflowAssetUrlResponse */
+        DocumentReflowAssetUrlResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Expires In */
+            expires_in: number;
+            /** Url */
+            url: string;
+        };
         /** DocumentReflowBlockResponse */
         DocumentReflowBlockResponse: {
+            /** Asset Id */
+            asset_id: string | null;
+            /** Group Id */
+            group_id: string | null;
             /** Heading Level */
             heading_level: number | null;
             /** Id */
@@ -2990,14 +3041,24 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "title" | "authors" | "heading" | "paragraph" | "list" | "quote" | "equation" | "table" | "figure" | "code" | "references";
+            kind: "eyebrow" | "title" | "authors" | "affiliations" | "abstract" | "keywords" | "heading" | "paragraph" | "list" | "quote" | "equation" | "table" | "figure" | "caption" | "code" | "footnote" | "references";
             /** Page Number */
             page_number: number | null;
+            /**
+             * Presentation Status
+             * @enum {string}
+             */
+            presentation_status: "verbatim" | "repaired" | "degraded";
+            /** Render Markdown */
+            render_markdown: string;
             /** Source Markdown */
             source_markdown: string;
+            source_rect: components["schemas"]["ReflowSourceRectPayload"] | null;
         };
         /** DocumentReflowResponse */
         DocumentReflowResponse: {
+            /** Assets */
+            assets: components["schemas"]["DocumentReflowAssetResponse"][];
             /** Blocks */
             blocks: components["schemas"]["DocumentReflowBlockResponse"][];
             /**
@@ -4211,6 +4272,17 @@ export interface components {
             annotations?: components["schemas"]["CitationAnnotation"][];
             /** Sources */
             sources?: (components["schemas"]["DocumentAnswerSource"] | components["schemas"]["ExternalAnswerSource"] | components["schemas"]["UserMessageReference"])[];
+        };
+        /** ReflowSourceRectPayload */
+        ReflowSourceRectPayload: {
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** RegisterRequest */
         RegisterRequest: {
@@ -7835,6 +7907,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentReflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_reflow_asset_url_api_v1_papers__document_id__reflow_assets__asset_id__url_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReflowAssetUrlResponse"];
                 };
             };
             /** @description Validation Error */

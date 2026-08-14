@@ -340,8 +340,12 @@ class AudioOverviewResult(BaseModel):
 
 
 ReflowBlockKind = Literal[
+    "eyebrow",
     "title",
     "authors",
+    "affiliations",
+    "abstract",
+    "keywords",
     "heading",
     "paragraph",
     "list",
@@ -349,9 +353,23 @@ ReflowBlockKind = Literal[
     "equation",
     "table",
     "figure",
+    "caption",
     "code",
+    "footnote",
     "references",
 ]
+
+ReflowPresentationStatus = Literal["verbatim", "repaired", "degraded"]
+ReflowAssetKind = Literal["raster", "vector", "composite", "table_preview"]
+
+
+class ReflowSourceRect(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
 
 
 class ReflowLayoutItem(BaseModel):
@@ -370,12 +388,22 @@ class ReflowChunkLayout(BaseModel):
     items: list[ReflowLayoutItem]
 
 
+class ReflowRepairResult(BaseModel):
+    """Bounded visual repair for one untrusted source unit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    render_markdown: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+
+
 class DocumentReflowRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_id: str
     title: str = Field(min_length=1, max_length=1_000)
     canonical_s3_key: str = Field(min_length=1, max_length=1_024)
+    pdf_s3_key: str = Field(min_length=1, max_length=1_024)
     page_offset_map: dict[int, list[int]] = Field(default_factory=dict)
 
 
@@ -386,8 +414,27 @@ class DocumentReflowBlock(BaseModel):
     index: int = Field(ge=0)
     kind: ReflowBlockKind
     source_markdown: str = Field(min_length=1)
+    render_markdown: str = Field(min_length=1)
+    group_id: str | None = Field(default=None, min_length=1, max_length=128)
     heading_level: int | None = Field(default=None, ge=1, le=6)
     page_number: int | None = Field(default=None, ge=1)
+    source_rect: ReflowSourceRect | None = None
+    presentation_status: ReflowPresentationStatus
+    asset_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class DocumentReflowAsset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=128)
+    object_key: str = Field(min_length=1, max_length=1_024)
+    kind: ReflowAssetKind
+    content_type: str = Field(min_length=1, max_length=128)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    page_number: int = Field(ge=1)
+    source_rect: ReflowSourceRect
+    checksum: str = Field(pattern="^[0-9a-f]{64}$")
 
 
 class DocumentReflowResult(BaseModel):
@@ -398,4 +445,5 @@ class DocumentReflowResult(BaseModel):
     prompt_revision: str = Field(min_length=1, max_length=64)
     profile_revision: str = Field(min_length=1, max_length=64)
     blocks: list[DocumentReflowBlock] = Field(min_length=1)
+    assets: list[DocumentReflowAsset] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list, max_length=1_000)

@@ -6,7 +6,10 @@ from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor
-from app.modules.reflows.application import DocumentReflowResponse
+from app.modules.reflows.application import (
+    DocumentReflowAssetUrlResponse,
+    DocumentReflowResponse,
+)
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
@@ -32,6 +35,27 @@ def get_document_reflow(
         lambda capabilities: capabilities.document_reflows.get(
             actor=actor,
             document_id=document_id,
+        )
+    )
+
+
+@paper_reflows_router.get(
+    "/{document_id}/reflow/assets/{asset_id}/url",
+    response_model=DocumentReflowAssetUrlResponse,
+)
+def get_document_reflow_asset_url(
+    document_id: UUID,
+    asset_id: str,
+    actor: Actor = Depends(get_required_user),
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> DocumentReflowAssetUrlResponse:
+    return executor.query(
+        lambda capabilities: capabilities.document_reflows.asset_url(
+            actor=actor,
+            document_id=document_id,
+            asset_id=asset_id,
         )
     )
 

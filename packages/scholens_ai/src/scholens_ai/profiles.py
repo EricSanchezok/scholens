@@ -28,6 +28,7 @@ class AIProfileName(StrEnum):
     DEEP = "deep"
     TRANSLATION = "translation"
     REFLOW = "reflow"
+    REFLOW_REPAIR = "reflow_repair"
 
 
 class AIThinkingMode(StrEnum):
@@ -65,6 +66,14 @@ _DEFAULTS: dict[AIProfileName, tuple[str, AIThinkingMode, AIThinkingEffort]] = {
     ),
     AIProfileName.REFLOW: (
         "deepseek:deepseek-v4-flash",
+        AIThinkingMode.DISABLED,
+        AIThinkingEffort.NONE,
+    ),
+    # Visual repair is deliberately isolated from layout classification.  The
+    # profile may be left without valid provider credentials in development;
+    # callers must then degrade only the affected evidence block.
+    AIProfileName.REFLOW_REPAIR: (
+        "openai:gpt-4.1-mini",
         AIThinkingMode.DISABLED,
         AIThinkingEffort.NONE,
     ),

@@ -10,6 +10,7 @@ from app.modules.operation_journal.domain import OperationAction, ResourceRef
 from app.modules.papers.application.details import GetPaperDetails
 from app.modules.reflows.application.contracts import (
     AuthorizedDocumentReflowBlock,
+    DocumentReflowAssetUrlResponse,
     DocumentReflowBlockResponse,
     DocumentReflowResponse,
 )
@@ -27,6 +28,10 @@ class DocumentReflowGateway(Protocol):
     def get_block(
         self, *, document_id: UUID, block_id: str
     ) -> DocumentReflowBlockResponse | None: ...
+
+    def get_asset_url(
+        self, *, document_id: UUID, asset_id: str
+    ) -> DocumentReflowAssetUrlResponse | None: ...
 
     def ensure(
         self,
@@ -90,6 +95,23 @@ class DocumentReflows:
             paper_title=paper.title,
             block=block,
         )
+
+    def asset_url(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+        asset_id: str,
+    ) -> DocumentReflowAssetUrlResponse:
+        self._access(actor=actor, document_id=document_id)
+        result = self._gateway.get_asset_url(document_id=document_id, asset_id=asset_id)
+        if result is None:
+            raise AppError(
+                code="document_reflow_asset_not_found",
+                message="Document reflow asset was not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        return result
 
     def retry(
         self,

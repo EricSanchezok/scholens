@@ -63,7 +63,10 @@ agent to reach information the current user is not permitted to access.
 
 Translation and reading reflow are derived views of an authorized paper. They
 must never overwrite the uploaded PDF, alter its canonical metadata, or become
-an alternate paper record. PDF remains the default reading view; derived views
+an alternate paper record. PDF remains the final authority. Reflow may repair
+visible structure and corrupted presentation only when the result remains
+traceable to the source page and coordinates; uncertain content degrades to an
+explicit PDF fallback instead of a plausible reconstruction. Derived views
 exist to reduce interaction cost, especially on narrow mobile screens where
 selection-based tools are difficult to operate.
 
@@ -71,8 +74,10 @@ Interface locale and paper-content language are independent preferences. A
 reader may use an English interface while translating a paper into Chinese, or
 the reverse. Selection translation starts only from an explicit selection and
 may run automatically after that selection stabilizes. Full-paper translation
-is lazy at the visible content-block boundary so the product does not spend
-credits on unread text.
+is available from AI reflow, defaults to bilingual source-and-translation
+reading, and remains lazy at the visible semantic-block boundary so the product
+does not spend credits on unread text. Author names, affiliations, code,
+equations, and image pixels are not translated; references require opt-in.
 
 Completed translation is durable and reusable. Its identity includes the
 normalized source, language direction, custom instructions, prompt revision,

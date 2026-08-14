@@ -14,7 +14,7 @@ Selection translation follows
 [`51 — Translation`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=720-965)
 for hierarchy and states while code owns responsive containment and accessibility.
 AI reflow and full translation extend the same document region according to
-[ADR 0016](../../docs/decisions/0016-lossless-reader-reflow-and-lazy-translation.md).
+[ADR 0017](../../docs/decisions/0017-evidence-driven-reader-reflow.md).
 
 ## Product boundary
 
@@ -33,9 +33,10 @@ AI reflow and full translation extend the same document region according to
 - Selection translation is available in personal and Project reading contexts.
   It re-authorizes the paper independently of annotation audience and never
   creates a shared Conversation resource.
-- AI reflow is a lossless derived layout of the canonical parser Markdown. It
-  is available in both contexts, never replaces the PDF, and keeps full
-  translation private to the requesting user's language preferences.
+- AI reflow is an evidence-bound reconstruction derived from canonical parser
+  Markdown and the original PDF. It is available in both contexts, never
+  replaces the PDF, degrades uncertain blocks back to the original page, and
+  keeps full translation private to the requesting user's preferences.
 
 ## Layout contract
 
@@ -148,19 +149,20 @@ feedback colors.
 ## AI reflow and full translation
 
 The document toolbar exposes an explicit PDF/AI reflow switch. Reflow is a
-single-column, text-first reading surface with a bounded measure, semantic
-typography, overflow-safe tables and code, remote-image placeholders, Light and
-Dark support, and mobile safe-area padding. Each block may expose its projected
-PDF page as a return link. Pending, failed, retrying, and deterministic-fallback
-states never obscure access to the original PDF.
+single-column, text-first academic reading surface with a bounded measure,
+semantic block types, overflow-contained tables and code, authorized lazy image
+assets, Light and Dark support, and mobile safe-area padding. High-confidence
+repairs remain traceable to a source page and rectangle. Degraded blocks offer a
+compact PDF fallback and never display guessed content.
 
-Full translation is an independent switch inside reflow. It observes blocks in
-and near the viewport, streams at most two translations concurrently, renders
-the source before any translated text, and retries one failed block without
-resetting the document. Disabling it aborts in-flight browser work. Changing
-source language, target language, or custom instructions starts a new client
-session; the server's revisioned durable cache decides whether each block is a
-free cache hit. The browser sends block identity, never source text.
+Full translation is a toolbar action: a desktop popover and mobile bottom sheet
+own language, bilingual/translation-only presentation, reference opt-in,
+translation markers, and custom instructions. It is visible but disabled in PDF
+view. In reflow it observes semantic blocks in and near the viewport, streams at
+most two translations concurrently, defaults to source followed by translation,
+and retries one failed block without resetting the document. Disabling it aborts
+in-flight browser work. The server's revisioned durable cache keys the repaired
+display content while the browser still sends block identity, never source text.
 
 ## Selection and annotation threads
 
