@@ -297,9 +297,14 @@ separated by 4 px inside the Dock rather than behaving as independent floating
 surfaces; a non-layout 20 px fade softens the transition from scrolling content.
 Only one real Composer is mounted at a time. On desktop it rests as a rounded
 single-line bar and expands to a rounded panel only when the written prompt
-becomes multiline or long. Selected sources add one compact, truncated context
-rail without turning the Composer into a tall card. On phones it stays one
-compact row above primary navigation: the
+becomes multiline or long. Explicit project and paper selections never add a
+second row: the AtSign trigger carries a compact count badge, caps its visible
+value at `9+`, and opens the existing context picker for inspection or removal.
+Entire Library uses a quiet status dot because it is a scope rather than a
+countable selection; an empty explicit selection has no indicator. A temporary
+passage supplied to one turn may still use a compact, truncated context rail so
+the user can identify the text that will be submitted. On phones the Composer
+stays one compact row above primary navigation: the
 Iconoir AtSign context trigger anchors the left, the input owns the flexible
 middle slot, and the circular submit or stop action anchors the right. The
 context trigger's accessible name and native title carry the current library,
@@ -307,7 +312,9 @@ project, paper, mixed-item, or empty-selection scope. Standard and Deep open
 one text-only radio menu from the phone header or desktop Composer instead of a
 segmented toggle. The phone menu is a compact two-label list; the desktop menu
 retains one supporting description per mode. Decorative mode icons do not
-repeat the labels. The separate selected-source chip remains desktop-only.
+repeat the labels. The trigger indicator is decorative because its accessible
+name already announces the complete current scope; it must not create a second
+focus target.
 Entire Library is mutually exclusive with selected projects and papers. While
 it is active, the context picker hides search and item selection rather than
 showing controls that cannot affect the scope; switching it off restores the

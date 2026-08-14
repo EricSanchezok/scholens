@@ -57,8 +57,12 @@ export const MultiplePapersScope: Story = {
     },
   },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const contextButton = canvas.getByRole("button", {
+      name: "研究范围：2 篇",
+    });
     await expect(
-      within(canvasElement).getByRole("button", { name: "研究范围：2 篇" }),
+      within(contextButton).getByText("2", { selector: "span" }),
     ).toBeVisible();
   },
 };
@@ -83,11 +87,40 @@ export const DesktopSelectedContext: Story = {
     if (!form) return;
     await expect(form).toHaveAttribute("data-has-context", "true");
     await expect(form).toHaveAttribute("data-expanded", "false");
-    await expect(canvas.getByText("1 个来源")).toBeVisible();
-    await expect(form.getBoundingClientRect().height).toBeLessThan(112);
+    const contextButton = canvas.getByRole("button", {
+      name: /研究范围：/,
+    });
+    await expect(
+      within(contextButton).getByText("1", { selector: "span" }),
+    ).toBeVisible();
+    await expect(canvas.queryByText("1 个来源")).toBeNull();
+    await expect(form.getBoundingClientRect().height).toBeLessThan(80);
     await expect(
       Number.parseFloat(getComputedStyle(form).borderRadius),
     ).toBeGreaterThanOrEqual(999);
+  },
+};
+
+export const ManySelectedSources: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      project_ids: [],
+      document_ids: Array.from(
+        { length: 12 },
+        (_, index) => `document-${index + 1}`,
+      ),
+    },
+  },
+  globals: {
+    locale: "zh-CN",
+    viewport: { value: "desktop", isRotated: false },
+  },
+  play: async ({ canvasElement }) => {
+    const contextButton = within(canvasElement).getByRole("button", {
+      name: "研究范围：12 篇",
+    });
+    await expect(within(contextButton).getByText("9+")).toBeVisible();
   },
 };
 

@@ -178,7 +178,22 @@ function ContextPicker({
           title={displayLabel}
           type="button"
         >
-          <Icon glyph={MentionIcon} size={20} />
+          <span className="relative grid size-6 place-items-center">
+            <Icon glyph={MentionIcon} size={20} />
+            {selectionCount > 0 ? (
+              <span
+                aria-hidden
+                className="bg-primary text-primary-foreground text-caption absolute -top-1.5 -right-2 grid h-4 min-w-4 place-items-center rounded-full px-1 leading-none font-semibold"
+              >
+                {selectionCount > 9 ? "9+" : selectionCount}
+              </span>
+            ) : context.kind === "library" ? (
+              <span
+                aria-hidden
+                className="bg-primary border-surface absolute -top-0.5 -right-0.5 size-2 rounded-full border"
+              />
+            ) : null}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -625,8 +640,7 @@ export function ResearchComposer({
         {...messageRegistration}
         {...focusHandlers}
       />
-      {turnContextLabel ||
-      (context.kind === "selection" && selectionCount > 0) ? (
+      {turnContextLabel ? (
         <div
           className={cn(
             "row-start-2 hidden min-w-0 pt-0.5 lg:flex",
@@ -635,10 +649,7 @@ export function ResearchComposer({
         >
           <span className="bg-subtle text-secondary inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-sm lg:text-xs">
             <Icon glyph={DocumentIcon} size={16} tone="secondary" />
-            <span className="truncate">
-              {turnContextLabel ??
-                t("context.selectionSummary", { count: selectionCount })}
-            </span>
+            <span className="truncate">{turnContextLabel}</span>
           </span>
         </div>
       ) : null}
