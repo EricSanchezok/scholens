@@ -44,10 +44,91 @@ when the agent intentionally works beyond that initial context. Tool activity,
 sources, citations, progress, and errors should use a consistent interaction
 language across all conversational surfaces.
 
+Ordinary questions should receive ordinary answers. Research retrieval is a
+capability the agent uses when evidence is needed, not a mandatory prelude to
+every response. When tools are used, the product may disclose a concise,
+inspectable activity history, but it must not expose model chain-of-thought,
+raw tool arguments, provider heartbeats, or internal iteration mechanics.
+
+That consistency includes the surrounding interface. New pages may have
+different information architecture and density, but they should not invent an
+independent visual or interaction dialect. Shared actions, context, progress,
+feedback, and account behavior should remain recognizable so the product grows
+as one system rather than a collection of separately themed tools.
+
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
-This is a product direction, not a description of the current backend and not
-an implementation specification. Concrete interfaces, field names, runtime
-structures, and tool schemas should be designed only after the active backend
-refactor has stabilized.
+## Reading transformations preserve the paper as source of truth
+
+Translation and reading reflow are derived views of an authorized paper. They
+must never overwrite the uploaded PDF, alter its canonical metadata, or become
+an alternate paper record. PDF remains the default reading view; derived views
+exist to reduce interaction cost, especially on narrow mobile screens where
+selection-based tools are difficult to operate.
+
+Interface locale and paper-content language are independent preferences. A
+reader may use an English interface while translating a paper into Chinese, or
+the reverse. Selection translation starts only from an explicit selection and
+may run automatically after that selection stabilizes. Full-paper translation
+is lazy at the visible content-block boundary so the product does not spend
+credits on unread text.
+
+Completed translation is durable and reusable. Its identity includes the
+normalized source, language direction, custom instructions, prompt revision,
+and AI runtime profile revision. A cache hit is free and does not consume a
+second provider request; raw selected source text is not retained in the cache.
+Access to a cached result is always re-authorized against the paper before the
+result is returned.
+
+## Annotations are anchored threads, not separate highlight and comment silos
+
+Reader annotations use one durable mental model across personal reading and
+Project collaboration. An annotation thread owns a stable passage anchor, one
+visual mark and color, an author, an immutable audience, and zero or more
+chronological comments. A highlight is a thread without a comment; commenting
+on a selection creates the same thread with its first comment. Comments do not
+own colors, visibility, or recursively nested reply trees.
+
+Personal annotations remain visible only to their creator. Project annotations
+belong to one specific Project and are visible to its current members; they
+must never become document-global merely because the same paper appears in
+another Project. Leaving a Project immediately removes access to its threads,
+while personal annotations remain independent.
+
+Removing a paper from the personal Library also removes that user's personal
+highlights and notes anchored to the paper. This is an intentional personal
+data deletion boundary: adding the same shared Document again starts with a
+clean personal reading layer. Project references, Project discussions, and
+other users' data remain untouched.
+
+Collaborative discussion protects authored contributions. People edit and
+delete only their own comments. A thread with another person's reply cannot be
+hard-deleted by its creator; Project discussion is concluded by resolving it
+and may later be reopened by an authorized Project editor. Audience is chosen
+when a thread is created and cannot be changed afterward.
+
+In a Project reading context, personal marks and that Project's discussions are
+shown together with explicit audience labels. Highlighting defaults to personal
+because reading marks are often private; starting a comment defaults to the
+current Project because its purpose is discussion. Color classifies the marked
+passage and never stands in for author identity or comment ownership.
+
+Reader distinguishes those derived modes without splitting the durable model:
+a comment-free Highlight paints one quiet translucent fill, while a Note or
+Discussion uses the same color as an underline so commentary never obscures the
+source. The annotation rail remains ordered by the anchored passage, keeps all
+comments visible as one compact chronological timeline, and reduces the quote
+to a one-line locator; selecting or hovering a card emphasizes the source
+anchor but never changes list order.
+
+The interface derives three presentation modes from that one aggregate: a
+thread with no comments is a highlight; a commented personal thread is a note;
+and a commented Project thread is a discussion. Only Project discussions have
+an open/resolved lifecycle. Personal highlights and notes remain reference
+material rather than tasks, and comment-free Project marks are removed rather
+than resolved.
+
+Concrete event fields and tool schemas remain implementation contracts, but
+the single-agent behavior and disclosure boundary above are durable product
+requirements.

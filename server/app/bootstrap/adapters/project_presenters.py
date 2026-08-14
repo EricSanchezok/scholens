@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from app.database.models import (
     AuthUser,
@@ -11,8 +12,7 @@ from app.database.models import (
     ProjectCollaborator,
     ProjectPaper,
     ResearchItem,
-    ResearchItemKind,
-    ResearchScopeType,
+    ResearchAudienceType,
 )
 from app.modules.projects.infrastructure.access import ProjectAccess
 from app.bootstrap.adapters.project_repository import project_repository
@@ -23,7 +23,7 @@ from app.modules.projects.application.contracts import (
     ProjectPermissionSet,
     ProjectResponse,
 )
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
@@ -40,7 +40,7 @@ def _project_counts(
     *,
     project_id: uuid.UUID,
     current_user_id: int,
-) -> tuple[int, int, int, int, int]:
+) -> tuple[int, int, int, int]:
     statements = (
         select(func.count(ProjectPaper.id)).where(
             ProjectPaper.project_id == project_id
@@ -51,29 +51,44 @@ def _project_counts(
             Conversation.user_id == current_user_id,
         ),
         select(func.count(ResearchItem.id)).where(
-            ResearchItem.scope_type == ResearchScopeType.PROJECT.value,
-            ResearchItem.project_id == project_id,
-            ResearchItem.kind == ResearchItemKind.AUDIO_OVERVIEW.value,
-            or_(
-                ResearchItem.is_shared.is_(True),
-                ResearchItem.created_by_id == current_user_id,
-            ),
-        ),
-        select(func.count(ResearchItem.id)).where(
-            ResearchItem.scope_type == ResearchScopeType.PROJECT.value,
-            ResearchItem.project_id == project_id,
-            ResearchItem.kind == ResearchItemKind.DATA_TABLE.value,
-            or_(
-                ResearchItem.is_shared.is_(True),
-                ResearchItem.created_by_id == current_user_id,
-            ),
+            ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+            ResearchItem.audience_project_id == project_id,
         ),
         select(func.count(ProjectCollaborator.id)).where(
             ProjectCollaborator.project_id == project_id
         ),
     )
     counts = [int(db.scalar(statement) or 0) for statement in statements]
-    return counts[0], counts[1], counts[2], counts[3], counts[4]
+    return counts[0], counts[1], counts[2], counts[3]
+
+
+def _project_activity(
+    db: Session,
+    *,
+    project: Project,
+    current_user_id: int,
+) -> datetime:
+    candidates = (
+        db.scalar(
+            select(func.max(ProjectPaper.created_at)).where(
+                ProjectPaper.project_id == project.id
+            )
+        ),
+        db.scalar(
+            select(func.max(Conversation.updated_at)).where(
+                Conversation.scope_type == "project",
+                Conversation.project_id == project.id,
+                Conversation.user_id == current_user_id,
+            )
+        ),
+        db.scalar(
+            select(func.max(ResearchItem.updated_at)).where(
+                ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                ResearchItem.audience_project_id == project.id,
+            )
+        ),
+    )
+    return max((project.updated_at, *(value for value in candidates if value)))
 
 
 def project_response(
@@ -93,8 +108,7 @@ def project_response(
     (
         num_papers,
         num_conversations,
-        num_audio,
-        num_tables,
+        num_outputs,
         num_collaborators,
     ) = _project_counts(
         db,
@@ -124,9 +138,13 @@ def project_response(
         ),
         num_papers=num_papers,
         num_conversations=num_conversations,
-        num_audio_overviews=num_audio,
-        num_data_tables=num_tables,
+        num_outputs=num_outputs,
         num_collaborators=num_collaborators,
+        activity_at=_project_activity(
+            db,
+            project=project,
+            current_user_id=current_user_id,
+        ),
         created_at=project.created_at,
         updated_at=project.updated_at,
     )

@@ -15,7 +15,7 @@ from app.database.models import (
     ProjectPaper,
     ResearchAudioOverview,
     ResearchItem,
-    ResearchScopeType,
+    ResearchAudienceType,
 )
 from app.shared.domain import AppError, FailureKind
 from sqlalchemy import func, select, update
@@ -75,8 +75,8 @@ def prepare_project_deletion(
                 ResearchItem.id == ResearchAudioOverview.research_item_id,
             )
             .where(
-                ResearchItem.scope_type == ResearchScopeType.PROJECT.value,
-                ResearchItem.project_id == project.id,
+                ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+                ResearchItem.audience_project_id == project.id,
             )
         ).all()
     )

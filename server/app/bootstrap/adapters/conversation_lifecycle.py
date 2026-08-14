@@ -8,20 +8,26 @@ from app.database.models import Conversation
 from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
     ConversationDetailResponse,
-    ConversationListResponse,
     ConversationMoveRequest,
     ConversationSummaryResponse,
     ConversationUpdateRequest,
     ConversationToolPermissionsRequest,
     ConversationToolPermissionsResponse,
     PaperContext,
-    MessageResponse,
+    ConversationTurnResponse,
+    ConversationResponseVariantResponse,
 )
-from app.modules.conversations.application.conversations import ConversationChange
-from app.modules.conversations.infrastructure.message_repository import (
-    message_repository,
+from app.modules.conversations.application.conversations import (
+    ConversationChange,
+    ConversationListPosition,
+    ConversationPage,
 )
-from app.modules.conversations.infrastructure.presenters import serialize_messages
+from app.shared.domain.enums import ConversationScopeType
+from app.modules.conversations.infrastructure.presenters import (
+    serialize_response,
+    serialize_turns,
+)
+from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.bootstrap.adapters.conversation_repository import conversation_repository
 from sqlalchemy.orm import Session
 
@@ -55,17 +61,23 @@ class SqlAlchemyConversationGateway:
         *,
         user_id: int,
         archived: bool,
-        cursor: str | None,
+        scope_type: ConversationScopeType | None,
+        scope_id: UUID | None,
+        context_document_id: UUID | None,
+        position: ConversationListPosition | None,
         limit: int,
-    ) -> ConversationListResponse:
-        conversations, next_cursor = conversation_repository.list(
+    ) -> ConversationPage:
+        conversations, has_more = conversation_repository.list(
             self._db,
             user_id=user_id,
             archived=archived,
-            cursor=cursor,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            context_document_id=context_document_id,
+            position=position,
             limit=limit,
         )
-        return ConversationListResponse(
+        return ConversationPage(
             items=[
                 conversation_repository.summarize(
                     self._db,
@@ -73,7 +85,15 @@ class SqlAlchemyConversationGateway:
                 )
                 for conversation in conversations
             ],
-            next_cursor=next_cursor,
+            next_position=(
+                ConversationListPosition(
+                    pinned_at=conversations[-1].pinned_at,
+                    updated_at=conversations[-1].updated_at,
+                    conversation_id=conversations[-1].id,
+                )
+                if has_more and conversations
+                else None
+            ),
         )
 
     def create(
@@ -102,21 +122,44 @@ class SqlAlchemyConversationGateway:
         )
         return self._detail(conversation=conversation, user_id=user_id)
 
-    def messages(
+    def turns(
         self,
         *,
         user_id: int,
         conversation_id: UUID,
         offset: int,
         limit: int,
-    ) -> list[MessageResponse]:
-        return serialize_messages(
-            message_repository.list_conversation_messages(
+    ) -> list[ConversationTurnResponse]:
+        return serialize_turns(
+            turn_repository.list_turns(
                 self._db,
                 conversation_id=conversation_id,
                 user_id=user_id,
                 offset=offset,
                 limit=limit,
+            ),
+            latest_turn_id=turn_repository.latest_turn_id(
+                self._db,
+                conversation_id=conversation_id,
+                user_id=user_id,
+            ),
+        )
+
+    def select_response(
+        self,
+        *,
+        user_id: int,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+    ) -> ConversationResponseVariantResponse:
+        return serialize_response(
+            turn_repository.select_response(
+                self._db,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                response_id=response_id,
+                user_id=user_id,
             )
         )
 
@@ -199,16 +242,16 @@ class SqlAlchemyConversationGateway:
         )
         return ConversationChange(value=result.value, changed=result.changed)
 
-    def update_title(
+    def apply_initial_generated_title(
         self,
         *,
         user_id: int,
         conversation_id: UUID,
         title: str,
     ) -> bool:
-        return conversation_repository.update(
+        return conversation_repository.apply_initial_generated_title(
             self._db,
             conversation_id=conversation_id,
             user_id=user_id,
-            request=ConversationUpdateRequest(title=title),
-        ).changed
+            title=title,
+        )

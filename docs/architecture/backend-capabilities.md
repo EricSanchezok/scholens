@@ -35,10 +35,17 @@ Public resources use canonical identifiers:
 
 - `document_id` identifies a paper everywhere. Association-row identifiers
   are named explicitly and are never presented as paper identifiers.
-- Collections return `{ "items": [...], "next_cursor": "..." }`; cursors are
-  opaque, signed, query-bound tokens.
+- Collections return `{ "items": [...], "next_cursor": "...",
+"previous_cursor": "...", "total_count": 0 }` when bidirectional navigation
+  is part of the product. Cursors are opaque, signed, user- and query-bound
+  keysets with a stable identifier tie-breaker; offset values are not disguised
+  as cursors.
 - Resource creation returns `201`, accepted asynchronous work returns `202`,
   and deletions without a response body return `204`.
+- Project browsing is an aggregate projection: cards expose paper, private
+  conversation, visible output, collaborator, and activity facts without
+  per-project count queries. Project paper and output collections use the same
+  signed, user-and-filter-bound keyset contract as Library collections.
 - Paper ingestion, Zotero imports, and generated artifacts accept
   `Idempotency-Key`. Reusing a key with a different request returns `409`.
 
@@ -85,6 +92,13 @@ command: complete
 failure -> command: fail/release
 ```
 
+Document reflow follows the durable form of this rule. PDF or Zotero completion
+commits the canonical Document update, reflow artifact, DurableJob, and dispatch
+outbox together, then a dedicated worker performs AI classification outside the
+transaction. The signed callback resumes a short SYSTEM operation and validates
+lossless source identity before replacing the artifact's ordered blocks. Reflow
+failure is independent from PDF ingestion success.
+
 Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and
 Zotero import/sync follow this shape. Agent and MCP paper tools obtain a fresh
 short operation for every tool call rather than retaining a session for the
@@ -113,11 +127,18 @@ Queries, rejected operations, no-ops, technical leases, and replayed tool
 invocations do not create Journal entries. The Journal is append-only and has
 no public read capability or transport endpoint.
 
-Conversation user messages are USER root operations. Model tool calls,
-answers, citations, and generated titles are AGENT child operations that retain
-the turn correlation. Jobs persist only their origin operation and correlation
+Conversation turns are USER root operations. A turn owns the immutable user
+prompt, while model responses, tool calls, citations, and generated titles are
+AGENT child operations that retain the turn correlation. A retry creates a new
+response variant under the same latest turn; selecting a variant does not
+rewrite the prompt. Jobs persist only their origin operation and correlation
 UUIDs, then callbacks resume a new SYSTEM operation after signature and owner
 verification.
+
+A Conversation title sidecar starts with its first turn and is applied once.
+It never blocks answer persistence or the public `response_ready` event. Later
+turns may retry only while the title remains the default; an explicit user title
+always wins over a concurrent generated title.
 
 ## Canonical tool catalog
 
@@ -126,6 +147,87 @@ Every model-visible research workspace tool is defined once in
 description, Pydantic input model, execution kind, and application handler.
 Independent Conversation and MCP profiles select definitions from the same
 catalog; transports never copy schemas or handlers.
+
+## Single conversation agent
+
+Home, project, and paper conversations all execute through one
+`ScholensConversationAgent`. The conversation scope supplies initial context and
+the default paper collection; it does not select a different runtime or tool
+set. Pydantic AI owns only the model/tool loop and model event decoding.
+Scholens retains ownership of authentication, tool visibility, resource
+authorization, operation provenance, argument validation, idempotent dispatch,
+source registration, citation validation, persistence, limits, and
+cancellation.
+
+The model receives an injected absolute time for the request's validated IANA
+time zone, so current-date answers do not rely on model memory. Tool results are
+bounded and projected before returning to the model. `Agent.iter()` exposes
+complete model and tool nodes to the harness: text from a response that calls a
+tool completes as a `progress` item, while the accepted no-tool response
+completes as the `final` item. Both use stable IDs and share a monotonic sequence
+with sanitized activity records. The persisted trace contains ordered progress
+and activity entries; progress is bounded before persistence, and final answer
+text remains in the selected `ConversationResponse` row. Runtime-to-adapter communication uses the
+public typed event models directly plus one private typed result envelope, so
+there is no second untyped event protocol to drift. Empty assistant items are
+rejected and a turn cannot complete without visible final content.
+
+The public Conversation stream exposes item lifecycle events, sanitized
+activity, final-only server-generated references, a persisted `response_ready`
+snapshot, an optional turn-suggestion update, and one terminal event. Raw
+reasoning, provider heartbeats, tool identity, full parameters, and tool return
+payloads remain internal diagnostics.
+
+The conversation aggregate has a destructive Turn/Response contract rather
+than a compatibility wrapper around messages. Only the latest turn exposes its
+completed response variants and permits retry or selection. Starting a newer
+turn deletes the older turn's unselected variants and its now-stale follow-up
+suggestions; persisted history therefore remains linear and bounded.
+
+Reader selections and annotation threads enter that same aggregate through
+typed turn contexts. Personal Reader conversations are paper-scoped. Reader
+conversations created while a Project is active remain private to the user but
+are Project-scoped with the open paper in selected document context. Project
+conversation listing may therefore filter by that context document; its signed
+cursor binds actor, Project, context document, and page size. The browser never
+downloads a broader collection to filter it locally.
+
+Reader annotation collections return self-contained thread timelines. The
+paper-level list carries each thread's derived presentation mode, ordered
+comments, comment count, last activity, status, anchor, and current actor
+capabilities. It is ordered by source position rather than recent activity, so
+replying or selecting never moves a thread in the document rail. Filters for
+audience, presentation mode, and status are authorized and applied by the
+Server, with open threads as the default. The thread-detail endpoint remains a
+canonical single-thread resource for direct consumers. Presentation mode is
+derived from audience and comment count and is never another persisted source
+of truth.
+
+Reader selection translation is a paper-authorized streaming workflow.
+`GET|PUT /api/v1/me/translation-preferences` owns source language, target
+language, custom instructions, and automatic-selection behavior;
+`POST /api/v1/papers/{document_id}/selection-translations` streams standard
+`start`, `delta`, `complete`, and `error` events. The workflow checks paper
+access before looking up a durable result, so shared result reuse never becomes
+an authorization side channel.
+
+Completed translations are persisted without source text. Their SHA-256
+identity binds document, normalized source, title, language direction,
+instructions, prompt revision, and AI profile revision. PostgreSQL owns the
+completed result; Redis owns only rate limits, concurrency leases, and a short
+single-flight lease. Cache hits bypass provider quota and AI capacity checks.
+Only the request holding the single-flight lease may call the provider and
+settle usage.
+
+Follow-up suggestions are a non-critical turn sidecar started before answer
+streaming. The model call runs outside an application transaction; the final
+short write locks the conversation and persists only while the turn is still
+latest, preventing slow work from resurrecting stale suggestions. Inputs are
+limited to the current query, locale, three recent selected turns, and
+authorized scope titles; the current answer, ordered worklog, provider output,
+tool payloads, and document bodies are not suggestion context. The typed output
+requires exactly three unique questions covering deeper inquiry, comparison or
+verification, and practical use. A retry reuses the turn-owned result.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Command tools commit
@@ -174,6 +276,52 @@ re-evaluated for each operation, and the outer `Document` query keeps papers
 that are reachable through several paths unique. Personal-library listing,
 tags, storage accounting, and ingestion ownership continue to use
 `LibraryPaper`; no Project paper is copied into the personal library.
+
+## Library collection
+
+The Library exposes two deliberately different collections:
+
+- Papers are personal `LibraryPaper` memberships. Search, tag OR-filtering,
+  stable keyset sorting, removal, download, and ingestion operate on that
+  membership. Removing a paper removes the personal membership only; shared
+  `Document` storage is reclaimed later only when no scope still references it.
+  Tags are user-owned resources with create, rename, and delete lifecycle
+  commands. Assignment updates replace the exact tag set for each selected
+  Library Paper, including an empty set; the API does not expose parallel
+  add-only and per-assignment removal protocols.
+- Outputs are a read projection over the four existing `ResearchItemKind`
+  values: `annotation_thread`, `citation`, `audio_overview`, and `data_table`.
+  The bootstrap adapter applies canonical audience authorization and returns
+  source audience/title metadata in one response. Annotation threads also carry
+  a target Document independently of their personal or Project audience. The
+  browser does not join permissions itself.
+
+`GET /api/v1/library/summary` returns visible Paper and Output counts. Both list
+endpoints use signed Previous/Next keyset cursors bound to user, collection,
+filters, sort, and limit. Paper sources enter through the discriminated
+`POST /api/v1/paper-ingestions/sources` contract (`doi`, `arxiv`, or direct PDF
+`url`); URL resolution and PDF validation remain server-owned. Failed jobs are
+retried by creating a new durable job from the persisted source, never by
+mutating the failed history row.
+
+PDF uploads and source imports share one atomic acceptance boundary. A `202`
+means the personal membership, source reference, durable job, and dispatch
+outbox record are committed and the ingestion is already visible through the
+Papers list union. The response is the canonical ingestion projection rather
+than an upload-only acknowledgement. That union emits exactly one row per
+personal membership: an active or failed ingestion replaces the completed
+paper projection instead of being prepended as a second row. Browser content
+hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
+constraints remain authoritative for repeated and concurrent uploads. `DELETE
+/api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
+replay and ignore late worker callbacks. The worker reports bounded lifecycle
+stages and heartbeats, while the Server owns terminal timeout/failure policy.
+
+PDF completion persists extracted metadata, generated summary, and summary
+citations on the canonical `Document`. It does not synthesize a paper-scoped
+conversation or a fake user turn. Starting a conversation about a paper is an
+explicit user operation and the conversation references that existing
+Document-owned context.
 
 ## Adding a capability or adapter
 

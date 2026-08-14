@@ -1,27 +1,38 @@
 # Scholens Web Foundation
 
-`web/` is the independent replacement frontend. It does not import from the
-legacy `client/`. The first product entry is the complete authentication
-lifecycle at `/login`; Home, Library, Projects, and Reader remain unimplemented.
+`web/` is the canonical Scholens frontend. It is an independent application and
+does not import from the legacy `client/`. The implemented product surface
+includes the authentication lifecycle at `/login`, authenticated Home at `/`,
+Library at `/library`, Projects at `/projects` and `/projects/[projectId]`, and
+Reader at `/reader/[documentId]`.
+
+Canonical source ownership does not yet mean production cutover. The current
+production Release and Compose path still builds and serves `client/`; see
+[`deploy/production/README.md`](../deploy/production/README.md). Do not remove
+the legacy application or claim that `web/` is production-deployable until a
+separate reviewed cutover changes the image, proxy, health-check, rollback, and
+release contracts together.
 
 ## Local commands
 
 ```bash
 corepack enable
 pnpm install --frozen-lockfile
-pnpm dev                 # http://localhost:3000
-pnpm storybook           # http://localhost:6006, no API required
+pnpm dev                 # http://127.0.0.1:7300
+pnpm storybook           # http://127.0.0.1:7306, no API required
 pnpm test
 pnpm test:storybook
 pnpm test:e2e
 pnpm i18n:check          # message keys and ICU arguments stay aligned
+pnpm design:check        # token parity, adapters, styling and Storybook contract
 ```
 
 Authentication modes are available at `/login`, `?mode=register`,
 `?mode=forgot`, `?mode=verify&token=...`, and `?mode=reset&token=...`. Review
 the isolated states under `Features/Authentication/Lifecycle` in Storybook.
 
-The legacy comparison client remains available at `http://localhost:3001`.
+Both commands use fixed loopback ports and fail on a conflict. The legacy
+comparison client remains available at `http://127.0.0.1:7303`.
 
 ## Boundaries
 
@@ -44,6 +55,8 @@ test:
 
 - [`architecture.md`](./docs/architecture.md): dependency direction, feature
   slices, state ownership, and route boundaries.
+- [`frontend-governance.md`](./docs/frontend-governance.md): add/change/delete
+  lifecycle and Figma/Storybook acceptance contract.
 - [`component-development.md`](./docs/component-development.md): component
   classification, API design, external component intake, and Storybook rules.
 - [`design-tokens.md`](./docs/design-tokens.md): Figma/DTCG workflow, semantic
@@ -59,6 +72,6 @@ test:
 - [`new-feature-checklist.md`](./docs/new-feature-checklist.md): the required
   checklist for every new vertical slice.
 
-Architecture exceptions require a short decision record in
-[`docs/decisions/`](./docs/decisions/README.md); they must not be hidden inside a
-feature implementation.
+Architecture exceptions require a short decision record in the repository-wide
+[`docs/decisions/`](../docs/decisions/README.md); they must not be hidden inside
+a feature implementation.

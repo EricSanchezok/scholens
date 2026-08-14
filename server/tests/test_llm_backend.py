@@ -9,38 +9,38 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.modules.conversations.application.contracts.messages import (
-    ConversationMessageRequest,
+from app.modules.conversations.application.contracts.turns import (
+    ConversationTurnCreateRequest,
 )
 from app.database.models import ReasoningLevel
 from app.llm.base import BaseLLMClient
-from app.llm.backend import DeepSeekBackend
+from app.llm.backend import ProfiledChatBackend
 from app.llm.backend import LLMResponse, LLMUsageSettlementError
 from app.llm.token_credits import utc_week_start
 from pydantic import BaseModel
 
 
-def _backend(monkeypatch: pytest.MonkeyPatch) -> DeepSeekBackend:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
-    monkeypatch.setenv("DEEPSEEK_STANDARD_MODEL", "standard-model")
-    monkeypatch.setenv("DEEPSEEK_DEEP_MODEL", "deep-model")
+def _backend(monkeypatch: pytest.MonkeyPatch) -> ProfiledChatBackend:
+    monkeypatch.setenv("SCHOLENS_AI_DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("SCHOLENS_AI_STANDARD_MODEL", "deepseek:standard-model")
+    monkeypatch.setenv("SCHOLENS_AI_DEEP_MODEL", "deepseek:deep-model")
     with patch("app.llm.backend.openai.OpenAI"):
-        return DeepSeekBackend()
+        return ProfiledChatBackend()
 
 
-def test_deepseek_default_output_limit_matches_provider_maximum(
+def test_profile_default_output_limit_matches_provider_maximum(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
-    monkeypatch.delenv("DEEPSEEK_MAX_OUTPUT_TOKENS", raising=False)
+    monkeypatch.setenv("SCHOLENS_AI_DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.delenv("SCHOLENS_AI_MAX_OUTPUT_TOKENS", raising=False)
 
     with patch("app.llm.backend.openai.OpenAI"):
-        backend = DeepSeekBackend()
+        backend = ProfiledChatBackend()
 
     assert backend._max_output_tokens == 384 * 1024
 
 
-def test_deepseek_routes_only_standard_and_deep_models(
+def test_profiles_route_standard_and_deep_models_with_thinking_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = _backend(monkeypatch)
@@ -60,7 +60,9 @@ def test_malformed_tool_arguments_are_returned_as_retryable_provider_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = _backend(monkeypatch)
-    backend._client.chat.completions.create.return_value = SimpleNamespace(
+    backend._client(
+        ReasoningLevel.STANDARD
+    ).chat.completions.create.return_value = SimpleNamespace(
         id="request-malformed-tool",
         usage=SimpleNamespace(
             prompt_tokens=10,
@@ -117,15 +119,18 @@ def test_provider_settles_total_tokens_without_double_counting_reasoning(
 
     with patch("app.llm.backend.settle_token_usage") as settle:
         backend._settle(
-            model="deep-model",
-            reasoning_level=ReasoningLevel.DEEP,
+            profile=backend._profile(ReasoningLevel.DEEP),
             response_id="request-1",
             usage=usage,
         )
 
     settle.assert_called_once_with(
+        provider="deepseek",
         model="deep-model",
-        reasoning_level="deep",
+        ai_profile="deep",
+        thinking="enabled",
+        thinking_effort="max",
+        profile_revision=backend._profile(ReasoningLevel.DEEP).revision,
         provider_request_id="request-1",
         prompt_tokens=100,
         completion_tokens=80,
@@ -141,7 +146,7 @@ def test_stream_replays_reasoning_and_settles_final_usage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = _backend(monkeypatch)
-    backend._client.chat.completions.create.return_value = iter(
+    backend._client(ReasoningLevel.DEEP).chat.completions.create.return_value = iter(
         [
             SimpleNamespace(
                 id="request-2",
@@ -186,7 +191,9 @@ def test_stream_records_unknown_usage_when_final_usage_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = _backend(monkeypatch)
-    backend._client.chat.completions.create.return_value = iter(
+    backend._client(
+        ReasoningLevel.STANDARD
+    ).chat.completions.create.return_value = iter(
         [
             SimpleNamespace(
                 id="request-3",
@@ -205,8 +212,7 @@ def test_stream_records_unknown_usage_when_final_usage_is_missing(
         list(backend.send_message_stream("question", [], "system"))
 
     settle.assert_called_once_with(
-        model="standard-model",
-        reasoning_level=ReasoningLevel.STANDARD,
+        profile=backend._profile(ReasoningLevel.STANDARD),
         response_id="request-3",
         usage=None,
     )
@@ -234,7 +240,9 @@ def test_stream_cancel_closes_the_provider_without_cross_thread_generator_close(
 ) -> None:
     backend = _backend(monkeypatch)
     provider_stream = _BlockingProviderStream()
-    backend._client.chat.completions.create.return_value = provider_stream
+    backend._client(
+        ReasoningLevel.STANDARD
+    ).chat.completions.create.return_value = provider_stream
     iterator = backend.send_message_stream("question", [], "system")
     errors: list[BaseException] = []
 
@@ -270,8 +278,7 @@ def test_token_settlement_failure_has_a_stable_backend_type(
         pytest.raises(LLMUsageSettlementError),
     ):
         backend._settle(
-            model="standard-model",
-            reasoning_level=ReasoningLevel.STANDARD,
+            profile=backend._profile(ReasoningLevel.STANDARD),
             response_id="request-4",
             usage=SimpleNamespace(
                 prompt_tokens=1,
@@ -285,40 +292,43 @@ def test_token_settlement_failure_has_a_stable_backend_type(
 def test_chat_requests_reject_legacy_provider_fields() -> None:
     base = {
         "turn_id": str(uuid4()),
+        "response_id": str(uuid4()),
         "user_query": "Explain the result",
+        "locale": "en",
+        "time_zone": "UTC",
     }
     with pytest.raises(ValidationError):
-        ConversationMessageRequest.model_validate({**base, "llm_provider": "gemini"})
+        ConversationTurnCreateRequest.model_validate({**base, "llm_provider": "gemini"})
     with pytest.raises(ValidationError):
-        ConversationMessageRequest.model_validate(
+        ConversationTurnCreateRequest.model_validate(
             {
                 **base,
                 "document_id": "00000000-0000-0000-0000-000000000001",
             }
         )
     with pytest.raises(ValidationError):
-        ConversationMessageRequest.model_validate(
+        ConversationTurnCreateRequest.model_validate(
             {
                 **base,
                 "project_id": "00000000-0000-0000-0000-000000000003",
             }
         )
     with pytest.raises(ValidationError):
-        ConversationMessageRequest.model_validate(
+        ConversationTurnCreateRequest.model_validate(
             {
                 **base,
                 "mentioned_document_ids": ["00000000-0000-0000-0000-000000000001"],
             }
         )
     with pytest.raises(ValidationError):
-        ConversationMessageRequest.model_validate(
+        ConversationTurnCreateRequest.model_validate(
             {
                 **base,
                 "reasoning_level": "extreme",
             }
         )
     with pytest.raises(ValidationError):
-        ConversationMessageRequest.model_validate({**base, "style": "detailed"})
+        ConversationTurnCreateRequest.model_validate({**base, "style": "detailed"})
 
 
 def test_token_week_starts_monday_utc() -> None:

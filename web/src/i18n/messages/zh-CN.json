@@ -12,12 +12,691 @@
     }
   },
   "Metadata": {
-    "title": "Scholens 前端基础",
-    "description": "Scholens 新一代前端基础验证页面"
+    "title": "Scholens",
+    "description": "使用 Scholens 阅读、组织论文，并基于研究资料提问。"
   },
   "FoundationSmoke": {
     "eyebrow": "前端基础 · 验证页面",
     "description": "独立的 Next.js、设计令牌、主题、查询、组件和多语言基础已经运行。具体产品页面将在后续开始开发。"
+  },
+  "WorkspaceShell": {
+    "navigation": {
+      "newChat": "新对话",
+      "ask": "问答",
+      "library": "资料库",
+      "projects": "项目",
+      "primary": "主导航",
+      "sidebar": "工作区侧栏",
+      "settings": "设置",
+      "collapse": "收起侧栏",
+      "expand": "展开侧栏",
+      "openMenu": "打开导航",
+      "closeMenu": "关闭导航",
+      "searchConversations": "搜索对话",
+      "comingSoon": "尚未开放"
+    },
+    "sidebar": {
+      "pinned": "置顶",
+      "conversations": "对话",
+      "recent": "最近",
+      "empty": "对话会显示在这里。",
+      "noMatches": "没有匹配的对话",
+      "conversationContext": "研究上下文"
+    },
+    "account": {
+      "openMenu": "打开账号菜单",
+      "settings": "账号设置",
+      "appearance": "外观",
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统",
+      "signOut": "退出登录",
+      "signingOut": "正在退出…"
+    }
+  },
+  "Home": {
+    "hero": {
+      "title": "你正在研究什么？",
+      "description": "基于你的研究资料提问。",
+      "emptyDescription": "从一篇论文、一个项目或整个资料库开始提问。"
+    },
+    "composer": {
+      "placeholder": "问任何问题",
+      "followUpPlaceholder": "继续追问",
+      "submit": "询问 Scholens",
+      "stop": "停止生成",
+      "addContext": "添加上下文",
+      "standard": "标准",
+      "deep": "深入",
+      "reasoningStrength": "思考强度",
+      "reasoningStrengthValue": "思考强度：{value}",
+      "standardDescription": "快速、均衡的推理",
+      "deepDescription": "更充分地分析复杂问题",
+      "removeTurnContext": "移除选区上下文"
+    },
+    "context": {
+      "title": "添加上下文",
+      "entireLibrary": "整个资料库",
+      "search": "搜索项目和论文",
+      "projects": "项目",
+      "papers": "论文",
+      "selected": "已选择 {count} 项",
+      "clear": "清除",
+      "done": "完成",
+      "close": "关闭上下文选择器",
+      "librarySelected": "整个资料库",
+      "scopeLibrary": "资料库",
+      "scopePapers": "{count} 篇",
+      "scopeItems": "{count} 项",
+      "scopeEmpty": "选择范围",
+      "scopeAccessible": "研究范围：{scope}",
+      "noMatches": "没有匹配的研究资料"
+    },
+    "recents": {
+      "papers": "最近论文",
+      "projects": "最近项目",
+      "viewAll": "查看全部",
+      "opened": "{relative}打开",
+      "updated": "{relative}更新",
+      "paperCount": "{count} 篇论文",
+      "conversationCount": "{count} 个对话",
+      "noPapersTitle": "你的阅读桌已经准备好了",
+      "noPapersDescription": "打开过的论文会显示在这里。",
+      "noProjectsTitle": "暂无最近项目",
+      "noProjectsDescription": "创建或加入项目后会显示在这里。",
+      "continue": "继续最近研究",
+      "loading": "正在加载最近研究",
+      "usePaper": "将论文《{title}》设为研究范围",
+      "useProject": "将项目“{title}”设为研究范围",
+      "loadError": "无法加载最近研究",
+      "retry": "重试"
+    },
+    "conversation": {
+      "assistant": "Scholens",
+      "assistantMessage": "助手回复",
+      "answerActions": "回答操作",
+      "copy": "复制回答",
+      "copying": "正在复制回答",
+      "copied": "已复制回答",
+      "copyFailed": "无法复制回答",
+      "regenerate": "重新生成回答",
+      "previousResponse": "上一版回答",
+      "nextResponse": "下一版回答",
+      "responseVersion": "第 {current} 版，共 {total} 版",
+      "suggestions": "建议的后续问题",
+      "sourceSummary": "{count} 个来源",
+      "sourcePanelTitle": "引用来源 {count}",
+      "sourcePanelDescription": "本回答使用的研究来源。",
+      "openSource": "打开来源：{title}",
+      "openCitation": "打开来源 {keys}",
+      "closeSources": "关闭来源",
+      "jumpToLatest": "返回最新消息",
+      "loading": "正在加载对话",
+      "empty": "提出一个问题以开始这次对话。",
+      "cancelled": "已停止生成，你可以重新提问。",
+      "error": "未能完成这次回答。",
+      "retry": "重试",
+      "retryHint": "你的消息已经保存，准备好后可以发送新消息。",
+      "failure": {
+        "unavailable": "研究服务暂时不可用。你的消息已保存，请稍后再试。",
+        "rateLimited": "请求过于频繁。你的消息已保存，请稍后再试。",
+        "generic": "回答意外中断。你的消息已保存，可以重新发送。",
+        "diagnostic": "诊断编号：{id}"
+      },
+      "readOnly": "你可以阅读此对话，但已没有权限继续发送消息。",
+      "readOnlyReason": "此对话的研究上下文已不可用，因此当前为只读状态。",
+      "reference": "来源 {number}",
+      "unknownSource": "研究来源",
+      "activity": {
+        "thinking": "正在思考…",
+        "searching": "正在检索你的研究资料…",
+        "reading": "正在阅读相关资料…",
+        "updatingWorkspace": "正在更新你的工作区…",
+        "usingConnector": "正在使用 {connector}…",
+        "completeSummary": "已完成研究 · {count} 项操作 · {sources} 个来源",
+        "partialSummary": "部分完成 · {count} 项操作 · {sources} 个来源",
+        "stopped": "已停止",
+        "failed": "未能完成",
+        "connectorFallback": "连接器",
+        "more": "另 {count} 项",
+        "batch": {
+          "search": "检索了 {count} 次",
+          "read": "阅读了 {count} 份资料",
+          "workspace_action": "完成了 {count} 项工作区操作",
+          "connector": "使用 {connector} {count} 次"
+        },
+        "state": {
+          "running": "进行中",
+          "succeeded": "已完成",
+          "failed": "失败"
+        }
+      }
+    },
+    "session": {
+      "checking": "正在打开研究工作台",
+      "unavailableTitle": "无法检查登录状态",
+      "unavailableDescription": "研究工作台仍在这里。服务恢复后请重试状态检查。",
+      "retry": "重试状态检查"
+    }
+  },
+  "Library": {
+    "title": "资料库",
+    "description": "集中管理论文，以及从论文中生成的研究产物。",
+    "tabs": {
+      "papers": "论文 {count}",
+      "outputs": "产物 {count}"
+    },
+    "common": {
+      "close": "关闭",
+      "cancel": "取消",
+      "actionFailed": "未能完成此操作"
+    },
+    "addPapers": {
+      "open": "添加论文",
+      "close": "关闭添加论文",
+      "title": "添加论文",
+      "description": "上传 PDF，或通过 DOI、arXiv、PDF 直链添加开放论文。",
+      "pdfTitle": "PDF 文件",
+      "pdfDescription": "可多选，每个 PDF 最大 50 MB；同时最多上传 3 个。",
+      "fileTooLarge": "此文件超过 50 MB。",
+      "chooseFiles": "选择 PDF",
+      "queueLabel": "PDF 上传队列",
+      "removeFile": "移除 {name}",
+      "uploadFiles": "上传 {count} 个文件",
+      "status": {
+        "queued": "等待上传",
+        "checking": "正在检查重复 PDF"
+      },
+      "duplicatesIgnored": "已忽略 {count} 个重复 PDF；相同内容只需上传一次。",
+      "sourceTitle": "DOI、arXiv 或 PDF 网址",
+      "sourceDescription": "Scholens 会解析开放 PDF，并将其添加到你的资料库。",
+      "sourceType": "来源类型",
+      "pdfUrl": "PDF 网址",
+      "sourceValue": "来源",
+      "placeholder": {
+        "doi": "10.1000/example",
+        "arxiv": "2401.01234",
+        "url": "https://example.org/paper.pdf"
+      },
+      "sourceRequired": "请输入 DOI、arXiv ID 或 PDF 直链。",
+      "sourceFailed": "无法添加此来源，请确认存在可访问的开放 PDF。",
+      "sourcePending": "正在验证来源",
+      "cancelSource": "取消",
+      "errors": {
+        "unavailable": "没有找到可访问的开放 PDF。",
+        "unsafeAddress": "不允许访问这个地址，请使用公网 PDF 直链。",
+        "tooLarge": "此 PDF 超过 50 MB。",
+        "invalidPdf": "该来源不是可读取且未加密的 PDF。",
+        "alreadyInCollection": "这篇论文已在所选资料库中。",
+        "uploadInProgress": "这篇论文正在上传，无需重复提交。",
+        "quota": "论文数量或存储额度已用完。",
+        "serviceUnavailable": "服务器暂时无法接受此来源，输入已保留，请稍后重试。"
+      },
+      "addSource": "添加来源"
+    },
+    "papers": {
+      "search": "搜索论文",
+      "loading": "正在加载论文",
+      "tryAgain": "重试",
+      "errorTitle": "无法加载论文",
+      "errorDescription": "筛选条件已保留，请重新加载资料库。",
+      "emptyTitle": "没有找到论文",
+      "emptyDescription": "调整筛选条件，或添加一篇论文开始使用资料库。",
+      "count": "共 {count} 篇论文",
+      "selectAll": "选择当前页全部论文",
+      "select": "选择《{title}》",
+      "unknown": "未知",
+      "columns": {
+        "paper": "论文",
+        "added": "添加时间",
+        "published": "发表时间",
+        "actions": "操作"
+      },
+      "selected": "已选择 {count} 篇论文",
+      "selectionToolbar": "论文批量操作",
+      "clearSelection": "清除选择",
+      "batchActions": "操作",
+      "previous": "上一页",
+      "next": "下一页",
+      "sort": {
+        "label": "论文排序",
+        "added_desc": "最近添加",
+        "added_asc": "最早添加",
+        "published_desc": "最近发表",
+        "published_asc": "最早发表",
+        "title_asc": "标题 A–Z"
+      },
+      "actions": {
+        "open": "《{title}》的操作",
+        "select": "选择论文",
+        "deselect": "取消选择",
+        "tags": "编辑标签",
+        "project": "加入项目",
+        "projectUnavailable": "加入项目 · 尚未开放",
+        "notAvailable": "尚未开放",
+        "download": "下载 PDF",
+        "remove": "从资料库移除",
+        "downloadFailed": "无法打开 PDF 下载"
+      },
+      "ingestion": {
+        "retry": "重试",
+        "cancel": "取消处理",
+        "remove": "移除失败的导入",
+        "pending": "待完成",
+        "status": {
+          "retrying": "正在重新导入",
+          "cancelling": "正在取消导入"
+        },
+        "stage": {
+          "uploading": "正在上传 PDF",
+          "queued": "等待处理",
+          "downloading": "正在下载 PDF",
+          "parsing": "正在读取 PDF",
+          "extracting_metadata": "正在提取元数据",
+          "indexing": "正在建立搜索索引",
+          "finalizing": "正在完成导入"
+        },
+        "errors": {
+          "connection_failed": "连接失败，可使用同一文件直接重试。",
+          "service_unavailable": "论文处理服务暂时不可用。",
+          "jobs_submission_failed": "论文处理服务未接受此任务。",
+          "paper_source_pdf_unavailable": "来源 PDF 已不可访问。",
+          "paper_source_unsafe_address": "不允许访问该来源地址。",
+          "document_already_in_collection": "这篇论文已在所选资料库中。",
+          "document_upload_in_progress": "这篇论文正在上传，无需重复提交。",
+          "upload_too_large": "此 PDF 超过 50 MB。",
+          "upload_quota_exceeded": "论文数量或存储额度已用完。",
+          "invalid_pdf": "此文件不是可读取的 PDF。",
+          "pdf_encrypted": "暂不支持加密 PDF。",
+          "unknown": "处理失败，来源已保留，可直接重试。"
+        }
+      },
+      "filters": {
+        "tags": "标签",
+        "noTags": "暂无标签",
+        "manage": "管理标签"
+      },
+      "tagDialog": {
+        "title": "编辑标签",
+        "description": "为已选择的 {count} 篇论文设置标签。",
+        "submit": "应用标签",
+        "manageTitle": "管理标签",
+        "manageDescription": "创建、重命名或删除资料库中使用的标签。",
+        "newLabel": "新标签名称",
+        "newPlaceholder": "新标签",
+        "create": "创建",
+        "listLabel": "资料库标签",
+        "renameLabel": "重命名“{name}”",
+        "saveRename": "保存",
+        "actionsLabel": "“{name}”的操作",
+        "rename": "重命名",
+        "delete": "删除",
+        "emptyTitle": "还没有标签",
+        "emptyDescription": "创建标签后，可以用它整理和筛选论文。",
+        "multiHint": "初始只勾选所有已选论文共有的标签；保存后将统一替换这些论文的标签。",
+        "error": "未能保存标签更改，请重试。",
+        "done": "完成",
+        "deleteTitle": "删除标签？",
+        "deleteDescription": "删除“{name}”并从所有论文中移除此标签？",
+        "deleteConfirm": "删除标签"
+      },
+      "removeDialog": {
+        "title": "从资料库移除？",
+        "description": "将从个人资料库移除 {count} 篇论文，并删除你在其中创建的个人高亮与笔记；项目引用及项目讨论会继续保留。",
+        "cancel": "取消",
+        "confirm": "移除"
+      }
+    },
+    "outputs": {
+      "search": "搜索产物",
+      "loading": "正在加载产物",
+      "tryAgain": "重试",
+      "errorTitle": "无法加载产物",
+      "errorDescription": "筛选条件已保留，请重新加载产物。",
+      "emptyTitle": "没有找到产物",
+      "emptyDescription": "调整筛选条件，或从研究内容中创建产物。",
+      "count": "共 {count} 项产物",
+      "previous": "上一页",
+      "next": "下一页",
+      "notAvailable": "尚未开放",
+      "columns": {
+        "output": "产物",
+        "type": "类型",
+        "source": "来源",
+        "updated": "更新时间",
+        "open": "打开"
+      },
+      "sort": {
+        "label": "产物排序",
+        "updated_desc": "最近更新",
+        "updated_asc": "最早更新",
+        "title_asc": "标题 A–Z",
+        "title_desc": "标题 Z–A"
+      },
+      "filters": {
+        "label": "类型",
+        "kind": {
+          "annotation_thread": "标注",
+          "citation": "引用",
+          "audio_overview": "音频概览",
+          "data_table": "数据表"
+        }
+      },
+      "kind": {
+        "annotation_thread": "标注",
+        "citation": "引用",
+        "audio_overview": "音频概览",
+        "data_table": "数据表"
+      },
+      "scope": {
+        "personal": "个人",
+        "document": "论文",
+        "project": "项目"
+      }
+    },
+    "session": {
+      "checking": "正在打开资料库",
+      "retry": "重试状态检查",
+      "unavailableTitle": "无法检查登录状态",
+      "unavailableDescription": "你的资料库仍在这里。服务恢复后请重试。"
+    }
+  },
+  "Reader": {
+    "untitled": "未命名论文",
+    "returnLibrary": "返回资料库",
+    "library": "资料库",
+    "loadingDocument": "正在打开论文",
+    "tryAgain": "重试",
+    "documentErrorDescription": "无法加载论文记录。",
+    "documentErrorTitle": "无法打开这篇论文",
+    "failedDescription": "解析失败。请返回资料库重试导入。",
+    "failedTitle": "无法处理这篇论文",
+    "processingDescription": "论文解析完成后即可进入阅读器。",
+    "processingTitle": "正在准备论文",
+    "loadingPdf": "正在加载 PDF",
+    "downloadInstead": "下载 PDF",
+    "pdfErrorDescription": "无法显示 PDF，但你仍可下载原始文件。",
+    "pdfErrorTitle": "无法渲染此 PDF",
+    "thumbnail": "打开第 {page} 页",
+    "navigation": {
+      "label": "文档导航",
+      "pages": "页面",
+      "outline": "目录"
+    },
+    "contextPanel": "阅读器上下文面板",
+    "documentCanvas": "PDF 文档",
+    "pdfLink": "PDF 中的链接",
+    "renderingPage": "正在渲染页面",
+    "closePanel": "关闭面板",
+    "toolbar": {
+      "download": "下载 PDF",
+      "fit": "适配",
+      "fitPage": "适合页面",
+      "fitWidth": "适合宽度",
+      "nextPage": "下一页",
+      "openPanel": "打开上下文面板",
+      "page": "页码",
+      "pdfView": "PDF",
+      "previousPage": "上一页",
+      "reflowView": "AI 重排",
+      "search": "搜索 PDF",
+      "showOutline": "显示论文目录",
+      "showPages": "显示页面缩略图",
+      "zoomIn": "放大",
+      "zoomOut": "缩小"
+    },
+    "reflow": {
+      "document": "AI 重排论文",
+      "failedDescription": "原始 PDF 仍可正常阅读；你可以随时重试独立的重排任务。",
+      "figurePlaceholder": "图表",
+      "failedTitle": "AI 重排暂不可用",
+      "fullTranslation": "全文翻译",
+      "fullTranslationDescription": "阅读到附近段落时按需翻译，已完成的内容会被缓存。",
+      "loading": "正在加载 AI 重排",
+      "openPdfPage": "PDF 第 {page} 页",
+      "original": "原文",
+      "processingDescription": "Scholens 正在后台生成适合屏幕阅读的版式，不会影响原始 PDF。",
+      "processingTitle": "正在准备 AI 重排",
+      "retry": "重试 AI 重排",
+      "retryFailedDescription": "请求未被接受，原始 PDF 仍可正常阅读，请稍后重试。",
+      "retryFailedTitle": "无法重试 AI 重排",
+      "retryTranslation": "重试翻译",
+      "translated": "译文",
+      "translating": "正在翻译此段…",
+      "translationFailed": "此段暂时无法翻译。"
+    },
+    "panels": {
+      "ask": "提问",
+      "annotations": "批注",
+      "translation": "翻译",
+      "details": "详情"
+    },
+    "search": {
+      "close": "关闭 PDF 搜索",
+      "empty": "没有匹配结果",
+      "next": "下一个结果",
+      "previous": "上一个结果"
+    },
+    "outline": {
+      "title": "论文目录",
+      "description": "跳转到论文中的章节。",
+      "empty": "这份 PDF 不包含目录。"
+    },
+    "details": {
+      "title": "标题",
+      "authors": "作者",
+      "abstract": "摘要",
+      "summary": "概述",
+      "doi": "DOI",
+      "file": "文件",
+      "journal": "期刊",
+      "publisher": "出版方",
+      "institutions": "机构",
+      "published": "出版时间",
+      "status": "处理状态",
+      "quality": "解析质量",
+      "warning": "解析警告",
+      "unavailable": "暂未开放",
+      "unavailableDescription": "项目归属、共享批注和翻译将在对应功能完成后显示在这里。",
+      "unknown": "暂无",
+      "statuses": {
+        "pending": "等待处理",
+        "processing": "正在处理",
+        "completed": "已完成",
+        "failed": "处理失败"
+      }
+    },
+    "selection": {
+      "ask": "基于选区提问",
+      "translate": "翻译选区",
+      "highlight": "高亮选区",
+      "comment": "添加批注",
+      "copy": "复制选区",
+      "copying": "正在复制",
+      "copied": "已复制",
+      "copyFailed": "复制失败",
+      "context": "第 {page} 页选区"
+    },
+    "translation": {
+      "sourceLanguage": "原文",
+      "targetLanguage": "译为",
+      "selectedText": "选中的原文",
+      "languages": {
+        "auto": "自动检测",
+        "en": "英语",
+        "zh-CN": "简体中文",
+        "zh-TW": "繁体中文",
+        "ja": "日语",
+        "ko": "韩语",
+        "de": "德语",
+        "fr": "法语",
+        "es": "西班牙语"
+      },
+      "autoSelection": {
+        "title": "自动翻译选区",
+        "description": "选区短暂停留不变后自动开始翻译。"
+      },
+      "empty": {
+        "title": "选择文字开始翻译",
+        "description": "在 PDF 中选择一段文字，译文会显示在这里，不会改变论文原文。"
+      },
+      "ready": {
+        "title": "选区已准备好",
+        "description": "点击下方翻译按钮，或开启自动翻译选区。"
+      },
+      "status": {
+        "translating": "正在翻译",
+        "completed": "译文",
+        "cached": "已缓存"
+      },
+      "actions": {
+        "translate": "翻译选区",
+        "copy": "复制译文",
+        "copying": "正在复制",
+        "copied": "已复制",
+        "copyFailed": "复制失败",
+        "annotate": "添加为批注",
+        "retry": "重试"
+      },
+      "errors": {
+        "title": "翻译未完成",
+        "quota": "Token Credits 已用完；已缓存的译文仍可继续查看。",
+        "busy": "当前翻译请求较多，请稍后重试。",
+        "inProgress": "相同选区正在翻译，请稍后重试。",
+        "provider": "翻译服务暂时不可用。",
+        "access": "这篇论文已不在你的文库中。",
+        "generic": "翻译被意外中断，请重试。"
+      },
+      "preferencesError": "翻译偏好保存失败，之前的设置仍然有效。",
+      "instructions": {
+        "title": "翻译偏好",
+        "label": "自定义要求",
+        "placeholder": "例如：专业术语保留英文。",
+        "description": "应用于之后的新翻译；修改后会生成新的缓存结果。",
+        "save": "保存要求"
+      }
+    },
+    "actions": {
+      "failedTitle": "Reader 操作失败",
+      "failedDescription": "更改未保存，请重试。",
+      "threadResolvedTitle": "讨论已被解决",
+      "threadResolvedDescription": "其他成员已解决这条讨论，请重新打开后回复；你的草稿仍保留在输入框中。",
+      "threadUnavailableTitle": "批注已不可用",
+      "threadUnavailableDescription": "它可能已被删除，或你的项目访问权限发生了变化。",
+      "threadHasRepliesTitle": "无法删除这条讨论",
+      "threadHasRepliesDescription": "已有其他成员回复，请改为解决讨论，以保留协作历史。",
+      "permissionDeniedTitle": "你无法更改这条讨论",
+      "permissionDeniedDescription": "当前项目角色不允许执行此操作，或该线程不支持讨论状态。"
+    },
+    "conversations": {
+      "search": "搜索当前论文的对话",
+      "new": "新建对话",
+      "newDraft": "新对话",
+      "loading": "正在加载对话",
+      "empty": "这篇论文还没有对话",
+      "emptyTitle": "想从这篇论文中了解什么？",
+      "emptyDescription": "可以询问它的观点、方法或结论，也可以选中原文继续讨论。",
+      "pin": "置顶对话",
+      "unpin": "取消置顶",
+      "pinned": "置顶",
+      "recent": "最近",
+      "switcher": "对话历史",
+      "unavailableTitle": "当前阅读范围无法打开该对话",
+      "unavailableDescription": "该对话可能已被删除、访问权限已变化，或属于其他阅读范围。Reader 已返回这篇论文的新对话。"
+    },
+    "projects": {
+      "selector": "阅读范围",
+      "personal": "个人阅读",
+      "unavailableTitle": "已切换为个人阅读",
+      "unavailableDescription": "你已无法访问该项目，阅读器已返回个人范围。"
+    },
+    "annotations": {
+      "error": "无法加载批注。",
+      "commentPlaceholder": "为这段选区添加笔记",
+      "saveSelection": "保存批注",
+      "saveHighlight": "保存高亮",
+      "emptyTitle": "还没有批注",
+      "emptyDescription": "选择 PDF 中的文字，即可高亮或添加笔记。",
+      "page": "第 {page} 页",
+      "deleteHighlight": "删除批注",
+      "delete": "删除",
+      "cancel": "取消",
+      "save": "保存",
+      "editComment": "编辑评论",
+      "deleteComment": "删除评论",
+      "replyPlaceholder": "回复这条讨论",
+      "continueNote": "继续记录",
+      "addNote": "添加笔记",
+      "startDiscussion": "发起讨论",
+      "add": "添加",
+      "start": "发起",
+      "reply": "回复",
+      "submitShortcut": "Cmd/Ctrl + Enter",
+      "summaryCount": "{count} 条批注",
+      "commentMarker": "{count} 条评论",
+      "previous": "上一条批注",
+      "next": "下一条批注",
+      "loadingThread": "正在加载讨论…",
+      "unavailableThread": "这条批注已不可用",
+      "unavailableThreadDescription": "它可能已被删除，或你的项目访问权限发生了变化。请选择其他批注继续。",
+      "noComments": "还没有评论，可以在下方添加第一条。",
+      "moreActions": "批注操作",
+      "commentActions": "评论操作",
+      "changeColor": "更改颜色",
+      "resolvedBy": "由 {author} 于 {time}解决",
+      "deleteThreadTitle": "删除这条批注？",
+      "deleteThreadDescription": "对应高亮及全部评论将被永久删除。",
+      "deleteCommentTitle": "删除这条评论？",
+      "deleteCommentDescription": "这条评论将从时间线中永久删除。",
+      "context": "已选批注",
+      "filters": {
+        "label": "筛选",
+        "scope": "范围",
+        "type": "类型",
+        "state": "状态",
+        "all": "全部",
+        "personal": "个人",
+        "project": "项目"
+      },
+      "modes": {
+        "all": "全部类型",
+        "highlight": "高亮",
+        "note": "笔记",
+        "discussion": "讨论"
+      },
+      "statusFilter": {
+        "open": "当前",
+        "resolved": "已解决的讨论"
+      },
+      "audience": {
+        "personal": "个人",
+        "project": "项目"
+      },
+      "status": {
+        "open": "进行中",
+        "resolved": "已解决"
+      },
+      "resolve": "解决",
+      "reopen": "重新打开",
+      "unknownAuthor": "未知作者",
+      "colors": {
+        "yellow": "黄色高亮",
+        "red": "红色高亮",
+        "blue": "蓝色高亮",
+        "green": "绿色高亮",
+        "purple": "紫色高亮",
+        "magenta": "洋红色高亮",
+        "orange": "橙色高亮",
+        "gray": "灰色高亮"
+      },
+      "thread": "批注讨论"
+    },
+    "session": {
+      "checking": "正在打开阅读器",
+      "retry": "重试状态检查",
+      "unavailableDescription": "请重新连接服务后重试。",
+      "unavailableTitle": "阅读器暂时不可用"
+    }
   },
   "AsyncFeedback": {
     "loading": "正在加载",
@@ -57,22 +736,28 @@
       "password": "密码",
       "passwordPlaceholder": "密码",
       "newPassword": "新密码",
-      "confirmPassword": "确认密码",
-      "passwordMinimum": "至少 12 个字符"
+      "confirmPassword": "确认密码"
     },
     "signIn": {
       "state": "登录",
       "title": "欢迎回来",
-      "description": "登录后继续管理论文和项目。",
+      "description": "让论文沉淀为可用的研究知识。",
       "submit": "登录",
       "submitting": "正在登录…"
     },
     "register": {
       "state": "创建账号",
       "title": "创建你的账号",
-      "description": "在一个地方管理论文、项目和标注。",
+      "description": "让论文沉淀为可用的研究知识。",
       "submit": "创建账号",
       "submitting": "正在创建账号…"
+    },
+    "passwordGuidance": {
+      "minimum": "至少 {minimum} 个字符",
+      "progress": "已输入 {count}/{minimum} 个字符",
+      "complete": "密码长度符合要求",
+      "matches": "两次密码一致",
+      "mismatch": "两次输入的密码不一致"
     },
     "checkInbox": {
       "state": "检查邮箱",
@@ -120,7 +805,9 @@
       "retry": "重试状态检查"
     },
     "validation": {
+      "displayNameMaximum": "显示名称不能超过 120 个字符",
       "email": "请输入有效的邮箱地址",
+      "passwordConfirmationRequired": "请再次输入密码",
       "passwordRequired": "请输入密码",
       "passwordMinimum": "密码至少需要 12 个字符",
       "passwordMismatch": "两次输入的密码不一致",
@@ -143,6 +830,164 @@
       "authenticated": "已登录",
       "anonymous": "未登录",
       "unavailable": "登录服务不可用"
+    }
+  },
+  "Projects": {
+    "title": "项目",
+    "description": "围绕同一个研究问题，集中管理论文、对话与研究产物。",
+    "search": "搜索项目",
+    "actions": {
+      "create": "新建项目",
+      "open": "打开",
+      "rename": "重命名",
+      "edit": "编辑项目",
+      "delete": "删除",
+      "leave": "退出项目"
+    },
+    "sort": {
+      "label": "项目排序",
+      "updated": "最近更新",
+      "title": "名称 A–Z",
+      "papers": "论文最多"
+    },
+    "metrics": {
+      "papers": "论文",
+      "conversations": "对话",
+      "outputs": "产物"
+    },
+    "card": {
+      "noDescription": "暂无描述",
+      "openMenu": "打开项目操作",
+      "updated": "更新于 {date}"
+    },
+    "empty": {
+      "title": "创建你的第一个研究项目",
+      "description": "创建项目，将相关论文、对话和研究产物集中在一起。",
+      "searchTitle": "没有匹配的项目",
+      "searchDescription": "请更换搜索词或清空搜索。"
+    },
+    "feedback": {
+      "loading": "正在加载项目",
+      "retry": "重试",
+      "errorTitle": "无法加载项目",
+      "errorDescription": "请检查网络连接后重试。",
+      "actionFailed": "无法完成项目操作"
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "form": {
+      "create": {
+        "title": "创建项目",
+        "description": "为研究空间设定清晰的主题，之后可以继续添加论文。",
+        "action": "创建项目"
+      },
+      "edit": {
+        "title": "编辑项目",
+        "description": "更新项目成员看到的名称和描述。",
+        "action": "保存更改"
+      },
+      "fields": {
+        "title": "项目名称",
+        "titleError": "请输入项目名称",
+        "description": "项目描述",
+        "descriptionHint": "可选 · 描述这个项目正在研究的问题或目标"
+      },
+      "cancel": "取消",
+      "close": "关闭项目表单",
+      "error": "无法保存项目，请重试。"
+    },
+    "confirm": {
+      "cancel": "取消",
+      "delete": {
+        "title": "删除这个项目？",
+        "description": "将永久删除 {title} 及其项目空间。已经加入个人资料库的论文不会被删除。",
+        "action": "删除项目"
+      },
+      "leave": {
+        "title": "退出这个项目？",
+        "description": "退出后你将无法访问 {title} 及其共享研究上下文。",
+        "action": "退出项目"
+      }
+    },
+    "detail": {
+      "back": "返回项目列表",
+      "manage": "管理项目",
+      "openChat": "对话",
+      "closeChat": "返回项目",
+      "errorTitle": "无法打开项目",
+      "errorDescription": "项目可能已被删除，或你已没有访问权限。",
+      "tabs": {
+        "overview": "概览",
+        "papers": "论文",
+        "outputs": "产物"
+      },
+      "recentPapers": "最近论文",
+      "recentOutputs": "最近产物",
+      "viewAll": "查看全部",
+      "papers": {
+        "search": "搜索项目论文",
+        "sortLabel": "项目论文排序",
+        "sortAdded": "最近添加",
+        "sortTitle": "标题 A–Z",
+        "sortPublished": "发表日期",
+        "add": "添加论文",
+        "openMenu": "打开论文操作",
+        "remove": "从项目中移除",
+        "removed": "已从项目中移除论文",
+        "removeFailed": "无法移除这篇论文",
+        "confirm": {
+          "title": "移除论文及其项目批注？",
+          "description": "移除“{title}”将永久删除 {threads} 个项目批注线程及其中的 {comments} 条评论。个人批注和 Library 访问不受影响。",
+          "action": "移除论文及批注"
+        },
+        "empty": "项目中还没有论文。",
+        "untitled": "未命名论文",
+        "unknownAuthors": "暂无作者信息",
+        "openReader": "在 Reader 中打开"
+      },
+      "outputs": {
+        "search": "搜索项目产物",
+        "kindLabel": "筛选产物类型",
+        "sortLabel": "项目产物排序",
+        "allKinds": "全部产物类型",
+        "sortUpdated": "最近更新",
+        "sortTitle": "标题 A–Z",
+        "empty": "项目中还没有研究产物。",
+        "startChat": "开始项目对话",
+        "kinds": {
+          "annotation_thread": "批注线程",
+          "citation": "引文",
+          "audio_overview": "音频概览",
+          "data_table": "数据表"
+        }
+      }
+    },
+    "chat": {
+      "title": "项目对话",
+      "switcher": "切换项目对话",
+      "new": "新对话",
+      "emptyTitle": "探索这个项目",
+      "emptyDescription": "针对项目中收集的论文和研究上下文发起提问。"
+    },
+    "addPapers": {
+      "title": "从资料库添加论文",
+      "description": "从个人资料库选择要加入项目的论文。",
+      "search": "搜索资料库论文",
+      "loading": "正在加载资料库论文…",
+      "empty": "没有匹配的资料库论文",
+      "unknownAuthors": "暂无作者信息",
+      "cancel": "取消",
+      "close": "关闭论文选择器",
+      "action": "添加 {count} 篇论文",
+      "error": "无法添加所选论文，请重试。"
+    },
+    "session": {
+      "checking": "正在检查登录状态",
+      "retry": "重试状态检查",
+      "unavailableTitle": "项目暂时不可用",
+      "unavailableDescription": "你可以保留此页面并重试登录状态检查。"
     }
   },
   "Errors": {

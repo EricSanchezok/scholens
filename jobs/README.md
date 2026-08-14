@@ -6,37 +6,70 @@ parser state, and return signed results to the Server webhook API.
 
 ## PDF ingestion
 
-The PDF worker follows one explicit pipeline:
+The PDF worker follows one explicit, local-first pipeline:
 
 1. Download the original PDF from private S3 storage.
-2. Generate a short-lived S3 URL for MinerU.
-3. Analyze the local PDF with PyMuPDF for preview and deterministic page text.
-4. Submit or resume the MinerU task and share one 600-second deadline across
-   polling and archive download.
-5. Validate and normalize MinerU's archive into canonical Markdown.
-6. If the MinerU lifecycle reaches that deadline, accept PyMuPDF text only when
-   it passes the local quality gate.
-7. Store Markdown, preview, and the MinerU archive when available.
-8. Extract metadata with DeepSeek unless the caller supplied authoritative
+2. Analyze the PDF locally with PyMuPDF: per-page text statistics, preview,
+   and deterministic page offsets (milliseconds per page).
+3. Classify the document:
+   - **Scanned PDF** (empty or near-empty text layer, or repeated boilerplate
+     such as per-page watermarks) is submitted to MinerU, the only OCR-capable
+     parser, and shares one 600-second deadline across polling and archive
+     download.
+   - **Digital PDF** (≥80% of uploads: arXiv, journal, most conference PDFs)
+     stays local:
+     a. `pymupdf4llm` extracts page-chunked Markdown with exact per-page
+     offsets (primary engine);
+     b. on failure, `markitdown` is tried as a second engine and is persisted
+     as `text_only` because its output has no page boundaries (offsets are
+     approximated from the local page analysis);
+     c. if both local engines fail, MinerU rescues the document (OCR can
+     recover misclassified or malformed PDFs);
+     d. if the MinerU rescue fails or times out, the deterministic per-page
+     text from step 2 is persisted as `text_only` with exact offsets.
+4. Store Markdown and preview; only the MinerU path produces an audit archive
+   (`mineru-result.zip`).
+5. Extract metadata with DeepSeek unless the caller supplied authoritative
    metadata, as Zotero imports do.
-9. Send the result and token usage to Server through an HMAC-signed webhook.
+6. Send the result and token usage to Server through an HMAC-signed webhook.
 
-MinerU is the only high-fidelity parser. PyMuPDF is a deterministic fallback for
-native-text PDFs; it does not attempt OCR, table reconstruction, or formula
-recognition. A fallback result is persisted as `text_only` so the client can
-warn that layout-dependent content may be incomplete.
+The worker also sends a signed stage projection and heartbeat at bounded
+intervals. Public progress is limited to `queued`, `parsing`, `extracting`,
+`indexing`, and `finalizing`; provider-specific payloads never become client
+state. The task checks Server-owned cancellation before and after expensive
+boundaries. Revocation uses `terminate=False`: pending work can be skipped, and
+running work exits cooperatively without killing a worker process. Soft and hard
+task limits bound the complete workflow so a lost provider response cannot
+leave a Library row processing forever.
+
+Local engines (`pymupdf4llm`, `markitdown`) are CPU-only, run in-process with
+a bounded time budget per engine, and never send document content off-host.
+MinerU is used only for scanned PDFs and as a rescue for digital PDFs whose
+local extraction failed; its results are persisted as `full` quality. A
+`text_only` result (local fallback or rescue timeout) is persisted so the
+client can warn that layout-dependent content may be incomplete.
 
 MinerU task IDs are checkpointed in Redis under the job ID. Four consecutive
 network failures switch polling or downloading to a slower bounded backoff;
 they do not end the task before its deadline. A redelivered Celery task resumes
-the same provider task instead of submitting another one.
+the same provider task instead of submitting another one. The checkpoint is
+cleared after Server acknowledges the result.
 
-When a running MinerU task outlives the initial deadline, Scholens keeps its
-checkpoint after persisting the `text_only` result. A dedicated Celery task
-continues the existing MinerU lifecycle. Once the full result is available,
-Jobs writes deterministic Markdown and audit ZIP keys and Server atomically
-replaces the paper content, page offsets, parser quality, and passage index.
-The checkpoint is cleared only after Server acknowledges the full result.
+## AI reading reflow
+
+After Server accepts a successful PDF callback, it dispatches a separate
+`generate_document_reflow` task to the `reflow` queue. The worker downloads the
+already-persisted canonical Markdown; it does not parse the PDF again and does
+not alter the parser order above. Source units preserve fenced code and display
+math, and requests are bounded to 20,000 source characters.
+
+The provider-neutral `reflow` profile classifies layout roles only. Every AI
+response must contain each supplied source index exactly once and in ascending
+order. A malformed response or provider failure falls back for that chunk to a
+deterministic local classification and records `ai_chunk_fallback:<index>`.
+Stable block IDs, exact source Markdown, page projections, source fingerprint,
+prompt revision, profile revision, and warnings return through the signed
+generic job callback. Server is the persistence authority.
 
 ## Code layout
 
@@ -49,7 +82,8 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
-├── llm_client.py    # DeepSeek jobs client
+├── reflow.py        # Lossless source units, AI layout validation, fallback
+├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py
 └── webhook_signing.py
 ```
@@ -68,7 +102,7 @@ Production requires:
 - Redis through `CELERY_RESULT_BACKEND` and optionally `PDF_PARSE_REDIS_URL`
 - S3 credentials and bucket names
 - `MINERU_API_TOKEN`
-- `DEEPSEEK_API_KEY`
+- the `SCHOLENS_AI_*` profile variables and the selected provider credential
 - `JOBS_WEBHOOK_SIGNING_SECRET`
 
 Development may omit `MINERU_API_TOKEN`; PDF ingestion then runs explicitly in
@@ -77,20 +111,48 @@ configuration is absent.
 
 ## Local commands
 
-Install and verify:
+Install dependencies when setting up the service:
 
 ```bash
 uv sync
+```
+
+Run the complete Jobs quality gate from the repository root. The runner has no
+dependency-installation, migration, or persistent service-startup side effects:
+
+```bash
+./scripts/run-gates.sh jobs
+```
+
+The equivalent service-local checks are:
+
+```bash
+uv run ruff format --check src tests
 uv run ruff check src tests
-uv run mypy src/pdf src/schemas.py src/tasks.py
+uv run mypy src
 uv run pytest -q
 ```
+
+Use `uv run ruff format src tests` deliberately when formatting; verification
+commands never rewrite source.
 
 Start the local stack:
 
 ```bash
-uv run start
+uv run --frozen --no-sync start
 ```
+
+This optional profile starts RabbitMQ on `127.0.0.1:55672`, Redis on
+`127.0.0.1:56379`, the worker, one Beat scheduler, and the Jobs API on
+`127.0.0.1:7302`. It does not install dependencies or apply database
+migrations. Run it only when exercising uploads, parsing, background work, or
+Zotero synchronization. Flower is separately available on
+`127.0.0.1:7307` with `./scripts/start_flower.sh`.
+
+For object storage, Jobs uses the same isolated remote dev S3 bucket as Server,
+with matching values in the two ignored `.env` files. Scholens does not start
+MinIO. Never use the production bucket or production workload credentials in
+the local Jobs profile.
 
 Run an opt-in real MinerU check with a local PDF:
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import cast
+from typing import Literal, cast
 
 from app.bootstrap.adapters.conversation_access import conversation_policy
 from app.bootstrap.adapters.conversation_repository import conversation_repository
@@ -21,20 +21,19 @@ from app.modules.conversations.application.chat import (
     ConversationTurnCompletion,
     ConversationTurnStart,
     MentionScope,
-    PersistedChatMessage,
+    PersistedChatResponse,
 )
-from app.modules.conversations.application.contracts.messages import (
-    ConversationMessageRequest,
+from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
+from app.modules.conversations.application.contracts.turns import (
+    ConversationTurnCreateRequest,
 )
-from app.modules.conversations.infrastructure.message_repository import (
-    MessageCreate,
-    message_repository,
+from app.modules.conversations.application.contracts.contexts import (
+    AnnotationThreadTurnContext,
 )
+from app.modules.conversations.application.contracts.trace import ConversationTrace
+from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.modules.papers.infrastructure.repository import document_repository
-from app.modules.papers.infrastructure.access import (
-    accessible_document_condition,
-    get_document_access,
-)
+from app.modules.papers.infrastructure.access import accessible_document_condition
 from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
     SelectedPaperCollection,
@@ -43,8 +42,6 @@ from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind, JsonValue
 from app.shared.domain import normalize_workspace_permissions
 from app.shared.domain.enums import ConversationScopeType
-from app.shared.domain.enums import RoleType
-from app.helpers.postgres import sanitize_for_postgres
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select
 
@@ -91,6 +88,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             tool_permissions=normalize_workspace_permissions(
                 conversation.tool_permissions
             ),
+            title_is_default=conversation.title == DEFAULT_CONVERSATION_TITLE,
         )
 
     def context(
@@ -168,41 +166,6 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             available_document_count=available_document_count,
         )
 
-    def context_contains_document(
-        self,
-        *,
-        actor: Actor,
-        scope: ConversationChatScope,
-        document_id: uuid.UUID,
-    ) -> bool:
-        if scope.document_id == document_id:
-            return True
-        context = scope.paper_context
-        if context.kind == "library":
-            return (
-                get_document_access(
-                    self._session,
-                    document_id=document_id,
-                    user_id=actor.id,
-                )
-                is not None
-            )
-        if document_id in context.document_ids:
-            return True
-        if not context.project_ids:
-            return False
-        return (
-            self._session.scalar(
-                select(ProjectPaper.document_id)
-                .where(
-                    ProjectPaper.document_id == document_id,
-                    ProjectPaper.project_id.in_(context.project_ids),
-                )
-                .limit(1)
-            )
-            is not None
-        )
-
     def history(
         self,
         *,
@@ -210,41 +173,59 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         conversation_id: uuid.UUID,
         exclude_turn_id: uuid.UUID | None,
     ) -> list[ChatHistoryMessage]:
-        return [
-            ChatHistoryMessage(role=message.role, content=message.content)
-            for message in message_repository.get_conversation_messages(
-                self._session,
-                conversation_id=conversation_id,
-                user_id=actor.id,
-                exclude_turn_id=exclude_turn_id,
+        history: list[ChatHistoryMessage] = []
+        for turn in turn_repository.history(
+            self._session,
+            conversation_id=conversation_id,
+            user_id=actor.id,
+            exclude_turn_id=exclude_turn_id,
+        ):
+            selected = next(
+                (
+                    response
+                    for response in turn.responses
+                    if response.id == turn.selected_response_id
+                ),
+                None,
             )
-        ]
+            if selected is None or selected.content is None:
+                continue
+            history.append(ChatHistoryMessage(role="user", content=turn.user_query))
+            history.append(
+                ChatHistoryMessage(role="assistant", content=selected.content)
+            )
+        return history
 
     def mentions(
         self,
         *,
         actor: Actor,
-        request: ConversationMessageRequest,
+        request: ConversationTurnCreateRequest,
     ) -> MentionScope:
-        if not request.mentioned_highlight_ids:
+        annotation_contexts = [
+            context
+            for context in request.contexts
+            if isinstance(context, AnnotationThreadTurnContext)
+        ]
+        if not annotation_contexts:
             return MentionScope(None, None)
 
         snapshot: list[dict[str, JsonValue]] = []
-        highlights_by_paper: dict[str, dict[str, JsonValue]] = {}
-        for highlight_id in request.mentioned_highlight_ids or []:
+        annotations_by_paper: dict[str, dict[str, JsonValue]] = {}
+        for context in annotation_contexts:
             try:
-                item = research_repository.get_highlight_thread_visible(
+                item = research_repository.get_annotation_thread_visible(
                     self._session,
-                    thread_id=uuid.UUID(highlight_id),
+                    thread_id=context.thread_id,
                     user_id=actor.id,
                 )
             except AppError:
                 continue
-            highlight = item.highlight_thread
-            if highlight is None or item.document_id is None:
+            thread = item.annotation_thread
+            if thread is None or item.target_document_id is None:
                 continue
-            document_id = str(item.document_id)
-            group = highlights_by_paper.get(document_id)
+            document_id = str(item.target_document_id)
+            group = annotations_by_paper.get(document_id)
             if group is None:
                 paper = document_repository.find_accessible(
                     self._session,
@@ -255,48 +236,55 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                     "document_id": document_id,
                     "paper_title": paper.title if paper else None,
                     "paper_abstract": paper.abstract if paper else None,
-                    "highlights": [],
+                    "annotation_threads": [],
                 }
-                highlights_by_paper[document_id] = group
+                annotations_by_paper[document_id] = group
             annotations = [
-                comment.content for comment in highlight.comments if comment.content
+                comment.content for comment in thread.comments if comment.content
             ]
             json_annotations = cast(list[JsonValue], annotations)
             snapshot.append(
                 {
-                    "kind": "highlight",
+                    "kind": "annotation_thread",
                     "id": str(item.id),
-                    "title": highlight.quote_text,
+                    "title": thread.quote_text,
                     "document_id": document_id,
                     "paper_title": group["paper_title"],
                     "annotations": json_annotations,
                 }
             )
-            highlights = group["highlights"]
-            assert isinstance(highlights, list)
-            highlights.append(
+            annotation_threads = group["annotation_threads"]
+            assert isinstance(annotation_threads, list)
+            annotation_threads.append(
                 {
-                    "highlighted_text": highlight.quote_text,
-                    "page_number": highlight.page_number,
+                    "quoted_text": thread.quote_text,
+                    "position": thread.position,
                     "annotations": json_annotations,
                 }
             )
         return MentionScope(
             snapshot=snapshot,
-            highlights=list(highlights_by_paper.values()),
+            annotation_threads=list(annotations_by_paper.values()),
         )
 
     @staticmethod
-    def _persisted(message: object) -> PersistedChatMessage:
-        from app.modules.conversations.infrastructure.models import Message
+    def _persisted(response: object) -> PersistedChatResponse:
+        from app.modules.conversations.infrastructure.models import ConversationResponse
 
-        if not isinstance(message, Message):
-            raise TypeError("expected Message")
-        return PersistedChatMessage(
-            id=message.id,
-            content=message.content,
-            references=message.references,
-            trace=message.trace,
+        if not isinstance(response, ConversationResponse):
+            raise TypeError("expected ConversationResponse")
+        return PersistedChatResponse(
+            id=response.id,
+            turn_id=response.turn_id,
+            variant_index=response.variant_index,
+            status=response.status,
+            content=response.content or "",
+            references=response.references,
+            trace=(
+                ConversationTrace.model_validate(response.trace)
+                if response.trace is not None
+                else None
+            ),
         )
 
     def start_turn(
@@ -305,71 +293,50 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         actor: Actor,
         conversation_id: uuid.UUID,
         turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+        generation_kind: Literal["initial", "retry"],
         user_content: str,
-        user_references: dict[str, JsonValue] | None,
+        contexts: list[dict[str, JsonValue]],
         scope: list[dict[str, JsonValue]] | None,
+        reasoning_level: str,
+        locale: str,
+        time_zone: str,
         created_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
     ) -> ConversationTurnStart:
-        message_repository.lock_conversation(
+        turn, turn_created = turn_repository.create_turn(
             self._session,
             conversation_id=conversation_id,
-            user_id=actor.id,
-        )
-        existing_user = message_repository.find_turn_message(
-            self._session,
-            conversation_id=conversation_id,
-            user_id=actor.id,
             turn_id=turn_id,
-            role=RoleType.USER,
-        )
-        if existing_user is not None:
-            normalized_content = sanitize_for_postgres(user_content)
-            if existing_user.content != normalized_content:
-                raise AppError(
-                    code="conversation_turn_conflict",
-                    message="This conversation turn was already used differently",
-                    kind=FailureKind.CONFLICT,
-                )
-            existing_assistant = message_repository.find_turn_message(
-                self._session,
-                conversation_id=conversation_id,
-                user_id=actor.id,
-                turn_id=turn_id,
-                role=RoleType.ASSISTANT,
-            )
-            return ConversationTurnStart(
-                user_message_id=existing_user.id,
-                user_operation_id=existing_user.created_operation_id,
-                correlation_id=existing_user.correlation_id,
-                created=False,
-                assistant=(
-                    self._persisted(existing_assistant)
-                    if existing_assistant is not None
-                    else None
-                ),
-            )
-
-        user_message = message_repository.create(
-            self._session,
-            request=MessageCreate(
-                conversation_id=conversation_id,
-                turn_id=turn_id,
-                created_operation_id=created_operation_id,
-                correlation_id=correlation_id,
-                role=RoleType.USER,
-                content=user_content,
-                references=user_references,
-                scope=scope,
-            ),
             user_id=actor.id,
+            created_operation_id=created_operation_id,
+            correlation_id=correlation_id,
+            user_query=user_content,
+            contexts=contexts,
+            scope=scope,
+            reasoning_level=reasoning_level,
+            locale=locale,
+            time_zone=time_zone,
+        )
+        response, response_created = turn_repository.create_response(
+            self._session,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+            user_id=actor.id,
+            created_operation_id=created_operation_id,
+            correlation_id=correlation_id,
+            generation_kind=generation_kind,
         )
         return ConversationTurnStart(
-            user_message_id=user_message.id,
-            user_operation_id=user_message.created_operation_id,
-            correlation_id=user_message.correlation_id,
-            created=True,
-            assistant=None,
+            turn_id=turn.id,
+            response=self._persisted(response),
+            turn_operation_id=turn.created_operation_id,
+            correlation_id=turn.correlation_id,
+            turn_created=turn_created,
+            response_created=response_created,
+            generation_kind=generation_kind,
+            suggestions=tuple(turn.suggestions or ()),
         )
 
     def complete_turn(
@@ -378,9 +345,10 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         actor: Actor,
         conversation_id: uuid.UUID,
         turn_id: uuid.UUID,
+        response_id: uuid.UUID,
         assistant_content: str,
         assistant_references: dict[str, JsonValue] | None,
-        assistant_trace: dict[str, JsonValue] | None,
+        assistant_trace: ConversationTrace | None,
         artifacts: list[dict[str, JsonValue]],
         created_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
@@ -389,73 +357,118 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             actor=actor,
             conversation_id=conversation_id,
         )
-        message_repository.lock_conversation(
+        turn = turn_repository.require_turn(
             self._session,
             conversation_id=conversation_id,
-            user_id=actor.id,
-        )
-        existing = message_repository.find_turn_message(
-            self._session,
-            conversation_id=conversation_id,
-            user_id=actor.id,
             turn_id=turn_id,
-            role=RoleType.ASSISTANT,
-        )
-        if existing is not None:
-            return ConversationTurnCompletion(
-                assistant=self._persisted(existing),
-                created=False,
-                citation_ids=(),
-            )
-        user_message = message_repository.find_turn_message(
-            self._session,
-            conversation_id=conversation_id,
             user_id=actor.id,
-            turn_id=turn_id,
-            role=RoleType.USER,
         )
-        if user_message is None:
-            raise AppError(
-                code="conversation_turn_not_started",
-                message="The conversation turn has not been started",
-                kind=FailureKind.CONFLICT,
-            )
-        if user_message.correlation_id != correlation_id:
+        if turn.correlation_id != correlation_id:
             raise AppError(
                 code="conversation_turn_causality_invalid",
                 message="The conversation turn causality is invalid",
                 kind=FailureKind.CONFLICT,
             )
-        assistant_message = message_repository.create(
+        prior_status = next(
+            (item.status for item in turn.responses if item.id == response_id),
+            None,
+        )
+        response = turn_repository.complete_response(
             self._session,
-            request=MessageCreate(
-                conversation_id=conversation_id,
-                turn_id=turn_id,
-                created_operation_id=created_operation_id,
-                correlation_id=correlation_id,
-                role=RoleType.ASSISTANT,
-                content=assistant_content,
-                references=assistant_references,
-                trace=assistant_trace,
-            ),
+            conversation_id=conversation_id,
+            response_id=response_id,
             user_id=actor.id,
+            content=assistant_content,
+            references=assistant_references,
+            trace=assistant_trace,
         )
         citation_ids: tuple[uuid.UUID, ...] = ()
-        if artifacts:
+        if artifacts and prior_status != "completed":
             citation_ids = tuple(
                 item.id
-                for item in research_repository.create_citations_for_message(
+                for item in research_repository.create_citations_for_response(
                     self._session,
                     conversation=conversation,
-                    message_id=assistant_message.id,
+                    response_id=response.id,
                     user_id=actor.id,
                     snapshots=cast(list[dict[str, object]], artifacts),
                 )
             )
         return ConversationTurnCompletion(
-            assistant=self._persisted(assistant_message),
-            created=True,
+            response=self._persisted(response),
+            created=prior_status != "completed",
             citation_ids=citation_ids,
+        )
+
+    def finish_response(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        response_id: uuid.UUID,
+        status: str,
+    ) -> None:
+        turn_repository.finish_response(
+            self._session,
+            conversation_id=conversation_id,
+            response_id=response_id,
+            user_id=actor.id,
+            status=status,
+        )
+
+    def save_turn_suggestions(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        turn_id: uuid.UUID,
+        suggestions: tuple[str, str, str],
+    ) -> bool:
+        return turn_repository.save_suggestions_if_latest(
+            self._session,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            user_id=actor.id,
+            suggestions=suggestions,
+        )
+
+    def retry_request(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+    ) -> ConversationTurnCreateRequest:
+        turn = turn_repository.require_turn(
+            self._session,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            user_id=actor.id,
+        )
+        if (
+            turn_repository.latest_turn_id(
+                self._session,
+                conversation_id=conversation_id,
+                user_id=actor.id,
+            )
+            != turn.id
+        ):
+            raise AppError(
+                code="conversation_retry_not_latest",
+                message="Only the latest turn can be retried",
+                kind=FailureKind.CONFLICT,
+            )
+        return ConversationTurnCreateRequest.model_validate(
+            {
+                "turn_id": turn.id,
+                "response_id": response_id,
+                "user_query": turn.user_query,
+                "locale": turn.locale,
+                "time_zone": turn.time_zone,
+                "contexts": turn.contexts or [],
+                "reasoning_level": turn.reasoning_level,
+            }
         )
 
     def _conversation(

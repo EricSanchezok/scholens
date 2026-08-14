@@ -4,10 +4,6 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from app.modules.conversations.infrastructure.message_repository import (
-    MessageCreate,
-    message_repository,
-)
 from app.bootstrap.adapters.upload_repository import (
     upload_reservation_repository,
 )
@@ -20,26 +16,19 @@ from app.modules.integrations.zotero.infrastructure.import_repository import (
 )
 from app.database.database import engine
 from app.database.models import (
-    ConversationScopeType,
     Document,
     DocumentProcessingStatus,
     JobStatus,
     JobOperation,
     LibraryPaper,
     ProjectPaper,
-    RoleType,
     ZoteroImportStatus,
 )
-from app.shared.domain import JsonValue
 from app.shared.domain import AppError, FailureKind
 from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
 from app.helpers.celery_config import get_webhook_base_url
 from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
 from app.bootstrap.adapters.document_gc import collect_document_if_due
-from app.modules.papers.application.citation_references import (
-    materialize_summary_references,
-)
-from app.bootstrap.adapters.conversation_repository import conversation_repository
 from app.modules.papers.infrastructure.search_repository import (
     document_search_repository,
 )
@@ -52,9 +41,6 @@ from app.modules.jobs.infrastructure.repository import (
     EnqueueJob,
     PersistedJob,
     job_repository,
-)
-from app.modules.conversations.application.contracts.conversations import (
-    ConversationCreateRequest,
 )
 from app.modules.papers.application.contracts.documents import DocumentUpdate
 from app.modules.jobs.application.contracts import (
@@ -83,13 +69,7 @@ from app.modules.papers.application.actions import (
 )
 from app.modules.research.application.items import (
     RESEARCH_ANNOTATION_COMMENT_CREATED,
-    RESEARCH_HIGHLIGHT_CREATED,
-)
-from app.modules.conversations.application.chat import (
-    CONVERSATION_MESSAGE_CREATED,
-)
-from app.modules.conversations.application.conversations import (
-    CONVERSATION_CREATED,
+    RESEARCH_ANNOTATION_THREAD_CREATED,
 )
 from app.modules.integrations.zotero.application.actions import (
     ZOTERO_IMPORT_COMPLETED,
@@ -110,16 +90,37 @@ from app.bootstrap.adapters.zotero_annotations import (
     apply_persisted_zotero_annotations,
 )
 from app.bootstrap.adapters.research_annotations import (
-    create_ai_highlights,
+    create_ai_annotations,
 )
 from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
-from pydantic import TypeAdapter
+from app.bootstrap.adapters.document_reflow import ensure_document_reflow_job
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
 
-_JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
+
+def _ensure_reflow(
+    db: Session,
+    *,
+    actor: Actor,
+    operation: OperationContext,
+    document_id: uuid.UUID,
+) -> uuid.UUID | None:
+    with optional_savepoint(
+        db,
+        operation="schedule_document_reflow",
+        context={"document_id": str(document_id)},
+    ):
+        response, created = ensure_document_reflow_job(
+            db,
+            actor=actor,
+            correlation_id=operation.trace.correlation_id,
+            origin_operation_id=operation.trace.operation_id,
+            document_id=document_id,
+        )
+        return response.job_id if created else None
+    return None
 
 
 def _complete_pdf_job(
@@ -267,10 +268,13 @@ def handle_failed_upload(
     reason: str = "Unknown error",
 ) -> tuple[OperationChange, ...]:
     """
-    Handle cleanup for a failed paper upload job.
+    Mark a paper upload as failed while preserving its retry source.
 
-    Removes the paper record and any associated ProjectPaper relationships
-    that were created during the upload process.
+    The provisional Library or Project membership is removed because a failed
+    document is not a usable paper. The canonical document and its source
+    object deliberately remain owned by the unsuperseded failed reservation so
+    the user can retry from the standard ingestion row. Explicit cancellation
+    or removal owns eventual document garbage collection.
 
     Args:
         db: Database session
@@ -281,8 +285,8 @@ def handle_failed_upload(
     # Refuse to tear down a job that already succeeded. A redelivered Celery
     # task (acks_late) can post a late "failed" webhook after another delivery
     # already built and committed the paper; deleting it here is what caused
-    # the highlights_document_id_fkey violations (highlight inserts racing a paper
-    # delete). A completed job means the paper is good — leave it alone.
+    # annotation target-FK violations (annotation inserts racing a paper delete).
+    # A completed job means the paper is good — leave it alone.
     job = upload_reservation_repository.get(db=db, id=job_id, user=job_user)
     if job and job.job.status == JobStatus.COMPLETED:
         logger.warning(
@@ -335,23 +339,6 @@ def handle_failed_upload(
                     )
                 )
             db.flush()
-            from app.bootstrap.adapters.document_gc import (
-                schedule_document_gc,
-            )
-
-            scheduled_gc = schedule_document_gc(
-                db,
-                document_id=document_id,
-                origin_operation_id=operation.trace.operation_id,
-                correlation_id=operation.trace.correlation_id,
-            )
-            if scheduled_gc is not None and scheduled_gc.created:
-                changes.append(
-                    OperationChange(
-                        action=JOB_CREATED,
-                        resources=(ResourceRef("job", str(scheduled_gc.job_id)),),
-                    )
-                )
 
     try:
         job_repository.fail(
@@ -813,30 +800,37 @@ async def handle_paper_processing_webhook(
                                 job_id=job_uuid,
                                 result=result,
                             )
+                            reflow_job_id = _ensure_reflow(
+                                db,
+                                actor=actor,
+                                operation=operation,
+                                document_id=uuid.UUID(salvaged),
+                            )
+                            salvage_changes = [
+                                _document_change(
+                                    action=DOCUMENT_PROCESSING_COMPLETED,
+                                    document_id=salvaged,
+                                ),
+                                OperationChange(
+                                    action=ZOTERO_IMPORT_COMPLETED,
+                                    resources=(ResourceRef("document", str(salvaged)),),
+                                ),
+                            ]
+                            if reflow_job_id is not None:
+                                salvage_changes.append(
+                                    OperationChange(
+                                        action=JOB_CREATED,
+                                        resources=(
+                                            ResourceRef("job", str(reflow_job_id)),
+                                        ),
+                                    )
+                                )
                             return JobHandlerResult(
                                 value={
                                     "status": "webhook processed - zotero salvage",
                                     "document_id": salvaged,
                                 },
-                                changes=(
-                                    (
-                                        _document_change(
-                                            action=DOCUMENT_PROCESSING_COMPLETED,
-                                            document_id=salvaged,
-                                        ),
-                                        OperationChange(
-                                            action=ZOTERO_IMPORT_COMPLETED,
-                                            resources=(
-                                                ResourceRef(
-                                                    "document",
-                                                    str(salvaged),
-                                                ),
-                                            ),
-                                        ),
-                                    )
-                                    if changed
-                                    else ()
-                                ),
+                                changes=tuple(salvage_changes) if changed else (),
                                 post_commit=post_commit,
                             )
                     return _failed_pdf_result(
@@ -863,6 +857,29 @@ async def handle_paper_processing_webhook(
                             job_id=job_uuid,
                             result=result,
                         )
+                        reflow_job_id = _ensure_reflow(
+                            db,
+                            actor=actor,
+                            operation=operation,
+                            document_id=uuid.UUID(finalized),
+                        )
+                        zotero_changes = [
+                            _document_change(
+                                action=DOCUMENT_PROCESSING_COMPLETED,
+                                document_id=finalized,
+                            ),
+                            OperationChange(
+                                action=ZOTERO_IMPORT_COMPLETED,
+                                resources=(ResourceRef("document", str(finalized)),),
+                            ),
+                        ]
+                        if reflow_job_id is not None:
+                            zotero_changes.append(
+                                OperationChange(
+                                    action=JOB_CREATED,
+                                    resources=(ResourceRef("job", str(reflow_job_id)),),
+                                )
+                            )
                         zotero_post_commit = _pdf_post_commit_actions(
                             actor_id=actor.id,
                             job_id=job_uuid,
@@ -880,25 +897,7 @@ async def handle_paper_processing_webhook(
                                 "status": "webhook processed - zotero import",
                                 "document_id": finalized,
                             },
-                            changes=(
-                                (
-                                    _document_change(
-                                        action=DOCUMENT_PROCESSING_COMPLETED,
-                                        document_id=finalized,
-                                    ),
-                                    OperationChange(
-                                        action=ZOTERO_IMPORT_COMPLETED,
-                                        resources=(
-                                            ResourceRef(
-                                                "document",
-                                                str(finalized),
-                                            ),
-                                        ),
-                                    ),
-                                )
-                                if changed
-                                else ()
-                            ),
+                            changes=tuple(zotero_changes) if changed else (),
                             post_commit=zotero_post_commit,
                         )
                     return _failed_pdf_result(
@@ -965,8 +964,8 @@ async def handle_paper_processing_webhook(
                         title=metadata.title,
                         authors=metadata.authors,
                         abstract=metadata.abstract,
-                        summary="",
-                        summary_citations=[],
+                        summary=metadata.summary,
+                        summary_citations=metadata.summary_citations,
                         institutions=metadata.institutions,
                         keywords=metadata.keywords,
                         publish_date=metadata.publish_date,
@@ -985,79 +984,36 @@ async def handle_paper_processing_webhook(
                     refresh_result=False,
                 )
 
-                created_highlight_ids: tuple[uuid.UUID, ...] = ()
+                created_annotation_thread_ids: tuple[uuid.UUID, ...] = ()
                 created_comment_ids: tuple[uuid.UUID, ...] = ()
                 if metadata.highlights:
                     with optional_savepoint(
                         db,
-                        operation="create_ai_highlights",
+                        operation="create_ai_annotations",
                         context={
                             "job_id": normalized_job_id,
                             "document_id": str(paper.id),
                         },
                     ):
-                        created_highlights = create_ai_highlights(
+                        created_annotations = create_ai_annotations(
                             db,
                             document_id=paper.id,
                             metadata=metadata,
                             user=actor,
                         )
-                        created_highlight_ids = created_highlights.thread_ids
-                        created_comment_ids = created_highlights.comment_ids
-
-                summary_conversation_id: uuid.UUID | None = None
-                summary_message_id: uuid.UUID | None = None
-                if metadata.summary:
-                    with optional_savepoint(
-                        db,
-                        operation="create_summary_conversation",
-                        context={
-                            "job_id": normalized_job_id,
-                            "document_id": str(paper.id),
-                        },
-                    ):
-                        conversation = conversation_repository.create(
-                            db,
-                            request=ConversationCreateRequest(
-                                scope_type=ConversationScopeType.PAPER,
-                                scope_id=paper.id,
-                            ),
-                            user_id=actor.id,
-                            refresh_result=False,
-                        )
-                        summary_content, references = materialize_summary_references(
-                            metadata.summary,
-                            metadata.summary_citations,
-                            document_id=paper.id,
-                            title=paper.title,
-                        )
-                        message = message_repository.create(
-                            db,
-                            request=MessageCreate(
-                                conversation_id=conversation.id,
-                                turn_id=operation.trace.operation_id,
-                                created_operation_id=operation.trace.operation_id,
-                                correlation_id=operation.trace.correlation_id,
-                                role=RoleType.ASSISTANT,
-                                content=summary_content,
-                                references=(
-                                    _JSON_OBJECT.validate_python(
-                                        references.model_dump(mode="json")
-                                    )
-                                    if references is not None
-                                    else None
-                                ),
-                            ),
-                            user_id=actor.id,
-                            refresh_result=False,
-                        )
-                        summary_conversation_id = conversation.id
-                        summary_message_id = message.id
+                        created_annotation_thread_ids = created_annotations.thread_ids
+                        created_comment_ids = created_annotations.comment_ids
 
                 completed = _complete_pdf_job(
                     db,
                     job_id=job_uuid,
                     result=result,
+                )
+                reflow_job_id = _ensure_reflow(
+                    db,
+                    actor=actor,
+                    operation=operation,
+                    document_id=paper.id,
                 )
                 postprocess_job = _enqueue_pdf_postprocess(
                     db,
@@ -1077,10 +1033,10 @@ async def handle_paper_processing_webhook(
                     )
                 changes.extend(
                     OperationChange(
-                        action=RESEARCH_HIGHLIGHT_CREATED,
+                        action=RESEARCH_ANNOTATION_THREAD_CREATED,
                         resources=(ResourceRef("research_item", str(thread_id)),),
                     )
-                    for thread_id in created_highlight_ids
+                    for thread_id in created_annotation_thread_ids
                 )
                 changes.extend(
                     OperationChange(
@@ -1094,30 +1050,6 @@ async def handle_paper_processing_webhook(
                     )
                     for comment_id in created_comment_ids
                 )
-                if summary_conversation_id is not None:
-                    changes.append(
-                        OperationChange(
-                            action=CONVERSATION_CREATED,
-                            resources=(
-                                ResourceRef(
-                                    "conversation",
-                                    str(summary_conversation_id),
-                                ),
-                            ),
-                        )
-                    )
-                if summary_message_id is not None:
-                    changes.append(
-                        OperationChange(
-                            action=CONVERSATION_MESSAGE_CREATED,
-                            resources=(
-                                ResourceRef(
-                                    "message",
-                                    str(summary_message_id),
-                                ),
-                            ),
-                        )
-                    )
                 if postprocess_job.created:
                     changes.append(
                         OperationChange(
@@ -1128,6 +1060,13 @@ async def handle_paper_processing_webhook(
                                     str(postprocess_job.job.id),
                                 ),
                             ),
+                        )
+                    )
+                if reflow_job_id is not None:
+                    changes.append(
+                        OperationChange(
+                            action=JOB_CREATED,
+                            resources=(ResourceRef("job", str(reflow_job_id)),),
                         )
                     )
                 end_time = datetime.now(timezone.utc)

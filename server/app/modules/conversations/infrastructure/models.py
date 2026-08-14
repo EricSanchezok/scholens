@@ -19,9 +19,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.shared.domain import JsonValue
-from app.shared.infrastructure.persistence import Base
 from app.shared.domain.enums import ConversationScopeType
+from app.shared.infrastructure.persistence import Base
 
 if TYPE_CHECKING:
     from app.modules.papers.infrastructure.models import Document
@@ -62,19 +63,13 @@ class ConversationContextDocument(Base):
     )
 
 
-class Message(Base):
-    __tablename__ = "messages"
+class ConversationTurn(Base):
+    __tablename__ = "conversation_turns"
     __table_args__ = (
         UniqueConstraint(
             "conversation_id",
             "sequence",
-            name="uq_messages_conversation_sequence",
-        ),
-        UniqueConstraint(
-            "conversation_id",
-            "turn_id",
-            "role",
-            name="uq_messages_conversation_turn_role",
+            name="uq_conversation_turns_conversation_sequence",
         ),
     )
 
@@ -84,10 +79,6 @@ class Message(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    turn_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
         nullable=False,
     )
     created_operation_id: Mapped[uuid.UUID] = mapped_column(
@@ -100,22 +91,90 @@ class Message(Base):
         nullable=False,
         index=True,
     )
-    role: Mapped[str] = mapped_column(String, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    user_query: Mapped[str] = mapped_column(Text, nullable=False)
+    contexts: Mapped[list[dict[str, JsonValue]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    scope: Mapped[list[dict[str, JsonValue]] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    reasoning_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    locale: Mapped[str] = mapped_column(String(16), nullable=False)
+    time_zone: Mapped[str] = mapped_column(String(100), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_response_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "conversation_responses.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_conversation_turns_selected_response_id",
+        ),
+        nullable=True,
+    )
+    suggestions: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    conversation: Mapped["Conversation"] = relationship(
+        "Conversation", back_populates="turns"
+    )
+    responses: Mapped[list["ConversationResponse"]] = relationship(
+        "ConversationResponse",
+        back_populates="turn",
+        order_by="ConversationResponse.variant_index",
+        cascade="all, delete-orphan",
+        foreign_keys="ConversationResponse.turn_id",
+    )
+    selected_response: Mapped["ConversationResponse | None"] = relationship(
+        "ConversationResponse",
+        primaryjoin="ConversationTurn.selected_response_id == ConversationResponse.id",
+        foreign_keys=[selected_response_id],
+        post_update=True,
+    )
+
+
+class ConversationResponse(Base):
+    __tablename__ = "conversation_responses"
+    __table_args__ = (
+        UniqueConstraint(
+            "turn_id",
+            "variant_index",
+            name="uq_conversation_responses_turn_variant",
+        ),
+        CheckConstraint(
+            "status IN ('running', 'completed', 'failed', 'cancelled')",
+            name="ck_conversation_responses_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversation_turns.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_operation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    correlation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    variant_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     references: Mapped[dict[str, JsonValue] | None] = mapped_column(
         JSONB, nullable=True
     )
     trace: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
-    scope: Mapped[list[dict[str, JsonValue]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
-    conversation: Mapped["Conversation"] = relationship(
-        "Conversation", back_populates="messages"
+    turn: Mapped["ConversationTurn"] = relationship(
+        "ConversationTurn",
+        back_populates="responses",
+        foreign_keys=[turn_id],
     )
     research_items: Mapped[list["ResearchItem"]] = relationship(
         "ResearchItem",
-        back_populates="source_message",
+        back_populates="source_response",
         order_by="ResearchItem.created_at",
         passive_deletes=True,
     )
@@ -165,7 +224,7 @@ class Conversation(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     title: Mapped[str] = mapped_column(
-        String(240), nullable=False, default="New conversation"
+        String(240), nullable=False, default=DEFAULT_CONVERSATION_TITLE
     )
     user_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -221,10 +280,10 @@ class Conversation(Base):
     user: Mapped["AuthUser | None"] = relationship(
         "AuthUser", back_populates="conversations"
     )
-    messages: Mapped[list["Message"]] = relationship(
-        "Message",
+    turns: Mapped[list["ConversationTurn"]] = relationship(
+        "ConversationTurn",
         back_populates="conversation",
-        order_by=Message.sequence,
+        order_by=ConversationTurn.sequence,
         cascade="all, delete-orphan",
     )
     context_projects: Mapped[list["ConversationContextProject"]] = relationship(

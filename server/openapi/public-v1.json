@@ -315,6 +315,28 @@
         "title": "AddPaperToProjectRequest",
         "type": "object"
       },
+      "AnnotationAudienceFilter": {
+        "enum": [
+          "personal",
+          "project"
+        ],
+        "title": "AnnotationAudienceFilter",
+        "type": "string"
+      },
+      "AnnotationColor": {
+        "enum": [
+          "yellow",
+          "red",
+          "green",
+          "blue",
+          "purple",
+          "magenta",
+          "orange",
+          "gray"
+        ],
+        "title": "AnnotationColor",
+        "type": "string"
+      },
       "AnnotationCommentResponse": {
         "properties": {
           "can_delete": {
@@ -369,6 +391,353 @@
           "can_delete"
         ],
         "title": "AnnotationCommentResponse",
+        "type": "object"
+      },
+      "AnnotationThreadCapabilities": {
+        "properties": {
+          "delete": {
+            "title": "Delete",
+            "type": "boolean"
+          },
+          "recolor": {
+            "title": "Recolor",
+            "type": "boolean"
+          },
+          "reopen": {
+            "title": "Reopen",
+            "type": "boolean"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "boolean"
+          },
+          "resolve": {
+            "title": "Resolve",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reply",
+          "recolor",
+          "resolve",
+          "reopen",
+          "delete"
+        ],
+        "title": "AnnotationThreadCapabilities",
+        "type": "object"
+      },
+      "AnnotationThreadContent": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/AnnotationThreadCapabilities"
+          },
+          "color": {
+            "$ref": "#/components/schemas/AnnotationColor"
+          },
+          "comment_count": {
+            "minimum": 0.0,
+            "title": "Comment Count",
+            "type": "integer"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationCommentResponse"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/AnnotationThreadMode"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "quote_text": {
+            "title": "Quote Text",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchCreatorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnnotationThreadStatus"
+          }
+        },
+        "required": [
+          "quote_text",
+          "position",
+          "color",
+          "role",
+          "mode",
+          "comment_count",
+          "last_activity_at",
+          "status",
+          "resolved_by",
+          "resolved_at",
+          "capabilities",
+          "comments"
+        ],
+        "title": "AnnotationThreadContent",
+        "type": "object"
+      },
+      "AnnotationThreadListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationThreadSummaryResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AnnotationThreadListResponse",
+        "type": "object"
+      },
+      "AnnotationThreadMode": {
+        "enum": [
+          "highlight",
+          "note",
+          "discussion"
+        ],
+        "title": "AnnotationThreadMode",
+        "type": "string"
+      },
+      "AnnotationThreadStatus": {
+        "enum": [
+          "open",
+          "resolved"
+        ],
+        "title": "AnnotationThreadStatus",
+        "type": "string"
+      },
+      "AnnotationThreadSummaryResponse": {
+        "properties": {
+          "audience": {
+            "discriminator": {
+              "mapping": {
+                "personal": "#/components/schemas/PersonalResearchAudience",
+                "project": "#/components/schemas/ProjectResearchAudience"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonalResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectResearchAudience"
+              }
+            ],
+            "title": "Audience"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/AnnotationThreadCapabilities"
+          },
+          "color": {
+            "$ref": "#/components/schemas/AnnotationColor"
+          },
+          "comment_count": {
+            "minimum": 0.0,
+            "title": "Comment Count",
+            "type": "integer"
+          },
+          "comments": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationCommentResponse"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/ResearchCreatorResponse"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/AnnotationThreadMode"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "quote_text": {
+            "title": "Quote Text",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchCreatorResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnnotationThreadStatus"
+          },
+          "target_document_id": {
+            "format": "uuid",
+            "title": "Target Document Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "audience",
+          "target_document_id",
+          "created_by",
+          "created_at",
+          "quote_text",
+          "position",
+          "color",
+          "role",
+          "mode",
+          "comment_count",
+          "last_activity_at",
+          "status",
+          "resolved_by",
+          "resolved_at",
+          "capabilities",
+          "comments"
+        ],
+        "title": "AnnotationThreadSummaryResponse",
+        "type": "object"
+      },
+      "AnnotationThreadTurnContext": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "annotation_thread",
+            "default": "annotation_thread",
+            "title": "Kind",
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "AnnotationThreadTurnContext",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -457,6 +826,28 @@
           "retryable"
         ],
         "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "ArxivPaperSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "arxiv",
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "ArxivPaperSource",
         "type": "object"
       },
       "AudioOverviewContent": {
@@ -1180,17 +1571,140 @@
         "title": "ConnectorUpdateRequest",
         "type": "object"
       },
-      "ConversationAutoTitleResponse": {
+      "ConversationActivity": {
+        "additionalProperties": false,
+        "description": "One sanitized, user-inspectable tool lifecycle entry.",
         "properties": {
-          "title": {
-            "title": "Title",
+          "artifact_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Count"
+          },
+          "category": {
+            "enum": [
+              "search",
+              "read",
+              "workspace_action",
+              "connector"
+            ],
+            "title": "Category",
             "type": "string"
+          },
+          "connector_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Name"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "activity",
+            "default": "activity",
+            "title": "Kind",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "source_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Count"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
           }
         },
         "required": [
-          "title"
+          "id",
+          "sequence",
+          "category",
+          "state"
         ],
-        "title": "ConversationAutoTitleResponse",
+        "title": "ConversationActivity",
+        "type": "object"
+      },
+      "ConversationAssistantItem": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "progress",
+              "final"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "phase",
+          "content"
+        ],
+        "title": "ConversationAssistantItem",
         "type": "object"
       },
       "ConversationCapabilitiesResponse": {
@@ -1241,6 +1755,33 @@
         "title": "ConversationCapabilitiesResponse",
         "type": "object"
       },
+      "ConversationCitationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "annotation_count": {
+            "minimum": 0.0,
+            "title": "Annotation Count",
+            "type": "integer"
+          },
+          "rejected_source_count": {
+            "minimum": 0.0,
+            "title": "Rejected Source Count",
+            "type": "integer"
+          },
+          "source_count": {
+            "minimum": 0.0,
+            "title": "Source Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_count",
+          "annotation_count",
+          "rejected_source_count"
+        ],
+        "title": "ConversationCitationSummary",
+        "type": "object"
+      },
       "ConversationCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1285,11 +1826,17 @@
             "$ref": "#/components/schemas/ConversationScopeType"
           },
           "title": {
-            "default": "New conversation",
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           },
           "tool_permissions": {
             "anyOf": [
@@ -1482,90 +2029,6 @@
         "title": "ConversationListResponse",
         "type": "object"
       },
-      "ConversationMessageRequest": {
-        "additionalProperties": false,
-        "description": "One stable message contract for every conversation scope.",
-        "properties": {
-          "mentioned_highlight_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "maxItems": 50,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mentioned Highlight Ids"
-          },
-          "reasoning_level": {
-            "$ref": "#/components/schemas/ReasoningLevel",
-            "default": "standard"
-          },
-          "turn_id": {
-            "format": "uuid",
-            "title": "Turn Id",
-            "type": "string"
-          },
-          "user_query": {
-            "maxLength": 20000,
-            "minLength": 1,
-            "title": "User Query",
-            "type": "string"
-          },
-          "user_references": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "maxItems": 50,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User References"
-          }
-        },
-        "required": [
-          "turn_id",
-          "user_query"
-        ],
-        "title": "ConversationMessageRequest",
-        "type": "object"
-      },
-      "ConversationMessagesResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/app__modules__conversations__application__contracts__conversations__MessageResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "title": "ConversationMessagesResponse",
-        "type": "object"
-      },
       "ConversationMoveRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1596,6 +2059,152 @@
         "title": "ConversationMoveRequest",
         "type": "object"
       },
+      "ConversationProgressEntry": {
+        "additionalProperties": false,
+        "description": "One safe, user-visible progress statement emitted before tool work.",
+        "properties": {
+          "content": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Kind",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "content"
+        ],
+        "title": "ConversationProgressEntry",
+        "type": "object"
+      },
+      "ConversationResponseCreateRequest": {
+        "additionalProperties": false,
+        "description": "Generate another response variant for the latest conversation turn.",
+        "properties": {
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id"
+        ],
+        "title": "ConversationResponseCreateRequest",
+        "type": "object"
+      },
+      "ConversationResponseSelectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id"
+        ],
+        "title": "ConversationResponseSelectionRequest",
+        "type": "object"
+      },
+      "ConversationResponseVariantResponse": {
+        "properties": {
+          "artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CitationSnapshot"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifacts"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "references": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceBundle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationTrace"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variant_index": {
+            "title": "Variant Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "variant_index",
+          "status",
+          "content",
+          "references",
+          "artifacts",
+          "trace"
+        ],
+        "title": "ConversationResponseVariantResponse",
+        "type": "object"
+      },
       "ConversationScopeType": {
         "enum": [
           "global",
@@ -1604,6 +2213,353 @@
         ],
         "title": "ConversationScopeType",
         "type": "string"
+      },
+      "ConversationStreamActivityEvent": {
+        "properties": {
+          "activity": {
+            "$ref": "#/components/schemas/ConversationActivity"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "activity",
+            "default": "activity",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "activity"
+        ],
+        "title": "ConversationStreamActivityEvent",
+        "type": "object"
+      },
+      "ConversationStreamAssistantItemCompleteEvent": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ConversationAssistantItem"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "assistant_item_complete",
+            "default": "assistant_item_complete",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "item"
+        ],
+        "title": "ConversationStreamAssistantItemCompleteEvent",
+        "type": "object"
+      },
+      "ConversationStreamAssistantItemDeltaEvent": {
+        "properties": {
+          "delta": {
+            "title": "Delta",
+            "type": "string"
+          },
+          "item_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "assistant_item_delta",
+            "default": "assistant_item_delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "item_id",
+          "delta"
+        ],
+        "title": "ConversationStreamAssistantItemDeltaEvent",
+        "type": "object"
+      },
+      "ConversationStreamAssistantItemStartEvent": {
+        "properties": {
+          "item_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "assistant_item_start",
+            "default": "assistant_item_start",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "item_id",
+          "sequence"
+        ],
+        "title": "ConversationStreamAssistantItemStartEvent",
+        "type": "object"
+      },
+      "ConversationStreamCompleteEvent": {
+        "properties": {
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "complete",
+            "default": "complete",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "response_id"
+        ],
+        "title": "ConversationStreamCompleteEvent",
+        "type": "object"
+      },
+      "ConversationStreamErrorEvent": {
+        "properties": {
+          "error": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Error",
+            "type": "object"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "error",
+            "default": "error",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "error"
+        ],
+        "title": "ConversationStreamErrorEvent",
+        "type": "object"
+      },
+      "ConversationStreamEventSchema": {
+        "description": "Public schema for the JSON payload carried by each SSE event.",
+        "discriminator": {
+          "mapping": {
+            "activity": "#/components/schemas/ConversationStreamActivityEvent",
+            "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
+            "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
+            "complete": "#/components/schemas/ConversationStreamCompleteEvent",
+            "error": "#/components/schemas/ConversationStreamErrorEvent",
+            "references": "#/components/schemas/ConversationStreamReferencesEvent",
+            "response_ready": "#/components/schemas/ConversationStreamResponseReadyEvent",
+            "start": "#/components/schemas/ConversationStreamStartEvent",
+            "suggestions": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ConversationStreamStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamActivityEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamReferencesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamResponseReadyEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
+          }
+        ],
+        "title": "ConversationStreamEventSchema"
+      },
+      "ConversationStreamReferencesEvent": {
+        "properties": {
+          "references": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "References",
+            "type": "object"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "references",
+            "default": "references",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "references"
+        ],
+        "title": "ConversationStreamReferencesEvent",
+        "type": "object"
+      },
+      "ConversationStreamResponseReadyEvent": {
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/ConversationTurnResponse"
+          },
+          "type": {
+            "const": "response_ready",
+            "default": "response_ready",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn"
+        ],
+        "title": "ConversationStreamResponseReadyEvent",
+        "type": "object"
+      },
+      "ConversationStreamStartEvent": {
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "generation_kind": {
+            "enum": [
+              "initial",
+              "retry"
+            ],
+            "title": "Generation Kind",
+            "type": "string"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "start",
+            "default": "start",
+            "title": "Type",
+            "type": "string"
+          },
+          "variant_index": {
+            "minimum": 1.0,
+            "title": "Variant Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "turn_id",
+          "response_id",
+          "variant_index",
+          "generation_kind"
+        ],
+        "title": "ConversationStreamStartEvent",
+        "type": "object"
+      },
+      "ConversationStreamSuggestionsEvent": {
+        "properties": {
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "suggestions",
+            "default": "suggestions",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "response_id",
+          "suggestions"
+        ],
+        "title": "ConversationStreamSuggestionsEvent",
+        "type": "object"
       },
       "ConversationSummaryResponse": {
         "properties": {
@@ -1753,6 +2709,261 @@
         "title": "ConversationToolPermissionsResponse",
         "type": "object"
       },
+      "ConversationTrace": {
+        "additionalProperties": false,
+        "properties": {
+          "citation_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationCitationSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entries": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "activity": "#/components/schemas/ConversationActivity",
+                  "progress": "#/components/schemas/ConversationProgressEntry"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ConversationProgressEntry"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationActivity"
+                }
+              ]
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "title": "ConversationTrace",
+        "type": "object"
+      },
+      "ConversationTurnCreateRequest": {
+        "additionalProperties": false,
+        "description": "Create one user turn and its initial generated response.",
+        "properties": {
+          "contexts": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "annotation_thread": "#/components/schemas/AnnotationThreadTurnContext",
+                  "paper_selection": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                {
+                  "$ref": "#/components/schemas/AnnotationThreadTurnContext"
+                }
+              ]
+            },
+            "maxItems": 50,
+            "title": "Contexts",
+            "type": "array"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "zh-CN"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "reasoning_level": {
+            "$ref": "#/components/schemas/ReasoningLevel",
+            "default": "standard"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "time_zone": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "user_query": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "User Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "response_id",
+          "user_query",
+          "locale",
+          "time_zone"
+        ],
+        "title": "ConversationTurnCreateRequest",
+        "type": "object"
+      },
+      "ConversationTurnResponse": {
+        "properties": {
+          "contexts": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "annotation_thread": "#/components/schemas/AnnotationThreadTurnContext",
+                  "paper_selection": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PaperSelectionTurnContext"
+                },
+                {
+                  "$ref": "#/components/schemas/AnnotationThreadTurnContext"
+                }
+              ]
+            },
+            "title": "Contexts",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "zh-CN"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "reasoning_level": {
+            "title": "Reasoning Level",
+            "type": "string"
+          },
+          "responses": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationResponseVariantResponse"
+            },
+            "title": "Responses",
+            "type": "array"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "selected_response_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Response Id"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "suggestions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestions"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "user_query": {
+            "title": "User Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_query",
+          "contexts",
+          "scope",
+          "reasoning_level",
+          "locale",
+          "time_zone",
+          "sequence",
+          "selected_response_id",
+          "suggestions",
+          "responses"
+        ],
+        "title": "ConversationTurnResponse",
+        "type": "object"
+      },
+      "ConversationTurnsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationTurnResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ConversationTurnsResponse",
+        "type": "object"
+      },
       "ConversationUpdateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1809,6 +3020,76 @@
           "content"
         ],
         "title": "CreateAnnotationCommentRequest",
+        "type": "object"
+      },
+      "CreateAnnotationThreadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "discriminator": {
+              "mapping": {
+                "personal": "#/components/schemas/PersonalResearchAudience",
+                "project": "#/components/schemas/ProjectResearchAudience"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonalResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectResearchAudience"
+              }
+            ],
+            "title": "Audience"
+          },
+          "color": {
+            "$ref": "#/components/schemas/AnnotationColor",
+            "default": "yellow"
+          },
+          "initial_comment": {
+            "anyOf": [
+              {
+                "maxLength": 100000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Comment"
+          },
+          "position": {
+            "discriminator": {
+              "mapping": {
+                "parsed_text": "#/components/schemas/ParsedTextPosition",
+                "pdf_text": "#/components/schemas/PdfTextPosition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PdfTextPosition"
+              },
+              {
+                "$ref": "#/components/schemas/ParsedTextPosition"
+              }
+            ],
+            "title": "Position"
+          },
+          "quote_text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Quote Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quote_text",
+          "position"
+        ],
+        "title": "CreateAnnotationThreadRequest",
         "type": "object"
       },
       "CreateAudioOverviewRequest": {
@@ -1869,84 +3150,6 @@
           "columns"
         ],
         "title": "CreateDataTableRequest",
-        "type": "object"
-      },
-      "CreateHighlightThreadRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "color": {
-            "default": "blue",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Color",
-            "type": "string"
-          },
-          "end_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
-          "page_number": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
-          "position": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Input"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Position"
-          },
-          "quote_text": {
-            "maxLength": 100000,
-            "minLength": 1,
-            "title": "Quote Text",
-            "type": "string"
-          },
-          "shared": {
-            "default": true,
-            "title": "Shared",
-            "type": "boolean"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
-          }
-        },
-        "required": [
-          "quote_text"
-        ],
-        "title": "CreateHighlightThreadRequest",
         "type": "object"
       },
       "CreateJobResponse": {
@@ -2060,7 +3263,7 @@
           "citations": {
             "items": {
               "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue-Output"
+                "$ref": "#/components/schemas/JsonValue"
               },
               "type": "object"
             },
@@ -2084,7 +3287,7 @@
           "rows": {
             "items": {
               "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue-Output"
+                "$ref": "#/components/schemas/JsonValue"
               },
               "type": "object"
             },
@@ -2182,7 +3385,7 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
+                  "$ref": "#/components/schemas/JsonValue"
                 },
                 "type": "object"
               },
@@ -2405,6 +3608,181 @@
         ],
         "title": "DocumentProcessingStatus",
         "type": "string"
+      },
+      "DocumentReflowBlockResponse": {
+        "properties": {
+          "heading_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading Level"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "title",
+              "authors",
+              "heading",
+              "paragraph",
+              "list",
+              "quote",
+              "equation",
+              "table",
+              "figure",
+              "code",
+              "references"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Number"
+          },
+          "source_markdown": {
+            "title": "Source Markdown",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "index",
+          "kind",
+          "source_markdown",
+          "heading_level",
+          "page_number"
+        ],
+        "title": "DocumentReflowBlockResponse",
+        "type": "object"
+      },
+      "DocumentReflowResponse": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentReflowBlockResponse"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "profile_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Revision"
+          },
+          "prompt_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_id",
+          "status",
+          "job_id",
+          "error_code",
+          "prompt_revision",
+          "profile_revision",
+          "warnings",
+          "blocks",
+          "updated_at"
+        ],
+        "title": "DocumentReflowResponse",
+        "type": "object"
+      },
+      "DocumentResearchAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "document",
+            "default": "document",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "DocumentResearchAudience",
+        "type": "object"
       },
       "DocumentResponse": {
         "properties": {
@@ -2635,6 +4013,28 @@
         "title": "DocumentResponse",
         "type": "object"
       },
+      "DoiPaperSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "doi",
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "DoiPaperSource",
+        "type": "object"
+      },
       "ExternalAnswerSource": {
         "additionalProperties": false,
         "properties": {
@@ -2724,88 +4124,6 @@
           }
         },
         "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "HighlightThreadContent": {
-        "properties": {
-          "color": {
-            "title": "Color",
-            "type": "string"
-          },
-          "comments": {
-            "items": {
-              "$ref": "#/components/schemas/AnnotationCommentResponse"
-            },
-            "title": "Comments",
-            "type": "array"
-          },
-          "end_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
-          "page_number": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
-          "position": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Position"
-          },
-          "quote_text": {
-            "title": "Quote Text",
-            "type": "string"
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
-          }
-        },
-        "required": [
-          "quote_text",
-          "page_number",
-          "start_offset",
-          "end_offset",
-          "position",
-          "color",
-          "role",
-          "comments"
-        ],
-        "title": "HighlightThreadContent",
         "type": "object"
       },
       "Institution": {
@@ -2957,6 +4275,7 @@
         "enum": [
           "pdf_process",
           "pdf_postprocess",
+          "document_reflow",
           "audio_generate",
           "data_table_generate",
           "zotero_import",
@@ -3018,7 +4337,7 @@
             "title": "Operation",
             "type": "string"
           },
-          "progress_message": {
+          "progress_code": {
             "anyOf": [
               {
                 "type": "string"
@@ -3027,7 +4346,7 @@
                 "type": "null"
               }
             ],
-            "title": "Progress Message"
+            "title": "Progress Code"
           },
           "project_id": {
             "anyOf": [
@@ -3045,7 +4364,7 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
+                  "$ref": "#/components/schemas/JsonValue"
                 },
                 "type": "object"
               },
@@ -3078,7 +4397,7 @@
           "document_id",
           "project_id",
           "status",
-          "progress_message",
+          "progress_code",
           "error_code",
           "result",
           "created_at",
@@ -3107,39 +4426,20 @@
           }
         ]
       },
-      "JsonValue-Input": {
+      "JsonValue": {
         "anyOf": [
           {
             "$ref": "#/components/schemas/JsonScalar"
           },
           {
             "items": {
-              "$ref": "#/components/schemas/JsonValue-Input"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "type": "array"
           },
           {
             "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue-Input"
-            },
-            "type": "object"
-          }
-        ]
-      },
-      "JsonValue-Output": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/JsonScalar"
-          },
-          {
-            "items": {
-              "$ref": "#/components/schemas/JsonValue-Output"
-            },
-            "type": "array"
-          },
-          {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue-Output"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "type": "object"
           }
@@ -3174,6 +4474,111 @@
         "title": "Keyword",
         "type": "object"
       },
+      "LibraryOutputListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryOutputResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "LibraryOutputListResponse",
+        "type": "object"
+      },
+      "LibraryOutputResponse": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ResearchItemResponse"
+          },
+          "source": {
+            "$ref": "#/components/schemas/LibraryOutputSourceResponse"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "title",
+          "source"
+        ],
+        "title": "LibraryOutputResponse",
+        "type": "object"
+      },
+      "LibraryOutputSort": {
+        "enum": [
+          "updated_desc",
+          "updated_asc",
+          "title_asc",
+          "title_desc"
+        ],
+        "title": "LibraryOutputSort",
+        "type": "string"
+      },
+      "LibraryOutputSourceResponse": {
+        "properties": {
+          "audience_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audience Id"
+          },
+          "audience_type": {
+            "$ref": "#/components/schemas/ResearchAudienceType"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience_type",
+          "audience_id",
+          "title"
+        ],
+        "title": "LibraryOutputSourceResponse",
+        "type": "object"
+      },
       "LibraryPaperCollection": {
         "additionalProperties": false,
         "description": "All documents readable through personal or Project-based access.",
@@ -3202,11 +4607,220 @@
         "title": "LibraryPaperContext",
         "type": "object"
       },
+      "LibraryPaperIngestionResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "source_kind": {
+            "enum": [
+              "upload",
+              "doi",
+              "arxiv",
+              "url"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "queued",
+              "downloading",
+              "parsing",
+              "extracting_metadata",
+              "indexing",
+              "finalizing"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "processing",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "source_kind",
+          "state",
+          "stage",
+          "project_id",
+          "document_id",
+          "error_code",
+          "created_at"
+        ],
+        "title": "LibraryPaperIngestionResponse",
+        "type": "object"
+      },
+      "LibraryPaperListIngestionEntry": {
+        "properties": {
+          "entry_type": {
+            "const": "ingestion",
+            "default": "ingestion",
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "ingestion": {
+            "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
+          }
+        },
+        "required": [
+          "ingestion"
+        ],
+        "title": "LibraryPaperListIngestionEntry",
+        "type": "object"
+      },
+      "LibraryPaperListPaperEntry": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentResponse"
+          },
+          "entry_type": {
+            "const": "paper",
+            "default": "paper",
+            "title": "Entry Type",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "last_accessed_at": {
+            "format": "date-time",
+            "title": "Last Accessed At",
+            "type": "string"
+          },
+          "library_entry_id": {
+            "format": "uuid",
+            "title": "Library Entry Id",
+            "type": "string"
+          },
+          "metadata_overrides": {
+            "$ref": "#/components/schemas/DocumentMetadataOverrides"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaperStatus"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryPaperTagResponse"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "library_entry_id",
+          "user_id",
+          "status",
+          "last_accessed_at",
+          "metadata_overrides",
+          "is_public",
+          "preview_url",
+          "tags",
+          "document",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LibraryPaperListPaperEntry",
+        "type": "object"
+      },
       "LibraryPaperListResponse": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/LibraryPaperResponse"
+              "discriminator": {
+                "mapping": {
+                  "ingestion": "#/components/schemas/LibraryPaperListIngestionEntry",
+                  "paper": "#/components/schemas/LibraryPaperListPaperEntry"
+                },
+                "propertyName": "entry_type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/LibraryPaperListPaperEntry"
+                },
+                {
+                  "$ref": "#/components/schemas/LibraryPaperListIngestionEntry"
+                }
+              ]
             },
             "title": "Items",
             "type": "array"
@@ -3221,12 +4835,66 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
-          "items"
+          "items",
+          "total_count"
         ],
         "title": "LibraryPaperListResponse",
+        "type": "object"
+      },
+      "LibraryPaperRemovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 120,
+            "minItems": 1,
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_ids"
+        ],
+        "title": "LibraryPaperRemovalRequest",
+        "type": "object"
+      },
+      "LibraryPaperRemovalResponse": {
+        "properties": {
+          "removed_document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Removed Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "removed_document_ids"
+        ],
+        "title": "LibraryPaperRemovalResponse",
         "type": "object"
       },
       "LibraryPaperResponse": {
@@ -3321,6 +4989,17 @@
         "title": "LibraryPaperShareResponse",
         "type": "object"
       },
+      "LibraryPaperSort": {
+        "enum": [
+          "added_desc",
+          "added_asc",
+          "published_desc",
+          "published_asc",
+          "title_asc"
+        ],
+        "title": "LibraryPaperSort",
+        "type": "string"
+      },
       "LibraryPaperTagResponse": {
         "properties": {
           "color": {
@@ -3379,6 +5058,26 @@
         "title": "LibraryPaperUpdateRequest",
         "type": "object"
       },
+      "LibrarySummaryResponse": {
+        "properties": {
+          "output_count": {
+            "minimum": 0.0,
+            "title": "Output Count",
+            "type": "integer"
+          },
+          "paper_count": {
+            "minimum": 0.0,
+            "title": "Paper Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "paper_count",
+          "output_count"
+        ],
+        "title": "LibrarySummaryResponse",
+        "type": "object"
+      },
       "LibraryTagAssignmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3398,7 +5097,6 @@
               "type": "string"
             },
             "maxItems": 120,
-            "minItems": 1,
             "title": "Tag Ids",
             "type": "array"
           }
@@ -3412,13 +5110,13 @@
       },
       "LibraryTagAssignmentResponse": {
         "properties": {
-          "assigned_count": {
-            "title": "Assigned Count",
+          "updated_paper_count": {
+            "title": "Updated Paper Count",
             "type": "integer"
           }
         },
         "required": [
-          "assigned_count"
+          "updated_paper_count"
         ],
         "title": "LibraryTagAssignmentResponse",
         "type": "object"
@@ -3478,6 +5176,22 @@
         "title": "LibraryTagListResponse",
         "type": "object"
       },
+      "LibraryTagRenameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "LibraryTagRenameRequest",
+        "type": "object"
+      },
       "LibraryTagResponse": {
         "properties": {
           "color": {
@@ -3526,6 +5240,19 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "MessageResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse",
         "type": "object"
       },
       "OAStatus": {
@@ -4214,6 +5941,44 @@
         "title": "PaperSearchStats",
         "type": "object"
       },
+      "PaperSelectionTurnContext": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/PdfTextPosition"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "paper_selection",
+            "default": "paper_selection",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "selected_text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Selected Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "page_number",
+          "selected_text",
+          "anchor"
+        ],
+        "title": "PaperSelectionTurnContext",
+        "type": "object"
+      },
       "PaperStatus": {
         "enum": [
           "todo",
@@ -4222,6 +5987,127 @@
         ],
         "title": "PaperStatus",
         "type": "string"
+      },
+      "ParsedTextPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "end_offset": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "parsed_text",
+            "default": "parsed_text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Number"
+          },
+          "start_offset": {
+            "minimum": 0.0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_offset",
+          "end_offset"
+        ],
+        "title": "ParsedTextPosition",
+        "type": "object"
+      },
+      "PdfTextPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "pdf_text",
+            "default": "pdf_text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "rects": {
+            "items": {
+              "$ref": "#/components/schemas/PdfTextRect"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Rects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page_number",
+          "rects"
+        ],
+        "title": "PdfTextPosition",
+        "type": "object"
+      },
+      "PdfTextRect": {
+        "additionalProperties": false,
+        "description": "A PDF text rectangle normalized to the page's 0\u20131 coordinate space.",
+        "properties": {
+          "height": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "PdfTextRect",
+        "type": "object"
+      },
+      "PersonalResearchAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "personal",
+            "default": "personal",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "PersonalResearchAudience",
+        "type": "object"
       },
       "PortalSessionResponse": {
         "properties": {
@@ -4664,6 +6550,23 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -4687,6 +6590,50 @@
           "permissions"
         ],
         "title": "ProjectMembershipResponse",
+        "type": "object"
+      },
+      "ProjectOutputListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryOutputResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProjectOutputListResponse",
         "type": "object"
       },
       "ProjectOwnerResponse": {
@@ -4759,6 +6706,23 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -4766,6 +6730,15 @@
         ],
         "title": "ProjectPaperListResponse",
         "type": "object"
+      },
+      "ProjectPaperSort": {
+        "enum": [
+          "added_desc",
+          "title_asc",
+          "published_desc"
+        ],
+        "title": "ProjectPaperSort",
+        "type": "string"
       },
       "ProjectPaperSummaryResponse": {
         "properties": {
@@ -4780,6 +6753,11 @@
             ],
             "title": "Abstract"
           },
+          "added_at": {
+            "format": "date-time",
+            "title": "Added At",
+            "type": "string"
+          },
           "authors": {
             "anyOf": [
               {
@@ -4793,11 +6771,6 @@
               }
             ],
             "title": "Authors"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
           },
           "document_id": {
             "format": "uuid",
@@ -4897,7 +6870,7 @@
         "required": [
           "document_id",
           "title",
-          "created_at",
+          "added_at",
           "abstract",
           "authors",
           "institutions",
@@ -5029,8 +7002,34 @@
         "title": "ProjectPermissionSet",
         "type": "object"
       },
+      "ProjectResearchAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "project",
+            "default": "project",
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "ProjectResearchAudience",
+        "type": "object"
+      },
       "ProjectResponse": {
         "properties": {
+          "activity_at": {
+            "format": "date-time",
+            "title": "Activity At",
+            "type": "string"
+          },
           "capabilities": {
             "$ref": "#/components/schemas/ProjectCapabilitiesResponse"
           },
@@ -5058,11 +7057,6 @@
           "membership": {
             "$ref": "#/components/schemas/ProjectMembershipResponse"
           },
-          "num_audio_overviews": {
-            "default": 0,
-            "title": "Num Audio Overviews",
-            "type": "integer"
-          },
           "num_collaborators": {
             "default": 0,
             "title": "Num Collaborators",
@@ -5073,9 +7067,9 @@
             "title": "Num Conversations",
             "type": "integer"
           },
-          "num_data_tables": {
+          "num_outputs": {
             "default": 0,
-            "title": "Num Data Tables",
+            "title": "Num Outputs",
             "type": "integer"
           },
           "num_papers": {
@@ -5103,11 +7097,21 @@
           "owner",
           "membership",
           "capabilities",
+          "activity_at",
           "created_at",
           "updated_at"
         ],
         "title": "ProjectResponse",
         "type": "object"
+      },
+      "ProjectSort": {
+        "enum": [
+          "activity_desc",
+          "title_asc",
+          "papers_desc"
+        ],
+        "title": "ProjectSort",
+        "type": "string"
       },
       "ProjectTransferRequest": {
         "additionalProperties": false,
@@ -5272,6 +7276,15 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ResearchAudienceType": {
+        "enum": [
+          "personal",
+          "document",
+          "project"
+        ],
+        "title": "ResearchAudienceType",
+        "type": "string"
+      },
       "ResearchCreatorResponse": {
         "properties": {
           "display_name": {
@@ -5313,14 +7326,9 @@
           "edit": {
             "title": "Edit",
             "type": "boolean"
-          },
-          "share": {
-            "title": "Share",
-            "type": "boolean"
           }
         },
         "required": [
-          "share",
           "edit",
           "delete"
         ],
@@ -5329,7 +7337,7 @@
       },
       "ResearchItemKind": {
         "enum": [
-          "highlight_thread",
+          "annotation_thread",
           "citation",
           "audio_overview",
           "data_table"
@@ -5366,6 +7374,38 @@
       },
       "ResearchItemResponse": {
         "properties": {
+          "annotation_thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnotationThreadContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audience": {
+            "discriminator": {
+              "mapping": {
+                "document": "#/components/schemas/DocumentResearchAudience",
+                "personal": "#/components/schemas/PersonalResearchAudience",
+                "project": "#/components/schemas/ProjectResearchAudience"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PersonalResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/DocumentResearchAudience"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectResearchAudience"
+              }
+            ],
+            "title": "Audience"
+          },
           "audio_overview": {
             "anyOf": [
               {
@@ -5407,29 +7447,15 @@
               }
             ]
           },
-          "highlight_thread": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HighlightThreadContent"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
           },
-          "is_shared": {
-            "title": "Is Shared",
-            "type": "boolean"
-          },
           "kind": {
             "$ref": "#/components/schemas/ResearchItemKind"
           },
-          "scope_id": {
+          "target_document_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -5439,10 +7465,7 @@
                 "type": "null"
               }
             ],
-            "title": "Scope Id"
-          },
-          "scope_type": {
-            "$ref": "#/components/schemas/ResearchScopeType"
+            "title": "Target Document Id"
           },
           "updated_at": {
             "format": "date-time",
@@ -5453,9 +7476,8 @@
         "required": [
           "id",
           "kind",
-          "scope_type",
-          "scope_id",
-          "is_shared",
+          "audience",
+          "target_document_id",
           "created_by",
           "created_at",
           "updated_at",
@@ -5463,15 +7485,6 @@
         ],
         "title": "ResearchItemResponse",
         "type": "object"
-      },
-      "ResearchScopeType": {
-        "enum": [
-          "personal",
-          "document",
-          "project"
-        ],
-        "title": "ResearchScopeType",
-        "type": "string"
       },
       "ResearchSearchComment": {
         "properties": {
@@ -5592,17 +7605,6 @@
             ],
             "title": "Document Title"
           },
-          "end_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End Offset"
-          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -5615,16 +7617,30 @@
             "title": "Matching Comments",
             "type": "array"
           },
-          "page_number": {
+          "position": {
             "anyOf": [
               {
-                "type": "integer"
+                "discriminator": {
+                  "mapping": {
+                    "parsed_text": "#/components/schemas/ParsedTextPosition",
+                    "pdf_text": "#/components/schemas/PdfTextPosition"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PdfTextPosition"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ParsedTextPosition"
+                  }
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Page Number"
+            "title": "Position"
           },
           "quote_text": {
             "title": "Quote Text",
@@ -5633,17 +7649,6 @@
           "role": {
             "title": "Role",
             "type": "string"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
           }
         },
         "required": [
@@ -5651,28 +7656,12 @@
           "document_id",
           "document_title",
           "quote_text",
-          "page_number",
-          "start_offset",
-          "end_offset",
+          "position",
           "role",
           "created_at",
           "matching_comments"
         ],
         "title": "ResearchSearchResult",
-        "type": "object"
-      },
-      "ResearchVisibilityRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "shared": {
-            "title": "Shared",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "shared"
-        ],
-        "title": "ResearchVisibilityRequest",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -6232,12 +8221,17 @@
             ],
             "title": "Custom Instructions"
           },
+          "source_language": {
+            "title": "Source Language",
+            "type": "string"
+          },
           "target_language": {
             "title": "Target Language",
             "type": "string"
           }
         },
         "required": [
+          "source_language",
           "target_language",
           "custom_instructions",
           "auto_translate_selection"
@@ -6264,6 +8258,11 @@
             "maxLength": 2000,
             "title": "Custom Instructions"
           },
+          "source_language": {
+            "maxLength": 35,
+            "title": "Source Language",
+            "type": "string"
+          },
           "target_language": {
             "maxLength": 35,
             "title": "Target Language",
@@ -6271,6 +8270,7 @@
           }
         },
         "required": [
+          "source_language",
           "target_language",
           "auto_translate_selection"
         ],
@@ -6308,98 +8308,31 @@
         "title": "UpdateAnnotationCommentRequest",
         "type": "object"
       },
-      "UpdateHighlightThreadRequest": {
+      "UpdateAnnotationThreadRequest": {
         "additionalProperties": false,
         "properties": {
           "color": {
             "anyOf": [
               {
-                "maxLength": 32,
-                "minLength": 1,
-                "type": "string"
+                "$ref": "#/components/schemas/AnnotationColor"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Color"
+            ]
           },
-          "end_offset": {
+          "status": {
             "anyOf": [
               {
-                "minimum": 0.0,
-                "type": "integer"
+                "$ref": "#/components/schemas/AnnotationThreadStatus"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "End Offset"
-          },
-          "page_number": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
-          "position": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Input"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Position"
-          },
-          "quote_text": {
-            "anyOf": [
-              {
-                "maxLength": 100000,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quote Text"
-          },
-          "shared": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Shared"
-          },
-          "start_offset": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start Offset"
+            ]
           }
         },
-        "title": "UpdateHighlightThreadRequest",
+        "title": "UpdateAnnotationThreadRequest",
         "type": "object"
       },
       "UpdateProfileBody": {
@@ -6422,40 +8355,70 @@
         "title": "UpdateProfileBody",
         "type": "object"
       },
-      "UploadAcceptedResponse": {
-        "properties": {
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
-          },
-          "message": {
-            "default": "File upload started",
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "job_id"
-        ],
-        "title": "UploadAcceptedResponse",
-        "type": "object"
-      },
-      "UploadFromUrlRequest": {
+      "UploadFromSourceRequest": {
         "additionalProperties": false,
         "properties": {
-          "url": {
-            "format": "uri",
-            "maxLength": 2083,
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "arxiv": "#/components/schemas/ArxivPaperSource",
+                "doi": "#/components/schemas/DoiPaperSource",
+                "url": "#/components/schemas/UrlPaperSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DoiPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/ArxivPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/UrlPaperSource"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "UploadFromSourceRequest",
+        "type": "object"
+      },
+      "UrlPaperSource": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "url",
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2048,
             "minLength": 1,
-            "title": "Url",
+            "title": "Value",
             "type": "string"
           }
         },
         "required": [
-          "url"
+          "kind",
+          "value"
         ],
-        "title": "UploadFromUrlRequest",
+        "title": "UrlPaperSource",
         "type": "object"
       },
       "UsageResponse": {
@@ -7069,107 +9032,6 @@
         ],
         "title": "ZoteroSyncResponse",
         "type": "object"
-      },
-      "app__modules__conversations__application__contracts__conversations__MessageResponse": {
-        "properties": {
-          "artifacts": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/CitationSnapshot"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artifacts"
-          },
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "references": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReferenceBundle"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "role": {
-            "title": "Role",
-            "type": "string"
-          },
-          "scope": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/JsonValue-Output"
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scope"
-          },
-          "sequence": {
-            "title": "Sequence",
-            "type": "integer"
-          },
-          "trace": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue-Output"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trace"
-          }
-        },
-        "required": [
-          "id",
-          "role",
-          "content",
-          "references",
-          "artifacts",
-          "trace",
-          "scope",
-          "sequence"
-        ],
-        "title": "MessageResponse",
-        "type": "object"
-      },
-      "sanchezcloud_identity__models__auth__MessageResponse": {
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "message"
-        ],
-        "title": "MessageResponse",
-        "type": "object"
       }
     },
     "securitySchemes": {
@@ -7331,6 +9193,202 @@
         "summary": "Update Annotation Comment"
       }
     },
+    "/api/v1/annotation-threads/{thread_id}": {
+      "delete": {
+        "operationId": "delete_annotation_thread_api_v1_annotation_threads__thread_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Annotation Thread"
+      },
+      "get": {
+        "operationId": "get_annotation_thread_api_v1_annotation_threads__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Annotation Thread"
+      },
+      "patch": {
+        "operationId": "update_annotation_thread_api_v1_annotation_threads__thread_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAnnotationThreadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Annotation Thread"
+      }
+    },
+    "/api/v1/annotation-threads/{thread_id}/comments": {
+      "post": {
+        "operationId": "create_annotation_comment_api_v1_annotation_threads__thread_id__comments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnotationCommentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationCommentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Annotation Comment"
+      }
+    },
     "/api/v1/auth/change-password": {
       "post": {
         "operationId": "change_password_api_v1_auth_change_password_post",
@@ -7349,7 +9407,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -7425,7 +9483,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -7547,7 +9605,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -7644,7 +9702,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -7705,7 +9763,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -7766,7 +9824,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -7837,7 +9895,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/sanchezcloud_identity__models__auth__MessageResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             },
@@ -8130,6 +10188,56 @@
               "default": false,
               "title": "Archived",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ConversationScopeType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "context_document_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Document Id"
             }
           },
           {
@@ -8471,130 +10579,6 @@
         "summary": "Update Conversation Paper Context"
       }
     },
-    "/api/v1/conversations/{conversation_id}/messages": {
-      "get": {
-        "operationId": "get_conversation_messages_api_v1_conversations__conversation_id__messages_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "cursor",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Cursor"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationMessagesResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Get Conversation Messages"
-      },
-      "post": {
-        "operationId": "create_conversation_message_api_v1_conversations__conversation_id__messages_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConversationMessageRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Create Conversation Message"
-      }
-    },
     "/api/v1/conversations/{conversation_id}/scope": {
       "put": {
         "operationId": "move_conversation_api_v1_conversations__conversation_id__scope_put",
@@ -8650,51 +10634,6 @@
         "summary": "Move Conversation"
       }
     },
-    "/api/v1/conversations/{conversation_id}/title": {
-      "post": {
-        "operationId": "auto_title_conversation_api_v1_conversations__conversation_id__title_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationAutoTitleResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Auto Title Conversation"
-      }
-    },
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
       "put": {
         "operationId": "update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put",
@@ -8748,6 +10687,264 @@
           }
         ],
         "summary": "Update Conversation Tool Permissions"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns": {
+      "get": {
+        "operationId": "get_conversation_turns_api_v1_conversations__conversation_id__turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTurnsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Conversation Turns"
+      },
+      "post": {
+        "operationId": "create_conversation_turn_api_v1_conversations__conversation_id__turns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTurnCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Standard SSE stream of typed conversation events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Conversation Turn"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses": {
+      "post": {
+        "operationId": "retry_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__responses_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationResponseCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Standard SSE stream of typed conversation events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Retry Conversation Turn"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {
+      "put": {
+        "operationId": "select_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__selected_response_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationResponseSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponseVariantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Select Conversation Response"
       }
     },
     "/api/v1/discovery/authors": {
@@ -8965,169 +11162,6 @@
           }
         ],
         "summary": "Get Topics"
-      }
-    },
-    "/api/v1/highlight-threads/{thread_id}": {
-      "delete": {
-        "operationId": "delete_highlight_thread_api_v1_highlight_threads__thread_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "thread_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Thread Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "confirm_delete_replies",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Confirm Delete Replies",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeleteResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Delete Highlight Thread"
-      },
-      "patch": {
-        "operationId": "update_highlight_thread_api_v1_highlight_threads__thread_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "thread_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Thread Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateHighlightThreadRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Update Highlight Thread"
-      }
-    },
-    "/api/v1/highlight-threads/{thread_id}/comments": {
-      "post": {
-        "operationId": "create_annotation_comment_api_v1_highlight_threads__thread_id__comments_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "thread_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Thread Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAnnotationCommentRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnnotationCommentResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Create Annotation Comment"
       }
     },
     "/api/v1/integrations/zotero/connection": {
@@ -9537,9 +11571,238 @@
         "summary": "Get Job"
       }
     },
+    "/api/v1/library/outputs": {
+      "get": {
+        "operationId": "list_library_outputs_api_v1_library_outputs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchItemKind"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kinds"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LibraryOutputSort",
+              "default": "updated_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOutputListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Library Outputs"
+      }
+    },
+    "/api/v1/library/paper-removals": {
+      "post": {
+        "operationId": "remove_library_papers_api_v1_library_paper_removals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryPaperRemovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryPaperRemovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Remove Library Papers"
+      }
+    },
     "/api/v1/library/papers": {
       "get": {
         "operationId": "list_library_papers_api_v1_library_papers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag_ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Ids"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LibraryPaperSort",
+              "default": "added_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9550,6 +11813,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -9816,44 +12089,19 @@
         "summary": "Share Library Paper"
       }
     },
-    "/api/v1/library/papers/{document_id}/tags/{tag_id}": {
-      "delete": {
-        "operationId": "remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "tag_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Tag Id",
-              "type": "string"
-            }
-          }
-        ],
+    "/api/v1/library/summary": {
+      "get": {
+        "operationId": "get_library_summary_api_v1_library_summary_get",
         "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LibrarySummaryResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Successful Response"
           }
         },
         "security": [
@@ -9861,7 +12109,7 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Remove Library Tag Assignment"
+        "summary": "Get Library Summary"
       }
     },
     "/api/v1/library/tags": {
@@ -9929,8 +12177,8 @@
       }
     },
     "/api/v1/library/tags/assignments": {
-      "post": {
-        "operationId": "assign_library_tags_api_v1_library_tags_assignments_post",
+      "put": {
+        "operationId": "replace_library_tag_assignments_api_v1_library_tags_assignments_put",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9942,7 +12190,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
@@ -9968,7 +12216,98 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Assign Library Tags"
+        "summary": "Replace Library Tag Assignments"
+      }
+    },
+    "/api/v1/library/tags/{tag_id}": {
+      "delete": {
+        "operationId": "delete_library_tag_api_v1_library_tags__tag_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Library Tag"
+      },
+      "patch": {
+        "operationId": "rename_library_tag_api_v1_library_tags__tag_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tag Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryTagRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryTagResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Rename Library Tag"
       }
     },
     "/api/v1/me": {
@@ -10624,6 +12963,69 @@
         ]
       }
     },
+    "/api/v1/paper-ingestions/sources": {
+      "post": {
+        "operationId": "upload_pdf_from_source_api_v1_paper_ingestions_sources_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadFromSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Upload Pdf From Source"
+      }
+    },
     "/api/v1/paper-ingestions/uploads": {
       "post": {
         "operationId": "upload_pdf_api_v1_paper_ingestions_uploads_post",
@@ -10679,7 +13081,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadAcceptedResponse"
+                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
                 }
               }
             },
@@ -10704,25 +13106,56 @@
         "summary": "Upload Pdf"
       }
     },
-    "/api/v1/paper-ingestions/urls": {
-      "post": {
-        "operationId": "upload_pdf_from_url_api_v1_paper_ingestions_urls_post",
+    "/api/v1/paper-ingestions/{job_id}": {
+      "delete": {
+        "operationId": "cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete",
         "parameters": [
           {
-            "in": "query",
-            "name": "project_id",
-            "required": false,
+            "in": "path",
+            "name": "job_id",
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
-              ],
-              "title": "Project Id"
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Cancel Pdf Ingestion"
+      }
+    },
+    "/api/v1/paper-ingestions/{job_id}/retries": {
+      "post": {
+        "operationId": "retry_pdf_ingestion_api_v1_paper_ingestions__job_id__retries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
             }
           },
           {
@@ -10744,22 +13177,12 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UploadFromUrlRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadAcceptedResponse"
+                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
                 }
               }
             },
@@ -10781,7 +13204,7 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Upload Pdf From Url"
+        "summary": "Retry Pdf Ingestion"
       }
     },
     "/api/v1/papers/{document_id}": {
@@ -10844,6 +13267,162 @@
           }
         ],
         "summary": "Get Document"
+      }
+    },
+    "/api/v1/papers/{document_id}/annotation-threads": {
+      "get": {
+        "operationId": "list_annotation_threads_api_v1_papers__document_id__annotation_threads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AnnotationAudienceFilter"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Audience"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AnnotationThreadMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AnnotationThreadStatus",
+              "default": "open"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnotationThreadListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Annotation Threads"
+      },
+      "post": {
+        "operationId": "create_annotation_thread_api_v1_papers__document_id__annotation_threads_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnotationThreadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Annotation Thread"
       }
     },
     "/api/v1/papers/{document_id}/audio-overviews": {
@@ -11114,104 +13693,6 @@
         "summary": "Get Document File Url"
       }
     },
-    "/api/v1/papers/{document_id}/highlight-threads": {
-      "get": {
-        "operationId": "list_highlight_threads_api_v1_papers__document_id__highlight_threads_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "List Highlight Threads"
-      },
-      "post": {
-        "operationId": "create_highlight_thread_api_v1_papers__document_id__highlight_threads_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateHighlightThreadRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Create Highlight Thread"
-      }
-    },
     "/api/v1/papers/{document_id}/projects": {
       "get": {
         "operationId": "get_projects_from_document_id_api_v1_papers__document_id__projects_get",
@@ -11255,6 +13736,159 @@
           }
         ],
         "summary": "Get Projects From Document Id"
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow": {
+      "get": {
+        "operationId": "get_document_reflow_api_v1_papers__document_id__reflow_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Document Reflow",
+        "tags": [
+          "reflows"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
+      "post": {
+        "operationId": "stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "A cached server-sent stream for one reflow block."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Stream Reflow Block Translation",
+        "tags": [
+          "translations"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow/retries": {
+      "post": {
+        "operationId": "retry_document_reflow_api_v1_papers__document_id__reflow_retries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Retry Document Reflow",
+        "tags": [
+          "reflows"
+        ]
       }
     },
     "/api/v1/papers/{document_id}/research-items": {
@@ -11302,9 +13936,9 @@
         "summary": "List Document Research Items"
       }
     },
-    "/api/v1/papers/{document_id}/translations": {
+    "/api/v1/papers/{document_id}/selection-translations": {
       "post": {
-        "operationId": "stream_paper_translation_api_v1_papers__document_id__translations_post",
+        "operationId": "stream_paper_translation_api_v1_papers__document_id__selection_translations_post",
         "parameters": [
           {
             "in": "path",
@@ -11403,20 +14037,58 @@
         "parameters": [
           {
             "in": "query",
-            "name": "limit",
+            "name": "q",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "maximum": 100,
-                  "minimum": 1,
-                  "type": "integer"
+                  "maxLength": 240,
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Limit"
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSort",
+              "default": "activity_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],
@@ -12162,6 +14834,120 @@
         "summary": "Update Project Collaborator"
       }
     },
+    "/api/v1/projects/{project_id}/outputs": {
+      "get": {
+        "operationId": "get_project_outputs_api_v1_projects__project_id__outputs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/ResearchItemKind"
+              },
+              "title": "Kinds",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LibraryOutputSort",
+              "default": "updated_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOutputListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Project Outputs"
+      }
+    },
     "/api/v1/projects/{project_id}/papers": {
       "get": {
         "operationId": "get_project_papers_api_v1_projects__project_id__papers_get",
@@ -12184,6 +14970,62 @@
               "default": false,
               "title": "Load Urls",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectPaperSort",
+              "default": "added_desc"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],
@@ -12337,6 +15179,16 @@
               "format": "uuid",
               "title": "Document Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirm_delete_annotations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Confirm Delete Annotations",
+              "type": "boolean"
             }
           }
         ],
@@ -12561,64 +15413,11 @@
           }
         ],
         "summary": "Delete Research Item"
-      },
-      "patch": {
-        "operationId": "update_research_item_api_v1_research_items__item_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "item_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Item Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResearchVisibilityRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchItemResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Update Research Item"
       }
     },
     "/api/v1/search/papers": {
       "post": {
-        "description": "Search across papers, annotations, and highlights in the user's knowledge base.\n\nReturns a hierarchical view with matching content organized under paper metadata.\nThe search looks through:\n- Document titles, abstracts, and raw content\n- Highlight thread text\n- Annotation comment content\n\nResults are organized by paper, with matching highlights and annotations\nsub-referenced under each paper's metadata.",
+        "description": "Search across papers and annotation threads in the user's knowledge base.\n\nReturns a hierarchical view with matching content organized under paper metadata.\nThe search looks through:\n- Document titles, abstracts, and raw content\n- Annotation thread quote text\n- Annotation comment content\n\nResults are organized by paper, with matching threads and comments\nsub-referenced under each paper's metadata.",
         "operationId": "search_papers_endpoint_api_v1_search_papers_post",
         "requestBody": {
           "content": {
@@ -12662,7 +15461,7 @@
     },
     "/api/v1/search/papers/stats": {
       "get": {
-        "description": "Get statistics about the user's knowledge base for search context.\n\nReturns counts of papers, highlights, and annotations.",
+        "description": "Get statistics about the user's knowledge base for search context.\n\nReturns counts of papers, annotation threads, and comments.",
         "operationId": "get_search_stats_api_v1_search_papers_stats_get",
         "responses": {
           "200": {

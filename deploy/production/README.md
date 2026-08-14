@@ -9,6 +9,26 @@ The release contains three immutable ECR images (API, client, jobs), RabbitMQ an
 internal Docker network, and API/worker/beat processes. Only the existing Caddy gateway can reach
 the Scholens client and API over the external `sanchezcloud-edge` Docker network.
 
+## Current frontend release boundary
+
+`web/` is the canonical source for new product development, but it has **not**
+been cut over to this production package. The current Release workflow and
+deployment contract still build `client/Dockerfile`, publish it to
+`ECR_CLIENT_REPOSITORY`, and activate it through `SCHOLENS_CLIENT_IMAGE` in
+Compose. In this document, **client** therefore means the legacy `client/`
+application, not canonical `web/`.
+
+Merging canonical Web product work into `main` establishes the reviewed source
+baseline only. It does not make canonical `web/` production-ready, authorize
+running the manual Release workflow, or constitute a production deployment. No
+image, tag, or release is created by a source merge.
+
+Canonical Web cutover requires a separate reviewed change that updates its
+Docker image, public build configuration, edge routing, health and smoke checks,
+Compose contract, source-map upload, CI image validation, activation, and
+rollback path together. Until that change lands and is verified, production
+continues to serve the legacy client.
+
 ## Database boundary
 
 - Use the shared `sanchezcloud` database. Cross-database foreign keys are not possible.

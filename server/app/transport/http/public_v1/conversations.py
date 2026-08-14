@@ -7,22 +7,24 @@ from uuid import UUID
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import (
     get_application_executor,
-    get_conversation_title_workflow,
 )
-from app.bootstrap.workflows.conversation_title import ConversationTitleWorkflow
 from app.database.product_analytics import track_event
 from app.modules.conversations.application.contracts.conversations import (
-    ConversationAutoTitleResponse,
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationListResponse,
-    ConversationMessagesResponse,
+    ConversationListRequest,
+    ConversationTurnsResponse,
     ConversationMoveRequest,
+    ConversationResponseVariantResponse,
     ConversationSummaryResponse,
     ConversationUpdateRequest,
     ConversationToolPermissionsRequest,
     ConversationToolPermissionsResponse,
     PaperContext,
+)
+from app.modules.conversations.application.contracts.turns import (
+    ConversationResponseSelectionRequest,
 )
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
 from app.shared.domain.enums import ConversationScopeType
@@ -38,6 +40,9 @@ conversation_router = APIRouter()
 @conversation_router.get("", response_model=ConversationListResponse)
 def list_conversations(
     archived: bool = False,
+    scope_type: ConversationScopeType | None = None,
+    scope_id: UUID | None = None,
+    context_document_id: UUID | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
@@ -45,12 +50,18 @@ def list_conversations(
     ),
     current_user: Actor = Depends(get_required_user),
 ) -> ConversationListResponse:
+    request = ConversationListRequest(
+        archived=archived,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        context_document_id=context_document_id,
+        cursor=cursor,
+        limit=limit,
+    )
     return executor.query(
         lambda capabilities: capabilities.conversations.list_page(
             actor=current_user,
-            archived=archived,
-            cursor=cursor,
-            limit=limit,
+            request=request,
         )
     )
 
@@ -103,10 +114,10 @@ def get_conversation(
 
 
 @conversation_router.get(
-    "/{conversation_id}/messages",
-    response_model=ConversationMessagesResponse,
+    "/{conversation_id}/turns",
+    response_model=ConversationTurnsResponse,
 )
-def get_conversation_messages(
+def get_conversation_turns(
     conversation_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
@@ -114,13 +125,38 @@ def get_conversation_messages(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
-) -> ConversationMessagesResponse:
+) -> ConversationTurnsResponse:
     return executor.query(
-        lambda capabilities: capabilities.conversations.messages(
+        lambda capabilities: capabilities.conversations.turns(
             actor=current_user,
             conversation_id=conversation_id,
             cursor=cursor,
             limit=limit,
+        )
+    )
+
+
+@conversation_router.put(
+    "/{conversation_id}/turns/{turn_id}/selected-response",
+    response_model=ConversationResponseVariantResponse,
+)
+def select_conversation_response(
+    conversation_id: UUID,
+    turn_id: UUID,
+    request: ConversationResponseSelectionRequest,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+) -> ConversationResponseVariantResponse:
+    return executor.command(
+        lambda capabilities: capabilities.conversations.select_response(
+            actor=current_user,
+            operation=operation,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=request.response_id,
         )
     )
 
@@ -214,23 +250,6 @@ def update_conversation_tool_permissions(
             conversation_id=conversation_id,
             request=request,
         )
-    )
-
-
-@conversation_router.post(
-    "/{conversation_id}/title",
-    response_model=ConversationAutoTitleResponse,
-)
-def auto_title_conversation(
-    conversation_id: UUID,
-    workflow: ConversationTitleWorkflow = Depends(get_conversation_title_workflow),
-    current_user: Actor = Depends(get_required_user),
-    operation: OperationContext = Depends(get_required_operation),
-) -> ConversationAutoTitleResponse:
-    return workflow.run(
-        actor=current_user,
-        operation=operation,
-        conversation_id=conversation_id,
     )
 
 

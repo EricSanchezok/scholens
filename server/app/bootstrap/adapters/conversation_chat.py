@@ -1,24 +1,56 @@
-import json
+"""Public Conversation streaming adapter for the single Scholens agent."""
+
+from __future__ import annotations
+
+import asyncio
 import logging
+import time
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, TypedDict
+from typing import Literal, Protocol
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.database.product_analytics import track_event
-from app.shared.domain import AppError, FailureKind, JsonValue
 from app.helpers.ai_limits import (
     AILimitExceeded,
     acquire_concurrency,
+    ai_limit_app_error,
     enforce_rate_limit,
     release_concurrency,
 )
-from app.llm.conversation_operations import conversation_operations
-from app.llm.conversation_agent import ConversationAgentRuntime
+from app.llm.conversation_agent import (
+    ConversationAgentResult,
+    ScholensConversationAgent,
+)
+from app.llm.conversation_titles import (
+    initial_conversation_title_generator,
+)
+from app.llm.follow_up_suggestions import SuggestionSeed
 from app.llm.token_credits import llm_usage_context
-from app.modules.conversations.application.contracts.messages import (
-    ConversationMessageRequest,
-    ToolRunState,
+from app.modules.conversations.application.contracts.answer_packet import (
+    ReferenceBundle,
+)
+from app.modules.conversations.application.contracts.turns import (
+    ConversationAssistantItem,
+    ConversationTurnCreateRequest,
+    ConversationStreamAssistantItemCompleteEvent,
+    ConversationStreamAssistantItemDeltaEvent,
+    ConversationStreamAssistantItemStartEvent,
+    ConversationStreamCompleteEvent,
+    ConversationStreamReferencesEvent,
+    ConversationStreamResponseReadyEvent,
+    ConversationStreamStartEvent,
+    ConversationStreamSuggestionsEvent,
+)
+from app.modules.conversations.application.contracts.trace import ConversationTrace
+from app.modules.conversations.application.contracts.conversations import (
+    ConversationTurnResponse,
+)
+from app.modules.conversations.application.chat import ChatHistoryMessage
+from app.modules.conversations.infrastructure.chat_streaming import (
+    encode_conversation_sse,
+    stream_with_stable_error,
 )
 from app.shared.application import (
     Actor,
@@ -27,159 +59,160 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
 )
-from app.modules.conversations.infrastructure.chat_streaming import (
-    stream_with_stable_error,
-)
-from dotenv import load_dotenv
+from app.shared.domain import JsonValue
 from pydantic import TypeAdapter
 from scholens_observability import DiagnosticSnapshotRecorder
 
-load_dotenv()
-
 logger = logging.getLogger(__name__)
-
-logger.setLevel(logging.INFO)
-
-END_DELIMITER = "END_OF_STREAM"
-MAX_REASONING_TRACE_CHARS = 100_000
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _JSON_OBJECT_LIST = TypeAdapter(list[dict[str, JsonValue]])
+_SUGGESTION_TAIL_SECONDS = 2.0
 
 
-class ReferencesState(TypedDict):
-    references: dict[str, Any] | None
+class ConversationSuggestionGenerator(Protocol):
+    async def generate(self, seed: SuggestionSeed) -> list[str]: ...
 
 
-class HighlightGroup(TypedDict):
-    document_id: str
-    paper_title: str | None
-    paper_abstract: str | None
-    highlights: list[dict[str, object]]
+def _validated_suggestions(values: list[str]) -> tuple[str, str, str]:
+    normalized = [" ".join(value.split()).strip() for value in values]
+    if (
+        len(normalized) != 3
+        or any(not value or len(value) > 160 for value in normalized)
+        or len({value.casefold() for value in normalized}) != 3
+    ):
+        raise ValueError("suggestion generator must return three unique values")
+    return normalized[0], normalized[1], normalized[2]
 
 
-def _append_status(messages: list[str] | None, message: str) -> None:
-    """Append a status message, collapsing consecutive duplicates (e.g. heartbeats)."""
-    if messages is None or not message:
-        return
-    if not messages or messages[-1] != message:
-        messages.append(message)
+def _recent_selected_turns(
+    history: list[ChatHistoryMessage],
+) -> tuple[tuple[str, str], ...]:
+    pairs: list[tuple[str, str]] = []
+    for index in range(0, len(history) - 1, 2):
+        user = history[index]
+        assistant = history[index + 1]
+        if user.role == "user" and assistant.role == "assistant":
+            pairs.append((user.content, assistant.content))
+    return tuple(pairs[-3:])
 
 
-async def _stream_chat_chunks(
-    chunk_generator: AsyncGenerator[dict[str, object] | str, None],
-    content_chunks: list[str],
-    references_container: ReferencesState,
-    artifacts: list[dict[str, object]] | None = None,
-    status_messages: list[str] | None = None,
-    reasoning_chunks: list[str] | None = None,
-) -> AsyncGenerator[str, None]:
-    """Helper to stream chat chunks and handle common logic."""
-    async for chunk in chunk_generator:
-        if not isinstance(chunk, dict):
-            logger.warning(
-                "conversation.stream.invalid_chunk",
-                extra={"chunk_type": type(chunk).__name__},
-            )
-            continue
+def _latest_turn_snapshot(
+    *,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+    actor: Actor,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
+) -> ConversationTurnResponse:
+    page = executor.query(
+        lambda capabilities: capabilities.conversations.turns(
+            actor=actor,
+            conversation_id=conversation_id,
+            cursor=None,
+            limit=1,
+        )
+    )
+    if not page.items or page.items[-1].id != turn_id:
+        raise RuntimeError("persisted conversation turn snapshot is unavailable")
+    return page.items[-1]
 
-        chunk_type = chunk.get("type")
-        chunk_content = chunk.get("content", "")
 
-        if chunk_type == "artifact":
-            if artifacts is not None and isinstance(chunk_content, dict):
-                artifacts.append(chunk_content)
-            try:
-                yield f"{json.dumps({'type': 'artifact', 'content': chunk_content})}{END_DELIMITER}"
-            except (TypeError, ValueError) as json_error:
-                raise AppError(
-                    code="stream_serialization_failed",
-                    message="A response artifact could not be serialized.",
-                    kind=FailureKind.INTERNAL,
-                    retryable=False,
-                ) from json_error
-            continue
-
-        if chunk_type == "reasoning":
-            reasoning_content = (
-                chunk_content if isinstance(chunk_content, str) else str(chunk_content)
-            )
-            if reasoning_chunks is not None and reasoning_content:
-                remaining = MAX_REASONING_TRACE_CHARS - sum(
-                    len(part) for part in reasoning_chunks
+async def _generate_turn_suggestions(
+    *,
+    generator: ConversationSuggestionGenerator,
+    seed: SuggestionSeed,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+    actor: Actor,
+    conversation_id: uuid.UUID,
+) -> tuple[str, str, str] | None:
+    try:
+        suggestions = _validated_suggestions(await generator.generate(seed))
+        saved = await asyncio.to_thread(
+            executor.command,
+            lambda capabilities: (
+                capabilities.conversation_chat_data.save_turn_suggestions(
+                    actor=actor,
+                    conversation_id=conversation_id,
+                    turn_id=seed.turn_id,
+                    suggestions=suggestions,
                 )
-                if remaining > 0:
-                    reasoning_chunks.append(reasoning_content[:remaining])
-            yield f"{json.dumps({'type': 'reasoning', 'content': reasoning_content})}{END_DELIMITER}"
-            continue
+            ),
+        )
+        return suggestions if saved else None
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "conversation.suggestions.generation_failed",
+            extra={
+                "turn_id": str(seed.turn_id),
+                "error_type": type(exc).__name__,
+            },
+        )
+        return None
 
-        if chunk_type == "content":
-            text_content = (
-                chunk_content if isinstance(chunk_content, str) else str(chunk_content)
-            )
-            content_chunks.append(text_content)
-            try:
-                json_response = json.dumps({"type": "content", "content": text_content})
-                yield f"{json_response}{END_DELIMITER}"
-            except (TypeError, ValueError) as json_error:
-                logger.warning(
-                    "conversation.stream.content_repaired",
-                    extra={"error_type": type(json_error).__name__},
-                )
-                safe_content = (
-                    str(chunk_content).encode("utf-8", errors="replace").decode("utf-8")
-                )
-                json_response = json.dumps({"type": "content", "content": safe_content})
-                yield f"{json_response}{END_DELIMITER}"
 
-        elif chunk_type == "references":
-            references_container["references"] = (
-                chunk_content if isinstance(chunk_content, dict) else None
-            )
-            try:
-                json_response = json.dumps(
-                    {"type": "references", "content": chunk_content}
-                )
-                yield f"{json_response}{END_DELIMITER}"
-            except (TypeError, ValueError) as json_error:
-                raise AppError(
-                    code="stream_serialization_failed",
-                    message="Response references could not be serialized.",
-                    kind=FailureKind.INTERNAL,
-                    retryable=False,
-                ) from json_error
-        elif chunk_type == "status":
-            status_content = (
-                chunk_content if isinstance(chunk_content, str) else str(chunk_content)
-            )
-            _append_status(status_messages, status_content)
-            yield f"{json.dumps({'type': 'status', 'content': status_content})}{END_DELIMITER}"
-        elif chunk_type == "error":
-            raise AppError(
-                code="agent_runtime_failed",
-                message="The agent runtime could not complete this response.",
-                kind=FailureKind.DEPENDENCY_FAILURE,
-                retryable=True,
-            )
+async def _generate_initial_title(
+    *,
+    user_query: str,
+    conversation_id: uuid.UUID,
+) -> str | None:
+    try:
+        return await asyncio.to_thread(
+            initial_conversation_title_generator.generate,
+            [ChatHistoryMessage(role="user", content=user_query)],
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception(
+            "conversation.title_generation.failed",
+            extra={"conversation_id": str(conversation_id)},
+        )
+        return None
+
+
+async def _apply_initial_title(
+    *,
+    title: str,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+    actor: Actor,
+    conversation_id: uuid.UUID,
+    operation: OperationContext,
+    operation_factory: OperationContextFactory,
+) -> None:
+    title_operation = operation_factory.resume(
+        correlation_id=operation.trace.correlation_id,
+        causation_id=operation.trace.operation_id,
+        initiated_by=OperationInitiator.AGENT,
+        origin=operation.origin,
+        credential=operation.credential,
+    )
+    await asyncio.to_thread(
+        executor.command,
+        lambda capabilities: capabilities.conversations.apply_initial_generated_title(
+            actor=actor,
+            operation=title_operation,
+            conversation_id=conversation_id,
+            title=title,
+        ),
+    )
 
 
 async def stream_conversation_agent(
-    request: ConversationMessageRequest,
+    request: ConversationTurnCreateRequest,
     *,
     conversation_id: uuid.UUID,
     client_ip: str,
     executor: ApplicationExecutor[ApplicationCapabilities],
     current_user: Actor,
-    runtime: ConversationAgentRuntime,
+    runtime: ScholensConversationAgent,
     operation: OperationContext,
     operation_factory: OperationContextFactory,
+    suggestion_generator: ConversationSuggestionGenerator,
+    generation_kind: Literal["initial", "retry"] = "initial",
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
 ) -> AsyncGenerator[str, None]:
-    """
-    Send a chat message and stream the response from the LLM.
-
-    Search and read within the Conversation's server-bound paper context, then
-    stream one cited answer through the shared runtime.
-    """
+    """Run one contextual agent and expose its sanitized product event stream."""
     conversation_scope = executor.query(
         lambda capabilities: capabilities.conversation_chat_data.prepare(
             actor=current_user,
@@ -187,20 +220,19 @@ async def stream_conversation_agent(
         )
     )
     project_id = conversation_scope.project_id
-
     mentions = executor.query(
         lambda capabilities: capabilities.conversation_chat_data.mentions(
             actor=current_user,
             request=request,
         )
     )
-    mentioned_highlights = mentions.highlights
     context_snapshot = executor.query(
         lambda capabilities: capabilities.conversation_chat_data.context(
             actor=current_user,
             scope=conversation_scope,
         )
     )
+
     scope_snapshot: list[dict[str, JsonValue]] = []
     if conversation_scope.paper_context.kind == "library":
         scope_snapshot.append({"kind": "library", "id": "library", "title": "Library"})
@@ -221,56 +253,104 @@ async def stream_conversation_agent(
             }
             for paper in context_snapshot.papers
         )
-    if mentions.snapshot:
+    if mentions.snapshot is not None:
         scope_snapshot.extend(mentions.snapshot)
 
-    formatted_references = (
-        {
-            "annotations": [],
-            "sources": [
-                {"key": index, "kind": "user", "reference": reference}
-                for index, reference in enumerate(request.user_references, start=1)
-            ],
-        }
-        if request.user_references
-        else None
-    )
+    serialized_contexts = [
+        context.model_dump(mode="json") for context in request.contexts
+    ]
     turn_start = executor.command(
         lambda capabilities: capabilities.conversation_chat_data.start_turn(
             actor=current_user,
             operation=operation,
             conversation_id=conversation_id,
             turn_id=request.turn_id,
+            response_id=request.response_id,
+            generation_kind=generation_kind,
             user_content=request.user_query,
-            user_references=(
-                _JSON_OBJECT.validate_python(formatted_references)
-                if formatted_references is not None
-                else None
-            ),
+            contexts=_JSON_OBJECT_LIST.validate_python(serialized_contexts),
             scope=_JSON_OBJECT_LIST.validate_python(scope_snapshot),
+            reasoning_level=request.reasoning_level.value,
+            locale=request.locale,
+            time_zone=request.time_zone,
+        )
+    )
+    start_event = encode_conversation_sse(
+        ConversationStreamStartEvent(
+            conversation_id=conversation_id,
+            turn_id=request.turn_id,
+            response_id=request.response_id,
+            variant_index=turn_start.response.variant_index,
+            generation_kind=generation_kind,
         )
     )
 
-    if turn_start.assistant is not None:
-        persisted = turn_start.assistant
+    if not turn_start.response_created and turn_start.response.status == "completed":
+        persisted = turn_start.response
+        snapshot = _latest_turn_snapshot(
+            executor=executor,
+            actor=current_user,
+            conversation_id=conversation_id,
+            turn_id=request.turn_id,
+        )
 
         async def replay_response() -> AsyncGenerator[str, None]:
-            yield (
-                f"{json.dumps({'type': 'content', 'content': persisted.content})}"
-                f"{END_DELIMITER}"
+            sequence = (
+                max(
+                    (entry.sequence for entry in persisted.trace.entries),
+                    default=0,
+                )
+                + 1
+                if persisted.trace is not None
+                else 1
+            )
+            item_id = f"assistant:{request.turn_id}:{sequence}"
+            yield start_event
+            yield encode_conversation_sse(
+                ConversationStreamAssistantItemStartEvent(
+                    response_id=persisted.id,
+                    item_id=item_id,
+                    sequence=sequence,
+                )
+            )
+            yield encode_conversation_sse(
+                ConversationStreamAssistantItemDeltaEvent(
+                    response_id=persisted.id,
+                    item_id=item_id,
+                    delta=persisted.content,
+                )
+            )
+            yield encode_conversation_sse(
+                ConversationStreamAssistantItemCompleteEvent(
+                    response_id=persisted.id,
+                    item=ConversationAssistantItem(
+                        id=item_id,
+                        sequence=sequence,
+                        phase="final",
+                        content=persisted.content,
+                    ),
+                )
             )
             if persisted.references is not None:
-                yield (
-                    f"{json.dumps({'type': 'references', 'content': persisted.references})}"
-                    f"{END_DELIMITER}"
+                yield encode_conversation_sse(
+                    ConversationStreamReferencesEvent(
+                        response_id=persisted.id,
+                        references=persisted.references,
+                    )
                 )
-            if persisted.trace is not None:
-                yield (
-                    f"{json.dumps({'type': 'trace', 'content': persisted.trace})}"
-                    f"{END_DELIMITER}"
+            yield encode_conversation_sse(
+                ConversationStreamResponseReadyEvent(turn=snapshot)
+            )
+            yield encode_conversation_sse(
+                ConversationStreamCompleteEvent(
+                    turn_id=request.turn_id,
+                    response_id=persisted.id,
                 )
+            )
 
         return replay_response()
+    if not turn_start.response_created:
+        raise RuntimeError("Conversation response is already in progress")
 
     try:
         await enforce_rate_limit(
@@ -283,20 +363,61 @@ async def stream_conversation_agent(
             category="interactive",
         )
     except AILimitExceeded as exc:
-        raise AppError(
-            code=exc.code,
-            message="AI request limit exceeded",
-            kind=FailureKind.RATE_LIMITED,
+        raise ai_limit_app_error(
+            exc,
+            exceeded_message="AI request limit exceeded",
         ) from None
 
+    prior_history = executor.query(
+        lambda capabilities: capabilities.conversation_chat_data.history(
+            actor=current_user,
+            conversation_id=conversation_id,
+            exclude_turn_id=request.turn_id,
+        )
+    )
+    suggestion_task: asyncio.Task[tuple[str, str, str] | None] | None = None
+    if not turn_start.suggestions:
+        suggestion_task = asyncio.create_task(
+            _generate_turn_suggestions(
+                generator=suggestion_generator,
+                seed=SuggestionSeed(
+                    turn_id=request.turn_id,
+                    user_query=request.user_query,
+                    locale=request.locale,
+                    recent_selected_turns=_recent_selected_turns(prior_history),
+                    scope_titles=tuple(
+                        str(item["title"])
+                        for item in scope_snapshot
+                        if item.get("title")
+                    ),
+                ),
+                executor=executor,
+                actor=current_user,
+                conversation_id=conversation_id,
+            ),
+            name=f"conversation-suggestions:{request.turn_id}",
+        )
+    title_task: asyncio.Task[str | None] | None = None
+    if turn_start.turn_created and conversation_scope.title_is_default:
+        title_task = asyncio.create_task(
+            _generate_initial_title(
+                user_query=(
+                    prior_history[0].content if prior_history else request.user_query
+                ),
+                conversation_id=conversation_id,
+            ),
+            name=f"conversation-title:{conversation_id}",
+        )
+
     diagnostic_context: dict[str, object] = {
-        "stage": "tool_loop",
+        "stage": "agent",
         "conversation_id": str(conversation_id),
         "turn_id": str(request.turn_id),
         "scope": conversation_scope.scope_type.value,
         "request": {
-            "user_query": request.user_query,
             "reasoning_level": request.reasoning_level.value,
+            "locale": request.locale,
+            "time_zone": request.time_zone,
             "permissions": sorted(
                 permission.value for permission in conversation_scope.tool_permissions
             ),
@@ -304,236 +425,170 @@ async def stream_conversation_agent(
     }
 
     async def run_response_generator() -> AsyncGenerator[str, None]:
-        content_chunks: list[str] = []
-        artifacts_collected: list[dict[str, object]] = []
-        status_messages: list[str] = []
-        reasoning_chunks: list[str] = []
-        start_time = datetime.now(timezone.utc)
-        references_container: ReferencesState = {"references": None}
-        tool_state: ToolRunState | None = None
+        yield start_event
+        final_content = ""
+        artifacts: list[dict[str, JsonValue]] = []
+        references: ReferenceBundle | None = None
+        trace: ConversationTrace | None = None
+        started_at = datetime.now(timezone.utc)
 
-        async for chunk in runtime.run_tools(
-            conversation_id=conversation_id,
-            turn_id=request.turn_id,
-            client_ip=client_ip,
-            question=request.user_query,
-            current_user=current_user,
+        async for event in runtime.stream(
+            request=request,
+            actor=current_user,
             executor=executor,
             conversation_scope=conversation_scope,
+            context_snapshot=context_snapshot,
+            conversation_id=conversation_id,
+            client_ip=client_ip,
             request_operation=operation,
-            turn_correlation_id=turn_start.correlation_id,
-            user_operation_id=turn_start.user_operation_id,
+            correlation_id=turn_start.correlation_id,
+            user_operation_id=turn_start.turn_operation_id,
+            mentioned_annotations=mentions.annotation_threads,
         ):
-            # Parse the chunk as a dictionary
-            if isinstance(chunk, dict):
-                chunk_type = chunk.get("type")
-                chunk_content = chunk.get("content", "")
+            if isinstance(event, ConversationAgentResult):
+                trace = event.trace
+                artifacts = event.artifacts
+                continue
+            if isinstance(event, ConversationStreamAssistantItemCompleteEvent):
+                if event.item.phase == "final":
+                    final_content = event.item.content
+            elif isinstance(event, ConversationStreamReferencesEvent):
+                references = ReferenceBundle.model_validate(event.references)
+            yield encode_conversation_sse(event)
 
-                if chunk_type == "tool_run_completed":
-                    assert isinstance(chunk_content, ToolRunState), (
-                        "Chunk content must be a ToolRunState"
-                    )
-                    tool_state = chunk_content
-                elif chunk_type == "status":
-                    status_content = str(chunk_content)
-                    _append_status(status_messages, status_content)
-                    yield f"{json.dumps({'type': 'status', 'content': status_content})}{END_DELIMITER}"
-                else:
-                    logger.warning(
-                        "conversation.runtime.unknown_chunk",
-                        extra={"chunk_type": str(chunk_type)},
-                    )
+        if not final_content:
+            raise RuntimeError("Conversation agent completed without a final answer")
 
-        diagnostic_context["stage"] = "answer_preparation"
-        if tool_state is not None:
-            diagnostic_context["tool_trace"] = tool_state.to_trace_dict()
-
-        # Artifacts and completed actions are real outcomes. Only short-circuit
-        # when the loop and the paper anchor supplied no usable information.
-        anchor_paper = next(
-            (
-                paper
-                for paper in context_snapshot.papers
-                if paper.document_id == conversation_scope.document_id
-            ),
-            None,
+        answer_finished_at = time.perf_counter()
+        suggestion_finished_before_answer = bool(
+            suggestion_task is None
+            or (suggestion_task.done() and suggestion_task.result() is not None)
         )
-        lacks_answer_context = tool_state is None or (
-            not tool_state.has_answer_material()
-            and len(tool_state.artifacts) == 0
-            and len(tool_state.action_results) == 0
-            and (anchor_paper is None or not anchor_paper.raw_content)
-            and not mentioned_highlights
-            and not request.user_references
+
+        diagnostic_context["answer_char_count"] = len(final_content)
+        diagnostic_context["activity_count"] = (
+            sum(entry.kind == "activity" for entry in trace.entries) if trace else 0
         )
-        if lacks_answer_context:
-            no_results_message = (
-                "It looks like I couldn't find any relevant papers for your "
-                "question. Please try rephrasing your question. If you think "
-                "this is an error, please contact support."
-            )
-            content_chunks.append(no_results_message)
-            yield (
-                f"{json.dumps({'type': 'content', 'content': no_results_message})}"
-                f"{END_DELIMITER}"
-            )
-        else:
-            assert tool_state is not None
-            diagnostic_context["stage"] = "final_answer"
-            yield (
-                f"{json.dumps({'type': 'status', 'content': 'Generating response...'})}"
-                f"{END_DELIMITER}"
-            )
-
-            chat_generator = runtime.stream_answer(
-                question=request.user_query,
-                reasoning_level=request.reasoning_level,
-                user_references=request.user_references,
-                tool_state=tool_state,
-                conversation_id=str(conversation_id),
-                turn_id=request.turn_id,
-                current_user=current_user,
-                all_papers=context_snapshot.papers,
-                anchor_paper=anchor_paper,
-                context_snapshot=context_snapshot,
-                scope_type=conversation_scope.scope_type,
-                mentioned_highlights=mentioned_highlights,
-                executor=executor,
-            )
-            async for stream_chunk in _stream_chat_chunks(
-                chunk_generator=chat_generator,
-                content_chunks=content_chunks,
-                references_container=references_container,
-                artifacts=artifacts_collected,
-                status_messages=status_messages,
-                reasoning_chunks=reasoning_chunks,
-            ):
-                yield stream_chunk
-
-        references = references_container["references"]
-
-        # Save the complete message to the database
-        full_content = "".join(content_chunks)
-        diagnostic_context["answer_char_count"] = len(full_content)
-
-        assistant_trace = tool_state.to_trace_dict() if tool_state else None
-        # Fold in the live status messages (the "thinking trace") so it
-        # survives reloads, even when there were no tool calls.
-        if status_messages:
-            assistant_trace = assistant_trace or {}
-            assistant_trace["status_messages"] = status_messages
-        if reasoning_chunks:
-            assistant_trace = assistant_trace or {}
-            assistant_trace["reasoning_content"] = "".join(reasoning_chunks)
-
-        # Surface the trajectory live so the just-answered message can show
-        # it immediately (it's also persisted for reload below).
-        if assistant_trace:
-            yield f"{json.dumps({'type': 'trace', 'content': assistant_trace})}{END_DELIMITER}"
-
         answer_operation = operation_factory.resume(
             correlation_id=turn_start.correlation_id,
-            causation_id=turn_start.user_operation_id,
+            causation_id=turn_start.turn_operation_id,
             initiated_by=OperationInitiator.AGENT,
             origin=operation.origin,
             credential=operation.credential,
         )
-
-        diagnostic_context["stage"] = "persist"
         executor.command(
             lambda capabilities: capabilities.conversation_chat_data.complete_turn(
                 actor=current_user,
                 operation=answer_operation,
                 conversation_id=conversation_id,
                 turn_id=request.turn_id,
-                assistant_content=full_content,
+                response_id=request.response_id,
+                assistant_content=final_content,
                 assistant_references=(
-                    _JSON_OBJECT.validate_python(references) if references else None
-                ),
-                assistant_trace=(
-                    _JSON_OBJECT.validate_python(assistant_trace)
-                    if assistant_trace is not None
+                    _JSON_OBJECT.validate_python(references.model_dump(mode="json"))
+                    if references is not None
                     else None
                 ),
-                artifacts=_JSON_OBJECT_LIST.validate_python(artifacts_collected),
+                assistant_trace=trace,
+                artifacts=artifacts,
             )
         )
 
-        history = executor.query(
-            lambda capabilities: capabilities.conversation_chat_data.history(
-                actor=current_user,
-                conversation_id=conversation_id,
-                exclude_turn_id=None,
-            )
+        snapshot = _latest_turn_snapshot(
+            executor=executor,
+            actor=current_user,
+            conversation_id=conversation_id,
+            turn_id=request.turn_id,
         )
-        try:
-            new_title = conversation_operations.generate_title(history)
-            if new_title is not None:
-                title_operation = operation_factory.resume(
-                    correlation_id=turn_start.correlation_id,
-                    causation_id=answer_operation.trace.operation_id,
-                    initiated_by=OperationInitiator.AGENT,
-                    origin=operation.origin,
-                    credential=operation.credential,
-                )
-                executor.command(
-                    lambda capabilities: (
-                        capabilities.conversations.apply_generated_title(
-                            actor=current_user,
-                            operation=title_operation,
-                            conversation_id=conversation_id,
-                            title=new_title,
+        ready_at = time.perf_counter()
+        yield encode_conversation_sse(
+            ConversationStreamResponseReadyEvent(turn=snapshot)
+        )
+
+        suggestions_tail_ms: float | None = 0.0 if snapshot.suggestions else None
+        sidecars = [task for task in (suggestion_task, title_task) if task is not None]
+        if sidecars:
+            done, pending = await asyncio.wait(
+                sidecars,
+                timeout=_SUGGESTION_TAIL_SECONDS,
+            )
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            if (
+                suggestion_task is not None
+                and suggestion_task in done
+                and not snapshot.suggestions
+            ):
+                suggestions = suggestion_task.result()
+                if suggestions is not None:
+                    suggestions_tail_ms = (time.perf_counter() - ready_at) * 1_000
+                    yield encode_conversation_sse(
+                        ConversationStreamSuggestionsEvent(
+                            turn_id=request.turn_id,
+                            response_id=request.response_id,
+                            suggestions=list(suggestions),
                         )
                     )
-                )
-        except Exception:
-            logger.exception(
-                "conversation.title_generation.failed",
-                extra={"conversation_id": str(conversation_id)},
-            )
+            if title_task is not None and title_task in done:
+                title = title_task.result()
+                if title is not None:
+                    try:
+                        await _apply_initial_title(
+                            title=title,
+                            executor=executor,
+                            actor=current_user,
+                            conversation_id=conversation_id,
+                            operation=operation,
+                            operation_factory=operation_factory,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "conversation.title_persistence.failed",
+                            extra={"conversation_id": str(conversation_id)},
+                        )
 
         scope_items = scope_snapshot or []
-        mention_scope_props = {
-            "num_context_papers": sum(
-                1 for i in scope_items if i.get("kind") == "paper"
-            ),
-            "num_context_projects": sum(
-                1 for i in scope_items if i.get("kind") == "project"
-            ),
-            "num_mentioned_highlights": sum(
-                1 for i in scope_items if i.get("kind") == "highlight"
-            ),
-            "uses_library_context": conversation_scope.paper_context.kind == "library",
-        }
-
-        # Track chat message event
         track_event(
             "did_chat_message",
             properties={
-                "has_user_references": bool(request.user_references),
-                "has_references": bool(references),
+                "has_turn_context": bool(request.contexts),
+                "has_references": references is not None,
                 "reasoning_level": request.reasoning_level.value,
-                "time_taken": (datetime.now(timezone.utc) - start_time).total_seconds(),
+                "time_taken": (datetime.now(timezone.utc) - started_at).total_seconds(),
+                "answer_to_ready_ms": (ready_at - answer_finished_at) * 1_000,
+                "suggestions_ready_before_answer": suggestion_finished_before_answer,
+                "suggestions_tail_ms": suggestions_tail_ms,
                 "type": conversation_scope.scope_type.value,
                 "project_id": str(project_id) if project_id is not None else None,
-                **mention_scope_props,
+                "num_context_papers": sum(
+                    item.get("kind") == "paper" for item in scope_items
+                ),
+                "num_context_projects": sum(
+                    item.get("kind") == "project" for item in scope_items
+                ),
+                "num_mentioned_annotations": sum(
+                    item.get("kind") == "annotation_thread" for item in scope_items
+                ),
+                "uses_library_context": (
+                    conversation_scope.paper_context.kind == "library"
+                ),
             },
             user_id=str(current_user.id),
         )
-        yield (
-            f"{json.dumps({'type': 'complete', 'content': {'turn_id': str(request.turn_id)}})}"
-            f"{END_DELIMITER}"
+        yield encode_conversation_sse(
+            ConversationStreamCompleteEvent(
+                turn_id=request.turn_id,
+                response_id=request.response_id,
+            )
         )
 
     async def response_generator() -> AsyncGenerator[str, None]:
         try:
-            with llm_usage_context(
-                user_id=int(current_user.id),
-                feature="chat",
-            ):
+            with llm_usage_context(user_id=int(current_user.id), feature="chat"):
                 async for event in stream_with_stable_error(
                     run_response_generator(),
-                    delimiter=END_DELIMITER,
                     event_name="conversation_chat_message_error",
                     user_id=current_user.id,
                     properties={
@@ -542,9 +597,41 @@ async def stream_conversation_agent(
                     },
                     diagnostic_recorder=diagnostic_recorder,
                     diagnostic_context=diagnostic_context,
+                    response_id=request.response_id,
                 ):
                     yield event
+        except asyncio.CancelledError:
+            executor.command(
+                lambda capabilities: (
+                    capabilities.conversation_chat_data.finish_response(
+                        actor=current_user,
+                        conversation_id=conversation_id,
+                        response_id=request.response_id,
+                        status="cancelled",
+                    )
+                )
+            )
+            raise
+        except Exception:
+            executor.command(
+                lambda capabilities: (
+                    capabilities.conversation_chat_data.finish_response(
+                        actor=current_user,
+                        conversation_id=conversation_id,
+                        response_id=request.response_id,
+                        status="failed",
+                    )
+                )
+            )
+            raise
         finally:
+            for task in (suggestion_task, title_task):
+                if task is not None and not task.done():
+                    task.cancel()
+            await asyncio.gather(
+                *(task for task in (suggestion_task, title_task) if task is not None),
+                return_exceptions=True,
+            )
             await release_concurrency(concurrency_lease)
 
     return response_generator()
@@ -556,14 +643,16 @@ class DefaultConversationChatGateway:
     def __init__(
         self,
         executor: ApplicationExecutor[ApplicationCapabilities],
-        runtime: ConversationAgentRuntime,
+        runtime: ScholensConversationAgent,
         operation_factory: OperationContextFactory,
         diagnostic_recorder: DiagnosticSnapshotRecorder,
+        suggestion_generator: ConversationSuggestionGenerator,
     ) -> None:
         self._executor = executor
         self._runtime = runtime
         self._operation_factory = operation_factory
         self._diagnostic_recorder = diagnostic_recorder
+        self._suggestion_generator = suggestion_generator
 
     async def stream(
         self,
@@ -571,8 +660,9 @@ class DefaultConversationChatGateway:
         actor: Actor,
         operation: OperationContext,
         conversation_id: uuid.UUID,
-        request: ConversationMessageRequest,
+        request: ConversationTurnCreateRequest,
         client_ip: str,
+        generation_kind: Literal["initial", "retry"] = "initial",
     ) -> AsyncGenerator[str, None]:
         return await stream_conversation_agent(
             request,
@@ -583,5 +673,34 @@ class DefaultConversationChatGateway:
             runtime=self._runtime,
             operation=operation,
             operation_factory=self._operation_factory,
+            suggestion_generator=self._suggestion_generator,
+            generation_kind=generation_kind,
             diagnostic_recorder=self._diagnostic_recorder,
+        )
+
+    async def retry(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: uuid.UUID,
+        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+        client_ip: str,
+    ) -> AsyncGenerator[str, None]:
+        request = self._executor.query(
+            lambda capabilities: capabilities.conversation_chat_data.retry_request(
+                actor=actor,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                response_id=response_id,
+            )
+        )
+        return await self.stream(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            request=request,
+            client_ip=client_ip,
+            generation_kind="retry",
         )

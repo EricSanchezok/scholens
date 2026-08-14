@@ -101,7 +101,9 @@ def configure_telemetry(
         metric_reader = PeriodicExportingMetricReader(
             OTLPMetricExporter(endpoint=endpoint, insecure=True)
         )
-        meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+        meter_provider = MeterProvider(
+            resource=resource, metric_readers=[metric_reader]
+        )
         trace.set_tracer_provider(tracer_provider)
         metrics.set_meter_provider(meter_provider)
         _TRACER_PROVIDER = tracer_provider

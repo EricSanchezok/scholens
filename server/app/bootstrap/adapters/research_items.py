@@ -6,19 +6,26 @@ from uuid import UUID
 
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadSummaryResponse,
     CreateAnnotationCommentRequest,
-    CreateHighlightThreadRequest,
+    CreateAnnotationThreadRequest,
     ResearchItemResponse,
-    ResearchVisibilityRequest,
     UpdateAnnotationCommentRequest,
-    UpdateHighlightThreadRequest,
+    UpdateAnnotationThreadRequest,
 )
 from app.modules.research.application.items import ResearchItemChange
 from app.bootstrap.adapters.research_repository import (
-    HighlightThreadCreate,
+    AnnotationThreadCreate,
     research_repository,
 )
-from app.shared.domain.enums import ResearchItemKind, RoleType
+from app.shared.domain.enums import (
+    AnnotationAudienceFilter,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    ResearchItemKind,
+    ResearchAudienceType,
+    RoleType,
+)
 from sqlalchemy.orm import Session
 
 
@@ -38,7 +45,8 @@ class SqlAlchemyResearchItemGateway:
         *,
         user_id: int,
         document_id: UUID,
-        highlights_only: bool,
+        project_id: UUID | None,
+        annotations_only: bool,
     ) -> list[ResearchItemResponse]:
         return [
             self._serialize(item=item, user_id=user_id)
@@ -46,7 +54,8 @@ class SqlAlchemyResearchItemGateway:
                 self._db,
                 document_id=document_id,
                 user_id=user_id,
-                kind=(ResearchItemKind.HIGHLIGHT_THREAD if highlights_only else None),
+                project_id=project_id,
+                kind=(ResearchItemKind.ANNOTATION_THREAD if annotations_only else None),
             )
         ]
 
@@ -65,39 +74,73 @@ class SqlAlchemyResearchItemGateway:
             )
         ]
 
-    def create_highlight(
+    def list_annotation_threads(
         self,
         *,
         user_id: int,
         document_id: UUID,
-        request: CreateHighlightThreadRequest,
-        content_role: RoleType,
-    ) -> ResearchItemResponse:
-        item = research_repository.create_highlight_thread(
+        project_id: UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+    ) -> list[AnnotationThreadSummaryResponse]:
+        return research_repository.list_annotation_summaries(
             self._db,
             document_id=document_id,
             user_id=user_id,
-            create=HighlightThreadCreate(
-                quote_text=request.quote_text,
-                page_number=request.page_number,
-                start_offset=request.start_offset,
-                end_offset=request.end_offset,
-                position=request.position,
-                color=request.color,
-                is_shared=request.shared,
-                content_role=content_role,
-            ),
+            project_id=project_id,
+            audience=audience,
+            mode=mode,
+            status=status,
         )
-        return self._serialize(item=item, user_id=user_id)
 
-    def update_highlight(
+    def get_annotation_thread(
         self,
         *,
         user_id: int,
         thread_id: UUID,
-        request: UpdateHighlightThreadRequest,
+    ) -> ResearchItemResponse:
+        return self._serialize(
+            item=research_repository.get_annotation_thread(
+                self._db,
+                thread_id=thread_id,
+                user_id=user_id,
+            ),
+            user_id=user_id,
+        )
+
+    def create_annotation_thread(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        request: CreateAnnotationThreadRequest,
+        content_role: RoleType,
+    ) -> ResearchItemResponse:
+        item = research_repository.create_annotation_thread(
+            self._db,
+            document_id=document_id,
+            user_id=user_id,
+            create=AnnotationThreadCreate(
+                quote_text=request.quote_text,
+                position=request.position,
+                color=request.color.value,
+                audience_type=ResearchAudienceType(request.audience.kind),
+                audience_project_id=getattr(request.audience, "project_id", None),
+                content_role=content_role,
+                initial_comment=request.initial_comment,
+            ),
+        )
+        return self._serialize(item=item, user_id=user_id)
+
+    def update_annotation_thread(
+        self,
+        *,
+        user_id: int,
+        thread_id: UUID,
+        request: UpdateAnnotationThreadRequest,
     ) -> ResearchItemChange[ResearchItemResponse]:
-        result = research_repository.update_highlight_thread(
+        result = research_repository.update_annotation_thread(
             self._db,
             thread_id=thread_id,
             user_id=user_id,
@@ -113,7 +156,6 @@ class SqlAlchemyResearchItemGateway:
         *,
         user_id: int,
         item_id: UUID,
-        confirm_delete_replies: bool,
         origin_operation_id: UUID,
         correlation_id: UUID,
     ) -> None:
@@ -121,7 +163,6 @@ class SqlAlchemyResearchItemGateway:
             self._db,
             item_id=item_id,
             user_id=user_id,
-            confirm_delete_replies=confirm_delete_replies,
             origin_operation_id=origin_operation_id,
             correlation_id=correlation_id,
         )
@@ -139,7 +180,7 @@ class SqlAlchemyResearchItemGateway:
         return research_repository.serialize_comment(
             comment,
             user_id=user_id,
-            has_scope_access=True,
+            has_audience_access=True,
         )
 
     def create_comment(
@@ -187,22 +228,4 @@ class SqlAlchemyResearchItemGateway:
             self._db,
             comment_id=comment_id,
             user_id=user_id,
-        )
-
-    def set_visibility(
-        self,
-        *,
-        user_id: int,
-        item_id: UUID,
-        request: ResearchVisibilityRequest,
-    ) -> ResearchItemChange[ResearchItemResponse]:
-        result = research_repository.set_visibility(
-            self._db,
-            item_id=item_id,
-            user_id=user_id,
-            shared=request.shared,
-        )
-        return ResearchItemChange(
-            value=self._serialize(item=result.value, user_id=user_id),
-            changed=result.changed,
         )

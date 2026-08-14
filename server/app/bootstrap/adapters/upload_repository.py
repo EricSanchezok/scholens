@@ -7,15 +7,11 @@ from app.database.models import (
     Document,
     DurableJob,
     JobStatus,
-    LibraryPaper,
     UploadReservation,
     ProjectPaper,
 )
 from app.modules.projects.infrastructure.access import get_project_access
 from app.shared.application import Actor
-from app.bootstrap.adapters.upload_lifecycle import (
-    active_upload_freshness_clause,
-)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -139,37 +135,6 @@ class UploadReservationRepository:
             ).all()
         )
 
-    def get_in_progress_jobs_for_user(
-        self, db: Session, *, user: Actor
-    ) -> list[tuple[UploadReservation, Document]]:
-        """
-        Get in-progress jobs for documents in the user's personal library.
-
-        Project-only uploads are deliberately excluded and are exposed through
-        ``get_in_progress_jobs_for_project`` instead.
-
-        Dead jobs are filtered using the same freshness contract as the
-        reservation reaper.
-        """
-        now = datetime.now(timezone.utc)
-        statement = (
-            select(UploadReservation, Document)
-            .join(DurableJob, DurableJob.id == UploadReservation.id)
-            .join(Document, Document.id == DurableJob.document_id)
-            .join(
-                LibraryPaper,
-                LibraryPaper.document_id == Document.id,
-            )
-            .where(
-                DurableJob.requested_by_id == user.id,
-                LibraryPaper.user_id == user.id,
-                DurableJob.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
-                active_upload_freshness_clause(now),
-            )
-            .order_by(DurableJob.created_at.asc())
-        )
-        return list(db.execute(statement).tuples().all())
-
     def get_in_progress_jobs_for_project(
         self, db: Session, *, project_id: uuid.UUID, user: Actor
     ) -> list[tuple[UploadReservation, Document]]:
@@ -177,17 +142,14 @@ class UploadReservationRepository:
         Get upload jobs that are still in progress for a project, paired with
         their paper record.
 
-        The Document and its ProjectPaper association are created at upload
-        start by ``services.document_submission``, so the job is reachable via
-        DurableJob.document_id points at the canonical Document. Returns reservations
-        that have not yet completed so the client can rehydrate the upload
-        tracker after a page refresh.
+        Atomic ingestion creates the Document, ProjectPaper, durable Job and
+        outbox dispatch before the request is accepted. Durable leases own
+        recovery and hard timeouts, so every pending/running row remains a
+        legitimate task until it reaches a terminal state.
         """
         # Only the owner and collaborators may see in-progress Project uploads.
         if get_project_access(db, project_id=project_id, user_id=user.id) is None:
             return []
-
-        now = datetime.now(timezone.utc)
 
         statement = (
             select(UploadReservation, Document)
@@ -197,7 +159,6 @@ class UploadReservationRepository:
             .where(
                 ProjectPaper.project_id == project_id,
                 DurableJob.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
-                active_upload_freshness_clause(now),
             )
             .order_by(DurableJob.created_at.asc())
         )

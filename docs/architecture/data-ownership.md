@@ -6,10 +6,10 @@ This document defines the Scholens-specific database and deployment contract.
 
 ## Storage ownership
 
-| Owner | Responsibilities | PostgreSQL ownership | Explicitly excluded |
-| --- | --- | --- | --- |
+| Owner                   | Responsibilities                                                                                                                                                                                | PostgreSQL ownership                                                                                                            | Explicitly excluded                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `sanchezcloud-identity` | Email identity, passwords, verification, global account status, lockout, public Account ID, shared avatar references, connected clients, security events, audience tokens, and refresh families | `auth.users`, `auth.refresh_tokens`, `auth.user_clients`, `auth.user_avatars`, `auth.security_events`, `auth.schema_migrations` | Product roles, blocks, subscriptions, quotas, usage, documents, projects |
-| Scholens | Documents, projects, collaboration, product profile/admin/block state, subscriptions, connectors, and usage | `scholens.*` including `scholens.schema_migrations` | Identity migrations, Scholight state, and Scholight Zilliz collections |
+| Scholens                | Documents, projects, collaboration, product profile/admin/block state, subscriptions, connectors, and usage                                                                                     | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
 
 Both schemas share the `sanchezcloud` database but have independent owners and migration
 ledgers. `public` contains no application tables. Scholens rows may reference the internal
@@ -49,3 +49,94 @@ roles or persist credentials. The required order is:
 
 A Scholens deployment never bundles or executes Identity migrations. Candidate Identity failures
 remain advisory until Scholens is declared production-ready in the consumer registry.
+
+## Conversation storage
+
+Scholens owns conversation state entirely inside `scholens.*`. A
+`conversation_turns` row is the immutable user request and owns one or more
+`conversation_responses`. The turn's selected response is the sole model-history
+branch. References, research items, artifacts, and worklog trace belong to a
+concrete response ID. Follow-up suggestions belong to the turn because retries
+and selected variants share the same next-question context.
+
+A turn also owns its typed Reader context. A `paper_selection` captures the
+authorized Document, selected text, one-based page, and normalized PDF anchor;
+an `annotation_thread` captures an authorized Research Item reference.
+Arbitrary reference dictionaries and parallel annotation-ID fields are not
+persisted.
+
+Only the latest turn may retain multiple completed response variants. Creating
+the next turn removes unselected variants from the previous turn and clears its
+no-longer-visible suggestions. No Identity, Scholight, or Jobs schema owns or
+selects a conversation response; callbacks may update Scholens-owned artifacts
+only through the Server's verified application boundary.
+
+## Library storage and projections
+
+`Document` owns canonical paper metadata, generated summary and summary
+citations, and source-object identity. A PDF-processing callback updates those
+document-owned fields; ingestion never creates a Conversation, Turn, or
+Response. Paper-scoped conversations exist only after an explicit user action
+and consume the Document as context rather than owning its canonical summary.
+`LibraryPaper` owns one user's personal membership, metadata overrides, tags,
+status, sharing state, and last-access time. Removing that membership never
+implies deleting a `Document`: Project references and other users' memberships
+remain authoritative, and orphan cleanup is scheduled outside the request
+transaction. The same removal transaction deletes annotation threads created
+by that user with personal audience and the removed Document as their target.
+It never deletes Project-audience threads or another user's annotations.
+
+`PaperTag` owns a user-scoped label name. Renaming or deleting it is authorized
+against that owner; deletion cascades only its Library Paper assignments.
+Library Paper tag edits are exact-set replacements, so clearing the final tag
+does not require a separate compatibility endpoint.
+
+Library Outputs do not introduce another persistence model. They are a
+permission-filtered read projection of Scholens-owned `ResearchItem` rows and
+their existing kind-specific payload tables. Audience access is resolved by the
+Server. The Web receives source audience/title as projection metadata and must
+not infer ownership by composing unrelated APIs.
+
+Research-item audience and annotation target are separate axes. Audience is
+`personal`, `document`, or `project` with the corresponding audience ID, while
+an annotation thread independently owns a required `target_document_id`.
+Annotations allow only personal and Project audiences: a personal thread is
+creator-only and a Project thread is visible only to current members of that
+specific Project. A paper appearing in several Projects never makes one
+Project's annotation visible in another. Citation, audio-overview, and data-
+table outputs retain document or Project audience as their producer requires.
+
+Annotation-thread positions are canonical Research data. PDF selections use
+one-based pages and normalized rectangles; parsed-text selections use validated
+start/end offsets with an optional page projection. A thread owns one color,
+immutable audience and zero or more chronological comments. Comments inherit
+the thread audience and own only their content and author. Threads do not
+support recursive comment trees or audience mutation.
+
+Translation preferences are user-owned Scholens data and are independent from
+the interface locale. Translation results are document-derived Scholens data:
+they own the translated text plus hashed request identity, language, prompt,
+and AI-profile revisions. They never own or duplicate raw selection source
+text. Deleting the source Document cascades its derived translation results.
+Redis does not own completed translations; it owns only short-lived capacity
+and single-flight coordination.
+
+`DocumentReflow` and its ordered `DocumentReflowBlock` rows are derived from
+the Document's canonical parser Markdown. They may classify layout and retain a
+best-effort PDF page projection, but their ordered whitespace-normalized
+content must fingerprint to the canonical source. They never replace the PDF,
+parser artifact, metadata, or processing status. A reflow references its
+current DurableJob; failed attempts remain immutable Jobs history, and deleting
+the Document cascades the artifact, blocks, and block translation results.
+
+Paper ingestion jobs retain immutable failure history. A retry creates a new
+`DurableJob` referencing the persisted PDF source and original Project context;
+it does not reset or overwrite the failed job.
+
+An ingestion operation owns its reservation, source identity, DurableJob, and
+dispatch outbox record. Server commits those records together before returning
+acceptance. Jobs may report progress or a terminal result only through the
+signed callback boundary; it never creates Library membership directly.
+Cancellation is a terminal Server decision. Storage cleanup is scheduled after
+the transaction, and any callback arriving after cancellation is an idempotent
+no-op rather than a second state authority.

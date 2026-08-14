@@ -24,7 +24,9 @@ from app.modules.papers.application.contracts.search import (
     PaperSearchFilters,
     PaperSearchRequest,
 )
-from app.modules.papers.application.contracts.uploads import UploadAcceptedResponse
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
+)
 from app.modules.projects.application.contracts import (
     AddPaperToProjectRequest,
     CollectPaperFromProjectRequest,
@@ -33,10 +35,9 @@ from app.modules.projects.application.contracts import (
 )
 from app.modules.research.application.contracts import (
     CreateAnnotationCommentRequest,
-    CreateHighlightThreadRequest,
-    DeleteHighlightThreadRequest,
+    CreateAnnotationThreadRequest,
     UpdateAnnotationCommentRequest,
-    UpdateHighlightThreadRequest,
+    UpdateAnnotationThreadRequest,
 )
 from app.shared.domain import (
     AppError,
@@ -179,6 +180,7 @@ class ProjectPaperInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_id: UUID
     document_id: UUID
+    confirm_delete_annotations: bool = False
 
 
 class UpdateLibraryPaperInput(BaseModel):
@@ -200,22 +202,21 @@ class IngestPaperFromUrlInput(BaseModel):
     project_id: UUID | None = None
 
 
-class CreateHighlightInput(CreateHighlightThreadRequest):
+class CreateAnnotationThreadInput(CreateAnnotationThreadRequest):
     document_id: UUID
 
 
-class UpdateHighlightInput(UpdateHighlightThreadRequest):
-    highlight_id: UUID
+class UpdateAnnotationThreadInput(UpdateAnnotationThreadRequest):
+    thread_id: UUID
 
 
-class DeleteHighlightInput(BaseModel):
+class DeleteAnnotationThreadInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    highlight_id: UUID
-    delete_annotations: bool = False
+    thread_id: UUID
 
 
 class CreateAnnotationCommentInput(CreateAnnotationCommentRequest):
-    highlight_id: UUID
+    thread_id: UUID
 
 
 class UpdateAnnotationCommentInput(UpdateAnnotationCommentRequest):
@@ -592,6 +593,7 @@ def _remove_paper_from_project(
         operation=context.operation,
         project_id=parsed.project_id,
         document_id=parsed.document_id,
+        confirm_delete_annotations=parsed.confirm_delete_annotations,
     )
     payload: dict[str, JsonValue] = {
         "removed": True,
@@ -705,7 +707,7 @@ def _collect_project_paper_to_library(
     )
 
 
-def _list_highlights(
+def _list_annotation_threads(
     capabilities: ApplicationCapabilities,
     context: ToolExecutionContext,
     arguments: BaseModel,
@@ -717,23 +719,23 @@ def _list_highlights(
             capabilities.research_items.list_document(
                 actor=context.actor,
                 document_id=parsed.document_id,
-                highlights_only=True,
+                annotations_only=True,
             )
         )
     )
 
 
-def _create_highlight(
+def _create_annotation_thread(
     capabilities: ApplicationCapabilities,
     context: ToolExecutionContext,
     arguments: BaseModel,
 ) -> ToolOutcome:
-    parsed = CreateHighlightInput.model_validate(arguments)
+    parsed = CreateAnnotationThreadInput.model_validate(arguments)
     _require_paper(capabilities, context, parsed.document_id)
-    request = CreateHighlightThreadRequest.model_validate(
+    request = CreateAnnotationThreadRequest.model_validate(
         parsed.model_dump(exclude={"document_id"})
     )
-    result = capabilities.research_items.create_highlight(
+    result = capabilities.research_items.create_annotation_thread(
         actor=context.actor,
         operation=context.operation,
         content_role=RoleType.ASSISTANT,
@@ -743,48 +745,45 @@ def _create_highlight(
     payload = _json(result)
     return ToolOutcome(
         payload=payload,
-        action={"kind": "highlight_created", "highlight": payload},
+        action={"kind": "annotation_thread_created", "annotation_thread": payload},
     )
 
 
-def _update_highlight(
+def _update_annotation_thread(
     capabilities: ApplicationCapabilities,
     context: ToolExecutionContext,
     arguments: BaseModel,
 ) -> ToolOutcome:
-    parsed = UpdateHighlightInput.model_validate(arguments)
-    result = capabilities.research_items.update_highlight(
+    parsed = UpdateAnnotationThreadInput.model_validate(arguments)
+    result = capabilities.research_items.update_annotation_thread(
         actor=context.actor,
         operation=context.operation,
-        thread_id=parsed.highlight_id,
-        request=UpdateHighlightThreadRequest.model_validate(
-            parsed.model_dump(exclude={"highlight_id"})
+        thread_id=parsed.thread_id,
+        request=UpdateAnnotationThreadRequest.model_validate(
+            parsed.model_dump(exclude={"thread_id"})
         ),
     )
     payload = _json(result)
     return ToolOutcome(
         payload=payload,
-        action={"kind": "highlight_updated", "highlight": payload},
+        action={"kind": "annotation_thread_updated", "annotation_thread": payload},
     )
 
 
-def _delete_highlight(
+def _delete_annotation_thread(
     capabilities: ApplicationCapabilities,
     context: ToolExecutionContext,
     arguments: BaseModel,
 ) -> ToolOutcome:
-    parsed = DeleteHighlightInput.model_validate(arguments)
-    capabilities.research_items.delete_highlight(
+    parsed = DeleteAnnotationThreadInput.model_validate(arguments)
+    capabilities.research_items.delete_annotation_thread(
         actor=context.actor,
         operation=context.operation,
-        thread_id=parsed.highlight_id,
-        request=DeleteHighlightThreadRequest(
-            confirm_delete_replies=parsed.delete_annotations
-        ),
+        thread_id=parsed.thread_id,
     )
     payload: dict[str, JsonValue] = {
         "deleted": True,
-        "highlight_id": str(parsed.highlight_id),
+        "thread_id": str(parsed.thread_id),
     }
     return ToolOutcome(payload=payload, action=payload)
 
@@ -799,7 +798,7 @@ def _create_annotation_comment(
         actor=context.actor,
         operation=context.operation,
         content_role=RoleType.ASSISTANT,
-        thread_id=parsed.highlight_id,
+        thread_id=parsed.thread_id,
         request=CreateAnnotationCommentRequest(content=parsed.content),
     )
     payload = _json(result)
@@ -909,7 +908,7 @@ def build_workspace_tool_catalog(
     ) -> ToolOutcome:
         parsed = IngestPaperFromUrlInput.model_validate(arguments)
         idempotency_key = "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest()
-        result: UploadAcceptedResponse = await ingestion.from_url(
+        result: LibraryPaperIngestionResponse = await ingestion.from_url(
             actor=context.actor,
             operation=context.operation,
             url=str(parsed.url),
@@ -931,6 +930,7 @@ def build_workspace_tool_catalog(
             execution=ToolExecutionKind.QUERY,
             required_permission=WorkspacePermission.READ,
             handler=_search_papers,
+            activity_subject_field="query",
         ),
         ToolDefinition(
             name="get_paper",
@@ -965,6 +965,7 @@ def build_workspace_tool_catalog(
             execution=ToolExecutionKind.QUERY,
             required_permission=WorkspacePermission.READ,
             handler=_search_paper_content,
+            activity_subject_field="query",
         ),
         ToolDefinition(
             name="get_paper_content_range",
@@ -1120,40 +1121,42 @@ def build_workspace_tool_catalog(
             workflow_handler=ingest_paper_from_url,
         ),
         ToolDefinition(
-            name="list_highlights",
-            description="List highlights and annotation comments for one paper.",
+            name="list_annotation_threads",
+            description="List annotation threads and comments for one paper.",
             input_model=DocumentInput,
             execution=ToolExecutionKind.QUERY,
             required_permission=WorkspacePermission.READ,
-            handler=_list_highlights,
+            handler=_list_annotation_threads,
         ),
         ToolDefinition(
-            name="create_highlight",
-            description="Create a highlight on one paper.",
-            input_model=CreateHighlightInput,
+            name="create_annotation_thread",
+            description="Create an annotation thread on one paper.",
+            input_model=CreateAnnotationThreadInput,
             execution=ToolExecutionKind.COMMAND,
             required_permission=WorkspacePermission.WRITE,
-            handler=_create_highlight,
+            handler=_create_annotation_thread,
         ),
         ToolDefinition(
-            name="update_highlight",
-            description="Update an existing highlight.",
-            input_model=UpdateHighlightInput,
+            name="update_annotation_thread",
+            description="Update an existing annotation thread.",
+            input_model=UpdateAnnotationThreadInput,
             execution=ToolExecutionKind.COMMAND,
             required_permission=WorkspacePermission.WRITE,
-            handler=_update_highlight,
+            handler=_update_annotation_thread,
         ),
         ToolDefinition(
-            name="delete_highlight",
-            description="Delete a highlight when the user explicitly requests it.",
-            input_model=DeleteHighlightInput,
+            name="delete_annotation_thread",
+            description=(
+                "Delete an annotation thread when the user explicitly requests it."
+            ),
+            input_model=DeleteAnnotationThreadInput,
             execution=ToolExecutionKind.COMMAND,
             required_permission=WorkspacePermission.DELETE,
-            handler=_delete_highlight,
+            handler=_delete_annotation_thread,
         ),
         ToolDefinition(
             name="create_annotation_comment",
-            description="Add an annotation comment to a highlight.",
+            description="Add a comment to an annotation thread.",
             input_model=CreateAnnotationCommentInput,
             execution=ToolExecutionKind.COMMAND,
             required_permission=WorkspacePermission.WRITE,
@@ -1193,25 +1196,14 @@ def build_workspace_tool_catalog(
             required_permission=WorkspacePermission.READ,
             handler=_get_job,
         ),
-        ToolDefinition(
-            name="finish_tool_use",
-            description="Finish tool use when no further operation is needed.",
-            input_model=EmptyInput,
-            execution=ToolExecutionKind.CONTROL,
-            required_permission=None,
-        ),
     ]
-    workspace_names = frozenset(
-        definition.name
-        for definition in definitions
-        if definition.execution is not ToolExecutionKind.CONTROL
-    )
+    workspace_names = frozenset(definition.name for definition in definitions)
     return ToolCatalog(
         definitions,
         [
             ToolProfile(
                 name=CONVERSATION_TOOL_PROFILE,
-                tool_names=workspace_names | {"finish_tool_use"},
+                tool_names=workspace_names,
             ),
             ToolProfile(
                 name=MCP_TOOL_PROFILE,

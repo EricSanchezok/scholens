@@ -51,6 +51,36 @@ def test_release_images_are_required_and_runtime_containers_are_non_root() -> No
         )
 
 
+def test_python_images_copy_shared_packages_before_locked_sync() -> None:
+    for dockerfile_path in (
+        ROOT / "server" / "Dockerfile",
+        ROOT / "jobs" / "Dockerfile",
+    ):
+        dockerfile = dockerfile_path.read_text(encoding="utf-8")
+        sync_index = dockerfile.index("RUN uv sync --frozen")
+        for shared_package in ("scholens_observability", "scholens_ai"):
+            copy_instruction = (
+                f"COPY packages/{shared_package}/ /packages/{shared_package}/"
+            )
+            assert dockerfile.index(copy_instruction) < sync_index
+
+
+def test_reflow_block_migration_includes_inherited_timestamps() -> None:
+    migration = (
+        ROOT
+        / "server"
+        / "migrations"
+        / "versions"
+        / "2026_07_28_1030_scholens_initial.py"
+    ).read_text(encoding="utf-8")
+    reflow_blocks = migration.split(
+        'op.create_table(\n        "document_reflow_blocks",', 1
+    )[1].split("op.create_index(", 1)[0]
+
+    assert '"created_at"' in reflow_blocks
+    assert '"updated_at"' in reflow_blocks
+
+
 def test_database_contract_shares_auth_and_isolates_scholens() -> None:
     runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
     bootstrap = (PRODUCTION / "bootstrap-db.sql").read_text(encoding="utf-8")
@@ -172,7 +202,10 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_URL",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
-        "DEEPSEEK_API_KEY",
+        "SCHOLENS_AI_DEEPSEEK_API_KEY",
+        "SCHOLENS_AI_STANDARD_MODEL",
+        "SCHOLENS_AI_TRANSLATION_MODEL",
+        "SCHOLENS_AI_REFLOW_MODEL",
         "MINERU_API_TOKEN",
         "MOSS_API_KEY",
         "MOSS_MAX_AUDIO_BYTES",
@@ -189,7 +222,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
     assert "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS:" in compose
     assert "SCHOLENS_CONNECTOR_CREDENTIAL_ENCRYPTION_KEY=" in runtime
     assert "SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET=" in runtime
-    assert "SCHOLENS_DEEPSEEK_API_KEY=" in runtime
+    assert "SCHOLENS_AI_DEEPSEEK_API_KEY=" in runtime
     assert "SCHOLENS_MINERU_API_TOKEN=" in runtime
     assert "SCHOLENS_MOSS_API_KEY=" in runtime
     assert "SCHOLENS_MOSS_MAX_AUDIO_BYTES=" in runtime
@@ -198,7 +231,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
     assert "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY:" in compose
     assert "SCHOLIGHT_MCP_URL:" in compose
     assert "MOSS_MAX_AUDIO_BYTES:" in compose
-    assert "DEEPSEEK_STRUCTURED_RETRIES:" in compose
+    assert "SCHOLENS_AI_STRUCTURED_RETRIES:" in compose
     assert "PAPER_SEARCH_CURSOR_SECRET:" in compose
     for legacy_variable in (
         "GEMINI_API_KEY",
@@ -206,10 +239,18 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
         "AZURE_OPENAI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "SCHOLENS_DEEPSEEK_API_KEY",
         "SCHOLIGHT_ACCESS_KEY",
         "JOBS_INTERNAL_SECRET",
     ):
-        assert legacy_variable not in catalog + runtime + compose + ci
+        assert (
+            re.search(
+                rf"(?m)^\s*{re.escape(legacy_variable)}\s*[=:]",
+                catalog + runtime + compose + ci,
+            )
+            is None
+        )
     assert "EXA_API_KEY" not in catalog + runtime + compose
     assert "FIRECRAWL_API_KEY" not in catalog + runtime + compose
 
@@ -267,10 +308,8 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
 
     assert [path.name for path in versions] == [
         "2026_07_28_1030_scholens_initial.py",
-        "2026_07_31_1500_connector_connections.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
-    connector_migration = versions[1].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline
     assert "scholens.document_content_trigger" in baseline
     assert "scholens.document_passages_tsvector_trigger" in baseline
@@ -284,8 +323,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         assert f"NEW.{field}" in baseline
     assert "paper_passages" not in baseline
     assert "discover_searches" not in baseline
-    assert 'down_revision: str | None = "b12d7d620e91"' in connector_migration
-    assert '"connector_connections"' in connector_migration
+    assert '"connector_connections"' in baseline
 
 
 def test_global_discovery_surfaces_are_absent_from_client_sources() -> None:
@@ -365,19 +403,62 @@ def test_caddy_contract_hides_internal_health_and_routes_same_origin_api() -> No
 
 def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    gate_runner = (ROOT / "scripts" / "run-gates.sh").read_text(encoding="utf-8")
 
     assert "tags: scholens-api:ci" in workflow
     assert "for _ in 1 2; do" in workflow
     assert "sanchezcloud-identity migrate" in workflow
     assert "python -m app.scripts.migrate_product" in workflow
-    assert "uv run mypy app" in workflow
-    assert "uv run mypy src" in workflow
-    assert "uv run ruff format --check app tests migrations" in workflow
-    assert "uv run ruff format --check src tests" in workflow
     assert "scholens-api:ci alembic check" in workflow
-    assert "window is not defined|document is not defined" in workflow
     assert "CREATE TABLE auth.product_migrator_must_not_create" in workflow
     assert "CREATE TABLE scholens.auth_migrator_must_not_create" in workflow
+
+    for lane in (
+        "server",
+        "jobs",
+        "shared-packages",
+        "web",
+        "client",
+        "deployment",
+    ):
+        assert f"./scripts/run-gates.sh {lane}" in workflow
+
+    assert '"$environment/mypy" app' in gate_runner
+    assert '"$environment/mypy" src' in gate_runner
+    assert '"$environment/ruff" format --check app tests migrations' in gate_runner
+    assert '"$environment/ruff" format --check src tests' in gate_runner
+    assert "window is not defined|document is not defined" in gate_runner
+
+
+def test_ci_has_one_stable_aggregate_required_check() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "all-checks-passed:" in workflow
+    assert "name: all checks passed" in workflow
+    for dependency in (
+        "server",
+        "jobs",
+        "shared-packages",
+        "web",
+        "client",
+        "deployment-contract",
+    ):
+        assert f"      - {dependency}" in workflow
+
+
+def test_root_gate_runner_has_no_provisioning_or_runtime_side_effects() -> None:
+    gate_runner = (ROOT / "scripts" / "run-gates.sh").read_text(encoding="utf-8")
+
+    for forbidden_command in (
+        "uv sync",
+        "pnpm install",
+        "yarn install",
+        "alembic upgrade",
+        "migrate_product",
+        "docker compose up",
+        "pnpm dev",
+    ):
+        assert forbidden_command not in gate_runner
 
 
 def test_external_actions_are_pinned_to_full_commit_shas() -> None:

@@ -42,7 +42,9 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
     RequestReference,
+    SignedCursorCodec,
 )
+from app.shared.domain import FailureKind
 
 
 class _Store:
@@ -89,6 +91,7 @@ def _projects(
             gateway=cast(ProjectGateway, gateway),
             capacity=MagicMock(),
             signer=MagicMock(),
+            cursors=MagicMock(),
             journal=journal,
         ),
         store,
@@ -168,8 +171,15 @@ def test_library_update_journals_only_user_visible_changes() -> None:
     journal, store = _journal()
     library = PaperLibrary(
         gateway=cast(PaperLibraryGateway, gateway),
+        outputs=MagicMock(),
         capacity=MagicMock(),
         signer=MagicMock(),
+        cursors=SignedCursorCodec(
+            "test-library-cursor-secret",
+            revision="library-v1",
+            error_code="library_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
     actor = _actor()
@@ -211,8 +221,15 @@ def test_library_remove_journals_only_a_new_cleanup_job() -> None:
     journal, store = _journal()
     library = PaperLibrary(
         gateway=cast(PaperLibraryGateway, gateway),
+        outputs=MagicMock(),
         capacity=MagicMock(),
         signer=MagicMock(),
+        cursors=SignedCursorCodec(
+            "test-library-cursor-secret",
+            revision="library-v1",
+            error_code="library_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 
@@ -277,9 +294,9 @@ def test_project_cleanup_jobs_are_journaled_only_when_created() -> None:
     ]
 
 
-def test_library_tag_assignment_uses_library_aggregate_and_skips_noop() -> None:
+def test_library_tag_replacement_uses_library_aggregate_and_skips_noop() -> None:
     gateway = MagicMock()
-    gateway.assign.side_effect = (0, 2)
+    gateway.replace_assignments.side_effect = (0, 2)
     journal, store = _journal()
     tags = LibraryTags(
         cast(LibraryTagGateway, gateway),
@@ -292,11 +309,13 @@ def test_library_tag_assignment_uses_library_aggregate_and_skips_noop() -> None:
         tag_ids=[uuid4(), uuid4()],
     )
 
-    tags.assign(actor=actor, operation=operation, request=request)
+    tags.replace_assignments(actor=actor, operation=operation, request=request)
     assert store.entries == []
 
-    tags.assign(actor=actor, operation=operation, request=request)
-    assert [str(entry.action) for entry in store.entries] == ["library.tags_assigned"]
+    tags.replace_assignments(actor=actor, operation=operation, request=request)
+    assert [str(entry.action) for entry in store.entries] == [
+        "library.tag_assignments_replaced"
+    ]
     assert store.entries[0].resources[0].type == "library"
     assert store.entries[0].resources[0].id == str(actor.id)
 
@@ -326,7 +345,7 @@ def test_workspace_commands_require_provenance_but_queries_do_not() -> None:
             "remove",
             "collect_public",
         },
-        LibraryTags: {"create", "assign", "remove"},
+        LibraryTags: {"create", "rename", "delete", "replace_assignments"},
     }
     queries = {
         Projects: {

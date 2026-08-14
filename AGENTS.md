@@ -11,16 +11,22 @@ Always read the documents relevant to the task before editing:
 | Area                                            | Required reading                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Product behavior or terminology                 | [`PRODUCT.md`](./PRODUCT.md)                                                               |
+| Branch, commit, PR, and review workflow         | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                     |
 | Local services, ports, environment, or commands | [`DEVELOPMENT.md`](./DEVELOPMENT.md)                                                       |
 | Replacement frontend (`web/`)                   | [`web/docs/README.md`](./web/docs/README.md) and its task-specific guide                   |
 | Backend API or domain behavior                  | [`server/README.md`](./server/README.md)                                                   |
 | Background processing                           | [`jobs/README.md`](./jobs/README.md)                                                       |
 | Data or service ownership                       | [`docs/architecture/data-ownership.md`](./docs/architecture/data-ownership.md)             |
 | Current backend capabilities                    | [`docs/architecture/backend-capabilities.md`](./docs/architecture/backend-capabilities.md) |
+| Shared Python packages                          | [`packages/README.md`](./packages/README.md)                                               |
+| Architecture decision rationale                 | [`docs/decisions/README.md`](./docs/decisions/README.md)                                   |
 | Production deployment                           | [`deploy/production/README.md`](./deploy/production/README.md)                             |
 
 For new `web/` product work, also complete
 [`web/docs/new-feature-checklist.md`](./web/docs/new-feature-checklist.md).
+Every addition, modification, or deletion of a Web page, module, component,
+token, theme, or Storybook state must follow
+[`web/docs/frontend-governance.md`](./web/docs/frontend-governance.md).
 
 ## Repository boundaries
 
@@ -35,6 +41,29 @@ For new `web/` product work, also complete
   `docs/architecture/data-ownership.md`.
 - Do not create compatibility layers between the old and new frontends. Evolve
   the public API contract deliberately instead.
+- Until the product is explicitly declared released, breaking product API and
+  `scholens` schema changes are reset-first: converge on one contract and
+  remove superseded routes, DTOs, columns, workflows, and tests in the same
+  change. Do not add dual read/write paths, legacy mappings, compatibility
+  flags, or backfills whose only purpose is preserving disposable pre-release
+  product data. Reset only the `scholens` schema and rebuild it explicitly;
+  `auth` data remains independently owned and must never be dropped.
+- Local development owns the `7300-7399` host-port block: Web `7300`, Server
+  `7301`, Jobs `7302`, legacy client `7303`, Storybook `7306`, and Flower
+  `7307`. Scholens local infrastructure uses PostgreSQL `55432`, RabbitMQ
+  `55672`, and Redis `56379`, all on `127.0.0.1`. Ports `59000/59001` remain
+  reserved for projects that explicitly choose local MinIO; Scholens does not
+  start or consume MinIO by default.
+- Local entrypoints must use fixed ports, bind to loopback, and fail on a
+  conflict. Never add port auto-increment, install dependencies, or apply
+  migrations as a side effect of a daily startup command.
+- `server` local startup must retain its guard against any database other than
+  `127.0.0.1:55432/sanchezcloud`. RDS and production object storage are outside
+  local-development scope. Scholens local development uses its isolated remote
+  dev S3 bucket and product-specific Aliyun DirectMail settings; neither may
+  reuse production resources.
+- Remote model and search providers are opt-in for the feature being tested.
+  Keep their credentials in ignored service-local environment files.
 
 ## Replacement frontend rules
 
@@ -53,32 +82,78 @@ The canonical rules live in [`web/docs`](./web/docs/README.md). In particular:
   do not handwrite duplicate DTOs;
 - every reusable component needs isolated Storybook coverage, interaction
   states, keyboard behavior, narrow-content coverage, and Light/Dark review.
+- Tailwind aliases are generated from the design-system adapter. Do not add
+  manual `@theme` mappings, page-local raw colors, primitive palette variables,
+  `dark:` appearance patches, or repeated typography/elevation recipes.
 - interface copy follows `web/docs/internationalization.md`; UI locale and
   Reader content translation are separate product concepts.
+- Do not invent a temporary page, substitute feature, compatibility facade, or
+  fake-data workflow merely because a downstream feature is unfinished. Keep
+  the current slice honest with an explicit localized unavailable state, then
+  connect the real dependency when its own vertical slice is implemented.
 
 Do not mechanically recreate Figma layers or absolute coordinates. Figma owns
 layout intent, visual hierarchy, interaction states, and acceptance; code owns
 responsive behavior, accessibility, runtime contracts, and component APIs.
 
+## Documentation responsibilities
+
+Keep each fact in one canonical place instead of copying it across guides:
+
+- `AGENTS.md` contains mandatory guardrails and navigation for agents.
+- `CONTRIBUTING.md` contains the human development, branch, commit, and PR
+  workflow.
+- `DEVELOPMENT.md` contains environment setup, fixed ports, and executable
+  local commands.
+- product, architecture, service, and feature documents describe the current
+  behavior of the repository.
+- package READMEs describe that package's public contract, consumers,
+  dependency direction, and limitations.
+- ADRs under `docs/decisions/` record why a consequential choice was made,
+  including alternatives and consequences; they do not replace current-state
+  documentation.
+- PRs record the scope and actual verification for ordinary changes.
+- postmortems are reserved for serious incidents or repeated regressions.
+
+When behavior changes, update the canonical current-state document in the same
+commit. Add or amend an ADR only when the reasoning or architectural boundary
+changes.
+
 ## Generated artifacts
 
 Do not edit generated files directly. Change their source and regenerate them.
 
-- Design tokens: edit `web/src/design-system/tokens/`, then run
-  `pnpm tokens:build` from `web/`.
+- Design tokens: edit `web/src/design-system/tokens/` and semantic utility names
+  in `web/src/design-system/adapters/`, then run `pnpm tokens:build` from
+  `web/`.
 - Frontend API types: update the FastAPI contract and public snapshot, then run
   `pnpm api:generate` from `web/`.
 - Commit source and generated outputs together.
 
 ## Verification
 
-Run checks proportional to the change. The full replacement-frontend gate is:
+Run checks proportional to the change through the side-effect-free root runner:
+
+```bash
+./scripts/run-gates.sh <server|jobs|shared-packages|web|client|deployment|docs|all>
+```
+
+The runner verifies an already provisioned checkout. It never installs
+dependencies, starts persistent development services, or applies migrations.
+Browser-test runners may create and clean up an ephemeral web server for their
+lane. CI invokes these same lanes and protects `main` through the aggregate
+`all checks passed` result.
+
+The full replacement-frontend lane expands to:
 
 ```bash
 cd web
 pnpm tokens:check
 pnpm api:check
 pnpm i18n:check
+pnpm architecture:check
+pnpm design:check
+pnpm docs:check
 pnpm lint
 pnpm format:check
 pnpm typecheck
@@ -97,13 +172,18 @@ smaller relevant subset, but the final handoff must state exactly what ran.
 
 - Preserve unrelated user or agent changes in a dirty worktree.
 - Never combine unrelated work in one commit.
+- After a completed change is verified, commit it on the current branch and
+  push that branch to its configured remote so finished work is not left only
+  in the local worktree. Skip either step only when the user explicitly asks.
 - For multi-step implementation, create a verified commit at each coherent
   recovery point when commits are within the requested workflow.
 - Before staging, inspect the exact changed files; do not stage another agent's
   work merely because it is present.
-- Architecture changes require an ADR under `web/docs/decisions/` or the
+- Architecture changes require an ADR under `docs/decisions/` or the
   appropriate service-level architecture documentation.
-- Documentation must change in the same commit as the behavior that invalidates
-  it.
+- Every code, configuration, or workflow change requires an explicit
+  documentation-impact check. Documentation must change in the same commit as
+  the behavior that invalidates it; if no documentation changes are needed,
+  state that in the handoff.
 - Keep upstream copyright, license, provenance, migration, and evaluation
   references unless their removal has been explicitly validated.

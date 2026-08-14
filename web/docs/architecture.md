@@ -20,7 +20,7 @@ src/app
       -> src/design-system
       -> src/lib
 
-src/components/feedback -> src/components/ui + src/design-system
+src/components/feedback -> src/components/ui + src/design-system + src/lib/utilities
 src/components/ui       -> src/design-system + src/lib/utilities
 src/design-system       -> framework packages only
 src/lib                 -> framework/client libraries only
@@ -37,6 +37,10 @@ The reverse directions are forbidden. In particular:
 If two features need the same product behavior, first decide whether it is a
 true cross-product pattern. Promote only that narrow pattern to a shared
 component; do not create an unowned `common/` or `shared/` dumping ground.
+Shared product capabilities remain named feature slices with a small public
+boundary. For example, `features/conversation` owns the one conversation
+stream, cache, message, source, worklog, action, and composer contract consumed
+by both Home and Reader; those routes must not fork their own implementations.
 
 ## Route boundary
 
@@ -120,4 +124,5 @@ an API response for the UI.
 Refactors within these boundaries do not require a decision record. Introducing
 a new state library, second primitive system, second icon set, cross-feature
 event bus, UI package, registry, or different token authority does. Record the
-decision before implementation using the template in `docs/decisions/`.
+decision before implementation using the template in
+[`docs/decisions/`](../../docs/decisions/README.md).

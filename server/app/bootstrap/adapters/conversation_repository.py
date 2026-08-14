@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -31,11 +28,13 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationToolPermissionsRequest,
     ConversationToolPermissionsResponse,
 )
+from app.modules.conversations.application.conversations import ConversationListPosition
+from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.shared.domain import (
     WorkspacePermission,
     ordered_workspace_permissions,
 )
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, exists, or_, select
 from sqlalchemy.orm import Session
 
 
@@ -51,41 +50,6 @@ def _not_found() -> AppError:
         message="Conversation not found",
         kind=FailureKind.NOT_FOUND,
     )
-
-
-def _encode_cursor(conversation: Conversation) -> str:
-    payload = json.dumps(
-        {
-            "p": (
-                conversation.pinned_at.isoformat() if conversation.pinned_at else None
-            ),
-            "u": conversation.updated_at.isoformat(),
-            "i": str(conversation.id),
-        },
-        separators=(",", ":"),
-    ).encode()
-    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
-
-
-def _decode_cursor(cursor: str) -> tuple[datetime | None, datetime, uuid.UUID]:
-    try:
-        padding = "=" * (-len(cursor) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(cursor + padding).decode())
-        pinned_at = datetime.fromisoformat(payload["p"]) if payload["p"] else None
-        return pinned_at, datetime.fromisoformat(payload["u"]), uuid.UUID(payload["i"])
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-        UnicodeDecodeError,
-        binascii.Error,
-        json.JSONDecodeError,
-    ) as exc:
-        raise AppError(
-            code="conversation_cursor_invalid",
-            message="Conversation cursor is invalid",
-            kind=FailureKind.UNPROCESSABLE,
-        ) from exc
 
 
 class ConversationRepository:
@@ -414,7 +378,7 @@ class ConversationRepository:
                 WorkspacePermission.WRITE,
             ]
         conversation = Conversation(
-            title=request.title,
+            title=request.title or DEFAULT_CONVERSATION_TITLE,
             user_id=user_id,
             scope_type=request.scope_type.value,
             project_id=project_id,
@@ -452,9 +416,12 @@ class ConversationRepository:
         *,
         user_id: int,
         archived: bool,
+        scope_type: ConversationScopeType | None,
+        scope_id: uuid.UUID | None,
+        context_document_id: uuid.UUID | None,
         limit: int,
-        cursor: str | None,
-    ) -> tuple[list[Conversation], str | None]:
+        position: ConversationListPosition | None,
+    ) -> tuple[list[Conversation], bool]:
         statement = select(Conversation).where(
             Conversation.user_id == user_id,
             (
@@ -463,8 +430,25 @@ class ConversationRepository:
                 else Conversation.archived_at.is_(None)
             ),
         )
-        if cursor:
-            pinned_at, updated_at, conversation_id = _decode_cursor(cursor)
+        if scope_type is not None:
+            statement = statement.where(Conversation.scope_type == scope_type.value)
+            if scope_type is ConversationScopeType.PAPER:
+                statement = statement.where(Conversation.document_id == scope_id)
+            elif scope_type is ConversationScopeType.PROJECT:
+                statement = statement.where(Conversation.project_id == scope_id)
+        if context_document_id is not None:
+            statement = statement.where(
+                exists(
+                    select(ConversationContextDocument.conversation_id).where(
+                        ConversationContextDocument.conversation_id == Conversation.id,
+                        ConversationContextDocument.document_id == context_document_id,
+                    )
+                )
+            )
+        if position:
+            pinned_at = position.pinned_at
+            updated_at = position.updated_at
+            conversation_id = position.conversation_id
             if pinned_at is not None:
                 statement = statement.where(
                     or_(
@@ -504,9 +488,7 @@ class ConversationRepository:
         )
         has_more = len(conversations) > limit
         conversations = conversations[:limit]
-        return conversations, (
-            _encode_cursor(conversations[-1]) if has_more and conversations else None
-        )
+        return conversations, has_more
 
     def update(
         self,
@@ -555,6 +537,27 @@ class ConversationRepository:
         db.flush()
         db.refresh(conversation)
         return ConversationWrite(value=conversation, changed=True)
+
+    def apply_initial_generated_title(
+        self,
+        db: Session,
+        *,
+        conversation_id: uuid.UUID,
+        user_id: int,
+        title: str,
+    ) -> bool:
+        """Apply the first generated title without overwriting a user rename."""
+        conversation = self.require_owned(
+            db,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            for_update=True,
+        )
+        if conversation.title != DEFAULT_CONVERSATION_TITLE:
+            return False
+        conversation.title = title
+        db.flush()
+        return True
 
     def move(
         self,

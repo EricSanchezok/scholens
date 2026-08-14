@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from typing import Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.modules.integrations.zotero.application.contracts import (
@@ -40,8 +40,7 @@ from app.modules.jobs.application.contracts import (
     JobClaimResponse,
 )
 from app.modules.papers.application.ingestion import (
-    IngestionFinalization,
-    IngestionReservation,
+    AcceptedIngestion,
     IngestPaper,
     PreparedPaperInput,
 )
@@ -647,96 +646,93 @@ async def _execute_import_plan(
         prepared_paper = PreparedPaperInput(
             content=content.pdf_content,
             filename=f"zotero-{planned.item.item_key}.pdf",
+            display_name=planned.item.title or f"Zotero {planned.item.item_key}",
+            source_kind="upload",
         )
-        reserve_operation = operation_factory.child(
+        accept_operation = operation_factory.child(
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
-        reservation: IngestionReservation | None = None
+        proposed_job_id = uuid4()
         ingestion: IngestPaper | None = None
-
-        def reserve(capabilities: ApplicationCapabilities) -> IngestionReservation:
-            reservation = capabilities.paper_ingestion.reserve(
-                actor=actor,
-                operation=reserve_operation,
-                prepared=prepared_paper,
-                project_id=None,
-                idempotency_key=None,
-            )
-            capabilities.zotero.reserve_import_item(
-                actor=actor,
-                item_key=planned.item.item_key,
-                upload_job_id=reservation.job_id,
-            )
-            return reservation
+        acquired = False
 
         try:
-            reservation = executor.command(reserve)
             ingestion = executor.query(
                 lambda capabilities: capabilities.paper_ingestion
             )
-            await ingestion.acquire(actor=actor, job_id=reservation.job_id)
+            await ingestion.acquire(actor=actor, job_id=proposed_job_id)
+            acquired = True
             await operations.upload_pdf(content=content.pdf_content)
-            finalize_operation = operation_factory.child(
-                reserve_operation,
-                initiated_by=OperationInitiator.SYSTEM,
-            )
 
-            def finalize(
+            def accept(
                 capabilities: ApplicationCapabilities,
-            ) -> tuple[IngestionFinalization, ZoteroImportItemResult]:
-                finalization = capabilities.paper_ingestion.finalize(
+            ) -> tuple[AcceptedIngestion, ZoteroImportItemResult]:
+                accepted = capabilities.paper_ingestion.accept(
                     actor=actor,
-                    operation=finalize_operation,
-                    job_id=reservation.job_id,
+                    operation=accept_operation,
                     prepared=prepared_paper,
+                    project_id=None,
+                    idempotency_key=(
+                        f"zotero:{planned.item.item_key}:"
+                        f"{accept_operation.trace.operation_id}"
+                    ),
+                    job_id=proposed_job_id,
+                )
+                document_id = accepted.ingestion.document_id
+                if document_id is None:
+                    raise RuntimeError("accepted_zotero_ingestion_has_no_document")
+                capabilities.zotero.reserve_import_item(
+                    actor=actor,
+                    item_key=planned.item.item_key,
+                    upload_job_id=accepted.ingestion.id,
                 )
                 item_result = capabilities.zotero.complete_import_item(
                     actor=actor,
-                    operation=finalize_operation,
+                    operation=accept_operation,
                     item=planned.item,
                     attachment=content.attachment,
-                    upload_job_id=reservation.job_id,
-                    document_id=finalization.document_id,
-                    reused_document=finalization.job_completed,
+                    upload_job_id=accepted.ingestion.id,
+                    document_id=document_id,
+                    reused_document=not accepted.processing_required,
                     page_dimensions=content.page_dimensions,
                 )
-                return finalization, item_result
+                return accepted, item_result
 
-            finalization, item_result = executor.command(finalize)
+            accepted, item_result = executor.command(accept)
             imported.append(item_result)
-            document_by_item_key[planned.item.item_key] = finalization.document_id
+            document_id = accepted.ingestion.document_id
+            if document_id is None:
+                raise RuntimeError("accepted_zotero_ingestion_has_no_document")
+            document_by_item_key[planned.item.item_key] = document_id
             dimensions_by_item_key[planned.item.item_key] = content.page_dimensions
-            if finalization.job_completed:
-                await ingestion.release(actor=actor, job_id=reservation.job_id)
+            if (
+                accepted.replayed
+                or accepted.ingestion.id != proposed_job_id
+                or not accepted.processing_required
+            ):
+                await ingestion.release(actor=actor, job_id=proposed_job_id)
+                acquired = False
         except Exception:
             logger.exception(
                 "zotero.item_import.failed",
                 extra={"zotero_item_key": planned.item.item_key},
             )
-            if reservation is not None and ingestion is not None:
-                failure_operation = operation_factory.child(
-                    reserve_operation,
-                    initiated_by=OperationInitiator.SYSTEM,
+            if acquired and ingestion is not None:
+                await ingestion.release(actor=actor, job_id=proposed_job_id)
+            failure_operation = operation_factory.child(
+                accept_operation,
+                initiated_by=OperationInitiator.SYSTEM,
+            )
+            executor.command(
+                lambda capabilities: capabilities.zotero.fail_import_item(
+                    actor=actor,
+                    operation=failure_operation,
+                    item_key=planned.item.item_key,
+                    upload_job_id=None,
+                    error_code="zotero_import_failed",
                 )
-
-                def fail(capabilities: ApplicationCapabilities) -> None:
-                    capabilities.paper_ingestion.fail(
-                        actor=actor,
-                        operation=failure_operation,
-                        job_id=reservation.job_id,
-                        error_code="zotero_import_failed",
-                    )
-                    capabilities.zotero.fail_import_item(
-                        actor=actor,
-                        operation=failure_operation,
-                        item_key=planned.item.item_key,
-                        upload_job_id=reservation.job_id,
-                        error_code="zotero_import_failed",
-                    )
-
-                executor.command(fail)
-                await ingestion.release(actor=actor, job_id=reservation.job_id)
+            )
             errors.append(
                 ZoteroImportError(
                     zotero_item_key=planned.item.item_key,

@@ -54,6 +54,7 @@ class JobStatus(str, Enum):
 class JobOperation(str, Enum):
     PDF_PROCESS = "pdf_process"
     PDF_POSTPROCESS = "pdf_postprocess"
+    DOCUMENT_REFLOW = "document_reflow"
     AUDIO_GENERATE = "audio_generate"
     DATA_TABLE_GENERATE = "data_table_generate"
     ZOTERO_IMPORT = "zotero_import"
@@ -93,16 +94,43 @@ class ConversationScopeType(str, Enum):
 
 
 class ResearchItemKind(str, Enum):
-    HIGHLIGHT_THREAD = "highlight_thread"
+    ANNOTATION_THREAD = "annotation_thread"
     CITATION = "citation"
     AUDIO_OVERVIEW = "audio_overview"
     DATA_TABLE = "data_table"
 
 
-class ResearchScopeType(str, Enum):
+class ResearchAudienceType(str, Enum):
     PERSONAL = "personal"
     DOCUMENT = "document"
     PROJECT = "project"
+
+
+class AnnotationThreadStatus(str, Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class AnnotationThreadMode(str, Enum):
+    HIGHLIGHT = "highlight"
+    NOTE = "note"
+    DISCUSSION = "discussion"
+
+
+class AnnotationAudienceFilter(str, Enum):
+    PERSONAL = "personal"
+    PROJECT = "project"
+
+
+class AnnotationColor(str, Enum):
+    YELLOW = "yellow"
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+    PURPLE = "purple"
+    MAGENTA = "magenta"
+    ORANGE = "orange"
+    GRAY = "gray"
 
 
 class HighlightType(str, Enum):

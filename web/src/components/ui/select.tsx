@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
+import { keyboardFocusRing } from "./focus";
 
 export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;
@@ -16,7 +17,8 @@ export const SelectTrigger = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <SelectPrimitive.Trigger
     className={cn(
-      "border-control bg-surface hover:border-line-strong disabled:text-disabled flex h-11 w-full items-center justify-between gap-2 rounded-[var(--radius-md)] border px-3 text-sm focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2 focus-visible:outline-none aria-invalid:border-[var(--color-danger-border)]",
+      "border-control bg-surface hover:border-line-strong disabled:text-disabled flex h-11 w-full items-center justify-between gap-2 rounded-[var(--radius-md)] border px-3 text-sm aria-invalid:border-[var(--color-danger-border)]",
+      keyboardFocusRing,
       className,
     )}
     ref={ref}
@@ -36,7 +38,7 @@ export const SelectContent = React.forwardRef<
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       className={cn(
-        "border-line bg-elevated z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-lg)] border p-1 shadow-[0_12px_36px_var(--color-elevation-shadow)]",
+        "border-line bg-elevated shadow-overlay z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-lg)] border p-1",
         className,
       )}
       position={position}

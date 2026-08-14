@@ -4,9 +4,29 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+from uuid import UUID
 from app.modules.conversations.infrastructure.chat_streaming import (
+    encode_conversation_sse,
     stream_with_stable_error,
 )
+from app.modules.conversations.application.contracts.turns import (
+    ConversationStreamAssistantItemDeltaEvent,
+    ConversationStreamCompleteEvent,
+)
+
+
+RESPONSE_ID = UUID("00000000-0000-0000-0000-000000000002")
+
+
+def _payload(event: str) -> dict[str, object]:
+    data = next(
+        line.removeprefix("data: ")
+        for line in event.splitlines()
+        if line.startswith("data: ")
+    )
+    value = json.loads(data)
+    assert isinstance(value, dict)
+    return value
 
 
 @pytest.mark.asyncio
@@ -28,7 +48,7 @@ async def test_stream_failure_is_redacted_and_recorded(
         event
         async for event in stream_with_stable_error(
             failing_stream(),
-            delimiter="END",
+            response_id=RESPONSE_ID,
             event_name="chat_error",
             user_id=7,
             properties={"conversation_id": "conversation"},
@@ -37,7 +57,7 @@ async def test_stream_failure_is_redacted_and_recorded(
     ]
 
     assert events[0] == "first"
-    failure = json.loads(events[-1].removesuffix("END"))
+    failure = _payload(events[-1])
     assert failure["type"] == "error"
     assert failure["error"]["code"] == "chat_stream_failed"
     assert failure["error"]["kind"] == "dependency_failure"
@@ -54,7 +74,13 @@ async def test_stream_requires_explicit_complete_event(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def incomplete_stream():
-        yield '{"type":"content","content":"partial"}END'
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemDeltaEvent(
+                response_id=RESPONSE_ID,
+                item_id="assistant:turn:1",
+                delta="partial",
+            )
+        )
 
     monkeypatch.setattr(
         "app.modules.conversations.infrastructure.chat_streaming.track_event",
@@ -64,30 +90,41 @@ async def test_stream_requires_explicit_complete_event(
         event
         async for event in stream_with_stable_error(
             incomplete_stream(),
-            delimiter="END",
+            response_id=RESPONSE_ID,
             event_name="chat_error",
             user_id=7,
             properties={},
         )
     ]
-    failure = json.loads(events[-1].removesuffix("END"))
+    failure = _payload(events[-1])
     assert failure["error"]["code"] == "stream_incomplete"
 
 
 @pytest.mark.asyncio
 async def test_complete_stream_has_no_error_event() -> None:
     async def completed_stream():
-        yield '{"type":"content","content":"answer"}END'
-        yield '{"type":"complete","content":{}}END'
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemDeltaEvent(
+                response_id=RESPONSE_ID,
+                item_id="assistant:turn:1",
+                delta="answer",
+            )
+        )
+        yield encode_conversation_sse(
+            ConversationStreamCompleteEvent(
+                turn_id="00000000-0000-0000-0000-000000000001",
+                response_id=RESPONSE_ID,
+            )
+        )
 
     events = [
         event
         async for event in stream_with_stable_error(
             completed_stream(),
-            delimiter="END",
+            response_id=RESPONSE_ID,
             event_name="chat_error",
             user_id=7,
             properties={},
         )
     ]
-    assert events[-1] == '{"type":"complete","content":{}}END'
+    assert _payload(events[-1])["type"] == "complete"

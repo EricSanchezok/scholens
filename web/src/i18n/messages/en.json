@@ -12,12 +12,691 @@
     }
   },
   "Metadata": {
-    "title": "Scholens Web Foundation",
-    "description": "Scholens next-generation web foundation smoke test"
+    "title": "Scholens",
+    "description": "Read, organize, and ask across your research with Scholens."
   },
   "FoundationSmoke": {
     "eyebrow": "Web foundation · smoke route",
     "description": "The independent Next.js, token, theme, query, component, and internationalization foundation is running. Product routes intentionally begin later."
+  },
+  "WorkspaceShell": {
+    "navigation": {
+      "newChat": "New chat",
+      "ask": "Ask",
+      "library": "Library",
+      "projects": "Projects",
+      "primary": "Primary navigation",
+      "sidebar": "Workspace sidebar",
+      "settings": "Settings",
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar",
+      "openMenu": "Open navigation",
+      "closeMenu": "Close navigation",
+      "searchConversations": "Search conversations",
+      "comingSoon": "Not available yet"
+    },
+    "sidebar": {
+      "pinned": "Pinned",
+      "conversations": "Conversations",
+      "recent": "Recent",
+      "empty": "Your conversations will appear here.",
+      "noMatches": "No matching conversations",
+      "conversationContext": "Research context"
+    },
+    "account": {
+      "openMenu": "Open account menu",
+      "settings": "Account settings",
+      "appearance": "Appearance",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System",
+      "signOut": "Sign out",
+      "signingOut": "Signing out…"
+    }
+  },
+  "Home": {
+    "hero": {
+      "title": "What are you working on?",
+      "description": "Ask across your research.",
+      "emptyDescription": "Ask across a paper, project, or your entire library."
+    },
+    "composer": {
+      "placeholder": "Ask anything",
+      "followUpPlaceholder": "Ask a follow-up",
+      "submit": "Ask Scholens",
+      "stop": "Stop response",
+      "addContext": "Add context",
+      "standard": "Standard",
+      "deep": "Deep",
+      "reasoningStrength": "Reasoning strength",
+      "reasoningStrengthValue": "Reasoning strength: {value}",
+      "standardDescription": "Fast, balanced reasoning",
+      "deepDescription": "More thorough reasoning",
+      "removeTurnContext": "Remove selection context"
+    },
+    "context": {
+      "title": "Add context",
+      "entireLibrary": "Entire library",
+      "search": "Search projects and papers",
+      "projects": "Projects",
+      "papers": "Papers",
+      "selected": "{count, plural, one {# selected} other {# selected}}",
+      "clear": "Clear",
+      "done": "Done",
+      "close": "Close context picker",
+      "librarySelected": "Entire library",
+      "scopeLibrary": "Library",
+      "scopePapers": "{count, plural, one {# paper} other {# papers}}",
+      "scopeItems": "{count, plural, one {# item} other {# items}}",
+      "scopeEmpty": "Select scope",
+      "scopeAccessible": "Research scope: {scope}",
+      "noMatches": "No matching research found"
+    },
+    "recents": {
+      "papers": "Recent papers",
+      "projects": "Recent projects",
+      "viewAll": "View all",
+      "opened": "Opened {relative}",
+      "updated": "Updated {relative}",
+      "paperCount": "{count, plural, one {# paper} other {# papers}}",
+      "conversationCount": "{count, plural, one {# conversation} other {# conversations}}",
+      "noPapersTitle": "Your reading desk is ready",
+      "noPapersDescription": "Papers you open will appear here.",
+      "noProjectsTitle": "No recent projects",
+      "noProjectsDescription": "Projects will appear here after you create or join one.",
+      "continue": "Continue your research",
+      "loading": "Loading recent research",
+      "usePaper": "Use paper {title} as the research scope",
+      "useProject": "Use project {title} as the research scope",
+      "loadError": "Could not load recent research",
+      "retry": "Try again"
+    },
+    "conversation": {
+      "assistant": "Scholens",
+      "assistantMessage": "Assistant response",
+      "answerActions": "Answer actions",
+      "copy": "Copy answer",
+      "copying": "Copying answer",
+      "copied": "Answer copied",
+      "copyFailed": "Could not copy answer",
+      "regenerate": "Try another response",
+      "previousResponse": "Previous response",
+      "nextResponse": "Next response",
+      "responseVersion": "Response {current} of {total}",
+      "suggestions": "Suggested follow-up questions",
+      "sourceSummary": "{count, plural, one {# source} other {# sources}}",
+      "sourcePanelTitle": "{count, plural, one {# source} other {# sources}}",
+      "sourcePanelDescription": "Research sources supporting this answer.",
+      "openSource": "Open source: {title}",
+      "openCitation": "Open sources {keys}",
+      "closeSources": "Close sources",
+      "jumpToLatest": "Jump to the latest response",
+      "loading": "Loading conversation",
+      "empty": "Ask a question to begin this conversation.",
+      "cancelled": "Response stopped. You can ask again.",
+      "error": "The response could not be completed.",
+      "retry": "Try again",
+      "retryHint": "Your message was saved. Send a new message when you are ready.",
+      "failure": {
+        "unavailable": "Research service is temporarily unavailable. Your message is saved; try again shortly.",
+        "rateLimited": "You’re sending requests too quickly. Your message is saved; try again shortly.",
+        "generic": "The response stopped unexpectedly. Your message is saved; try again.",
+        "diagnostic": "Diagnostic ID: {id}"
+      },
+      "readOnly": "You can read this conversation, but you no longer have permission to continue it.",
+      "readOnlyReason": "This conversation is read-only because its research context is no longer available.",
+      "reference": "Source {number}",
+      "unknownSource": "Research source",
+      "activity": {
+        "thinking": "Thinking…",
+        "searching": "Searching your research…",
+        "reading": "Reading relevant sources…",
+        "updatingWorkspace": "Updating your workspace…",
+        "usingConnector": "Using {connector}…",
+        "completeSummary": "Research complete · {count, plural, one {# action} other {# actions}} · {sources, plural, one {# source} other {# sources}}",
+        "partialSummary": "Partially complete · {count, plural, one {# action} other {# actions}} · {sources, plural, one {# source} other {# sources}}",
+        "stopped": "Stopped",
+        "failed": "Could not complete",
+        "connectorFallback": "a connector",
+        "more": "{count, plural, one {# more} other {# more}}",
+        "batch": {
+          "search": "Searched {count, plural, one {# time} other {# times}}",
+          "read": "Read {count, plural, one {# source} other {# sources}}",
+          "workspace_action": "Completed {count, plural, one {# workspace action} other {# workspace actions}}",
+          "connector": "Used {connector} {count, plural, one {# time} other {# times}}"
+        },
+        "state": {
+          "running": "In progress",
+          "succeeded": "Completed",
+          "failed": "Failed"
+        }
+      }
+    },
+    "session": {
+      "checking": "Opening your research workspace",
+      "unavailableTitle": "Your session could not be checked",
+      "unavailableDescription": "The workspace is still here. Retry the session check when the server is available.",
+      "retry": "Retry session check"
+    }
+  },
+  "Library": {
+    "title": "Library",
+    "description": "Organize papers and the research outputs created from them.",
+    "tabs": {
+      "papers": "Papers {count}",
+      "outputs": "Outputs {count}"
+    },
+    "common": {
+      "close": "Close",
+      "cancel": "Cancel",
+      "actionFailed": "The action could not be completed"
+    },
+    "addPapers": {
+      "open": "Add papers",
+      "close": "Close add papers",
+      "title": "Add papers",
+      "description": "Upload PDFs or add an open paper from DOI, arXiv, or a direct PDF URL.",
+      "pdfTitle": "PDF files",
+      "pdfDescription": "Select multiple PDFs up to 50 MB each. Up to three upload at once.",
+      "fileTooLarge": "This file is larger than 50 MB.",
+      "chooseFiles": "Choose PDFs",
+      "queueLabel": "PDF upload queue",
+      "removeFile": "Remove {name}",
+      "uploadFiles": "Upload {count, plural, one {# file} other {# files}}",
+      "status": {
+        "queued": "Ready to upload",
+        "checking": "Checking for duplicate PDFs"
+      },
+      "duplicatesIgnored": "{count, plural, one {# duplicate PDF was ignored.} other {# duplicate PDFs were ignored.}} The same content only needs to be uploaded once.",
+      "sourceTitle": "DOI, arXiv, or PDF URL",
+      "sourceDescription": "Scholens will resolve an open PDF and add it to your library.",
+      "sourceType": "Source type",
+      "pdfUrl": "PDF URL",
+      "sourceValue": "Source",
+      "placeholder": {
+        "doi": "10.1000/example",
+        "arxiv": "2401.01234",
+        "url": "https://example.org/paper.pdf"
+      },
+      "sourceRequired": "Enter a DOI, arXiv ID, or direct PDF URL.",
+      "sourceFailed": "This source could not be added. Check that an open PDF is available.",
+      "sourcePending": "Validating source",
+      "cancelSource": "Cancel",
+      "errors": {
+        "unavailable": "No accessible open PDF was found for this source.",
+        "unsafeAddress": "This address is not allowed. Use a public direct PDF URL.",
+        "tooLarge": "This PDF is larger than 50 MB.",
+        "invalidPdf": "The source did not return a readable, unencrypted PDF.",
+        "alreadyInCollection": "This paper is already in the selected collection.",
+        "uploadInProgress": "This paper is already being uploaded.",
+        "quota": "Your paper or storage allowance has been reached.",
+        "serviceUnavailable": "The server could not accept this source. Keep the value and try again."
+      },
+      "addSource": "Add source"
+    },
+    "papers": {
+      "search": "Search papers",
+      "loading": "Loading papers",
+      "tryAgain": "Try again",
+      "errorTitle": "Papers could not be loaded",
+      "errorDescription": "Your filters are preserved. Try loading the library again.",
+      "emptyTitle": "No papers found",
+      "emptyDescription": "Adjust the filters or add a paper to start your library.",
+      "count": "{count, plural, one {# paper} other {# papers}}",
+      "selectAll": "Select all papers on this page",
+      "select": "Select {title}",
+      "unknown": "Unknown",
+      "columns": {
+        "paper": "Paper",
+        "added": "Added",
+        "published": "Published",
+        "actions": "Actions"
+      },
+      "selected": "{count, plural, one {# paper selected} other {# papers selected}}",
+      "selectionToolbar": "Paper selection actions",
+      "clearSelection": "Clear",
+      "batchActions": "Actions",
+      "previous": "Previous",
+      "next": "Next",
+      "sort": {
+        "label": "Sort papers",
+        "added_desc": "Newest added",
+        "added_asc": "Oldest added",
+        "published_desc": "Newest published",
+        "published_asc": "Oldest published",
+        "title_asc": "Title A–Z"
+      },
+      "actions": {
+        "open": "Actions for {title}",
+        "select": "Select paper",
+        "deselect": "Deselect paper",
+        "tags": "Edit tags",
+        "project": "Add to project",
+        "projectUnavailable": "Add to project · Not available yet",
+        "notAvailable": "Not available yet",
+        "download": "Download PDF",
+        "remove": "Remove from library",
+        "downloadFailed": "The PDF download could not be opened"
+      },
+      "ingestion": {
+        "retry": "Retry",
+        "cancel": "Cancel processing",
+        "remove": "Remove failed import",
+        "pending": "Pending",
+        "status": {
+          "retrying": "Retrying import",
+          "cancelling": "Cancelling import"
+        },
+        "stage": {
+          "uploading": "Uploading PDF",
+          "queued": "Waiting to process",
+          "downloading": "Downloading PDF",
+          "parsing": "Reading PDF",
+          "extracting_metadata": "Extracting metadata",
+          "indexing": "Building search index",
+          "finalizing": "Finishing import"
+        },
+        "errors": {
+          "connection_failed": "Connection failed. Retry with the same file.",
+          "service_unavailable": "The processing service is unavailable.",
+          "jobs_submission_failed": "The processing service did not accept this paper.",
+          "paper_source_pdf_unavailable": "The source PDF is no longer available.",
+          "paper_source_unsafe_address": "The source address is not allowed.",
+          "document_already_in_collection": "This paper is already in the selected collection.",
+          "document_upload_in_progress": "This paper is already being uploaded.",
+          "upload_too_large": "This PDF is larger than 50 MB.",
+          "upload_quota_exceeded": "Your paper or storage allowance has been reached.",
+          "invalid_pdf": "This file is not a readable PDF.",
+          "pdf_encrypted": "Encrypted PDFs are not supported.",
+          "unknown": "Processing failed. The source is preserved for retry."
+        }
+      },
+      "filters": {
+        "tags": "Tags",
+        "noTags": "No tags yet",
+        "manage": "Manage tags"
+      },
+      "tagDialog": {
+        "title": "Edit tags",
+        "description": "Choose the tags to assign to {count, plural, one {this paper} other {these papers}}.",
+        "submit": "Apply tags",
+        "manageTitle": "Manage tags",
+        "manageDescription": "Create, rename, or delete the tags used across your library.",
+        "newLabel": "New tag name",
+        "newPlaceholder": "New tag",
+        "create": "Create",
+        "listLabel": "Library tags",
+        "renameLabel": "Rename {name}",
+        "saveRename": "Save",
+        "actionsLabel": "Actions for {name}",
+        "rename": "Rename",
+        "delete": "Delete",
+        "emptyTitle": "No tags yet",
+        "emptyDescription": "Create a tag to organize and filter your papers.",
+        "multiHint": "Only tags shared by every selected paper start checked. Saving replaces the tags on all selected papers.",
+        "error": "The tag change could not be saved. Try again.",
+        "done": "Done",
+        "deleteTitle": "Delete tag?",
+        "deleteDescription": "Delete “{name}” and remove it from every paper?",
+        "deleteConfirm": "Delete tag"
+      },
+      "removeDialog": {
+        "title": "Remove from library?",
+        "description": "This removes {count, plural, one {the paper} other {# papers}} from your personal library and deletes your personal highlights and notes in it. Project references and discussions remain intact.",
+        "cancel": "Cancel",
+        "confirm": "Remove"
+      }
+    },
+    "outputs": {
+      "search": "Search outputs",
+      "loading": "Loading outputs",
+      "tryAgain": "Try again",
+      "errorTitle": "Outputs could not be loaded",
+      "errorDescription": "Your filters are preserved. Try loading the outputs again.",
+      "emptyTitle": "No outputs found",
+      "emptyDescription": "Adjust the filters or create an output from your research.",
+      "count": "{count, plural, one {# output} other {# outputs}}",
+      "previous": "Previous",
+      "next": "Next",
+      "notAvailable": "Not available yet",
+      "columns": {
+        "output": "Output",
+        "type": "Type",
+        "source": "Source",
+        "updated": "Updated",
+        "open": "Open"
+      },
+      "sort": {
+        "label": "Sort outputs",
+        "updated_desc": "Recently updated",
+        "updated_asc": "Oldest updated",
+        "title_asc": "Title A–Z",
+        "title_desc": "Title Z–A"
+      },
+      "filters": {
+        "label": "Types",
+        "kind": {
+          "annotation_thread": "Annotations",
+          "citation": "Citations",
+          "audio_overview": "Audio overviews",
+          "data_table": "Data tables"
+        }
+      },
+      "kind": {
+        "annotation_thread": "Annotations",
+        "citation": "Citations",
+        "audio_overview": "Audio overviews",
+        "data_table": "Data tables"
+      },
+      "scope": {
+        "personal": "Personal",
+        "document": "Paper",
+        "project": "Project"
+      }
+    },
+    "session": {
+      "checking": "Opening your library",
+      "retry": "Retry session check",
+      "unavailableTitle": "Your session could not be checked",
+      "unavailableDescription": "Your library is still here. Retry when the server is available."
+    }
+  },
+  "Reader": {
+    "untitled": "Untitled paper",
+    "returnLibrary": "Return to library",
+    "library": "Library",
+    "loadingDocument": "Opening paper",
+    "tryAgain": "Try again",
+    "documentErrorDescription": "The paper record could not be loaded.",
+    "documentErrorTitle": "Could not open this paper",
+    "failedDescription": "Processing failed. Return to Library to retry the import.",
+    "failedTitle": "This paper could not be processed",
+    "processingDescription": "The Reader will be available as soon as parsing finishes.",
+    "processingTitle": "Preparing this paper",
+    "loadingPdf": "Loading PDF",
+    "downloadInstead": "Download PDF",
+    "pdfErrorDescription": "The PDF could not be displayed. You can still download the original file.",
+    "pdfErrorTitle": "Could not render this PDF",
+    "thumbnail": "Open page {page}",
+    "navigation": {
+      "label": "Document navigation",
+      "pages": "Pages",
+      "outline": "Outline"
+    },
+    "contextPanel": "Reader context panel",
+    "documentCanvas": "PDF document",
+    "pdfLink": "Link in PDF",
+    "renderingPage": "Rendering page",
+    "closePanel": "Close panel",
+    "toolbar": {
+      "download": "Download PDF",
+      "fit": "Fit",
+      "fitPage": "Fit page",
+      "fitWidth": "Fit width",
+      "nextPage": "Next page",
+      "openPanel": "Open context panel",
+      "page": "Page",
+      "pdfView": "PDF",
+      "previousPage": "Previous page",
+      "reflowView": "AI reflow",
+      "search": "Search PDF",
+      "showOutline": "Show document outline",
+      "showPages": "Show page thumbnails",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out"
+    },
+    "reflow": {
+      "document": "AI-reflowed paper",
+      "failedDescription": "The PDF remains available. Retry the independent reflow job when you are ready.",
+      "figurePlaceholder": "Figure",
+      "failedTitle": "AI reflow is unavailable",
+      "fullTranslation": "Full translation",
+      "fullTranslationDescription": "Translate nearby sections as you read. Completed sections are cached.",
+      "loading": "Loading AI reflow",
+      "openPdfPage": "PDF p. {page}",
+      "original": "Original text",
+      "processingDescription": "Scholens is preparing a responsive reading layout in the background. The original PDF is unaffected.",
+      "processingTitle": "Preparing AI reflow",
+      "retry": "Retry AI reflow",
+      "retryFailedDescription": "The request was not accepted. The PDF is still available; try again in a moment.",
+      "retryFailedTitle": "Could not retry AI reflow",
+      "retryTranslation": "Retry translation",
+      "translated": "Translated text",
+      "translating": "Translating this section…",
+      "translationFailed": "This section could not be translated."
+    },
+    "panels": {
+      "ask": "Ask",
+      "annotations": "Annotations",
+      "translation": "Translate",
+      "details": "Details"
+    },
+    "search": {
+      "close": "Close PDF search",
+      "empty": "No matches",
+      "next": "Next match",
+      "previous": "Previous match"
+    },
+    "outline": {
+      "title": "Document outline",
+      "description": "Jump to a section in this paper.",
+      "empty": "This PDF does not include an outline."
+    },
+    "details": {
+      "title": "Title",
+      "authors": "Authors",
+      "abstract": "Abstract",
+      "summary": "Summary",
+      "doi": "DOI",
+      "file": "File",
+      "journal": "Journal",
+      "publisher": "Publisher",
+      "institutions": "Institutions",
+      "published": "Published",
+      "status": "Processing status",
+      "quality": "Parse quality",
+      "warning": "Parse warning",
+      "unavailable": "Not available yet",
+      "unavailableDescription": "Projects, shared annotations, and Translation will appear here when those features are complete.",
+      "unknown": "Not available",
+      "statuses": {
+        "pending": "Pending",
+        "processing": "Processing",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    },
+    "selection": {
+      "ask": "Ask about selection",
+      "translate": "Translate selection",
+      "highlight": "Highlight selection",
+      "comment": "Add annotation",
+      "copy": "Copy selection",
+      "copying": "Copying",
+      "copied": "Copied",
+      "copyFailed": "Copy failed",
+      "context": "Selection from page {page}"
+    },
+    "translation": {
+      "sourceLanguage": "From",
+      "targetLanguage": "To",
+      "selectedText": "Selected text",
+      "languages": {
+        "auto": "Detect language",
+        "en": "English",
+        "zh-CN": "Simplified Chinese",
+        "zh-TW": "Traditional Chinese",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "de": "German",
+        "fr": "French",
+        "es": "Spanish"
+      },
+      "autoSelection": {
+        "title": "Translate selections automatically",
+        "description": "Start after the selection stays unchanged for a moment."
+      },
+      "empty": {
+        "title": "Select text to translate",
+        "description": "Choose a passage in the PDF. The translation appears here without changing the document."
+      },
+      "ready": {
+        "title": "Ready to translate",
+        "description": "Use Translate below, or turn on automatic selection translation."
+      },
+      "status": {
+        "translating": "Translating",
+        "completed": "Translation",
+        "cached": "Saved result"
+      },
+      "actions": {
+        "translate": "Translate selection",
+        "copy": "Copy translation",
+        "copying": "Copying",
+        "copied": "Copied",
+        "copyFailed": "Copy failed",
+        "annotate": "Add as annotation",
+        "retry": "Try again"
+      },
+      "errors": {
+        "title": "Translation was not completed",
+        "quota": "Your Token Credits are exhausted. Cached translations remain available.",
+        "busy": "Translation is busy right now. Wait a moment and try again.",
+        "inProgress": "The same passage is already being translated. Try again shortly.",
+        "provider": "The translation service is temporarily unavailable.",
+        "access": "This paper is no longer available in your library.",
+        "generic": "Something interrupted the translation. Try again."
+      },
+      "preferencesError": "Translation preferences could not be saved. Your previous preferences are still active.",
+      "instructions": {
+        "title": "Translation preferences",
+        "label": "Custom instructions",
+        "placeholder": "For example: keep technical terms in English.",
+        "description": "Applied to new translations. Changing this creates a new cached result.",
+        "save": "Save instructions"
+      }
+    },
+    "actions": {
+      "failedTitle": "Reader action failed",
+      "failedDescription": "Your change was not saved. Please try again.",
+      "threadResolvedTitle": "Discussion was resolved",
+      "threadResolvedDescription": "Another member resolved this discussion. Reopen it before replying; your draft is still here.",
+      "threadUnavailableTitle": "Annotation is no longer available",
+      "threadUnavailableDescription": "It may have been removed or your project access may have changed.",
+      "threadHasRepliesTitle": "This discussion cannot be deleted",
+      "threadHasRepliesDescription": "Other members have replied. Resolve the discussion instead so its history is preserved.",
+      "permissionDeniedTitle": "You cannot change this discussion",
+      "permissionDeniedDescription": "Your project role does not allow this action, or this thread does not support a discussion status."
+    },
+    "conversations": {
+      "search": "Search this paper's conversations",
+      "new": "New conversation",
+      "newDraft": "New conversation",
+      "loading": "Loading conversations",
+      "empty": "No conversations for this paper yet",
+      "emptyTitle": "What would you like to understand?",
+      "emptyDescription": "Ask about this paper’s claims, methods, or conclusions, or select a passage to discuss.",
+      "pin": "Pin conversation",
+      "unpin": "Unpin conversation",
+      "pinned": "Pinned",
+      "recent": "Recent",
+      "switcher": "Conversation history",
+      "unavailableTitle": "Conversation unavailable here",
+      "unavailableDescription": "It was deleted, access changed, or it belongs to another reading context. Reader opened a new conversation for this paper."
+    },
+    "projects": {
+      "selector": "Reader context",
+      "personal": "Personal reading",
+      "unavailableTitle": "Switched to personal reading",
+      "unavailableDescription": "You no longer have access to that project, so Reader returned to your personal context."
+    },
+    "annotations": {
+      "error": "Annotations could not be loaded.",
+      "commentPlaceholder": "Add a note to this selection",
+      "saveSelection": "Save annotation",
+      "saveHighlight": "Save highlight",
+      "emptyTitle": "No annotations yet",
+      "emptyDescription": "Select text in the PDF to highlight it or add a note.",
+      "page": "Page {page}",
+      "deleteHighlight": "Delete annotation",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "save": "Save",
+      "editComment": "Edit comment",
+      "deleteComment": "Delete comment",
+      "replyPlaceholder": "Reply to this discussion",
+      "continueNote": "Continue this note",
+      "addNote": "Add a note",
+      "startDiscussion": "Start a discussion",
+      "add": "Add",
+      "start": "Start",
+      "reply": "Reply",
+      "submitShortcut": "Cmd/Ctrl + Enter",
+      "summaryCount": "{count, plural, one {# annotation} other {# annotations}}",
+      "commentMarker": "{count, plural, one {# comment} other {# comments}}",
+      "previous": "Previous annotation",
+      "next": "Next annotation",
+      "loadingThread": "Loading discussion…",
+      "unavailableThread": "This annotation is no longer available",
+      "unavailableThreadDescription": "It may have been removed or your project access may have changed. Choose another annotation to continue.",
+      "noComments": "No comments yet. Add the first one below.",
+      "moreActions": "Annotation actions",
+      "commentActions": "Comment actions",
+      "changeColor": "Change color",
+      "resolvedBy": "Resolved by {author} {time}",
+      "deleteThreadTitle": "Delete this annotation?",
+      "deleteThreadDescription": "The highlight and its comments will be permanently removed.",
+      "deleteCommentTitle": "Delete this comment?",
+      "deleteCommentDescription": "This comment will be permanently removed from the timeline.",
+      "context": "Selected annotation",
+      "filters": {
+        "label": "Filter",
+        "scope": "Scope",
+        "type": "Type",
+        "state": "Status",
+        "all": "All",
+        "personal": "Personal",
+        "project": "Project"
+      },
+      "modes": {
+        "all": "All types",
+        "highlight": "Highlight",
+        "note": "Note",
+        "discussion": "Discussion"
+      },
+      "statusFilter": {
+        "open": "Current",
+        "resolved": "Resolved discussions"
+      },
+      "audience": {
+        "personal": "Personal",
+        "project": "Project"
+      },
+      "status": {
+        "open": "Open",
+        "resolved": "Resolved"
+      },
+      "resolve": "Resolve",
+      "reopen": "Reopen",
+      "unknownAuthor": "Unknown author",
+      "colors": {
+        "yellow": "Yellow highlight",
+        "red": "Red highlight",
+        "blue": "Blue highlight",
+        "green": "Green highlight",
+        "purple": "Purple highlight",
+        "magenta": "Magenta highlight",
+        "orange": "Orange highlight",
+        "gray": "Gray highlight"
+      },
+      "thread": "Annotation thread"
+    },
+    "session": {
+      "checking": "Opening Reader",
+      "retry": "Retry session check",
+      "unavailableDescription": "Reconnect to the server, then retry.",
+      "unavailableTitle": "Reader is temporarily unavailable"
+    }
   },
   "AsyncFeedback": {
     "loading": "Loading",
@@ -57,22 +736,28 @@
       "password": "Password",
       "passwordPlaceholder": "Password",
       "newPassword": "New password",
-      "confirmPassword": "Confirm password",
-      "passwordMinimum": "At least 12 characters"
+      "confirmPassword": "Confirm password"
     },
     "signIn": {
       "state": "Sign in",
       "title": "Welcome back",
-      "description": "Sign in to continue to your papers and projects.",
+      "description": "Where papers become working knowledge.",
       "submit": "Sign in",
       "submitting": "Signing in…"
     },
     "register": {
       "state": "Create account",
       "title": "Create your account",
-      "description": "Keep your papers, projects, and annotations in one place.",
+      "description": "Where papers become working knowledge.",
       "submit": "Create account",
       "submitting": "Creating account…"
+    },
+    "passwordGuidance": {
+      "minimum": "{minimum} characters minimum",
+      "progress": "{count} of {minimum} characters",
+      "complete": "Password requirement met",
+      "matches": "Passwords match",
+      "mismatch": "Passwords do not match"
     },
     "checkInbox": {
       "state": "Check inbox",
@@ -120,7 +805,9 @@
       "retry": "Retry session check"
     },
     "validation": {
+      "displayNameMaximum": "Keep your display name under 120 characters",
       "email": "Enter a valid email address",
+      "passwordConfirmationRequired": "Confirm your password",
       "passwordRequired": "Enter your password",
       "passwordMinimum": "Use at least 12 characters",
       "passwordMismatch": "Passwords do not match",
@@ -143,6 +830,164 @@
       "authenticated": "Signed in",
       "anonymous": "Signed out",
       "unavailable": "Session service unavailable"
+    }
+  },
+  "Projects": {
+    "title": "Projects",
+    "description": "Keep papers, conversations, and research outputs together around a shared question.",
+    "search": "Search projects",
+    "actions": {
+      "create": "New project",
+      "open": "Open",
+      "rename": "Rename",
+      "edit": "Edit project",
+      "delete": "Delete",
+      "leave": "Leave project"
+    },
+    "sort": {
+      "label": "Sort projects",
+      "updated": "Last updated",
+      "title": "Name A–Z",
+      "papers": "Most papers"
+    },
+    "metrics": {
+      "papers": "Papers",
+      "conversations": "Conversations",
+      "outputs": "Outputs"
+    },
+    "card": {
+      "noDescription": "No description",
+      "openMenu": "Open project actions",
+      "updated": "Updated {date}"
+    },
+    "empty": {
+      "title": "Start your first research project",
+      "description": "Create a project to collect papers and keep related conversations and outputs in one place.",
+      "searchTitle": "No matching projects",
+      "searchDescription": "Try another search term or clear the search."
+    },
+    "feedback": {
+      "loading": "Loading projects",
+      "retry": "Try again",
+      "errorTitle": "Projects could not be loaded",
+      "errorDescription": "Check your connection and try again.",
+      "actionFailed": "The project action could not be completed"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "form": {
+      "create": {
+        "title": "Create a project",
+        "description": "Give this research workspace a clear focus. You can add papers next.",
+        "action": "Create project"
+      },
+      "edit": {
+        "title": "Edit project",
+        "description": "Update the name and description shown to everyone in the project.",
+        "action": "Save changes"
+      },
+      "fields": {
+        "title": "Project name",
+        "titleError": "Enter a project name",
+        "description": "Description",
+        "descriptionHint": "Optional · describe the question or outcome this project is working toward"
+      },
+      "cancel": "Cancel",
+      "close": "Close project form",
+      "error": "The project could not be saved. Try again."
+    },
+    "confirm": {
+      "cancel": "Cancel",
+      "delete": {
+        "title": "Delete this project?",
+        "description": "{title} and its project workspace will be permanently deleted. Papers already in personal libraries remain there.",
+        "action": "Delete project"
+      },
+      "leave": {
+        "title": "Leave this project?",
+        "description": "You will lose access to {title} and its shared research context.",
+        "action": "Leave project"
+      }
+    },
+    "detail": {
+      "back": "Back to projects",
+      "manage": "Manage project",
+      "openChat": "Chat",
+      "closeChat": "Return to project",
+      "errorTitle": "Project could not be opened",
+      "errorDescription": "It may have been removed or you may no longer have access.",
+      "tabs": {
+        "overview": "Overview",
+        "papers": "Papers",
+        "outputs": "Outputs"
+      },
+      "recentPapers": "Recent papers",
+      "recentOutputs": "Recent outputs",
+      "viewAll": "View all",
+      "papers": {
+        "search": "Search project papers",
+        "sortLabel": "Sort project papers",
+        "sortAdded": "Recently added",
+        "sortTitle": "Title A–Z",
+        "sortPublished": "Publication date",
+        "add": "Add papers",
+        "openMenu": "Open paper actions",
+        "remove": "Remove from project",
+        "removed": "Paper removed from project",
+        "removeFailed": "The paper could not be removed",
+        "confirm": {
+          "title": "Remove this paper and its project annotations?",
+          "description": "Removing “{title}” will permanently delete {threads, plural, one {# project annotation thread} other {# project annotation threads}} and {comments, plural, one {# comment} other {# comments}}. Personal annotations and Library access are not affected.",
+          "action": "Remove paper and annotations"
+        },
+        "empty": "No papers in this project yet.",
+        "untitled": "Untitled paper",
+        "unknownAuthors": "Authors unavailable",
+        "openReader": "Open in Reader"
+      },
+      "outputs": {
+        "search": "Search project outputs",
+        "kindLabel": "Filter output type",
+        "sortLabel": "Sort project outputs",
+        "allKinds": "All output types",
+        "sortUpdated": "Last updated",
+        "sortTitle": "Title A–Z",
+        "empty": "No research outputs in this project yet.",
+        "startChat": "Start a project chat",
+        "kinds": {
+          "annotation_thread": "Annotation thread",
+          "citation": "Citation",
+          "audio_overview": "Audio overview",
+          "data_table": "Data table"
+        }
+      }
+    },
+    "chat": {
+      "title": "Project chat",
+      "switcher": "Switch project conversation",
+      "new": "New conversation",
+      "emptyTitle": "Explore this project",
+      "emptyDescription": "Ask across the papers and research context collected here."
+    },
+    "addPapers": {
+      "title": "Add papers from Library",
+      "description": "Choose papers from your personal Library to add to this project.",
+      "search": "Search Library papers",
+      "loading": "Loading Library papers…",
+      "empty": "No matching Library papers",
+      "unknownAuthors": "Authors unavailable",
+      "cancel": "Cancel",
+      "close": "Close paper chooser",
+      "action": "Add {count, plural, one {# paper} other {# papers}}",
+      "error": "The selected papers could not be added. Try again."
+    },
+    "session": {
+      "checking": "Checking your session",
+      "retry": "Retry session check",
+      "unavailableTitle": "Projects are temporarily unavailable",
+      "unavailableDescription": "Keep this page open and retry the session check."
     }
   },
   "Errors": {

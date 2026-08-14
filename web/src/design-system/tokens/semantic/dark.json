@@ -52,12 +52,63 @@
       "bg": { "$type": "color", "$value": "{palette.neutral.900}" },
       "foreground": { "$type": "color", "$value": "{palette.neutral.100}" }
     },
+    "document-selection": {
+      "bg": {
+        "$type": "color",
+        "$value": "{palette.document-selection.active}"
+      }
+    },
+    "document-search": {
+      "match": {
+        "$type": "color",
+        "$value": "{palette.document-search.match}"
+      },
+      "current": {
+        "$type": "color",
+        "$value": "{palette.document-search.current}"
+      }
+    },
+    "document-highlight": {
+      "yellow": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.yellow}"
+      },
+      "red": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.red}"
+      },
+      "green": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.green}"
+      },
+      "blue": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.blue}"
+      },
+      "purple": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.purple}"
+      },
+      "magenta": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.magenta}"
+      },
+      "orange": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.orange}"
+      },
+      "gray": {
+        "$type": "color",
+        "$value": "{palette.document-highlight.gray}"
+      }
+    },
     "focus": { "ring": { "$type": "color", "$value": "{palette.neutral.0}" } },
     "overlay": {
       "backdrop": { "$type": "color", "$value": "{palette.overlay.40}" }
     },
     "elevation": {
-      "shadow": { "$type": "color", "$value": "{palette.overlay.40}" }
+      "shadow": { "$type": "color", "$value": "{palette.overlay.40}" },
+      "composer": { "$type": "color", "$value": "{palette.overlay.40}" }
     },
     "annotation": {
       "bg": { "$type": "color", "$value": "{palette.status.warning.strong}" },

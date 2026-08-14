@@ -20,7 +20,9 @@ from app.modules.translations.application.ports import (
 from app.modules.translations.domain import (
     normalize_custom_instructions,
     normalize_language_tag,
+    normalize_reflow_source,
     normalize_source_text,
+    normalize_source_language,
     resolve_target_language,
 )
 from app.shared.application import Actor, OperationContext
@@ -43,7 +45,7 @@ class Translations:
 
     def preferences(self, *, actor: Actor) -> TranslationPreferencesResponse:
         record = self._gateway.get(user_id=actor.id)
-        return self._response(record=record, actor_locale=actor.locale)
+        return self._response(record=record)
 
     def update_preferences(
         self,
@@ -53,11 +55,12 @@ class Translations:
         request: TranslationPreferencesUpdateRequest,
     ) -> TranslationPreferencesResponse:
         try:
+            source_language = normalize_source_language(request.source_language)
             target_language = normalize_language_tag(request.target_language)
         except ValueError:
             raise AppError(
                 code="translation_language_invalid",
-                message="Target language is invalid",
+                message="Translation language is invalid",
                 kind=FailureKind.INVALID_ARGUMENT,
             ) from None
         try:
@@ -73,6 +76,7 @@ class Translations:
         record = self._gateway.upsert(
             user_id=actor.id,
             preferences=TranslationPreferencesRecord(
+                source_language=source_language,
                 target_language=target_language,
                 custom_instructions=custom_instructions,
                 auto_translate_selection=request.auto_translate_selection,
@@ -84,7 +88,7 @@ class Translations:
             action=TRANSLATION_PREFERENCES_UPDATED,
             resources=(ResourceRef("translation_preferences", str(actor.id)),),
         )
-        return self._response(record=record, actor_locale=actor.locale)
+        return self._response(record=record)
 
     def prepare(
         self,
@@ -107,8 +111,38 @@ class Translations:
             document_id=document_id,
             paper_title=paper_title,
             source_text=source_text,
+            source_language=preferences.source_language,
             target_language=preferences.target_language,
             custom_instructions=preferences.custom_instructions,
+        )
+
+    def prepare_reflow_block(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+        paper_title: str | None,
+        block_id: str,
+        source_markdown: str,
+    ) -> PreparedTranslation:
+        try:
+            source_text = normalize_reflow_source(source_markdown)
+        except ValueError:
+            raise AppError(
+                code="translation_text_invalid",
+                message="Reflow block is empty or exceeds the translation limit",
+                kind=FailureKind.INVALID_ARGUMENT,
+            ) from None
+        preferences = self.preferences(actor=actor)
+        return PreparedTranslation(
+            document_id=document_id,
+            paper_title=paper_title,
+            source_text=source_text,
+            source_language=preferences.source_language,
+            target_language=preferences.target_language,
+            custom_instructions=preferences.custom_instructions,
+            context_kind="reflow_block",
+            block_id=block_id,
         )
 
     def require_token_credits(self, *, actor: Actor) -> None:
@@ -123,14 +157,11 @@ class Translations:
     def _response(
         *,
         record: TranslationPreferencesRecord | None,
-        actor_locale: str | None,
     ) -> TranslationPreferencesResponse:
         return TranslationPreferencesResponse(
+            source_language=(record.source_language if record is not None else "auto"),
             target_language=resolve_target_language(
-                stored_language=(
-                    record.target_language if record is not None else None
-                ),
-                actor_locale=actor_locale,
+                stored_language=record.target_language if record is not None else None,
             ),
             custom_instructions=(
                 record.custom_instructions if record is not None else None

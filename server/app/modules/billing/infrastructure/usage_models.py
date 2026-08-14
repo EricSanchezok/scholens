@@ -18,7 +18,7 @@ from app.shared.infrastructure.persistence import Base
 
 
 class TokenUsageEvent(Base):
-    """Immutable provider usage returned by one DeepSeek API call."""
+    """Immutable usage returned by one configured AI provider call."""
 
     __tablename__ = "token_usage_events"
     __table_args__ = (
@@ -36,11 +36,12 @@ class TokenUsageEvent(Base):
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
     operation_id: Mapped[str] = mapped_column(String(128), nullable=False)
     feature: Mapped[str] = mapped_column(String(64), nullable=False)
-    provider: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="deepseek"
-    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(128), nullable=False)
-    reasoning_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    ai_profile: Mapped[str] = mapped_column(String(32), nullable=False)
+    thinking: Mapped[str] = mapped_column(String(16), nullable=False)
+    thinking_effort: Mapped[str] = mapped_column(String(16), nullable=False)
+    profile_revision: Mapped[str] = mapped_column(String(64), nullable=False)
     provider_request_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     prompt_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     completion_tokens: Mapped[int] = mapped_column(

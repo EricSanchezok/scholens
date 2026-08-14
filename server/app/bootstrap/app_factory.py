@@ -25,7 +25,7 @@ from app.transport.http.internal_v1.jobs_callbacks import (
     webhook_router as jobs_callback_router,
 )
 from app.transport.http.public_v1.library_tags import library_tags_router
-from app.transport.http.public_v1.messages import message_router
+from app.transport.http.public_v1.turns import turn_router
 from app.transport.http.public_v1.discovery import (
     author_discovery_router,
     paper_search_router,
@@ -58,6 +58,7 @@ from app.transport.http.public_v1.translations import (
     paper_translations_router,
     translation_preferences_router,
 )
+from app.transport.http.public_v1.reflows import paper_reflows_router
 from app.modules.identity.infrastructure.sanchezcloud_identity import (
     sanchezcloud_identity_router,
     identity_user_router,
@@ -72,7 +73,6 @@ from app.bootstrap.execution import (
     create_connector_workflow,
     create_conversation_agent_runtime,
     create_conversation_chat,
-    create_conversation_title_workflow,
     create_citation_workflow,
     create_job_completion_processor,
     create_mcp_transport,
@@ -128,13 +128,14 @@ def _public_router() -> APIRouter:
         tags=["zotero"],
     )
     # Static chat capability routes must precede the UUID conversation route.
-    router.include_router(message_router, prefix="/conversations")
+    router.include_router(turn_router, prefix="/conversations")
     router.include_router(conversation_router, prefix="/conversations")
     router.include_router(library_router, prefix="/library")
     router.include_router(library_project_papers_router, prefix="/library")
     router.include_router(library_tags_router, prefix="/library")
     router.include_router(document_router, prefix="/papers")
     router.include_router(paper_translations_router, prefix="/papers")
+    router.include_router(paper_reflows_router, prefix="/papers")
     router.include_router(paper_projects_router, prefix="/papers")
     router.include_router(public_document_router, prefix="/shares")
     router.include_router(projects_router, prefix="/projects")
@@ -233,9 +234,6 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         conversation_runtime,
         operation_context_factory,
         application.state.diagnostic_snapshot_recorder,
-    )
-    application.state.conversation_title_workflow = create_conversation_title_workflow(
-        executor, operation_context_factory
     )
     application.state.onboarding_finisher = create_onboarding_finisher()
     application.state.billing_workflow = create_billing_workflow(

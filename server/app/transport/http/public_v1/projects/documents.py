@@ -11,15 +11,19 @@ from app.modules.projects.application.contracts import (
     ProjectPaperCollectedResponse,
     ProjectPaperFileUrlResponse,
     ProjectPaperListResponse,
+    ProjectPaperSort,
+    ProjectOutputListResponse,
     ProjectPapersAddedResponse,
     ProjectPendingUploadsResponse,
 )
+from app.modules.papers.application.contracts.documents import LibraryOutputSort
+from app.shared.domain.enums import ResearchItemKind
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 project_papers_router = APIRouter()
 paper_projects_router = APIRouter()
@@ -79,6 +83,10 @@ def add_paper_to_project(
 def get_project_papers(
     project_id: UUID,
     load_urls: bool = False,
+    q: str | None = Query(default=None, max_length=240),
+    sort: ProjectPaperSort = ProjectPaperSort.ADDED_DESC,
+    cursor: str | None = Query(default=None, min_length=1, max_length=2048),
+    limit: int = Query(default=20, ge=1, le=100),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -89,6 +97,39 @@ def get_project_papers(
             actor=current_user,
             project_id=project_id,
             load_urls=load_urls,
+            query=q,
+            sort=sort,
+            cursor=cursor,
+            limit=limit,
+        )
+    )
+
+
+@project_papers_router.get(
+    "/{project_id}/outputs",
+    response_model=ProjectOutputListResponse,
+)
+def get_project_outputs(
+    project_id: UUID,
+    q: str | None = Query(default=None, max_length=240),
+    kinds: list[ResearchItemKind] = Query(default=[]),
+    sort: LibraryOutputSort = LibraryOutputSort.UPDATED_DESC,
+    cursor: str | None = Query(default=None, min_length=1, max_length=2048),
+    limit: int = Query(default=20, ge=1, le=100),
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+) -> ProjectOutputListResponse:
+    return executor.query(
+        lambda capabilities: capabilities.projects.outputs(
+            actor=current_user,
+            project_id=project_id,
+            query=q,
+            kinds=tuple(kinds),
+            sort=sort,
+            cursor=cursor,
+            limit=limit,
         )
     )
 
@@ -159,6 +200,7 @@ def get_projects_from_document_id(
 def remove_paper_from_project(
     project_id: UUID,
     document_id: UUID,
+    confirm_delete_annotations: bool = False,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -171,6 +213,7 @@ def remove_paper_from_project(
             operation=operation,
             project_id=project_id,
             document_id=document_id,
+            confirm_delete_annotations=confirm_delete_annotations,
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

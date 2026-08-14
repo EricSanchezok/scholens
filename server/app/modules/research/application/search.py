@@ -1,4 +1,4 @@
-"""Independent search capability for highlights and their comments."""
+"""Independent search capability for annotation threads and comments."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.shared.application import Actor, SignedCursorCodec
+from app.modules.research.application.positions import ResearchPosition
 from pydantic import BaseModel, ConfigDict, Field
 
 RESEARCH_SEARCH_REVISION = "research-search:1"
@@ -39,9 +40,7 @@ class ResearchSearchResult(BaseModel):
     document_id: UUID
     document_title: str | None
     quote_text: str
-    page_number: int | None
-    start_offset: int | None
-    end_offset: int | None
+    position: ResearchPosition | None
     role: str
     created_at: datetime
     matching_comments: list[ResearchSearchComment]

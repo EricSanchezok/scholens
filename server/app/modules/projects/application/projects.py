@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
+import json
+from collections.abc import Mapping
 from typing import Protocol
 from uuid import UUID
 
@@ -22,9 +25,13 @@ from app.modules.projects.application.contracts import (
     ProjectPaperCollectedResponse,
     ProjectPaperFileUrlResponse,
     ProjectPaperListResponse,
+    ProjectPaperSummaryResponse,
+    ProjectPaperSort,
     ProjectPapersAddedResponse,
     ProjectPendingUploadsResponse,
+    ProjectOutputListResponse,
     ProjectResponse,
+    ProjectSort,
     ProjectTransferRequest,
     ProjectUpdateRequest,
 )
@@ -50,8 +57,49 @@ from app.modules.operation_journal.domain import (
     ResourceRef,
 )
 from app.shared.application import Actor
+from app.shared.application import SignedCursorCodec
 from app.shared.application.operation_context import OperationContext
 from app.shared.domain import AppError, FailureKind
+from app.modules.papers.application.contracts.documents import (
+    LibraryOutputResponse,
+    LibraryOutputSort,
+)
+from app.shared.domain.enums import ResearchItemKind
+
+
+class ProjectPageDirection(StrEnum):
+    FORWARD = "forward"
+    BACKWARD = "backward"
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectPagePosition:
+    key: str
+    id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectPage:
+    items: list[ProjectResponse]
+    positions: list[ProjectPagePosition]
+    has_more: bool
+    total_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectPaperPage:
+    items: list[ProjectPaperSummaryResponse]
+    positions: list[ProjectPagePosition]
+    has_more: bool
+    total_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectOutputPage:
+    items: list[LibraryOutputResponse]
+    positions: list[ProjectPagePosition]
+    has_more: bool
+    total_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,8 +156,12 @@ class ProjectGateway(Protocol):
         self,
         *,
         user_id: int,
-        limit: int | None,
-    ) -> list[ProjectResponse]: ...
+        query: str | None,
+        sort: ProjectSort,
+        limit: int,
+        direction: ProjectPageDirection,
+        position: ProjectPagePosition | None,
+    ) -> ProjectPage: ...
 
     def get(self, *, user_id: int, project_id: UUID) -> ProjectResponse: ...
 
@@ -224,7 +276,25 @@ class ProjectGateway(Protocol):
         actor: Actor,
         project_id: UUID,
         load_urls: bool,
-    ) -> ProjectPaperListResponse: ...
+        query: str | None,
+        sort: ProjectPaperSort,
+        limit: int,
+        direction: ProjectPageDirection,
+        position: ProjectPagePosition | None,
+    ) -> ProjectPaperPage: ...
+
+    def list_outputs(
+        self,
+        *,
+        actor: Actor,
+        project_id: UUID,
+        query: str | None,
+        kinds: tuple[ResearchItemKind, ...],
+        sort: LibraryOutputSort,
+        limit: int,
+        direction: ProjectPageDirection,
+        position: ProjectPagePosition | None,
+    ) -> ProjectOutputPage: ...
 
     def pending_uploads(
         self,
@@ -256,6 +326,7 @@ class ProjectGateway(Protocol):
         document_id: UUID,
         origin_operation_id: UUID,
         correlation_id: UUID,
+        confirm_delete_annotations: bool,
     ) -> ProjectPaperRemoval: ...
 
 
@@ -270,11 +341,13 @@ class Projects:
         gateway: ProjectGateway,
         capacity: ProjectCapacity,
         signer: PaperDownloadSigner,
+        cursors: SignedCursorCodec,
         journal: OperationJournal,
     ) -> None:
         self._gateway = gateway
         self._capacity = capacity
         self._signer = signer
+        self._cursors = cursors
         self._journal = journal
 
     def create(
@@ -298,10 +371,48 @@ class Projects:
         self,
         *,
         actor: Actor,
-        limit: int | None,
+        query: str | None = None,
+        sort: ProjectSort = ProjectSort.ACTIVITY_DESC,
+        cursor: str | None = None,
+        limit: int = 20,
     ) -> ProjectListResponse:
+        normalized_query = query.strip() if query and query.strip() else None
+        filters = {"q": normalized_query, "sort": sort.value, "limit": limit}
+        direction, position = self._decode_cursor(
+            actor=actor,
+            collection="projects",
+            filters=filters,
+            cursor=cursor,
+        )
+        page = self._gateway.list_projects(
+            user_id=actor.id,
+            query=normalized_query,
+            sort=sort,
+            limit=limit,
+            direction=direction,
+            position=position,
+        )
         return ProjectListResponse(
-            items=self._gateway.list_projects(user_id=actor.id, limit=limit)
+            items=page.items,
+            previous_cursor=self._page_cursor(
+                actor=actor,
+                collection="projects",
+                filters=filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+                previous=True,
+            ),
+            next_cursor=self._page_cursor(
+                actor=actor,
+                collection="projects",
+                filters=filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+                previous=False,
+            ),
+            total_count=page.total_count,
         )
 
     def get(self, *, actor: Actor, project_id: UUID) -> ProjectResponse:
@@ -646,11 +757,189 @@ class Projects:
         actor: Actor,
         project_id: UUID,
         load_urls: bool,
+        query: str | None = None,
+        sort: ProjectPaperSort = ProjectPaperSort.ADDED_DESC,
+        cursor: str | None = None,
+        limit: int = 20,
     ) -> ProjectPaperListResponse:
-        return self._gateway.list_documents(
+        normalized_query = query.strip() if query and query.strip() else None
+        filters = {
+            "project_id": str(project_id),
+            "q": normalized_query,
+            "sort": sort.value,
+            "limit": limit,
+            "load_urls": load_urls,
+        }
+        direction, position = self._decode_cursor(
+            actor=actor,
+            collection="project-papers",
+            filters=filters,
+            cursor=cursor,
+        )
+        page = self._gateway.list_documents(
             actor=actor,
             project_id=project_id,
             load_urls=load_urls,
+            query=normalized_query,
+            sort=sort,
+            limit=limit,
+            direction=direction,
+            position=position,
+        )
+        return ProjectPaperListResponse(
+            items=page.items,
+            previous_cursor=self._page_cursor(
+                actor=actor,
+                collection="project-papers",
+                filters=filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+                previous=True,
+            ),
+            next_cursor=self._page_cursor(
+                actor=actor,
+                collection="project-papers",
+                filters=filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+                previous=False,
+            ),
+            total_count=page.total_count,
+        )
+
+    def outputs(
+        self,
+        *,
+        actor: Actor,
+        project_id: UUID,
+        query: str | None = None,
+        kinds: tuple[ResearchItemKind, ...] = (),
+        sort: LibraryOutputSort = LibraryOutputSort.UPDATED_DESC,
+        cursor: str | None = None,
+        limit: int = 20,
+    ) -> ProjectOutputListResponse:
+        normalized_query = query.strip() if query and query.strip() else None
+        normalized_kinds = tuple(sorted(set(kinds), key=lambda value: value.value))
+        filters = {
+            "project_id": str(project_id),
+            "q": normalized_query,
+            "kinds": [kind.value for kind in normalized_kinds],
+            "sort": sort.value,
+            "limit": limit,
+        }
+        direction, position = self._decode_cursor(
+            actor=actor,
+            collection="project-outputs",
+            filters=filters,
+            cursor=cursor,
+        )
+        page = self._gateway.list_outputs(
+            actor=actor,
+            project_id=project_id,
+            query=normalized_query,
+            kinds=normalized_kinds,
+            sort=sort,
+            limit=limit,
+            direction=direction,
+            position=position,
+        )
+        return ProjectOutputListResponse(
+            items=page.items,
+            previous_cursor=self._page_cursor(
+                actor=actor,
+                collection="project-outputs",
+                filters=filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+                previous=True,
+            ),
+            next_cursor=self._page_cursor(
+                actor=actor,
+                collection="project-outputs",
+                filters=filters,
+                page=page,
+                direction=direction,
+                had_position=position is not None,
+                previous=False,
+            ),
+            total_count=page.total_count,
+        )
+
+    def _decode_cursor(
+        self,
+        *,
+        actor: Actor,
+        collection: str,
+        filters: Mapping[str, object],
+        cursor: str | None,
+    ) -> tuple[ProjectPageDirection, ProjectPagePosition | None]:
+        if cursor is None:
+            return ProjectPageDirection.FORWARD, None
+        try:
+            direction, key, item_id = self._cursors.decode_keyset(
+                cursor=cursor,
+                fingerprint=self._cursor_binding(actor, collection, filters),
+                arity=3,
+            )
+            return ProjectPageDirection(direction), ProjectPagePosition(
+                key=key,
+                id=UUID(item_id),
+            )
+        except (TypeError, ValueError) as error:
+            raise AppError(
+                code="project_cursor_invalid",
+                message="The Project cursor is invalid or expired",
+                kind=FailureKind.INVALID_ARGUMENT,
+            ) from error
+
+    def _page_cursor(
+        self,
+        *,
+        actor: Actor,
+        collection: str,
+        filters: Mapping[str, object],
+        page: ProjectPage | ProjectPaperPage | ProjectOutputPage,
+        direction: ProjectPageDirection,
+        had_position: bool,
+        previous: bool,
+    ) -> str | None:
+        if not page.positions:
+            return None
+        available = (
+            page.has_more
+            if (previous and direction is ProjectPageDirection.BACKWARD)
+            or (not previous and direction is ProjectPageDirection.FORWARD)
+            else had_position
+        )
+        if not available:
+            return None
+        target_direction = (
+            ProjectPageDirection.BACKWARD if previous else ProjectPageDirection.FORWARD
+        )
+        position = page.positions[0] if previous else page.positions[-1]
+        return self._cursors.encode_keyset(
+            fingerprint=self._cursor_binding(actor, collection, filters),
+            values=(target_direction.value, position.key, str(position.id)),
+        )
+
+    @staticmethod
+    def _cursor_binding(
+        actor: Actor,
+        collection: str,
+        filters: Mapping[str, object],
+    ) -> str:
+        return json.dumps(
+            {
+                "revision": "projects-v1",
+                "user_id": actor.id,
+                "collection": collection,
+                "filters": filters,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
         )
 
     def pending_uploads(
@@ -696,11 +985,13 @@ class Projects:
         actor: Actor,
         document_id: UUID,
     ) -> ProjectListResponse:
+        items = self._gateway.projects_for_document(
+            actor=actor,
+            document_id=document_id,
+        )
         return ProjectListResponse(
-            items=self._gateway.projects_for_document(
-                actor=actor,
-                document_id=document_id,
-            )
+            items=items,
+            total_count=len(items),
         )
 
     def remove_document(
@@ -710,6 +1001,7 @@ class Projects:
         operation: OperationContext,
         project_id: UUID,
         document_id: UUID,
+        confirm_delete_annotations: bool = False,
     ) -> None:
         result = self._gateway.remove_document(
             actor=actor,
@@ -717,6 +1009,7 @@ class Projects:
             document_id=document_id,
             origin_operation_id=operation.trace.operation_id,
             correlation_id=operation.trace.correlation_id,
+            confirm_delete_annotations=confirm_delete_annotations,
         )
         changes = [
             OperationChange(

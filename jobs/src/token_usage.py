@@ -1,4 +1,4 @@
-"""Per-task DeepSeek usage collection for server-side settlement."""
+"""Per-task AI provider usage collection for server-side settlement."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Iterator
+
+from scholens_ai import AIProfile
 
 
 @dataclass
@@ -32,7 +34,7 @@ def collect_token_usage(operation_id: str) -> Iterator[UsageCollector]:
 def record_token_usage(
     *,
     feature: str,
-    model: str,
+    profile: AIProfile,
     usage: Any,
     request_id: str | None,
     idempotency_suffix: str,
@@ -42,9 +44,15 @@ def record_token_usage(
         return
 
     status = "unknown" if usage is None else "settled"
-    prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-    completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-    total_tokens = int(getattr(usage, "total_tokens", 0) or 0)
+    prompt_tokens = int(
+        getattr(usage, "input_tokens", getattr(usage, "prompt_tokens", 0)) or 0
+    )
+    completion_tokens = int(
+        getattr(usage, "output_tokens", getattr(usage, "completion_tokens", 0)) or 0
+    )
+    total_tokens = int(
+        getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0
+    )
     prompt_details = getattr(usage, "prompt_tokens_details", None)
     completion_details = getattr(usage, "completion_tokens_details", None)
 
@@ -53,15 +61,24 @@ def record_token_usage(
             "idempotency_key": (f"jobs:{collector.operation_id}:{idempotency_suffix}"),
             "operation_id": collector.operation_id,
             "feature": feature,
-            "model": model,
-            "reasoning_level": "standard",
+            "provider": profile.provider,
+            "model": profile.model_id,
+            "ai_profile": profile.name.value,
+            "thinking": profile.thinking.value,
+            "thinking_effort": profile.thinking_effort.value,
+            "profile_revision": profile.revision,
             "provider_request_id": request_id,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "reasoning_tokens": int(
-                getattr(completion_details, "reasoning_tokens", 0) or 0
+                getattr(completion_details, "reasoning_tokens", 0)
+                or getattr(usage, "details", {}).get("reasoning_tokens", 0)
             ),
-            "cache_hit_tokens": int(getattr(prompt_details, "cached_tokens", 0) or 0),
+            "cache_hit_tokens": int(
+                getattr(usage, "cache_read_tokens", 0)
+                or getattr(prompt_details, "cached_tokens", 0)
+                or 0
+            ),
             "cache_miss_tokens": 0,
             "total_tokens": total_tokens,
             "status": status,

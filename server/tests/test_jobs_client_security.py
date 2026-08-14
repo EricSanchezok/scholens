@@ -42,3 +42,20 @@ def test_jobs_client_reuses_one_configured_celery_producer() -> None:
     assert celery_app.send_task.call_args_list[0].kwargs["headers"] == {
         "scholens-correlation-id": "correlation-id"
     }
+
+
+def test_jobs_client_revoke_never_terminates_a_worker_process() -> None:
+    celery_app = MagicMock()
+    with patch(
+        "app.modules.jobs.infrastructure.client.Celery", return_value=celery_app
+    ):
+        client = JobsClient(
+            celery_broker_url="amqp://user:password@rabbitmq:5672//",
+        )
+
+    client.revoke(job_id="paper-job")
+
+    celery_app.control.revoke.assert_called_once_with(
+        "paper-job",
+        terminate=False,
+    )

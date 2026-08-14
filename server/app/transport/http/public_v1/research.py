@@ -8,23 +8,27 @@ from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadListResponse,
     CreateAnnotationCommentRequest,
-    CreateHighlightThreadRequest,
-    DeleteHighlightThreadRequest,
+    CreateAnnotationThreadRequest,
     DeleteResearchItemResponse,
     ResearchItemListResponse,
     ResearchItemResponse,
-    ResearchVisibilityRequest,
     UpdateAnnotationCommentRequest,
-    UpdateHighlightThreadRequest,
+    UpdateAnnotationThreadRequest,
 )
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
-from app.shared.domain.enums import RoleType
+from app.shared.domain.enums import (
+    AnnotationAudienceFilter,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    RoleType,
+)
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 document_research_router = APIRouter()
 project_research_router = APIRouter()
@@ -70,33 +74,43 @@ def list_project_research_items(
 
 
 @document_research_router.get(
-    "/{document_id}/highlight-threads",
-    response_model=ResearchItemListResponse,
+    "/{document_id}/annotation-threads",
+    response_model=AnnotationThreadListResponse,
 )
-def list_highlight_threads(
+def list_annotation_threads(
     document_id: UUID,
+    project_id: UUID | None = Query(default=None),
+    audience: AnnotationAudienceFilter | None = Query(default=None),
+    mode: AnnotationThreadMode | None = Query(default=None),
+    annotation_status: AnnotationThreadStatus = Query(
+        default=AnnotationThreadStatus.OPEN,
+        alias="status",
+    ),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
-) -> ResearchItemListResponse:
+) -> AnnotationThreadListResponse:
     return executor.query(
-        lambda capabilities: capabilities.research_items.list_document(
+        lambda capabilities: capabilities.research_items.list_annotation_threads(
             actor=current_user,
             document_id=document_id,
-            highlights_only=True,
+            project_id=project_id,
+            audience=audience,
+            mode=mode,
+            status=annotation_status,
         )
     )
 
 
 @document_research_router.post(
-    "/{document_id}/highlight-threads",
+    "/{document_id}/annotation-threads",
     response_model=ResearchItemResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_highlight_thread(
+def create_annotation_thread(
     document_id: UUID,
-    request: CreateHighlightThreadRequest,
+    request: CreateAnnotationThreadRequest,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -104,7 +118,7 @@ def create_highlight_thread(
     operation: OperationContext = Depends(get_required_operation),
 ) -> ResearchItemResponse:
     return executor.command(
-        lambda capabilities: capabilities.research_items.create_highlight(
+        lambda capabilities: capabilities.research_items.create_annotation_thread(
             actor=current_user,
             operation=operation,
             content_role=RoleType.USER,
@@ -115,12 +129,12 @@ def create_highlight_thread(
 
 
 @research_router.patch(
-    "/highlight-threads/{thread_id}",
+    "/annotation-threads/{thread_id}",
     response_model=ResearchItemResponse,
 )
-def update_highlight_thread(
+def update_annotation_thread(
     thread_id: UUID,
-    request: UpdateHighlightThreadRequest,
+    request: UpdateAnnotationThreadRequest,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -128,7 +142,7 @@ def update_highlight_thread(
     operation: OperationContext = Depends(get_required_operation),
 ) -> ResearchItemResponse:
     return executor.command(
-        lambda capabilities: capabilities.research_items.update_highlight(
+        lambda capabilities: capabilities.research_items.update_annotation_thread(
             actor=current_user,
             operation=operation,
             thread_id=thread_id,
@@ -137,13 +151,31 @@ def update_highlight_thread(
     )
 
 
+@research_router.get(
+    "/annotation-threads/{thread_id}",
+    response_model=ResearchItemResponse,
+)
+def get_annotation_thread(
+    thread_id: UUID,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+) -> ResearchItemResponse:
+    return executor.query(
+        lambda capabilities: capabilities.research_items.get_annotation_thread(
+            actor=current_user,
+            thread_id=thread_id,
+        )
+    )
+
+
 @research_router.delete(
-    "/highlight-threads/{thread_id}",
+    "/annotation-threads/{thread_id}",
     response_model=DeleteResearchItemResponse,
 )
-def delete_highlight_thread(
+def delete_annotation_thread(
     thread_id: UUID,
-    request: DeleteHighlightThreadRequest = Depends(),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
@@ -151,17 +183,16 @@ def delete_highlight_thread(
     operation: OperationContext = Depends(get_required_operation),
 ) -> DeleteResearchItemResponse:
     return executor.command(
-        lambda capabilities: capabilities.research_items.delete_highlight(
+        lambda capabilities: capabilities.research_items.delete_annotation_thread(
             actor=current_user,
             operation=operation,
             thread_id=thread_id,
-            request=request,
         )
     )
 
 
 @research_router.post(
-    "/highlight-threads/{thread_id}/comments",
+    "/annotation-threads/{thread_id}/comments",
     response_model=AnnotationCommentResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -228,29 +259,6 @@ def delete_annotation_comment(
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@research_router.patch(
-    "/research-items/{item_id}",
-    response_model=ResearchItemResponse,
-)
-def update_research_item(
-    item_id: UUID,
-    request: ResearchVisibilityRequest,
-    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
-        get_application_executor
-    ),
-    current_user: Actor = Depends(get_required_user),
-    operation: OperationContext = Depends(get_required_operation),
-) -> ResearchItemResponse:
-    return executor.command(
-        lambda capabilities: capabilities.research_items.set_visibility(
-            actor=current_user,
-            operation=operation,
-            item_id=item_id,
-            request=request,
-        )
-    )
 
 
 @research_router.delete(

@@ -3,14 +3,12 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
-from app.modules.conversations.infrastructure.message_repository import (
-    message_repository,
-)
 from app.database.models import (
     Conversation,
     ConversationContextDocument,
     ConversationContextProject,
-    Message,
+    ConversationResponse,
+    ConversationTurn,
 )
 from app.shared.domain import AppError, FailureKind, WorkspacePermission
 from app.main import app
@@ -24,15 +22,26 @@ from app.bootstrap.adapters.conversation_chat_data import (
 from app.modules.conversations.application.chat import ConversationChatScope
 from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
+    ConversationListRequest,
     LibraryPaperContext,
     ConversationMoveRequest,
     SelectedPaperContext,
     ConversationUpdateRequest,
 )
-from app.modules.conversations.infrastructure.presenters import serialize_messages
-from app.modules.conversations.infrastructure.message_repository import MessageCreate
-from app.shared.application import Actor
-from app.shared.domain.enums import ConversationScopeType, RoleType
+from app.modules.conversations.application.conversations import (
+    ConversationListPosition,
+    ConversationPage,
+    Conversations,
+)
+from app.modules.conversations.application.contracts.turns import (
+    ConversationAssistantItem,
+)
+from app.modules.conversations.application.contracts.trace import ConversationTrace
+from app.modules.conversations.infrastructure.presenters import serialize_turns
+from app.modules.conversations.infrastructure.turn_repository import turn_repository
+from app.shared.application import Actor, SignedCursorCodec
+from app.modules.operation_journal.application import OperationJournal
+from app.shared.domain.enums import ConversationScopeType
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
 
@@ -47,29 +56,66 @@ def _current_user() -> Actor:
     )
 
 
-def test_assistant_trace_serializes_as_an_object() -> None:
-    message = Message(
+def test_response_trace_serializes_as_a_typed_product_trace() -> None:
+    turn = ConversationTurn(
         id=uuid.uuid4(),
         conversation_id=uuid.uuid4(),
-        role="assistant",
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        user_query="Question",
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        sequence=1,
+    )
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        variant_index=1,
+        status="completed",
         content="Answer",
         references={"annotations": [], "sources": []},
         trace={
-            "citations": [],
-            "tool_calls": [{"name": "search", "status": "completed"}],
-            "status_messages": ["Searching the library"],
+            "entries": [
+                {
+                    "kind": "activity",
+                    "id": "search-1",
+                    "sequence": 1,
+                    "category": "search",
+                    "state": "succeeded",
+                    "subject": "reasoning compression",
+                    "source_count": 2,
+                }
+            ],
+            "citation_summary": {
+                "source_count": 2,
+                "annotation_count": 1,
+                "rejected_source_count": 0,
+            },
         },
-        sequence=2,
     )
-    message.artifacts = []
+    response.research_items = []
+    turn.responses = [response]
+    turn.selected_response_id = response.id
 
-    serialized = serialize_messages([message])
+    serialized = serialize_turns([turn], latest_turn_id=turn.id)
 
-    assert serialized[0].trace == {
-        "citations": [],
-        "tool_calls": [{"name": "search", "status": "completed"}],
-        "status_messages": ["Searching the library"],
-    }
+    assert serialized[0].responses[0].trace == ConversationTrace.model_validate(
+        response.trace
+    )
+    assert serialized[0].selected_response_id == response.id
+
+
+def test_completed_assistant_items_require_visible_content() -> None:
+    with pytest.raises(ValidationError):
+        ConversationAssistantItem(
+            id="assistant:item",
+            sequence=1,
+            phase="final",
+            content="",
+        )
 
 
 def test_conversation_scope_contract_is_private_and_unified() -> None:
@@ -78,7 +124,14 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
     assert "/api/v1/conversations" in paths
     assert "/api/v1/conversations/{conversation_id}/scope" in paths
     assert "/api/v1/conversations/{conversation_id}/context" in paths
-    assert "/api/v1/conversations/{conversation_id}/messages" in paths
+    assert "/api/v1/conversations/{conversation_id}/turns" in paths
+    assert "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses" in paths
+    assert (
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response"
+        in paths
+    )
+    assert not any(path.endswith("/suggestions") for path in paths)
+    assert "/api/v1/conversations/{conversation_id}/messages" not in paths
     assert not any(path.startswith("/api/v1/conversation/") for path in paths)
     assert not any(path.startswith("/api/v1/projects/conversations") for path in paths)
     assert not any("conversation/share" in path for path in paths)
@@ -105,65 +158,100 @@ def test_conversation_scope_contract_is_private_and_unified() -> None:
         "conversation_id",
         "document_id",
     } <= set(ConversationContextDocument.__table__.c.keys())
-    assert "user_id" not in Message.__table__.c
+    assert "user_id" not in ConversationTurn.__table__.c
+    assert "contexts" in ConversationTurn.__table__.c
+    assert "user_references" not in ConversationTurn.__table__.c
     assert any(
-        constraint.name == "uq_messages_conversation_sequence"
-        for constraint in Message.__table__.constraints
+        constraint.name == "uq_conversation_turns_conversation_sequence"
+        for constraint in ConversationTurn.__table__.constraints
+    )
+    assert any(
+        constraint.name == "uq_conversation_responses_turn_variant"
+        for constraint in ConversationResponse.__table__.constraints
     )
 
 
-def test_message_creation_locks_and_touches_the_owned_conversation() -> None:
-    db = MagicMock(spec=Session)
-    conversation = Conversation(
-        id=uuid.uuid4(),
-        title="Conversation",
-        user_id=1,
-        scope_type="global",
-    )
-    original_updated_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    conversation.updated_at = original_updated_at
-    db.scalar.side_effect = [conversation, 3]
+def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
+    response = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
+        "post"
+    ]["responses"]["200"]
 
-    message = message_repository.create(
-        db,
-        request=MessageCreate(
-            conversation_id=conversation.id,
-            turn_id=uuid.uuid4(),
-            created_operation_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-            role=RoleType.USER,
-            content="Question",
+    assert response["content"]["text/event-stream"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationStreamEventSchema"
+    )
+    event_schema = app.openapi()["components"]["schemas"][
+        "ConversationStreamEventSchema"
+    ]["oneOf"]
+    assert {item["$ref"].rsplit("/", maxsplit=1)[-1] for item in event_schema} == {
+        "ConversationStreamStartEvent",
+        "ConversationStreamActivityEvent",
+        "ConversationStreamAssistantItemStartEvent",
+        "ConversationStreamAssistantItemDeltaEvent",
+        "ConversationStreamAssistantItemCompleteEvent",
+        "ConversationStreamReferencesEvent",
+        "ConversationStreamResponseReadyEvent",
+        "ConversationStreamSuggestionsEvent",
+        "ConversationStreamCompleteEvent",
+        "ConversationStreamErrorEvent",
+    }
+
+    schemas = app.openapi()["components"]["schemas"]
+    assert "ConversationSuggestionsResponse" not in schemas
+    variant_properties = schemas["ConversationResponseVariantResponse"]["properties"]
+    assert "suggestions" not in variant_properties
+    assert "suggestions_status" not in variant_properties
+    assert "suggestions" in schemas["ConversationTurnResponse"]["properties"]
+    assert "contexts" in schemas["ConversationTurnResponse"]["properties"]
+    assert "user_references" not in schemas["ConversationTurnResponse"]["properties"]
+    create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
+    assert "contexts" in create_properties
+    assert "mentioned_thread_ids" not in create_properties
+
+
+def test_conversation_list_cursor_is_bound_to_paper_scope() -> None:
+    gateway = MagicMock()
+    next_position = ConversationListPosition(
+        pinned_at=None,
+        updated_at=datetime.now(timezone.utc),
+        conversation_id=uuid.uuid4(),
+    )
+    gateway.list_conversations.return_value = ConversationPage(
+        items=[],
+        next_position=next_position,
+    )
+    service = Conversations(
+        gateway=gateway,
+        list_cursors=SignedCursorCodec(
+            "test-secret",
+            revision="conversation-list-v2",
+            error_code="conversation_cursor_expired",
         ),
-        user_id=_current_user().id,
-        refresh_result=False,
+        turn_cursors=MagicMock(),
+        journal=MagicMock(spec=OperationJournal),
     )
-
-    assert message is not None
-    assert message.sequence == 4
-    assert conversation.updated_at > original_updated_at
-    ownership_statement = db.scalar.call_args_list[0].args[0]
-    assert "FOR UPDATE" in str(ownership_statement)
-
-
-def test_message_creation_rejects_a_conversation_owned_by_someone_else() -> None:
-    db = MagicMock(spec=Session)
-    db.scalar.return_value = None
+    document_id = uuid.uuid4()
+    first_page = service.list_page(
+        actor=_current_user(),
+        request=ConversationListRequest(
+            scope_type=ConversationScopeType.PAPER,
+            scope_id=document_id,
+            limit=20,
+        ),
+    )
+    assert first_page.next_cursor is not None
+    assert gateway.list_conversations.call_args.kwargs["scope_id"] == document_id
 
     with pytest.raises(AppError) as exc_info:
-        message_repository.create(
-            db,
-            request=MessageCreate(
-                conversation_id=uuid.uuid4(),
-                turn_id=uuid.uuid4(),
-                created_operation_id=uuid.uuid4(),
-                correlation_id=uuid.uuid4(),
-                role=RoleType.USER,
-                content="Question",
+        service.list_page(
+            actor=_current_user(),
+            request=ConversationListRequest(
+                scope_type=ConversationScopeType.PAPER,
+                scope_id=uuid.uuid4(),
+                cursor=first_page.next_cursor,
+                limit=20,
             ),
-            user_id=_current_user().id,
         )
-
-    assert exc_info.value.code == "conversation_not_found"
+    assert exc_info.value.code == "conversation_cursor_expired"
 
 
 def test_owned_conversation_lookup_filters_id_and_user_in_one_query() -> None:
@@ -180,6 +268,42 @@ def test_owned_conversation_lookup_filters_id_and_user_in_one_query() -> None:
     statement = str(db.scalar.call_args.args[0])
     assert "conversations.id" in statement
     assert "conversations.user_id" in statement
+
+
+def test_project_conversation_list_can_filter_current_document() -> None:
+    document_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    request = ConversationListRequest(
+        scope_type=ConversationScopeType.PROJECT,
+        scope_id=project_id,
+        context_document_id=document_id,
+    )
+    assert request.context_document_id == document_id
+
+    db = MagicMock(spec=Session)
+    result = MagicMock()
+    result.all.return_value = []
+    db.scalars.return_value = result
+    conversation_repository.list(
+        db,
+        user_id=73,
+        archived=False,
+        scope_type=ConversationScopeType.PROJECT,
+        scope_id=project_id,
+        context_document_id=document_id,
+        limit=20,
+        position=None,
+    )
+    statement = str(db.scalars.call_args.args[0])
+    assert "conversation_context_documents" in statement
+    assert "conversations.project_id" in statement
+
+    with pytest.raises(ValidationError):
+        ConversationListRequest(
+            scope_type=ConversationScopeType.PAPER,
+            scope_id=document_id,
+            context_document_id=document_id,
+        )
 
 
 def test_paper_conversation_scope_is_immutable(
@@ -409,6 +533,7 @@ def test_paper_context_snapshot_only_loads_anchor_full_text(
                 document_ids=[anchor_id, extra_id],
             ),
             tool_permissions=frozenset(WorkspacePermission),
+            title_is_default=False,
         ),
     )
 
@@ -417,46 +542,6 @@ def test_paper_context_snapshot_only_loads_anchor_full_text(
     assert by_id[anchor_id].abstract == "Anchor abstract"
     assert by_id[extra_id].raw_content is None
     assert by_id[extra_id].abstract is None
-
-
-def test_library_context_accepts_project_shared_document_access(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    shared_document_id = uuid.uuid4()
-    actor = _current_user()
-    db = MagicMock(spec=Session)
-    adapter = SqlAlchemyConversationChatData(db)
-    scope = ConversationChatScope(
-        scope_type=ConversationScopeType.GLOBAL,
-        project_id=None,
-        document_id=None,
-        paper_context=LibraryPaperContext(),
-        tool_permissions=frozenset(WorkspacePermission),
-    )
-    access = MagicMock()
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat_data.get_document_access",
-        lambda _db, *, document_id, user_id: (
-            access
-            if document_id == shared_document_id and user_id == actor.id
-            else None
-        ),
-    )
-
-    assert adapter.context_contains_document(
-        actor=actor,
-        scope=scope,
-        document_id=shared_document_id,
-    )
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat_data.get_document_access",
-        lambda _db, *, document_id, user_id: None,
-    )
-    assert not adapter.context_contains_document(
-        actor=actor,
-        scope=scope,
-        document_id=shared_document_id,
-    )
 
 
 def test_missing_conversation_is_the_only_404(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -482,7 +567,7 @@ def test_missing_conversation_is_the_only_404(monkeypatch: pytest.MonkeyPatch) -
     assert exc_info.value.code == "conversation_not_found"
 
 
-def test_conversation_serialization_errors_are_not_reported_as_404(
+def test_conversation_turn_serialization_errors_are_not_reported_as_404(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conversation_id = uuid.uuid4()
@@ -499,20 +584,26 @@ def test_conversation_serialization_errors_are_not_reported_as_404(
         "require_owned",
         lambda *_args, **_kwargs: conversation,
     )
-    monkeypatch.setattr(
-        message_repository,
-        "list_conversation_messages",
-        lambda *_args, **_kwargs: [MagicMock()],
-    )
+    gateway = SqlAlchemyConversationGateway(MagicMock(spec=Session))
 
     with pytest.raises(ValueError, match="invalid message payload"):
         monkeypatch.setattr(
-            "app.bootstrap.adapters.conversation_lifecycle.serialize_messages",
-            lambda _messages: (_ for _ in ()).throw(
+            "app.bootstrap.adapters.conversation_lifecycle.serialize_turns",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
                 ValueError("invalid message payload")
             ),
         )
-        SqlAlchemyConversationGateway(MagicMock(spec=Session)).messages(
+        monkeypatch.setattr(
+            turn_repository,
+            "list_turns",
+            lambda *_args, **_kwargs: [MagicMock()],
+        )
+        monkeypatch.setattr(
+            turn_repository,
+            "latest_turn_id",
+            lambda *_args, **_kwargs: None,
+        )
+        gateway.turns(
             conversation_id=conversation_id,
             offset=0,
             limit=10,

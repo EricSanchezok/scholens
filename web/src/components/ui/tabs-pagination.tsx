@@ -84,3 +84,45 @@ export function Pagination({
     </nav>
   );
 }
+
+export function CursorPagination({
+  nextDisabled,
+  nextLabel,
+  onNext,
+  onPrevious,
+  previousDisabled,
+  previousLabel,
+}: {
+  nextDisabled?: boolean;
+  nextLabel: string;
+  onNext: () => void;
+  onPrevious: () => void;
+  previousDisabled?: boolean;
+  previousLabel: string;
+}) {
+  return (
+    <nav
+      aria-label={`${previousLabel} / ${nextLabel}`}
+      className="flex items-center gap-2"
+    >
+      <Button
+        disabled={previousDisabled}
+        onClick={onPrevious}
+        size="sm"
+        variant="secondary"
+      >
+        <Icon glyph={NavArrowLeft} size={16} />
+        {previousLabel}
+      </Button>
+      <Button
+        disabled={nextDisabled}
+        onClick={onNext}
+        size="sm"
+        variant="secondary"
+      >
+        {nextLabel}
+        <Icon glyph={NavArrowRight} size={16} />
+      </Button>
+    </nav>
+  );
+}

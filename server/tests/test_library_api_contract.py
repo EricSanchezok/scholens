@@ -2,24 +2,40 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from uuid import uuid4
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.settings import AppSettings
+from app.bootstrap.adapters.library_removal import (
+    delete_personal_document_annotations,
+)
 from app.transport.http.public_v1.documents.router import list_library_papers
-from app.database.models import Document, LibraryPaper, PaperStatus
+from app.database.models import (
+    Document,
+    DurableJob,
+    JobOperation,
+    JobStatus,
+    LibraryPaper,
+    PaperStatus,
+    UploadReservation,
+)
 from app.main import app
 from app.helpers.s3 import s3_service
 from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.papers.infrastructure.library_gateway import (
+    SqlAlchemyPaperLibraryGateway,
     library_paper_response,
 )
+from app.modules.papers.application.contracts.documents import LibraryPaperSort
+from app.modules.papers.application.library import LibraryPageDirection
 from app.shared.application import Actor
+from app.shared.domain.enums import ResearchAudienceType, ResearchItemKind
 from app.shared.infrastructure import SqlAlchemyApplicationExecutor
 from app.modules.papers.application.contracts.tags import LibraryTagAssignmentRequest
 from pydantic import ValidationError
 import pytest
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 
@@ -71,6 +87,12 @@ def _entry() -> LibraryPaper:
     return entry
 
 
+def _compiled_delete_parameters(call: object) -> tuple[str, set[object]]:
+    statement = call.args[0]  # type: ignore[attr-defined]
+    compiled = statement.compile(dialect=postgresql.dialect())
+    return str(compiled), set(compiled.params.values())
+
+
 def test_library_list_uses_empty_collection_for_new_user(monkeypatch) -> None:
     monkeypatch.setattr(
         document_repository, "list_library", lambda *_args, **_kwargs: []
@@ -99,6 +121,176 @@ def test_library_response_returns_private_signed_preview(monkeypatch) -> None:
     assert response.document.document_id == entry.document_id
     assert response.preview_url == "https://signed.example.invalid/preview"
     assert response.metadata_overrides.title == "My title"
+
+
+def test_library_list_projects_one_lifecycle_row_for_an_ingesting_paper() -> None:
+    entry = _entry()
+    job = DurableJob(
+        id=uuid4(),
+        operation=JobOperation.PDF_PROCESS.value,
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        requested_by_id=entry.user_id,
+        project_id=None,
+        document_id=entry.document_id,
+        idempotency_key=f"paper-test:{uuid4()}",
+        status=JobStatus.RUNNING.value,
+        progress_code="parsing",
+        payload={},
+        created_at=entry.created_at,
+    )
+    reservation = UploadReservation(
+        id=job.id,
+        quota_owner_id=entry.user_id,
+        content_sha256=entry.document.sha256,
+        display_name=entry.document.original_filename,
+        source_kind="upload",
+    )
+    reservation.job = job
+    paper_results = MagicMock()
+    paper_results.all.return_value = [entry]
+    reservation_results = MagicMock()
+    reservation_results.all.return_value = [reservation]
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    db.scalars.side_effect = [paper_results, reservation_results]
+
+    page = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+        personal_annotations_removed=MagicMock(),
+    ).list(
+        user_id=entry.user_id,
+        query=None,
+        tag_ids=(),
+        sort=LibraryPaperSort.ADDED_DESC,
+        limit=20,
+        direction=LibraryPageDirection.FORWARD,
+        position=None,
+    )
+
+    assert page.total_count == 1
+    assert len(page.items) == 1
+    assert page.items[0].entry_type == "ingestion"
+    assert page.items[0].ingestion.document_id == entry.document_id
+    assert len(page.positions) == 1
+
+
+def test_library_list_does_not_replace_a_personal_paper_with_project_work() -> None:
+    entry = _entry()
+    entry.document.preview_s3_key = None
+    paper_results = MagicMock()
+    paper_results.all.return_value = [entry]
+    reservation_results = MagicMock()
+    reservation_results.all.return_value = []
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    db.scalars.side_effect = [paper_results, reservation_results]
+
+    page = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+        personal_annotations_removed=MagicMock(),
+    ).list(
+        user_id=entry.user_id,
+        query=None,
+        tag_ids=(),
+        sort=LibraryPaperSort.ADDED_DESC,
+        limit=20,
+        direction=LibraryPageDirection.FORWARD,
+        position=None,
+    )
+
+    assert len(page.items) == 1
+    assert page.items[0].entry_type == "paper"
+    reservation_statement = str(db.scalars.call_args_list[1].args[0])
+    assert "jobs.project_id IS NULL" in reservation_statement
+
+
+def test_library_removal_deletes_only_the_actor_personal_annotation_threads(
+    monkeypatch,
+) -> None:
+    entry = _entry()
+    db = MagicMock(spec=Session)
+    delete_library_paper = MagicMock()
+    personal_annotations_removed = MagicMock()
+    monkeypatch.setattr(
+        document_repository,
+        "delete_library_paper",
+        delete_library_paper,
+    )
+
+    SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(return_value=None),
+        personal_annotations_removed=personal_annotations_removed,
+    ).remove(
+        user_id=entry.user_id,
+        document_id=entry.document_id,
+        origin_operation_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+
+    delete_library_paper.assert_called_once_with(
+        db,
+        document_id=entry.document_id,
+        user_id=entry.user_id,
+    )
+    personal_annotations_removed.assert_called_once_with(
+        document_id=entry.document_id,
+        user_id=entry.user_id,
+    )
+
+
+def test_personal_annotation_cleanup_excludes_project_and_other_user_data() -> None:
+    entry = _entry()
+    db = MagicMock(spec=Session)
+
+    delete_personal_document_annotations(
+        db,
+        document_id=entry.document_id,
+        user_id=entry.user_id,
+    )
+
+    sql, parameters = _compiled_delete_parameters(db.execute.call_args)
+    assert "DELETE FROM scholens.research_items" in sql
+    assert "research_items.kind" in sql
+    assert "research_items.audience_type" in sql
+    assert "research_items.created_by_id" in sql
+    assert "research_items.target_document_id" in sql
+    assert ResearchItemKind.ANNOTATION_THREAD.value in parameters
+    assert ResearchAudienceType.PERSONAL.value in parameters
+    assert ResearchAudienceType.PROJECT.value not in parameters
+    assert entry.user_id in parameters
+    assert entry.document_id in parameters
+
+
+def test_batch_library_removal_cleans_personal_annotations_for_each_document() -> None:
+    first = _entry()
+    second = _entry()
+    results = MagicMock()
+    results.all.return_value = [first, second]
+    db = MagicMock(spec=Session)
+    db.scalars.return_value = results
+    personal_annotations_removed = MagicMock()
+
+    SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(return_value=None),
+        personal_annotations_removed=personal_annotations_removed,
+    ).remove_many(
+        user_id=first.user_id,
+        document_ids=(first.document_id, second.document_id),
+        origin_operation_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+
+    assert personal_annotations_removed.call_args_list == [
+        call(document_id=first.document_id, user_id=first.user_id),
+        call(document_id=second.document_id, user_id=first.user_id),
+    ]
+    db.delete.assert_any_call(first)
+    db.delete.assert_any_call(second)
 
 
 def test_share_token_is_rotated_and_only_its_hash_is_persisted() -> None:
@@ -146,10 +338,18 @@ def test_library_tag_api_uses_library_document_boundaries() -> None:
     paths = app.openapi()["paths"]
 
     assert "/api/v1/paper-ingestions/uploads" in paths
-    assert "/api/v1/paper-ingestions/urls" in paths
+    assert "/api/v1/paper-ingestions/sources" in paths
+    assert "/api/v1/paper-ingestions/urls" not in paths
+    assert "/api/v1/paper-ingestions/{job_id}/retries" in paths
+    assert "/api/v1/library/outputs" in paths
+    assert "/api/v1/library/summary" in paths
+    assert "/api/v1/library/paper-removals" in paths
     assert "/api/v1/library/tags" in paths
     assert "/api/v1/library/tags/assignments" in paths
-    assert "/api/v1/library/papers/{document_id}/tags/{tag_id}" in paths
+    assert "/api/v1/library/tags/{tag_id}" in paths
+    assert set(paths["/api/v1/library/tags/assignments"]) & {"put"} == {"put"}
+    assert "post" not in paths["/api/v1/library/tags/assignments"]
+    assert "/api/v1/library/papers/{document_id}/tags/{tag_id}" not in paths
     assert not any(path.startswith("/api/v1/paper/tag") for path in paths)
     assert not any(path.startswith("/api/v1/paper/upload") for path in paths)
 
@@ -162,6 +362,12 @@ def test_library_tag_assignment_is_strict_and_bounded() -> None:
         tag_ids=[tag_id],
     )
     assert request.document_ids == [document_id]
+
+    clear_request = LibraryTagAssignmentRequest(
+        document_ids=[document_id],
+        tag_ids=[],
+    )
+    assert clear_request.tag_ids == []
 
     with pytest.raises(ValidationError):
         LibraryTagAssignmentRequest.model_validate(

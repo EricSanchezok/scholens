@@ -1,8 +1,7 @@
 import * as React from "react";
 
-import { cn } from "@/lib/utilities/cn";
-
-export type IconTone = "primary" | "secondary" | "inverse" | "disabled";
+export type IconTone =
+  "primary" | "secondary" | "inverse" | "disabled" | "success" | "danger";
 export type IconSize = 16 | 20 | 24;
 
 const toneClass: Record<IconTone, string> = {
@@ -10,6 +9,8 @@ const toneClass: Record<IconTone, string> = {
   secondary: "text-ui-icon-secondary",
   inverse: "text-ui-icon-inverse",
   disabled: "text-ui-icon-disabled",
+  success: "text-success",
+  danger: "text-danger",
 };
 
 export type IconGlyph = React.ForwardRefExoticComponent<
@@ -34,7 +35,9 @@ export function Icon({
     <Glyph
       aria-hidden={label ? undefined : true}
       aria-label={label}
-      className={cn("shrink-0", toneClass[tone], className)}
+      className={["shrink-0", toneClass[tone], className]
+        .filter(Boolean)
+        .join(" ")}
       height={size}
       strokeWidth={1.5}
       width={size}

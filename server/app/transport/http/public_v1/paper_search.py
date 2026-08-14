@@ -24,15 +24,15 @@ async def search_papers_endpoint(
     current_user: Actor = Depends(get_required_user),
 ) -> PaperSearchResponse:
     """
-    Search across papers, annotations, and highlights in the user's knowledge base.
+    Search across papers and annotation threads in the user's knowledge base.
 
     Returns a hierarchical view with matching content organized under paper metadata.
     The search looks through:
     - Document titles, abstracts, and raw content
-    - Highlight thread text
+    - Annotation thread quote text
     - Annotation comment content
 
-    Results are organized by paper, with matching highlights and annotations
+    Results are organized by paper, with matching threads and comments
     sub-referenced under each paper's metadata.
     """
     results = executor.query(
@@ -64,7 +64,7 @@ async def get_search_stats(
     """
     Get statistics about the user's knowledge base for search context.
 
-    Returns counts of papers, highlights, and annotations.
+    Returns counts of papers, annotation threads, and comments.
     """
     return executor.query(
         lambda capabilities: capabilities.paper_search_stats(actor=current_user)

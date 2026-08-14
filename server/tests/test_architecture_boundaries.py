@@ -284,6 +284,18 @@ def test_explicit_commits_are_limited_to_owned_background_transactions() -> None
     assert violations == []
 
 
+def test_pdf_ingestion_callback_never_manufactures_conversations() -> None:
+    path = APP_ROOT / "bootstrap" / "adapters" / "document_job_callbacks.py"
+    forbidden = {
+        imported
+        for imported in _runtime_imports(path)
+        if imported.startswith("app.modules.conversations")
+        or imported == "app.bootstrap.adapters.conversation_repository"
+    }
+
+    assert forbidden == set()
+
+
 def test_agent_and_mcp_share_only_the_canonical_tool_catalog() -> None:
     catalog = APP_ROOT / "tooling" / "workspace.py"
     mcp = APP_ROOT / "transport" / "mcp" / "server.py"
@@ -327,14 +339,12 @@ def test_legacy_model_tool_names_cannot_reenter_runtime_code() -> None:
 def test_conversation_answer_runtime_has_one_packet_and_typed_source_path() -> None:
     runtime_files = (
         APP_ROOT / "llm" / "conversation_agent.py",
-        APP_ROOT / "llm" / "conversation_tool_loop.py",
-        APP_ROOT / "llm" / "prompts.py",
         APP_ROOT
         / "modules"
         / "conversations"
         / "application"
         / "contracts"
-        / "messages.py",
+        / "turns.py",
     )
     source = "\n".join(path.read_text(encoding="utf-8") for path in runtime_files)
     for legacy in (
@@ -349,8 +359,19 @@ def test_conversation_answer_runtime_has_one_packet_and_typed_source_path() -> N
         assert legacy not in source
 
     agent_source = runtime_files[0].read_text(encoding="utf-8")
-    assert 'label="answer_packet"' in agent_source
-    assert agent_source.count('label="answer_packet"') == 1
+    assert "Agent(" in agent_source
+    assert "agent.iter(" in agent_source
+    assert "run_stream_events(" not in agent_source
+    assert "FinalResultEvent" not in agent_source
+    assert "ConversationToolLoop" not in agent_source
+    assert "finish_tool_use" not in agent_source
+    assert "AsyncGenerator[dict[" not in agent_source
+
+    adapter_source = (
+        APP_ROOT / "bootstrap" / "adapters" / "conversation_chat.py"
+    ).read_text(encoding="utf-8")
+    assert 'event.get("type")' not in adapter_source
+    assert "conversation.runtime.unknown_event" not in adapter_source
 
 
 def test_only_versioned_public_routes_are_exposed() -> None:
@@ -416,14 +437,21 @@ def test_mutation_status_and_idempotency_contracts_are_stable() -> None:
     paths = app.openapi()["paths"]
     async_mutations = {
         "/api/v1/paper-ingestions/uploads",
-        "/api/v1/paper-ingestions/urls",
+        "/api/v1/paper-ingestions/sources",
+        "/api/v1/paper-ingestions/{job_id}/retries",
         "/api/v1/integrations/zotero/imports",
         "/api/v1/integrations/zotero/sync-runs",
         "/api/v1/papers/{document_id}/audio-overviews",
+        "/api/v1/papers/{document_id}/reflow/retries",
         "/api/v1/projects/{project_id}/audio-overviews",
         "/api/v1/projects/{project_id}/data-tables",
     }
-    idempotent_mutations = async_mutations - {"/api/v1/integrations/zotero/sync-runs"}
+    idempotent_mutations = async_mutations - {
+        "/api/v1/integrations/zotero/sync-runs",
+        # Reflow retry is state-idempotent: only a failed artifact can enqueue,
+        # and subsequent requests return its active durable job.
+        "/api/v1/papers/{document_id}/reflow/retries",
+    }
     created_resources = {
         "/api/v1/conversations",
         "/api/v1/library/papers",

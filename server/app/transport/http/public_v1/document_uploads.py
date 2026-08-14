@@ -9,10 +9,10 @@ from uuid import UUID
 from app.bootstrap.execution import get_paper_ingestion_workflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.modules.papers.domain import MAX_PDF_BYTES, MAX_PDF_SIZE_MB
-from app.modules.papers.application.contracts.uploads import (
-    UploadAcceptedResponse,
-    UploadFromUrlRequest,
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
 )
+from app.modules.papers.application.contracts.uploads import UploadFromSourceRequest
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind
 from app.transport.client_ip import http_client_ip
@@ -20,7 +20,7 @@ from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, File, Header, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Request, Response, UploadFile
 
 logger = logging.getLogger(__name__)
 document_upload_router = APIRouter()
@@ -32,24 +32,24 @@ IdempotencyHeader = Annotated[
 
 
 @document_upload_router.post(
-    "/urls",
-    response_model=UploadAcceptedResponse,
+    "/sources",
+    response_model=LibraryPaperIngestionResponse,
     status_code=202,
 )
-async def upload_pdf_from_url(
-    payload: UploadFromUrlRequest,
+async def upload_pdf_from_source(
+    payload: UploadFromSourceRequest,
     request: Request,
     idempotency_key: IdempotencyHeader = None,
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
     ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
-    project_id: UUID | None = None,
-) -> UploadAcceptedResponse:
-    return await ingestion.from_url(
+) -> LibraryPaperIngestionResponse:
+    return await ingestion.from_source(
         actor=current_user,
         operation=operation,
-        url=str(payload.url),
-        project_id=project_id,
+        kind=payload.source.kind,
+        value=payload.source.value,
+        project_id=payload.project_id,
         idempotency_key=idempotency_key,
         ip_address=http_client_ip(request),
     )
@@ -57,7 +57,7 @@ async def upload_pdf_from_url(
 
 @document_upload_router.post(
     "/uploads",
-    response_model=UploadAcceptedResponse,
+    response_model=LibraryPaperIngestionResponse,
     status_code=202,
 )
 async def upload_pdf(
@@ -68,7 +68,7 @@ async def upload_pdf(
     operation: OperationContext = Depends(get_required_operation),
     ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
     project_id: UUID | None = None,
-) -> UploadAcceptedResponse:
+) -> LibraryPaperIngestionResponse:
     max_bytes = MAX_PDF_BYTES
     declared_size = request.headers.get("content-length")
     if declared_size and (
@@ -116,3 +116,38 @@ async def upload_pdf(
         idempotency_key=idempotency_key,
         ip_address=http_client_ip(request),
     )
+
+
+@document_upload_router.post(
+    "/{job_id}/retries",
+    response_model=LibraryPaperIngestionResponse,
+    status_code=202,
+)
+async def retry_pdf_ingestion(
+    job_id: UUID,
+    idempotency_key: IdempotencyHeader = None,
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+    ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
+) -> LibraryPaperIngestionResponse:
+    return await ingestion.retry(
+        actor=current_user,
+        operation=operation,
+        job_id=job_id,
+        idempotency_key=idempotency_key,
+    )
+
+
+@document_upload_router.delete("/{job_id}", status_code=204)
+async def cancel_pdf_ingestion(
+    job_id: UUID,
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+    ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
+) -> Response:
+    await ingestion.cancel(
+        actor=current_user,
+        operation=operation,
+        job_id=job_id,
+    )
+    return Response(status_code=204)

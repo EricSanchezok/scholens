@@ -8,31 +8,34 @@ Scholens-specific ownership is documented in
 [`docs/architecture/data-ownership.md`](../docs/architecture/data-ownership.md).
 
 ## Prerequisites
+
 - Python 3.12 or higher
 - [Uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [PostgreSQL database](http://postgresql.org/download/) (Make sure it's running with a user postgres)
-- [Docker](https://docs.docker.com/get-docker/) (for RabbitMQ/Redis used by PDF processing)
+- [Docker](https://docs.docker.com/get-docker/) (for RabbitMQ/Redis used by PDF processing and Redis-backed AI capacity limits)
 - Jobs service running for uploads and Zotero import (see [jobs/README.md](../jobs/README.md))
 
 ## Setup
 
 1. Install dependencies
+
 ```bash
 uv sync
 source .venv/bin/activate
 ```
 
-2. Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
+2. Set up environment variables from the repository-level catalog. Copy only
+   the Server section; the root file is not itself a runtime file.
 
-3. Set up environment variables from the repository-level catalog
 ```bash
-cp ../.env.example .env
+touch .env
 ```
 
 At minimum, point `DATABASE_URL` at a `sanchezcloud` database with migrated
-`auth` and `scholens` schemas, then replace the placeholder provider keys for
-the features you want to exercise. See [`../DEVELOPMENT.md`](../DEVELOPMENT.md)
-for the shared-local-account and AWS RDS distinction.
+`auth` and `scholens` schemas, then configure only the opt-in model, search,
+mail, and storage providers needed for the feature you are exercising. See
+[`../DEVELOPMENT.md`](../DEVELOPMENT.md) for the provider catalog, shared-local
+account, and AWS RDS distinction.
 
 The backend exposes one versioned capability surface and shares its application
 use cases with Agent adapters and the authenticated `/mcp` server. Architecture rules,
@@ -48,28 +51,128 @@ second capability map or provider-specific tool wrappers.
 ## Start the Application
 
 1. Start the jobs service (RabbitMQ + Celery worker) in a separate terminal:
+
 ```bash
 cd ../jobs
-uv run start
+uv run --frozen --no-sync start
 ```
 
 2. Start the API server:
+
 ```bash
-uv run start
+uv run --frozen --no-sync start
 ```
 
-Optional: set `CELERY_BROKER_URL=pyamqp://guest@localhost:5672//` in `.env` if you use a non-default broker.
+The command binds to `127.0.0.1:7301`, rejects any `DATABASE_URL` other than
+the shared local PostgreSQL at `127.0.0.1:55432/sanchezcloud`, and does not run
+migrations. Apply product migrations explicitly with the `scholens_migrator`
+role as documented in [`../DEVELOPMENT.md`](../DEVELOPMENT.md).
+
+The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
+enabled.
+
+The ordinary Scholens local environment uses an isolated remote dev S3 bucket
+and Aliyun DirectMail for real verification and password-reset messages. It
+does not require Mailpit or MinIO. Keep both providers' credentials in the
+ignored `server/.env`; Jobs receives the same dev S3 settings through its own
+ignored `jobs/.env`. Production RDS, S3, and mail resources must never be used
+by local startup.
 
 ## API Documentation
 
 FastAPI automatically generates API documentation. Once the application is running, you can access:
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: `http://127.0.0.1:7301/docs`
+- ReDoc: `http://127.0.0.1:7301/redoc`
 
 Public application routes are under `/api/v1`; provider webhooks are under
 `/webhooks/v1`. `/internal/v1` is reserved for authenticated worker traffic and
 is intentionally not routed by the production edge proxy.
+
+Reader composes the existing Document, Research Item, Conversation, and turn
+stream capabilities. PDF and parsed-text anchors are discriminated application
+contracts, and paper-conversation list cursors are signed against the requested
+scope. Do not add Reader aggregation routes, arbitrary position dictionaries,
+or browser-side conversation authorization.
+
+Reader content translation uses
+`GET|PUT /api/v1/me/translation-preferences` and
+`POST /api/v1/papers/{document_id}/selection-translations`. Reflow blocks use
+`POST /api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations` and
+accept no client source body. Translation emits
+standard Server-Sent Events named `start`, `delta`, `complete`, and `error`.
+The server re-authorizes the paper before durable-result lookup, persists only
+the source hash and translated result, and uses Redis only for capacity and
+single-flight coordination. A durable result hit does not consume Token Credits
+or provider capacity.
+
+Document reflow is exposed at `GET /api/v1/papers/{document_id}/reflow`; only a
+failed artifact may be retried with
+`POST /api/v1/papers/{document_id}/reflow/retries`. PDF completion schedules a
+separate DurableJob and outbox dispatch, but reflow scheduling or execution
+failure never changes the successful PDF processing state. Callback completion
+persists blocks only after the ordered content fingerprint matches the
+canonical parser Markdown. Reflow is a derived reading layout, not another PDF
+parser or metadata authority.
+
+Conversation turns are created at
+`POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn
+creates another response variant at
+`POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses`.
+Both generation endpoints stream standard Server-Sent Events. Consumers must handle
+the typed `start`, `assistant_item_start`, `assistant_item_delta`,
+`assistant_item_complete`, `activity`, `references`, `response_ready`,
+`suggestions`, `complete`, and `error` events and treat `complete` or `error`
+as terminal. `response_ready` carries the complete persisted turn snapshot and
+unblocks response actions; `suggestions` is an optional late sidecar update.
+Assistant items begin as
+provisional and are authoritatively classified on completion as `progress` or
+`final`; clients move the same stable item instead of duplicating its text.
+Progress and activity entries share a monotonic sequence. Requests include the
+UI locale and a validated IANA time zone. `activity` contains only a sanitized
+category/state/subject projection and intentionally omits the raw tool name.
+Model reasoning, provider heartbeats, tool arguments, and tool payloads are
+never part of the public stream. References may be emitted only for the final
+assistant item. The runtime passes these same typed event models to the HTTP
+adapter rather than maintaining a second dictionary-shaped protocol. Completed
+assistant items must contain visible text; user-visible progress is bounded to
+4,000 characters, and a response without a visible final answer is failed
+instead of persisting an empty response variant. A turn owns the immutable user
+prompt and one or more generated responses; only the latest turn may be retried
+or switch its selected response. Creating the next turn prunes unselected
+variants from the prior turn, so completed history has one canonical response.
+The latest turn may own persisted follow-up suggestions. Suggestion generation
+starts beside the answer stream and shares the same SSE instead of requiring a
+second HTTP request or polling. It uses no open database transaction while the
+model runs and rechecks latest-turn ownership before persisting. The structured
+result is exactly three unique questions:
+one deepening question, one comparison or verification question, and one
+practical-application question. Only the current query, locale, three recent
+selected turns, and authorized scope display titles enter that prompt; the
+current answer, trace data, raw tool output, and document bodies never do. A
+newer turn clears the preceding suggestions, and a late result cannot restore
+them. Suggestions and first-title generation never block `response_ready`; the
+stream retains a bounded two-second sidecar tail before `complete`.
+There is no private delimiter. Clients may abort the request, but must not
+automatically retry this non-idempotent operation.
+
+Paper ingestion has a separate operation-scoped idempotency contract. Uploads
+and DOI/arXiv/direct-PDF sources return `202` only after the canonical Library
+ingestion row, durable job, and outbox dispatch are committed. If the browser
+loses that response, it reconciles or repeats the same parameters with the same
+`Idempotency-Key`; it must not create a second operation. The Papers list
+returns completed papers and active/failed ingestions as one discriminated
+collection, with exactly one lifecycle row per personal membership: an active
+or failed ingestion replaces that paper's completed projection until it reaches
+a terminal success state. PDF content SHA-256 is the server-side duplicate
+authority, including concurrent requests. `DELETE
+/api/v1/paper-ingestions/{job_id}` cancels an owned ingestion, and late worker
+callbacks cannot restore it.
+
+The PDF completion callback persists extracted metadata, generated summary,
+and summary citations on the canonical `Document`. Ingestion never creates a
+Conversation, Turn, or Response. A paper-scoped conversation begins only from
+an explicit user action and reads the existing Document-owned context.
 
 # Migrations
 
@@ -79,11 +182,13 @@ locked `uv` environment:
 ```bash
 uv run alembic revision --autogenerate -m "migration message"
 ```
+
 To apply the migration, run:
 
 ```bash
 uv run alembic upgrade head
 ```
+
 To downgrade the migration, run:
 
 ```bash
@@ -98,19 +203,37 @@ product-only reset procedure is documented in
 
 # Tests
 
-Run the complete Server quality gate from the `server` directory:
+Run the complete Server quality gate from the repository root. The runner has
+no dependency-installation, migration, or persistent service-startup side
+effects:
 
 ```bash
+./scripts/run-gates.sh server
+```
+
+The equivalent service-local checks are:
+
+```bash
+uv run ruff format --check app tests migrations
 uv run ruff check app tests migrations
 uv run mypy app
 uv run pytest -q
 ```
 
+The root gate and CI additionally reject known debug and superseded import
+patterns in Server business code. Use `uv run ruff format app tests migrations`
+deliberately when formatting; verification commands never rewrite source.
+
 ## Chat with Knowledge Base
 
-We have an `Ask` page, which allows you to ask questions across your entire knowledge base. AI-generated responses come with inline citations which will link to the original papers and show the text citation. Deep-linking is not yet available, but is planned.
+The Home conversation surface can ask questions across the authorized knowledge
+base. AI-generated responses carry validated inline citations that open the
+source panel; paper and Reader context use the canonical typed source and anchor
+contracts described above.
 
-The response agent works by sending off an agent with access to a series of research tools:
+The response agent is one contextual Pydantic AI runtime with access to the
+authorized subset of the canonical workspace and connector tools:
+
 - `search_papers`
 - `get_paper_abstract`
 - `search_paper_content`
@@ -127,20 +250,17 @@ Unified Conversation agent workflow:
 |      User      |----->|             FastAPI Server                    |----->|        LLM        |
 +----------------+      |         (conversation_agent.py)               |      +-------------------+
         ^             |                                                 |              ^
-        |             |  1. run_tools(request)                          |              |
-        |             |     - Iteratively calls LLM with tools:         |              |
-        |             |       - search_papers(query)                    |--------------+
-        |             |       - get_paper_content(document_id)          |
-        |             |       - ...                                     |
-        |             |     - Executes explicit workspace actions       |
-        |             |     - Compacts results if they get too large    |
-        |             |                                                 |
-        |             |  2. Build one bounded AnswerPacket              |
-        |             |     - Validates document/external sources       |
-        |             |  3. stream_answer(question, answer_packet)      |--------------+
-        |             |     - Sends materials, actions, and sources     |
-        |             |     - Streams response back to user             |              |
-        |             |     - Filters citations through server keys     |              |
+        |             |  1. Run one model loop                           |              |
+        |             |     - answer directly when tools are unnecessary |              |
+        |             |     - call 0..n authorized tools                 |--------------+
+        |             |  2. Dispatch every call through Scholens         |
+        |             |     - validate arguments and permissions         |
+        |             |     - journal writes and enforce idempotency      |
+        |             |     - project safe, bounded results               |
+        |             |  3. Register validated sources incrementally      |
+        |             |  4. Stream answer and materialize citations       |--------------+
+        |             |     - expose sanitized activity only              |              |
+        |             |     - persist typed terminal trace                 |              |
         |             +-------------------------------------------------+              |
         |                           |                                                  |
         +---------------------------+--------------------------------------------------+

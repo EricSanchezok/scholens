@@ -25,8 +25,10 @@ from app.modules.integrations.zotero.application.zotero import (
     ZoteroItemSnapshot,
 )
 from app.modules.papers.application.ingestion import (
-    IngestionFinalization,
-    IngestionReservation,
+    AcceptedIngestion,
+)
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
 )
 from app.shared.application import (
     Actor,
@@ -213,22 +215,27 @@ async def test_import_plan_keeps_remote_io_outside_commands() -> None:
     job_id = uuid4()
     document_id = uuid4()
     paper_ingestion = MagicMock()
-    paper_ingestion.reserve.side_effect = lambda **_kwargs: (
-        events.append("reserve_paper")
-        or IngestionReservation(job_id=job_id, replayed=False)
-    )
     paper_ingestion.acquire = AsyncMock(
         side_effect=lambda **_kwargs: events.append("acquire")
     )
-    paper_ingestion.finalize.side_effect = lambda **_kwargs: (
-        events.append("finalize_paper")
-        or IngestionFinalization(
-            task_id=str(job_id),
-            job_id=job_id,
-            document_id=document_id,
-            project_id=None,
-            changed=True,
-            job_completed=False,
+    paper_ingestion.accept.side_effect = lambda **kwargs: (
+        events.append("accept_paper")
+        or AcceptedIngestion(
+            ingestion=LibraryPaperIngestionResponse.model_validate(
+                {
+                    "id": kwargs["job_id"],
+                    "display_name": item.title,
+                    "source_kind": "upload",
+                    "state": "queued",
+                    "stage": "queued",
+                    "project_id": None,
+                    "document_id": document_id,
+                    "error_code": None,
+                    "created_at": "2026-08-12T00:00:00Z",
+                }
+            ),
+            replayed=False,
+            processing_required=True,
         )
     )
     zotero = MagicMock()
@@ -280,15 +287,12 @@ async def test_import_plan_keeps_remote_io_outside_commands() -> None:
     assert result.imported_count == 1
     assert events == [
         "fetch_remote",
-        "command:start",
-        "reserve_paper",
-        "reserve_zotero",
-        "command:end",
         "query",
         "acquire",
         "upload_external",
         "command:start",
-        "finalize_paper",
+        "accept_paper",
+        "reserve_zotero",
         "complete_zotero",
         "command:end",
     ]

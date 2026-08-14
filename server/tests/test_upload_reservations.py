@@ -46,10 +46,6 @@ def _quota_patches(*, active_count: int = 0, active_size_kb: int = 0):
             "app.bootstrap.adapters.upload_reservations.resource_usage_repository.completed_storage_kb",
             return_value=0,
         ),
-        patch(
-            "app.bootstrap.adapters.upload_reservations.reap_stale_uploads",
-            return_value=(),
-        ),
     )
 
 
@@ -83,7 +79,6 @@ def test_personal_upload_is_reserved_to_requester() -> None:
         patches[4],
         patches[5],
         patches[6],
-        patches[7],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -97,6 +92,8 @@ def test_personal_upload_is_reserved_to_requester() -> None:
             project_id=None,
             input_size_bytes=1_025,
             original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
             content_sha256="a" * 64,
         )
 
@@ -136,7 +133,6 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
         patches[4],
         patches[5],
         patches[6],
-        patches[7],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -150,6 +146,8 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
             project_id=project_id,
             input_size_bytes=4_096,
             original_filename="shared.pdf",
+            display_name="shared.pdf",
+            source_kind="upload",
             content_sha256="b" * 64,
         )
 
@@ -180,7 +178,6 @@ def test_active_reservations_prevent_concurrent_paper_quota_bypass() -> None:
         patches[4],
         patches[5],
         patches[6],
-        patches[7],
         pytest.raises(AppError) as error,
     ):
         reserve_upload(
@@ -191,6 +188,8 @@ def test_active_reservations_prevent_concurrent_paper_quota_bypass() -> None:
             project_id=None,
             input_size_bytes=1_024,
             original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
             content_sha256="c" * 64,
         )
 
@@ -216,7 +215,6 @@ def test_same_document_cannot_be_reserved_twice_for_one_library() -> None:
             return_value=True,
         ),
         patches[6],
-        patches[7],
         pytest.raises(AppError) as error,
     ):
         reserve_upload(
@@ -227,6 +225,8 @@ def test_same_document_cannot_be_reserved_twice_for_one_library() -> None:
             project_id=None,
             input_size_bytes=1_024,
             original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
             content_sha256="c" * 64,
         )
 
@@ -247,6 +247,8 @@ def test_empty_upload_is_rejected_before_any_reservation() -> None:
             project_id=None,
             input_size_bytes=0,
             original_filename="empty.pdf",
+            display_name="empty.pdf",
+            source_kind="upload",
             content_sha256="d" * 64,
         )
 
@@ -264,6 +266,8 @@ def test_idempotency_key_returns_the_original_reservation() -> None:
         id=existing_job.id,
         quota_owner_id=17,
         content_sha256="e" * 64,
+        display_name="paper.pdf",
+        source_kind="upload",
     )
     reservation.job = existing_job
     db = MagicMock()
@@ -284,12 +288,57 @@ def test_idempotency_key_returns_the_original_reservation() -> None:
             project_id=None,
             input_size_bytes=1_024,
             original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
             content_sha256="e" * 64,
             idempotency_key="request-1",
         )
 
     assert result.reservation is reservation
-    assert result.reaped_stale_uploads == ()
+    assert result.created is False
+    db.add.assert_not_called()
+
+
+def test_idempotency_key_does_not_resurrect_a_cancelled_ingestion() -> None:
+    requester = MagicMock(id=17)
+    existing_job = _durable_job(requester_id=17)
+    existing_job.idempotency_key = "pdf-ingestion:17:library:request-1"
+    existing_job.payload = {"content_sha256": "e" * 64}
+    existing_job.status = JobStatus.CANCELLED.value
+    reservation = UploadReservation(
+        id=existing_job.id,
+        quota_owner_id=17,
+        content_sha256="e" * 64,
+        display_name="paper.pdf",
+        source_kind="upload",
+    )
+    reservation.job = existing_job
+    db = MagicMock()
+    db.get.return_value = reservation
+
+    with (
+        patch("app.bootstrap.adapters.upload_reservations.lock_account_resource_quota"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.job_repository.find_by_idempotency_key",
+            return_value=existing_job,
+        ),
+        pytest.raises(AppError) as error,
+    ):
+        reserve_upload(
+            db,
+            requester=requester,
+            origin_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            project_id=None,
+            input_size_bytes=1_024,
+            original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
+            content_sha256="e" * 64,
+            idempotency_key="request-1",
+        )
+
+    assert error.value.code == "paper_ingestion_cancelled"
     db.add.assert_not_called()
 
 

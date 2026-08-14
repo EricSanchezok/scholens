@@ -11,6 +11,7 @@ from app.bootstrap.adapters.project_documents import (
     project_document_repository,
 )
 from app.database.models import (
+    AnnotationComment,
     Base,
     Document,
     DurableJob,
@@ -20,6 +21,9 @@ from app.database.models import (
     ProjectCollaborator,
     ProjectInvitation,
     ProjectPaper,
+    ResearchItem,
+    ResearchItemKind,
+    ResearchAudienceType,
     UploadReservation,
 )
 from app.shared.domain import AppError
@@ -223,6 +227,66 @@ def test_project_paper_batch_rejects_partial_library_matches(
     db.commit.assert_not_called()
 
 
+def test_project_paper_removal_requires_annotation_deletion_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock(spec=Session)
+    project_id = uuid.uuid4()
+    document_id = uuid.uuid4()
+    project_paper = ProjectPaper(
+        project_id=project_id,
+        document_id=document_id,
+        added_by_id=1,
+    )
+    scalars = MagicMock()
+    scalars.first.return_value = project_paper
+    db.scalars.return_value = scalars
+    db.scalar.side_effect = [2, 5]
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.project_documents.require_project_permission",
+        lambda *_args, **_kwargs: None,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        project_document_repository.remove_by_paper_and_project(
+            db,
+            document_id=document_id,
+            project_id=project_id,
+            user=Actor(
+                id=1,
+                email="owner@example.com",
+                status="active",
+                email_verified=True,
+            ),
+            origin_operation_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+            confirm_delete_annotations=False,
+        )
+
+    assert exc_info.value.code == "project_document_has_annotations"
+    assert exc_info.value.details == {"thread_count": 2, "comment_count": 5}
+    db.delete.assert_not_called()
+    assert not db.execute.called
+
+
+def test_project_paper_confirm_deletes_only_matching_project_threads() -> None:
+    project_id = uuid.uuid4()
+    document_id = uuid.uuid4()
+    filters = (
+        ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+        ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+        ResearchItem.audience_project_id == project_id,
+        ResearchItem.target_document_id == document_id,
+    )
+    statement = str(__import__("sqlalchemy").delete(ResearchItem).where(*filters))
+    assert "audience_project_id" in statement
+    assert "target_document_id" in statement
+    assert "created_by_id" not in statement
+    assert "annotation_comments" in str(
+        __import__("sqlalchemy").select(AnnotationComment.id)
+    )
+
+
 def test_fresh_project_upload_requires_matching_durable_reservation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -408,9 +472,23 @@ def test_project_api_exposes_capabilities_and_invitation_lifecycle() -> None:
     assert "/api/v1/projects/{project_id}/leave" in paths
     assert "/api/v1/projects/{project_id}/papers" in paths
     assert "/api/v1/projects/{project_id}/papers/{document_id}" in paths
+    assert "/api/v1/projects/{project_id}/outputs" in paths
     assert "/api/v1/project-invitations/{token}/accept" in paths
     assert "/api/v1/project-invitations/token/{token}/accept" not in paths
     assert not any("role" in path for path in paths if "project" in path)
+
+    schemas = app.openapi()["components"]["schemas"]
+    project_fields = schemas["ProjectResponse"]["properties"]
+    assert {"num_papers", "num_conversations", "num_outputs", "activity_at"} <= set(
+        project_fields
+    )
+    assert "num_audio_overviews" not in project_fields
+    assert "num_data_tables" not in project_fields
+
+    project_query = paths["/api/v1/projects"]["get"]["parameters"]
+    assert {"q", "sort", "cursor", "limit"} == {
+        parameter["name"] for parameter in project_query
+    }
 
 
 def test_document_and_library_api_expose_canonical_asset_boundaries() -> None:

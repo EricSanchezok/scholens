@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from scholens_ai import AIProfileName, resolve_profile
 from scholens_observability import current_context
 
 from src.observability import _task_postrun, _task_prerun
@@ -49,7 +50,7 @@ def test_jobs_usage_uses_provider_total_as_the_only_charge() -> None:
     with collect_token_usage("job-1") as collector:
         record_token_usage(
             feature="metadata",
-            model="standard-model",
+            profile=resolve_profile(AIProfileName.STANDARD),
             usage=usage,
             request_id="request-1",
             idempotency_suffix="metadata",
@@ -57,6 +58,8 @@ def test_jobs_usage_uses_provider_total_as_the_only_charge() -> None:
 
     assert collector.events[0]["total_tokens"] == 180
     assert collector.events[0]["reasoning_tokens"] == 50
+    assert collector.events[0]["provider"] == "deepseek"
+    assert collector.events[0]["ai_profile"] == "standard"
     assert collector.events[0]["idempotency_key"] == "jobs:job-1:metadata"
 
 

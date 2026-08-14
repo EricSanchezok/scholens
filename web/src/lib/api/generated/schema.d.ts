@@ -39,6 +39,42 @@ export interface paths {
         patch: operations["update_annotation_comment_api_v1_annotation_comments__comment_id__patch"];
         trace?: never;
     };
+    "/api/v1/annotation-threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Annotation Thread */
+        get: operations["get_annotation_thread_api_v1_annotation_threads__thread_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Annotation Thread */
+        delete: operations["delete_annotation_thread_api_v1_annotation_threads__thread_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Annotation Thread */
+        patch: operations["update_annotation_thread_api_v1_annotation_threads__thread_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/annotation-threads/{thread_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Annotation Comment */
+        post: operations["create_annotation_comment_api_v1_annotation_threads__thread_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-password": {
         parameters: {
             query?: never;
@@ -383,24 +419,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/conversations/{conversation_id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Conversation Messages */
-        get: operations["get_conversation_messages_api_v1_conversations__conversation_id__messages_get"];
-        put?: never;
-        /** Create Conversation Message */
-        post: operations["create_conversation_message_api_v1_conversations__conversation_id__messages_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/conversations/{conversation_id}/scope": {
         parameters: {
             query?: never;
@@ -418,23 +436,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/conversations/{conversation_id}/title": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Auto Title Conversation */
-        post: operations["auto_title_conversation_api_v1_conversations__conversation_id__title_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
         parameters: {
             query?: never;
@@ -445,6 +446,58 @@ export interface paths {
         get?: never;
         /** Update Conversation Tool Permissions */
         put: operations["update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Conversation Turns */
+        get: operations["get_conversation_turns_api_v1_conversations__conversation_id__turns_get"];
+        put?: never;
+        /** Create Conversation Turn */
+        post: operations["create_conversation_turn_api_v1_conversations__conversation_id__turns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Conversation Turn */
+        post: operations["retry_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__responses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Select Conversation Response */
+        put: operations["select_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__selected_response_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -514,41 +567,6 @@ export interface paths {
         get: operations["get_topics_api_v1_discovery_topics_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/highlight-threads/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Highlight Thread */
-        delete: operations["delete_highlight_thread_api_v1_highlight_threads__thread_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Highlight Thread */
-        patch: operations["update_highlight_thread_api_v1_highlight_threads__thread_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/highlight-threads/{thread_id}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Annotation Comment */
-        post: operations["create_annotation_comment_api_v1_highlight_threads__thread_id__comments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -693,6 +711,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Library Outputs */
+        get: operations["list_library_outputs_api_v1_library_outputs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/paper-removals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Library Papers */
+        post: operations["remove_library_papers_api_v1_library_paper_removals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/papers": {
         parameters: {
             query?: never;
@@ -748,18 +800,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/library/papers/{document_id}/tags/{tag_id}": {
+    "/api/v1/library/summary": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Library Summary */
+        get: operations["get_library_summary_api_v1_library_summary_get"];
         put?: never;
         post?: never;
-        /** Remove Library Tag Assignment */
-        delete: operations["remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -791,13 +843,31 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
-        /** Assign Library Tags */
-        post: operations["assign_library_tags_api_v1_library_tags_assignments_post"];
+        /** Replace Library Tag Assignments */
+        put: operations["replace_library_tag_assignments_api_v1_library_tags_assignments_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Library Tag */
+        delete: operations["delete_library_tag_api_v1_library_tags__tag_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Library Tag */
+        patch: operations["rename_library_tag_api_v1_library_tags__tag_id__patch"];
         trace?: never;
     };
     "/api/v1/me": {
@@ -943,6 +1013,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/paper-ingestions/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Pdf From Source */
+        post: operations["upload_pdf_from_source_api_v1_paper_ingestions_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/paper-ingestions/uploads": {
         parameters: {
             query?: never;
@@ -960,7 +1047,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/paper-ingestions/urls": {
+    "/api/v1/paper-ingestions/{job_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -969,8 +1056,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload Pdf From Url */
-        post: operations["upload_pdf_from_url_api_v1_paper_ingestions_urls_post"];
+        post?: never;
+        /** Cancel Pdf Ingestion */
+        delete: operations["cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/paper-ingestions/{job_id}/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Pdf Ingestion */
+        post: operations["retry_pdf_ingestion_api_v1_paper_ingestions__job_id__retries_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -988,6 +1092,24 @@ export interface paths {
         get: operations["get_document_api_v1_papers__document_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/annotation-threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Annotation Threads */
+        get: operations["list_annotation_threads_api_v1_papers__document_id__annotation_threads_get"];
+        put?: never;
+        /** Create Annotation Thread */
+        post: operations["create_annotation_thread_api_v1_papers__document_id__annotation_threads_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1062,24 +1184,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/papers/{document_id}/highlight-threads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Highlight Threads */
-        get: operations["list_highlight_threads_api_v1_papers__document_id__highlight_threads_get"];
-        put?: never;
-        /** Create Highlight Thread */
-        post: operations["create_highlight_thread_api_v1_papers__document_id__highlight_threads_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/papers/{document_id}/projects": {
         parameters: {
             query?: never;
@@ -1091,6 +1195,57 @@ export interface paths {
         get: operations["get_projects_from_document_id_api_v1_papers__document_id__projects_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Reflow */
+        get: operations["get_document_reflow_api_v1_papers__document_id__reflow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream Reflow Block Translation */
+        post: operations["stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reflow/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Document Reflow */
+        post: operations["retry_document_reflow_api_v1_papers__document_id__reflow_retries_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1114,7 +1269,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/papers/{document_id}/translations": {
+    "/api/v1/papers/{document_id}/selection-translations": {
         parameters: {
             query?: never;
             header?: never;
@@ -1124,7 +1279,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Stream Paper Translation */
-        post: operations["stream_paper_translation_api_v1_papers__document_id__translations_post"];
+        post: operations["stream_paper_translation_api_v1_papers__document_id__selection_translations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1323,6 +1478,23 @@ export interface paths {
         patch: operations["update_project_collaborator_api_v1_projects__project_id__members__user_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/outputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project Outputs */
+        get: operations["get_project_outputs_api_v1_projects__project_id__outputs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/papers": {
         parameters: {
             query?: never;
@@ -1440,8 +1612,7 @@ export interface paths {
         delete: operations["delete_research_item_api_v1_research_items__item_id__delete"];
         options?: never;
         head?: never;
-        /** Update Research Item */
-        patch: operations["update_research_item_api_v1_research_items__item_id__patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/v1/search/papers": {
@@ -1455,15 +1626,15 @@ export interface paths {
         put?: never;
         /**
          * Search Papers Endpoint
-         * @description Search across papers, annotations, and highlights in the user's knowledge base.
+         * @description Search across papers and annotation threads in the user's knowledge base.
          *
          *     Returns a hierarchical view with matching content organized under paper metadata.
          *     The search looks through:
          *     - Document titles, abstracts, and raw content
-         *     - Highlight thread text
+         *     - Annotation thread quote text
          *     - Annotation comment content
          *
-         *     Results are organized by paper, with matching highlights and annotations
+         *     Results are organized by paper, with matching threads and comments
          *     sub-referenced under each paper's metadata.
          */
         post: operations["search_papers_endpoint_api_v1_search_papers_post"];
@@ -1484,7 +1655,7 @@ export interface paths {
          * Get Search Stats
          * @description Get statistics about the user's knowledge base for search context.
          *
-         *     Returns counts of papers, highlights, and annotations.
+         *     Returns counts of papers, annotation threads, and comments.
          */
         get: operations["get_search_stats_api_v1_search_papers_stats_get"];
         put?: never;
@@ -1672,6 +1843,16 @@ export interface components {
             /** Document Ids */
             document_ids: string[];
         };
+        /**
+         * AnnotationAudienceFilter
+         * @enum {string}
+         */
+        AnnotationAudienceFilter: "personal" | "project";
+        /**
+         * AnnotationColor
+         * @enum {string}
+         */
+        AnnotationColor: "yellow" | "red" | "green" | "blue" | "purple" | "magenta" | "orange" | "gray";
         /** AnnotationCommentResponse */
         AnnotationCommentResponse: {
             /** Can Delete */
@@ -1703,6 +1884,117 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** AnnotationThreadCapabilities */
+        AnnotationThreadCapabilities: {
+            /** Delete */
+            delete: boolean;
+            /** Recolor */
+            recolor: boolean;
+            /** Reopen */
+            reopen: boolean;
+            /** Reply */
+            reply: boolean;
+            /** Resolve */
+            resolve: boolean;
+        };
+        /** AnnotationThreadContent */
+        AnnotationThreadContent: {
+            capabilities: components["schemas"]["AnnotationThreadCapabilities"];
+            color: components["schemas"]["AnnotationColor"];
+            /** Comment Count */
+            comment_count: number;
+            /** Comments */
+            comments: components["schemas"]["AnnotationCommentResponse"][];
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            mode: components["schemas"]["AnnotationThreadMode"];
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
+            /** Quote Text */
+            quote_text: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            resolved_by: components["schemas"]["ResearchCreatorResponse"] | null;
+            /** Role */
+            role: string;
+            status: components["schemas"]["AnnotationThreadStatus"];
+        };
+        /** AnnotationThreadListResponse */
+        AnnotationThreadListResponse: {
+            /** Items */
+            items: components["schemas"]["AnnotationThreadSummaryResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * AnnotationThreadMode
+         * @enum {string}
+         */
+        AnnotationThreadMode: "highlight" | "note" | "discussion";
+        /**
+         * AnnotationThreadStatus
+         * @enum {string}
+         */
+        AnnotationThreadStatus: "open" | "resolved";
+        /** AnnotationThreadSummaryResponse */
+        AnnotationThreadSummaryResponse: {
+            /** Audience */
+            audience: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
+            capabilities: components["schemas"]["AnnotationThreadCapabilities"];
+            color: components["schemas"]["AnnotationColor"];
+            /** Comment Count */
+            comment_count: number;
+            /** Comments */
+            comments: components["schemas"]["AnnotationCommentResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["ResearchCreatorResponse"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            mode: components["schemas"]["AnnotationThreadMode"];
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
+            /** Quote Text */
+            quote_text: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            resolved_by: components["schemas"]["ResearchCreatorResponse"] | null;
+            /** Role */
+            role: string;
+            status: components["schemas"]["AnnotationThreadStatus"];
+            /**
+             * Target Document Id
+             * Format: uuid
+             */
+            target_document_id: string;
+        };
+        /** AnnotationThreadTurnContext */
+        AnnotationThreadTurnContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "annotation_thread";
+            /**
+             * Thread Id
+             * Format: uuid
+             */
+            thread_id: string;
         };
         /** ApiErrorResponse */
         ApiErrorResponse: {
@@ -1740,6 +2032,16 @@ export interface components {
              * @default null
              */
             stage: string | null;
+        };
+        /** ArxivPaperSource */
+        ArxivPaperSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "arxiv";
+            /** Value */
+            value: string;
         };
         /** AudioOverviewContent */
         AudioOverviewContent: {
@@ -1983,10 +2285,52 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
-        /** ConversationAutoTitleResponse */
-        ConversationAutoTitleResponse: {
-            /** Title */
-            title: string;
+        /**
+         * ConversationActivity
+         * @description One sanitized, user-inspectable tool lifecycle entry.
+         */
+        ConversationActivity: {
+            /** Artifact Count */
+            artifact_count?: number | null;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "search" | "read" | "workspace_action" | "connector";
+            /** Connector Name */
+            connector_name?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "activity";
+            /** Sequence */
+            sequence: number;
+            /** Source Count */
+            source_count?: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "succeeded" | "failed";
+            /** Subject */
+            subject?: string | null;
+        };
+        /** ConversationAssistantItem */
+        ConversationAssistantItem: {
+            /** Content */
+            content: string;
+            /** Id */
+            id: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "progress" | "final";
+            /** Sequence */
+            sequence: number;
         };
         /** ConversationCapabilitiesResponse */
         ConversationCapabilitiesResponse: {
@@ -2022,6 +2366,15 @@ export interface components {
              */
             share: boolean;
         };
+        /** ConversationCitationSummary */
+        ConversationCitationSummary: {
+            /** Annotation Count */
+            annotation_count: number;
+            /** Rejected Source Count */
+            rejected_source_count: number;
+            /** Source Count */
+            source_count: number;
+        };
         /** ConversationCreateRequest */
         ConversationCreateRequest: {
             /** Paper Context */
@@ -2029,11 +2382,8 @@ export interface components {
             /** Scope Id */
             scope_id?: string | null;
             scope_type: components["schemas"]["ConversationScopeType"];
-            /**
-             * Title
-             * @default New conversation
-             */
-            title: string;
+            /** Title */
+            title?: string | null;
             /** Tool Permissions */
             tool_permissions?: components["schemas"]["WorkspacePermission"][] | null;
         };
@@ -2082,32 +2432,6 @@ export interface components {
             /** Next Cursor */
             next_cursor: string | null;
         };
-        /**
-         * ConversationMessageRequest
-         * @description One stable message contract for every conversation scope.
-         */
-        ConversationMessageRequest: {
-            /** Mentioned Highlight Ids */
-            mentioned_highlight_ids?: string[] | null;
-            /** @default standard */
-            reasoning_level: components["schemas"]["ReasoningLevel"];
-            /**
-             * Turn Id
-             * Format: uuid
-             */
-            turn_id: string;
-            /** User Query */
-            user_query: string;
-            /** User References */
-            user_references?: string[] | null;
-        };
-        /** ConversationMessagesResponse */
-        ConversationMessagesResponse: {
-            /** Items */
-            items: components["schemas"]["app__modules__conversations__application__contracts__conversations__MessageResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
-        };
         /** ConversationMoveRequest */
         ConversationMoveRequest: {
             /** Scope Id */
@@ -2119,10 +2443,245 @@ export interface components {
             scope_type: "global" | "project";
         };
         /**
+         * ConversationProgressEntry
+         * @description One safe, user-visible progress statement emitted before tool work.
+         */
+        ConversationProgressEntry: {
+            /** Content */
+            content: string;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "progress";
+            /** Sequence */
+            sequence: number;
+        };
+        /**
+         * ConversationResponseCreateRequest
+         * @description Generate another response variant for the latest conversation turn.
+         */
+        ConversationResponseCreateRequest: {
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+        };
+        /** ConversationResponseSelectionRequest */
+        ConversationResponseSelectionRequest: {
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+        };
+        /** ConversationResponseVariantResponse */
+        ConversationResponseVariantResponse: {
+            /** Artifacts */
+            artifacts: components["schemas"]["CitationSnapshot"][] | null;
+            /** Content */
+            content: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            references: components["schemas"]["ReferenceBundle"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed" | "cancelled";
+            trace: components["schemas"]["ConversationTrace"] | null;
+            /** Variant Index */
+            variant_index: number;
+        };
+        /**
          * ConversationScopeType
          * @enum {string}
          */
         ConversationScopeType: "global" | "project" | "paper";
+        /** ConversationStreamActivityEvent */
+        ConversationStreamActivityEvent: {
+            activity: components["schemas"]["ConversationActivity"];
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "activity";
+        };
+        /** ConversationStreamAssistantItemCompleteEvent */
+        ConversationStreamAssistantItemCompleteEvent: {
+            item: components["schemas"]["ConversationAssistantItem"];
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_item_complete";
+        };
+        /** ConversationStreamAssistantItemDeltaEvent */
+        ConversationStreamAssistantItemDeltaEvent: {
+            /** Delta */
+            delta: string;
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_item_delta";
+        };
+        /** ConversationStreamAssistantItemStartEvent */
+        ConversationStreamAssistantItemStartEvent: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_item_start";
+        };
+        /** ConversationStreamCompleteEvent */
+        ConversationStreamCompleteEvent: {
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "complete";
+        };
+        /** ConversationStreamErrorEvent */
+        ConversationStreamErrorEvent: {
+            /** Error */
+            error: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+        };
+        /**
+         * ConversationStreamEventSchema
+         * @description Public schema for the JSON payload carried by each SSE event.
+         */
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        /** ConversationStreamReferencesEvent */
+        ConversationStreamReferencesEvent: {
+            /** References */
+            references: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "references";
+        };
+        /** ConversationStreamResponseReadyEvent */
+        ConversationStreamResponseReadyEvent: {
+            turn: components["schemas"]["ConversationTurnResponse"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "response_ready";
+        };
+        /** ConversationStreamStartEvent */
+        ConversationStreamStartEvent: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Generation Kind
+             * @enum {string}
+             */
+            generation_kind: "initial" | "retry";
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "start";
+            /** Variant Index */
+            variant_index: number;
+        };
+        /** ConversationStreamSuggestionsEvent */
+        ConversationStreamSuggestionsEvent: {
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /** Suggestions */
+            suggestions: string[];
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "suggestions";
+        };
         /** ConversationSummaryResponse */
         ConversationSummaryResponse: {
             /** Archived At */
@@ -2167,6 +2726,81 @@ export interface components {
             /** Permissions */
             permissions: components["schemas"]["WorkspacePermission"][];
         };
+        /** ConversationTrace */
+        ConversationTrace: {
+            citation_summary?: components["schemas"]["ConversationCitationSummary"] | null;
+            /** Entries */
+            entries?: (components["schemas"]["ConversationProgressEntry"] | components["schemas"]["ConversationActivity"])[];
+        };
+        /**
+         * ConversationTurnCreateRequest
+         * @description Create one user turn and its initial generated response.
+         */
+        ConversationTurnCreateRequest: {
+            /** Contexts */
+            contexts?: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["AnnotationThreadTurnContext"])[];
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "en" | "zh-CN";
+            /** @default standard */
+            reasoning_level: components["schemas"]["ReasoningLevel"];
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /** Time Zone */
+            time_zone: string;
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /** User Query */
+            user_query: string;
+        };
+        /** ConversationTurnResponse */
+        ConversationTurnResponse: {
+            /** Contexts */
+            contexts: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["AnnotationThreadTurnContext"])[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "en" | "zh-CN";
+            /** Reasoning Level */
+            reasoning_level: string;
+            /** Responses */
+            responses: components["schemas"]["ConversationResponseVariantResponse"][];
+            /** Scope */
+            scope: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[] | null;
+            /** Selected Response Id */
+            selected_response_id: string | null;
+            /** Sequence */
+            sequence: number;
+            /** Suggestions */
+            suggestions: string[] | null;
+            /** Time Zone */
+            time_zone: string;
+            /** User Query */
+            user_query: string;
+        };
+        /** ConversationTurnsResponse */
+        ConversationTurnsResponse: {
+            /** Items */
+            items: components["schemas"]["ConversationTurnResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** ConversationUpdateRequest */
         ConversationUpdateRequest: {
             /** Archived */
@@ -2180,6 +2814,19 @@ export interface components {
         CreateAnnotationCommentRequest: {
             /** Content */
             content: string;
+        };
+        /** CreateAnnotationThreadRequest */
+        CreateAnnotationThreadRequest: {
+            /** Audience */
+            audience?: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
+            /** @default yellow */
+            color: components["schemas"]["AnnotationColor"];
+            /** Initial Comment */
+            initial_comment?: string | null;
+            /** Position */
+            position: components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"];
+            /** Quote Text */
+            quote_text: string;
         };
         /** CreateAudioOverviewRequest */
         CreateAudioOverviewRequest: {
@@ -2198,31 +2845,6 @@ export interface components {
             columns: string[];
             /** Title */
             title?: string | null;
-        };
-        /** CreateHighlightThreadRequest */
-        CreateHighlightThreadRequest: {
-            /**
-             * Color
-             * @default blue
-             */
-            color: string;
-            /** End Offset */
-            end_offset?: number | null;
-            /** Page Number */
-            page_number?: number | null;
-            /** Position */
-            position?: {
-                [key: string]: components["schemas"]["JsonValue-Input"];
-            } | null;
-            /** Quote Text */
-            quote_text: string;
-            /**
-             * Shared
-             * @default true
-             */
-            shared: boolean;
-            /** Start Offset */
-            start_offset?: number | null;
         };
         /** CreateJobResponse */
         CreateJobResponse: {
@@ -2254,7 +2876,7 @@ export interface components {
         DataTableContent: {
             /** Citations */
             citations: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Columns */
             columns: string[];
@@ -2262,7 +2884,7 @@ export interface components {
             row_failures: string[];
             /** Rows */
             rows: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Title */
             title: string | null;
@@ -2301,7 +2923,7 @@ export interface components {
             kind: "document";
             /** Locator */
             locator?: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Reference */
             reference: string;
@@ -2356,6 +2978,70 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentReflowBlockResponse */
+        DocumentReflowBlockResponse: {
+            /** Heading Level */
+            heading_level: number | null;
+            /** Id */
+            id: string;
+            /** Index */
+            index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "title" | "authors" | "heading" | "paragraph" | "list" | "quote" | "equation" | "table" | "figure" | "code" | "references";
+            /** Page Number */
+            page_number: number | null;
+            /** Source Markdown */
+            source_markdown: string;
+        };
+        /** DocumentReflowResponse */
+        DocumentReflowResponse: {
+            /** Blocks */
+            blocks: components["schemas"]["DocumentReflowBlockResponse"][];
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Error Code */
+            error_code: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Profile Revision */
+            profile_revision: string | null;
+            /** Prompt Revision */
+            prompt_revision: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "processing" | "completed" | "failed";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** DocumentResearchAudience */
+        DocumentResearchAudience: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "document";
+        };
         /** DocumentResponse */
         DocumentResponse: {
             /** Abstract */
@@ -2409,6 +3095,16 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DoiPaperSource */
+        DoiPaperSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "doi";
+            /** Value */
+            value: string;
+        };
         /** ExternalAnswerSource */
         ExternalAnswerSource: {
             /** Key */
@@ -2450,27 +3146,6 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** HighlightThreadContent */
-        HighlightThreadContent: {
-            /** Color */
-            color: string;
-            /** Comments */
-            comments: components["schemas"]["AnnotationCommentResponse"][];
-            /** End Offset */
-            end_offset: number | null;
-            /** Page Number */
-            page_number: number | null;
-            /** Position */
-            position: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
-            } | null;
-            /** Quote Text */
-            quote_text: string;
-            /** Role */
-            role: string;
-            /** Start Offset */
-            start_offset: number | null;
-        };
         /** Institution */
         Institution: {
             /** Country Code */
@@ -2507,7 +3182,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "pdf_process" | "pdf_postprocess" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_postprocess" | "document_gc" | "storage_delete";
+        JobOperation: "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_postprocess" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -2528,13 +3203,13 @@ export interface components {
             id: string;
             /** Operation */
             operation: string;
-            /** Progress Message */
-            progress_message: string | null;
+            /** Progress Code */
+            progress_code: string | null;
             /** Project Id */
             project_id: string | null;
             /** Result */
             result: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Started At */
             started_at: string | null;
@@ -2542,11 +3217,8 @@ export interface components {
             status: string;
         };
         JsonScalar: string | number | boolean | null;
-        "JsonValue-Input": components["schemas"]["JsonScalar"] | components["schemas"]["JsonValue-Input"][] | {
-            [key: string]: components["schemas"]["JsonValue-Input"];
-        };
-        "JsonValue-Output": components["schemas"]["JsonScalar"] | components["schemas"]["JsonValue-Output"][] | {
-            [key: string]: components["schemas"]["JsonValue-Output"];
+        JsonValue: components["schemas"]["JsonScalar"] | components["schemas"]["JsonValue"][] | {
+            [key: string]: components["schemas"]["JsonValue"];
         };
         /** Keyword */
         Keyword: {
@@ -2556,6 +3228,37 @@ export interface components {
             id: string;
             /** Score */
             score?: number | null;
+        };
+        /** LibraryOutputListResponse */
+        LibraryOutputListResponse: {
+            /** Items */
+            items: components["schemas"]["LibraryOutputResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /** Total Count */
+            total_count: number;
+        };
+        /** LibraryOutputResponse */
+        LibraryOutputResponse: {
+            item: components["schemas"]["ResearchItemResponse"];
+            source: components["schemas"]["LibraryOutputSourceResponse"];
+            /** Title */
+            title: string;
+        };
+        /**
+         * LibraryOutputSort
+         * @enum {string}
+         */
+        LibraryOutputSort: "updated_desc" | "updated_asc" | "title_asc" | "title_desc";
+        /** LibraryOutputSourceResponse */
+        LibraryOutputSourceResponse: {
+            /** Audience Id */
+            audience_id: string | null;
+            audience_type: components["schemas"]["ResearchAudienceType"];
+            /** Title */
+            title: string;
         };
         /**
          * LibraryPaperCollection
@@ -2579,12 +3282,110 @@ export interface components {
              */
             kind: "library";
         };
+        /** LibraryPaperIngestionResponse */
+        LibraryPaperIngestionResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            /** Document Id */
+            document_id: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "upload" | "doi" | "arxiv" | "url";
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "queued" | "downloading" | "parsing" | "extracting_metadata" | "indexing" | "finalizing";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "processing" | "failed";
+        };
+        /** LibraryPaperListIngestionEntry */
+        LibraryPaperListIngestionEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_type: "ingestion";
+            ingestion: components["schemas"]["LibraryPaperIngestionResponse"];
+        };
+        /** LibraryPaperListPaperEntry */
+        LibraryPaperListPaperEntry: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            document: components["schemas"]["DocumentResponse"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_type: "paper";
+            /** Is Public */
+            is_public: boolean;
+            /**
+             * Last Accessed At
+             * Format: date-time
+             */
+            last_accessed_at: string;
+            /**
+             * Library Entry Id
+             * Format: uuid
+             */
+            library_entry_id: string;
+            metadata_overrides: components["schemas"]["DocumentMetadataOverrides"];
+            /** Preview Url */
+            preview_url: string | null;
+            status: components["schemas"]["PaperStatus"];
+            /** Tags */
+            tags: components["schemas"]["LibraryPaperTagResponse"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Id */
+            user_id: number;
+        };
         /** LibraryPaperListResponse */
         LibraryPaperListResponse: {
             /** Items */
-            items: components["schemas"]["LibraryPaperResponse"][];
+            items: (components["schemas"]["LibraryPaperListPaperEntry"] | components["schemas"]["LibraryPaperListIngestionEntry"])[];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /** Total Count */
+            total_count: number;
+        };
+        /** LibraryPaperRemovalRequest */
+        LibraryPaperRemovalRequest: {
+            /** Document Ids */
+            document_ids: string[];
+        };
+        /** LibraryPaperRemovalResponse */
+        LibraryPaperRemovalResponse: {
+            /** Removed Document Ids */
+            removed_document_ids: string[];
         };
         /** LibraryPaperResponse */
         LibraryPaperResponse: {
@@ -2627,6 +3428,11 @@ export interface components {
             /** Share Token */
             share_token: string;
         };
+        /**
+         * LibraryPaperSort
+         * @enum {string}
+         */
+        LibraryPaperSort: "added_desc" | "added_asc" | "published_desc" | "published_asc" | "title_asc";
         /** LibraryPaperTagResponse */
         LibraryPaperTagResponse: {
             /** Color */
@@ -2644,6 +3450,13 @@ export interface components {
             metadata_overrides?: components["schemas"]["DocumentMetadataOverrides"] | null;
             status?: components["schemas"]["PaperStatus"] | null;
         };
+        /** LibrarySummaryResponse */
+        LibrarySummaryResponse: {
+            /** Output Count */
+            output_count: number;
+            /** Paper Count */
+            paper_count: number;
+        };
         /** LibraryTagAssignmentRequest */
         LibraryTagAssignmentRequest: {
             /** Document Ids */
@@ -2653,8 +3466,8 @@ export interface components {
         };
         /** LibraryTagAssignmentResponse */
         LibraryTagAssignmentResponse: {
-            /** Assigned Count */
-            assigned_count: number;
+            /** Updated Paper Count */
+            updated_paper_count: number;
         };
         /** LibraryTagCreateRequest */
         LibraryTagCreateRequest: {
@@ -2669,6 +3482,11 @@ export interface components {
             items: components["schemas"]["LibraryTagResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /** LibraryTagRenameRequest */
+        LibraryTagRenameRequest: {
+            /** Name */
+            name: string;
         };
         /** LibraryTagResponse */
         LibraryTagResponse: {
@@ -2691,6 +3509,11 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** MessageResponse */
+        MessageResponse: {
+            /** Message */
+            message: string;
         };
         /**
          * OAStatus
@@ -2876,11 +3699,77 @@ export interface components {
             /** Total Papers */
             total_papers: number;
         };
+        /** PaperSelectionTurnContext */
+        PaperSelectionTurnContext: {
+            anchor: components["schemas"]["PdfTextPosition"];
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "paper_selection";
+            /** Page Number */
+            page_number: number;
+            /** Selected Text */
+            selected_text: string;
+        };
         /**
          * PaperStatus
          * @enum {string}
          */
         PaperStatus: "todo" | "reading" | "completed";
+        /** ParsedTextPosition */
+        ParsedTextPosition: {
+            /** End Offset */
+            end_offset: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "parsed_text";
+            /** Page Number */
+            page_number?: number | null;
+            /** Start Offset */
+            start_offset: number;
+        };
+        /** PdfTextPosition */
+        PdfTextPosition: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "pdf_text";
+            /** Page Number */
+            page_number: number;
+            /** Rects */
+            rects: components["schemas"]["PdfTextRect"][];
+        };
+        /**
+         * PdfTextRect
+         * @description A PDF text rectangle normalized to the page's 0–1 coordinate space.
+         */
+        PdfTextRect: {
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** PersonalResearchAudience */
+        PersonalResearchAudience: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "personal";
+        };
         /** PortalSessionResponse */
         PortalSessionResponse: {
             /** Url */
@@ -3059,12 +3948,33 @@ export interface components {
             items: components["schemas"]["ProjectResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
         /** ProjectMembershipResponse */
         ProjectMembershipResponse: {
             /** Kind */
             kind: string;
             permissions: components["schemas"]["ProjectPermissionSet"];
+        };
+        /** ProjectOutputListResponse */
+        ProjectOutputListResponse: {
+            /** Items */
+            items: components["schemas"]["LibraryOutputResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
         /** ProjectOwnerResponse */
         ProjectOwnerResponse: {
@@ -3097,18 +4007,30 @@ export interface components {
             items: components["schemas"]["ProjectPaperSummaryResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
+        /**
+         * ProjectPaperSort
+         * @enum {string}
+         */
+        ProjectPaperSort: "added_desc" | "title_asc" | "published_desc";
         /** ProjectPaperSummaryResponse */
         ProjectPaperSummaryResponse: {
             /** Abstract */
             abstract: string | null;
-            /** Authors */
-            authors: string[] | null;
             /**
-             * Created At
+             * Added At
              * Format: date-time
              */
-            created_at: string;
+            added_at: string;
+            /** Authors */
+            authors: string[] | null;
             /**
              * Document Id
              * Format: uuid
@@ -3184,8 +4106,26 @@ export interface components {
              */
             manage_papers: boolean;
         };
+        /** ProjectResearchAudience */
+        ProjectResearchAudience: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "project";
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectResponse */
         ProjectResponse: {
+            /**
+             * Activity At
+             * Format: date-time
+             */
+            activity_at: string;
             capabilities: components["schemas"]["ProjectCapabilitiesResponse"];
             /**
              * Created At
@@ -3201,11 +4141,6 @@ export interface components {
             id: string;
             membership: components["schemas"]["ProjectMembershipResponse"];
             /**
-             * Num Audio Overviews
-             * @default 0
-             */
-            num_audio_overviews: number;
-            /**
              * Num Collaborators
              * @default 0
              */
@@ -3216,10 +4151,10 @@ export interface components {
              */
             num_conversations: number;
             /**
-             * Num Data Tables
+             * Num Outputs
              * @default 0
              */
-            num_data_tables: number;
+            num_outputs: number;
             /**
              * Num Papers
              * @default 0
@@ -3234,6 +4169,11 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ProjectSort
+         * @enum {string}
+         */
+        ProjectSort: "activity_desc" | "title_asc" | "papers_desc";
         /** ProjectTransferRequest */
         ProjectTransferRequest: {
             /** New Owner Id */
@@ -3284,6 +4224,11 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * ResearchAudienceType
+         * @enum {string}
+         */
+        ResearchAudienceType: "personal" | "document" | "project";
         /** ResearchCreatorResponse */
         ResearchCreatorResponse: {
             /** Display Name */
@@ -3297,14 +4242,12 @@ export interface components {
             delete: boolean;
             /** Edit */
             edit: boolean;
-            /** Share */
-            share: boolean;
         };
         /**
          * ResearchItemKind
          * @enum {string}
          */
-        ResearchItemKind: "highlight_thread" | "citation" | "audio_overview" | "data_table";
+        ResearchItemKind: "annotation_thread" | "citation" | "audio_overview" | "data_table";
         /** ResearchItemListResponse */
         ResearchItemListResponse: {
             /** Items */
@@ -3314,6 +4257,9 @@ export interface components {
         };
         /** ResearchItemResponse */
         ResearchItemResponse: {
+            annotation_thread?: components["schemas"]["AnnotationThreadContent"] | null;
+            /** Audience */
+            audience: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["DocumentResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
             audio_overview?: components["schemas"]["AudioOverviewContent"] | null;
             capabilities: components["schemas"]["ResearchItemCapabilities"];
             citation?: components["schemas"]["CitationContent"] | null;
@@ -3324,29 +4270,20 @@ export interface components {
             created_at: string;
             created_by: components["schemas"]["ResearchCreatorResponse"];
             data_table?: components["schemas"]["DataTableContent"] | null;
-            highlight_thread?: components["schemas"]["HighlightThreadContent"] | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** Is Shared */
-            is_shared: boolean;
             kind: components["schemas"]["ResearchItemKind"];
-            /** Scope Id */
-            scope_id: string | null;
-            scope_type: components["schemas"]["ResearchScopeType"];
+            /** Target Document Id */
+            target_document_id: string | null;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
         };
-        /**
-         * ResearchScopeType
-         * @enum {string}
-         */
-        ResearchScopeType: "personal" | "document" | "project";
         /** ResearchSearchComment */
         ResearchSearchComment: {
             /** Content */
@@ -3399,8 +4336,6 @@ export interface components {
             document_id: string;
             /** Document Title */
             document_title: string | null;
-            /** End Offset */
-            end_offset: number | null;
             /**
              * Id
              * Format: uuid
@@ -3408,19 +4343,12 @@ export interface components {
             id: string;
             /** Matching Comments */
             matching_comments: components["schemas"]["ResearchSearchComment"][];
-            /** Page Number */
-            page_number: number | null;
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
             /** Quote Text */
             quote_text: string;
             /** Role */
             role: string;
-            /** Start Offset */
-            start_offset: number | null;
-        };
-        /** ResearchVisibilityRequest */
-        ResearchVisibilityRequest: {
-            /** Shared */
-            shared: boolean;
         };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
@@ -3613,6 +4541,8 @@ export interface components {
             auto_translate_selection: boolean;
             /** Custom Instructions */
             custom_instructions: string | null;
+            /** Source Language */
+            source_language: string;
             /** Target Language */
             target_language: string;
         };
@@ -3622,6 +4552,8 @@ export interface components {
             auto_translate_selection: boolean;
             /** Custom Instructions */
             custom_instructions?: string | null;
+            /** Source Language */
+            source_language: string;
             /** Target Language */
             target_language: string;
         };
@@ -3635,24 +4567,10 @@ export interface components {
             /** Content */
             content: string;
         };
-        /** UpdateHighlightThreadRequest */
-        UpdateHighlightThreadRequest: {
-            /** Color */
-            color?: string | null;
-            /** End Offset */
-            end_offset?: number | null;
-            /** Page Number */
-            page_number?: number | null;
-            /** Position */
-            position?: {
-                [key: string]: components["schemas"]["JsonValue-Input"];
-            } | null;
-            /** Quote Text */
-            quote_text?: string | null;
-            /** Shared */
-            shared?: boolean | null;
-            /** Start Offset */
-            start_offset?: number | null;
+        /** UpdateAnnotationThreadRequest */
+        UpdateAnnotationThreadRequest: {
+            color?: components["schemas"]["AnnotationColor"] | null;
+            status?: components["schemas"]["AnnotationThreadStatus"] | null;
         };
         /**
          * UpdateProfileBody
@@ -3662,26 +4580,22 @@ export interface components {
             /** Display Name */
             display_name?: string | null;
         };
-        /** UploadAcceptedResponse */
-        UploadAcceptedResponse: {
-            /**
-             * Job Id
-             * Format: uuid
-             */
-            job_id: string;
-            /**
-             * Message
-             * @default File upload started
-             */
-            message: string;
+        /** UploadFromSourceRequest */
+        UploadFromSourceRequest: {
+            /** Project Id */
+            project_id?: string | null;
+            /** Source */
+            source: components["schemas"]["DoiPaperSource"] | components["schemas"]["ArxivPaperSource"] | components["schemas"]["UrlPaperSource"];
         };
-        /** UploadFromUrlRequest */
-        UploadFromUrlRequest: {
+        /** UrlPaperSource */
+        UrlPaperSource: {
             /**
-             * Url
-             * Format: uri
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            url: string;
+            kind: "url";
+            /** Value */
+            value: string;
         };
         /** UsageResponse */
         UsageResponse: {
@@ -3878,36 +4792,6 @@ export interface components {
             /** Synced Papers Count */
             synced_papers_count: number;
         };
-        /** MessageResponse */
-        app__modules__conversations__application__contracts__conversations__MessageResponse: {
-            /** Artifacts */
-            artifacts: components["schemas"]["CitationSnapshot"][] | null;
-            /** Content */
-            content: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            references: components["schemas"]["ReferenceBundle"] | null;
-            /** Role */
-            role: string;
-            /** Scope */
-            scope: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
-            }[] | null;
-            /** Sequence */
-            sequence: number;
-            /** Trace */
-            trace: {
-                [key: string]: components["schemas"]["JsonValue-Output"];
-            } | null;
-        };
-        /** MessageResponse */
-        sanchezcloud_identity__models__auth__MessageResponse: {
-            /** Message */
-            message: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -4016,6 +4900,138 @@ export interface operations {
             };
         };
     };
+    get_annotation_thread_api_v1_annotation_threads__thread_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_annotation_thread_api_v1_annotation_threads__thread_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_annotation_thread_api_v1_annotation_threads__thread_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAnnotationThreadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_comment_api_v1_annotation_threads__thread_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnnotationCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationCommentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     change_password_api_v1_auth_change_password_post: {
         parameters: {
             query?: never;
@@ -4035,7 +5051,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Invalid or expired authentication token */
@@ -4095,7 +5111,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Request validation failed */
@@ -4202,7 +5218,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Authentication failed or session unavailable */
@@ -4282,7 +5298,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Request validation failed */
@@ -4333,7 +5349,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Request validation failed */
@@ -4384,7 +5400,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Invalid or expired authentication token */
@@ -4444,7 +5460,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["sanchezcloud_identity__models__auth__MessageResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Invalid or expired authentication token */
@@ -4673,6 +5689,9 @@ export interface operations {
         parameters: {
             query?: {
                 archived?: boolean;
+                scope_type?: components["schemas"]["ConversationScopeType"] | null;
+                scope_id?: string | null;
+                context_document_id?: string | null;
                 cursor?: string | null;
                 limit?: number;
             };
@@ -4887,75 +5906,6 @@ export interface operations {
             };
         };
     };
-    get_conversation_messages_api_v1_conversations__conversation_id__messages_get: {
-        parameters: {
-            query?: {
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationMessagesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_conversation_message_api_v1_conversations__conversation_id__messages_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConversationMessageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     move_conversation_api_v1_conversations__conversation_id__scope_put: {
         parameters: {
             query?: never;
@@ -4991,37 +5941,6 @@ export interface operations {
             };
         };
     };
-    auto_title_conversation_api_v1_conversations__conversation_id__title_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationAutoTitleResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put: {
         parameters: {
             query?: never;
@@ -5044,6 +5963,147 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationToolPermissionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_turns_api_v1_conversations__conversation_id__turns_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationTurnsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_conversation_turn_api_v1_conversations__conversation_id__turns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationTurnCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Standard SSE stream of typed conversation events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__responses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationResponseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Standard SSE stream of typed conversation events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__selected_response_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationResponseSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponseVariantResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5169,109 +6229,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TopicListResponse"];
-                };
-            };
-        };
-    };
-    delete_highlight_thread_api_v1_highlight_threads__thread_id__delete: {
-        parameters: {
-            query?: {
-                confirm_delete_replies?: boolean;
-            };
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeleteResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_highlight_thread_api_v1_highlight_threads__thread_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateHighlightThreadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_annotation_comment_api_v1_highlight_threads__thread_id__comments_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateAnnotationCommentRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationCommentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -5535,9 +6492,83 @@ export interface operations {
             };
         };
     };
-    list_library_papers_api_v1_library_papers_get: {
+    list_library_outputs_api_v1_library_outputs_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                kinds?: components["schemas"]["ResearchItemKind"][] | null;
+                sort?: components["schemas"]["LibraryOutputSort"];
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryOutputListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_library_papers_api_v1_library_paper_removals_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryPaperRemovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPaperRemovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_library_papers_api_v1_library_papers_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                tag_ids?: string[] | null;
+                sort?: components["schemas"]["LibraryPaperSort"];
+                cursor?: string | null;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5551,6 +6582,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryPaperListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -5743,32 +6783,22 @@ export interface operations {
             };
         };
     };
-    remove_library_tag_assignment_api_v1_library_papers__document_id__tags__tag_id__delete: {
+    get_library_summary_api_v1_library_summary_get: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                document_id: string;
-                tag_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LibrarySummaryResponse"];
                 };
             };
         };
@@ -5826,7 +6856,7 @@ export interface operations {
             };
         };
     };
-    assign_library_tags_api_v1_library_tags_assignments_post: {
+    replace_library_tag_assignments_api_v1_library_tags_assignments_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -5840,12 +6870,76 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryTagAssignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_library_tag_api_v1_library_tags__tag_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_library_tag_api_v1_library_tags__tag_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryTagRenameRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryTagResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6317,6 +7411,41 @@ export interface operations {
             };
         };
     };
+    upload_pdf_from_source_api_v1_paper_ingestions_sources_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadFromSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_pdf_api_v1_paper_ingestions_uploads_post: {
         parameters: {
             query?: {
@@ -6340,7 +7469,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadAcceptedResponse"];
+                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6354,22 +7483,47 @@ export interface operations {
             };
         };
     };
-    upload_pdf_from_url_api_v1_paper_ingestions_urls_post: {
+    cancel_pdf_ingestion_api_v1_paper_ingestions__job_id__delete: {
         parameters: {
-            query?: {
-                project_id?: string | null;
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_pdf_ingestion_api_v1_paper_ingestions__job_id__retries_post: {
+        parameters: {
+            query?: never;
             header?: {
                 "Idempotency-Key"?: string | null;
             };
-            path?: never;
+            path: {
+                job_id: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UploadFromUrlRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             202: {
@@ -6377,7 +7531,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadAcceptedResponse"];
+                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6411,6 +7565,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_annotation_threads_api_v1_papers__document_id__annotation_threads_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                audience?: components["schemas"]["AnnotationAudienceFilter"] | null;
+                mode?: components["schemas"]["AnnotationThreadMode"] | null;
+                status?: components["schemas"]["AnnotationThreadStatus"];
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnotationThreadListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_annotation_thread_api_v1_papers__document_id__annotation_threads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAnnotationThreadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchItemResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6561,72 +7786,6 @@ export interface operations {
             };
         };
     };
-    list_highlight_threads_api_v1_papers__document_id__highlight_threads_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_highlight_thread_api_v1_papers__document_id__highlight_threads_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateHighlightThreadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_projects_from_document_id_api_v1_papers__document_id__projects_get: {
         parameters: {
             query?: never;
@@ -6645,6 +7804,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_reflow_api_v1_papers__document_id__reflow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A cached server-sent stream for one reflow block. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_document_reflow_api_v1_papers__document_id__reflow_retries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReflowResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6689,7 +7942,7 @@ export interface operations {
             };
         };
     };
-    stream_paper_translation_api_v1_papers__document_id__translations_post: {
+    stream_paper_translation_api_v1_papers__document_id__selection_translations_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6756,7 +8009,10 @@ export interface operations {
     get_projects_api_v1_projects_get: {
         parameters: {
             query?: {
-                limit?: number | null;
+                q?: string | null;
+                sort?: components["schemas"]["ProjectSort"];
+                cursor?: string | null;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -7240,10 +8496,51 @@ export interface operations {
             };
         };
     };
+    get_project_outputs_api_v1_projects__project_id__outputs_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                kinds?: components["schemas"]["ResearchItemKind"][];
+                sort?: components["schemas"]["LibraryOutputSort"];
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOutputListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_project_papers_api_v1_projects__project_id__papers_get: {
         parameters: {
             query?: {
                 load_urls?: boolean;
+                q?: string | null;
+                sort?: components["schemas"]["ProjectPaperSort"];
+                cursor?: string | null;
+                limit?: number;
             };
             header?: never;
             path: {
@@ -7341,7 +8638,9 @@ export interface operations {
     };
     remove_paper_from_project_api_v1_projects__project_id__papers__document_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                confirm_delete_annotations?: boolean;
+            };
             header?: never;
             path: {
                 project_id: string;
@@ -7485,41 +8784,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteResearchItemResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_research_item_api_v1_research_items__item_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResearchVisibilityRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchItemResponse"];
                 };
             };
             /** @description Validation Error */

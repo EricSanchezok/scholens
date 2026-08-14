@@ -38,6 +38,8 @@ class JobLifecyclePort(Protocol):
 
     def heartbeat(self, *, job_id: UUID) -> bool: ...
 
+    def progress(self, *, job_id: UUID, progress_code: str) -> bool: ...
+
     def fail(self, *, job_id: UUID, error_code: str) -> bool: ...
 
 
@@ -156,6 +158,14 @@ class JobCallbacks:
     def heartbeat(self, *, job_id: UUID) -> JobClaimResponse:
         return JobClaimResponse(claimed=self._lifecycle.heartbeat(job_id=job_id))
 
+    def progress(self, *, job_id: UUID, progress_code: str) -> JobClaimResponse:
+        return JobClaimResponse(
+            claimed=self._lifecycle.progress(
+                job_id=job_id,
+                progress_code=progress_code,
+            )
+        )
+
     async def complete(
         self,
         *,
@@ -168,6 +178,8 @@ class JobCallbacks:
         registration = self._registration(job_operation)
         callback = self._validate_callback(registration, payload)
         before = self._lifecycle.status(job_id=job_id)
+        if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            return JobCompletionResult(value={"accepted": False})
         handler_result = await registration.handler.complete(
             actor=actor,
             operation=operation,
@@ -204,6 +216,8 @@ class JobCallbacks:
         if not isinstance(handler, PdfPostprocessCompletionHandler):
             raise RuntimeError("pdf_postprocess_handler_contract_invalid")
         before = self._lifecycle.status(job_id=job_id)
+        if before in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            return JobCompletionResult(value={"accepted": False})
         handler_result = await handler.complete_resolved(
             actor=actor,
             operation=operation,

@@ -29,6 +29,7 @@ class SqlAlchemyTranslationPreferences:
             insert(TranslationPreference)
             .values(
                 user_id=user_id,
+                source_language=preferences.source_language,
                 target_language=preferences.target_language,
                 custom_instructions=preferences.custom_instructions,
                 auto_translate_selection=preferences.auto_translate_selection,
@@ -36,6 +37,7 @@ class SqlAlchemyTranslationPreferences:
             .on_conflict_do_update(
                 index_elements=["user_id"],
                 set_={
+                    "source_language": preferences.source_language,
                     "target_language": preferences.target_language,
                     "custom_instructions": preferences.custom_instructions,
                     "auto_translate_selection": (preferences.auto_translate_selection),
@@ -50,6 +52,7 @@ class SqlAlchemyTranslationPreferences:
 
 def _record(model: TranslationPreference) -> TranslationPreferencesRecord:
     return TranslationPreferencesRecord(
+        source_language=model.source_language,
         target_language=model.target_language,
         custom_instructions=model.custom_instructions,
         auto_translate_selection=model.auto_translate_selection,

@@ -17,12 +17,13 @@
     "md": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } },
     "lg": { "$type": "dimension", "$value": { "value": 12, "unit": "px" } },
     "xl": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } },
+    "2xl": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } },
     "full": { "$type": "dimension", "$value": { "value": 999, "unit": "px" } }
   },
   "layout": {
     "sidebar": {
       "$type": "dimension",
-      "$value": { "value": 248, "unit": "px" }
+      "$value": { "value": 240, "unit": "px" }
     },
     "reading-column": {
       "$type": "dimension",
@@ -47,6 +48,17 @@
   },
   "focus": {
     "width": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } }
+  },
+  "type": {
+    "ui": { "$type": "dimension", "$value": { "value": 14, "unit": "px" } },
+    "sidebar": {
+      "$type": "dimension",
+      "$value": { "value": 13, "unit": "px" }
+    },
+    "caption": {
+      "$type": "dimension",
+      "$value": { "value": 11, "unit": "px" }
+    }
   },
   "opacity": { "disabled": { "$type": "number", "$value": 0.38 } }
 }

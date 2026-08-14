@@ -2,7 +2,7 @@
 
 import os
 
-os.environ.setdefault("DEEPSEEK_API_KEY", "test-deepseek-key")
+os.environ.setdefault("SCHOLENS_AI_DEEPSEEK_API_KEY", "test-provider-key")
 os.environ.setdefault("STRIPE_API_KEY", "sk_test_scholens")
 os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_test_scholens")
 os.environ.setdefault("STRIPE_MONTHLY_PRICE_ID", "price_test_monthly")

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from app.database.models import (
+    AnnotationComment,
     Document,
     DurableJob,
     JobStatus,
@@ -16,6 +17,9 @@ from app.database.models import (
     Project,
     ProjectCollaborator,
     ProjectPaper,
+    ResearchItem,
+    ResearchItemKind,
+    ResearchAudienceType,
 )
 from app.shared.domain import AppError, FailureKind
 from app.modules.papers.infrastructure.repository import document_repository
@@ -28,7 +32,7 @@ from app.modules.projects.infrastructure.access import (
     require_project_permission,
 )
 from app.shared.application import Actor
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session, load_only
 
 if TYPE_CHECKING:
@@ -313,6 +317,7 @@ class ProjectDocumentRepository:
         user: Actor,
         origin_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
+        confirm_delete_annotations: bool,
     ) -> ScheduledDocumentGc | None:
         require_project_permission(
             db,
@@ -334,6 +339,39 @@ class ProjectDocumentRepository:
                 message="Document not found in this Project",
                 kind=FailureKind.NOT_FOUND,
             )
+
+        project_annotation_filter = (
+            ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+            ResearchItem.audience_type == ResearchAudienceType.PROJECT.value,
+            ResearchItem.audience_project_id == project_id,
+            ResearchItem.target_document_id == document_id,
+        )
+        annotation_count = int(
+            db.scalar(
+                select(func.count(ResearchItem.id)).where(*project_annotation_filter)
+            )
+            or 0
+        )
+        comment_count = int(
+            db.scalar(
+                select(func.count(AnnotationComment.id))
+                .join(ResearchItem, ResearchItem.id == AnnotationComment.thread_id)
+                .where(*project_annotation_filter)
+            )
+            or 0
+        )
+        if annotation_count and not confirm_delete_annotations:
+            raise AppError(
+                code="project_document_has_annotations",
+                message="Confirm deletion of Project annotations before removing this paper",
+                kind=FailureKind.CONFLICT,
+                details={
+                    "thread_count": annotation_count,
+                    "comment_count": comment_count,
+                },
+            )
+        if annotation_count:
+            db.execute(delete(ResearchItem).where(*project_annotation_filter))
 
         db.delete(project_paper)
         db.flush()

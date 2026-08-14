@@ -107,7 +107,7 @@ def test_apply_annotation_snapshot_is_idempotent_by_zotero_key() -> None:
             )
             == 0
         )
-        repository.create_highlight_thread.assert_not_called()
+        repository.create_annotation_thread.assert_not_called()
 
 
 def test_apply_sync_with_empty_annotations_does_not_require_paper_content() -> None:

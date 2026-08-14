@@ -3,6 +3,8 @@
 from app.shared.domain import JsonScalar, JsonValue
 from app.shared.infrastructure.persistence import Base
 from app.shared.domain.enums import (
+    AnnotationColor,
+    AnnotationThreadStatus,
     ConversationScopeType,
     DocumentProcessingStatus,
     HighlightType,
@@ -11,8 +13,8 @@ from app.shared.domain.enums import (
     JobStatus,
     PaperStatus,
     ReasoningLevel,
+    ResearchAudienceType,
     ResearchItemKind,
-    ResearchScopeType,
     RoleType,
     SubscriptionPlan,
     SubscriptionStatus,
@@ -43,7 +45,8 @@ from app.modules.conversations.infrastructure.models import (
     Conversation,
     ConversationContextDocument,
     ConversationContextProject,
-    Message,
+    ConversationResponse,
+    ConversationTurn,
 )
 from app.modules.papers.infrastructure.models import (
     LibraryPaper,
@@ -66,18 +69,27 @@ from app.modules.projects.infrastructure.models import (
 from app.modules.research.infrastructure.models import (
     AnnotationComment,
     CitationOutput,
-    HighlightThread,
+    AnnotationThread,
     ResearchAudioOverview,
     ResearchDataTable,
     ResearchItem,
 )
 from app.modules.billing.infrastructure.models import StripeWebhookEvent, Subscription
 from app.database.models.tool_invocation import ToolInvocation
-from app.modules.translations.infrastructure.models import TranslationPreference
+from app.modules.translations.infrastructure.models import (
+    TranslationPreference,
+    TranslationResult,
+)
+from app.modules.reflows.infrastructure.models import (
+    DocumentReflow,
+    DocumentReflowBlock,
+)
 
 __all__ = [
     "AuthUser",
     "AccessKey",
+    "AnnotationColor",
+    "AnnotationThreadStatus",
     "Base",
     "ConversationScopeType",
     "ConnectorConnection",
@@ -96,11 +108,14 @@ __all__ = [
     "LibraryPaperTag",
     "JsonScalar",
     "JsonValue",
-    "Message",
+    "ConversationResponse",
+    "ConversationTurn",
     "Onboarding",
     "OperationJournalEntryModel",
     "Document",
     "DocumentPassage",
+    "DocumentReflow",
+    "DocumentReflowBlock",
     "PaperStatus",
     "PaperTag",
     "UploadReservation",
@@ -112,10 +127,10 @@ __all__ = [
     "ResearchAudioOverview",
     "ResearchDataTable",
     "ResearchItem",
+    "ResearchAudienceType",
     "ResearchItemKind",
-    "ResearchScopeType",
     "CitationOutput",
-    "HighlightThread",
+    "AnnotationThread",
     "AnnotationComment",
     "RoleType",
     "Subscription",
@@ -127,6 +142,7 @@ __all__ = [
     "TokenWeeklyUsage",
     "ToolInvocation",
     "TranslationPreference",
+    "TranslationResult",
     "UserProfile",
     "ZoteroConnection",
     "ZoteroImportSource",

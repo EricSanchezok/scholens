@@ -22,6 +22,7 @@ from app.modules.papers.infrastructure.downloads import S3PaperDownloadSigner
 from app.helpers.s3 import DEFAULT_SIGNED_URL_TTL_SECONDS
 from app.modules.papers.application.ingestion import IngestPaper
 from app.bootstrap.adapters.paper_ingestion import (
+    DefaultPaperSourceResolver,
     DefaultPaperIngestionLimits,
     DefaultPdfInputValidator,
     SafePdfUrlSource,
@@ -78,6 +79,10 @@ from app.modules.papers.application.library import PaperLibrary
 from app.modules.papers.infrastructure.details import SqlAlchemyPaperDetails
 from app.modules.papers.infrastructure.library_gateway import (
     SqlAlchemyPaperLibraryGateway,
+)
+from app.bootstrap.adapters.library_outputs import SqlAlchemyLibraryOutputsGateway
+from app.bootstrap.adapters.library_removal import (
+    delete_personal_document_annotations,
 )
 from app.bootstrap.adapters.document_gc import schedule_document_gc
 from app.modules.projects.application.projects import Projects
@@ -139,6 +144,8 @@ from app.modules.translations.infrastructure.repository import (
 from app.modules.translations.infrastructure.entitlements import (
     SqlTranslationEntitlements,
 )
+from app.modules.reflows.application import DocumentReflows
+from app.bootstrap.adapters.document_reflow import SqlDocumentReflowGateway
 from app.bootstrap.adapters.zotero_gateway import (
     DefaultZoteroGateway,
 )
@@ -211,6 +218,10 @@ def build_paper_ingestion(*, db: Session, journal: OperationJournal) -> IngestPa
 
 def build_pdf_url_source() -> SafePdfUrlSource:
     return SafePdfUrlSource()
+
+
+def build_paper_source_resolver() -> DefaultPaperSourceResolver:
+    return DefaultPaperSourceResolver()
 
 
 def build_research_search(
@@ -287,14 +298,30 @@ def build_external_paper_discovery(
     )
 
 
-def build_paper_library(*, db: Session, journal: OperationJournal) -> PaperLibrary:
+def build_paper_library(
+    *,
+    db: Session,
+    cursor_secret: str,
+    journal: OperationJournal,
+) -> PaperLibrary:
     return PaperLibrary(
         gateway=SqlAlchemyPaperLibraryGateway(
             db,
             document_removed=partial(schedule_document_gc, db),
+            personal_annotations_removed=partial(
+                delete_personal_document_annotations,
+                db,
+            ),
         ),
+        outputs=SqlAlchemyLibraryOutputsGateway(db),
         capacity=BillingLibraryCapacity(db),
         signer=S3PaperDownloadSigner(),
+        cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="library-v1",
+            error_code="library_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 
@@ -303,6 +330,17 @@ def build_paper_details(*, db: Session) -> GetPaperDetails:
     return GetPaperDetails(
         SqlAlchemyPaperDetails(db),
         build_project_document_visibility(db=db),
+    )
+
+
+def build_document_reflows(
+    *, db: Session, journal: OperationJournal
+) -> DocumentReflows:
+    return DocumentReflows(
+        access=build_paper_details(db=db),
+        gateway=SqlDocumentReflowGateway(db),
+        entitlements=SqlTranslationEntitlements(db),
+        journal=journal,
     )
 
 
@@ -321,11 +359,19 @@ def build_citation_metadata(
     )
 
 
-def build_projects(*, db: Session, journal: OperationJournal) -> Projects:
+def build_projects(
+    *, db: Session, cursor_secret: str, journal: OperationJournal
+) -> Projects:
     return Projects(
         gateway=SqlAlchemyProjectGateway(db),
         capacity=BillingProjectCapacity(db),
         signer=S3PaperDownloadSigner(),
+        cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="projects-v1",
+            error_code="project_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
         journal=journal,
     )
 
@@ -364,6 +410,7 @@ def build_job_callbacks(
     from app.modules.jobs.application.contracts import (
         AudioOverviewWebhookData,
         DataTableWebhookData,
+        DocumentReflowWebhookData,
         JobCallbackIdentity,
         PdfProcessingWebhookData,
         StorageDeleteCallback,
@@ -371,6 +418,7 @@ def build_job_callbacks(
     from app.bootstrap.adapters.job_callback_handlers import (
         AudioCompletion,
         DataTableCompletion,
+        DocumentReflowCompletion,
         DocumentGcCompletion,
         PdfPostprocessCompletion,
         PdfProcessCompletion,
@@ -400,6 +448,9 @@ def build_job_callbacks(
             ),
             JobOperation.DATA_TABLE_GENERATE: RegisteredJobCallback(
                 DataTableWebhookData, DataTableCompletion(db)
+            ),
+            JobOperation.DOCUMENT_REFLOW: RegisteredJobCallback(
+                DocumentReflowWebhookData, DocumentReflowCompletion(db)
             ),
         },
         schedules=ZoteroSyncSchedule(db),
@@ -448,10 +499,15 @@ def build_conversations(
 ) -> Conversations:
     return Conversations(
         gateway=SqlAlchemyConversationGateway(db),
-        message_cursors=SignedCursorCodec(
+        list_cursors=SignedCursorCodec(
             cursor_secret,
-            revision="conversation-messages-v1",
-            error_code="conversation_message_cursor_expired",
+            revision="conversation-list-v2",
+            error_code="conversation_cursor_expired",
+        ),
+        turn_cursors=SignedCursorCodec(
+            cursor_secret,
+            revision="conversation-turns-v1",
+            error_code="conversation_turn_cursor_expired",
         ),
         journal=journal,
     )

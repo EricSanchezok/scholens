@@ -17,13 +17,14 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationUpdateRequest,
     LibraryPaperContext,
 )
+from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.modules.conversations.application.conversations import (
     ConversationChange,
     Conversations,
 )
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.research.application.contracts import (
-    CreateHighlightThreadRequest,
+    CreateAnnotationThreadRequest,
     UpdateAnnotationCommentRequest,
 )
 from app.modules.research.application.items import ResearchItemChange, ResearchItems
@@ -63,14 +64,23 @@ def test_research_creation_requires_explicit_role_and_journals_change() -> None:
     gateway = MagicMock()
     journal = MagicMock(spec=OperationJournal)
     response = SimpleNamespace(id=uuid4())
-    gateway.create_highlight.return_value = response
+    gateway.create_annotation_thread.return_value = response
     service = ResearchItems(gateway, journal=journal)
     actor = _actor()
     operation = _operation()
-    request = CreateHighlightThreadRequest(quote_text="Evidence")
+    request = CreateAnnotationThreadRequest.model_validate(
+        {
+            "quote_text": "Evidence",
+            "position": {
+                "kind": "parsed_text",
+                "start_offset": 0,
+                "end_offset": 8,
+            },
+        }
+    )
 
     assert (
-        service.create_highlight(
+        service.create_annotation_thread(
             actor=actor,
             operation=operation,
             document_id=uuid4(),
@@ -81,12 +91,16 @@ def test_research_creation_requires_explicit_role_and_journals_change() -> None:
     )
 
     assert (
-        gateway.create_highlight.call_args.kwargs["content_role"] is RoleType.ASSISTANT
+        gateway.create_annotation_thread.call_args.kwargs["content_role"]
+        is RoleType.ASSISTANT
     )
-    assert journal.append.call_args.kwargs["action"] == "research.highlight_created"
+    assert (
+        journal.append.call_args.kwargs["action"]
+        == "research.annotation_thread_created"
+    )
 
     with pytest.raises(TypeError):
-        service.create_highlight(
+        service.create_annotation_thread(
             actor=actor,
             operation=operation,
             document_id=uuid4(),
@@ -153,7 +167,8 @@ def _conversations(
 ) -> Conversations:
     return Conversations(
         gateway=gateway,
-        message_cursors=MagicMock(),
+        list_cursors=MagicMock(),
+        turn_cursors=MagicMock(),
         journal=journal,
     )
 
@@ -265,20 +280,63 @@ def test_conversation_repository_same_tool_permissions_are_noop() -> None:
 
 def test_auto_title_only_journals_an_applied_title() -> None:
     gateway = MagicMock()
-    gateway.update_title.return_value = False
+    gateway.apply_initial_generated_title.return_value = False
     journal = MagicMock(spec=OperationJournal)
     service = _conversations(gateway=gateway, journal=journal)
     conversation_id = uuid4()
 
-    response = service.apply_generated_title(
+    service.apply_initial_generated_title(
         actor=_actor(),
         operation=_operation(),
         conversation_id=conversation_id,
         title="Same title",
     )
 
-    assert response.title == "Same title"
     journal.append.assert_not_called()
+
+
+def test_generated_title_only_replaces_the_default_title() -> None:
+    conversation = Conversation(
+        id=uuid4(),
+        title=DEFAULT_CONVERSATION_TITLE,
+        user_id=7,
+        scope_type=ConversationScopeType.GLOBAL.value,
+    )
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = conversation
+
+    changed = conversation_repository.apply_initial_generated_title(
+        db,
+        conversation_id=conversation.id,
+        user_id=7,
+        title="Reasoning systems",
+    )
+
+    assert changed is True
+    assert conversation.title == "Reasoning systems"
+    db.flush.assert_called_once_with()
+
+
+def test_generated_title_never_overwrites_a_user_title() -> None:
+    conversation = Conversation(
+        id=uuid4(),
+        title="My research notes",
+        user_id=7,
+        scope_type=ConversationScopeType.GLOBAL.value,
+    )
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = conversation
+
+    changed = conversation_repository.apply_initial_generated_title(
+        db,
+        conversation_id=conversation.id,
+        user_id=7,
+        title="Generated replacement",
+    )
+
+    assert changed is False
+    assert conversation.title == "My research notes"
+    db.flush.assert_not_called()
 
 
 def test_created_resource_ref_uses_canonical_uuid() -> None:

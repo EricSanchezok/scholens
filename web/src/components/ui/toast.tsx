@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
+import { keyboardFocusRing } from "./focus";
 
 type ToastNotice = {
   description?: string;
@@ -86,7 +87,7 @@ export const ToastRoot = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitive.Root
     className={cn(
-      "border-line bg-elevated relative grid gap-1 rounded-[var(--radius-lg)] border px-4 py-3 pr-12 shadow-[0_12px_36px_var(--color-elevation-shadow)]",
+      "border-line bg-elevated shadow-overlay relative grid gap-1 rounded-[var(--radius-lg)] border px-4 py-3 pr-12",
       className,
     )}
     ref={ref}
@@ -113,7 +114,10 @@ export const ToastClose = ({
 }) => (
   <ToastPrimitive.Close
     aria-label={label}
-    className="hover:bg-hover absolute top-1 right-1 grid size-11 place-items-center rounded-[var(--radius-md)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:outline-none"
+    className={cn(
+      "hover:bg-hover absolute top-1 right-1 grid size-11 place-items-center rounded-[var(--radius-md)]",
+      keyboardFocusRing,
+    )}
     {...props}
   >
     <Icon glyph={Xmark} size={16} tone="secondary" />

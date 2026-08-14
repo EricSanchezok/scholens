@@ -61,6 +61,9 @@ class _Lifecycle:
     def heartbeat(self, *, job_id: UUID) -> bool:
         return False
 
+    def progress(self, *, job_id: UUID, progress_code: str) -> bool:
+        return False
+
     def fail(self, *, job_id: UUID, error_code: str) -> bool:
         self.status_value = JobStatus.FAILED
         return True
@@ -92,6 +95,9 @@ class _Handler:
 
 
 class _ReplayHandler:
+    def __init__(self) -> None:
+        self.called = False
+
     async def complete(
         self,
         *,
@@ -100,6 +106,7 @@ class _ReplayHandler:
         job_id: UUID,
         callback: BaseModel,
     ) -> JobHandlerResult:
+        self.called = True
         return JobHandlerResult(value={"completed": False})
 
 
@@ -166,12 +173,13 @@ async def test_job_completion_journals_business_and_terminal_changes_once() -> N
 async def test_job_completion_replay_does_not_append_a_terminal_entry() -> None:
     job_id = uuid4()
     store = _Store()
+    handler = _ReplayHandler()
     callbacks = JobCallbacks(
         lifecycle=_Lifecycle(status=JobStatus.COMPLETED),
         handlers={
             JobOperation.PDF_POSTPROCESS: RegisteredJobCallback(
                 contract=JobCallbackIdentity,
-                handler=_ReplayHandler(),
+                handler=handler,
             )
         },
         schedules=_Schedules(),
@@ -185,4 +193,34 @@ async def test_job_completion_replay_does_not_append_a_terminal_entry() -> None:
         payload={"task_id": str(job_id)},
     )
 
+    assert store.entries == []
+    assert handler.called is False
+
+
+@pytest.mark.asyncio
+async def test_late_completion_after_cancellation_is_a_noop() -> None:
+    job_id = uuid4()
+    store = _Store()
+    handler = _ReplayHandler()
+    callbacks = JobCallbacks(
+        lifecycle=_Lifecycle(status=JobStatus.CANCELLED),
+        handlers={
+            JobOperation.PDF_POSTPROCESS: RegisteredJobCallback(
+                contract=JobCallbackIdentity,
+                handler=handler,
+            )
+        },
+        schedules=_Schedules(),
+        journal=OperationJournal(store=store, clock=_Clock()),
+    )
+
+    result = await callbacks.complete(
+        actor=None,
+        operation=_operation(),
+        job_id=job_id,
+        payload={"task_id": str(job_id)},
+    )
+
+    assert result.value == {"accepted": False}
+    assert handler.called is False
     assert store.entries == []

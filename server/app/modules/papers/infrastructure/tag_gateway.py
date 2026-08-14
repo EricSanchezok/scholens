@@ -7,6 +7,7 @@ from uuid import UUID
 from app.modules.papers.application.contracts.tags import (
     LibraryTagAssignmentRequest,
     LibraryTagCreateRequest,
+    LibraryTagRenameRequest,
     LibraryTagResponse,
 )
 from app.modules.papers.infrastructure.tag_repository import library_tag_repository
@@ -46,29 +47,38 @@ class SqlAlchemyLibraryTagGateway:
             )
         )
 
-    def assign(
+    def rename(
+        self,
+        *,
+        user_id: int,
+        tag_id: UUID,
+        request: LibraryTagRenameRequest,
+    ) -> LibraryTagResponse:
+        return self._response(
+            library_tag_repository.rename(
+                self._db,
+                user_id=user_id,
+                tag_id=tag_id,
+                name=request.name,
+            )
+        )
+
+    def delete(self, *, user_id: int, tag_id: UUID) -> None:
+        library_tag_repository.delete_owned(
+            self._db,
+            user_id=user_id,
+            tag_id=tag_id,
+        )
+
+    def replace_assignments(
         self,
         *,
         user_id: int,
         request: LibraryTagAssignmentRequest,
     ) -> int:
-        return library_tag_repository.assign_many(
+        return library_tag_repository.replace_assignments(
             self._db,
             user_id=user_id,
             document_ids=request.document_ids,
             tag_ids=request.tag_ids,
-        )
-
-    def remove(
-        self,
-        *,
-        user_id: int,
-        document_id: UUID,
-        tag_id: UUID,
-    ) -> None:
-        library_tag_repository.remove_from_document(
-            self._db,
-            user_id=user_id,
-            document_id=document_id,
-            tag_id=tag_id,
         )

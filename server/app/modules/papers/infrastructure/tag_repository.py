@@ -6,7 +6,7 @@ import uuid
 
 from app.database.models import LibraryPaper, LibraryPaperTag, PaperTag
 from app.shared.domain import AppError, FailureKind
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -86,6 +86,61 @@ class LibraryTagRepository:
         db.flush()
         db.refresh(tag)
         return tag
+
+    def rename(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        tag_id: uuid.UUID,
+        name: str,
+    ) -> PaperTag:
+        tag = db.scalar(
+            select(PaperTag).where(
+                PaperTag.id == tag_id,
+                PaperTag.user_id == user_id,
+            )
+        )
+        if tag is None:
+            raise AppError(
+                code="library_tag_not_found",
+                message="Library tag not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        normalized = _normalized_name(name)
+        conflict = self._find_by_name(db, user_id=user_id, name=normalized)
+        if conflict is not None and conflict.id != tag.id:
+            raise AppError(
+                code="library_tag_already_exists",
+                message="A tag with this name already exists",
+                kind=FailureKind.CONFLICT,
+            )
+        tag.name = normalized
+        db.flush()
+        db.refresh(tag)
+        return tag
+
+    @staticmethod
+    def delete_owned(
+        db: Session,
+        *,
+        user_id: int,
+        tag_id: uuid.UUID,
+    ) -> None:
+        tag = db.scalar(
+            select(PaperTag).where(
+                PaperTag.id == tag_id,
+                PaperTag.user_id == user_id,
+            )
+        )
+        if tag is None:
+            raise AppError(
+                code="library_tag_not_found",
+                message="Library tag not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        db.delete(tag)
+        db.flush()
 
     def get_or_create(
         self,
@@ -173,7 +228,7 @@ class LibraryTagRepository:
         return created_id is not None
 
     @staticmethod
-    def assign_many(
+    def replace_assignments(
         db: Session,
         *,
         user_id: int,
@@ -210,60 +265,47 @@ class LibraryTagRepository:
                 kind=FailureKind.NOT_FOUND,
             )
 
+        library_paper_ids = list(library_by_document.values())
+        existing_rows = list(
+            db.execute(
+                select(
+                    LibraryPaperTag.library_paper_id,
+                    LibraryPaperTag.tag_id,
+                ).where(LibraryPaperTag.library_paper_id.in_(library_paper_ids))
+            ).tuples()
+        )
+        existing_by_paper: dict[uuid.UUID, set[uuid.UUID]] = {
+            paper_id: set() for paper_id in library_paper_ids
+        }
+        for paper_id, tag_id in existing_rows:
+            existing_by_paper[paper_id].add(tag_id)
+
+        desired_tag_ids = set(tag_ids)
+        changed_paper_ids = [
+            paper_id
+            for paper_id in library_paper_ids
+            if existing_by_paper[paper_id] != desired_tag_ids
+        ]
+        if not changed_paper_ids:
+            return 0
+
+        db.execute(
+            delete(LibraryPaperTag).where(
+                LibraryPaperTag.library_paper_id.in_(changed_paper_ids)
+            )
+        )
         rows = [
             {
-                "library_paper_id": library_by_document[document_id],
+                "library_paper_id": library_paper_id,
                 "tag_id": tag_id,
             }
-            for document_id in document_ids
+            for library_paper_id in changed_paper_ids
             for tag_id in tag_ids
         ]
-        created_ids = list(
-            db.scalars(
-                insert(LibraryPaperTag)
-                .values(rows)
-                .on_conflict_do_nothing(
-                    index_elements=[
-                        LibraryPaperTag.library_paper_id,
-                        LibraryPaperTag.tag_id,
-                    ]
-                )
-                .returning(LibraryPaperTag.tag_id)
-            ).all()
-        )
+        if rows:
+            db.execute(insert(LibraryPaperTag).values(rows))
         db.flush()
-        return len(created_ids)
-
-    @staticmethod
-    def remove_from_document(
-        db: Session,
-        *,
-        user_id: int,
-        document_id: uuid.UUID,
-        tag_id: uuid.UUID,
-    ) -> None:
-        association = db.scalar(
-            select(LibraryPaperTag)
-            .join(
-                LibraryPaper,
-                LibraryPaper.id == LibraryPaperTag.library_paper_id,
-            )
-            .join(PaperTag, PaperTag.id == LibraryPaperTag.tag_id)
-            .where(
-                LibraryPaper.user_id == user_id,
-                LibraryPaper.document_id == document_id,
-                PaperTag.user_id == user_id,
-                PaperTag.id == tag_id,
-            )
-        )
-        if association is None:
-            raise AppError(
-                code="library_tag_assignment_not_found",
-                message="Tag assignment not found",
-                kind=FailureKind.NOT_FOUND,
-            )
-        db.delete(association)
-        db.flush()
+        return len(changed_paper_ids)
 
 
 library_tag_repository = LibraryTagRepository()

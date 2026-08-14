@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from app.shared.domain import JsonValue
-from app.shared.domain.enums import ResearchItemKind, ResearchScopeType
+from app.shared.domain.enums import (
+    AnnotationColor,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    ResearchItemKind,
+)
 from app.modules.papers.application.contracts.citation import (
     CitationData,
     CitationMethod,
 )
 from app.modules.papers.application.contracts.extraction import ResponseCitation
+from app.modules.research.application.positions import ResearchPosition
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -31,15 +37,82 @@ class AnnotationCommentResponse(BaseModel):
     can_delete: bool
 
 
-class HighlightThreadContent(BaseModel):
+class PersonalResearchAudience(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["personal"] = "personal"
+
+
+class DocumentResearchAudience(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["document"] = "document"
+    document_id: UUID
+
+
+class ProjectResearchAudience(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["project"] = "project"
+    project_id: UUID
+
+
+ResearchAudience = Annotated[
+    PersonalResearchAudience | DocumentResearchAudience | ProjectResearchAudience,
+    Field(discriminator="kind"),
+]
+AnnotationAudience = Annotated[
+    PersonalResearchAudience | ProjectResearchAudience,
+    Field(discriminator="kind"),
+]
+
+
+class AnnotationThreadCapabilities(BaseModel):
+    reply: bool
+    recolor: bool
+    resolve: bool
+    reopen: bool
+    delete: bool
+
+
+class AnnotationThreadContent(BaseModel):
     quote_text: str
-    page_number: int | None
-    start_offset: int | None
-    end_offset: int | None
-    position: dict[str, JsonValue] | None
-    color: str
+    position: ResearchPosition | None
+    color: AnnotationColor
     role: str
+    mode: AnnotationThreadMode
+    comment_count: int = Field(ge=0)
+    last_activity_at: datetime
+    status: AnnotationThreadStatus
+    resolved_by: ResearchCreatorResponse | None
+    resolved_at: datetime | None
+    capabilities: AnnotationThreadCapabilities
     comments: list[AnnotationCommentResponse]
+
+
+class AnnotationThreadSummaryResponse(BaseModel):
+    id: UUID
+    audience: AnnotationAudience
+    target_document_id: UUID
+    created_by: ResearchCreatorResponse
+    created_at: datetime
+    quote_text: str
+    position: ResearchPosition | None
+    color: AnnotationColor
+    role: str
+    mode: AnnotationThreadMode
+    comment_count: int = Field(ge=0)
+    last_activity_at: datetime
+    status: AnnotationThreadStatus
+    resolved_by: ResearchCreatorResponse | None
+    resolved_at: datetime | None
+    capabilities: AnnotationThreadCapabilities
+    comments: list[AnnotationCommentResponse]
+
+
+class AnnotationThreadListResponse(BaseModel):
+    items: list[AnnotationThreadSummaryResponse]
+    next_cursor: str | None = None
 
 
 class CitationSnapshot(BaseModel):
@@ -79,7 +152,6 @@ class DataTableContent(BaseModel):
 
 
 class ResearchItemCapabilities(BaseModel):
-    share: bool
     edit: bool
     delete: bool
 
@@ -87,14 +159,13 @@ class ResearchItemCapabilities(BaseModel):
 class ResearchItemResponse(BaseModel):
     id: UUID
     kind: ResearchItemKind
-    scope_type: ResearchScopeType
-    scope_id: UUID | None
-    is_shared: bool
+    audience: ResearchAudience
+    target_document_id: UUID | None
     created_by: ResearchCreatorResponse
     created_at: datetime
     updated_at: datetime
     capabilities: ResearchItemCapabilities
-    highlight_thread: HighlightThreadContent | None = None
+    annotation_thread: AnnotationThreadContent | None = None
     citation: CitationContent | None = None
     audio_overview: AudioOverviewContent | None = None
     data_table: DataTableContent | None = None
@@ -104,7 +175,7 @@ class ResearchItemResponse(BaseModel):
         populated = sum(
             value is not None
             for value in (
-                self.highlight_thread,
+                self.annotation_thread,
                 self.citation,
                 self.audio_overview,
                 self.data_table,
@@ -120,50 +191,27 @@ class ResearchItemListResponse(BaseModel):
     next_cursor: str | None = None
 
 
-class ResearchVisibilityRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    shared: bool
-
-
-class CreateHighlightThreadRequest(BaseModel):
+class CreateAnnotationThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     quote_text: str = Field(min_length=1, max_length=100_000)
-    page_number: int | None = Field(default=None, ge=1)
-    start_offset: int | None = Field(default=None, ge=0)
-    end_offset: int | None = Field(default=None, ge=0)
-    position: dict[str, JsonValue] | None = None
-    color: str = Field(default="blue", min_length=1, max_length=32)
-    shared: bool = True
-
-    @model_validator(mode="after")
-    def validate_offsets(self) -> CreateHighlightThreadRequest:
-        if (
-            self.start_offset is not None
-            and self.end_offset is not None
-            and self.end_offset < self.start_offset
-        ):
-            raise ValueError("end_offset must not precede start_offset")
-        return self
+    position: ResearchPosition
+    color: AnnotationColor = AnnotationColor.YELLOW
+    audience: AnnotationAudience = Field(default_factory=PersonalResearchAudience)
+    initial_comment: str | None = Field(default=None, min_length=1, max_length=100_000)
 
 
-class UpdateHighlightThreadRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    quote_text: str | None = Field(default=None, min_length=1, max_length=100_000)
-    page_number: int | None = Field(default=None, ge=1)
-    start_offset: int | None = Field(default=None, ge=0)
-    end_offset: int | None = Field(default=None, ge=0)
-    position: dict[str, JsonValue] | None = None
-    color: str | None = Field(default=None, min_length=1, max_length=32)
-    shared: bool | None = None
-
-
-class DeleteHighlightThreadRequest(BaseModel):
+class UpdateAnnotationThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    confirm_delete_replies: bool = False
+    color: AnnotationColor | None = None
+    status: AnnotationThreadStatus | None = None
+
+    @model_validator(mode="after")
+    def require_exactly_one_change(self) -> "UpdateAnnotationThreadRequest":
+        if (self.color is None) == (self.status is None):
+            raise ValueError("exactly one of color or status is required")
+        return self
 
 
 class CreateAnnotationCommentRequest(BaseModel):

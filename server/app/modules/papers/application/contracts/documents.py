@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
+from typing import Annotated, Literal
 from uuid import UUID
 
 from app.shared.domain import JsonValue
-from app.shared.domain.enums import DocumentProcessingStatus, PaperStatus
+from app.shared.domain.enums import (
+    DocumentProcessingStatus,
+    PaperStatus,
+    ResearchAudienceType,
+)
 from app.modules.papers.application.contracts.extraction import ResponseCitation
+from app.modules.research.application.contracts import ResearchItemResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class LibraryPaperSort(StrEnum):
+    ADDED_DESC = "added_desc"
+    ADDED_ASC = "added_asc"
+    PUBLISHED_DESC = "published_desc"
+    PUBLISHED_ASC = "published_asc"
+    TITLE_ASC = "title_asc"
+
+
+class LibraryOutputSort(StrEnum):
+    UPDATED_DESC = "updated_desc"
+    UPDATED_ASC = "updated_asc"
+    TITLE_ASC = "title_asc"
+    TITLE_DESC = "title_desc"
 
 
 class DocumentUpdate(BaseModel):
@@ -120,9 +142,86 @@ class LibraryPaperResponse(BaseModel):
     updated_at: datetime
 
 
+class LibraryPaperIngestionResponse(BaseModel):
+    id: UUID
+    display_name: str
+    source_kind: Literal["upload", "doi", "arxiv", "url"]
+    state: Literal["queued", "processing", "failed"]
+    stage: Literal[
+        "queued",
+        "downloading",
+        "parsing",
+        "extracting_metadata",
+        "indexing",
+        "finalizing",
+    ]
+    project_id: UUID | None
+    document_id: UUID | None
+    error_code: str | None
+    created_at: datetime
+
+
+class LibraryPaperListPaperEntry(LibraryPaperResponse):
+    entry_type: Literal["paper"] = "paper"
+
+
+class LibraryPaperListIngestionEntry(BaseModel):
+    entry_type: Literal["ingestion"] = "ingestion"
+    ingestion: LibraryPaperIngestionResponse
+
+
+LibraryPaperListEntry = Annotated[
+    LibraryPaperListPaperEntry | LibraryPaperListIngestionEntry,
+    Field(discriminator="entry_type"),
+]
+
+
 class LibraryPaperListResponse(BaseModel):
-    items: list[LibraryPaperResponse]
+    items: list[LibraryPaperListEntry]
     next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(ge=0)
+
+
+class LibraryOutputSourceResponse(BaseModel):
+    audience_type: ResearchAudienceType
+    audience_id: UUID | None
+    title: str
+
+
+class LibraryOutputResponse(BaseModel):
+    item: ResearchItemResponse
+    title: str
+    source: LibraryOutputSourceResponse
+
+
+class LibraryOutputListResponse(BaseModel):
+    items: list[LibraryOutputResponse]
+    next_cursor: str | None = None
+    previous_cursor: str | None = None
+    total_count: int = Field(ge=0)
+
+
+class LibrarySummaryResponse(BaseModel):
+    paper_count: int = Field(ge=0)
+    output_count: int = Field(ge=0)
+
+
+class LibraryPaperRemovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_ids: list[UUID] = Field(min_length=1, max_length=120)
+
+    @field_validator("document_ids")
+    @classmethod
+    def unique_document_ids(cls, values: list[UUID]) -> list[UUID]:
+        if len(values) != len(set(values)):
+            raise ValueError("document_ids must be unique")
+        return values
+
+
+class LibraryPaperRemovalResponse(BaseModel):
+    removed_document_ids: list[UUID]
 
 
 class LibraryPaperShareResponse(BaseModel):

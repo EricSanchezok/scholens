@@ -37,7 +37,25 @@
       }
     },
     "overlay": {
+      "12": { "$type": "color", "$value": "#0000001f" },
       "40": { "$type": "color", "$value": "#00000066" }
+    },
+    "document-selection": {
+      "active": { "$type": "color", "$value": "#5b9bd54d" }
+    },
+    "document-search": {
+      "match": { "$type": "color", "$value": "#f6d36566" },
+      "current": { "$type": "color", "$value": "#f2b84b8f" }
+    },
+    "document-highlight": {
+      "yellow": { "$type": "color", "$value": "#ffd400" },
+      "red": { "$type": "color", "$value": "#ff6666" },
+      "green": { "$type": "color", "$value": "#5fb236" },
+      "blue": { "$type": "color", "$value": "#2ea8e5" },
+      "purple": { "$type": "color", "$value": "#a28ae5" },
+      "magenta": { "$type": "color", "$value": "#e56be5" },
+      "orange": { "$type": "color", "$value": "#f19837" },
+      "gray": { "$type": "color", "$value": "#9b9b95" }
     }
   }
 }

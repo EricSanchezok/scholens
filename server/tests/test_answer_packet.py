@@ -2,16 +2,11 @@ from dataclasses import replace
 from uuid import uuid4
 
 from app.llm.answer_packet import AnswerPacketBuilder, SourceRegistry
+from app.llm.conversation_state import ConversationAgentState
 from app.llm.grounded_answer import GroundedAnswerStreamParser
 from app.modules.conversations.application.contracts.answer_packet import (
     ExternalAnswerSource,
 )
-from app.modules.papers.application.citation_references import (
-    materialize_summary_references,
-)
-from app.modules.papers.application.contracts.extraction import ResponseCitation
-from app.modules.conversations.application.contracts.messages import ToolRunState
-from app.modules.papers.application.contracts.extraction import ToolCall
 from app.tooling import (
     DocumentSourceCandidate,
     ExternalSourceCandidate,
@@ -25,9 +20,9 @@ from app.tooling.source_extraction import (
 
 def test_answer_packet_keeps_general_materials_actions_and_typed_sources() -> None:
     document_id = uuid4()
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="read", name="get_paper_content_range", args={}),
+        {},
         ToolOutcome(
             payload={"method": "measured result", "score": 0.91},
             sources=(
@@ -42,7 +37,7 @@ def test_answer_packet_keeps_general_materials_actions_and_typed_sources() -> No
         ),
     )
     state.add_tool_outcome(
-        ToolCall(id="create", name="create_project", args={}),
+        {},
         ToolOutcome(
             payload={"project_id": "project-1"},
             action={"kind": "project_created", "project_id": "project-1"},
@@ -51,7 +46,7 @@ def test_answer_packet_keeps_general_materials_actions_and_typed_sources() -> No
 
     packet = AnswerPacketBuilder().build(
         context={"scope": "global"},
-        tool_state=state,
+        agent_state=state,
         document_source_texts={document_id: ("The measured result was 0.91.",)},
     )
 
@@ -65,9 +60,9 @@ def test_answer_packet_keeps_general_materials_actions_and_typed_sources() -> No
 
 
 def test_document_source_is_rejected_after_access_is_lost() -> None:
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="read", name="get_paper_content", args={}),
+        {},
         ToolOutcome(
             payload={"content": "private"},
             sources=(
@@ -81,7 +76,7 @@ def test_document_source_is_rejected_after_access_is_lost() -> None:
 
     packet = AnswerPacketBuilder().build(
         context={},
-        tool_state=state,
+        agent_state=state,
         document_source_texts={},
     )
 
@@ -92,9 +87,9 @@ def test_document_source_is_rejected_after_access_is_lost() -> None:
 
 def test_document_source_excerpt_must_belong_to_verified_document_text() -> None:
     document_id = uuid4()
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="read", name="get_paper_content", args={}),
+        {},
         ToolOutcome(
             payload={"content": "A forged excerpt"},
             sources=(
@@ -108,7 +103,7 @@ def test_document_source_excerpt_must_belong_to_verified_document_text() -> None
 
     packet = AnswerPacketBuilder().build(
         context={},
-        tool_state=state,
+        agent_state=state,
         document_source_texts={document_id: ("The actual paper text",)},
     )
 
@@ -206,12 +201,12 @@ def test_external_source_preserves_multiline_quotes_and_unicode() -> None:
     payload = {"content": excerpt}
     sources = extract_external_sources(arguments=arguments, payload=payload)
 
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="remote", name="extract", args=arguments),
+        arguments,
         ToolOutcome(payload=payload, sources=sources),
     )
-    packet = AnswerPacketBuilder().build(context={}, tool_state=state)
+    packet = AnswerPacketBuilder().build(context={}, agent_state=state)
 
     assert packet.sources[0].reference == excerpt
     assert packet.coverage.rejected_sources == 0
@@ -226,13 +221,13 @@ def test_external_source_provenance_tampering_is_rejected() -> None:
         source,
         provenance=replace(source.provenance, excerpt_start=1),
     )
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="remote", name="extract", args=arguments),
+        arguments,
         ToolOutcome(payload=payload, sources=(forged,)),
     )
 
-    packet = AnswerPacketBuilder().build(context={}, tool_state=state)
+    packet = AnswerPacketBuilder().build(context={}, agent_state=state)
 
     assert packet.sources == []
     assert packet.coverage.rejected_sources == 1
@@ -291,9 +286,9 @@ def test_external_source_never_uses_argument_text_as_excerpt() -> None:
 
 
 def test_observation_cannot_register_external_url_absent_from_tool_data() -> None:
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="remote", name="research", args={"query": "test"}),
+        {"query": "test"},
         ToolOutcome(
             payload={"result": "No source URL was returned"},
             sources=(
@@ -305,7 +300,7 @@ def test_observation_cannot_register_external_url_absent_from_tool_data() -> Non
         ),
     )
 
-    packet = AnswerPacketBuilder().build(context={}, tool_state=state)
+    packet = AnswerPacketBuilder().build(context={}, agent_state=state)
 
     assert packet.sources == []
     assert packet.coverage.rejected_sources == 1
@@ -433,27 +428,6 @@ def test_grounded_answer_parser_maps_each_marker_to_the_preceding_passage() -> N
     assert references.annotations[1].source_keys == [2, 1]
 
 
-def test_paper_summary_markers_are_materialized_before_conversation_storage() -> None:
-    document_id = uuid4()
-    content, references = materialize_summary_references(
-        "The method is efficient [^4].\n\nA second claim [^8, ^4].",
-        [
-            ResponseCitation(index=4, text="Method excerpt"),
-            ResponseCitation(index=8, text="Second excerpt"),
-        ],
-        document_id=document_id,
-        title="Paper",
-    )
-
-    assert "[^" not in content
-    assert references is not None
-    assert [source.key for source in references.sources] == [1, 2]
-    assert references.annotations[0].source_keys == [1]
-    assert references.annotations[1].source_keys == [2, 1]
-    for annotation in references.annotations:
-        assert content[annotation.start_offset : annotation.end_offset].strip()
-
-
 def test_answer_packet_reports_every_kind_of_budget_truncation(monkeypatch) -> None:
     from app.llm import answer_packet as answer_packet_module
 
@@ -463,9 +437,9 @@ def test_answer_packet_reports_every_kind_of_budget_truncation(monkeypatch) -> N
     monkeypatch.setattr(answer_packet_module, "_ACTION_TOKEN_BUDGET", 150)
     monkeypatch.setattr(answer_packet_module, "_SOURCE_TOKEN_BUDGET", 300)
     document_id = uuid4()
-    state = ToolRunState()
+    state = ConversationAgentState()
     state.add_tool_outcome(
-        ToolCall(id="read", name="get_paper_content", args={}),
+        {},
         ToolOutcome(
             payload={"content": "m" * 3_000},
             sources=(
@@ -477,7 +451,7 @@ def test_answer_packet_reports_every_kind_of_budget_truncation(monkeypatch) -> N
         ),
     )
     state.add_tool_outcome(
-        ToolCall(id="create", name="create_project", args={}),
+        {},
         ToolOutcome(
             payload={"project_id": "project-1"},
             action={"kind": "project_created", "detail": "a" * 3_000},
@@ -486,7 +460,7 @@ def test_answer_packet_reports_every_kind_of_budget_truncation(monkeypatch) -> N
 
     packet = answer_packet_module.AnswerPacketBuilder().build(
         context={"papers": "c" * 3_000},
-        tool_state=state,
+        agent_state=state,
         document_source_texts={document_id: ("s" * 3_000,)},
     )
 
@@ -508,16 +482,16 @@ def test_answer_packet_fairly_omits_materials_when_metadata_exceeds_budget(
     monkeypatch.setattr(answer_packet_module, "_MATERIAL_TOKEN_BUDGET", 300)
     monkeypatch.setattr(answer_packet_module, "_ACTION_TOKEN_BUDGET", 50)
     monkeypatch.setattr(answer_packet_module, "_SOURCE_TOKEN_BUDGET", 300)
-    state = ToolRunState()
+    state = ConversationAgentState()
     for index in range(100):
         state.add_tool_outcome(
-            ToolCall(id=str(index), name="search", args={}),
+            {},
             ToolOutcome(payload={"index": index, "value": "x" * 30}),
         )
 
     packet = answer_packet_module.AnswerPacketBuilder().build(
         context={},
-        tool_state=state,
+        agent_state=state,
     )
 
     assert answer_packet_module.estimate_tokens(packet.model_dump_json()) <= 900

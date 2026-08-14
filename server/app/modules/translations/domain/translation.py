@@ -1,8 +1,7 @@
-"""Pure normalization and cache identity rules for paper translation."""
+"""Pure normalization and request-fingerprint rules for paper translation."""
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import re
@@ -11,10 +10,12 @@ from dataclasses import asdict, dataclass
 from uuid import UUID
 
 DEFAULT_TARGET_LANGUAGE = "zh-CN"
+DEFAULT_SOURCE_LANGUAGE = "auto"
 MAX_LANGUAGE_TAG_CHARS = 35
 MAX_CUSTOM_INSTRUCTIONS_CHARS = 2_000
 MAX_SOURCE_TEXT_CHARS = 5_000
-MAX_TRANSLATED_TEXT_CHARS = 20_000
+MAX_REFLOW_BLOCK_CHARS = 25_000
+MAX_TRANSLATED_TEXT_CHARS = 80_000
 
 _LANGUAGE_TAG = re.compile(
     r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
@@ -43,12 +44,17 @@ def normalize_language_tag(value: str) -> str:
     return "-".join(normalized)
 
 
-def resolve_target_language(
-    *,
-    stored_language: str | None,
-    actor_locale: str | None,
-) -> str:
-    for candidate in (stored_language, actor_locale, DEFAULT_TARGET_LANGUAGE):
+def normalize_source_language(value: str) -> str:
+    candidate = value.strip()
+    return (
+        DEFAULT_SOURCE_LANGUAGE
+        if candidate.casefold() == DEFAULT_SOURCE_LANGUAGE
+        else normalize_language_tag(candidate)
+    )
+
+
+def resolve_target_language(*, stored_language: str | None) -> str:
+    for candidate in (stored_language, DEFAULT_TARGET_LANGUAGE):
         if candidate is None:
             continue
         try:
@@ -96,6 +102,18 @@ def normalize_source_text(value: str) -> str:
     return result
 
 
+def normalize_reflow_source(value: str) -> str:
+    """Normalize a persisted reflow block without damaging Markdown structure."""
+
+    normalized = unicodedata.normalize("NFC", value).replace("\r\n", "\n")
+    normalized = normalized.replace("\r", "\n").strip()
+    if not normalized:
+        raise ValueError("source_text_empty")
+    if len(normalized) > MAX_REFLOW_BLOCK_CHARS:
+        raise ValueError("source_text_too_long")
+    return normalized
+
+
 def validate_translated_text(value: str) -> str:
     normalized = unicodedata.normalize("NFC", value).strip()
     if not normalized or len(normalized) > MAX_TRANSLATED_TEXT_CHARS:
@@ -104,18 +122,21 @@ def validate_translated_text(value: str) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class TranslationCacheIdentity:
+class TranslationFingerprint:
     schema_revision: str
     prompt_revision: str
     model_revision: str
+    context_kind: str
+    block_id: str | None
     document_id: UUID
     paper_title_hash: str
     source_text: str
+    source_language: str
     target_language: str
     custom_instructions_hash: str
 
 
-def translation_cache_key(identity: TranslationCacheIdentity) -> str:
+def translation_identity_key(identity: TranslationFingerprint) -> str:
     payload = json.dumps(
         asdict(identity),
         sort_keys=True,
@@ -123,8 +144,11 @@ def translation_cache_key(identity: TranslationCacheIdentity) -> str:
         ensure_ascii=False,
         default=str,
     ).encode()
-    digest = base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).rstrip(b"=")
-    return f"scholens:translation:v1:{digest.decode('ascii')}"
+    return hashlib.sha256(payload).hexdigest()
+
+
+def translation_source_hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def translation_instructions_hash(value: str | None) -> str:

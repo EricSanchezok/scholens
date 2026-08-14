@@ -17,6 +17,7 @@ readme = "README.md"
 dependencies = [
     "sanchezcloud-identity[aliyun,fastapi] @ git+https://github.com/EricSanchezok/sanchezcloud-identity.git@v0.5.2",
     "fastapi>=0.115",
+    "httpx>=0.28.0",
     "uvicorn>=0.34",
     "pydantic[email]>=2.10",
     "python-dotenv>=1.2.2",
@@ -33,6 +34,7 @@ dependencies = [
     "gunicorn>=23.0.0",
     "mcp>=1.26,<2",
     "openai>=1.82.0",
+    "pydantic-ai-slim[openai]>=1.0,<2",
     "posthog>=4.2.0",
     "resend>=2.10.0",
     "celery>=5.5.3",
@@ -42,6 +44,7 @@ dependencies = [
     "redis>=5.2",
     "cryptography>=48.0.1",
     "scholens-observability",
+    "scholens-ai",
     "opentelemetry-instrumentation-fastapi>=0.50b0,<1",
     "opentelemetry-instrumentation-httpx>=0.50b0,<1",
     "opentelemetry-instrumentation-requests>=0.50b0,<1",
@@ -52,6 +55,7 @@ dependencies = [
 
 [tool.uv.sources]
 scholens-observability = { path = "../packages/scholens_observability" }
+scholens-ai = { path = "../packages/scholens_ai" }
 
 [project.scripts]
 start = "app.cli:start"

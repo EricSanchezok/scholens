@@ -10,22 +10,33 @@ from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import OperationAction, ResourceRef
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
+    AnnotationThreadListResponse,
+    AnnotationThreadSummaryResponse,
     CreateAnnotationCommentRequest,
-    CreateHighlightThreadRequest,
-    DeleteHighlightThreadRequest,
+    CreateAnnotationThreadRequest,
     DeleteResearchItemResponse,
     ResearchItemListResponse,
     ResearchItemResponse,
-    ResearchVisibilityRequest,
     UpdateAnnotationCommentRequest,
-    UpdateHighlightThreadRequest,
+    UpdateAnnotationThreadRequest,
 )
 from app.shared.application import Actor, OperationContext
-from app.shared.domain.enums import RoleType
+from app.shared.domain.enums import (
+    AnnotationAudienceFilter,
+    AnnotationThreadMode,
+    AnnotationThreadStatus,
+    RoleType,
+)
 
-RESEARCH_HIGHLIGHT_CREATED = OperationAction("research.highlight_created")
-RESEARCH_HIGHLIGHT_UPDATED = OperationAction("research.highlight_updated")
-RESEARCH_HIGHLIGHT_DELETED = OperationAction("research.highlight_deleted")
+RESEARCH_ANNOTATION_THREAD_CREATED = OperationAction(
+    "research.annotation_thread_created"
+)
+RESEARCH_ANNOTATION_THREAD_UPDATED = OperationAction(
+    "research.annotation_thread_updated"
+)
+RESEARCH_ANNOTATION_THREAD_DELETED = OperationAction(
+    "research.annotation_thread_deleted"
+)
 RESEARCH_ANNOTATION_COMMENT_CREATED = OperationAction(
     "research.annotation_comment_created"
 )
@@ -35,7 +46,6 @@ RESEARCH_ANNOTATION_COMMENT_UPDATED = OperationAction(
 RESEARCH_ANNOTATION_COMMENT_DELETED = OperationAction(
     "research.annotation_comment_deleted"
 )
-RESEARCH_VISIBILITY_UPDATED = OperationAction("research.visibility_updated")
 RESEARCH_ITEM_DELETED = OperationAction("research.item_deleted")
 
 
@@ -51,7 +61,8 @@ class ResearchItemGateway(Protocol):
         *,
         user_id: int,
         document_id: UUID,
-        highlights_only: bool,
+        project_id: UUID | None,
+        annotations_only: bool,
     ) -> list[ResearchItemResponse]: ...
 
     def list_project(
@@ -61,21 +72,39 @@ class ResearchItemGateway(Protocol):
         project_id: UUID,
     ) -> list[ResearchItemResponse]: ...
 
-    def create_highlight(
+    def list_annotation_threads(
         self,
         *,
         user_id: int,
         document_id: UUID,
-        request: CreateHighlightThreadRequest,
-        content_role: RoleType,
-    ) -> ResearchItemResponse: ...
+        project_id: UUID | None,
+        audience: AnnotationAudienceFilter | None,
+        mode: AnnotationThreadMode | None,
+        status: AnnotationThreadStatus,
+    ) -> list[AnnotationThreadSummaryResponse]: ...
 
-    def update_highlight(
+    def get_annotation_thread(
         self,
         *,
         user_id: int,
         thread_id: UUID,
-        request: UpdateHighlightThreadRequest,
+    ) -> ResearchItemResponse: ...
+
+    def create_annotation_thread(
+        self,
+        *,
+        user_id: int,
+        document_id: UUID,
+        request: CreateAnnotationThreadRequest,
+        content_role: RoleType,
+    ) -> ResearchItemResponse: ...
+
+    def update_annotation_thread(
+        self,
+        *,
+        user_id: int,
+        thread_id: UUID,
+        request: UpdateAnnotationThreadRequest,
     ) -> ResearchItemChange[ResearchItemResponse]: ...
 
     def delete_item(
@@ -83,7 +112,6 @@ class ResearchItemGateway(Protocol):
         *,
         user_id: int,
         item_id: UUID,
-        confirm_delete_replies: bool,
         origin_operation_id: UUID,
         correlation_id: UUID,
     ) -> None: ...
@@ -107,14 +135,6 @@ class ResearchItemGateway(Protocol):
 
     def delete_comment(self, *, user_id: int, comment_id: UUID) -> None: ...
 
-    def set_visibility(
-        self,
-        *,
-        user_id: int,
-        item_id: UUID,
-        request: ResearchVisibilityRequest,
-    ) -> ResearchItemChange[ResearchItemResponse]: ...
-
 
 class ResearchItems:
     def __init__(
@@ -131,13 +151,15 @@ class ResearchItems:
         *,
         actor: Actor,
         document_id: UUID,
-        highlights_only: bool = False,
+        project_id: UUID | None = None,
+        annotations_only: bool = False,
     ) -> ResearchItemListResponse:
         return ResearchItemListResponse(
             items=self._gateway.list_document(
                 user_id=actor.id,
                 document_id=document_id,
-                highlights_only=highlights_only,
+                project_id=project_id,
+                annotations_only=annotations_only,
             )
         )
 
@@ -154,18 +176,50 @@ class ResearchItems:
             )
         )
 
-    def create_highlight(
+    def list_annotation_threads(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+        project_id: UUID | None = None,
+        audience: AnnotationAudienceFilter | None = None,
+        mode: AnnotationThreadMode | None = None,
+        status: AnnotationThreadStatus = AnnotationThreadStatus.OPEN,
+    ) -> AnnotationThreadListResponse:
+        return AnnotationThreadListResponse(
+            items=self._gateway.list_annotation_threads(
+                user_id=actor.id,
+                document_id=document_id,
+                project_id=project_id,
+                audience=audience,
+                mode=mode,
+                status=status,
+            )
+        )
+
+    def get_annotation_thread(
+        self,
+        *,
+        actor: Actor,
+        thread_id: UUID,
+    ) -> ResearchItemResponse:
+        return self._gateway.get_annotation_thread(
+            user_id=actor.id,
+            thread_id=thread_id,
+        )
+
+    def create_annotation_thread(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         document_id: UUID,
-        request: CreateHighlightThreadRequest,
+        request: CreateAnnotationThreadRequest,
         content_role: RoleType,
     ) -> ResearchItemResponse:
         if not isinstance(content_role, RoleType):
             raise TypeError("content_role must be a RoleType")
-        result = self._gateway.create_highlight(
+        result = self._gateway.create_annotation_thread(
             user_id=actor.id,
             document_id=document_id,
             request=request,
@@ -174,20 +228,20 @@ class ResearchItems:
         self._journal.append(
             actor=actor,
             operation=operation,
-            action=RESEARCH_HIGHLIGHT_CREATED,
+            action=RESEARCH_ANNOTATION_THREAD_CREATED,
             resources=(ResourceRef("research_item", str(result.id)),),
         )
         return result
 
-    def update_highlight(
+    def update_annotation_thread(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         thread_id: UUID,
-        request: UpdateHighlightThreadRequest,
+        request: UpdateAnnotationThreadRequest,
     ) -> ResearchItemResponse:
-        result = self._gateway.update_highlight(
+        result = self._gateway.update_annotation_thread(
             user_id=actor.id,
             thread_id=thread_id,
             request=request,
@@ -196,30 +250,28 @@ class ResearchItems:
             self._journal.append(
                 actor=actor,
                 operation=operation,
-                action=RESEARCH_HIGHLIGHT_UPDATED,
+                action=RESEARCH_ANNOTATION_THREAD_UPDATED,
                 resources=(ResourceRef("research_item", str(thread_id)),),
             )
         return result.value
 
-    def delete_highlight(
+    def delete_annotation_thread(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         thread_id: UUID,
-        request: DeleteHighlightThreadRequest,
     ) -> DeleteResearchItemResponse:
         self._gateway.delete_item(
             user_id=actor.id,
             item_id=thread_id,
-            confirm_delete_replies=request.confirm_delete_replies,
             origin_operation_id=operation.trace.operation_id,
             correlation_id=operation.trace.correlation_id,
         )
         self._journal.append(
             actor=actor,
             operation=operation,
-            action=RESEARCH_HIGHLIGHT_DELETED,
+            action=RESEARCH_ANNOTATION_THREAD_DELETED,
             resources=(ResourceRef("research_item", str(thread_id)),),
         )
         return DeleteResearchItemResponse()
@@ -286,28 +338,6 @@ class ResearchItems:
             resources=(ResourceRef("annotation_comment", str(comment_id)),),
         )
 
-    def set_visibility(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        item_id: UUID,
-        request: ResearchVisibilityRequest,
-    ) -> ResearchItemResponse:
-        result = self._gateway.set_visibility(
-            user_id=actor.id,
-            item_id=item_id,
-            request=request,
-        )
-        if result.changed:
-            self._journal.append(
-                actor=actor,
-                operation=operation,
-                action=RESEARCH_VISIBILITY_UPDATED,
-                resources=(ResourceRef("research_item", str(item_id)),),
-            )
-        return result.value
-
     def delete_item(
         self,
         *,
@@ -318,7 +348,6 @@ class ResearchItems:
         self._gateway.delete_item(
             user_id=actor.id,
             item_id=item_id,
-            confirm_delete_replies=False,
             origin_operation_id=operation.trace.operation_id,
             correlation_id=operation.trace.correlation_id,
         )

@@ -11,6 +11,7 @@ from app.modules.papers.application.contracts.tags import (
     LibraryTagAssignmentResponse,
     LibraryTagCreateRequest,
     LibraryTagListResponse,
+    LibraryTagRenameRequest,
     LibraryTagResponse,
 )
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
@@ -57,34 +58,34 @@ def create_library_tag(
     )
 
 
-@library_tags_router.post(
-    "/tags/assignments",
-    response_model=LibraryTagAssignmentResponse,
-    status_code=status.HTTP_201_CREATED,
+@library_tags_router.patch(
+    "/tags/{tag_id}",
+    response_model=LibraryTagResponse,
 )
-def assign_library_tags(
-    request: LibraryTagAssignmentRequest,
+def rename_library_tag(
+    tag_id: UUID,
+    request: LibraryTagRenameRequest,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
-) -> LibraryTagAssignmentResponse:
+) -> LibraryTagResponse:
     return executor.command(
-        lambda capabilities: capabilities.library_tags.assign(
+        lambda capabilities: capabilities.library_tags.rename(
             actor=current_user,
             operation=operation,
+            tag_id=tag_id,
             request=request,
         )
     )
 
 
 @library_tags_router.delete(
-    "/papers/{document_id}/tags/{tag_id}",
+    "/tags/{tag_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def remove_library_tag_assignment(
-    document_id: UUID,
+def delete_library_tag(
     tag_id: UUID,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
@@ -93,11 +94,31 @@ def remove_library_tag_assignment(
     operation: OperationContext = Depends(get_required_operation),
 ) -> Response:
     executor.command(
-        lambda capabilities: capabilities.library_tags.remove(
+        lambda capabilities: capabilities.library_tags.delete(
             actor=current_user,
             operation=operation,
-            document_id=document_id,
             tag_id=tag_id,
         )
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@library_tags_router.put(
+    "/tags/assignments",
+    response_model=LibraryTagAssignmentResponse,
+)
+def replace_library_tag_assignments(
+    request: LibraryTagAssignmentRequest,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+) -> LibraryTagAssignmentResponse:
+    return executor.command(
+        lambda capabilities: capabilities.library_tags.replace_assignments(
+            actor=current_user,
+            operation=operation,
+            request=request,
+        )
+    )
