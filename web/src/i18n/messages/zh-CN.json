@@ -429,11 +429,13 @@
     "renderingPage": "正在渲染页面",
     "closePanel": "关闭面板",
     "toolbar": {
+      "closePanel": "关闭上下文面板",
       "download": "下载 PDF",
       "fit": "适配",
       "fitPage": "适合页面",
       "fitWidth": "适合宽度",
       "nextPage": "下一页",
+      "moreActions": "更多操作",
       "openPanel": "打开上下文面板",
       "page": "页码",
       "pdfView": "PDF",
@@ -446,24 +448,53 @@
       "zoomOut": "缩小"
     },
     "reflow": {
+      "degradedDescription": "这部分内容无法在不猜测的情况下可靠重建，请回到对应 PDF 页面查看。",
+      "degradedTitle": "无法可靠重排",
       "document": "AI 重排论文",
       "failedDescription": "原始 PDF 仍可正常阅读；你可以随时重试独立的重排任务。",
       "figurePlaceholder": "图表",
       "failedTitle": "AI 重排暂不可用",
-      "fullTranslation": "全文翻译",
-      "fullTranslationDescription": "阅读到附近段落时按需翻译，已完成的内容会被缓存。",
       "loading": "正在加载 AI 重排",
       "openPdfPage": "PDF 第 {page} 页",
       "original": "原文",
+      "paperInformation": "论文信息",
       "processingDescription": "Scholens 正在后台生成适合屏幕阅读的版式，不会影响原始 PDF。",
       "processingTitle": "正在准备 AI 重排",
       "retry": "重试 AI 重排",
       "retryFailedDescription": "请求未被接受，原始 PDF 仍可正常阅读，请稍后重试。",
       "retryFailedTitle": "无法重试 AI 重排",
       "retryTranslation": "重试翻译",
+      "repaired": "AI 辅助修复",
       "translated": "译文",
-      "translating": "正在翻译此段…",
-      "translationFailed": "此段暂时无法翻译。"
+      "translationFailed": "此段暂时无法翻译。",
+      "translationMarker": "译文"
+    },
+    "fullTranslation": {
+      "close": "关闭全文翻译设置",
+      "display": {
+        "bilingual": "双语对照",
+        "label": "显示方式",
+        "translationOnly": "仅译文"
+      },
+      "enable": "启用全文翻译",
+      "enableDescription": "按阅读位置翻译附近的语义块，并缓存已经完成的内容。",
+      "instructions": {
+        "label": "自定义翻译指令",
+        "placeholder": "例如：保留领域术语英文，并在首次出现时补充中文解释。",
+        "save": "保存指令",
+        "title": "自定义翻译指令"
+      },
+      "pdfUnavailable": "切换到 AI 重排后使用全文翻译",
+      "showMarker": "显示译文标识",
+      "status": {
+        "complete": "当前论文的可翻译内容已完成",
+        "idle": "尚未启用",
+        "partial": "部分内容翻译失败，可在正文中重试",
+        "translating": "正在按阅读位置翻译"
+      },
+      "targetLanguage": "目标语言",
+      "title": "全文翻译",
+      "translateReferences": "翻译参考文献"
     },
     "panels": {
       "ask": "提问",

@@ -8398,6 +8398,18 @@
             ],
             "title": "Custom Instructions"
           },
+          "full_translation_display": {
+            "enum": [
+              "bilingual",
+              "translation_only"
+            ],
+            "title": "Full Translation Display",
+            "type": "string"
+          },
+          "show_translation_marker": {
+            "title": "Show Translation Marker",
+            "type": "boolean"
+          },
           "source_language": {
             "title": "Source Language",
             "type": "string"
@@ -8405,13 +8417,20 @@
           "target_language": {
             "title": "Target Language",
             "type": "string"
+          },
+          "translate_references": {
+            "title": "Translate References",
+            "type": "boolean"
           }
         },
         "required": [
           "source_language",
           "target_language",
           "custom_instructions",
-          "auto_translate_selection"
+          "auto_translate_selection",
+          "full_translation_display",
+          "translate_references",
+          "show_translation_marker"
         ],
         "title": "TranslationPreferencesResponse",
         "type": "object"
@@ -8435,6 +8454,18 @@
             "maxLength": 2000,
             "title": "Custom Instructions"
           },
+          "full_translation_display": {
+            "enum": [
+              "bilingual",
+              "translation_only"
+            ],
+            "title": "Full Translation Display",
+            "type": "string"
+          },
+          "show_translation_marker": {
+            "title": "Show Translation Marker",
+            "type": "boolean"
+          },
           "source_language": {
             "maxLength": 35,
             "title": "Source Language",
@@ -8444,12 +8475,19 @@
             "maxLength": 35,
             "title": "Target Language",
             "type": "string"
+          },
+          "translate_references": {
+            "title": "Translate References",
+            "type": "boolean"
           }
         },
         "required": [
           "source_language",
           "target_language",
-          "auto_translate_selection"
+          "auto_translate_selection",
+          "full_translation_display",
+          "translate_references",
+          "show_translation_marker"
         ],
         "title": "TranslationPreferencesUpdateRequest",
         "type": "object"

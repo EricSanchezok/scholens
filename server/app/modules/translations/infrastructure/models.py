@@ -37,6 +37,10 @@ class TranslationPreference(Base):
             "AND custom_instructions = btrim(custom_instructions))",
             name="ck_translation_preferences_instructions",
         ),
+        CheckConstraint(
+            "full_translation_display IN ('bilingual', 'translation_only')",
+            name="ck_translation_preferences_display",
+        ),
         {"schema": "scholens"},
     )
 
@@ -55,6 +59,15 @@ class TranslationPreference(Base):
         nullable=False,
         default=True,
         server_default="true",
+    )
+    full_translation_display: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="bilingual", server_default="bilingual"
+    )
+    translate_references: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    show_translation_marker: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
     )
 
 

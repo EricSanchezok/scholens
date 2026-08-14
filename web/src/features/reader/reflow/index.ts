@@ -1,1 +1,4 @@
-export { ReaderReflowSurface } from "./reader-reflow-surface";
+export {
+  ReaderReflowSurface,
+  type ReaderReflowOutlineItem,
+} from "./reader-reflow-surface";

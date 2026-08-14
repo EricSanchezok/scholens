@@ -4613,10 +4613,19 @@ export interface components {
             auto_translate_selection: boolean;
             /** Custom Instructions */
             custom_instructions: string | null;
+            /**
+             * Full Translation Display
+             * @enum {string}
+             */
+            full_translation_display: "bilingual" | "translation_only";
+            /** Show Translation Marker */
+            show_translation_marker: boolean;
             /** Source Language */
             source_language: string;
             /** Target Language */
             target_language: string;
+            /** Translate References */
+            translate_references: boolean;
         };
         /** TranslationPreferencesUpdateRequest */
         TranslationPreferencesUpdateRequest: {
@@ -4624,10 +4633,19 @@ export interface components {
             auto_translate_selection: boolean;
             /** Custom Instructions */
             custom_instructions?: string | null;
+            /**
+             * Full Translation Display
+             * @enum {string}
+             */
+            full_translation_display: "bilingual" | "translation_only";
+            /** Show Translation Marker */
+            show_translation_marker: boolean;
             /** Source Language */
             source_language: string;
             /** Target Language */
             target_language: string;
+            /** Translate References */
+            translate_references: boolean;
         };
         /** TranslationRequest */
         TranslationRequest: {

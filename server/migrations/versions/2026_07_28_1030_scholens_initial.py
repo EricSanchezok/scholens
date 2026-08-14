@@ -572,6 +572,24 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
+            "full_translation_display",
+            sa.String(length=24),
+            server_default="bilingual",
+            nullable=False,
+        ),
+        sa.Column(
+            "translate_references",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+        sa.Column(
+            "show_translation_marker",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
@@ -599,6 +617,10 @@ def upgrade() -> None:
             "OR (length(custom_instructions) BETWEEN 1 AND 2000 "
             "AND custom_instructions = btrim(custom_instructions))",
             name="ck_translation_preferences_instructions",
+        ),
+        sa.CheckConstraint(
+            "full_translation_display IN ('bilingual', 'translation_only')",
+            name="ck_translation_preferences_display",
         ),
         sa.ForeignKeyConstraint(["user_id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id"),

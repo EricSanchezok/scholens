@@ -34,7 +34,7 @@ import type { ReaderSelection } from "../components/pdf-page";
 import type { TranslationPreferences } from "./api";
 import type { SelectionTranslationState } from "./use-reader-translation";
 
-const languageCodes = [
+export const translationLanguageCodes = [
   "en",
   "zh-CN",
   "zh-TW",
@@ -51,7 +51,7 @@ const instructionsSchema = z.object({
 
 type InstructionsValues = z.infer<typeof instructionsSchema>;
 
-function TranslationLanguageSelect({
+export function TranslationLanguageSelect({
   allowAuto,
   disabled,
   label,
@@ -69,7 +69,7 @@ function TranslationLanguageSelect({
   const valueLabel =
     value === "auto"
       ? t("languages.auto")
-      : t(`languages.${value as (typeof languageCodes)[number]}`);
+      : t(`languages.${value as (typeof translationLanguageCodes)[number]}`);
   return (
     <div className="grid gap-2">
       <Label htmlFor={triggerId}>{label}</Label>
@@ -81,7 +81,7 @@ function TranslationLanguageSelect({
           {allowAuto ? (
             <SelectItem value="auto">{t("languages.auto")}</SelectItem>
           ) : null}
-          {languageCodes.map((code) => (
+          {translationLanguageCodes.map((code) => (
             <SelectItem key={code} value={code}>
               {t(`languages.${code}`)}
             </SelectItem>

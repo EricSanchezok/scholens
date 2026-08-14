@@ -17,6 +17,9 @@ class TranslationPreferencesRecord:
     target_language: str
     custom_instructions: str | None
     auto_translate_selection: bool
+    full_translation_display: str
+    translate_references: bool
+    show_translation_marker: bool
 
 
 class TranslationPreferencesGateway(Protocol):

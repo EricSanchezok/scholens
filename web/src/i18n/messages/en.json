@@ -429,11 +429,13 @@
     "renderingPage": "Rendering page",
     "closePanel": "Close panel",
     "toolbar": {
+      "closePanel": "Close context panel",
       "download": "Download PDF",
       "fit": "Fit",
       "fitPage": "Fit page",
       "fitWidth": "Fit width",
       "nextPage": "Next page",
+      "moreActions": "More actions",
       "openPanel": "Open context panel",
       "page": "Page",
       "pdfView": "PDF",
@@ -446,24 +448,53 @@
       "zoomOut": "Zoom out"
     },
     "reflow": {
+      "degradedDescription": "This content cannot be reconstructed reliably without guessing. Open the corresponding PDF page to inspect the source.",
+      "degradedTitle": "Could not reflow reliably",
       "document": "AI-reflowed paper",
       "failedDescription": "The PDF remains available. Retry the independent reflow job when you are ready.",
       "figurePlaceholder": "Figure",
       "failedTitle": "AI reflow is unavailable",
-      "fullTranslation": "Full translation",
-      "fullTranslationDescription": "Translate nearby sections as you read. Completed sections are cached.",
       "loading": "Loading AI reflow",
       "openPdfPage": "PDF p. {page}",
       "original": "Original text",
+      "paperInformation": "Paper information",
       "processingDescription": "Scholens is preparing a responsive reading layout in the background. The original PDF is unaffected.",
       "processingTitle": "Preparing AI reflow",
       "retry": "Retry AI reflow",
       "retryFailedDescription": "The request was not accepted. The PDF is still available; try again in a moment.",
       "retryFailedTitle": "Could not retry AI reflow",
       "retryTranslation": "Retry translation",
+      "repaired": "AI-assisted repair",
       "translated": "Translated text",
-      "translating": "Translating this section…",
-      "translationFailed": "This section could not be translated."
+      "translationFailed": "This section could not be translated.",
+      "translationMarker": "Translation"
+    },
+    "fullTranslation": {
+      "close": "Close full translation settings",
+      "display": {
+        "bilingual": "Bilingual",
+        "label": "Display",
+        "translationOnly": "Translation only"
+      },
+      "enable": "Enable full translation",
+      "enableDescription": "Translate nearby semantic blocks as you read and cache completed content.",
+      "instructions": {
+        "label": "Custom translation instructions",
+        "placeholder": "For example: preserve English domain terms and explain them in Chinese on first use.",
+        "save": "Save instructions",
+        "title": "Custom translation instructions"
+      },
+      "pdfUnavailable": "Switch to AI reflow to use full translation",
+      "showMarker": "Show translation marker",
+      "status": {
+        "complete": "All translatable content in this paper is complete",
+        "idle": "Not enabled",
+        "partial": "Some content failed; retry it in the document",
+        "translating": "Translating as you read"
+      },
+      "targetLanguage": "Target language",
+      "title": "Full translation",
+      "translateReferences": "Translate references"
     },
     "panels": {
       "ask": "Ask",

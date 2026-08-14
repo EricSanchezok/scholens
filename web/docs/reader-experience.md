@@ -402,21 +402,23 @@ collaboration contract is executable in Storybook with these state mappings;
 until dedicated collaboration frames receive stable node IDs, reviewers use
 the named `50 — Reader` states rather than inventing links:
 
-| Figma `50 — Reader` state     | Executable acceptance evidence              |
-| ----------------------------- | ------------------------------------------- |
-| Personal highlight            | `CommentlessPersonalHighlight`              |
-| Project discussion            | `ProjectDiscussionTwoAuthors`               |
-| Resolved Project discussion   | `ResolvedProjectDiscussion`                 |
-| Project audience before save  | `ProjectAudience`                           |
-| Project context selector      | `ProjectContext`                            |
-| Light/Dark annotation palette | `AnnotationThread`, `AnnotationPaletteDark` |
-| Narrow annotation composer    | `NarrowSelection`                           |
-| Selection translation states  | `Ready`, `Streaming`, `CompletedAndCached`  |
-| Mobile translation            | `NarrowMobile`                              |
-| Dark translation              | `CompletedDark`                             |
-| AI reflow original/translated | `Original`, `Translated`                    |
-| AI reflow partial/error       | `Streaming`, `TranslationError`             |
-| AI reflow mobile/Dark         | `Mobile`, `Dark`                            |
+| Figma `50 — Reader` state     | Executable acceptance evidence                            |
+| ----------------------------- | --------------------------------------------------------- |
+| Personal highlight            | `CommentlessPersonalHighlight`                            |
+| Project discussion            | `ProjectDiscussionTwoAuthors`                             |
+| Resolved Project discussion   | `ResolvedProjectDiscussion`                               |
+| Project audience before save  | `ProjectAudience`                                         |
+| Project context selector      | `ProjectContext`                                          |
+| Light/Dark annotation palette | `AnnotationThread`, `AnnotationPaletteDark`               |
+| Narrow annotation composer    | `NarrowSelection`                                         |
+| Selection translation states  | `Ready`, `Streaming`, `CompletedAndCached`                |
+| Mobile translation            | `NarrowMobile`                                            |
+| Dark translation              | `CompletedDark`                                           |
+| AI reflow semantic structure  | `AcademicStructure`, `DegradedEvidence`                   |
+| AI reflow translation modes   | `Bilingual`, `TranslationOnly`, `Streaming`               |
+| AI reflow translation error   | `TranslationError`, `PartialFailure`                      |
+| AI reflow toolbar settings    | `DesktopPopover`, `PdfUnavailable`                        |
+| AI reflow mobile/Dark         | `SmallMobile`, `LargeMobile`, `MobileBottomSheet`, `Dark` |
 
 The Project discussion stories deliberately show flat replies from two
 authors, immutable audience badges, root-only color, and resolve/reopen

@@ -21,8 +21,11 @@ const selection: ReaderSelection = {
 const preferences: TranslationPreferences = {
   auto_translate_selection: true,
   custom_instructions: null,
+  full_translation_display: "bilingual",
+  show_translation_marker: true,
   source_language: "auto",
   target_language: "zh-CN",
+  translate_references: false,
 };
 
 const meta = {

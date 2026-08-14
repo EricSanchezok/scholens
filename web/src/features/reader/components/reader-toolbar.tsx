@@ -10,7 +10,9 @@ import {
   DocumentIcon,
   SearchIcon,
   OpenPanelIcon,
+  ClosePanelIcon,
   DismissIcon,
+  MoreIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -34,6 +36,11 @@ import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
 import type { ReaderFitMode } from "./pdf-page";
 import type { ReaderDocumentView } from "../reader-types";
+import {
+  ReaderFullTranslationControl,
+  type FullTranslationStatus,
+  type TranslationPreferences,
+} from "../translation";
 
 export type ReaderToolbarLabels = {
   previousPage: string;
@@ -53,6 +60,8 @@ export type ReaderToolbarLabels = {
   showPages: string;
   download: string;
   openPanel: string;
+  closePanel: string;
+  moreActions: string;
   returnLibrary: string;
   projectContext: string;
   personalContext: string;
@@ -82,6 +91,8 @@ export function ReaderToolbar({
   title,
   view,
   search,
+  translation,
+  reflowOutline,
   zoom,
 }: {
   className?: string;
@@ -114,6 +125,21 @@ export function ReaderToolbar({
     onQueryChange: (query: string) => void;
     query: string;
   };
+  translation: {
+    enabled: boolean;
+    onEnabledChange: (enabled: boolean) => void;
+    onPreferencesChange: (
+      patch: Partial<TranslationPreferences>,
+    ) => Promise<unknown>;
+    preferences?: TranslationPreferences;
+    saving: boolean;
+    status: FullTranslationStatus;
+  };
+  reflowOutline?: Array<{
+    id: string;
+    label: string;
+    onSelect: () => void;
+  }>;
   title: string;
   view: ReaderDocumentView;
   zoom: number;
@@ -181,7 +207,7 @@ export function ReaderToolbar({
         >
           <SelectTrigger
             aria-label={labels.projectContext}
-            className="h-9 min-h-9 min-w-0 flex-1 2xl:hidden"
+            className="hidden h-9 min-h-9 min-w-0 flex-1 sm:flex 2xl:hidden"
           >
             <SelectValue />
           </SelectTrigger>
@@ -286,7 +312,7 @@ export function ReaderToolbar({
           </div>
 
           {view === "pdf" ? (
-            <div className="flex shrink-0 items-center gap-0.5">
+            <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
               <IconButton
                 disabled={pageNumber <= 1}
                 label={labels.previousPage}
@@ -391,6 +417,38 @@ export function ReaderToolbar({
                 </IconButton>
               </>
             ) : null}
+            {view === "reflow" && reflowOutline?.length ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton
+                    className="hidden sm:inline-flex"
+                    label={labels.showOutline}
+                    variant="ghost"
+                  >
+                    <Icon glyph={OutlineIcon} size={20} />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-80 w-72 overflow-y-auto"
+                >
+                  {reflowOutline.map((item) => (
+                    <DropdownMenuItem key={item.id} onSelect={item.onSelect}>
+                      <span className="truncate">{item.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+            <ReaderFullTranslationControl
+              enabled={translation.enabled}
+              onEnabledChange={translation.onEnabledChange}
+              onPreferencesChange={translation.onPreferencesChange}
+              preferences={translation.preferences}
+              saving={translation.saving}
+              status={translation.status}
+              view={view}
+            />
             <IconButton
               className="hidden sm:inline-flex"
               label={labels.download}
@@ -399,15 +457,47 @@ export function ReaderToolbar({
             >
               <Icon glyph={DownloadIcon} size={20} />
             </IconButton>
-            {!panelOpen ? (
-              <IconButton
-                label={labels.openPanel}
-                onClick={onOpenPanel}
-                variant="ghost"
-              >
-                <Icon glyph={OpenPanelIcon} size={20} />
-              </IconButton>
-            ) : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton
+                  className="inline-flex sm:hidden"
+                  label={labels.moreActions}
+                  variant="ghost"
+                >
+                  <Icon glyph={MoreIcon} size={20} />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {view === "pdf" ? (
+                  <DropdownMenuItem onSelect={onOpenSearch}>
+                    <Icon glyph={SearchIcon} size={20} />
+                    {labels.search}
+                  </DropdownMenuItem>
+                ) : null}
+                {view === "reflow" && reflowOutline?.length
+                  ? reflowOutline.map((item) => (
+                      <DropdownMenuItem key={item.id} onSelect={item.onSelect}>
+                        <span className="max-w-56 truncate">{item.label}</span>
+                      </DropdownMenuItem>
+                    ))
+                  : null}
+                <DropdownMenuItem onSelect={onDownload}>
+                  <Icon glyph={DownloadIcon} size={20} />
+                  {labels.download}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <IconButton
+              aria-pressed={panelOpen}
+              label={panelOpen ? labels.closePanel : labels.openPanel}
+              onClick={onOpenPanel}
+              variant="ghost"
+            >
+              <Icon
+                glyph={panelOpen ? ClosePanelIcon : OpenPanelIcon}
+                size={20}
+              />
+            </IconButton>
           </div>
         </>
       )}

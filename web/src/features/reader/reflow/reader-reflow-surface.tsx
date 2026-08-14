@@ -7,24 +7,39 @@ import * as React from "react";
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { useToast } from "@/components/ui";
 import { reflowKeys, reflowQueries, retryDocumentReflow } from "./api";
-import { ReaderReflowView } from "./reader-reflow-view";
+import {
+  isTranslatableReflowBlock,
+  ReaderReflowView,
+  reflowMarkdownPlainText,
+} from "./reader-reflow-view";
 import { useReflowTranslations } from "./use-reflow-translations";
+import type {
+  FullTranslationStatus,
+  TranslationPreferences,
+} from "../translation";
+
+export type ReaderReflowOutlineItem = {
+  id: string;
+  label: string;
+};
 
 export function ReaderReflowSurface({
   documentId,
   fullTranslationEnabled,
-  onFullTranslationEnabledChange,
+  onOutlineChange,
   onOpenPdfPage,
+  onTranslationStatusChange,
+  preferences,
   targetLanguage,
-  title,
   translationCacheVersion,
 }: {
   documentId: string;
   fullTranslationEnabled: boolean;
-  onFullTranslationEnabledChange: (enabled: boolean) => void;
+  onOutlineChange?: (items: ReaderReflowOutlineItem[]) => void;
   onOpenPdfPage: (page: number) => void;
+  onTranslationStatusChange?: (status: FullTranslationStatus) => void;
+  preferences?: TranslationPreferences;
   targetLanguage: string;
-  title: string;
   translationCacheVersion?: string;
 }) {
   const queryClient = useQueryClient();
@@ -39,6 +54,49 @@ export function ReaderReflowSurface({
       translationCacheVersion !== undefined &&
       reflowQuery.data?.status === "completed",
   });
+  const completedReflow =
+    reflowQuery.data?.status === "completed" ? reflowQuery.data : undefined;
+  const translateReferences = preferences?.translate_references ?? false;
+  const outline = React.useMemo<ReaderReflowOutlineItem[]>(
+    () =>
+      (completedReflow?.blocks ?? [])
+        .filter((block) => block.kind === "heading")
+        .map((block) => ({
+          id: block.id,
+          label: reflowMarkdownPlainText(
+            block.render_markdown || block.source_markdown,
+          ),
+        }))
+        .filter((item) => item.label.length > 0),
+    [completedReflow?.blocks],
+  );
+  const translationStatus = React.useMemo<FullTranslationStatus>(() => {
+    if (!fullTranslationEnabled || !completedReflow) return "idle";
+    const ids = completedReflow.blocks
+      .filter((block) => isTranslatableReflowBlock(block, translateReferences))
+      .map((block) => block.id);
+    if (ids.some((id) => translations.translations[id]?.status === "error")) {
+      return "partial";
+    }
+    if (
+      ids.length > 0 &&
+      ids.every((id) => translations.translations[id]?.status === "completed")
+    ) {
+      return "complete";
+    }
+    return "translating";
+  }, [
+    completedReflow,
+    fullTranslationEnabled,
+    translateReferences,
+    translations.translations,
+  ]);
+
+  React.useEffect(() => onOutlineChange?.(outline), [onOutlineChange, outline]);
+  React.useEffect(
+    () => onTranslationStatusChange?.(translationStatus),
+    [onTranslationStatusChange, translationStatus],
+  );
 
   const retry = React.useCallback(async () => {
     try {
@@ -89,26 +147,33 @@ export function ReaderReflowSurface({
 
   return (
     <ReaderReflowView
+      assets={reflowQuery.data.assets}
       blocks={reflowQuery.data.blocks}
+      documentId={documentId}
+      fullTranslationDisplay={
+        preferences?.full_translation_display ?? "bilingual"
+      }
       fullTranslationEnabled={fullTranslationEnabled}
       labels={{
+        degradedDescription: t("degradedDescription"),
+        degradedTitle: t("degradedTitle"),
         document: t("document"),
         figurePlaceholder: t("figurePlaceholder"),
-        fullTranslation: t("fullTranslation"),
-        fullTranslationDescription: t("fullTranslationDescription"),
         openPdfPage: (page) => t("openPdfPage", { page }),
         original: t("original"),
+        paperInformation: t("paperInformation"),
+        repaired: t("repaired"),
         retryTranslation: t("retryTranslation"),
         translated: t("translated"),
-        translating: t("translating"),
         translationFailed: t("translationFailed"),
+        translationMarker: t("translationMarker"),
       }}
-      onFullTranslationEnabledChange={onFullTranslationEnabledChange}
       onOpenPdfPage={onOpenPdfPage}
       onRequestTranslation={translations.request}
       onRetryTranslation={translations.retry}
+      showTranslationMarker={preferences?.show_translation_marker ?? true}
       targetLanguage={targetLanguage}
-      title={title}
+      translateReferences={translateReferences}
       translations={translations.translations}
     />
   );

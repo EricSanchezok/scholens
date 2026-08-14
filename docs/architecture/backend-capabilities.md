@@ -209,7 +209,9 @@ of truth.
 
 Reader selection translation is a paper-authorized streaming workflow.
 `GET|PUT /api/v1/me/translation-preferences` owns source language, target
-language, custom instructions, and automatic-selection behavior;
+language, custom instructions, automatic-selection behavior, bilingual or
+translation-only full-translation presentation, reference opt-in, and the
+translation-marker preference;
 `POST /api/v1/papers/{document_id}/selection-translations` streams standard
 `start`, `delta`, `complete`, and `error` events. The workflow checks paper
 access before looking up a durable result, so shared result reuse never becomes
@@ -222,6 +224,11 @@ completed result; Redis owns only rate limits, concurrency leases, and a short
 single-flight lease. Cache hits bypass provider quota and AI capacity checks.
 Only the request holding the single-flight lease may call the provider and
 settle usage.
+
+For reflow blocks, the normalized source is the repaired `render_markdown`
+rather than the parser's raw Markdown. This keeps the durable cache aligned with
+the evidence-validated text actually shown to the reader while the browser
+continues to send only the authorized block identity.
 
 Follow-up suggestions are a non-critical turn sidecar started before answer
 streaming. The model call runs outside an application transaction; the final

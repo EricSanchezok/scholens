@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from app.modules.translations.domain import (
     MAX_CUSTOM_INSTRUCTIONS_CHARS,
     MAX_LANGUAGE_TAG_CHARS,
@@ -9,6 +11,9 @@ from app.modules.translations.domain import (
 )
 from app.shared.domain import AppError, FailureKind
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+FullTranslationDisplay = Literal["bilingual", "translation_only"]
 
 
 class TranslationPreferencesUpdateRequest(BaseModel):
@@ -25,6 +30,9 @@ class TranslationPreferencesUpdateRequest(BaseModel):
         json_schema_extra={"maxLength": MAX_CUSTOM_INSTRUCTIONS_CHARS},
     )
     auto_translate_selection: bool
+    full_translation_display: FullTranslationDisplay
+    translate_references: bool
+    show_translation_marker: bool
 
     @field_validator("source_language", "target_language")
     @classmethod
@@ -54,6 +62,9 @@ class TranslationPreferencesResponse(BaseModel):
     target_language: str
     custom_instructions: str | None
     auto_translate_selection: bool
+    full_translation_display: FullTranslationDisplay
+    translate_references: bool
+    show_translation_marker: bool
 
 
 class TranslationRequest(BaseModel):

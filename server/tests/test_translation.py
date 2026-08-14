@@ -126,6 +126,9 @@ def test_translation_preferences_default_and_update_are_normalized() -> None:
     assert defaults.target_language == "zh-CN"
     assert defaults.custom_instructions is None
     assert defaults.auto_translate_selection is True
+    assert defaults.full_translation_display == "bilingual"
+    assert defaults.translate_references is False
+    assert defaults.show_translation_marker is True
 
     updated = translations.update_preferences(
         actor=_actor(),
@@ -135,12 +138,18 @@ def test_translation_preferences_default_and_update_are_normalized() -> None:
             target_language="EN-us",
             custom_instructions="  Preserve English terms.  ",
             auto_translate_selection=False,
+            full_translation_display="translation_only",
+            translate_references=True,
+            show_translation_marker=False,
         ),
     )
     assert updated.source_language == "auto"
     assert updated.target_language == "en-US"
     assert updated.custom_instructions == "Preserve English terms."
     assert updated.auto_translate_selection is False
+    assert updated.full_translation_display == "translation_only"
+    assert updated.translate_references is True
+    assert updated.show_translation_marker is False
     assert len(journal.appended) == 1
     assert "Preserve English terms." not in repr(journal.appended[0])
 
@@ -160,6 +169,9 @@ def test_translation_preferences_reject_invalid_language() -> None:
                 target_language="not_a_language",
                 custom_instructions=None,
                 auto_translate_selection=True,
+                full_translation_display="bilingual",
+                translate_references=False,
+                show_translation_marker=True,
             ),
         )
     assert error.value.code == "translation_language_invalid"
@@ -189,6 +201,9 @@ def test_translation_business_limits_use_stable_application_errors() -> None:
                 target_language="zh-CN",
                 custom_instructions="x" * 2_001,
                 auto_translate_selection=True,
+                full_translation_display="bilingual",
+                translate_references=False,
+                show_translation_marker=True,
             ),
         )
     assert instructions_error.value.code == "translation_instructions_invalid"
@@ -377,6 +392,7 @@ class _DocumentReflows:
             paper_title="Paper title",
             block=SimpleNamespace(
                 id=block_id,
+                render_markdown="## Method\n\nPreserve $x^2$ and repaired text.",
                 source_markdown="## Method\n\nPreserve $x^2$ and `code`.",
             ),
         )
@@ -558,7 +574,10 @@ async def test_reflow_translation_reads_authorized_server_block_and_caches_conte
     )
     await _events(stream)
 
-    assert provider.calls[0].source_text == "## Method\n\nPreserve $x^2$ and `code`."
+    assert (
+        provider.calls[0].source_text
+        == "## Method\n\nPreserve $x^2$ and repaired text."
+    )
     assert cache.set_identities[0].context_kind == "reflow_block"
     assert cache.set_identities[0].block_id == "block-7"
 

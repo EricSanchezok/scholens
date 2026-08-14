@@ -80,6 +80,9 @@ class Translations:
                 target_language=target_language,
                 custom_instructions=custom_instructions,
                 auto_translate_selection=request.auto_translate_selection,
+                full_translation_display=request.full_translation_display,
+                translate_references=request.translate_references,
+                show_translation_marker=request.show_translation_marker,
             ),
         )
         self._journal.append(
@@ -168,5 +171,14 @@ class Translations:
             ),
             auto_translate_selection=(
                 record.auto_translate_selection if record is not None else True
+            ),
+            full_translation_display=(
+                record.full_translation_display if record is not None else "bilingual"
+            ),
+            translate_references=(
+                record.translate_references if record is not None else False
+            ),
+            show_translation_marker=(
+                record.show_translation_marker if record is not None else True
             ),
         )

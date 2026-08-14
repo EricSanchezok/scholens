@@ -33,6 +33,9 @@ class SqlAlchemyTranslationPreferences:
                 target_language=preferences.target_language,
                 custom_instructions=preferences.custom_instructions,
                 auto_translate_selection=preferences.auto_translate_selection,
+                full_translation_display=preferences.full_translation_display,
+                translate_references=preferences.translate_references,
+                show_translation_marker=preferences.show_translation_marker,
             )
             .on_conflict_do_update(
                 index_elements=["user_id"],
@@ -41,6 +44,9 @@ class SqlAlchemyTranslationPreferences:
                     "target_language": preferences.target_language,
                     "custom_instructions": preferences.custom_instructions,
                     "auto_translate_selection": (preferences.auto_translate_selection),
+                    "full_translation_display": preferences.full_translation_display,
+                    "translate_references": preferences.translate_references,
+                    "show_translation_marker": preferences.show_translation_marker,
                     "updated_at": func.now(),
                 },
             )
@@ -56,4 +62,7 @@ def _record(model: TranslationPreference) -> TranslationPreferencesRecord:
         target_language=model.target_language,
         custom_instructions=model.custom_instructions,
         auto_translate_selection=model.auto_translate_selection,
+        full_translation_display=model.full_translation_display,
+        translate_references=model.translate_references,
+        show_translation_marker=model.show_translation_marker,
     )

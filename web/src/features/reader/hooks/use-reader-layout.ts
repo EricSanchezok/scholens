@@ -11,7 +11,7 @@ function subscribe(query: string, onStoreChange: () => void) {
   return () => mediaQuery.removeEventListener("change", onStoreChange);
 }
 
-function useMediaQuery(query: string) {
+export function useReaderMediaQuery(query: string) {
   const subscribeToQuery = React.useCallback(
     (onStoreChange: () => void) => subscribe(query, onStoreChange),
     [query],
@@ -36,10 +36,15 @@ function getServerSnapshot() {
  * CSS-only hiding would still initialize PDF.js thumbnail canvases on phones.
  */
 export function useDocumentNavigationRail() {
-  return useMediaQuery(DOCUMENT_NAVIGATION_QUERY);
+  return useReaderMediaQuery(DOCUMENT_NAVIGATION_QUERY);
 }
 
 /** Prevents a visually hidden mobile Sheet from making the desktop inert. */
 export function useDesktopReaderPanel() {
-  return useMediaQuery(DESKTOP_PANEL_QUERY);
+  return useReaderMediaQuery(DESKTOP_PANEL_QUERY);
+}
+
+/** Uses a stable breakpoint for toolbar popovers versus bottom sheets. */
+export function useDesktopReaderToolbar() {
+  return useReaderMediaQuery(DOCUMENT_NAVIGATION_QUERY);
 }
