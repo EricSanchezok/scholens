@@ -83,6 +83,11 @@ client build context is the safer operational boundary.
 `CELERY_API_URL=http://127.0.0.1:7302`; jobs needs
 `WEBHOOK_BASE_URL=http://127.0.0.1:7301`.
 
+AI configuration has one canonical namespace: `SCHOLENS_AI_*`. Remove obsolete
+unprefixed `DEEPSEEK_*` variables after moving their current credential and
+endpoint values; the runtime intentionally provides no alias or fallback for
+the superseded names.
+
 ### Required for a minimal local stack
 
 | Variable                                                                                          | Where                                                  |
