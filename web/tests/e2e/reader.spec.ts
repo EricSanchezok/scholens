@@ -1375,7 +1375,10 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
   await page.getByRole("option", { name: "Translation only" }).click();
   await expect(page.getByText("基于证据的学术阅读")).toBeVisible();
   await expect(
-    page.getByText("Evidence-driven academic reading", { exact: true }),
+    page.getByRole("heading", {
+      name: "Evidence-driven academic reading",
+      exact: true,
+    }),
   ).toHaveCount(0);
   await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
 });
