@@ -7,7 +7,7 @@ import html
 import mimetypes
 import re
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from typing import Any
@@ -28,16 +28,20 @@ from src.schemas import (
 )
 
 REFLOW_PIPELINE_REVISION = "mineru-continuous-ast-v1"
-_AUXILIARY_TYPES = {"header", "footer", "page_number", "aside"}
+_AUXILIARY_TYPES = {
+    "header",
+    "footer",
+    "page_number",
+    "aside",
+    "aside_text",
+}
 _TERMINAL = re.compile(r"[.!?。！？:：;；)”’'\]]$")
 _HTML_COMMENT = re.compile(r"<!--[\s\S]*?-->")
 _SUP = re.compile(r"<sup\b[^>]*>(.*?)</sup>", re.IGNORECASE | re.DOTALL)
 _SUB = re.compile(r"<sub\b[^>]*>(.*?)</sub>", re.IGNORECASE | re.DOTALL)
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _TAG = re.compile(r"</?[a-zA-Z][^>]*>")
-_BROKEN_TEX_SUPERSCRIPT = re.compile(
-    r"(?<!\$)(?:\$\$)?\^\{?([^{}$]{1,12})\}?(?:\$\$)?", re.IGNORECASE
-)
+_SUPERSCRIPT_RUN = re.compile(r"(?:\$\^\{[^{}$]+\}\$)+")
 
 AssetWriter = Callable[[bytes, str, str], str]
 
@@ -118,9 +122,13 @@ def _safe_markdown(value: str, *, prose: bool = True) -> tuple[str, bool]:
     value = _SUB.sub(lambda match: f"$_{{{_plain_text(match.group(1))}}}$", value)
     value = _BR.sub("  \n", value)
     value = _TAG.sub("", value)
-    value = _BROKEN_TEX_SUPERSCRIPT.sub(
-        lambda match: f"$^{{{match.group(1).strip()}}}$", value
-    )
+
+    def normalize_superscripts(match: re.Match[str]) -> str:
+        values = re.findall(r"\$\^\{([^{}$]+)\}\$", match.group(0))
+        normalized = "".join(value.strip().lstrip("_") for value in values)
+        return f"$^{{{normalized}}}$" if normalized else ""
+
+    value = _SUPERSCRIPT_RUN.sub(normalize_superscripts, value)
     if prose:
         value = re.sub(r"(?<=\w)-\s*\n\s*(?=[a-z])", "", value)
         value = re.sub(r"(?<!\n)\n(?!\n)", " ", value)
@@ -261,6 +269,73 @@ def _asset_from_block(
     )
 
 
+def _union_rect(blocks: Iterable[dict[str, Any]]) -> ReflowSourceRect:
+    rects = [_bbox(block) for block in blocks]
+    x0 = min(rect.x for rect in rects)
+    y0 = min(rect.y for rect in rects)
+    x1 = max(rect.x + rect.width for rect in rects)
+    y1 = max(rect.y + rect.height for rect in rects)
+    return ReflowSourceRect(x=x0, y=y0, width=x1 - x0, height=y1 - y0)
+
+
+def _asset_from_pdf_region(
+    *,
+    blocks: tuple[dict[str, Any], ...],
+    pdf_bytes: bytes,
+    document_id: str,
+    write_asset: AssetWriter | None,
+) -> DocumentReflowAsset | None:
+    """Render one composite visual from its PDF evidence region.
+
+    MinerU sometimes emits a multi-panel figure as several adjacent image
+    entries. Rendering their union from the canonical PDF preserves the actual
+    composition instead of presenting disconnected tiles in the reading view.
+    """
+
+    document = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        page_number = _page_number(blocks[0])
+        if page_number > document.page_count:
+            return None
+        source_rect = _union_rect(blocks)
+        page = document[page_number - 1]
+        clip = pymupdf.Rect(
+            source_rect.x * page.rect.width,
+            source_rect.y * page.rect.height,
+            (source_rect.x + source_rect.width) * page.rect.width,
+            (source_rect.y + source_rect.height) * page.rect.height,
+        )
+        if clip.is_empty:
+            return None
+        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=clip, alpha=False)
+        data = pixmap.tobytes("png")
+    except Exception:
+        return None
+    finally:
+        document.close()
+    checksum = hashlib.sha256(data).hexdigest()
+    identity = ":".join(
+        f"{_bbox(block).x:.4f}:{_bbox(block).y:.4f}" for block in blocks
+    )
+    asset_id = hashlib.sha256(
+        f"{document_id}:{page_number}:composite:{identity}:{checksum}".encode()
+    ).hexdigest()[:32]
+    object_key = f"documents/{document_id}/reflow/assets/{asset_id}.png"
+    if write_asset is not None:
+        write_asset(data, object_key, "image/png")
+    return DocumentReflowAsset(
+        id=asset_id,
+        object_key=object_key,
+        kind="raster",
+        content_type="image/png",
+        width=max(1, pixmap.width),
+        height=max(1, pixmap.height),
+        page_number=page_number,
+        source_rect=source_rect,
+        checksum=checksum,
+    )
+
+
 def _block_text(block: dict[str, Any]) -> str:
     block_type = str(block.get("type") or "text").lower()
     if block_type == "table":
@@ -285,15 +360,16 @@ def _block_text(block: dict[str, Any]) -> str:
     )
 
 
-def _heading_kind(text: str, level: int, index: int) -> ReflowBlockKind:
-    normalized = _plain_text(text).lower().rstrip(":：")
-    if normalized in {"abstract", "summary"}:
-        return "abstract"
-    if normalized in {"keywords", "key words", "index terms"}:
-        return "keywords"
-    if normalized in {"references", "bibliography"}:
-        return "references"
-    return "title" if index == 0 or level == 1 else "heading"
+def _academic_caption(value: str) -> str:
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if re.match(r"^(?:figure|fig\.|table)\s+\d+\b", line, re.IGNORECASE):
+            return " ".join(lines[index:])
+    return " ".join(lines)
+
+
+def _heading_kind(index: int) -> ReflowBlockKind:
+    return "title" if index == 0 else "heading"
 
 
 def _candidate(
@@ -377,18 +453,36 @@ def _candidate(
         level = int(block.get("text_level", 0) or 0)
     except (TypeError, ValueError):
         level = 0
+    normalized = _plain_text(markdown).lower().rstrip(":：")
     if level:
-        heading_level = max(1, min(6, level))
-        kind = _heading_kind(markdown, heading_level, index)
-        if kind in {"title", "heading", "abstract", "keywords", "references"}:
-            markdown = f"{'#' * heading_level} {markdown}"
-    elif block_type == "page_footnote":
+        kind = _heading_kind(index)
+        # MinerU's level 1 is both the paper title and a top-level section.
+        # Reserve Markdown h1 for the paper title and shift later sections one
+        # level down so every section does not look like another document title.
+        section_number = re.match(r"^(\d+(?:\.\d+)*)\b", _plain_text(markdown))
+        heading_level = (
+            1
+            if kind == "title"
+            else min(6, 2 + section_number.group(1).count("."))
+            if section_number
+            else max(2, min(6, level))
+        )
+        markdown = f"{'#' * heading_level} {markdown}"
+    elif normalized.startswith(("keywords:", "keywords：", "index terms:")):
+        kind = "keywords"
+    elif block_type in {"page_footnote", "ref_footnote"}:
         kind = "footnote"
     elif in_references:
         kind = "references"
     elif before_body:
         kind = "authors"
         group_id = "paper-information"
+    elif re.match(r"^\s*(?:\d+[.)]|[-•]|\\-)\s+", markdown):
+        kind = "list"
+        markdown = re.sub(r"^(\s*\d+)\)\s+", r"\1. ", markdown)
+        markdown = re.sub(r"^\s*(?:•|\\-)\s+", "- ", markdown)
+    elif markdown.lstrip().startswith(("“", '"', "—")):
+        kind = "quote"
     else:
         kind = "paragraph"
     return _Candidate(
@@ -406,7 +500,7 @@ def _candidate(
 
 
 def _can_merge(previous: _Candidate, current: _Candidate) -> bool:
-    if previous.kind != "paragraph" or current.kind != "paragraph":
+    if previous.kind != current.kind or previous.kind not in {"abstract", "paragraph"}:
         return False
     if previous.asset_id or current.asset_id:
         return False
@@ -425,11 +519,33 @@ def _can_merge(previous: _Candidate, current: _Candidate) -> bool:
 def _merge_candidates(candidates: Iterable[_Candidate]) -> list[_Candidate]:
     merged: list[_Candidate] = []
     for candidate in candidates:
+        if merged and merged[-1].kind == candidate.kind == "list":
+            previous = merged[-1]
+            merged[-1] = replace(
+                previous,
+                markdown=f"{previous.markdown.rstrip()}\n{candidate.markdown.lstrip()}",
+                spans=(*previous.spans, *candidate.spans),
+                presentation_status=(
+                    "degraded"
+                    if "degraded"
+                    in {previous.presentation_status, candidate.presentation_status}
+                    else "repaired"
+                ),
+            )
+            continue
+        if merged and merged[-1].kind == candidate.kind == "quote":
+            previous = merged[-1]
+            merged[-1] = replace(
+                previous,
+                markdown=f"{previous.markdown.rstrip()}  \n{candidate.markdown.lstrip()}",
+                spans=(*previous.spans, *candidate.spans),
+            )
+            continue
         if merged and _can_merge(merged[-1], candidate):
             previous = merged[-1]
             joined = f"{previous.markdown.rstrip()} {candidate.markdown.lstrip()}"
             merged[-1] = _Candidate(
-                kind="paragraph",
+                kind=previous.kind,
                 markdown=joined,
                 heading_level=None,
                 spans=(*previous.spans, *candidate.spans),
@@ -488,45 +604,155 @@ def build_document_reflow(
     candidates: list[_Candidate] = []
     in_references = False
     before_body = True
+    abstract_section = False
+    in_contents = False
+    has_authors = False
     ordered = sorted(
         enumerate(archive.content_list),
         key=lambda item: (_page_number(item[1]), item[0]),
     )
-    for _, provider_block in ordered:
+    cursor = 0
+    while cursor < len(ordered):
+        _, provider_block = ordered[cursor]
         block = dict(provider_block)
-        asset = _asset_from_block(
-            archive=archive,
-            block=block,
-            document_id=document_id,
-            write_asset=write_asset,
-        )
-        if asset is not None and all(existing.id != asset.id for existing in assets):
-            assets.append(asset)
+        block_type = str(block.get("type") or "text").lower()
+
+        if block_type in {"image", "chart"}:
+            visual_group = [block]
+            cursor += 1
+            while cursor < len(ordered):
+                _, possible_visual = ordered[cursor]
+                possible_type = str(possible_visual.get("type") or "").lower()
+                if possible_type not in {"image", "chart"} or _page_number(
+                    possible_visual
+                ) != _page_number(block):
+                    break
+                visual_group.append(dict(possible_visual))
+                cursor += 1
+
+            caption_parts = [
+                _block_text(item) for item in visual_group if _block_text(item)
+            ]
+            caption_raw = _academic_caption("\n".join(dict.fromkeys(caption_parts)))
+            rect = _union_rect(visual_group)
+            if (
+                len(visual_group) == 1
+                and not caption_raw
+                and rect.width * rect.height < 0.003
+            ):
+                continue
+            asset = (
+                _asset_from_pdf_region(
+                    blocks=tuple(visual_group),
+                    pdf_bytes=pdf_bytes,
+                    document_id=document_id,
+                    write_asset=write_asset,
+                )
+                if len(visual_group) > 1
+                else _asset_from_block(
+                    archive=archive,
+                    block=block,
+                    document_id=document_id,
+                    write_asset=write_asset,
+                )
+            )
+            spans = tuple(_span(item, _block_text(item)) for item in visual_group)
+            caption_markdown, caption_changed = _safe_markdown(caption_raw)
+            if asset is None:
+                warnings.append(f"reflow_asset_missing:{spans[0].page_number}")
+            group_id = f"figure-{asset.id}" if asset is not None else None
+            candidates.append(
+                _Candidate(
+                    kind="figure",
+                    markdown=caption_markdown or "Figure",
+                    heading_level=None,
+                    spans=spans,
+                    presentation_status=(
+                        "degraded"
+                        if asset is None
+                        else "repaired"
+                        if len(visual_group) > 1 or caption_changed
+                        else "verbatim"
+                    ),
+                    group_id=group_id,
+                    asset_id=asset.id if asset is not None else None,
+                )
+            )
+            if asset is not None:
+                assets.append(asset)
+            if caption_markdown:
+                candidates.append(
+                    _Candidate(
+                        kind="caption",
+                        markdown=caption_markdown,
+                        heading_level=None,
+                        spans=spans,
+                        presentation_status=(
+                            "repaired" if caption_changed else "verbatim"
+                        ),
+                        group_id=group_id,
+                    )
+                )
+            continue
+
+        cursor += 1
         candidate = _candidate(
             block,
             index=len(candidates),
             in_references=in_references,
             before_body=before_body,
-            asset_id=asset.id if asset is not None else None,
+            asset_id=None,
         )
         if candidate is None:
             continue
-        visible = _plain_text(candidate.markdown).lower().rstrip(":：")
-        if candidate.kind == "references" or visible in {"references", "bibliography"}:
-            in_references = True
-        if candidate.kind in {"abstract", "keywords", "heading", "paragraph", "quote"}:
-            before_body = False
-        if candidate.kind == "figure" and asset is None:
-            warnings.append(f"reflow_asset_missing:{candidate.spans[0].page_number}")
-            candidate = _Candidate(
-                kind=candidate.kind,
-                markdown=candidate.markdown,
-                heading_level=candidate.heading_level,
-                spans=candidate.spans,
-                presentation_status="degraded",
-                group_id=candidate.group_id,
-                asset_id=None,
+        if block_type == "table":
+            table_caption, changed = _safe_markdown(
+                _academic_caption(_as_text(block.get("table_caption")))
             )
+            if table_caption:
+                table_group_id = hashlib.sha256(
+                    f"table:{_page_number(block)}:{_bbox(block)}".encode()
+                ).hexdigest()[:24]
+                candidate = replace(candidate, group_id=table_group_id)
+                candidates.append(candidate)
+                candidates.append(
+                    _Candidate(
+                        kind="caption",
+                        markdown=table_caption,
+                        heading_level=None,
+                        spans=candidate.spans,
+                        presentation_status="repaired" if changed else "verbatim",
+                        group_id=table_group_id,
+                    )
+                )
+                continue
+        visible = _plain_text(candidate.markdown).lower().rstrip(":：")
+        heading_text = visible.lstrip("# ")
+        if candidate.kind == "heading" and heading_text in {
+            "contents",
+            "table of contents",
+        }:
+            in_contents = True
+            continue
+        if in_contents:
+            if candidate.kind != "heading":
+                continue
+            in_contents = False
+        if candidate.kind == "heading":
+            abstract_section = heading_text in {"abstract", "summary"}
+        if heading_text in {"references", "bibliography"}:
+            in_references = True
+            abstract_section = False
+        if candidate.kind == "authors":
+            candidate = replace(
+                candidate,
+                kind="affiliations" if has_authors else "authors",
+            )
+            has_authors = True
+        elif candidate.kind == "paragraph" and abstract_section:
+            candidate = replace(candidate, kind="abstract", group_id="abstract")
+        if candidate.kind in {"keywords", "heading", "paragraph", "quote", "abstract"}:
+            before_body = False
         candidates.append(candidate)
 
     if not candidates:
@@ -534,10 +760,10 @@ def build_document_reflow(
     merged = _merge_candidates(candidates)
     blocks: list[DocumentReflowBlock] = []
     for index, candidate in enumerate(merged):
-        spans = list(candidate.spans)
+        block_source_spans = list(candidate.spans)
         identity = ":".join(
             f"{span.page_number}:{span.source_rect.x:.4f}:{span.source_rect.y:.4f}"
-            for span in spans
+            for span in block_source_spans
         )
         blocks.append(
             DocumentReflowBlock(
@@ -549,7 +775,7 @@ def build_document_reflow(
                 render_markdown=candidate.markdown,
                 group_id=candidate.group_id,
                 heading_level=candidate.heading_level,
-                source_spans=spans,
+                source_spans=block_source_spans,
                 presentation_status=candidate.presentation_status,
                 asset_id=candidate.asset_id,
             )
