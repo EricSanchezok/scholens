@@ -1001,6 +1001,18 @@ def upgrade() -> None:
         sa.Column("source_markdown", sa.Text(), nullable=False),
         sa.Column("heading_level", sa.Integer(), nullable=True),
         sa.Column("page_number", sa.Integer(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("block_index >= 0", name="ck_reflow_blocks_index"),
         sa.CheckConstraint(
             "kind IN ('title', 'authors', 'heading', 'paragraph', 'list', "

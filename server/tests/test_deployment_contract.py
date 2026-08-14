@@ -65,6 +65,22 @@ def test_python_images_copy_shared_packages_before_locked_sync() -> None:
             assert dockerfile.index(copy_instruction) < sync_index
 
 
+def test_reflow_block_migration_includes_inherited_timestamps() -> None:
+    migration = (
+        ROOT
+        / "server"
+        / "migrations"
+        / "versions"
+        / "2026_07_28_1030_scholens_initial.py"
+    ).read_text(encoding="utf-8")
+    reflow_blocks = migration.split(
+        'op.create_table(\n        "document_reflow_blocks",', 1
+    )[1].split("op.create_index(", 1)[0]
+
+    assert '"created_at"' in reflow_blocks
+    assert '"updated_at"' in reflow_blocks
+
+
 def test_database_contract_shares_auth_and_isolates_scholens() -> None:
     runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
     bootstrap = (PRODUCTION / "bootstrap-db.sql").read_text(encoding="utf-8")
