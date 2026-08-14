@@ -13,6 +13,8 @@ The canonical conversation boundary is
 Selection translation follows
 [`51 — Translation`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=720-965)
 for hierarchy and states while code owns responsive containment and accessibility.
+AI reflow and full translation extend the same document region according to
+[ADR 0016](./decisions/0016-lossless-reader-reflow-and-lazy-translation.md).
 
 ## Product boundary
 
@@ -31,6 +33,9 @@ for hierarchy and states while code owns responsive containment and accessibilit
 - Selection translation is available in personal and Project reading contexts.
   It re-authorizes the paper independently of annotation audience and never
   creates a shared Conversation resource.
+- AI reflow is a lossless derived layout of the canonical parser Markdown. It
+  is available in both contexts, never replaces the PDF, and keeps full
+  translation private to the requesting user's language preferences.
 
 ## Layout contract
 
@@ -91,9 +96,12 @@ The URL is the shareable reading state:
 - `page`: one-based current PDF page;
 - `panel`: `ask`, `annotations`, `translation`, `details`, or omitted;
 - `conversation`: the active paper-scoped conversation ID, or omitted for the
-  local blank state.
+  local blank state;
 - `project`: an accessible Project that contains the Document, or omitted for
   personal reading.
+- `view`: `reflow` for the responsive reading layout, or omitted for the
+  canonical PDF default;
+- `translate`: `full` to lazily translate visible reflow blocks, or omitted.
 
 Zoom, fit mode, desktop document-navigation mode, mobile Outline disclosure,
 search disclosure, search query, search match index, draft text, active browser
@@ -136,6 +144,23 @@ navigable. All results use the translucent document-search match role; the
 current result uses the stronger current role and scrolls into view when the
 search cursor moves. Search styling never reuses neutral selection or warning
 feedback colors.
+
+## AI reflow and full translation
+
+The document toolbar exposes an explicit PDF/AI reflow switch. Reflow is a
+single-column, text-first reading surface with a bounded measure, semantic
+typography, overflow-safe tables and code, remote-image placeholders, Light and
+Dark support, and mobile safe-area padding. Each block may expose its projected
+PDF page as a return link. Pending, failed, retrying, and deterministic-fallback
+states never obscure access to the original PDF.
+
+Full translation is an independent switch inside reflow. It observes blocks in
+and near the viewport, streams at most two translations concurrently, renders
+the source before any translated text, and retries one failed block without
+resetting the document. Disabling it aborts in-flight browser work. Changing
+source language, target language, or custom instructions starts a new client
+session; the server's revisioned durable cache decides whether each block is a
+free cache hit. The browser sends block identity, never source text.
 
 ## Selection and annotation threads
 
@@ -361,6 +386,7 @@ Playwright coverage for the following matrix:
 | Search and outline | closed, query with no result, one result, multiple results, no outline, nested outline                    |
 | Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled    |
 | Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                      |
+| AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link         |
 | Annotations        | empty, populated, selected, editing, deleting, permission denied                                          |
 | Ask                | local new chat, streaming, response ready, suggestions delayed, historical, retried variants, source open |
 | Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                            |
@@ -386,6 +412,9 @@ the named `50 — Reader` states rather than inventing links:
 | Selection translation states  | `Ready`, `Streaming`, `CompletedAndCached`  |
 | Mobile translation            | `NarrowMobile`                              |
 | Dark translation              | `CompletedDark`                             |
+| AI reflow original/translated | `Original`, `Translated`                    |
+| AI reflow partial/error       | `Streaming`, `TranslationError`             |
+| AI reflow mobile/Dark         | `Mobile`, `Dark`                            |
 
 The Project discussion stories deliberately show flat replies from two
 authors, immutable audience badges, root-only color, and resolve/reopen
@@ -412,6 +441,8 @@ Reader remains a vertical feature rather than a second application shell:
   Annotations, Translate, Details, and the paper-conversation switcher;
 - `translation/` owns translation preferences, the standard SSE adapter, the
   selection lifecycle controller, and translation panel states;
+- `reflow/` owns the typed artifact query, block-only SSE adapter, bounded
+  visible-block scheduler, and responsive reflow presentation;
 - `features/conversation` owns the shared turn lifecycle, streaming response,
   worklog, sources, suggestions, answer actions, and composer used by both Home
   and Reader.

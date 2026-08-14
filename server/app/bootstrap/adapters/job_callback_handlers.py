@@ -14,12 +14,16 @@ from app.modules.jobs.application.callbacks import (
 from app.modules.jobs.application.contracts import (
     AudioOverviewWebhookData,
     DataTableWebhookData,
+    DocumentReflowWebhookData,
     JobCallbackIdentity,
     PdfProcessingWebhookData,
     StorageDeleteCallback,
 )
 from app.bootstrap.adapters import document_job_callbacks
 from app.modules.jobs.infrastructure import research_callbacks
+from app.bootstrap.adapters.document_reflow_callbacks import (
+    complete_document_reflow,
+)
 from app.modules.jobs.infrastructure.repository import job_repository
 from app.shared.application import Actor, OperationContext
 from app.shared.domain.enums import JobOperation, JobStatus
@@ -181,6 +185,29 @@ class DataTableCompletion(JobCompletionHandler):
     ) -> JobHandlerResult:
         return await research_callbacks.complete_data_table_job(
             job_id, cast(DataTableWebhookData, callback), self._db
+        )
+
+
+class DocumentReflowCompletion(JobCompletionHandler):
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    async def complete(
+        self,
+        *,
+        actor: Actor | None,
+        operation: OperationContext,
+        job_id: UUID,
+        callback: BaseModel,
+    ) -> JobHandlerResult:
+        del operation
+        if actor is None:
+            raise RuntimeError("document_reflow_job_owner_missing")
+        return complete_document_reflow(
+            self._db,
+            actor=actor,
+            job_id=job_id,
+            callback=cast(DocumentReflowWebhookData, callback),
         )
 
 

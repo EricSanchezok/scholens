@@ -19,6 +19,8 @@ const labels = {
   returnLibrary: "Return to library",
   projectContext: "Reader context",
   personalContext: "Personal reading",
+  pdfView: "PDF",
+  reflowView: "AI reflow",
   search: "Search PDF",
   showOutline: "Show document outline",
   showPages: "Show page thumbnails",
@@ -39,6 +41,7 @@ const meta = {
     onOpenSearch: fn(),
     onPageChange: fn(),
     onReturn: fn(),
+    onViewChange: fn(),
     onZoomChange: fn(),
     pageCount: 18,
     pageNumber: 4,
@@ -47,6 +50,7 @@ const meta = {
     title: "Retrieval-Augmented Generation: Foundations and Open Questions",
     metadata: "A. Researcher · 10.1000/rag.2026",
     zoom: 1,
+    view: "pdf",
   },
   parameters: {
     layout: "fullscreen",
@@ -76,6 +80,10 @@ export const ContextPanelOpen: Story = {
 
 export const OutlineVisible: Story = {
   args: { navigationMode: "outline" },
+};
+
+export const Reflow: Story = {
+  args: { view: "reflow" },
 };
 
 export const ProjectContext: Story = {

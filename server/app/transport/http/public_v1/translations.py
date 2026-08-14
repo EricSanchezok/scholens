@@ -109,6 +109,44 @@ async def stream_paper_translation(
     )
 
 
+@paper_translations_router.post(
+    "/{document_id}/reflow/blocks/{block_id}/translations",
+    response_class=TranslationEventStreamResponse,
+    responses={
+        200: {
+            "description": "A cached server-sent stream for one reflow block.",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                }
+            },
+        }
+    },
+)
+async def stream_reflow_block_translation(
+    document_id: UUID,
+    block_id: str,
+    http_request: Request,
+    actor: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+    workflow: TranslationWorkflow = Depends(get_translation_workflow),
+) -> TranslationEventStreamResponse:
+    events = await workflow.open_reflow_block_stream(
+        actor=actor,
+        operation=operation,
+        document_id=document_id,
+        block_id=block_id,
+        client_ip=http_client_ip(http_request),
+    )
+    return TranslationEventStreamResponse(
+        _sse(events),
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 async def _sse(
     events: AsyncIterator[TranslationStreamEvent],
 ) -> AsyncIterator[str]:

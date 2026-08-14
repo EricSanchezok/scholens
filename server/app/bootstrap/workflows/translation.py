@@ -107,10 +107,51 @@ class TranslationWorkflow:
                 request=request,
             )
         )
+        return await self._open_prepared(
+            actor=actor,
+            operation=operation,
+            prepared=prepared,
+            client_ip=client_ip,
+        )
+
+    async def open_reflow_block_stream(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        document_id: UUID,
+        block_id: str,
+        client_ip: str,
+    ) -> AsyncIterator[TranslationStreamEvent]:
+        prepared = self._executor.query(
+            lambda capabilities: _prepare_reflow_block_translation(
+                capabilities=capabilities,
+                actor=actor,
+                document_id=document_id,
+                block_id=block_id,
+            )
+        )
+        return await self._open_prepared(
+            actor=actor,
+            operation=operation,
+            prepared=prepared,
+            client_ip=client_ip,
+        )
+
+    async def _open_prepared(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        prepared: PreparedTranslation,
+        client_ip: str,
+    ) -> AsyncIterator[TranslationStreamEvent]:
         fingerprint = TranslationFingerprint(
             schema_revision=TRANSLATION_RESULT_SCHEMA_REVISION,
             prompt_revision=self._provider.prompt_revision(),
             model_revision=self._provider.model_revision(),
+            context_kind=prepared.context_kind,
+            block_id=prepared.block_id,
             document_id=prepared.document_id,
             paper_title_hash=translation_paper_title_hash(prepared.paper_title),
             source_text=prepared.source_text,
@@ -123,9 +164,9 @@ class TranslationWorkflow:
         identity_key = translation_identity_key(fingerprint)
         result_identity = TranslationResultIdentity(
             key=identity_key,
-            context_kind="selection",
+            context_kind=prepared.context_kind,
             document_id=prepared.document_id,
-            block_id=None,
+            block_id=prepared.block_id,
             target_language=prepared.target_language,
             source_hash=translation_source_hash(prepared.source_text),
             instructions_hash=fingerprint.custom_instructions_hash,
@@ -368,6 +409,27 @@ def _prepare_translation(
         document_id=document_id,
         paper_title=paper.title,
         request=request,
+    )
+
+
+def _prepare_reflow_block_translation(
+    *,
+    capabilities: ApplicationCapabilities,
+    actor: Actor,
+    document_id: UUID,
+    block_id: str,
+) -> PreparedTranslation:
+    source = capabilities.document_reflows.translation_source(
+        actor=actor,
+        document_id=document_id,
+        block_id=block_id,
+    )
+    return capabilities.translations.prepare_reflow_block(
+        actor=actor,
+        document_id=document_id,
+        paper_title=source.paper_title,
+        block_id=source.block.id,
+        source_markdown=source.block.source_markdown,
     )
 
 

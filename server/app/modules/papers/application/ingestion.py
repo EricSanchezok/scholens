@@ -11,7 +11,11 @@ from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
 from app.modules.operation_journal.application import OperationJournal
-from app.modules.operation_journal.domain import OperationAction, ResourceRef
+from app.modules.operation_journal.domain import (
+    OperationAction,
+    OperationChange,
+    ResourceRef,
+)
 from app.modules.papers.domain import normalize_idempotency_key
 from app.shared.application import Actor, OperationContext
 
@@ -29,6 +33,7 @@ class AcceptedIngestion:
     ingestion: LibraryPaperIngestionResponse
     replayed: bool
     processing_required: bool
+    additional_job_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,11 +211,19 @@ class IngestPaper:
             retry_of=retry_of,
         )
         if not accepted.replayed:
-            self._journal.append(
+            self._journal.append_many(
                 actor=actor,
                 operation=operation,
-                action=JOB_CREATED,
-                resources=(ResourceRef("job", str(accepted.ingestion.id)),),
+                changes=(
+                    OperationChange(
+                        action=JOB_CREATED,
+                        resources=(ResourceRef("job", str(job_id)),),
+                    )
+                    for job_id in (
+                        accepted.ingestion.id,
+                        *accepted.additional_job_ids,
+                    )
+                ),
             )
         return accepted
 

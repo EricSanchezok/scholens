@@ -947,6 +947,91 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_table(
+        "document_reflows",
+        sa.Column("document_id", sa.UUID(), nullable=False),
+        sa.Column("job_id", sa.UUID(), nullable=False),
+        sa.Column(
+            "status",
+            sa.String(length=16),
+            server_default="pending",
+            nullable=False,
+        ),
+        sa.Column("attempt_count", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("source_hash", sa.String(length=64), nullable=True),
+        sa.Column("prompt_revision", sa.String(length=64), nullable=True),
+        sa.Column("profile_revision", sa.String(length=64), nullable=True),
+        sa.Column(
+            "warnings",
+            postgresql.ARRAY(sa.Text()),
+            server_default="{}",
+            nullable=False,
+        ),
+        sa.Column("error_code", sa.String(length=128), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "status IN ('pending', 'completed', 'failed')",
+            name="ck_document_reflows_status",
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"], ["scholens.documents.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(["job_id"], ["scholens.jobs.id"], ondelete="RESTRICT"),
+        sa.PrimaryKeyConstraint("document_id"),
+        sa.UniqueConstraint("job_id"),
+        schema="scholens",
+    )
+    op.create_table(
+        "document_reflow_blocks",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("document_id", sa.UUID(), nullable=False),
+        sa.Column("block_index", sa.Integer(), nullable=False),
+        sa.Column("kind", sa.String(length=24), nullable=False),
+        sa.Column("source_markdown", sa.Text(), nullable=False),
+        sa.Column("heading_level", sa.Integer(), nullable=True),
+        sa.Column("page_number", sa.Integer(), nullable=True),
+        sa.CheckConstraint("block_index >= 0", name="ck_reflow_blocks_index"),
+        sa.CheckConstraint(
+            "kind IN ('title', 'authors', 'heading', 'paragraph', 'list', "
+            "'quote', 'equation', 'table', 'figure', 'code', 'references')",
+            name="ck_reflow_blocks_kind",
+        ),
+        sa.CheckConstraint(
+            "heading_level IS NULL OR heading_level BETWEEN 1 AND 6",
+            name="ck_reflow_blocks_heading_level",
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["scholens.document_reflows.document_id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "document_id",
+            "block_index",
+            name="uq_document_reflow_blocks_document_index",
+        ),
+        schema="scholens",
+    )
+    op.create_index(
+        "ix_document_reflow_blocks_document",
+        "document_reflow_blocks",
+        ["document_id", "block_index"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_table(
         "library_papers",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.BigInteger(), nullable=False),
@@ -2138,6 +2223,13 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("library_papers", schema="scholens")
+    op.drop_index(
+        "ix_document_reflow_blocks_document",
+        table_name="document_reflow_blocks",
+        schema="scholens",
+    )
+    op.drop_table("document_reflow_blocks", schema="scholens")
+    op.drop_table("document_reflows", schema="scholens")
     op.drop_index(
         op.f("ix_scholens_jobs_origin_operation_id"),
         table_name="jobs",

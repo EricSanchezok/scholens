@@ -55,6 +55,22 @@ they do not end the task before its deadline. A redelivered Celery task resumes
 the same provider task instead of submitting another one. The checkpoint is
 cleared after Server acknowledges the result.
 
+## AI reading reflow
+
+After Server accepts a successful PDF callback, it dispatches a separate
+`generate_document_reflow` task to the `reflow` queue. The worker downloads the
+already-persisted canonical Markdown; it does not parse the PDF again and does
+not alter the parser order above. Source units preserve fenced code and display
+math, and requests are bounded to 20,000 source characters.
+
+The provider-neutral `reflow` profile classifies layout roles only. Every AI
+response must contain each supplied source index exactly once and in ascending
+order. A malformed response or provider failure falls back for that chunk to a
+deterministic local classification and records `ai_chunk_fallback:<index>`.
+Stable block IDs, exact source Markdown, page projections, source fingerprint,
+prompt revision, profile revision, and warnings return through the signed
+generic job callback. Server is the persistence authority.
+
 ## Code layout
 
 ```text
@@ -66,6 +82,7 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
+├── reflow.py        # Lossless source units, AI layout validation, fallback
 ├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py
 └── webhook_signing.py

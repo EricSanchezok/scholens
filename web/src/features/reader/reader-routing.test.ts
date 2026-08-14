@@ -4,6 +4,7 @@ import {
   conversationBelongsToReaderContext,
   parsePositiveInteger,
   readReaderPanel,
+  readReaderView,
   readSourcePage,
 } from "./reader-routing";
 
@@ -38,6 +39,13 @@ const conversation = {
 };
 
 describe("reader URL state", () => {
+  it("uses PDF as the canonical default and accepts reflow explicitly", () => {
+    expect(readReaderView(null)).toBe("pdf");
+    expect(readReaderView("pdf")).toBe("pdf");
+    expect(readReaderView("reflow")).toBe("reflow");
+    expect(readReaderView("unknown")).toBe("pdf");
+  });
+
   it("accepts only positive integer page numbers", () => {
     expect(parsePositiveInteger("12")).toBe(12);
     expect(parsePositiveInteger("0", 3)).toBe(3);

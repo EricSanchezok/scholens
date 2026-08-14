@@ -16,12 +16,15 @@ from src.schemas import (
     DataTableCellValue,
     DataTableRow,
     PaperMetadataExtraction,
+    ReflowChunkLayout,
 )
 from src.token_usage import record_token_usage
 from src.utils import time_it
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
+
+
 class AIExtractionClient:
     """Small JSON-mode client shared by metadata and data-table jobs."""
 
@@ -154,6 +157,36 @@ class AIExtractionClient:
             feature="audio_overview",
             idempotency_suffix="audio_narrative",
         )
+
+    async def classify_reflow_chunk(
+        self,
+        *,
+        prompt: str,
+        chunk_index: int,
+    ) -> tuple[ReflowChunkLayout, str]:
+        """Classify layout only; source Markdown remains outside model output."""
+
+        profile = resolve_profile(AIProfileName.REFLOW)
+        model = build_model(profile)
+        agent: Agent[None, ReflowChunkLayout] = Agent(
+            model,
+            output_type=ReflowChunkLayout,
+            instructions=(
+                "Classify every numbered source unit exactly once. Preserve the "
+                "given order and source_index values. Return layout metadata only; "
+                "never quote, rewrite, summarize, translate, merge, or omit source text."
+            ),
+            retries=profile.structured_retries,
+        )
+        result = await agent.run(prompt[: profile.max_input_chars])
+        record_token_usage(
+            feature="document_reflow",
+            profile=profile,
+            usage=result.usage,
+            request_id=result.response.provider_response_id,
+            idempotency_suffix=f"reflow:{chunk_index}",
+        )
+        return result.output, profile.revision
 
 
 llm_client = AIExtractionClient()

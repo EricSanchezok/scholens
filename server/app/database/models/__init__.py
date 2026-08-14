@@ -80,6 +80,10 @@ from app.modules.translations.infrastructure.models import (
     TranslationPreference,
     TranslationResult,
 )
+from app.modules.reflows.infrastructure.models import (
+    DocumentReflow,
+    DocumentReflowBlock,
+)
 
 __all__ = [
     "AuthUser",
@@ -110,6 +114,8 @@ __all__ = [
     "OperationJournalEntryModel",
     "Document",
     "DocumentPassage",
+    "DocumentReflow",
+    "DocumentReflowBlock",
     "PaperStatus",
     "PaperTag",
     "UploadReservation",

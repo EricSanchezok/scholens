@@ -14,8 +14,14 @@ import psutil
 import requests
 from celery.exceptions import SoftTimeLimitExceeded
 
-from src.schemas import DataTableSchema, DataTableTaskRequest, ResearchDataTableResult
+from src.schemas import (
+    DataTableSchema,
+    DataTableTaskRequest,
+    DocumentReflowRequest,
+    ResearchDataTableResult,
+)
 from src.audio import generate_audio
+from src.reflow import generate_document_reflow
 from src.data_table_processor import construct_data_table
 from src.pdf.models import (
     ParserError,
@@ -54,11 +60,7 @@ PDF_PROGRESS_MARKERS = (
 def _normalize_pdf_progress(status: str, *, current: str) -> str:
     normalized = status.casefold()
     return next(
-        (
-            code
-            for marker, code in PDF_PROGRESS_MARKERS
-            if marker in normalized
-        ),
+        (code for marker, code in PDF_PROGRESS_MARKERS if marker in normalized),
         current,
     )
 
@@ -433,6 +435,61 @@ def generate_audio_overview_task(
             "status": "failed",
             "result": None,
             "error": "audio_generation_failed",
+            "usage_events": usage_events,
+        }
+        _deliver_webhook(webhook_url, payload, task_id=task_id)
+        raise
+
+
+@celery_app.task(
+    bind=True,
+    name="generate_document_reflow",
+    soft_time_limit=1200,
+    time_limit=1260,
+)
+def generate_document_reflow_task(
+    self,
+    request: dict[str, Any],
+    webhook_url: str,
+    claim_url: str | None = None,
+) -> dict[str, Any]:
+    """Generate one lossless, idempotently addressed reading layout."""
+
+    task_id = self.request.id
+    if not _claim_job(claim_url, task_id=task_id):
+        return {"task_id": task_id, "status": "duplicate"}
+    usage_events: list[dict[str, Any]] = []
+    try:
+        parsed = DocumentReflowRequest.model_validate(request)
+        markdown = s3_service.download_file_to_bytes(parsed.canonical_s3_key).decode(
+            "utf-8"
+        )
+        with collect_token_usage(task_id) as usage:
+            usage_events = usage.events
+            result = asyncio.run(
+                generate_document_reflow(
+                    document_id=parsed.document_id,
+                    title=parsed.title,
+                    markdown=markdown,
+                    page_offset_map=parsed.page_offset_map,
+                )
+            )
+        payload = {
+            "task_id": task_id,
+            "status": "completed",
+            "result": result.model_dump(mode="json"),
+            "usage_events": usage_events,
+        }
+        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+            payload["webhook_error"] = "webhook_delivery_failed"
+        return payload
+    except Exception:
+        logger.exception("job.document_reflow.failed", extra={"job_id": task_id})
+        payload = {
+            "task_id": task_id,
+            "status": "failed",
+            "result": None,
+            "error": "document_reflow_failed",
             "usage_events": usage_events,
         }
         _deliver_webhook(webhook_url, payload, task_id=task_id)

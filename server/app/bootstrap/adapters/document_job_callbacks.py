@@ -93,10 +93,34 @@ from app.bootstrap.adapters.research_annotations import (
     create_ai_annotations,
 )
 from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
+from app.bootstrap.adapters.document_reflow import ensure_document_reflow_job
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_reflow(
+    db: Session,
+    *,
+    actor: Actor,
+    operation: OperationContext,
+    document_id: uuid.UUID,
+) -> uuid.UUID | None:
+    with optional_savepoint(
+        db,
+        operation="schedule_document_reflow",
+        context={"document_id": str(document_id)},
+    ):
+        response, created = ensure_document_reflow_job(
+            db,
+            actor=actor,
+            correlation_id=operation.trace.correlation_id,
+            origin_operation_id=operation.trace.operation_id,
+            document_id=document_id,
+        )
+        return response.job_id if created else None
+    return None
 
 
 def _complete_pdf_job(
@@ -776,30 +800,37 @@ async def handle_paper_processing_webhook(
                                 job_id=job_uuid,
                                 result=result,
                             )
+                            reflow_job_id = _ensure_reflow(
+                                db,
+                                actor=actor,
+                                operation=operation,
+                                document_id=uuid.UUID(salvaged),
+                            )
+                            salvage_changes = [
+                                _document_change(
+                                    action=DOCUMENT_PROCESSING_COMPLETED,
+                                    document_id=salvaged,
+                                ),
+                                OperationChange(
+                                    action=ZOTERO_IMPORT_COMPLETED,
+                                    resources=(ResourceRef("document", str(salvaged)),),
+                                ),
+                            ]
+                            if reflow_job_id is not None:
+                                salvage_changes.append(
+                                    OperationChange(
+                                        action=JOB_CREATED,
+                                        resources=(
+                                            ResourceRef("job", str(reflow_job_id)),
+                                        ),
+                                    )
+                                )
                             return JobHandlerResult(
                                 value={
                                     "status": "webhook processed - zotero salvage",
                                     "document_id": salvaged,
                                 },
-                                changes=(
-                                    (
-                                        _document_change(
-                                            action=DOCUMENT_PROCESSING_COMPLETED,
-                                            document_id=salvaged,
-                                        ),
-                                        OperationChange(
-                                            action=ZOTERO_IMPORT_COMPLETED,
-                                            resources=(
-                                                ResourceRef(
-                                                    "document",
-                                                    str(salvaged),
-                                                ),
-                                            ),
-                                        ),
-                                    )
-                                    if changed
-                                    else ()
-                                ),
+                                changes=tuple(salvage_changes) if changed else (),
                                 post_commit=post_commit,
                             )
                     return _failed_pdf_result(
@@ -826,6 +857,29 @@ async def handle_paper_processing_webhook(
                             job_id=job_uuid,
                             result=result,
                         )
+                        reflow_job_id = _ensure_reflow(
+                            db,
+                            actor=actor,
+                            operation=operation,
+                            document_id=uuid.UUID(finalized),
+                        )
+                        zotero_changes = [
+                            _document_change(
+                                action=DOCUMENT_PROCESSING_COMPLETED,
+                                document_id=finalized,
+                            ),
+                            OperationChange(
+                                action=ZOTERO_IMPORT_COMPLETED,
+                                resources=(ResourceRef("document", str(finalized)),),
+                            ),
+                        ]
+                        if reflow_job_id is not None:
+                            zotero_changes.append(
+                                OperationChange(
+                                    action=JOB_CREATED,
+                                    resources=(ResourceRef("job", str(reflow_job_id)),),
+                                )
+                            )
                         zotero_post_commit = _pdf_post_commit_actions(
                             actor_id=actor.id,
                             job_id=job_uuid,
@@ -843,25 +897,7 @@ async def handle_paper_processing_webhook(
                                 "status": "webhook processed - zotero import",
                                 "document_id": finalized,
                             },
-                            changes=(
-                                (
-                                    _document_change(
-                                        action=DOCUMENT_PROCESSING_COMPLETED,
-                                        document_id=finalized,
-                                    ),
-                                    OperationChange(
-                                        action=ZOTERO_IMPORT_COMPLETED,
-                                        resources=(
-                                            ResourceRef(
-                                                "document",
-                                                str(finalized),
-                                            ),
-                                        ),
-                                    ),
-                                )
-                                if changed
-                                else ()
-                            ),
+                            changes=tuple(zotero_changes) if changed else (),
                             post_commit=zotero_post_commit,
                         )
                     return _failed_pdf_result(
@@ -973,6 +1009,12 @@ async def handle_paper_processing_webhook(
                     job_id=job_uuid,
                     result=result,
                 )
+                reflow_job_id = _ensure_reflow(
+                    db,
+                    actor=actor,
+                    operation=operation,
+                    document_id=paper.id,
+                )
                 postprocess_job = _enqueue_pdf_postprocess(
                     db,
                     ingestion_job_id=job_uuid,
@@ -1018,6 +1060,13 @@ async def handle_paper_processing_webhook(
                                     str(postprocess_job.job.id),
                                 ),
                             ),
+                        )
+                    )
+                if reflow_job_id is not None:
+                    changes.append(
+                        OperationChange(
+                            action=JOB_CREATED,
+                            resources=(ResourceRef("job", str(reflow_job_id)),),
                         )
                     )
                 end_time = datetime.now(timezone.utc)

@@ -1,6 +1,14 @@
 import type { components } from "@/lib/api/generated/schema";
 
-import type { ReaderContextPanel, ReaderDocumentSource } from "./reader-types";
+import type {
+  ReaderContextPanel,
+  ReaderDocumentSource,
+  ReaderDocumentView,
+} from "./reader-types";
+
+export function readReaderView(value: string | null): ReaderDocumentView {
+  return value === "reflow" ? "reflow" : "pdf";
+}
 
 type ConversationDetail = components["schemas"]["ConversationDetailResponse"];
 

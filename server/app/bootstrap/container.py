@@ -144,6 +144,8 @@ from app.modules.translations.infrastructure.repository import (
 from app.modules.translations.infrastructure.entitlements import (
     SqlTranslationEntitlements,
 )
+from app.modules.reflows.application import DocumentReflows
+from app.bootstrap.adapters.document_reflow import SqlDocumentReflowGateway
 from app.bootstrap.adapters.zotero_gateway import (
     DefaultZoteroGateway,
 )
@@ -331,6 +333,17 @@ def build_paper_details(*, db: Session) -> GetPaperDetails:
     )
 
 
+def build_document_reflows(
+    *, db: Session, journal: OperationJournal
+) -> DocumentReflows:
+    return DocumentReflows(
+        access=build_paper_details(db=db),
+        gateway=SqlDocumentReflowGateway(db),
+        entitlements=SqlTranslationEntitlements(db),
+        journal=journal,
+    )
+
+
 def build_citation_metadata(
     *,
     db: Session,
@@ -397,6 +410,7 @@ def build_job_callbacks(
     from app.modules.jobs.application.contracts import (
         AudioOverviewWebhookData,
         DataTableWebhookData,
+        DocumentReflowWebhookData,
         JobCallbackIdentity,
         PdfProcessingWebhookData,
         StorageDeleteCallback,
@@ -404,6 +418,7 @@ def build_job_callbacks(
     from app.bootstrap.adapters.job_callback_handlers import (
         AudioCompletion,
         DataTableCompletion,
+        DocumentReflowCompletion,
         DocumentGcCompletion,
         PdfPostprocessCompletion,
         PdfProcessCompletion,
@@ -433,6 +448,9 @@ def build_job_callbacks(
             ),
             JobOperation.DATA_TABLE_GENERATE: RegisteredJobCallback(
                 DataTableWebhookData, DataTableCompletion(db)
+            ),
+            JobOperation.DOCUMENT_REFLOW: RegisteredJobCallback(
+                DocumentReflowWebhookData, DocumentReflowCompletion(db)
             ),
         },
         schedules=ZoteroSyncSchedule(db),

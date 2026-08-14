@@ -71,9 +71,11 @@ import {
   conversationBelongsToReaderContext,
   parsePositiveInteger,
   readReaderPanel,
+  readReaderView,
   readSourcePage,
 } from "./reader-routing";
 import { ReaderTranslationPanel, useReaderTranslation } from "./translation";
+import { ReaderReflowSurface } from "./reflow";
 import type {
   ReaderAnnotationAudience,
   ReaderAnnotationAudienceFilter,
@@ -150,6 +152,16 @@ function ReaderDocumentWorkspace({
     documentId,
     selection: activeTextSelection,
   });
+  const readerView = readReaderView(searchParams.get("view"));
+  const fullTranslationEnabled = searchParams.get("translate") === "full";
+  const translationCacheVersion = translation.effectivePreferences
+    ? JSON.stringify({
+        customInstructions:
+          translation.effectivePreferences.custom_instructions ?? null,
+        sourceLanguage: translation.effectivePreferences.source_language,
+        targetLanguage: translation.effectivePreferences.target_language,
+      })
+    : undefined;
 
   const projectId = searchParams.get("project") ?? undefined;
   const activeProject = projectsQuery.data?.items.find(
@@ -196,6 +208,8 @@ function ReaderDocumentWorkspace({
       panel?: ReaderContextPanelName | null;
       conversation?: string | null;
       project?: string | null;
+      translate?: boolean;
+      view?: "pdf" | "reflow";
     }) => {
       const next = new URLSearchParams(locationParamsRef.current?.toString());
       if (patch.page !== undefined) next.set("page", String(patch.page));
@@ -205,6 +219,10 @@ function ReaderDocumentWorkspace({
       else if (patch.conversation) next.set("conversation", patch.conversation);
       if (patch.project === null) next.delete("project");
       else if (patch.project) next.set("project", patch.project);
+      if (patch.translate === false) next.delete("translate");
+      else if (patch.translate) next.set("translate", "full");
+      if (patch.view === "pdf") next.delete("view");
+      else if (patch.view) next.set("view", patch.view);
       const query = next.toString();
       locationParamsRef.current = next;
       router.replace(
@@ -499,6 +517,8 @@ function ReaderDocumentWorkspace({
       previousSearchResult: t("search.previous"),
       projectContext: t("projects.selector"),
       personalContext: t("projects.personal"),
+      pdfView: t("toolbar.pdfView"),
+      reflowView: t("toolbar.reflowView"),
       returnLibrary: t("returnLibrary"),
       search: t("toolbar.search"),
       showOutline: t("toolbar.showOutline"),
@@ -536,6 +556,15 @@ function ReaderDocumentWorkspace({
     const rawPanel = searchParams.get("panel");
     if (rawPanel && !panel) updateLocation({ panel: null });
   }, [panel, searchParams, updateLocation]);
+
+  React.useEffect(() => {
+    const rawView = searchParams.get("view");
+    const rawTranslate = searchParams.get("translate");
+    if (rawView && rawView !== "reflow") updateLocation({ view: "pdf" });
+    if (rawTranslate && rawTranslate !== "full") {
+      updateLocation({ translate: false });
+    }
+  }, [searchParams, updateLocation]);
 
   React.useEffect(() => {
     if (panel) {
@@ -730,13 +759,14 @@ function ReaderDocumentWorkspace({
           </div>
         )}
         {document?.processing_status === "completed" &&
+          readerView === "pdf" &&
           !adapter &&
           !adapterError && (
             <div className="m-auto w-full max-w-sm p-6">
               <LoadingState label={t("loadingPdf")} />
             </div>
           )}
-        {adapterError !== undefined && (
+        {readerView === "pdf" && adapterError !== undefined && (
           <div className="m-auto w-full max-w-md p-6">
             <AsyncFeedback
               action={{
@@ -750,220 +780,251 @@ function ReaderDocumentWorkspace({
           </div>
         )}
 
-        {adapter && (
-          <div className="flex min-h-0 flex-1">
-            <section className="flex min-w-0 flex-1 flex-col">
-              <ReaderToolbar
-                fitMode={fitMode}
-                labels={toolbarLabels}
-                metadata={documentMetadata}
-                onDownload={() => void handleDownload()}
-                onFitModeChange={setFitMode}
-                navigationMode={navigationMode}
-                onToggleNavigation={() => {
-                  if (showDocumentNavigation) {
-                    setNavigationMode((current) =>
-                      current === "outline" ? "thumbnails" : "outline",
-                    );
-                  } else setMobileOutlineOpen(true);
-                }}
-                onOpenPanel={() =>
-                  updateLocation({ panel: lastContextPanelRef.current })
-                }
-                onOpenSearch={() => setSearchOpen(true)}
-                onPageChange={(page) => {
-                  setActiveTextSelection(undefined);
-                  updateLocation({
-                    page: Math.min(Math.max(page, 1), pageCount),
-                  });
-                }}
-                onReturn={() => router.push("/library")}
-                onZoomChange={(nextZoom) => {
-                  setZoom(nextZoom);
-                  setFitMode("custom");
-                }}
-                pageCount={pageCount}
-                pageNumber={pageNumber}
-                panelOpen={desktopPanelOpen}
-                projectContext={{
-                  onChange: (nextProjectId) => {
-                    setSelectedAnnotationId(undefined);
-                    setActiveTextSelection(undefined);
-                    setAnnotationAudienceFilter("all");
-                    setAnnotationModeFilter("all");
-                    setAnnotationStatusFilter("open");
-                    updateLocation({
-                      conversation: null,
-                      project: nextProjectId ?? null,
-                    });
-                  },
-                  options: projectsQuery.data?.items ?? [],
-                  projectId,
-                }}
-                search={
-                  searchOpen
-                    ? {
-                        currentIndex: searchIndex,
-                        matchCount: searchResults.length,
-                        onClose: closeSearch,
-                        onMove: (direction) =>
-                          setSearchIndex((current) =>
-                            moveReaderSearchCursor(
-                              current,
-                              searchResults.length,
-                              direction,
-                            ),
-                          ),
-                        onQueryChange: (query) => {
-                          setSearchQuery(query);
-                          setSearchIndex(-1);
-                        },
-                        query: searchQuery,
-                      }
-                    : undefined
-                }
-                title={title}
-                zoom={zoom}
-              />
-              <div className="flex min-h-0 flex-1">
-                {showDocumentNavigation && (
-                  <ReaderDocumentNavigation
-                    labels={{
-                      emptyOutline: t("outline.empty"),
-                      navigation: t("navigation.label"),
-                    }}
-                    mode={navigationMode}
-                    onOutlineSelect={(destination) =>
-                      void resolveDestination(destination)
-                    }
-                    outline={outline}
-                  >
-                    <div className="grid gap-1">
-                      {Array.from(
-                        { length: pageCount },
-                        (_, index) => index + 1,
-                      ).map((number) => (
-                        <PdfThumbnail
-                          adapter={adapter}
-                          current={pageNumber === number}
-                          key={number}
-                          label={t("thumbnail", { page: number })}
-                          onSelect={() => updateLocation({ page: number })}
-                          pageNumber={number}
-                        />
-                      ))}
-                    </div>
-                  </ReaderDocumentNavigation>
-                )}
-                <PdfPage
-                  activeTextSelection={activeTextSelection}
-                  adapter={adapter}
-                  annotationCommentLabel={(count) =>
-                    t("annotations.commentMarker", { count })
-                  }
-                  annotationLinkLabel={t("pdfLink")}
-                  annotations={filteredAnnotations}
-                  canvasLabel={t("documentCanvas")}
+        {document?.processing_status === "completed" &&
+          (readerView === "reflow" || adapter) && (
+            <div className="flex min-h-0 flex-1">
+              <section className="flex min-w-0 flex-1 flex-col">
+                <ReaderToolbar
                   fitMode={fitMode}
-                  loadingLabel={t("renderingPage")}
-                  onActiveTextSelectionChange={handleActiveTextSelectionChange}
-                  onAnnotationSelect={(id) => void openAnnotation(id)}
-                  onAskSelection={(selection) => {
-                    setPendingTurnContext({
-                      ...selection,
-                      document_id: documentId,
-                    });
-                    setActiveTextSelection(undefined);
-                    window.getSelection()?.removeAllRanges();
-                    updateLocation({ panel: "ask" });
+                  labels={toolbarLabels}
+                  metadata={documentMetadata}
+                  onDownload={() => void handleDownload()}
+                  onFitModeChange={setFitMode}
+                  navigationMode={navigationMode}
+                  onToggleNavigation={() => {
+                    if (showDocumentNavigation) {
+                      setNavigationMode((current) =>
+                        current === "outline" ? "thumbnails" : "outline",
+                      );
+                    } else setMobileOutlineOpen(true);
                   }}
-                  onCommentSelection={(selection) => {
-                    setAnnotationSelection({
-                      ...selection,
-                      document_id: documentId,
-                    });
-                    setAnnotationInitialComment(undefined);
-                    setActiveTextSelection(undefined);
-                    setSelectedAnnotationId(undefined);
-                    window.getSelection()?.removeAllRanges();
-                    updateLocation({ panel: "annotations" });
-                  }}
-                  onHighlightSelection={(selection, color, audience) => {
-                    void createHighlight(
-                      { ...selection, document_id: documentId },
-                      color,
-                      undefined,
-                      audience,
-                    ).catch(notifyActionError);
-                  }}
-                  onOpenTranslation={() =>
-                    updateLocation({ panel: "translation" })
+                  onOpenPanel={() =>
+                    updateLocation({ panel: lastContextPanelRef.current })
                   }
-                  onTranslateSelection={() => {
-                    updateLocation({ panel: "translation" });
-                    void translation.translate("manual");
+                  onOpenSearch={() => setSearchOpen(true)}
+                  onPageChange={(page) => {
+                    setActiveTextSelection(undefined);
+                    updateLocation({
+                      page: Math.min(Math.max(page, 1), pageCount),
+                    });
                   }}
-                  onInternalDestination={(destination) =>
-                    void resolveDestination(destination)
-                  }
-                  onVisiblePageChange={handleVisiblePageChange}
+                  onReturn={() => router.push("/library")}
+                  onViewChange={(nextView) => {
+                    closeSearch();
+                    setActiveTextSelection(undefined);
+                    updateLocation({ view: nextView });
+                  }}
+                  onZoomChange={(nextZoom) => {
+                    setZoom(nextZoom);
+                    setFitMode("custom");
+                  }}
                   pageCount={pageCount}
                   pageNumber={pageNumber}
-                  searchMatches={searchResults}
-                  activeSearchMatch={searchResults[searchIndex]}
-                  searchQuery={searchQuery}
-                  selectedAnnotationId={selectedAnnotationId}
-                  previewAnnotationId={previewAnnotationId}
-                  projectContext={Boolean(activeProject)}
-                  selectionLabels={{
-                    ask: t("selection.ask"),
-                    colors: {
-                      blue: t("annotations.colors.blue"),
-                      gray: t("annotations.colors.gray"),
-                      green: t("annotations.colors.green"),
-                      magenta: t("annotations.colors.magenta"),
-                      orange: t("annotations.colors.orange"),
-                      purple: t("annotations.colors.purple"),
-                      red: t("annotations.colors.red"),
-                      yellow: t("annotations.colors.yellow"),
+                  panelOpen={desktopPanelOpen}
+                  projectContext={{
+                    onChange: (nextProjectId) => {
+                      setSelectedAnnotationId(undefined);
+                      setActiveTextSelection(undefined);
+                      setAnnotationAudienceFilter("all");
+                      setAnnotationModeFilter("all");
+                      setAnnotationStatusFilter("open");
+                      updateLocation({
+                        conversation: null,
+                        project: nextProjectId ?? null,
+                      });
                     },
-                    comment: t("selection.comment"),
-                    copy: t("selection.copy"),
-                    copied: t("selection.copied"),
-                    copying: t("selection.copying"),
-                    copyFailed: t("selection.copyFailed"),
-                    highlight: t("selection.highlight"),
-                    personal: t("annotations.audience.personal"),
-                    project: t("annotations.audience.project"),
-                    translate: t("selection.translate"),
-                    translating: t("translation.status.translating"),
-                    translationFailed: t("translation.errors.title"),
-                    viewTranslation: t("panels.translation"),
+                    options: projectsQuery.data?.items ?? [],
+                    projectId,
                   }}
-                  translationPreview={
-                    activeTextSelection &&
-                    translation.state.selection?.selected_text ===
-                      activeTextSelection.selected_text &&
-                    translation.state.selection.page_number ===
-                      activeTextSelection.page_number &&
-                    (translation.state.status === "streaming" ||
-                      translation.state.status === "completed" ||
-                      translation.state.status === "error")
+                  search={
+                    searchOpen
                       ? {
-                          status: translation.state.status,
-                          text: translation.state.translatedText,
+                          currentIndex: searchIndex,
+                          matchCount: searchResults.length,
+                          onClose: closeSearch,
+                          onMove: (direction) =>
+                            setSearchIndex((current) =>
+                              moveReaderSearchCursor(
+                                current,
+                                searchResults.length,
+                                direction,
+                              ),
+                            ),
+                          onQueryChange: (query) => {
+                            setSearchQuery(query);
+                            setSearchIndex(-1);
+                          },
+                          query: searchQuery,
                         }
                       : undefined
                   }
+                  title={title}
+                  view={readerView}
                   zoom={zoom}
                 />
-              </div>
-            </section>
-            {useDesktopPanel && desktopPanelOpen && (
-              <ReaderContextPanel {...contextPanelProps} className="flex" />
-            )}
-          </div>
-        )}
+                <div className="flex min-h-0 flex-1">
+                  {readerView === "pdf" &&
+                    adapter &&
+                    showDocumentNavigation && (
+                      <ReaderDocumentNavigation
+                        labels={{
+                          emptyOutline: t("outline.empty"),
+                          navigation: t("navigation.label"),
+                        }}
+                        mode={navigationMode}
+                        onOutlineSelect={(destination) =>
+                          void resolveDestination(destination)
+                        }
+                        outline={outline}
+                      >
+                        <div className="grid gap-1">
+                          {Array.from(
+                            { length: pageCount },
+                            (_, index) => index + 1,
+                          ).map((number) => (
+                            <PdfThumbnail
+                              adapter={adapter}
+                              current={pageNumber === number}
+                              key={number}
+                              label={t("thumbnail", { page: number })}
+                              onSelect={() => updateLocation({ page: number })}
+                              pageNumber={number}
+                            />
+                          ))}
+                        </div>
+                      </ReaderDocumentNavigation>
+                    )}
+                  {readerView === "pdf" && adapter ? (
+                    <PdfPage
+                      activeTextSelection={activeTextSelection}
+                      adapter={adapter}
+                      annotationCommentLabel={(count) =>
+                        t("annotations.commentMarker", { count })
+                      }
+                      annotationLinkLabel={t("pdfLink")}
+                      annotations={filteredAnnotations}
+                      canvasLabel={t("documentCanvas")}
+                      fitMode={fitMode}
+                      loadingLabel={t("renderingPage")}
+                      onActiveTextSelectionChange={
+                        handleActiveTextSelectionChange
+                      }
+                      onAnnotationSelect={(id) => void openAnnotation(id)}
+                      onAskSelection={(selection) => {
+                        setPendingTurnContext({
+                          ...selection,
+                          document_id: documentId,
+                        });
+                        setActiveTextSelection(undefined);
+                        window.getSelection()?.removeAllRanges();
+                        updateLocation({ panel: "ask" });
+                      }}
+                      onCommentSelection={(selection) => {
+                        setAnnotationSelection({
+                          ...selection,
+                          document_id: documentId,
+                        });
+                        setAnnotationInitialComment(undefined);
+                        setActiveTextSelection(undefined);
+                        setSelectedAnnotationId(undefined);
+                        window.getSelection()?.removeAllRanges();
+                        updateLocation({ panel: "annotations" });
+                      }}
+                      onHighlightSelection={(selection, color, audience) => {
+                        void createHighlight(
+                          { ...selection, document_id: documentId },
+                          color,
+                          undefined,
+                          audience,
+                        ).catch(notifyActionError);
+                      }}
+                      onOpenTranslation={() =>
+                        updateLocation({ panel: "translation" })
+                      }
+                      onTranslateSelection={() => {
+                        updateLocation({ panel: "translation" });
+                        void translation.translate("manual");
+                      }}
+                      onInternalDestination={(destination) =>
+                        void resolveDestination(destination)
+                      }
+                      onVisiblePageChange={handleVisiblePageChange}
+                      pageCount={pageCount}
+                      pageNumber={pageNumber}
+                      searchMatches={searchResults}
+                      activeSearchMatch={searchResults[searchIndex]}
+                      searchQuery={searchQuery}
+                      selectedAnnotationId={selectedAnnotationId}
+                      previewAnnotationId={previewAnnotationId}
+                      projectContext={Boolean(activeProject)}
+                      selectionLabels={{
+                        ask: t("selection.ask"),
+                        colors: {
+                          blue: t("annotations.colors.blue"),
+                          gray: t("annotations.colors.gray"),
+                          green: t("annotations.colors.green"),
+                          magenta: t("annotations.colors.magenta"),
+                          orange: t("annotations.colors.orange"),
+                          purple: t("annotations.colors.purple"),
+                          red: t("annotations.colors.red"),
+                          yellow: t("annotations.colors.yellow"),
+                        },
+                        comment: t("selection.comment"),
+                        copy: t("selection.copy"),
+                        copied: t("selection.copied"),
+                        copying: t("selection.copying"),
+                        copyFailed: t("selection.copyFailed"),
+                        highlight: t("selection.highlight"),
+                        personal: t("annotations.audience.personal"),
+                        project: t("annotations.audience.project"),
+                        translate: t("selection.translate"),
+                        translating: t("translation.status.translating"),
+                        translationFailed: t("translation.errors.title"),
+                        viewTranslation: t("panels.translation"),
+                      }}
+                      translationPreview={
+                        activeTextSelection &&
+                        translation.state.selection?.selected_text ===
+                          activeTextSelection.selected_text &&
+                        translation.state.selection.page_number ===
+                          activeTextSelection.page_number &&
+                        (translation.state.status === "streaming" ||
+                          translation.state.status === "completed" ||
+                          translation.state.status === "error")
+                          ? {
+                              status: translation.state.status,
+                              text: translation.state.translatedText,
+                            }
+                          : undefined
+                      }
+                      zoom={zoom}
+                    />
+                  ) : null}
+                  {readerView === "reflow" ? (
+                    <ReaderReflowSurface
+                      documentId={documentId}
+                      fullTranslationEnabled={fullTranslationEnabled}
+                      onFullTranslationEnabledChange={(enabled) =>
+                        updateLocation({ translate: enabled })
+                      }
+                      onOpenPdfPage={(page) =>
+                        updateLocation({ page, view: "pdf" })
+                      }
+                      targetLanguage={
+                        translation.effectivePreferences?.target_language ??
+                        "zh-CN"
+                      }
+                      title={title}
+                      translationCacheVersion={translationCacheVersion}
+                    />
+                  ) : null}
+                </div>
+              </section>
+              {useDesktopPanel && desktopPanelOpen && (
+                <ReaderContextPanel {...contextPanelProps} className="flex" />
+              )}
+            </div>
+          )}
       </div>
 
       <Sheet

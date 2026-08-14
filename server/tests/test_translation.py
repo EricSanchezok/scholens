@@ -33,6 +33,7 @@ from app.modules.translations.application import (
 from app.modules.translations.domain import (
     TranslationFingerprint,
     normalize_language_tag,
+    normalize_reflow_source,
     normalize_source_text,
     translation_identity_key,
     translation_instructions_hash,
@@ -198,11 +199,16 @@ def test_translation_normalization_and_cache_identity_are_deterministic() -> Non
     assert normalize_source_text(
         "  Retrieval-\r\naugmented   generation\n\n Works. "
     ) == ("Retrieval-augmented generation\n\nWorks.")
+    assert normalize_reflow_source("  ```py\r\nx =  1\r\n```  ") == (
+        "```py\nx =  1\n```"
+    )
     document_id = uuid4()
     identity = TranslationFingerprint(
         schema_revision="v1",
         prompt_revision="p1",
         model_revision="m1",
+        context_kind="selection",
+        block_id=None,
         document_id=document_id,
         paper_title_hash=translation_paper_title_hash("Paper title"),
         source_text="source",
@@ -216,6 +222,8 @@ def test_translation_normalization_and_cache_identity_are_deterministic() -> Non
         schema_revision=identity.schema_revision,
         prompt_revision=identity.prompt_revision,
         model_revision=identity.model_revision,
+        context_kind=identity.context_kind,
+        block_id=identity.block_id,
         document_id=identity.document_id,
         paper_title_hash=translation_paper_title_hash("Updated title"),
         source_text=identity.source_text,
@@ -238,6 +246,7 @@ class _Cache:
     def __init__(self, value: TranslationResultValue | None = None) -> None:
         self.value = value
         self.set_values: list[TranslationResultValue] = []
+        self.set_identities: list[TranslationResultIdentity] = []
         self.released: list[tuple[str, str]] = []
         self.get_calls = 0
 
@@ -253,6 +262,7 @@ class _Cache:
     ) -> None:
         self.value = value
         self.set_values.append(value)
+        self.set_identities.append(identity)
 
     async def acquire(self, key: str) -> str | None:
         return "lease-token"
@@ -338,10 +348,44 @@ class _Translations:
     def require_token_credits(self, *, actor: Actor) -> None:
         self.token_checks += 1
 
+    def prepare_reflow_block(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+        paper_title: str | None,
+        block_id: str,
+        source_markdown: str,
+    ) -> PreparedTranslation:
+        return PreparedTranslation(
+            block_id=block_id,
+            context_kind="reflow_block",
+            custom_instructions=None,
+            document_id=document_id,
+            paper_title=paper_title,
+            source_language="auto",
+            source_text=source_markdown,
+            target_language="zh-CN",
+        )
+
+
+class _DocumentReflows:
+    def translation_source(
+        self, *, actor: Actor, document_id: UUID, block_id: str
+    ) -> object:
+        return SimpleNamespace(
+            paper_title="Paper title",
+            block=SimpleNamespace(
+                id=block_id,
+                source_markdown="## Method\n\nPreserve $x^2$ and `code`.",
+            ),
+        )
+
 
 class _Capabilities:
     def __init__(self) -> None:
         self.translations = _Translations()
+        self.document_reflows = _DocumentReflows()
 
     def paper_details(
         self,
@@ -488,6 +532,35 @@ async def test_streaming_translation_uses_shared_usage_context_and_caches_comple
     assert cache.set_values[0].translated_text == "译文"
     assert capacity.releases == 1
     assert len(cache.released) == 1
+
+
+@pytest.mark.asyncio
+async def test_reflow_translation_reads_authorized_server_block_and_caches_context() -> (
+    None
+):
+    cache = _Cache()
+    provider = _Provider()
+    workflow = TranslationWorkflow(
+        executor=cast(Any, _Executor(_Capabilities())),
+        result_store=cache,
+        singleflight=cache,
+        provider=provider,
+        capacity=_Capacity(),
+    )
+    document_id = uuid4()
+
+    stream = await workflow.open_reflow_block_stream(
+        actor=_actor(),
+        operation=_operation(),
+        document_id=document_id,
+        block_id="block-7",
+        client_ip="127.0.0.1",
+    )
+    await _events(stream)
+
+    assert provider.calls[0].source_text == "## Method\n\nPreserve $x^2$ and `code`."
+    assert cache.set_identities[0].context_kind == "reflow_block"
+    assert cache.set_identities[0].block_id == "block-7"
 
 
 @pytest.mark.asyncio
@@ -718,3 +791,9 @@ def test_translation_openapi_declares_event_stream_response() -> None:
 
     assert set(response["content"]) == {"text/event-stream"}
     assert response["content"]["text/event-stream"]["schema"] == {"type": "string"}
+
+    reflow_operation = app.openapi()["paths"][
+        "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations"
+    ]["post"]
+    assert "requestBody" not in reflow_operation
+    assert set(reflow_operation["responses"]["200"]["content"]) == {"text/event-stream"}

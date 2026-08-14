@@ -1,0 +1,227 @@
+"""Cross-module SQL/outbox adapter for durable document reflow artifacts."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import cast
+from uuid import UUID, uuid4
+
+from app.modules.jobs.application.contracts import (
+    DocumentReflowTaskPayload,
+    ReflowBlockKind,
+)
+from app.modules.jobs.application.jobs import EnqueueJobCommand
+from app.modules.jobs.infrastructure.application_gateway import SqlAlchemyJobsGateway
+from app.modules.papers.infrastructure.models import Document
+from app.modules.reflows.application.contracts import (
+    DocumentReflowBlockResponse,
+    DocumentReflowResponse,
+    DocumentReflowStatus,
+)
+from app.modules.reflows.infrastructure.models import (
+    DocumentReflow,
+    DocumentReflowBlock,
+)
+from app.shared.application import Actor, OperationContext
+from app.shared.domain import AppError, FailureKind, JsonValue
+from app.shared.domain.enums import JobOperation, JobStatus
+from pydantic import TypeAdapter
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+_JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
+
+
+class SqlDocumentReflowGateway:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+        self._jobs = SqlAlchemyJobsGateway(db)
+
+    def _load(self, document_id: UUID, *, lock: bool = False) -> DocumentReflow | None:
+        statement = (
+            select(DocumentReflow)
+            .where(DocumentReflow.document_id == document_id)
+            .options(
+                selectinload(DocumentReflow.blocks),
+                selectinload(DocumentReflow.job),
+            )
+        )
+        if lock:
+            statement = statement.with_for_update()
+        return self._db.scalar(statement)
+
+    @staticmethod
+    def _response(artifact: DocumentReflow) -> DocumentReflowResponse:
+        status: DocumentReflowStatus
+        if artifact.status == "completed":
+            status = "completed"
+        elif (
+            artifact.status == "failed" or artifact.job.status == JobStatus.FAILED.value
+        ):
+            status = "failed"
+        elif artifact.job.status == JobStatus.RUNNING.value:
+            status = "processing"
+        else:
+            status = "pending"
+        return DocumentReflowResponse(
+            document_id=artifact.document_id,
+            status=status,
+            job_id=artifact.job_id,
+            error_code=artifact.error_code or artifact.job.error_code,
+            prompt_revision=artifact.prompt_revision,
+            profile_revision=artifact.profile_revision,
+            warnings=list(artifact.warnings or []),
+            blocks=[
+                DocumentReflowBlockResponse(
+                    id=block.id,
+                    index=block.block_index,
+                    kind=cast(ReflowBlockKind, block.kind),
+                    source_markdown=block.source_markdown,
+                    heading_level=block.heading_level,
+                    page_number=block.page_number,
+                )
+                for block in artifact.blocks
+            ],
+            updated_at=artifact.updated_at,
+        )
+
+    def get(self, *, document_id: UUID) -> DocumentReflowResponse | None:
+        artifact = self._load(document_id)
+        return self._response(artifact) if artifact is not None else None
+
+    def get_block(
+        self,
+        *,
+        document_id: UUID,
+        block_id: str,
+    ) -> DocumentReflowBlockResponse | None:
+        block = self._db.scalar(
+            select(DocumentReflowBlock)
+            .join(DocumentReflow)
+            .where(
+                DocumentReflowBlock.document_id == document_id,
+                DocumentReflowBlock.id == block_id,
+                DocumentReflow.status == "completed",
+            )
+        )
+        if block is None:
+            return None
+        return DocumentReflowBlockResponse(
+            id=block.id,
+            index=block.block_index,
+            kind=cast(ReflowBlockKind, block.kind),
+            source_markdown=block.source_markdown,
+            heading_level=block.heading_level,
+            page_number=block.page_number,
+        )
+
+    def ensure(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        document_id: UUID,
+        retry_failed: bool,
+    ) -> tuple[DocumentReflowResponse, bool]:
+        return self.ensure_causality(
+            actor=actor,
+            correlation_id=operation.trace.correlation_id,
+            origin_operation_id=operation.trace.operation_id,
+            document_id=document_id,
+            retry_failed=retry_failed,
+        )
+
+    def ensure_causality(
+        self,
+        *,
+        actor: Actor,
+        correlation_id: UUID,
+        origin_operation_id: UUID,
+        document_id: UUID,
+        retry_failed: bool,
+    ) -> tuple[DocumentReflowResponse, bool]:
+        artifact = self._load(document_id, lock=True)
+        if artifact is not None and (
+            artifact.status == "completed"
+            or artifact.job.status in {JobStatus.PENDING.value, JobStatus.RUNNING.value}
+            or not retry_failed
+        ):
+            return self._response(artifact), False
+
+        document = self._db.get(Document, document_id)
+        if (
+            document is None
+            or not document.parser_markdown_s3_key
+            or not document.raw_content
+        ):
+            raise AppError(
+                code="document_reflow_source_not_ready",
+                message="The parsed paper is not ready for reflow",
+                kind=FailureKind.CONFLICT,
+            )
+        attempt = (artifact.attempt_count + 1) if artifact is not None else 1
+        job_id = uuid4()
+        payload_model = DocumentReflowTaskPayload(
+            document_id=document.id,
+            title=document.title or document.original_filename,
+            canonical_s3_key=document.parser_markdown_s3_key,
+            page_offset_map=document.page_offset_map or {},
+        )
+        payload = _JSON_OBJECT.validate_python(payload_model.model_dump(mode="json"))
+        enqueued = self._jobs.enqueue(
+            command=EnqueueJobCommand(
+                job_id=job_id,
+                operation=JobOperation.DOCUMENT_REFLOW,
+                requested_by_id=actor.id,
+                correlation_id=correlation_id,
+                origin_operation_id=origin_operation_id,
+                idempotency_key=f"document-reflow:{document.id}:{attempt}",
+                payload=payload,
+                task_name="generate_document_reflow",
+                queue="reflow",
+                document_id=document.id,
+            )
+        )
+        if artifact is None:
+            artifact = DocumentReflow(
+                document_id=document.id,
+                job_id=enqueued.job.id,
+                attempt_count=attempt,
+            )
+            self._db.add(artifact)
+        else:
+            artifact.job_id = enqueued.job.id
+            artifact.status = "pending"
+            artifact.attempt_count = attempt
+            artifact.source_hash = None
+            artifact.prompt_revision = None
+            artifact.profile_revision = None
+            artifact.warnings = []
+            artifact.error_code = None
+            artifact.completed_at = None
+            artifact.blocks.clear()
+            artifact.updated_at = datetime.now(UTC)
+        self._db.flush()
+        refreshed = self._load(document_id)
+        if refreshed is None:
+            raise RuntimeError("document_reflow_insert_failed")
+        return self._response(refreshed), enqueued.created
+
+
+def ensure_document_reflow_job(
+    db: Session,
+    *,
+    actor: Actor,
+    correlation_id: UUID,
+    origin_operation_id: UUID,
+    document_id: UUID,
+) -> tuple[DocumentReflowResponse, bool]:
+    """Schedule the automatic artifact in the caller's existing transaction."""
+
+    return SqlDocumentReflowGateway(db).ensure_causality(
+        actor=actor,
+        correlation_id=correlation_id,
+        origin_operation_id=origin_operation_id,
+        document_id=document_id,
+        retry_failed=False,
+    )

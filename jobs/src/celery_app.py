@@ -37,6 +37,7 @@ celery_app.conf.update(
         "delete_storage_objects": {"queue": "storage_gc"},
         "generate_audio_overview": {"queue": "audio"},
         "process_data_table": {"queue": "data_table"},
+        "generate_document_reflow": {"queue": "reflow"},
         "periodic_zotero_sync": {"queue": "zotero_sync"},
         "postprocess_zotero": {"queue": "zotero_sync"},
     },

@@ -58,6 +58,7 @@ from app.transport.http.public_v1.translations import (
     paper_translations_router,
     translation_preferences_router,
 )
+from app.transport.http.public_v1.reflows import paper_reflows_router
 from app.modules.identity.infrastructure.sanchezcloud_identity import (
     sanchezcloud_identity_router,
     identity_user_router,
@@ -134,6 +135,7 @@ def _public_router() -> APIRouter:
     router.include_router(library_tags_router, prefix="/library")
     router.include_router(document_router, prefix="/papers")
     router.include_router(paper_translations_router, prefix="/papers")
+    router.include_router(paper_reflows_router, prefix="/papers")
     router.include_router(paper_projects_router, prefix="/papers")
     router.include_router(public_document_router, prefix="/shares")
     router.include_router(projects_router, prefix="/projects")

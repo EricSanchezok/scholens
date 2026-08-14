@@ -18,6 +18,7 @@ from app.bootstrap.container import (
     build_paper_content,
     build_paper_collection_access,
     build_paper_details,
+    build_document_reflows,
     build_paper_discovery,
     build_paper_download,
     build_paper_ingestion,
@@ -71,6 +72,7 @@ from app.modules.operation_journal.infrastructure import (
     SqlAlchemyOperationJournalStore,
 )
 from app.modules.translations.application import Translations
+from app.modules.reflows.application import DocumentReflows
 from app.shared.infrastructure import SystemClock
 
 
@@ -187,6 +189,10 @@ class ApplicationCapabilities:
     @cached_property
     def paper_details(self) -> GetPaperDetails:
         return build_paper_details(db=self._session)
+
+    @cached_property
+    def document_reflows(self) -> DocumentReflows:
+        return build_document_reflows(db=self._session, journal=self._journal)
 
     @cached_property
     def citations(self) -> CitationMetadata:

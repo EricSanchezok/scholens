@@ -42,6 +42,8 @@ class PreparedTranslation:
     source_language: str
     target_language: str
     custom_instructions: str | None
+    context_kind: str = "selection"
+    block_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

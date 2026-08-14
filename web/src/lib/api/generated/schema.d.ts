@@ -1201,6 +1201,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/papers/{document_id}/reflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Reflow */
+        get: operations["get_document_reflow_api_v1_papers__document_id__reflow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream Reflow Block Translation */
+        post: operations["stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/papers/{document_id}/reflow/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Document Reflow */
+        post: operations["retry_document_reflow_api_v1_papers__document_id__reflow_retries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/papers/{document_id}/research-items": {
         parameters: {
             query?: never;
@@ -2927,6 +2978,57 @@ export interface components {
          * @enum {string}
          */
         DocumentProcessingStatus: "pending" | "processing" | "completed" | "failed";
+        /** DocumentReflowBlockResponse */
+        DocumentReflowBlockResponse: {
+            /** Heading Level */
+            heading_level: number | null;
+            /** Id */
+            id: string;
+            /** Index */
+            index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "title" | "authors" | "heading" | "paragraph" | "list" | "quote" | "equation" | "table" | "figure" | "code" | "references";
+            /** Page Number */
+            page_number: number | null;
+            /** Source Markdown */
+            source_markdown: string;
+        };
+        /** DocumentReflowResponse */
+        DocumentReflowResponse: {
+            /** Blocks */
+            blocks: components["schemas"]["DocumentReflowBlockResponse"][];
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Error Code */
+            error_code: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Profile Revision */
+            profile_revision: string | null;
+            /** Prompt Revision */
+            prompt_revision: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "processing" | "completed" | "failed";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Warnings */
+            warnings: string[];
+        };
         /** DocumentResearchAudience */
         DocumentResearchAudience: {
             /**
@@ -3080,7 +3182,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "pdf_process" | "pdf_postprocess" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_postprocess" | "document_gc" | "storage_delete";
+        JobOperation: "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_postprocess" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -7702,6 +7804,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_reflow_api_v1_papers__document_id__reflow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A cached server-sent stream for one reflow block. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_document_reflow_api_v1_papers__document_id__reflow_retries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReflowResponse"];
                 };
             };
             /** @description Validation Error */

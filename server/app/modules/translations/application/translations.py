@@ -20,6 +20,7 @@ from app.modules.translations.application.ports import (
 from app.modules.translations.domain import (
     normalize_custom_instructions,
     normalize_language_tag,
+    normalize_reflow_source,
     normalize_source_text,
     normalize_source_language,
     resolve_target_language,
@@ -113,6 +114,35 @@ class Translations:
             source_language=preferences.source_language,
             target_language=preferences.target_language,
             custom_instructions=preferences.custom_instructions,
+        )
+
+    def prepare_reflow_block(
+        self,
+        *,
+        actor: Actor,
+        document_id: UUID,
+        paper_title: str | None,
+        block_id: str,
+        source_markdown: str,
+    ) -> PreparedTranslation:
+        try:
+            source_text = normalize_reflow_source(source_markdown)
+        except ValueError:
+            raise AppError(
+                code="translation_text_invalid",
+                message="Reflow block is empty or exceeds the translation limit",
+                kind=FailureKind.INVALID_ARGUMENT,
+            ) from None
+        preferences = self.preferences(actor=actor)
+        return PreparedTranslation(
+            document_id=document_id,
+            paper_title=paper_title,
+            source_text=source_text,
+            source_language=preferences.source_language,
+            target_language=preferences.target_language,
+            custom_instructions=preferences.custom_instructions,
+            context_kind="reflow_block",
+            block_id=block_id,
         )
 
     def require_token_credits(self, *, actor: Actor) -> None:

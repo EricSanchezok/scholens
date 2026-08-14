@@ -92,6 +92,13 @@ command: complete
 failure -> command: fail/release
 ```
 
+Document reflow follows the durable form of this rule. PDF or Zotero completion
+commits the canonical Document update, reflow artifact, DurableJob, and dispatch
+outbox together, then a dedicated worker performs AI classification outside the
+transaction. The signed callback resumes a short SYSTEM operation and validates
+lossless source identity before replacing the artifact's ordered blocks. Reflow
+failure is independent from PDF ingestion success.
+
 Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and
 Zotero import/sync follow this shape. Agent and MCP paper tools obtain a fresh
 short operation for every tool call rather than retaining a session for the

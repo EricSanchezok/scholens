@@ -337,3 +337,65 @@ class AudioOverviewResult(BaseModel):
     s3_object_key: str
     voice_id: str
     model_version: str
+
+
+ReflowBlockKind = Literal[
+    "title",
+    "authors",
+    "heading",
+    "paragraph",
+    "list",
+    "quote",
+    "equation",
+    "table",
+    "figure",
+    "code",
+    "references",
+]
+
+
+class ReflowLayoutItem(BaseModel):
+    """AI-produced layout metadata; it never contains or rewrites source text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_index: int = Field(ge=0)
+    kind: ReflowBlockKind
+    heading_level: int | None = Field(default=None, ge=1, le=6)
+
+
+class ReflowChunkLayout(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ReflowLayoutItem]
+
+
+class DocumentReflowRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str
+    title: str = Field(min_length=1, max_length=1_000)
+    canonical_s3_key: str = Field(min_length=1, max_length=1_024)
+    page_offset_map: dict[int, list[int]] = Field(default_factory=dict)
+
+
+class DocumentReflowBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=128)
+    index: int = Field(ge=0)
+    kind: ReflowBlockKind
+    source_markdown: str = Field(min_length=1)
+    heading_level: int | None = Field(default=None, ge=1, le=6)
+    page_number: int | None = Field(default=None, ge=1)
+
+
+class DocumentReflowResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str
+    source_hash: str = Field(pattern="^[0-9a-f]{64}$")
+    prompt_revision: str = Field(min_length=1, max_length=64)
+    profile_revision: str = Field(min_length=1, max_length=64)
+    blocks: list[DocumentReflowBlock] = Field(min_length=1)
+    warnings: list[str] = Field(default_factory=list, max_length=1_000)

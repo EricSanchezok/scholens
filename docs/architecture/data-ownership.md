@@ -121,6 +121,14 @@ text. Deleting the source Document cascades its derived translation results.
 Redis does not own completed translations; it owns only short-lived capacity
 and single-flight coordination.
 
+`DocumentReflow` and its ordered `DocumentReflowBlock` rows are derived from
+the Document's canonical parser Markdown. They may classify layout and retain a
+best-effort PDF page projection, but their ordered whitespace-normalized
+content must fingerprint to the canonical source. They never replace the PDF,
+parser artifact, metadata, or processing status. A reflow references its
+current DurableJob; failed attempts remain immutable Jobs history, and deleting
+the Document cascades the artifact, blocks, and block translation results.
+
 Paper ingestion jobs retain immutable failure history. A retry creates a new
 `DurableJob` referencing the persisted PDF source and original Project context;
 it does not reset or overwrite the failed job.

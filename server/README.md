@@ -98,12 +98,23 @@ or browser-side conversation authorization.
 
 Reader content translation uses
 `GET|PUT /api/v1/me/translation-preferences` and
-`POST /api/v1/papers/{document_id}/selection-translations`. Translation emits
+`POST /api/v1/papers/{document_id}/selection-translations`. Reflow blocks use
+`POST /api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations` and
+accept no client source body. Translation emits
 standard Server-Sent Events named `start`, `delta`, `complete`, and `error`.
 The server re-authorizes the paper before durable-result lookup, persists only
 the source hash and translated result, and uses Redis only for capacity and
 single-flight coordination. A durable result hit does not consume Token Credits
 or provider capacity.
+
+Document reflow is exposed at `GET /api/v1/papers/{document_id}/reflow`; only a
+failed artifact may be retried with
+`POST /api/v1/papers/{document_id}/reflow/retries`. PDF completion schedules a
+separate DurableJob and outbox dispatch, but reflow scheduling or execution
+failure never changes the successful PDF processing state. Callback completion
+persists blocks only after the ordered content fingerprint matches the
+canonical parser Markdown. Reflow is a derived reading layout, not another PDF
+parser or metadata authority.
 
 Conversation turns are created at
 `POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn

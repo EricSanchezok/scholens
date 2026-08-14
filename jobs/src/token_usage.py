@@ -48,8 +48,7 @@ def record_token_usage(
         getattr(usage, "input_tokens", getattr(usage, "prompt_tokens", 0)) or 0
     )
     completion_tokens = int(
-        getattr(usage, "output_tokens", getattr(usage, "completion_tokens", 0))
-        or 0
+        getattr(usage, "output_tokens", getattr(usage, "completion_tokens", 0)) or 0
     )
     total_tokens = int(
         getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0

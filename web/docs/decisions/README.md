@@ -25,6 +25,7 @@ history; add a later ADR that supersedes it.
 - [ADR 0013: Reader context and anchor contracts](./0013-reader-context-and-anchor-contracts.md)
 - [ADR 0014: Anchored annotation threads and Project audiences](./0014-annotation-thread-collaboration.md)
 - [ADR 0015: Durable Reader selection translation](./0015-durable-reader-selection-translation.md)
+- [ADR 0016: Lossless Reader reflow and lazy full translation](./0016-lossless-reader-reflow-and-lazy-translation.md)
 
 ## Template
 

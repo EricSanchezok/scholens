@@ -54,6 +54,7 @@ class JobStatus(str, Enum):
 class JobOperation(str, Enum):
     PDF_PROCESS = "pdf_process"
     PDF_POSTPROCESS = "pdf_postprocess"
+    DOCUMENT_REFLOW = "document_reflow"
     AUDIO_GENERATE = "audio_generate"
     DATA_TABLE_GENERATE = "data_table_generate"
     ZOTERO_IMPORT = "zotero_import"

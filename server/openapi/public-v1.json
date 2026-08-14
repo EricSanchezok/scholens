@@ -3609,6 +3609,160 @@
         "title": "DocumentProcessingStatus",
         "type": "string"
       },
+      "DocumentReflowBlockResponse": {
+        "properties": {
+          "heading_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading Level"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "title",
+              "authors",
+              "heading",
+              "paragraph",
+              "list",
+              "quote",
+              "equation",
+              "table",
+              "figure",
+              "code",
+              "references"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Number"
+          },
+          "source_markdown": {
+            "title": "Source Markdown",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "index",
+          "kind",
+          "source_markdown",
+          "heading_level",
+          "page_number"
+        ],
+        "title": "DocumentReflowBlockResponse",
+        "type": "object"
+      },
+      "DocumentReflowResponse": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentReflowBlockResponse"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "profile_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Revision"
+          },
+          "prompt_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Revision"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_id",
+          "status",
+          "job_id",
+          "error_code",
+          "prompt_revision",
+          "profile_revision",
+          "warnings",
+          "blocks",
+          "updated_at"
+        ],
+        "title": "DocumentReflowResponse",
+        "type": "object"
+      },
       "DocumentResearchAudience": {
         "additionalProperties": false,
         "properties": {
@@ -4121,6 +4275,7 @@
         "enum": [
           "pdf_process",
           "pdf_postprocess",
+          "document_reflow",
           "audio_generate",
           "data_table_generate",
           "zotero_import",
@@ -13581,6 +13736,159 @@
           }
         ],
         "summary": "Get Projects From Document Id"
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow": {
+      "get": {
+        "operationId": "get_document_reflow_api_v1_papers__document_id__reflow_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Document Reflow",
+        "tags": [
+          "reflows"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
+      "post": {
+        "operationId": "stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "A cached server-sent stream for one reflow block."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Stream Reflow Block Translation",
+        "tags": [
+          "translations"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow/retries": {
+      "post": {
+        "operationId": "retry_document_reflow_api_v1_papers__document_id__reflow_retries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Retry Document Reflow",
+        "tags": [
+          "reflows"
+        ]
       }
     },
     "/api/v1/papers/{document_id}/research-items": {

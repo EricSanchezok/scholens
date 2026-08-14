@@ -235,6 +235,15 @@
     "/api/v1/papers/{document_id}/projects": [
       "get"
     ],
+    "/api/v1/papers/{document_id}/reflow": [
+      "get"
+    ],
+    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": [
+      "post"
+    ],
+    "/api/v1/papers/{document_id}/reflow/retries": [
+      "post"
+    ],
     "/api/v1/papers/{document_id}/research-items": [
       "get"
     ],

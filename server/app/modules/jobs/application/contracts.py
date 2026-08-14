@@ -253,3 +253,67 @@ class DataTableWebhookData(BaseModel):
         if self.status == "failed" and not self.error:
             raise ValueError("failed data-table job requires an error code")
         return self
+
+
+ReflowBlockKind = Literal[
+    "title",
+    "authors",
+    "heading",
+    "paragraph",
+    "list",
+    "quote",
+    "equation",
+    "table",
+    "figure",
+    "code",
+    "references",
+]
+
+
+class DocumentReflowTaskPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: UUID
+    title: str = Field(min_length=1, max_length=1_000)
+    canonical_s3_key: str = Field(min_length=1, max_length=1_024)
+    page_offset_map: dict[int, list[int]] = Field(default_factory=dict)
+
+
+class DocumentReflowBlockPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=128)
+    index: int = Field(ge=0)
+    kind: ReflowBlockKind
+    source_markdown: str = Field(min_length=1)
+    heading_level: int | None = Field(default=None, ge=1, le=6)
+    page_number: int | None = Field(default=None, ge=1)
+
+
+class DocumentReflowResultPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: UUID
+    source_hash: str = Field(pattern="^[0-9a-f]{64}$")
+    prompt_revision: str = Field(min_length=1, max_length=64)
+    profile_revision: str = Field(min_length=1, max_length=64)
+    blocks: list[DocumentReflowBlockPayload] = Field(min_length=1)
+    warnings: list[str] = Field(default_factory=list, max_length=1_000)
+
+
+class DocumentReflowWebhookData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    status: Literal["completed", "failed"]
+    result: DocumentReflowResultPayload | None = None
+    error: str | None = None
+    usage_events: list[TokenUsageEventPayload] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "DocumentReflowWebhookData":
+        if self.status == "completed" and self.result is None:
+            raise ValueError("completed reflow job requires a result")
+        if self.status == "failed" and not self.error:
+            raise ValueError("failed reflow job requires an error code")
+        return self
