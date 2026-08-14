@@ -149,11 +149,13 @@ feedback colors.
 ## AI reflow and full translation
 
 The document toolbar exposes an explicit PDF/AI reflow switch. Reflow is a
-single-column, text-first academic reading surface with a bounded measure,
-semantic block types, overflow-contained tables and code, authorized lazy image
-assets, Light and Dark support, and mobile safe-area padding. High-confidence
-repairs remain traceable to a source page and rectangle. Degraded blocks offer a
-compact PDF fallback and never display guessed content.
+continuous, single-column academic Markdown reading surface with a bounded
+measure, semantic block types, overflow-contained tables and code, authorized
+lazy image assets, Light and Dark support, and mobile safe-area padding. It does
+not preserve PDF page whitespace or restart layout at page boundaries. Every
+block retains ordered MinerU source spans and can return to the exact source
+page and rectangle. Degraded blocks offer a compact PDF fallback and never
+display guessed content.
 
 Full translation is a toolbar action: a desktop popover and mobile bottom sheet
 own language, bilingual/translation-only presentation, reference opt-in,

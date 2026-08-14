@@ -96,11 +96,12 @@ failure -> command: fail/release
 
 Document reflow follows the durable form of this rule. PDF or Zotero completion
 commits the canonical Document update, reflow artifact, DurableJob, and dispatch
-outbox together, then a dedicated worker combines canonical Markdown with PDF
-text, geometry, and extracted visual assets outside the transaction. The signed
-callback resumes a short SYSTEM operation, validates exact source coverage and
-asset references, then atomically replaces the artifact's ordered blocks and
-assets. Reflow failure, including an isolated visual-repair failure, remains
+outbox together, then a dedicated worker submits the original PDF to MinerU and
+maps its stable ordered `content_list.json` to continuous semantic Markdown
+blocks outside the transaction. The signed callback resumes a short SYSTEM
+operation, validates source fingerprint, block order, source spans, and asset
+references, then atomically replaces the artifact's ordered blocks and assets.
+Reflow failure, including an isolated missing-asset degradation, remains
 independent from PDF ingestion success.
 
 Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and

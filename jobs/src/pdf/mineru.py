@@ -20,6 +20,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from src.pdf.models import (
+    MinerUArchive,
     ParsedDocument,
     ParserBackend,
     ParserConfigurationError,
@@ -942,12 +943,13 @@ class MinerUClient:
             task_id=batch_id,
         )
 
-    def read_archive(self, archive_bytes: bytes) -> ParsedDocument:
+    def read_structured_archive(self, archive_bytes: bytes) -> MinerUArchive:
         if len(archive_bytes) > self.config.max_archive_bytes:
             raise ParserSecurityError("MinerU archive exceeds configured size limit")
 
         markdown_found = False
         content_list: list[dict] | None = None
+        files: dict[str, bytes] = {}
         total_uncompressed = 0
 
         try:
@@ -981,6 +983,7 @@ class MinerUClient:
                         )
 
                     name = path.name.lower()
+                    normalized_name = path.as_posix()
                     if name in {"full.md", "auto.md"} or name.endswith(".md"):
                         markdown_found = True
                     if name == "content_list.json" or (
@@ -992,6 +995,10 @@ class MinerUClient:
                                 "MinerU content_list.json is not a list"
                             )
                         content_list = parsed
+                    if name.endswith(
+                        (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg")
+                    ):
+                        files[normalized_name] = archive.read(info)
         except zipfile.BadZipFile as exc:
             raise ParserContentError(
                 "MinerU result is not a valid ZIP archive"
@@ -1004,7 +1011,14 @@ class MinerUClient:
                 "MinerU result is missing markdown or content_list.json"
             )
 
-        markdown, page_offsets = canonical_markdown(content_list)
+        if any(not isinstance(block, dict) for block in content_list):
+            raise ParserContentError("MinerU content_list.json has invalid blocks")
+        return MinerUArchive(content_list=tuple(content_list), files=files)
+
+    def read_archive(self, archive_bytes: bytes) -> ParsedDocument:
+        structured = self.read_structured_archive(archive_bytes)
+
+        markdown, page_offsets = canonical_markdown(list(structured.content_list))
         if len(markdown.strip()) < MIN_EXTRACTED_TEXT_CHARACTERS:
             raise ParserContentError("MinerU returned insufficient paper content")
         return ParsedDocument(

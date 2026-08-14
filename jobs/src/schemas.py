@@ -372,39 +372,20 @@ class ReflowSourceRect(BaseModel):
     height: float = Field(gt=0, le=1)
 
 
-class ReflowLayoutItem(BaseModel):
-    """AI-produced layout metadata; it never contains or rewrites source text."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_index: int = Field(ge=0)
-    kind: ReflowBlockKind
-    heading_level: int | None = Field(default=None, ge=1, le=6)
-
-
-class ReflowChunkLayout(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[ReflowLayoutItem]
-
-
-class ReflowRepairResult(BaseModel):
-    """Bounded visual repair for one untrusted source unit."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    render_markdown: str = Field(min_length=1)
-    confidence: float = Field(ge=0, le=1)
-
-
 class DocumentReflowRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_id: str
     title: str = Field(min_length=1, max_length=1_000)
-    canonical_s3_key: str = Field(min_length=1, max_length=1_024)
     pdf_s3_key: str = Field(min_length=1, max_length=1_024)
-    page_offset_map: dict[int, list[int]] = Field(default_factory=dict)
+
+
+class ReflowSourceSpan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page_number: int = Field(ge=1)
+    source_rect: ReflowSourceRect
+    source_text: str = Field(min_length=1)
 
 
 class DocumentReflowBlock(BaseModel):
@@ -413,12 +394,10 @@ class DocumentReflowBlock(BaseModel):
     id: str = Field(min_length=1, max_length=128)
     index: int = Field(ge=0)
     kind: ReflowBlockKind
-    source_markdown: str = Field(min_length=1)
     render_markdown: str = Field(min_length=1)
     group_id: str | None = Field(default=None, min_length=1, max_length=128)
     heading_level: int | None = Field(default=None, ge=1, le=6)
-    page_number: int | None = Field(default=None, ge=1)
-    source_rect: ReflowSourceRect | None = None
+    source_spans: list[ReflowSourceSpan] = Field(min_length=1)
     presentation_status: ReflowPresentationStatus
     asset_id: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -442,8 +421,8 @@ class DocumentReflowResult(BaseModel):
 
     document_id: str
     source_hash: str = Field(pattern="^[0-9a-f]{64}$")
-    prompt_revision: str = Field(min_length=1, max_length=64)
-    profile_revision: str = Field(min_length=1, max_length=64)
+    pipeline_revision: str = Field(min_length=1, max_length=64)
+    parser_revision: str = Field(min_length=1, max_length=64)
     blocks: list[DocumentReflowBlock] = Field(min_length=1)
     assets: list[DocumentReflowAsset] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list, max_length=1_000)

@@ -59,21 +59,21 @@ cleared after Server acknowledges the result.
 
 After Server accepts a successful PDF callback, it dispatches a separate
 `generate_document_reflow` task to the `reflow` queue. The worker downloads the
-already-persisted canonical Markdown and original PDF. Source units preserve
-fenced code and display math while PDF evidence supplies page geometry, images,
-vector regions, and bounded visual crops. The worker does not alter canonical
-Markdown or parser ownership.
+original PDF and submits it to MinerU. Reflow consumes the stable
+`content_list.json` from the returned archive instead of flattening Markdown and
+asking a language model to rediscover structure. MinerU's reading order, block
+types, page indices, normalized rectangles, tables, equations, lists, and image
+paths become a continuous academic Markdown AST.
 
-The provider-neutral `reflow` profile classifies semantic roles. Deterministic
-normalization repairs safe presentation defects such as HTML residue and line
-wraps. Only ambiguous equations, tables, replacement characters, and structure
-conflicts use the independent multimodal `reflow_repair` profile with a matching
-PDF crop. Repairs must pass source coverage and confidence validation; otherwise
-only that block is marked degraded and Reader returns the user to the PDF.
-Stable block and asset IDs, exact source Markdown, safe render Markdown, page
-coordinates, presentation status, source fingerprint, profile revisions, and
-warnings return through the signed callback. Server remains persistence
-authority.
+Deterministic normalization removes unsafe HTML residue, converts supported
+superscript/subscript markup, joins parser-only line wrapping, and filters page
+chrome. Every rendered block retains one or more source spans with the original
+item index, page, rectangle, and text. Missing visual assets or unsupported
+items degrade only that block to a PDF fallback; there is no reflow-specific
+LLM profile and no whole-document rewrite. Stable block and asset IDs, safe
+render Markdown, source spans, presentation status, source fingerprint, parser
+revision, and warnings return through the signed callback. Server remains the
+persistence authority.
 
 ## Code layout
 
@@ -86,7 +86,7 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
-├── reflow.py        # Lossless source units, AI layout validation, fallback
+├── reflow.py        # MinerU content-list normalization and continuous AST
 ├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py
 └── webhook_signing.py

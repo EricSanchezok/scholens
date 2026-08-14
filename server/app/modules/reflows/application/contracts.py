@@ -10,6 +10,7 @@ from app.modules.jobs.application.contracts import (
     ReflowBlockKind,
     ReflowPresentationStatus,
     ReflowSourceRectPayload,
+    ReflowSourceSpanPayload,
 )
 from pydantic import BaseModel
 
@@ -20,12 +21,10 @@ class DocumentReflowBlockResponse(BaseModel):
     id: str
     index: int
     kind: ReflowBlockKind
-    source_markdown: str
     render_markdown: str
     group_id: str | None
     heading_level: int | None
-    page_number: int | None
-    source_rect: ReflowSourceRectPayload | None
+    source_spans: list[ReflowSourceSpanPayload]
     presentation_status: ReflowPresentationStatus
     asset_id: str | None
 
@@ -52,8 +51,8 @@ class DocumentReflowResponse(BaseModel):
     status: DocumentReflowStatus
     job_id: UUID
     error_code: str | None
-    prompt_revision: str | None
-    profile_revision: str | None
+    pipeline_revision: str | None
+    parser_revision: str | None
     warnings: list[str]
     blocks: list[DocumentReflowBlockResponse]
     assets: list[DocumentReflowAssetResponse]

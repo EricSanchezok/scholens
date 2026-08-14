@@ -3042,8 +3042,6 @@ export interface components {
              * @enum {string}
              */
             kind: "eyebrow" | "title" | "authors" | "affiliations" | "abstract" | "keywords" | "heading" | "paragraph" | "list" | "quote" | "equation" | "table" | "figure" | "caption" | "code" | "footnote" | "references";
-            /** Page Number */
-            page_number: number | null;
             /**
              * Presentation Status
              * @enum {string}
@@ -3051,9 +3049,8 @@ export interface components {
             presentation_status: "verbatim" | "repaired" | "degraded";
             /** Render Markdown */
             render_markdown: string;
-            /** Source Markdown */
-            source_markdown: string;
-            source_rect: components["schemas"]["ReflowSourceRectPayload"] | null;
+            /** Source Spans */
+            source_spans: components["schemas"]["ReflowSourceSpanPayload"][];
         };
         /** DocumentReflowResponse */
         DocumentReflowResponse: {
@@ -3073,10 +3070,10 @@ export interface components {
              * Format: uuid
              */
             job_id: string;
-            /** Profile Revision */
-            profile_revision: string | null;
-            /** Prompt Revision */
-            prompt_revision: string | null;
+            /** Parser Revision */
+            parser_revision: string | null;
+            /** Pipeline Revision */
+            pipeline_revision: string | null;
             /**
              * Status
              * @enum {string}
@@ -4283,6 +4280,14 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /** ReflowSourceSpanPayload */
+        ReflowSourceSpanPayload: {
+            /** Page Number */
+            page_number: number;
+            source_rect: components["schemas"]["ReflowSourceRectPayload"];
+            /** Source Text */
+            source_text: string;
         };
         /** RegisterRequest */
         RegisterRequest: {

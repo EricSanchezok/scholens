@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -30,10 +29,6 @@ from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import JobOperation, JobStatus
 from sqlalchemy.orm import Session
-
-
-def _source_hash(markdown: str) -> str:
-    return hashlib.sha256(" ".join(markdown.split()).encode()).hexdigest()
 
 
 def _require_scope(
@@ -115,18 +110,13 @@ def complete_document_reflow(
     result = callback.result
     if result is None:
         raise RuntimeError("validated_reflow_callback_without_result")
-    expected_hash = _source_hash(document.raw_content or "")
-    block_content_hash = _source_hash(
-        "\n\n".join(block.source_markdown for block in result.blocks)
-    )
     indexes = [block.index for block in result.blocks]
     block_ids = [block.id for block in result.blocks]
     asset_ids = [asset.id for asset in result.assets]
     asset_id_set = set(asset_ids)
     if (
         result.document_id != document.id
-        or result.source_hash != expected_hash
-        or block_content_hash != expected_hash
+        or result.source_hash != document.sha256
         or indexes != list(range(len(result.blocks)))
         or len(set(block_ids)) != len(block_ids)
         or len(asset_id_set) != len(asset_ids)
@@ -167,14 +157,10 @@ def complete_document_reflow(
             document_id=document.id,
             block_index=block.index,
             kind=block.kind,
-            source_markdown=block.source_markdown,
             render_markdown=block.render_markdown,
             group_id=block.group_id,
             heading_level=block.heading_level,
-            page_number=block.page_number,
-            source_rect=(
-                block.source_rect.model_dump(mode="json") if block.source_rect else None
-            ),
+            source_spans=[span.model_dump(mode="json") for span in block.source_spans],
             presentation_status=block.presentation_status,
             asset_id=block.asset_id,
         )
@@ -189,8 +175,8 @@ def complete_document_reflow(
     )
     artifact.status = "completed"
     artifact.source_hash = result.source_hash
-    artifact.prompt_revision = result.prompt_revision
-    artifact.profile_revision = result.profile_revision
+    artifact.pipeline_revision = result.pipeline_revision
+    artifact.parser_revision = result.parser_revision
     artifact.warnings = result.warnings
     artifact.error_code = None
     artifact.completed_at = datetime.now(UTC)

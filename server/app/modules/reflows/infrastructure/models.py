@@ -50,8 +50,8 @@ class DocumentReflow(Base):
         Integer, nullable=False, default=1, server_default="1"
     )
     source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    prompt_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    profile_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pipeline_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parser_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
     warnings: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, default=list, server_default="{}"
     )
@@ -144,12 +144,10 @@ class DocumentReflowBlock(Base):
     )
     block_index: Mapped[int] = mapped_column(Integer, nullable=False)
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
-    source_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     render_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     group_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     heading_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_rect: Mapped[dict[str, float] | None] = mapped_column(JSONB, nullable=True)
+    source_spans: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
     presentation_status: Mapped[str] = mapped_column(String(16), nullable=False)
     asset_id: Mapped[str | None] = mapped_column(
         String(128),

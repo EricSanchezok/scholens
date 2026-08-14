@@ -3751,17 +3751,6 @@
             "title": "Kind",
             "type": "string"
           },
-          "page_number": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Number"
-          },
           "presentation_status": {
             "enum": [
               "verbatim",
@@ -3775,31 +3764,22 @@
             "title": "Render Markdown",
             "type": "string"
           },
-          "source_markdown": {
-            "title": "Source Markdown",
-            "type": "string"
-          },
-          "source_rect": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReflowSourceRectPayload"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "source_spans": {
+            "items": {
+              "$ref": "#/components/schemas/ReflowSourceSpanPayload"
+            },
+            "title": "Source Spans",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "index",
           "kind",
-          "source_markdown",
           "render_markdown",
           "group_id",
           "heading_level",
-          "page_number",
-          "source_rect",
+          "source_spans",
           "presentation_status",
           "asset_id"
         ],
@@ -3843,7 +3823,7 @@
             "title": "Job Id",
             "type": "string"
           },
-          "profile_revision": {
+          "parser_revision": {
             "anyOf": [
               {
                 "type": "string"
@@ -3852,9 +3832,9 @@
                 "type": "null"
               }
             ],
-            "title": "Profile Revision"
+            "title": "Parser Revision"
           },
-          "prompt_revision": {
+          "pipeline_revision": {
             "anyOf": [
               {
                 "type": "string"
@@ -3863,7 +3843,7 @@
                 "type": "null"
               }
             ],
-            "title": "Prompt Revision"
+            "title": "Pipeline Revision"
           },
           "status": {
             "enum": [
@@ -3893,8 +3873,8 @@
           "status",
           "job_id",
           "error_code",
-          "prompt_revision",
-          "profile_revision",
+          "pipeline_revision",
+          "parser_revision",
           "warnings",
           "blocks",
           "assets",
@@ -7420,6 +7400,31 @@
           "height"
         ],
         "title": "ReflowSourceRectPayload",
+        "type": "object"
+      },
+      "ReflowSourceSpanPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "source_rect": {
+            "$ref": "#/components/schemas/ReflowSourceRectPayload"
+          },
+          "source_text": {
+            "minLength": 1,
+            "title": "Source Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_number",
+          "source_rect",
+          "source_text"
+        ],
+        "title": "ReflowSourceSpanPayload",
         "type": "object"
       },
       "RegisterRequest": {

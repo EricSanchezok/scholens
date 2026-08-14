@@ -206,8 +206,6 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "SCHOLENS_AI_OPENAI_API_KEY",
         "SCHOLENS_AI_STANDARD_MODEL",
         "SCHOLENS_AI_TRANSLATION_MODEL",
-        "SCHOLENS_AI_REFLOW_MODEL",
-        "SCHOLENS_AI_REFLOW_REPAIR_MODEL",
         "MINERU_API_TOKEN",
         "MOSS_API_KEY",
         "MOSS_MAX_AUDIO_BYTES",

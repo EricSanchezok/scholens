@@ -22,22 +22,21 @@ understand or configure.
 
 ## Decision
 
-Reflow is a derived, evidence-bound academic reconstruction. A reflow job reads
-both the canonical Markdown and the original PDF. Every original source unit is
-persisted unchanged in `source_markdown`; the separately persisted
-`render_markdown` may contain deterministic repairs or a visually verified
-repair. Blocks retain their source page and normalized PDF rectangle whenever
-the text layer can locate it.
+Reflow is a derived, evidence-bound academic reconstruction. A reflow job sends
+the original PDF to MinerU and consumes its stable `content_list.json` as the
+canonical intermediate representation. This ordered list already carries block
+types, page indices, normalized rectangles, image paths, tables, equations, and
+lists. Scholens maps it deterministically to a continuous academic Markdown AST;
+it does not flatten the result and ask a general-purpose model to rediscover the
+document structure.
 
-Deterministic repair removes comments and unknown tags while preserving visible
-text, converts supported superscript and subscript markup to safe math, and
-joins parser-only line-wrap hyphenation. Formula, table, replacement-character,
-and structure conflicts may use the independent provider-neutral
-`reflow_repair` multimodal profile with a bounded page crop. Model output is
-accepted only when source coverage, ordering, length, markup safety, visual
-evidence, and a local confidence threshold agree. Failure or low confidence
-degrades only that block to a PDF fallback; a model guess is never displayed.
-Document text is untrusted evidence and cannot alter the repair instructions.
+Deterministic normalization removes comments and unknown tags while preserving
+visible text, converts supported superscript and subscript markup to safe math,
+and joins parser-only line-wrap hyphenation. Each rendered block retains one or
+more source spans containing the original MinerU item index, page, rectangle,
+and source text. Unsupported or incomplete visual blocks degrade locally to a
+PDF fallback; Scholens never asks a text model to invent a formula, table, image,
+or reading order.
 
 Reflow recognizes explicit academic block kinds including paper metadata,
 abstract, keywords, equations, tables, figures, captions, footnotes, and
@@ -71,14 +70,16 @@ blocks; the Reader surface itself may not scroll horizontally.
 
 ## Alternatives considered
 
-- Continue layout-only classification. Rejected because it cannot repair
-  visible parser defects or restore figures and tables.
+- Continue model-based layout classification after flattening Markdown.
+  Rejected because it discards MinerU's reading order and geometry, produces
+  arbitrary fragments, and cannot reliably restore figures or tables.
 - Trust a whole-document model rewrite. Rejected because it cannot prove source
   coverage, makes hallucination hard to localize, and weakens PDF traceability.
 - Accept model self-reported confidence. Rejected because confidence without
   source coverage and PDF evidence is not a correctness signal.
-- Make visual AI mandatory for every block. Rejected because prose has a strong
-  deterministic path and one provider outage must not fail the whole paper.
+- Add a second visual model after MinerU. Deferred because MinerU already emits
+  the evidence required by the reading surface; any future repair stage must be
+  block-local and prove that it improves real corpus failures.
 - Render arbitrary HTML emitted by parser or model. Rejected because it expands
   the injection surface and makes content policy impossible to audit.
 - Overlay translated text on PDF geometry. Rejected for this phase because
@@ -87,22 +88,21 @@ blocks; the Reader surface itself may not scroll horizontally.
 
 ## Consequences
 
-Jobs now owns bounded PDF evidence extraction and repair validation in addition
-to layout classification. Server owns block/asset persistence, authorized asset
+Jobs owns MinerU archive validation and deterministic semantic normalization.
+Server owns block/asset persistence, authorized asset
 URLs, retry replacement, and storage lifecycle. Web owns safe academic
 presentation, toolbar settings, lazy translation, and exact source navigation.
 
-The original Markdown remains available for audit, but the translation source
-and Reader presentation use `render_markdown`. Reflow has more rows and derived
-objects, so schema reset is required during pre-release development. Model
-configuration gains `SCHOLENS_AI_REFLOW_REPAIR_*`; a missing credential is a
-supported degraded state, not a document failure.
+Every rendered block keeps source spans for audit and translation uses the same
+safe display content. Reflow has more rows and derived objects, so schema reset
+is required during pre-release development. There are no reflow-specific LLM
+credentials or profiles.
 
 ## Validation
 
-Jobs tests cover deterministic markup repair, prompt-injection isolation,
-source coverage, page rectangles, image extraction, visual acceptance, and
-per-block degradation. Server tests cover callback integrity, authorized asset
+Jobs tests cover deterministic markup normalization, source coverage, reading
+order, page rectangles, image extraction, and per-block degradation. Server
+tests cover callback integrity, authorized asset
 URLs, atomic replacement, and physical cleanup. Web gates cover every semantic
 block, safe math/table rendering, translation modes, desktop popover, mobile
 sheet, exact PDF navigation, and 320/390px horizontal-overflow regression.

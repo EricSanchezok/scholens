@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -8,7 +9,6 @@ from uuid import uuid4
 import pytest
 
 from app.bootstrap.adapters.document_reflow_callbacks import (
-    _source_hash,
     complete_document_reflow,
 )
 from app.modules.jobs.application.contracts import (
@@ -55,7 +55,11 @@ def _scope(markdown: str = "# Paper\n\nSource paragraph."):
     )
     artifact.blocks = []
     artifact.assets = []
-    document = SimpleNamespace(id=document_id, raw_content=markdown)
+    document = SimpleNamespace(
+        id=document_id,
+        raw_content=markdown,
+        sha256=hashlib.sha256(b"canonical-pdf").hexdigest(),
+    )
     db = MagicMock()
     db.get.side_effect = lambda model, key: (
         artifact if model is DocumentReflow and key == document_id else document
@@ -70,33 +74,47 @@ def _completed_callback(job_id, document_id, markdown: str):
             "status": "completed",
             "result": {
                 "document_id": str(document_id),
-                "source_hash": _source_hash(markdown),
-                "prompt_revision": "reflow-layout-v1",
-                "profile_revision": "profile-v1",
+                "source_hash": hashlib.sha256(b"canonical-pdf").hexdigest(),
+                "pipeline_revision": "mineru-continuous-ast-v1",
+                "parser_revision": "mineru-cloud-v1",
                 "blocks": [
                     {
                         "id": "title-block",
                         "index": 0,
                         "kind": "title",
-                        "source_markdown": "# Paper",
                         "render_markdown": "# Paper",
                         "heading_level": 1,
-                        "page_number": 1,
-                        "source_rect": {
-                            "x": 0.1,
-                            "y": 0.1,
-                            "width": 0.5,
-                            "height": 0.05,
-                        },
+                        "source_spans": [
+                            {
+                                "page_number": 1,
+                                "source_rect": {
+                                    "x": 0.1,
+                                    "y": 0.1,
+                                    "width": 0.5,
+                                    "height": 0.05,
+                                },
+                                "source_text": "Paper",
+                            }
+                        ],
                         "presentation_status": "verbatim",
                     },
                     {
                         "id": "body-block",
                         "index": 1,
                         "kind": "paragraph",
-                        "source_markdown": "Source paragraph.",
                         "render_markdown": "Source paragraph.",
-                        "page_number": 1,
+                        "source_spans": [
+                            {
+                                "page_number": 1,
+                                "source_rect": {
+                                    "x": 0.1,
+                                    "y": 0.2,
+                                    "width": 0.8,
+                                    "height": 0.1,
+                                },
+                                "source_text": "Source paragraph.",
+                            }
+                        ],
                         "presentation_status": "verbatim",
                     },
                 ],
@@ -107,7 +125,7 @@ def _completed_callback(job_id, document_id, markdown: str):
     )
 
 
-def test_reflow_completion_persists_only_lossless_sequential_blocks() -> None:
+def test_reflow_completion_persists_sequential_evidence_bound_blocks() -> None:
     markdown = "# Paper\n\nSource paragraph."
     db, job, artifact, document = _scope(markdown)
     callback = _completed_callback(job.id, document.id, markdown)
@@ -134,10 +152,13 @@ def test_reflow_completion_persists_only_lossless_sequential_blocks() -> None:
         )
 
     assert result.value == {"accepted": True}
-    assert [block.source_markdown for block in artifact.blocks] == [
+    assert [block.render_markdown for block in artifact.blocks] == [
         "# Paper",
         "Source paragraph.",
     ]
+    assert artifact.blocks[0].source_spans[0]["source_text"] == "Paper"
+    assert artifact.pipeline_revision == "mineru-continuous-ast-v1"
+    assert artifact.parser_revision == "mineru-cloud-v1"
     assert artifact.status == "completed"
     assert artifact.completed_at is not None
     complete.assert_called_once()
@@ -217,7 +238,7 @@ def test_reflow_completion_rejects_changed_source_content() -> None:
     db, job, _artifact, document = _scope(markdown)
     callback = _completed_callback(job.id, document.id, markdown)
     assert callback.result is not None
-    callback.result.blocks[1].source_markdown = "Hallucinated paragraph."
+    callback.result.source_hash = "f" * 64
 
     with patch(
         "app.bootstrap.adapters.document_reflow_callbacks.job_repository.require",

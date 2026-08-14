@@ -12,6 +12,7 @@ from app.modules.jobs.application.contracts import (
     ReflowBlockKind,
     ReflowPresentationStatus,
     ReflowSourceRectPayload,
+    ReflowSourceSpanPayload,
 )
 from app.modules.jobs.application.jobs import EnqueueJobCommand
 from app.modules.jobs.infrastructure.application_gateway import SqlAlchemyJobsGateway
@@ -77,24 +78,21 @@ class SqlDocumentReflowGateway:
             status=status,
             job_id=artifact.job_id,
             error_code=artifact.error_code or artifact.job.error_code,
-            prompt_revision=artifact.prompt_revision,
-            profile_revision=artifact.profile_revision,
+            pipeline_revision=artifact.pipeline_revision,
+            parser_revision=artifact.parser_revision,
             warnings=list(artifact.warnings or []),
             blocks=[
                 DocumentReflowBlockResponse(
                     id=block.id,
                     index=block.block_index,
                     kind=cast(ReflowBlockKind, block.kind),
-                    source_markdown=block.source_markdown,
                     render_markdown=block.render_markdown,
                     group_id=block.group_id,
                     heading_level=block.heading_level,
-                    page_number=block.page_number,
-                    source_rect=(
-                        ReflowSourceRectPayload.model_validate(block.source_rect)
-                        if block.source_rect
-                        else None
-                    ),
+                    source_spans=[
+                        ReflowSourceSpanPayload.model_validate(span)
+                        for span in block.source_spans
+                    ],
                     presentation_status=cast(
                         ReflowPresentationStatus, block.presentation_status
                     ),
@@ -149,16 +147,13 @@ class SqlDocumentReflowGateway:
             id=block.id,
             index=block.block_index,
             kind=cast(ReflowBlockKind, block.kind),
-            source_markdown=block.source_markdown,
             render_markdown=block.render_markdown,
             group_id=block.group_id,
             heading_level=block.heading_level,
-            page_number=block.page_number,
-            source_rect=(
-                ReflowSourceRectPayload.model_validate(block.source_rect)
-                if block.source_rect
-                else None
-            ),
+            source_spans=[
+                ReflowSourceSpanPayload.model_validate(span)
+                for span in block.source_spans
+            ],
             presentation_status=cast(
                 ReflowPresentationStatus, block.presentation_status
             ),
@@ -220,11 +215,7 @@ class SqlDocumentReflowGateway:
             return self._response(artifact), False
 
         document = self._db.get(Document, document_id)
-        if (
-            document is None
-            or not document.parser_markdown_s3_key
-            or not document.raw_content
-        ):
+        if document is None or not document.s3_object_key:
             raise AppError(
                 code="document_reflow_source_not_ready",
                 message="The parsed paper is not ready for reflow",
@@ -235,9 +226,7 @@ class SqlDocumentReflowGateway:
         payload_model = DocumentReflowTaskPayload(
             document_id=document.id,
             title=document.title or document.original_filename,
-            canonical_s3_key=document.parser_markdown_s3_key,
             pdf_s3_key=document.s3_object_key,
-            page_offset_map=document.page_offset_map or {},
         )
         payload = _JSON_OBJECT.validate_python(payload_model.model_dump(mode="json"))
         enqueued = self._jobs.enqueue(
@@ -266,8 +255,8 @@ class SqlDocumentReflowGateway:
             artifact.status = "pending"
             artifact.attempt_count = attempt
             artifact.source_hash = None
-            artifact.prompt_revision = None
-            artifact.profile_revision = None
+            artifact.pipeline_revision = None
+            artifact.parser_revision = None
             artifact.warnings = []
             artifact.error_code = None
             artifact.completed_at = None

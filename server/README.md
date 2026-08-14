@@ -111,12 +111,13 @@ failed artifact may be retried with
 `POST /api/v1/papers/{document_id}/reflow/retries`. PDF completion schedules a
 separate DurableJob and outbox dispatch, but reflow scheduling or execution
 failure never changes the successful PDF processing state. Callback completion
-persists blocks and derived assets only after exact source coverage, asset
-references, page coordinates, and the canonical Markdown fingerprint validate.
+persists blocks and derived assets only after source fingerprint, ordered source
+spans, asset references, and page coordinates validate.
 `GET /api/v1/papers/{document_id}/reflow/assets/{asset_id}/url` authorizes the
 paper again before returning a short-lived derived-asset URL; object keys remain
-private. Reflow is an evidence-bound reading reconstruction, not another PDF
-parser or metadata authority.
+private. Reflow is an evidence-bound reading reconstruction over MinerU's
+stable structured output, not another metadata authority or a whole-document
+model rewrite.
 
 Conversation turns are created at
 `POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn

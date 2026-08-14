@@ -70,6 +70,13 @@ explicit PDF fallback instead of a plausible reconstruction. Derived views
 exist to reduce interaction cost, especially on narrow mobile screens where
 selection-based tools are difficult to operate.
 
+The reflow product is a semantic PDF-to-Markdown reading view, not a recreation
+of paper pages and not an AI summary. It preserves academic order and meaning
+while removing page whitespace, headers, footers, and column geometry that make
+PDFs difficult to read on narrow screens. MinerU's structured content list is
+the evidence boundary; rendered blocks retain source spans so navigation and
+auditing always return to the PDF.
+
 Interface locale and paper-content language are independent preferences. A
 reader may use an English interface while translating a paper into Chinese, or
 the reverse. Selection translation starts only from an explicit selection and

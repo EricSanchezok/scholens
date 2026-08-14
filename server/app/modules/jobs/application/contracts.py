@@ -293,9 +293,15 @@ class DocumentReflowTaskPayload(BaseModel):
 
     document_id: UUID
     title: str = Field(min_length=1, max_length=1_000)
-    canonical_s3_key: str = Field(min_length=1, max_length=1_024)
     pdf_s3_key: str = Field(min_length=1, max_length=1_024)
-    page_offset_map: dict[int, list[int]] = Field(default_factory=dict)
+
+
+class ReflowSourceSpanPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page_number: int = Field(ge=1)
+    source_rect: ReflowSourceRectPayload
+    source_text: str = Field(min_length=1)
 
 
 class DocumentReflowBlockPayload(BaseModel):
@@ -304,12 +310,10 @@ class DocumentReflowBlockPayload(BaseModel):
     id: str = Field(min_length=1, max_length=128)
     index: int = Field(ge=0)
     kind: ReflowBlockKind
-    source_markdown: str = Field(min_length=1)
     render_markdown: str = Field(min_length=1)
     group_id: str | None = Field(default=None, min_length=1, max_length=128)
     heading_level: int | None = Field(default=None, ge=1, le=6)
-    page_number: int | None = Field(default=None, ge=1)
-    source_rect: ReflowSourceRectPayload | None = None
+    source_spans: list[ReflowSourceSpanPayload] = Field(min_length=1)
     presentation_status: ReflowPresentationStatus
     asset_id: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -333,8 +337,8 @@ class DocumentReflowResultPayload(BaseModel):
 
     document_id: UUID
     source_hash: str = Field(pattern="^[0-9a-f]{64}$")
-    prompt_revision: str = Field(min_length=1, max_length=64)
-    profile_revision: str = Field(min_length=1, max_length=64)
+    pipeline_revision: str = Field(min_length=1, max_length=64)
+    parser_revision: str = Field(min_length=1, max_length=64)
     blocks: list[DocumentReflowBlockPayload] = Field(min_length=1)
     assets: list[DocumentReflowAssetPayload] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list, max_length=1_000)

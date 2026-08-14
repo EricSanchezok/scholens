@@ -145,6 +145,36 @@ def test_archive_requires_safe_canonical_artifacts() -> None:
         client.read_archive(output.getvalue())
 
 
+def test_structured_archive_preserves_ordered_blocks_and_assets() -> None:
+    output = io.BytesIO()
+    content_list = [
+        {
+            "type": "text",
+            "text": "Paper title",
+            "text_level": 1,
+            "page_idx": 0,
+            "bbox": [100, 100, 900, 180],
+        },
+        {
+            "type": "image",
+            "img_path": "images/figure-1.png",
+            "image_caption": ["Figure 1. Architecture"],
+            "page_idx": 1,
+            "bbox": [120, 200, 880, 700],
+        },
+    ]
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr("result/full.md", "# Paper title")
+        archive.writestr("result/paper_content_list.json", json.dumps(content_list))
+        archive.writestr("result/images/figure-1.png", b"not-a-real-png")
+
+    client = MinerUClient(_config(), MemoryStateStore())
+    result = client.read_structured_archive(output.getvalue())
+
+    assert result.content_list == tuple(content_list)
+    assert result.files == {"result/images/figure-1.png": b"not-a-real-png"}
+
+
 def test_archive_rejects_unsafe_compression_ratio() -> None:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
