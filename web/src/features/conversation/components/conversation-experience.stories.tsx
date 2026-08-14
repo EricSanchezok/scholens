@@ -66,11 +66,44 @@ export const ContextPanelSelection: Story = {
     const textbox = canvas.getByRole("textbox");
     const composer = textbox.closest("form");
     await expect(composer).not.toBeNull();
+    await expect(composer).toHaveAttribute("data-expanded", "true");
     const restingBorder = getComputedStyle(composer!).borderTopColor;
     await expect(restingBorder).not.toBe("transparent");
     await userEvent.tab();
     await expect(textbox).toHaveFocus();
     await expect(composer).toHaveAttribute("data-focus-surface");
+  },
+};
+
+export const ContextPanelCompact: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: ["paper-1"],
+      project_ids: [],
+    },
+    contextLabel: "Retrieval-Augmented Generation",
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const textbox = within(canvasElement).getByRole("textbox");
+    const composer = textbox.closest("form");
+    await expect(composer).not.toBeNull();
+    if (!composer) return;
+    await expect(composer).toHaveAttribute("data-expanded", "false");
+    await expect(composer.getBoundingClientRect().height).toBeLessThan(64);
+    await expect(
+      Number.parseFloat(getComputedStyle(composer).borderRadius),
+    ).toBeGreaterThanOrEqual(999);
   },
 };
 

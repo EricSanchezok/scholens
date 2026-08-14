@@ -1,6 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { ComponentProps } from "react";
-import { expect, fn, userEvent, waitFor, within } from "storybook/test";
+import {
+  expect,
+  fireEvent,
+  fn,
+  userEvent,
+  waitFor,
+  within,
+} from "storybook/test";
 
 import type { components } from "@/lib/api/generated/schema";
 import type { LiveTurn } from "@/features/conversation";
@@ -841,4 +848,39 @@ export const SidePanelReady: Story = {
     turns: [researchTurn()],
   },
   render: SidePanelStory,
+};
+
+export const SidePanelJumpToLatest: Story = {
+  args: {
+    ...SidePanelEmpty.args,
+    turns: Array.from({ length: 4 }, (_, index) =>
+      researchTurn({
+        id: `51000000-0000-4000-8000-${String(index + 21).padStart(12, "0")}`,
+        sequence: index + 1,
+        user_query: `Research question ${index + 1}`,
+      }),
+    ),
+  },
+  render: SidePanelStory,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const scrollRoot = canvasElement.querySelector<HTMLElement>(
+      "[data-conversation-scroll-root]",
+    );
+    await expect(scrollRoot).not.toBeNull();
+    if (!scrollRoot) return;
+    scrollRoot.scrollTop = 0;
+    await fireEvent.scroll(scrollRoot);
+    const jumpButton = await canvas.findByRole("button", {
+      name: "Jump to the latest response",
+    });
+    const composer = canvas.getByRole("textbox").closest("form");
+    await expect(composer).not.toBeNull();
+    if (!composer) return;
+    await waitFor(() => {
+      expect(jumpButton.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        composer.getBoundingClientRect().top,
+      );
+    });
+  },
 };

@@ -657,14 +657,22 @@ export function ConversationView({
           </div>
         )}
       </div>
-      {showJumpToLatest && (
-        <div
-          className={
-            layout === "side-panel"
-              ? "pointer-events-none absolute right-0 bottom-24 left-0 z-10 flex justify-center"
-              : "pointer-events-none sticky bottom-3 z-10 -mt-15 hidden h-15 justify-center max-lg:flex"
-          }
-        >
+      {showJumpToLatest && layout === "side-panel" && (
+        <div className="pointer-events-none relative z-30 h-0 shrink-0">
+          <div className="absolute right-0 bottom-3 left-0 flex justify-center">
+            <IconButton
+              className="bg-elevated shadow-raised pointer-events-auto size-12 rounded-full"
+              label={t("jumpToLatest")}
+              onClick={jumpToLatest}
+              variant="secondary"
+            >
+              <Icon glyph={ExpandIcon} size={20} />
+            </IconButton>
+          </div>
+        </div>
+      )}
+      {showJumpToLatest && layout !== "side-panel" && (
+        <div className="pointer-events-none sticky bottom-3 z-10 -mt-15 hidden h-15 justify-center max-lg:flex">
           <IconButton
             className="bg-elevated shadow-raised pointer-events-auto size-12 rounded-full"
             label={t("jumpToLatest")}

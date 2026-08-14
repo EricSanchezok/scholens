@@ -507,6 +507,7 @@ export function ResearchComposer({
   const hasContext = Boolean(turnContextLabel) || selectionCount > 0;
   const expanded =
     messageValue.includes("\n") || messageValue.trim().length > 88;
+  const contextPanelExpanded = expanded || Boolean(turnContextLabel);
 
   async function submit(values: ComposerValues) {
     await onSubmit(values.message.trim());
@@ -521,17 +522,23 @@ export function ResearchComposer({
     return (
       <form
         className={cn(
-          "border-line bg-surface shadow-composer lg:shadow-raised grid w-full gap-1.5 border p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
-          expanded
+          "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 border p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
+          contextPanelExpanded
             ? "rounded-[var(--radius-2xl)]"
             : "rounded-[var(--radius-full)]",
         )}
+        data-expanded={contextPanelExpanded}
         data-focus-surface
         onSubmit={composerForm.handleSubmit(submit)}
       >
         <textarea
           aria-label={placeholder}
-          className="placeholder:text-muted [field-sizing:content] max-h-28 min-h-11 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-6 outline-none focus-visible:outline-none"
+          className={cn(
+            "placeholder:text-muted [field-sizing:content] max-h-28 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none focus-visible:outline-none",
+            contextPanelExpanded
+              ? "col-span-3 col-start-1 row-start-1 min-h-11 px-2 py-2"
+              : "col-start-2 row-start-1 min-h-9 px-1 py-1.5",
+          )}
           data-focus-delegate="surface"
           data-focus-origin={focusOrigin ?? undefined}
           disabled={busy || unavailable}
@@ -546,17 +553,27 @@ export function ResearchComposer({
           {...messageRegistration}
           {...focusHandlers}
         />
-        <div className="flex min-w-0 items-center gap-1">
-          <div
-            aria-label={contextLabel}
-            className="text-secondary grid size-9 shrink-0 place-items-center rounded-full"
-            role="img"
-            title={contextLabel}
-          >
-            <Icon glyph={MentionIcon} size={20} tone="secondary" />
-          </div>
+        <div
+          aria-label={contextLabel}
+          className={cn(
+            "text-secondary col-start-1 grid size-9 shrink-0 place-items-center rounded-full",
+            contextPanelExpanded ? "row-start-2" : "row-start-1",
+          )}
+          role="img"
+          title={contextLabel}
+        >
+          <Icon glyph={MentionIcon} size={20} tone="secondary" />
+        </div>
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-1",
+            contextPanelExpanded
+              ? "col-span-2 col-start-2 row-start-2"
+              : "col-start-3 row-start-1",
+          )}
+        >
           {turnContextLabel ? (
-            <span className="bg-subtle text-secondary flex max-w-[45%] min-w-0 items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
+            <span className="bg-subtle text-secondary flex min-w-0 flex-1 items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
               <Icon glyph={DocumentIcon} size={16} tone="secondary" />
               <span className="truncate">{turnContextLabel}</span>
               {onTurnContextClear ? (
@@ -572,7 +589,7 @@ export function ResearchComposer({
             </span>
           ) : null}
           <ReasoningMenu
-            className="ml-auto h-9 px-2"
+            className="ml-auto h-9 shrink-0 px-2"
             disabled={unavailable}
             onChange={onReasoningLevelChange}
             value={reasoningLevel}

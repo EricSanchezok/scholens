@@ -283,11 +283,15 @@ locally.
 
 The Ask message viewport and Composer are two siblings inside the contextual
 panel. Messages own the panel's vertical scroll, while the `context-panel`
-Composer remains docked at the bottom with its input on top and context,
-reasoning, and send controls below. The switcher, message viewport, and Composer
-are separated by spacing rather than stacked card borders; the Composer uses
-the same `border-line` resting boundary and desktop raised elevation as Home at
-the narrower panel measure. Its outer surface alone owns keyboard focus.
+Composer remains docked at the bottom. Its resting state is one compact row:
+context, input, reasoning, and send controls share the same pill. It expands to
+a second control row only for multiline input, long input, or an attached
+passage. The switcher, message viewport, and Composer are separated by spacing
+rather than stacked card borders; the Composer uses the same `border-line`
+resting boundary and desktop raised elevation as Home at the narrower panel
+measure. Its outer surface alone owns keyboard focus. The Jump to latest action
+is anchored to the message-viewport/Composer boundary so it remains fully above
+the Composer at every expanded height.
 An empty paper conversation uses a quiet title and supporting description with
 no decorative icon or suggestion shortcuts; Home retains its existing empty
 behavior through the optional structured-empty-state interface.
