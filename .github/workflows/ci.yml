@@ -65,7 +65,7 @@ jobs:
       - name: Static cleanliness gates
         run: |
           if grep -R --exclude-dir=__pycache__ --line-number \
-            -E 'print\(|datetime\.utcnow\(|app\.api\.types' app; then
+            -E '(^|[^[:alnum:]_])print\(|datetime\.utcnow\(|app\.api\.types' app; then
             printf 'Forbidden legacy or debug pattern found in Server business code\n' >&2
             exit 1
           fi

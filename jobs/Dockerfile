@@ -4,6 +4,7 @@ FROM ${PYTHON_IMAGE} AS builder
 RUN python -m pip install --no-cache-dir uv==0.9.2
 WORKDIR /app
 COPY packages/scholens_observability/ /packages/scholens_observability/
+COPY packages/scholens_ai/ /packages/scholens_ai/
 COPY jobs/pyproject.toml jobs/uv.lock jobs/README.md /app/
 RUN uv sync --frozen --no-dev --no-install-project
 COPY jobs/src/ /app/src/

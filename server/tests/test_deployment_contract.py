@@ -51,6 +51,20 @@ def test_release_images_are_required_and_runtime_containers_are_non_root() -> No
         )
 
 
+def test_python_images_copy_shared_packages_before_locked_sync() -> None:
+    for dockerfile_path in (
+        ROOT / "server" / "Dockerfile",
+        ROOT / "jobs" / "Dockerfile",
+    ):
+        dockerfile = dockerfile_path.read_text(encoding="utf-8")
+        sync_index = dockerfile.index("RUN uv sync --frozen")
+        for shared_package in ("scholens_observability", "scholens_ai"):
+            copy_instruction = (
+                f"COPY packages/{shared_package}/ /packages/{shared_package}/"
+            )
+            assert dockerfile.index(copy_instruction) < sync_index
+
+
 def test_database_contract_shares_auth_and_isolates_scholens() -> None:
     runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
     bootstrap = (PRODUCTION / "bootstrap-db.sql").read_text(encoding="utf-8")

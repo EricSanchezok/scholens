@@ -21,6 +21,7 @@ RUN --mount=type=secret,id=github_token \
     && rm /tmp/sanchezcloud-identity.tar.gz
 
 COPY packages/scholens_observability/ /packages/scholens_observability/
+COPY packages/scholens_ai/ /packages/scholens_ai/
 COPY server/pyproject.toml server/uv.lock server/README.md /app/
 RUN uv sync --frozen --no-dev --no-install-project --no-install-package sanchezcloud-identity \
     && uv pip install --no-deps /app/sanchezcloud-identity/
