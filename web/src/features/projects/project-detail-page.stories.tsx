@@ -44,16 +44,63 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const OverviewWithChat: Story = {
+export const OverviewCollapsed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
       await canvas.findByRole("heading", { name: "Truthward" }),
     ).toBeVisible();
     await expect(
-      canvas.getByRole("region", { name: "Project chat" }),
-    ).toBeVisible();
+      canvas.queryByRole("region", { name: "Project chat" }),
+    ).not.toBeInTheDocument();
     await expect(canvas.getByText("Recent papers")).toBeVisible();
+  },
+};
+
+export const ChatExpanded: Story = {
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: `/projects/${projectId}?panel=chat&conversation=40000000-0000-4000-8000-000000000001`,
+        pathname: `/projects/${projectId}`,
+        query: {
+          conversation: "40000000-0000-4000-8000-000000000001",
+          panel: "chat",
+        },
+      },
+    },
+  },
+  loaders: [
+    async () => {
+      resetRefreshForTests();
+      window.history.replaceState(
+        {},
+        "",
+        `/projects/${projectId}?panel=chat&conversation=40000000-0000-4000-8000-000000000001`,
+      );
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("region", { name: "Project chat" }),
+    ).toBeVisible();
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Compare retrieval baselines",
+      }),
+    );
+    const body = within(document.body);
+    const history = await body.findByRole("dialog", {
+      name: "Conversation history",
+    });
+    await expect(within(history).getByText("Pinned")).toBeVisible();
+    await expect(within(history).getByText("Recent")).toBeVisible();
+    await expect(
+      within(history).getByRole("button", { name: "Unpin conversation" }),
+    ).toBeVisible();
   },
 };
 
@@ -74,7 +121,15 @@ export const Papers: Story = {
     await expect(
       paperTitles.some((element) => element.getClientRects().length > 0),
     ).toBe(true);
-    await userEvent.click(canvas.getByRole("button", { name: "Add papers" }));
+    await expect(
+      canvas.queryByRole("button", { name: "Add papers" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Manage project" }),
+    );
+    await userEvent.click(
+      within(document.body).getByRole("menuitem", { name: "Add papers" }),
+    );
     await expect(
       await within(document.body).findByRole("heading", {
         name: "Add papers from Library",
@@ -195,13 +250,13 @@ export const MobileChat: Story = {
       },
     },
   },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+  play: async () => {
+    const body = within(document.body);
     await expect(
-      await canvas.findByRole("region", { name: "Project chat" }),
+      await body.findByRole("region", { name: "Project chat" }),
     ).toBeVisible();
     await expect(
-      canvas.getByRole("button", { name: "Return to project" }),
+      body.getByRole("button", { name: "Close project chat" }),
     ).toBeVisible();
   },
 };
@@ -216,5 +271,51 @@ export const Tablet768: Story = {
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
       canvasElement.clientWidth,
     );
+  },
+};
+
+export const Mobile430: Story = {
+  globals: { viewport: { value: "mobile" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("button", { name: "Chat" }),
+    ).toBeVisible();
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
+      canvasElement.clientWidth,
+    );
+  },
+};
+
+export const LongTitle: Story = {
+  parameters: {
+    msw: { handlers: [...authHandlers.success, ...projectHandlers.longTitle] },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
+      canvasElement.clientWidth,
+    );
+  },
+};
+
+export const ChineseDark: Story = {
+  globals: { appearance: "dark", locale: "zh-CN" },
+};
+
+export const WithoutPaperManagement: Story = {
+  parameters: {
+    msw: {
+      handlers: [...authHandlers.success, ...projectHandlers.noPaperManagement],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Manage project" }),
+    );
+    await expect(
+      within(document.body).queryByRole("menuitem", { name: "Add papers" }),
+    ).not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
   },
 };

@@ -996,7 +996,7 @@
       "back": "Back to projects",
       "manage": "Manage project",
       "openChat": "Chat",
-      "closeChat": "Return to project",
+      "closeChat": "Close project chat",
       "errorTitle": "Project could not be opened",
       "errorDescription": "It may have been removed or you may no longer have access.",
       "tabs": {
@@ -1047,8 +1047,17 @@
     },
     "chat": {
       "title": "Project chat",
-      "switcher": "Switch project conversation",
+      "switcher": "Conversation history",
+      "search": "Search this project's conversations",
       "new": "New conversation",
+      "newDraft": "New conversation",
+      "loading": "Loading conversations",
+      "empty": "No conversations in this project yet",
+      "pin": "Pin conversation",
+      "unpin": "Unpin conversation",
+      "pinned": "Pinned",
+      "recent": "Recent",
+      "close": "Close project chat",
       "emptyTitle": "Explore this project",
       "emptyDescription": "Ask across the papers and research context collected here."
     },

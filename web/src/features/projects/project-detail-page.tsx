@@ -29,6 +29,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Sheet,
+  SheetContent,
+  SheetTitle,
   Tabs,
   TabsContent,
   TabsList,
@@ -41,15 +44,21 @@ import {
   AudioIcon,
   BackIcon,
   CitationIcon,
+  ClosePanelIcon,
   DataTableIcon,
   DeleteIcon,
   EditIcon,
   MoreIcon,
+  OpenPanelIcon,
   QuoteIcon,
 } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
+  conversationKeys,
+  conversationQueries,
+  ConversationSwitcher,
   ConversationView,
+  setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
 } from "@/features/conversation";
@@ -67,6 +76,7 @@ import {
 } from "./api";
 import { AddProjectPapersDialog } from "./components/add-project-papers-dialog";
 import { ProjectFormDialog } from "./components/project-form-dialog";
+import { useProjectDesktopLayout } from "./hooks/use-project-desktop-layout";
 import {
   parseProjectDetailSearch,
   serializeProjectDetailSearch,
@@ -100,6 +110,7 @@ function ProjectSearchField({
   return (
     <SearchField
       aria-label={label}
+      className="bg-subtle hover:border-line rounded-full border-transparent"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
       value={input}
@@ -110,12 +121,20 @@ function ProjectSearchField({
 function ProjectChat({
   conversationId,
   conversations,
+  conversationsLoading,
+  onClose,
   onConversationChange,
+  onConversationPin,
+  onConversationPinError,
   project,
 }: {
   conversationId?: string;
   conversations: components["schemas"]["ConversationSummaryResponse"][];
+  conversationsLoading: boolean;
+  onClose?: () => void;
   onConversationChange: (conversationId?: string) => void;
+  onConversationPin: (id: string, pinned: boolean) => Promise<void>;
+  onConversationPinError: () => void;
   project: Project;
 }) {
   const t = useTranslations("Projects.chat");
@@ -133,31 +152,36 @@ function ProjectChat({
     <section
       className="bg-canvas flex h-full min-h-0 flex-col"
       aria-label={t("title")}
+      data-project-chat
     >
-      <div className="border-line flex h-16 shrink-0 items-center gap-3 border-b px-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold">{t("title")}</h2>
-          <p className="text-muted truncate text-xs">{project.title}</p>
-        </div>
-        <Select
-          onValueChange={(value) =>
-            onConversationChange(value === "new" ? undefined : value)
-          }
-          value={conversationId ?? "new"}
-        >
-          <SelectTrigger className="h-9 w-44" aria-label={t("switcher")}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="new">{t("new")}</SelectItem>
-            {conversations.map((conversation) => (
-              <SelectItem key={conversation.id} value={conversation.id}>
-                {conversation.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <ConversationSwitcher
+        activeId={conversationId}
+        conversations={conversations}
+        labels={{
+          empty: t("empty"),
+          loading: t("loading"),
+          new: t("new"),
+          newDraft: t("newDraft"),
+          pin: t("pin"),
+          pinned: t("pinned"),
+          recent: t("recent"),
+          search: t("search"),
+          switcher: t("switcher"),
+          unpin: t("unpin"),
+        }}
+        loading={conversationsLoading}
+        onChange={onConversationChange}
+        onNew={() => onConversationChange(undefined)}
+        onPin={onConversationPin}
+        onPinError={onConversationPinError}
+        trailingAction={
+          onClose ? (
+            <IconButton label={t("close")} onClick={onClose} variant="ghost">
+              <Icon glyph={ClosePanelIcon} size={20} />
+            </IconButton>
+          ) : undefined
+        }
+      />
       <div className="min-h-0 flex-1">
         <ConversationView
           canSend={session.canSend}
@@ -197,15 +221,6 @@ function ProjectChat({
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="border-line border-b py-4 last:border-b-0 sm:border-r sm:border-b-0 sm:px-5 sm:first:pl-0 sm:last:border-r-0">
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
-      <div className="text-muted mt-1 text-xs">{label}</div>
-    </div>
-  );
-}
-
 function ProjectPaperRow({
   canRemove,
   onActionTrigger,
@@ -221,13 +236,13 @@ function ProjectPaperRow({
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <div className="border-line grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b px-1 py-2 last:border-b-0">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2">
       <Link
         className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
       >
         <span className="min-w-0">
-          <span className="block truncate text-sm font-medium">
+          <span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">
             {paper.title || t("untitled")}
           </span>
           <span className="text-muted mt-1 block truncate text-xs">
@@ -304,7 +319,7 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
   const format = useFormatter();
   const kind = output.item.kind;
   return (
-    <div className="border-line flex min-w-0 items-center gap-3 border-b px-1 py-4 last:border-b-0">
+    <div className="hover:bg-hover flex min-w-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-4 transition-colors">
       <div className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
         <Icon glyph={outputIcons[kind]} size={20} tone="secondary" />
       </div>
@@ -316,6 +331,66 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
         {format.dateTime(new Date(output.item.updated_at), "short")}
       </time>
     </div>
+  );
+}
+
+function ProjectManageMenu({
+  onAddPapers,
+  onDelete,
+  onEdit,
+  onLeave,
+  project,
+}: {
+  onAddPapers: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  onLeave: () => void;
+  project: Project;
+}) {
+  const t = useTranslations("Projects");
+  const hasProjectAction =
+    project.capabilities.edit_project ||
+    project.capabilities.delete ||
+    project.capabilities.leave;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton label={t("detail.manage")} variant="ghost">
+          <Icon glyph={MoreIcon} size={20} />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {project.capabilities.manage_papers ? (
+          <DropdownMenuItem onSelect={onAddPapers}>
+            <Icon glyph={AddIcon} size={16} />
+            {t("detail.papers.add")}
+          </DropdownMenuItem>
+        ) : null}
+        {project.capabilities.manage_papers && hasProjectAction ? (
+          <DropdownMenuSeparator />
+        ) : null}
+        {project.capabilities.edit_project ? (
+          <DropdownMenuItem onSelect={onEdit}>
+            <Icon glyph={EditIcon} size={16} />
+            {t("actions.edit")}
+          </DropdownMenuItem>
+        ) : null}
+        {(project.capabilities.delete || project.capabilities.leave) &&
+        project.capabilities.edit_project ? (
+          <DropdownMenuSeparator />
+        ) : null}
+        {project.capabilities.delete ? (
+          <DropdownMenuItem destructive onSelect={onDelete}>
+            {t("actions.delete")}
+          </DropdownMenuItem>
+        ) : null}
+        {project.capabilities.leave ? (
+          <DropdownMenuItem destructive onSelect={onLeave}>
+            {t("actions.leave")}
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -331,6 +406,7 @@ export function ProjectDetailWorkspace({
   const queryClient = useQueryClient();
   const toast = useToast();
   const t = useTranslations("Projects");
+  const desktopLayout = useProjectDesktopLayout();
   const { signOut } = useAuthSession();
   const state = React.useMemo(
     () =>
@@ -344,11 +420,14 @@ export function ProjectDetailWorkspace({
   const [paperRemoval, setPaperRemoval] =
     React.useState<PaperRemovalImpact | null>(null);
   const paperRemovalTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const mobileChatTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const [destructive, setDestructive] = React.useState<
     "delete" | "leave" | null
   >(null);
   const projectQuery = useQuery(projectQueries.detail(projectId));
-  const conversationsQuery = useQuery(projectQueries.conversations(projectId));
+  const conversationsQuery = useQuery(
+    conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
+  );
   const papersQuery = useQuery({
     ...projectQueries.papers(projectId, state),
     enabled: state.view === "papers" || state.view === "overview",
@@ -398,6 +477,12 @@ export function ProjectDetailWorkspace({
         }),
         queryClient.invalidateQueries({ queryKey: projectKeys.lists() }),
       ]);
+      replaceSearch({
+        paperCursor: undefined,
+        paperQuery: "",
+        paperSort: "added_desc",
+        view: "papers",
+      });
     },
   });
   const removePaperMutation = useMutation({
@@ -473,6 +558,13 @@ export function ProjectDetailWorkspace({
     }
   }
 
+  async function pinConversation(id: string, pinned: boolean) {
+    await setConversationPinned(id, pinned);
+    await queryClient.invalidateQueries({
+      queryKey: conversationKeys.lists(),
+    });
+  }
+
   if (projectQuery.isPending) {
     return (
       <main className="grid min-h-screen place-items-center p-6">
@@ -498,12 +590,18 @@ export function ProjectDetailWorkspace({
     );
   }
   const project = projectQuery.data;
-  const chat = (
+  const renderChat = (onClose?: () => void) => (
     <ProjectChat
       conversationId={state.conversation}
       conversations={conversationsQuery.data?.items ?? []}
+      conversationsLoading={conversationsQuery.isPending}
+      onClose={onClose}
       onConversationChange={(conversation) =>
         replaceSearch({ conversation, panel: "chat" })
+      }
+      onConversationPin={pinConversation}
+      onConversationPinError={() =>
+        toast.notify({ title: t("feedback.actionFailed") })
       }
       project={project}
     />
@@ -520,31 +618,52 @@ export function ProjectDetailWorkspace({
       }
       conversations={conversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
-        <span className="block truncate text-base font-semibold">
-          {state.panel === "chat" ? t("chat.title") : project.title}
+        <span
+          className="block truncate text-base font-semibold"
+          data-project-title
+        >
+          {project.title}
         </span>
       }
       mobileHeaderLeading={
-        state.panel === "chat" ? (
-          <IconButton
-            label={t("detail.closeChat")}
-            onClick={() => replaceSearch({ panel: undefined })}
-            variant="ghost"
-          >
-            <Icon glyph={BackIcon} size={20} />
-          </IconButton>
-        ) : undefined
+        <Link
+          aria-label={t("detail.back")}
+          className="hover:bg-hover grid size-11 shrink-0 place-items-center rounded-[var(--radius-md)]"
+          href="/projects"
+        >
+          <Icon glyph={BackIcon} size={20} />
+        </Link>
       }
       mobileHeaderTrailing={
-        state.panel !== "chat" ? (
-          <Button
-            onClick={() => replaceSearch({ panel: "chat" })}
-            size="sm"
+        <div className="flex items-center gap-1">
+          <ProjectManageMenu
+            onAddPapers={() => setAddPapersOpen(true)}
+            onDelete={() => setDestructive("delete")}
+            onEdit={() => setEditOpen(true)}
+            onLeave={() => setDestructive("leave")}
+            project={project}
+          />
+          <IconButton
+            label={
+              state.panel === "chat"
+                ? t("detail.closeChat")
+                : t("detail.openChat")
+            }
+            onClick={() =>
+              replaceSearch({
+                panel: state.panel === "chat" ? undefined : "chat",
+              })
+            }
+            ref={mobileChatTriggerRef}
+            aria-pressed={state.panel === "chat"}
             variant="ghost"
           >
-            {t("detail.openChat")}
-          </Button>
-        ) : null
+            <Icon
+              glyph={state.panel === "chat" ? ClosePanelIcon : OpenPanelIcon}
+              size={20}
+            />
+          </IconButton>
+        </div>
       }
       onCollapsedChange={setCollapsed}
       onSignOut={handleSignOut}
@@ -552,15 +671,9 @@ export function ProjectDetailWorkspace({
       signingOut={signingOut}
     >
       <div className="flex h-full min-h-0">
-        <div
-          className={
-            state.panel === "chat"
-              ? "hidden min-w-0 flex-1 lg:block"
-              : "min-w-0 flex-1"
-          }
-        >
-          <div className="mx-auto w-full max-w-5xl px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
-            <header className="flex min-w-0 items-start gap-4">
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-9">
+            <header className="hidden min-w-0 items-start gap-4 lg:flex">
               <Link
                 aria-label={t("detail.back")}
                 className="hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]"
@@ -569,85 +682,123 @@ export function ProjectDetailWorkspace({
                 <Icon glyph={BackIcon} size={20} />
               </Link>
               <div className="min-w-0 flex-1">
-                <h1 className="truncate text-2xl font-semibold tracking-[-0.02em]">
+                <h1
+                  className="max-w-3xl text-2xl font-semibold tracking-[-0.02em] break-words"
+                  data-project-title
+                >
                   {project.title}
                 </h1>
                 <p className="text-secondary mt-2 line-clamp-2 max-w-3xl text-sm">
                   {project.description || t("row.noDescription")}
                 </p>
+                <dl className="text-muted mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <dt>{t("metrics.papers")}</dt>
+                    <dd className="text-secondary tabular-nums">
+                      {project.num_papers}
+                    </dd>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <dt>{t("metrics.conversations")}</dt>
+                    <dd className="text-secondary tabular-nums">
+                      {project.num_conversations}
+                    </dd>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <dt>{t("metrics.outputs")}</dt>
+                    <dd className="text-secondary tabular-nums">
+                      {project.num_outputs}
+                    </dd>
+                  </div>
+                </dl>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton label={t("detail.manage")} variant="secondary">
-                    <Icon glyph={MoreIcon} size={20} />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {project.capabilities.edit_project && (
-                    <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-                      <Icon glyph={EditIcon} size={16} />
-                      {t("actions.edit")}
-                    </DropdownMenuItem>
-                  )}
-                  {(project.capabilities.delete ||
-                    project.capabilities.leave) &&
-                    project.capabilities.edit_project && (
-                      <DropdownMenuSeparator />
-                    )}
-                  {project.capabilities.delete && (
-                    <DropdownMenuItem
-                      destructive
-                      onSelect={() => setDestructive("delete")}
-                    >
-                      {t("actions.delete")}
-                    </DropdownMenuItem>
-                  )}
-                  {project.capabilities.leave && (
-                    <DropdownMenuItem
-                      destructive
-                      onSelect={() => setDestructive("leave")}
-                    >
-                      {t("actions.leave")}
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex shrink-0 items-center gap-1">
+                <ProjectManageMenu
+                  onAddPapers={() => setAddPapersOpen(true)}
+                  onDelete={() => setDestructive("delete")}
+                  onEdit={() => setEditOpen(true)}
+                  onLeave={() => setDestructive("leave")}
+                  project={project}
+                />
+                <IconButton
+                  label={
+                    state.panel === "chat"
+                      ? t("detail.closeChat")
+                      : t("detail.openChat")
+                  }
+                  onClick={() =>
+                    replaceSearch({
+                      panel: state.panel === "chat" ? undefined : "chat",
+                    })
+                  }
+                  aria-pressed={state.panel === "chat"}
+                  variant="ghost"
+                >
+                  <Icon
+                    glyph={
+                      state.panel === "chat" ? ClosePanelIcon : OpenPanelIcon
+                    }
+                    size={20}
+                  />
+                </IconButton>
+              </div>
             </header>
 
+            <section className="lg:hidden">
+              <p className="text-secondary line-clamp-3 text-sm leading-6">
+                {project.description || t("row.noDescription")}
+              </p>
+              <dl className="text-muted mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <dt>{t("metrics.papers")}</dt>
+                  <dd className="text-secondary tabular-nums">
+                    {project.num_papers}
+                  </dd>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <dt>{t("metrics.conversations")}</dt>
+                  <dd className="text-secondary tabular-nums">
+                    {project.num_conversations}
+                  </dd>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <dt>{t("metrics.outputs")}</dt>
+                  <dd className="text-secondary tabular-nums">
+                    {project.num_outputs}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
             <Tabs
-              className="mt-7"
+              className="mt-6 lg:mt-8"
               onValueChange={(view: string) =>
                 replaceSearch({ view: view as ProjectView })
               }
               value={state.view}
             >
-              <TabsList>
-                <TabsTrigger value="overview">
+              <TabsList className="bg-transparent p-0">
+                <TabsTrigger
+                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  value="overview"
+                >
                   {t("detail.tabs.overview")}
                 </TabsTrigger>
-                <TabsTrigger value="papers">
+                <TabsTrigger
+                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  value="papers"
+                >
                   {t("detail.tabs.papers")}
                 </TabsTrigger>
-                <TabsTrigger value="outputs">
+                <TabsTrigger
+                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  value="outputs"
+                >
                   {t("detail.tabs.outputs")}
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent className="mt-6 grid gap-8" value="overview">
-                <section className="border-line bg-surface grid rounded-[var(--radius-xl)] border px-5 sm:grid-cols-3">
-                  <Metric
-                    label={t("metrics.papers")}
-                    value={project.num_papers}
-                  />
-                  <Metric
-                    label={t("metrics.conversations")}
-                    value={project.num_conversations}
-                  />
-                  <Metric
-                    label={t("metrics.outputs")}
-                    value={project.num_outputs}
-                  />
-                </section>
+              <TabsContent className="mt-7 grid gap-10" value="overview">
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-base font-semibold">
@@ -661,7 +812,7 @@ export function ProjectDetailWorkspace({
                       {t("detail.viewAll")}
                     </Button>
                   </div>
-                  <div className="border-line bg-surface rounded-[var(--radius-xl)] border px-4">
+                  <div className="divide-line-subtle border-line-subtle divide-y border-y">
                     {papersQuery.data?.items.slice(0, 3).map((paper) => (
                       <ProjectPaperRow
                         canRemove={project.capabilities.manage_papers}
@@ -676,7 +827,7 @@ export function ProjectDetailWorkspace({
                     ))}
                     {!papersQuery.isPending &&
                       papersQuery.data?.items.length === 0 && (
-                        <p className="text-muted py-8 text-center text-sm">
+                        <p className="text-muted py-12 text-center text-sm">
                           {t("detail.papers.empty")}
                         </p>
                       )}
@@ -695,13 +846,13 @@ export function ProjectDetailWorkspace({
                       {t("detail.viewAll")}
                     </Button>
                   </div>
-                  <div className="border-line bg-surface rounded-[var(--radius-xl)] border px-4">
+                  <div className="divide-line-subtle border-line-subtle divide-y border-y">
                     {outputsQuery.data?.items.slice(0, 3).map((output) => (
                       <ProjectOutputRow key={output.item.id} output={output} />
                     ))}
                     {!outputsQuery.isPending &&
                       outputsQuery.data?.items.length === 0 && (
-                        <div className="py-8 text-center">
+                        <div className="py-12 text-center">
                           <p className="text-muted text-sm">
                             {t("detail.outputs.empty")}
                           </p>
@@ -709,7 +860,7 @@ export function ProjectDetailWorkspace({
                             className="mt-3"
                             onClick={() => replaceSearch({ panel: "chat" })}
                             size="sm"
-                            variant="secondary"
+                            variant="ghost"
                           >
                             {t("detail.outputs.startChat")}
                           </Button>
@@ -720,7 +871,7 @@ export function ProjectDetailWorkspace({
               </TabsContent>
 
               <TabsContent className="mt-6" value="papers">
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto]">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]">
                   <ProjectSearchField
                     key={state.paperQuery}
                     label={t("detail.papers.search")}
@@ -735,7 +886,10 @@ export function ProjectDetailWorkspace({
                     }
                     value={state.paperSort}
                   >
-                    <SelectTrigger aria-label={t("detail.papers.sortLabel")}>
+                    <SelectTrigger
+                      aria-label={t("detail.papers.sortLabel")}
+                      className="bg-subtle hover:border-line rounded-full border-transparent"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -750,14 +904,8 @@ export function ProjectDetailWorkspace({
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  {project.capabilities.manage_papers && (
-                    <Button onClick={() => setAddPapersOpen(true)}>
-                      <Icon glyph={AddIcon} size={20} />
-                      {t("detail.papers.add")}
-                    </Button>
-                  )}
                 </div>
-                <div className="border-line bg-surface mt-5 rounded-[var(--radius-xl)] border px-4">
+                <div className="divide-line-subtle border-line-subtle mt-5 divide-y border-y">
                   {papersQuery.isPending ? (
                     <div className="py-6">
                       <LoadingState />
@@ -773,7 +921,7 @@ export function ProjectDetailWorkspace({
                       />
                     </div>
                   ) : papersQuery.data.items.length === 0 ? (
-                    <p className="text-muted py-10 text-center text-sm">
+                    <p className="text-muted py-12 text-center text-sm">
                       {t("detail.papers.empty")}
                     </p>
                   ) : (
@@ -837,7 +985,10 @@ export function ProjectDetailWorkspace({
                     }
                     value={state.outputKinds[0] ?? "all"}
                   >
-                    <SelectTrigger aria-label={t("detail.outputs.kindLabel")}>
+                    <SelectTrigger
+                      aria-label={t("detail.outputs.kindLabel")}
+                      className="bg-subtle hover:border-line rounded-full border-transparent"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -864,7 +1015,10 @@ export function ProjectDetailWorkspace({
                     }
                     value={state.outputSort}
                   >
-                    <SelectTrigger aria-label={t("detail.outputs.sortLabel")}>
+                    <SelectTrigger
+                      aria-label={t("detail.outputs.sortLabel")}
+                      className="bg-subtle hover:border-line rounded-full border-transparent"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -877,7 +1031,7 @@ export function ProjectDetailWorkspace({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="border-line bg-surface mt-5 rounded-[var(--radius-xl)] border px-4">
+                <div className="divide-line-subtle border-line-subtle mt-5 divide-y border-y">
                   {outputsQuery.isPending ? (
                     <div className="py-6">
                       <LoadingState />
@@ -893,7 +1047,7 @@ export function ProjectDetailWorkspace({
                       />
                     </div>
                   ) : outputsQuery.data.items.length === 0 ? (
-                    <div className="py-10 text-center">
+                    <div className="py-12 text-center">
                       <p className="text-muted text-sm">
                         {t("detail.outputs.empty")}
                       </p>
@@ -901,7 +1055,7 @@ export function ProjectDetailWorkspace({
                         className="mt-3"
                         onClick={() => replaceSearch({ panel: "chat" })}
                         size="sm"
-                        variant="secondary"
+                        variant="ghost"
                       >
                         {t("detail.outputs.startChat")}
                       </Button>
@@ -940,16 +1094,41 @@ export function ProjectDetailWorkspace({
             </Tabs>
           </div>
         </div>
-        <aside
-          className={
-            state.panel === "chat"
-              ? "min-w-0 flex-1 lg:w-[26rem] lg:flex-none"
-              : "border-line hidden w-[26rem] shrink-0 border-l lg:block"
-          }
-        >
-          {chat}
-        </aside>
+        {desktopLayout ? (
+          <aside
+            className={
+              state.panel === "chat"
+                ? "border-line flex w-[clamp(23rem,34vw,31.25rem)] shrink-0 border-l"
+                : "hidden"
+            }
+          >
+            {renderChat()}
+          </aside>
+        ) : null}
       </div>
+
+      {!desktopLayout ? (
+        <Sheet
+          onOpenChange={(open) => {
+            if (!open) replaceSearch({ panel: undefined });
+          }}
+          open={state.panel === "chat"}
+        >
+          <SheetContent
+            className="inset-0 h-[100dvh] w-full max-w-none border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] data-[state=closed]:hidden"
+            closeLabel={t("detail.closeChat")}
+            forceMount
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              mobileChatTriggerRef.current?.focus();
+            }}
+            showCloseButton={false}
+          >
+            <SheetTitle className="sr-only">{t("chat.title")}</SheetTitle>
+            {renderChat(() => replaceSearch({ panel: undefined }))}
+          </SheetContent>
+        </Sheet>
+      ) : null}
 
       <ProjectFormDialog
         initialValue={{

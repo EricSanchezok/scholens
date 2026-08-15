@@ -169,18 +169,3 @@ export async function deleteReaderComment(commentId: string) {
     params: { path: { comment_id: commentId } },
   });
 }
-
-export async function setReaderConversationPinned(
-  conversationId: string,
-  pinned: boolean,
-) {
-  const { data } = await apiClient.PATCH(
-    "/api/v1/conversations/{conversation_id}",
-    {
-      params: { path: { conversation_id: conversationId } },
-      body: { pinned },
-    },
-  );
-  if (!data) throw new Error("Update conversation response was empty");
-  return data;
-}

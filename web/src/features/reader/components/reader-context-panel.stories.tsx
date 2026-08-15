@@ -4,13 +4,11 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import type { ReaderSelection } from "./pdf-page";
 import {
   ReaderAnnotationPanel,
-  ReaderConversationSwitcher,
   ReaderDetailsPanel,
 } from "./reader-context-panel";
 import type {
   ReaderAnnotation,
   ReaderAnnotationSummary,
-  ReaderConversation,
   ReaderDocument,
 } from "../reader-types";
 
@@ -181,55 +179,6 @@ const document: ReaderDocument = {
   publish_date: "2026-06-01",
   publisher: "Scholens Press",
 };
-
-const conversations: ReaderConversation[] = [
-  {
-    id: "40000000-0000-4000-8000-000000000001",
-    archived_at: null,
-    capabilities: {
-      archive: true,
-      delete: true,
-      detach: false,
-      move: false,
-      pin: true,
-      rename: true,
-      send: true,
-      share: false,
-    },
-    pinned_at: "2026-08-12T10:05:00Z",
-    read_only: false,
-    read_only_reason: null,
-    scope_access: "active",
-    scope_id: selection.document_id,
-    scope_label: document.title,
-    scope_type: "paper",
-    title: "Compare the evaluation methods",
-    updated_at: "2026-08-12T10:05:00Z",
-  },
-  {
-    id: "40000000-0000-4000-8000-000000000002",
-    archived_at: null,
-    capabilities: {
-      archive: true,
-      delete: true,
-      detach: false,
-      move: false,
-      pin: true,
-      rename: true,
-      send: true,
-      share: false,
-    },
-    pinned_at: null,
-    read_only: false,
-    read_only_reason: null,
-    scope_access: "active",
-    scope_id: selection.document_id,
-    scope_label: document.title,
-    scope_type: "paper",
-    title: "Summarize the central contribution",
-    updated_at: "2026-08-12T09:05:00Z",
-  },
-];
 
 const annotationArgs = {
   audienceFilter: "all" as const,
@@ -425,43 +374,4 @@ export const Details: Story = {
   render: () => (
     <ReaderDetailsPanel document={document} title={document.title!} />
   ),
-};
-
-export const ConversationSwitcherClosed: Story = {
-  render: () => (
-    <ReaderConversationSwitcher
-      activeId={conversations[0]!.id}
-      conversations={conversations}
-      loading={false}
-      onChange={fn()}
-      onNew={fn()}
-      onPin={fn(async () => undefined)}
-      onPinError={fn()}
-    />
-  ),
-};
-
-export const ConversationSwitcherOpen: Story = {
-  render: () => (
-    <ReaderConversationSwitcher
-      activeId={conversations[0]!.id}
-      conversations={conversations}
-      loading={false}
-      onChange={fn()}
-      onNew={fn()}
-      onPin={fn(async () => undefined)}
-      onPinError={fn()}
-    />
-  ),
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await expect(
-      canvas.queryByPlaceholderText("Search this paper’s conversations"),
-    ).not.toBeInTheDocument();
-    const trigger = canvas.getByRole("button", {
-      name: "Compare the evaluation methods",
-    });
-    await userEvent.click(trigger);
-    await expect(trigger).toHaveAttribute("aria-expanded", "true");
-  },
 };

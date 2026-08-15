@@ -3,6 +3,7 @@ export * from "./api/conversations";
 export * from "./api/keys";
 export * from "./api/queries";
 export * from "./components/conversation-sources";
+export * from "./components/conversation-switcher";
 export * from "./components/conversation-view";
 export * from "./components/conversation-worklog";
 export * from "./components/message-content";

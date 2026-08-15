@@ -28,6 +28,7 @@ import {
 import { Icon } from "@/design-system/icons/icon";
 import { AddIcon, ProjectIcon } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
+import { conversationQueries } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import type { components } from "@/lib/api/generated/schema";
 import {
@@ -120,7 +121,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
     project: Project;
   } | null>(null);
   const projectsQuery = useQuery(projectQueries.list(state));
-  const conversationsQuery = useQuery(projectQueries.conversations());
+  const conversationsQuery = useQuery(conversationQueries.list());
 
   const replaceSearch = React.useCallback(
     (patch: Partial<ProjectsSearchState>) => {

@@ -37,4 +37,15 @@ describe("Projects URL state", () => {
       parseProjectDetailSearch(serializeProjectDetailSearch(state)),
     ).toEqual(state);
   });
+
+  it("keeps a selected conversation when the chat panel is collapsed", () => {
+    const state = parseProjectDetailSearch(
+      new URLSearchParams("conversation=c1"),
+    );
+    expect(state.panel).toBeUndefined();
+    expect(state.conversation).toBe("c1");
+    const serialized = serializeProjectDetailSearch(state).toString();
+    expect(serialized).toContain("conversation=c1");
+    expect(serialized).not.toContain("panel=chat");
+  });
 });

@@ -44,6 +44,25 @@ const populated = [
       next_cursor: null,
     }),
   ),
+  http.get(`${api}/conversations/:conversationId`, ({ params }) => {
+    const conversation = projectConversationFixtures.find(
+      (item) => item.id === params.conversationId,
+    );
+    return HttpResponse.json({
+      ...(conversation ?? projectConversationFixtures[0]),
+      paper_context: { kind: "library" },
+      tool_permissions: [],
+    });
+  }),
+  http.get(`${api}/conversations/:conversationId/turns`, () =>
+    HttpResponse.json({ items: [], next_cursor: null, path_revision: 1 }),
+  ),
+  http.patch(`${api}/conversations/:conversationId`, ({ params }) => {
+    const conversation = projectConversationFixtures.find(
+      (item) => item.id === params.conversationId,
+    );
+    return HttpResponse.json(conversation ?? projectConversationFixtures[0]);
+  }),
   http.get(`${api}/library/papers`, () =>
     HttpResponse.json({
       items: projectLibraryPaperFixtures,
@@ -151,6 +170,35 @@ export const projectHandlers = {
         next_cursor: null,
         previous_cursor: null,
         total_count: 0,
+      }),
+    ),
+    ...populated,
+  ],
+  noPaperManagement: [
+    http.get(`${api}/projects/:projectId`, () =>
+      HttpResponse.json({
+        ...projectFixtures[0],
+        capabilities: {
+          ...projectFixtures[0]!.capabilities,
+          manage_papers: false,
+        },
+        membership: {
+          ...projectFixtures[0]!.membership,
+          permissions: {
+            ...projectFixtures[0]!.membership.permissions,
+            manage_papers: false,
+          },
+        },
+      }),
+    ),
+    ...populated,
+  ],
+  longTitle: [
+    http.get(`${api}/projects/:projectId`, () =>
+      HttpResponse.json({
+        ...projectFixtures[0],
+        title:
+          "Longitudinal evidence synthesis for trustworthy retrieval systems across multilingual research contexts",
       }),
     ),
     ...populated,
