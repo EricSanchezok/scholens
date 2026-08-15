@@ -58,7 +58,10 @@ MinerU is user supplied. The connection form accepts a token from
 `https://mineru.net/apiManage/token`, submits it once over the authenticated
 Server API, and subsequently shows only status and a masked hint. Replacing a
 token creates a new credential revision; disconnecting removes its availability
-for future work. UI copy must never imply that Scholens supplies the token.
+for future work. MinerU has no lightweight credential probe, so a newly saved
+token remains enabled and is verified by the first real PDF or reflow request;
+the connection state states that timing directly. UI copy must never imply that
+Scholens supplies the token.
 
 When PDF ingestion or AI reflow reports that MinerU is required, its action
 opens Settings directly on Connections. The initiating surface retains one

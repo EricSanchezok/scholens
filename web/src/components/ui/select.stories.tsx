@@ -2,6 +2,14 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, within } from "storybook/test";
 
 import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -20,6 +28,24 @@ function LanguageSelect({ disabled = false }: { disabled?: boolean }) {
         <SelectItem value="zh-CN">简体中文</SelectItem>
       </SelectContent>
     </Select>
+  );
+}
+
+function SelectInDialog() {
+  return (
+    <Dialog defaultOpen>
+      <DialogContent closeLabel="Close settings">
+        <DialogHeader>
+          <DialogTitle>Appearance & language</DialogTitle>
+          <DialogDescription>
+            Choose the language used by this interface.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <LanguageSelect />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -55,6 +81,18 @@ export const KeyboardInteraction: Story = {
     const trigger = canvas.getByRole("combobox", { name: "Language" });
     await userEvent.click(trigger);
     await userEvent.keyboard("{ArrowDown}{Enter}");
+    await expect(trigger).toHaveTextContent("简体中文");
+  },
+};
+export const DialogLayering: Story = {
+  render: () => <SelectInDialog />,
+  play: async () => {
+    const body = within(document.body);
+    const trigger = await body.findByRole("combobox", { name: "Language" });
+    await userEvent.click(trigger);
+    await userEvent.click(
+      await body.findByRole("option", { name: "简体中文" }),
+    );
     await expect(trigger).toHaveTextContent("简体中文");
   },
 };

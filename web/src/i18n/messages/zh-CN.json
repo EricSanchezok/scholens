@@ -1200,7 +1200,7 @@
       },
       "state": {
         "connected": "已连接",
-        "connected_unverified": "已保存 · 尚未验证",
+        "connected_unverified": "已保存 · 首次使用时验证",
         "invalid": "需要处理",
         "disabled": "已停用",
         "disconnected": "未连接"
