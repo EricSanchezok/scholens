@@ -49,6 +49,24 @@ function SelectInDialog() {
   );
 }
 
+function LongValueSelect() {
+  return (
+    <div className="w-40">
+      <Select defaultValue="long">
+        <SelectTrigger aria-label="Reader context">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="long">
+            A deliberately long research project title that must stay on one
+            line
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 const meta = {
   title: "Forms/Select",
   component: LanguageSelect,
@@ -94,5 +112,19 @@ export const DialogLayering: Story = {
       await body.findByRole("option", { name: "简体中文" }),
     );
     await expect(trigger).toHaveTextContent("简体中文");
+  },
+};
+export const LongValue: StoryObj<typeof LongValueSelect> = {
+  render: () => <LongValueSelect />,
+  play: async ({ canvasElement }) => {
+    const trigger = within(canvasElement).getByRole("combobox", {
+      name: "Reader context",
+    });
+    const value = trigger.querySelector("[data-slot]") ?? trigger.firstChild;
+    await expect(trigger.scrollWidth).toBeLessThanOrEqual(trigger.clientWidth);
+    await expect(value).not.toBeNull();
+    await expect(window.getComputedStyle(value as Element).whiteSpace).toBe(
+      "nowrap",
+    );
   },
 };

@@ -61,6 +61,12 @@ border ownership with one divided list instead of a stack of repeated cards.
 This visual contract also applies to Outputs so switching tabs does not change
 the page's interface dialect.
 
+Paper and tag rows follow the shared collection-row and nested-action contract
+in [Component Development](./component-development.md). A paper title is the
+desktop table's only keyboard navigation Link; date cells only extend the
+pointer hit region, while selection and overflow controls remain independent.
+Touch layouts keep overflow actions visible and never depend on hover.
+
 Library tags are explicit user-owned organizational labels, not model-generated
 keywords. Papers without assigned labels show no synthetic tags; the filter
 only lists labels the user owns, and assigned labels render with the paper.

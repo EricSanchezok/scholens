@@ -1132,7 +1132,7 @@ test("falls back from an inaccessible Project Reader context", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("combobox", { name: "Reader context" }),
-  ).toHaveText("Personal reading");
+  ).toHaveText("Personal");
 });
 
 test("deduplicates exact anchors and reveals resolved Project discussions weakly", async ({

@@ -9,8 +9,22 @@ import { cn } from "@/lib/utilities/cn";
 import { keyboardFocusRing } from "./focus";
 
 export const Select = SelectPrimitive.Root;
-export const SelectValue = SelectPrimitive.Value;
 export const SelectGroup = SelectPrimitive.Group;
+export const SelectValue = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Value>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>
+>(({ className, ...props }, ref) => (
+  <span
+    className={cn(
+      "min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap",
+      className,
+    )}
+    data-slot="select-value"
+  >
+    <SelectPrimitive.Value ref={ref} {...props} />
+  </span>
+));
+SelectValue.displayName = SelectPrimitive.Value.displayName;
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
@@ -25,7 +39,7 @@ export const SelectTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon>
+    <SelectPrimitive.Icon className="shrink-0">
       <Icon glyph={NavArrowDown} size={16} tone="secondary" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>

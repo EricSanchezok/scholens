@@ -41,7 +41,24 @@
       "recent": "Recent",
       "empty": "Your conversations will appear here.",
       "noMatches": "No matching conversations",
-      "conversationContext": "Research context"
+      "conversationContext": "Research context",
+      "openActions": "Open actions for {title}",
+      "openNewTab": "Open in new tab",
+      "rename": "Rename",
+      "renameTitle": "Rename conversation",
+      "renameDescription": "Choose a clear title that is easy to find later.",
+      "renameLabel": "Conversation title",
+      "saveRename": "Save",
+      "cancelRename": "Cancel",
+      "closeRename": "Close rename dialog",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "delete": "Delete",
+      "deleteTitle": "Delete conversation?",
+      "deleteDescription": "“{title}” and its messages will be permanently deleted. This cannot be undone.",
+      "confirmDelete": "Delete",
+      "cancelDelete": "Cancel",
+      "actionFailed": "Conversation could not be updated. Try again."
     },
     "account": {
       "openMenu": "Open account menu",
@@ -685,8 +702,8 @@
       "unavailableDescription": "It was deleted, access changed, or it belongs to another reading context. Reader opened a new conversation for this paper."
     },
     "projects": {
-      "selector": "Reader context",
-      "personal": "Personal reading",
+      "selector": "Reader context: {context}",
+      "personal": "Personal",
       "unavailableTitle": "Switched to personal reading",
       "unavailableDescription": "You no longer have access to that project, so Reader returned to your personal context."
     },

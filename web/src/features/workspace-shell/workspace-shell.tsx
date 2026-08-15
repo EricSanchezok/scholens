@@ -49,6 +49,15 @@ import {
   NewConversationIcon,
   ProjectIcon,
 } from "./icons";
+import {
+  ConversationActionDialogs,
+  type ConversationDialogTarget,
+} from "./conversation-action-dialogs";
+import { ConversationListItem } from "./conversation-list-item";
+import {
+  useConversationListController,
+  type ConversationListController,
+} from "./use-conversation-list-controller";
 
 export type WorkspaceDestination = "ask" | "library" | "projects";
 
@@ -144,12 +153,24 @@ function ConversationGroup({
   activeConversationId,
   onSelect,
   conversationHref,
+  controller,
+  onDelete,
+  onRequestMobileRename,
 }: {
   title: string;
   items: ConversationSummary[];
   activeConversationId?: string;
   onSelect?: () => void;
   conversationHref?: (conversationId: string) => string;
+  controller: ConversationListController;
+  onDelete: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
+  onRequestMobileRename: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
 }) {
   if (items.length === 0) return null;
 
@@ -158,34 +179,34 @@ function ConversationGroup({
       <div className="text-secondary flex h-6 items-center px-2 text-xs font-medium">
         {title}
       </div>
-      {items.map((conversation) => (
-        <Link
-          aria-current={
-            activeConversationId === conversation.id ? "page" : undefined
-          }
-          className={cn(
-            "text-sidebar-label hover:bg-hover flex h-8 min-w-0 items-center gap-2 rounded-[var(--radius-lg)] px-2",
-            keyboardFocusRing,
-            activeConversationId === conversation.id && "bg-hover",
-          )}
-          href={
-            (conversationHref?.(conversation.id) ??
-              `/?conversation=${conversation.id}`) as Route
-          }
-          key={conversation.id}
-          onClick={onSelect}
-        >
-          {conversation.pinned_at && (
-            <Icon glyph={AskIcon} size={20} tone="secondary" />
-          )}
-          <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
-          {conversation.scope_label && (
-            <span className="text-caption text-secondary max-w-[4.5rem] truncate">
-              {conversation.scope_label}
-            </span>
-          )}
-        </Link>
-      ))}
+      {items.map((conversation) => {
+        const href =
+          conversationHref?.(conversation.id) ??
+          `/?conversation=${conversation.id}`;
+        return (
+          <ConversationListItem
+            conversation={conversation}
+            current={activeConversationId === conversation.id}
+            href={href}
+            key={conversation.id}
+            onDelete={(returnFocus) => onDelete(conversation, returnFocus)}
+            onNavigate={onSelect}
+            onRename={(title) =>
+              controller.renameConversation(conversation, title)
+            }
+            onRequestMobileRename={(returnFocus) =>
+              onRequestMobileRename(conversation, returnFocus)
+            }
+            onTogglePinned={() =>
+              controller.toggleConversationPinned(conversation)
+            }
+            pending={
+              controller.updatingConversationId === conversation.id ||
+              controller.deletingConversationId === conversation.id
+            }
+          />
+        );
+      })}
     </section>
   );
 }
@@ -392,48 +413,60 @@ function MobileConversationGroup({
   onSelect,
   conversationHref,
   title,
+  controller,
+  onDelete,
+  onRequestMobileRename,
 }: {
   activeConversationId?: string;
   items: ConversationSummary[];
   onSelect: () => void;
   conversationHref?: (conversationId: string) => string;
   title: string;
+  controller: ConversationListController;
+  onDelete: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
+  onRequestMobileRename: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
 }) {
-  const format = useFormatter();
   if (items.length === 0) return null;
   return (
     <section className="grid gap-1">
       <h2 className="text-secondary px-3 pt-4 pb-1 text-sm font-medium">
         {title}
       </h2>
-      {items.map((conversation) => (
-        <Link
-          aria-current={
-            activeConversationId === conversation.id ? "page" : undefined
-          }
-          className={cn(
-            "hover:bg-hover flex min-h-16 min-w-0 items-center rounded-[var(--radius-lg)] px-3 py-2",
-            keyboardFocusRing,
-            activeConversationId === conversation.id && "bg-surface",
-          )}
-          href={
-            (conversationHref?.(conversation.id) ??
-              `/?conversation=${conversation.id}`) as Route
-          }
-          key={conversation.id}
-          onClick={onSelect}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-base leading-6">
-              {conversation.title}
-            </span>
-            <span className="text-secondary block truncate text-xs leading-5">
-              {format.relativeTime(new Date(conversation.updated_at))}
-              {conversation.scope_label && ` · ${conversation.scope_label}`}
-            </span>
-          </span>
-        </Link>
-      ))}
+      {items.map((conversation) => {
+        const href =
+          conversationHref?.(conversation.id) ??
+          `/?conversation=${conversation.id}`;
+        return (
+          <ConversationListItem
+            conversation={conversation}
+            current={activeConversationId === conversation.id}
+            href={href}
+            key={conversation.id}
+            mobile
+            onDelete={(returnFocus) => onDelete(conversation, returnFocus)}
+            onNavigate={onSelect}
+            onRename={(nextTitle) =>
+              controller.renameConversation(conversation, nextTitle)
+            }
+            onRequestMobileRename={(returnFocus) =>
+              onRequestMobileRename(conversation, returnFocus)
+            }
+            onTogglePinned={() =>
+              controller.toggleConversationPinned(conversation)
+            }
+            pending={
+              controller.updatingConversationId === conversation.id ||
+              controller.deletingConversationId === conversation.id
+            }
+          />
+        );
+      })}
     </section>
   );
 }
@@ -450,6 +483,9 @@ function MobileNavigation({
   onSignOut,
   onSelect,
   conversationHref,
+  controller,
+  onDeleteConversation,
+  onRequestMobileRename,
 }: {
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
@@ -462,6 +498,15 @@ function MobileNavigation({
   onSignOut: () => Promise<void>;
   onSelect: () => void;
   conversationHref?: (conversationId: string) => string;
+  controller: ConversationListController;
+  onDeleteConversation: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
+  onRequestMobileRename: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
 }) {
   const t = useTranslations("WorkspaceShell");
   const [query, setQuery] = React.useState("");
@@ -486,6 +531,9 @@ function MobileNavigation({
         <MobileConversationGroup
           activeConversationId={activeConversationId}
           items={pinned}
+          controller={controller}
+          onDelete={onDeleteConversation}
+          onRequestMobileRename={onRequestMobileRename}
           onSelect={onSelect}
           conversationHref={conversationHref}
           title={t("sidebar.pinned")}
@@ -493,6 +541,9 @@ function MobileNavigation({
         <MobileConversationGroup
           activeConversationId={activeConversationId}
           items={recent}
+          controller={controller}
+          onDelete={onDeleteConversation}
+          onRequestMobileRename={onRequestMobileRename}
           onSelect={onSelect}
           conversationHref={conversationHref}
           title={t("sidebar.conversations")}
@@ -718,6 +769,9 @@ function Sidebar({
   onSignOut,
   onSelect,
   conversationHref,
+  controller,
+  onDeleteConversation,
+  onRequestMobileRename,
 }: {
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
@@ -733,6 +787,15 @@ function Sidebar({
   onSignOut: () => Promise<void>;
   onSelect?: () => void;
   conversationHref?: (conversationId: string) => string;
+  controller: ConversationListController;
+  onDeleteConversation: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
+  onRequestMobileRename: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
 }) {
   const t = useTranslations("WorkspaceShell");
   const pinned = conversations.filter((item) => item.pinned_at).slice(0, 3);
@@ -809,6 +872,9 @@ function Sidebar({
             <ConversationGroup
               activeConversationId={activeConversationId}
               items={pinned}
+              controller={controller}
+              onDelete={onDeleteConversation}
+              onRequestMobileRename={onRequestMobileRename}
               onSelect={onSelect}
               conversationHref={conversationHref}
               title={t("sidebar.pinned")}
@@ -817,6 +883,9 @@ function Sidebar({
               <ConversationGroup
                 activeConversationId={activeConversationId}
                 items={recent}
+                controller={controller}
+                onDelete={onDeleteConversation}
+                onRequestMobileRename={onRequestMobileRename}
                 onSelect={onSelect}
                 conversationHref={conversationHref}
                 title={t("sidebar.recent")}
@@ -884,7 +953,14 @@ export function WorkspaceShell({
 }) {
   const t = useTranslations("WorkspaceShell");
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] =
+    React.useState<ConversationDialogTarget>();
+  const [renameTarget, setRenameTarget] =
+    React.useState<ConversationDialogTarget>();
   const billingUsage = useCurrentBillingUsage();
+  const conversationController = useConversationListController({
+    activeConversationId,
+  });
   const { setSection: setSettingsSection } = useSettingsNavigation();
   const mobileSheetRef = React.useRef<HTMLDivElement>(null);
   const localMobileDockRef = React.useRef<HTMLDivElement>(null);
@@ -910,10 +986,17 @@ export function WorkspaceShell({
           billingUsage={billingUsage}
           collapsed={collapsed}
           conversations={conversations}
+          controller={conversationController}
           onCollapsedChange={onCollapsedChange}
+          onDeleteConversation={(conversation, returnFocus) =>
+            setDeleteTarget({ conversation, returnFocus })
+          }
           onOpenAccount={() => setSettingsSection("account")}
           onOpenSettings={() => setSettingsSection("general")}
           onOpenUsage={() => setSettingsSection("usage")}
+          onRequestMobileRename={(conversation, returnFocus) =>
+            setRenameTarget({ conversation, returnFocus })
+          }
           onSignOut={onSignOut}
           signingOut={signingOut}
           conversationHref={conversationHref}
@@ -939,6 +1022,10 @@ export function WorkspaceShell({
             actor={actor}
             billingUsage={billingUsage}
             conversations={conversations}
+            controller={conversationController}
+            onDeleteConversation={(conversation, returnFocus) =>
+              setDeleteTarget({ conversation, returnFocus })
+            }
             onOpenAccount={() => {
               setMobileOpen(false);
               setSettingsSection("account");
@@ -951,6 +1038,9 @@ export function WorkspaceShell({
               setMobileOpen(false);
               setSettingsSection("usage");
             }}
+            onRequestMobileRename={(conversation, returnFocus) =>
+              setRenameTarget({ conversation, returnFocus })
+            }
             onSelect={() => setMobileOpen(false)}
             onSignOut={onSignOut}
             signingOut={signingOut}
@@ -992,6 +1082,13 @@ export function WorkspaceShell({
         )}
       </div>
       <SettingsDialog />
+      <ConversationActionDialogs
+        controller={conversationController}
+        deleteTarget={deleteTarget}
+        onDeleteTargetChange={setDeleteTarget}
+        onRenameTargetChange={setRenameTarget}
+        renameTarget={renameTarget}
+      />
     </div>
   );
 }

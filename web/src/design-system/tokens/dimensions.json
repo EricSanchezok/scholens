@@ -23,7 +23,7 @@
   "layout": {
     "sidebar": {
       "$type": "dimension",
-      "$value": { "value": 240, "unit": "px" }
+      "$value": { "value": 264, "unit": "px" }
     },
     "reading-column": {
       "$type": "dimension",
@@ -31,7 +31,7 @@
     },
     "conversation-lane": {
       "$type": "dimension",
-      "$value": { "value": 880, "unit": "px" }
+      "$value": { "value": 832, "unit": "px" }
     }
   },
   "scrollbar": {

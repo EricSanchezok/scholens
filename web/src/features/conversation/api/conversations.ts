@@ -18,6 +18,8 @@ export type ConversationResponseCreateRequest =
   components["schemas"]["ConversationResponseCreateRequest"];
 export type ConversationCreateRequest =
   components["schemas"]["ConversationCreateRequest"];
+export type ConversationUpdateRequest =
+  components["schemas"]["ConversationUpdateRequest"];
 
 const conversationStreamEventTypes = {
   start: true,
@@ -38,19 +40,29 @@ export async function createConversation(body: ConversationCreateRequest) {
   return data;
 }
 
-export async function setConversationPinned(
+export async function updateConversation(
   conversationId: string,
-  pinned: boolean,
+  body: ConversationUpdateRequest,
 ) {
   const { data } = await apiClient.PATCH(
     "/api/v1/conversations/{conversation_id}",
     {
       params: { path: { conversation_id: conversationId } },
-      body: { pinned },
+      body,
     },
   );
   if (!data) throw new Error("Update conversation response was empty");
   return data;
+}
+
+export function setConversationPinned(conversationId: string, pinned: boolean) {
+  return updateConversation(conversationId, { pinned });
+}
+
+export async function deleteConversation(conversationId: string) {
+  await apiClient.DELETE("/api/v1/conversations/{conversation_id}", {
+    params: { path: { conversation_id: conversationId } },
+  });
 }
 
 export async function updateConversationContext(

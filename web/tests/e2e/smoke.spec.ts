@@ -795,7 +795,7 @@ test("edits any prompt into a persistent branch and switches the full suffix", a
     userMessage.boundingBox(),
     assistantMessage.boundingBox(),
   ]);
-  expect(composerBox?.width).toBeCloseTo(880, 0);
+  expect(composerBox?.width).toBeCloseTo(832, 0);
   expect(
     Math.abs(
       (userBox?.x ?? 0) +

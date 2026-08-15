@@ -6,7 +6,6 @@ import {
   EditIcon,
   FilterIcon,
   HighlightColorIcon,
-  MoreIcon,
   NextIcon,
   PreviousIcon,
   ReopenIcon,
@@ -34,6 +33,7 @@ import {
   Input,
   isImeComposing,
   keyboardFocusRing,
+  OverflowMenuButton,
   Textarea,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
@@ -379,10 +379,11 @@ export function ReaderAnnotationPanel({
           return (
             <article
               className={cn(
-                "group/thread border-line bg-surface hover:bg-hover focus-within:bg-hover max-w-full min-w-0 rounded-[var(--radius-lg)] border transition-colors",
+                "group/thread group/interactive-row border-line bg-surface hover:bg-hover focus-within:bg-hover active:bg-pressed max-w-full min-w-0 rounded-[var(--radius-lg)] border transition-colors duration-150 motion-reduce:transition-none",
                 active && "bg-subtle",
               )}
               data-reader-annotation-card={annotation.id}
+              data-current={active ? "" : undefined}
               key={annotation.id}
               onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -478,13 +479,11 @@ export function ReaderAnnotationPanel({
                     }}
                   >
                     <DropdownMenuTrigger asChild>
-                      <IconButton
-                        className="-mt-1 size-8 min-h-8 shrink-0"
+                      <OverflowMenuButton
+                        className="-mt-1 shrink-0"
                         label={t("moreActions")}
-                        variant="ghost"
-                      >
-                        <Icon glyph={MoreIcon} size={20} tone="secondary" />
-                      </IconButton>
+                        visibility="contextual"
+                      />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
@@ -581,7 +580,7 @@ export function ReaderAnnotationPanel({
                 </div>
 
                 {annotation.status === "resolved" && annotation.resolved_at ? (
-                  <p className="text-muted mt-2 text-xs">
+                  <p className="text-secondary mt-2 text-xs">
                     {t("resolvedBy", {
                       author:
                         annotation.resolved_by?.display_name ??
@@ -597,7 +596,7 @@ export function ReaderAnnotationPanel({
                   <div className="border-line-subtle mt-2 border-t pt-1">
                     {annotation.comments.map((item) => (
                       <div
-                        className="group/comment relative mt-2.5 grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2"
+                        className="group/comment group/interactive-row hover:bg-hover focus-within:bg-hover relative mt-2.5 grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 rounded-[var(--radius-md)] transition-colors duration-150 motion-reduce:transition-none"
                         key={item.id}
                       >
                         {editingCommentId === item.id ? (
@@ -680,17 +679,11 @@ export function ReaderAnnotationPanel({
                                 {item.can_edit || item.can_delete ? (
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                      <IconButton
-                                        className="ml-auto size-7 min-h-7 opacity-100 transition-opacity data-[state=open]:opacity-100 sm:opacity-0 sm:group-focus-within/comment:opacity-100 sm:group-hover/comment:opacity-100"
+                                      <OverflowMenuButton
+                                        className="ml-auto"
                                         label={t("commentActions")}
-                                        variant="ghost"
-                                      >
-                                        <Icon
-                                          glyph={MoreIcon}
-                                          size={16}
-                                          tone="secondary"
-                                        />
-                                      </IconButton>
+                                        visibility="contextual"
+                                      />
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                       align="end"

@@ -57,6 +57,13 @@ conversation content into an unreadably narrow strip. Toolbars and panels may
 be sticky inside their own regions, but the document shell must not make the
 browser body scroll.
 
+The Reader context selector is a 160 px desktop control that may shrink with
+the toolbar but never wraps. Its selected value is a single-line ellipsis and
+its accessible name includes the complete current context. The personal label
+is deliberately compact (`Personal` / `个人`); project options retain the real
+title and may use two lines inside a bounded menu rather than widening the
+toolbar.
+
 The contextual panel disclosure occupies one stable far-right toolbar slot.
 When the panel is closed that slot opens it; when the panel is open the same
 screen edge closes it. Toggling the panel must not move the pointer target or
@@ -320,6 +327,9 @@ recolor requires a click and then replaces that menu with a vertical palette,
 never a hover-triggered submenu overlapping destructive actions. Per-comment
 edit and delete remain in each comment's semantic overflow menu. Reply drafts
 remain scoped to their thread and survive failed requests.
+These thread and comment menus consume the shared collection-row and overflow
+contract in [Component Development](./component-development.md); touch does not
+depend on hover, while fine-pointer controls reveal on row hover or focus.
 
 A comment-free Highlight paints a low-opacity color fill with no underline. A
 Note or Discussion paints only a colored underline across its anchored text,
@@ -446,7 +456,7 @@ the named `50 — Reader` states rather than inventing links:
 | Project discussion            | `ProjectDiscussionTwoAuthors`                             |
 | Resolved Project discussion   | `ResolvedProjectDiscussion`                               |
 | Project audience before save  | `ProjectAudience`                                         |
-| Project context selector      | `ProjectContext`                                          |
+| Project context selector      | `ProjectContext`, `LongProjectContext`                    |
 | Light/Dark annotation palette | `AnnotationThread`, `AnnotationPaletteDark`               |
 | Narrow annotation composer    | `NarrowSelection`                                         |
 | Selection translation states  | `Ready`, `Streaming`, `CompletedAndCached`                |
