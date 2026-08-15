@@ -65,8 +65,8 @@ export function Progress({
       {...props}
     >
       <ProgressPrimitive.Indicator
-        className="bg-primary h-full transition-transform"
-        style={{ transform: `translateX(-${100 - percentage}%)` }}
+        className="motion-progress bg-primary h-full w-full"
+        style={{ transform: `scaleX(${percentage / 100})` }}
       />
     </ProgressPrimitive.Root>
   );
@@ -80,7 +80,7 @@ export function Skeleton({
     <div
       aria-hidden
       className={cn(
-        "bg-secondary-action animate-pulse rounded-[var(--radius-md)]",
+        "motion-skeleton bg-secondary-action rounded-[var(--radius-md)]",
         className,
       )}
       {...props}

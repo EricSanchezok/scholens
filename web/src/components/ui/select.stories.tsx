@@ -119,6 +119,19 @@ export const KeyboardInteraction: Story = {
     const canvas = within(canvasElement);
     const trigger = canvas.getByRole("combobox", { name: "Language" });
     await userEvent.click(trigger);
+    const listbox = await within(document.body).findByRole("listbox");
+    const popup = listbox.closest<HTMLElement>(".motion-popup");
+    await expect(popup).not.toBeNull();
+    const style = getComputedStyle(popup!);
+    const radixOrigin = style
+      .getPropertyValue("--radix-select-content-transform-origin")
+      .trim();
+    await expect(radixOrigin).not.toBe("");
+    const [originX = Number.NaN, originY = Number.NaN] = style.transformOrigin
+      .split(" ")
+      .map((value) => Number.parseFloat(value));
+    await expect(originX).toBeCloseTo(0, 1);
+    await expect(originY).toBeCloseTo(0, 1);
     await userEvent.keyboard("{ArrowDown}{Enter}");
     await expect(trigger).toHaveTextContent("简体中文");
   },

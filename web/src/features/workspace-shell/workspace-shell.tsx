@@ -9,6 +9,10 @@ import {
   SettingsIcon,
   UsageIcon,
 } from "@/design-system/icons/semantic-icons";
+import {
+  motionCssEasings,
+  motionDurations,
+} from "@/design-system/generated/motion-metadata";
 import Link from "next/link";
 import type { Route } from "next";
 import { useFormatter, useTranslations } from "next-intl";
@@ -33,6 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
+import { useMotionPreference } from "@/design-system/motion/motion-provider";
 import type { Actor } from "@/features/authentication";
 import {
   formatDateOnly,
@@ -69,6 +74,11 @@ export type MobileViewportState = {
 
 type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
 
+type RailFlipSnapshot = {
+  chromeClipPath: string;
+  contentLeft: number;
+};
+
 function actorName(actor: Actor) {
   return actor.display_name?.trim() || actor.email.split("@")[0] || actor.email;
 }
@@ -99,7 +109,7 @@ function SidebarControl({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? accessibleLabel : undefined}
       className={cn(
-        "hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium transition-colors",
+        "motion-control hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active && "bg-hover",
@@ -111,7 +121,9 @@ function SidebarControl({
         <Icon glyph={glyph} size={20} tone="primary" />
       </span>
       {!collapsed && (
-        <span className="text-sidebar-label truncate">{label}</span>
+        <span className="settled-content-enter text-sidebar-label truncate">
+          {label}
+        </span>
       )}
     </Link>
   ) : (
@@ -119,7 +131,7 @@ function SidebarControl({
       aria-disabled={disabled || undefined}
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
-        "flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
+        "motion-control flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
@@ -131,7 +143,9 @@ function SidebarControl({
         <Icon glyph={glyph} size={20} tone="secondary" />
       </span>
       {!collapsed && (
-        <span className="text-sidebar-label truncate">{label}</span>
+        <span className="settled-content-enter text-sidebar-label truncate">
+          {label}
+        </span>
       )}
     </button>
   );
@@ -806,7 +820,7 @@ function Sidebar({
       <aside
         aria-label={t("navigation.sidebar")}
         className={cn(
-          "border-line bg-canvas flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))] transition-[width] duration-200 ease-out motion-reduce:transition-none",
+          "flex h-full shrink-0 flex-col overflow-hidden px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))]",
           collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
         )}
       >
@@ -814,7 +828,7 @@ function Sidebar({
           <Link
             aria-hidden={collapsed || undefined}
             className={cn(
-              "text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none",
+              "motion-control text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap",
               collapsed && "pointer-events-none opacity-0",
             )}
             href="/"
@@ -962,13 +976,104 @@ export function WorkspaceShell({
     activeConversationId,
   });
   const { setSection: setSettingsSection } = useSettingsNavigation();
+  const {
+    ready: motionReady,
+    resolved: resolvedMotion,
+    skipAnimations,
+  } = useMotionPreference();
   const mobileSheetRef = React.useRef<HTMLDivElement>(null);
   const localMobileDockRef = React.useRef<HTMLDivElement>(null);
+  const desktopRailChromeRef = React.useRef<HTMLDivElement>(null);
+  const desktopContentRef = React.useRef<HTMLDivElement>(null);
+  const railFlipSnapshotRef = React.useRef<RailFlipSnapshot | undefined>(
+    undefined,
+  );
+  const railAnimationsRef = React.useRef<Animation[]>([]);
   const effectiveMobileViewport = mobileViewport ?? { open: false };
+
+  const stopRailAnimations = React.useCallback(() => {
+    for (const animation of railAnimationsRef.current) animation.cancel();
+    railAnimationsRef.current = [];
+  }, []);
+
+  const handleCollapsedChange = React.useCallback(
+    (nextCollapsed: boolean) => {
+      const chrome = desktopRailChromeRef.current;
+      const content = desktopContentRef.current;
+      if (chrome && content) {
+        railFlipSnapshotRef.current = {
+          chromeClipPath: getComputedStyle(chrome).clipPath,
+          contentLeft: content.getBoundingClientRect().left,
+        };
+      }
+      stopRailAnimations();
+      onCollapsedChange(nextCollapsed);
+    },
+    [onCollapsedChange, stopRailAnimations],
+  );
+
+  React.useLayoutEffect(() => {
+    const snapshot = railFlipSnapshotRef.current;
+    railFlipSnapshotRef.current = undefined;
+    if (!motionReady || resolvedMotion === "reduced" || skipAnimations) {
+      stopRailAnimations();
+      return;
+    }
+
+    const chrome = desktopRailChromeRef.current;
+    const content = desktopContentRef.current;
+    if (!snapshot || !chrome || !content) return;
+
+    const options: KeyframeAnimationOptions = {
+      duration: motionDurations.slow,
+      easing: motionCssEasings.enter,
+    };
+    const animations: Animation[] = [];
+    const contentDelta =
+      snapshot.contentLeft - content.getBoundingClientRect().left;
+    if (Math.abs(contentDelta) > 0.5) {
+      animations.push(
+        content.animate(
+          [
+            { transform: `translateX(${contentDelta}px)` },
+            { transform: "translateX(0)" },
+          ],
+          options,
+        ),
+      );
+    }
+
+    const finalClipPath = getComputedStyle(chrome).clipPath;
+    if (snapshot.chromeClipPath !== finalClipPath) {
+      animations.push(
+        chrome.animate(
+          [{ clipPath: snapshot.chromeClipPath }, { clipPath: finalClipPath }],
+          options,
+        ),
+      );
+    }
+    railAnimationsRef.current = animations;
+    void Promise.allSettled(
+      animations.map((animation) => animation.finished),
+    ).then(() => {
+      if (railAnimationsRef.current === animations) {
+        railAnimationsRef.current = [];
+      }
+    });
+  }, [
+    collapsed,
+    motionReady,
+    resolvedMotion,
+    skipAnimations,
+    stopRailAnimations,
+  ]);
+
+  React.useEffect(() => stopRailAnimations, [stopRailAnimations]);
 
   return (
     <div
       className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden"
+      data-workspace-shell=""
       style={
         effectiveMobileViewport.viewportHeight
           ? {
@@ -978,29 +1083,43 @@ export function WorkspaceShell({
           : undefined
       }
     >
-      <div className="hidden lg:block">
-        <Sidebar
-          activeConversationId={activeConversationId}
-          activeDestination={activeDestination}
-          actor={actor}
-          billingUsage={billingUsage}
-          collapsed={collapsed}
-          conversations={conversations}
-          controller={conversationController}
-          onCollapsedChange={onCollapsedChange}
-          onDeleteConversation={(conversation, returnFocus) =>
-            setDeleteTarget({ conversation, returnFocus })
-          }
-          onOpenAccount={() => setSettingsSection("account")}
-          onOpenSettings={() => setSettingsSection("general")}
-          onOpenUsage={() => setSettingsSection("usage")}
-          onRequestMobileRename={(conversation, returnFocus) =>
-            setRenameTarget({ conversation, returnFocus })
-          }
-          onSignOut={onSignOut}
-          signingOut={signingOut}
-          conversationHref={conversationHref}
+      <div
+        className={cn(
+          "relative z-10 hidden shrink-0 lg:block",
+          collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
+        )}
+        data-motion-rail-frame=""
+      >
+        <div
+          aria-hidden="true"
+          className="motion-rail-chrome border-line bg-canvas pointer-events-none absolute inset-y-0 left-0 w-[var(--layout-sidebar)] border-r"
+          data-collapsed={collapsed}
+          ref={desktopRailChromeRef}
         />
+        <div className="relative z-10 h-full">
+          <Sidebar
+            activeConversationId={activeConversationId}
+            activeDestination={activeDestination}
+            actor={actor}
+            billingUsage={billingUsage}
+            collapsed={collapsed}
+            conversations={conversations}
+            controller={conversationController}
+            onCollapsedChange={handleCollapsedChange}
+            onDeleteConversation={(conversation, returnFocus) =>
+              setDeleteTarget({ conversation, returnFocus })
+            }
+            onOpenAccount={() => setSettingsSection("account")}
+            onOpenSettings={() => setSettingsSection("general")}
+            onOpenUsage={() => setSettingsSection("usage")}
+            onRequestMobileRename={(conversation, returnFocus) =>
+              setRenameTarget({ conversation, returnFocus })
+            }
+            onSignOut={onSignOut}
+            signingOut={signingOut}
+            conversationHref={conversationHref}
+          />
+        </div>
       </div>
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
@@ -1048,7 +1167,11 @@ export function WorkspaceShell({
           />
         </SheetContent>
       </Sheet>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className="flex min-w-0 flex-1 flex-col"
+        data-motion-rail-content=""
+        ref={desktopContentRef}
+      >
         <header className="border-line shrink-0 border-b pt-[env(safe-area-inset-top)] lg:hidden">
           <div className="flex h-16 items-center px-3">
             {mobileHeaderLeading ?? (

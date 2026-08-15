@@ -49,6 +49,14 @@ import {
 } from "@/components/ui";
 import { Badge } from "@/components/ui/display";
 import { Icon } from "@/design-system/icons/icon";
+import {
+  AnimatePresence,
+  m,
+  MotionPresence,
+  motionStagger,
+  motionTransitions,
+  motionVariants,
+} from "@/design-system/motion";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import type { PaperSort } from "../library-search";
@@ -173,7 +181,7 @@ function SelectablePaperThumbnail({
       <PaperThumbnail paper={paper} />
       <span
         className={cn(
-          "bg-surface absolute inset-0 grid place-items-center rounded-[var(--radius-md)] transition-opacity duration-150 motion-reduce:transition-none",
+          "motion-control bg-surface absolute inset-0 grid place-items-center rounded-[var(--radius-md)]",
           checked || selectionMode
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0 md:pointer-events-auto md:group-focus-within/interactive-row:opacity-100 md:group-hover/interactive-row:opacity-100",
@@ -206,7 +214,7 @@ function PaperDetails({ paper }: { paper: Paper }) {
       )}
       href={`/reader/${paper.document.document_id}` as Route}
     >
-      <span className="hover:text-secondary line-clamp-2 block text-left text-sm leading-5 font-semibold [overflow-wrap:anywhere] transition-colors md:line-clamp-1">
+      <span className="motion-control hover:text-secondary line-clamp-2 block text-left text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
         {metadata.title}
       </span>
       <span className="text-secondary mt-1 block truncate text-xs">
@@ -382,7 +390,7 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
       >
         {active && (
           <Icon
-            className="animate-spin motion-reduce:animate-none"
+            className="motion-spinner"
             glyph={RetryIcon}
             size={16}
             tone="secondary"
@@ -439,6 +447,54 @@ function IngestionActions({
     >
       <Icon glyph={DismissIcon} size={16} tone="secondary" />
     </IconButton>
+  );
+}
+
+function BoundedMotionTableRow({
+  children,
+  withMotion,
+}: {
+  children: React.ReactNode;
+  withMotion: boolean;
+}) {
+  if (!withMotion) return <tr>{children}</tr>;
+  return (
+    <m.tr
+      animate="animate"
+      data-motion-list-item
+      exit="exit"
+      initial="initial"
+      layout="position"
+      transition={motionTransitions.layout}
+      variants={motionVariants.listItem}
+    >
+      {children}
+    </m.tr>
+  );
+}
+
+function BoundedMotionListItem({
+  children,
+  withMotion,
+}: {
+  children: React.ReactNode;
+  withMotion: boolean;
+}) {
+  const className = "min-w-0 py-4";
+  if (!withMotion) return <li className={className}>{children}</li>;
+  return (
+    <m.li
+      animate="animate"
+      className={className}
+      data-motion-list-item
+      exit="exit"
+      initial="initial"
+      layout="position"
+      transition={motionTransitions.layout}
+      variants={motionVariants.listItem}
+    >
+      {children}
+    </m.li>
   );
 }
 
@@ -681,119 +737,133 @@ export function PapersView({
 
   return (
     <>
-      {selected.length > 0 ? (
-        <div
-          aria-label={t("selectionToolbar")}
-          className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
-          role="toolbar"
-        >
-          <span className="mr-auto min-w-0 text-sm font-semibold">
-            {t("selected", { count: selected.length })}
-          </span>
-          <Button
-            className="md:h-8 md:min-h-8"
-            onClick={() => setSelected([])}
-            size="sm"
-            variant="ghost"
+      <AnimatePresence initial={false} mode="popLayout">
+        {selected.length > 0 ? (
+          <MotionPresence
+            animate="animate"
+            aria-label={t("selectionToolbar")}
+            className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
+            exit="exit"
+            initial="initial"
+            key="selection-toolbar"
+            role="toolbar"
+            variants={motionVariants.swap}
           >
-            {t("clearSelection")}
-          </Button>
-          <div className="hidden items-center gap-2 sm:flex">
+            <span className="mr-auto min-w-0 text-sm font-semibold">
+              {t("selected", { count: selected.length })}
+            </span>
             <Button
               className="md:h-8 md:min-h-8"
-              onClick={() => beginTagEditing(selected)}
+              onClick={() => setSelected([])}
               size="sm"
-              variant="secondary"
+              variant="ghost"
             >
-              {t("actions.tags")}
+              {t("clearSelection")}
             </Button>
-            <Button
-              className="md:h-8 md:min-h-8"
-              disabled
-              size="sm"
-              title={t("actions.notAvailable")}
-              variant="secondary"
-            >
-              {t("actions.projectUnavailable")}
-            </Button>
-            <Button
-              className="md:h-8 md:min-h-8"
-              onClick={() => beginRemoval(selected)}
-              size="sm"
-              variant="danger"
-            >
-              {t("actions.remove")}
-            </Button>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="sm:hidden" size="sm" variant="secondary">
-                {t("batchActions")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
-                <Icon glyph={TagIcon} size={16} tone="secondary" />
+            <div className="hidden items-center gap-2 sm:flex">
+              <Button
+                className="md:h-8 md:min-h-8"
+                onClick={() => beginTagEditing(selected)}
+                size="sm"
+                variant="secondary"
+              >
                 {t("actions.tags")}
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <Icon glyph={ProjectIcon} size={16} tone="secondary" />
+              </Button>
+              <Button
+                className="md:h-8 md:min-h-8"
+                disabled
+                size="sm"
+                title={t("actions.notAvailable")}
+                variant="secondary"
+              >
                 {t("actions.projectUnavailable")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                destructive
-                onSelect={() => beginRemoval(selected)}
+              </Button>
+              <Button
+                className="md:h-8 md:min-h-8"
+                onClick={() => beginRemoval(selected)}
+                size="sm"
+                variant="danger"
               >
-                <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                 {t("actions.remove")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : (
-        <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center">
-          <div className="min-w-0">{search}</div>
-          <div className="flex min-w-0 items-center gap-2 md:contents">
-            <TagFilter
-              active={tagIds}
-              onChange={onTagFilterChange}
-              onManage={beginTagManagement}
-              tags={tags}
-            />
-            <Select
-              onValueChange={(value) => onSortChange(value as PaperSort)}
-              value={sort}
-            >
-              <SelectTrigger
-                aria-label={t("sort.label")}
-                className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+              </Button>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="sm:hidden" size="sm" variant="secondary">
+                  {t("batchActions")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
+                  <Icon glyph={TagIcon} size={16} tone="secondary" />
+                  {t("actions.tags")}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Icon glyph={ProjectIcon} size={16} tone="secondary" />
+                  {t("actions.projectUnavailable")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  destructive
+                  onSelect={() => beginRemoval(selected)}
+                >
+                  <Icon glyph={DeleteIcon} size={16} tone="secondary" />
+                  {t("actions.remove")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </MotionPresence>
+        ) : (
+          <MotionPresence
+            animate="animate"
+            className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center"
+            exit="exit"
+            initial="initial"
+            key="utility-toolbar"
+            variants={motionVariants.swap}
+          >
+            <div className="min-w-0">{search}</div>
+            <div className="flex min-w-0 items-center gap-2 md:contents">
+              <TagFilter
+                active={tagIds}
+                onChange={onTagFilterChange}
+                onManage={beginTagManagement}
+                tags={tags}
+              />
+              <Select
+                onValueChange={(value) => onSortChange(value as PaperSort)}
+                value={sort}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAPER_SORTS.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {t(`sort.${option}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {data && (
-              <span className="text-secondary ml-auto shrink-0 text-right text-sm md:ml-2">
-                {t("count", { count: paperCount })}
-                {ingestionCount > 0 && (
-                  <span className="block text-xs sm:inline">
-                    {t("ingestionCount", {
-                      attentionCount,
-                      count: ingestionCount,
-                    })}
-                  </span>
-                )}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
+                <SelectTrigger
+                  aria-label={t("sort.label")}
+                  className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAPER_SORTS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {t(`sort.${option}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {data && (
+                <span className="text-secondary ml-auto shrink-0 text-right text-sm md:ml-2">
+                  {t("count", { count: paperCount })}
+                  {ingestionCount > 0 && (
+                    <span className="block text-xs sm:inline">
+                      {t("ingestionCount", {
+                        attentionCount,
+                        count: ingestionCount,
+                      })}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          </MotionPresence>
+        )}
+      </AnimatePresence>
 
       <div className="mt-4">
         {loading && <LoadingState label={t("loading")} />}
@@ -822,7 +892,7 @@ export function PapersView({
                     <th className="w-20 px-3 py-3">
                       <span
                         className={cn(
-                          "grid w-14 place-items-center transition-opacity duration-150 motion-reduce:transition-none",
+                          "motion-control grid w-14 place-items-center",
                           selected.length > 0
                             ? "opacity-100"
                             : "opacity-0 group-focus-within/table:opacity-100 group-hover/table:opacity-100",
@@ -856,40 +926,42 @@ export function PapersView({
                   </tr>
                 </thead>
                 <tbody className="divide-line divide-y">
-                  {ingestions.map((ingestion) => (
-                    <tr
-                      className="transition-opacity duration-150"
-                      key={ingestion.id}
-                    >
-                      <td className="px-3 py-3 align-middle">
-                        <IngestionThumbnail />
-                      </td>
-                      <td className="px-2 py-3 align-middle">
-                        <IngestionDetails ingestion={ingestion} />
-                      </td>
-                      <td className="text-secondary px-3 py-4 align-top text-sm">
-                        {format.dateTime(new Date(ingestion.createdAt), {
-                          dateStyle: "medium",
-                        })}
-                      </td>
-                      <td className="text-secondary px-3 py-4 align-top text-sm">
-                        {t("ingestion.pending")}
-                      </td>
-                      <td className="px-2 py-2 align-top">
-                        <IngestionActions
-                          ingestion={ingestion}
-                          onCancel={() => onCancelIngestion(ingestion.id)}
-                          onRetry={() => onRetryIngestion(ingestion.id)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                  <AnimatePresence initial={false}>
+                    {ingestions.map((ingestion, index) => (
+                      <BoundedMotionTableRow
+                        key={ingestion.id}
+                        withMotion={index < motionStagger.maximumChildren}
+                      >
+                        <td className="px-3 py-3 align-middle">
+                          <IngestionThumbnail />
+                        </td>
+                        <td className="px-2 py-3 align-middle">
+                          <IngestionDetails ingestion={ingestion} />
+                        </td>
+                        <td className="text-secondary px-3 py-4 align-top text-sm">
+                          {format.dateTime(new Date(ingestion.createdAt), {
+                            dateStyle: "medium",
+                          })}
+                        </td>
+                        <td className="text-secondary px-3 py-4 align-top text-sm">
+                          {t("ingestion.pending")}
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          <IngestionActions
+                            ingestion={ingestion}
+                            onCancel={() => onCancelIngestion(ingestion.id)}
+                            onRetry={() => onRetryIngestion(ingestion.id)}
+                          />
+                        </td>
+                      </BoundedMotionTableRow>
+                    ))}
+                  </AnimatePresence>
                   {papers.map((paper) => {
                     const id = paper.document.document_id;
                     const metadata = paperMetadata(paper);
                     return (
                       <tr
-                        className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed transition-colors duration-150 motion-reduce:transition-none"
+                        className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed"
                         key={id}
                       >
                         <td className="px-3 py-3 align-middle">
@@ -940,38 +1012,40 @@ export function PapersView({
             </div>
 
             <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
-              {ingestions.map((ingestion) => (
-                <li
-                  className="min-w-0 py-4 transition-opacity duration-150"
-                  key={ingestion.id}
-                >
-                  <div className="flex items-start gap-3">
-                    <IngestionThumbnail />
-                    <div className="min-w-0 flex-1">
-                      <IngestionDetails ingestion={ingestion} />
+              <AnimatePresence initial={false}>
+                {ingestions.map((ingestion, index) => (
+                  <BoundedMotionListItem
+                    key={ingestion.id}
+                    withMotion={index < motionStagger.maximumChildren}
+                  >
+                    <div className="flex items-start gap-3">
+                      <IngestionThumbnail />
+                      <div className="min-w-0 flex-1">
+                        <IngestionDetails ingestion={ingestion} />
+                      </div>
+                      <IngestionActions
+                        ingestion={ingestion}
+                        onCancel={() => onCancelIngestion(ingestion.id)}
+                        onRetry={() => onRetryIngestion(ingestion.id)}
+                      />
                     </div>
-                    <IngestionActions
-                      ingestion={ingestion}
-                      onCancel={() => onCancelIngestion(ingestion.id)}
-                      onRetry={() => onRetryIngestion(ingestion.id)}
-                    />
-                  </div>
-                  <div className="text-secondary mt-3 flex gap-3 pl-[4.25rem] text-xs">
-                    <span>
-                      {format.dateTime(new Date(ingestion.createdAt), {
-                        dateStyle: "medium",
-                      })}
-                    </span>
-                    <span>{t("ingestion.pending")}</span>
-                  </div>
-                </li>
-              ))}
+                    <div className="text-secondary mt-3 flex gap-3 pl-[4.25rem] text-xs">
+                      <span>
+                        {format.dateTime(new Date(ingestion.createdAt), {
+                          dateStyle: "medium",
+                        })}
+                      </span>
+                      <span>{t("ingestion.pending")}</span>
+                    </div>
+                  </BoundedMotionListItem>
+                ))}
+              </AnimatePresence>
               {papers.map((paper) => {
                 const id = paper.document.document_id;
                 const metadata = paperMetadata(paper);
                 return (
                   <li
-                    className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed min-w-0 rounded-[var(--radius-lg)] px-2 py-4 transition-colors duration-150 motion-reduce:transition-none"
+                    className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed min-w-0 rounded-[var(--radius-lg)] px-2 py-4"
                     key={id}
                   >
                     <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3">

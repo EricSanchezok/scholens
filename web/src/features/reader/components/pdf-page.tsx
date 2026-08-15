@@ -569,7 +569,7 @@ function PdfPageSurface({
                 <button
                   aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
                   className={cn(
-                    "pointer-events-auto absolute rounded-[1px] transition-opacity",
+                    "motion-control pointer-events-auto absolute rounded-[1px]",
                     keyboardFocusRing,
                     paintMode === "highlight" &&
                       "opacity-20 hover:opacity-30 focus-visible:opacity-30",

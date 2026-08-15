@@ -142,12 +142,27 @@ export const DesktopLongContent: Story = {
 export const DesktopCollapsed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const sidebar = canvas.getByRole("complementary");
+    const railChrome = canvasElement.querySelector<HTMLElement>(
+      ".motion-rail-chrome",
+    )!;
+    const railContent = canvasElement.querySelector<HTMLElement>(
+      "[data-motion-rail-content]",
+    )!;
     await userEvent.click(
       canvas.getByRole("button", { name: "Collapse sidebar" }),
     );
     await expect(
       canvas.getByRole("button", { name: "Expand sidebar" }),
     ).toBeVisible();
+    await expect(sidebar).toHaveStyle({ width: "64px" });
+    await expect(getComputedStyle(sidebar).transitionProperty).not.toContain(
+      "width",
+    );
+    await expect(getComputedStyle(railContent).transform).toBe("none");
+    await expect(getComputedStyle(railChrome).clipPath).toContain("200px");
+    await expect(railContent.getAnimations()).toHaveLength(0);
+    await expect(railChrome.getAnimations()).toHaveLength(0);
   },
 };
 
@@ -222,7 +237,7 @@ export const ConversationActions: Story = {
     const restoredTrigger = canvas.getByRole("button", {
       name: `Open actions for ${conversations[0]!.title}`,
     });
-    await expect(restoredTrigger).toHaveFocus();
+    await waitFor(() => expect(restoredTrigger).toHaveFocus());
     await userEvent.click(restoredTrigger);
     await userEvent.click(await body.findByRole("menuitem", { name: "Pin" }));
   },

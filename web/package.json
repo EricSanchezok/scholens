@@ -53,6 +53,7 @@
     "clsx": "^2.1.1",
     "iconoir-react": "^7.11.1",
     "katex": "^0.18.4",
+    "motion": "^13.1.0",
     "next": "16.2.11",
     "next-intl": "4.13.4",
     "openapi-fetch": "^0.15.0",

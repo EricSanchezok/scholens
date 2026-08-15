@@ -114,3 +114,14 @@ Archive frame; it is not an active acceptance state.
 The compact desktop list and detail headers are intentional runtime refinements
 pending canonical-frame synchronization after local visual acceptance; the
 documented responsive and interaction state inventory is unchanged.
+
+## Motion acceptance
+
+Project list changes use bounded row presence and position continuity. Opening
+desktop Project Chat introduces the contextual side panel and lets the detail
+region resize with the shared layout transition; closing it reverses that
+relationship without clearing the selected conversation or draft. Mobile Chat
+delegates entrance and exit to the shared full-height Sheet recipe. Tabs,
+filters, and route navigation do not crossfade the whole page. Reduced mode
+opens and closes both chat compositions without spatial movement while
+preserving URL state and focus return.

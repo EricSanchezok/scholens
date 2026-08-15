@@ -3,6 +3,7 @@ import { expect, within } from "storybook/test";
 
 import { authHandlers } from "../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
+import { motionStagger } from "@/design-system/motion";
 import { resetRefreshForTests } from "@/lib/api";
 import { PapersView } from "./components/papers-view";
 import type { PaperIngestionRow } from "./use-paper-ingestions";
@@ -251,5 +252,23 @@ export const Mobile390Lifecycle: Story = {
         matches.some((element) => element.getClientRects().length > 0),
       ).toBe(true);
     }
+  },
+};
+
+export const BoundedLargeQueue: Story = {
+  args: {
+    ingestions: Array.from({ length: 10 }, (_, index) => ({
+      ...row("queued", "queued"),
+      displayName: `queued-${index + 1}.pdf`,
+      id: `queued-${index + 1}`,
+    })),
+    ingestionCount: 10,
+  },
+  play: async ({ canvasElement }) => {
+    const table = await within(canvasElement).findByRole("table");
+    await expect(table.querySelectorAll("tbody > tr")).toHaveLength(10);
+    await expect(
+      table.querySelectorAll("tbody > [data-motion-list-item]"),
+    ).toHaveLength(motionStagger.maximumChildren);
   },
 };

@@ -523,7 +523,7 @@ export function ResearchComposer({
     return (
       <form
         className={cn(
-          "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 border p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
+          "motion-shape border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 border p-2",
           contextPanelExpanded
             ? "rounded-[var(--radius-2xl)]"
             : "rounded-[var(--radius-full)]",

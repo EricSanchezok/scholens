@@ -683,7 +683,7 @@ export const MobileWorklogExpanded: Story = {
     const canvas = within(canvasElement);
     const disclosure = canvas.getByRole("button", { name: /已完成研究/ });
     await userEvent.click(disclosure);
-    await expect(canvas.getByText("检索了 2 次")).toBeVisible();
+    await waitFor(() => expect(canvas.getByText("检索了 2 次")).toBeVisible());
   },
 };
 
@@ -712,13 +712,16 @@ export const ProvisionalResponse: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const content = canvas.getByText(
-      "I’ll first inspect the research available in your library.",
-    );
-    await expect(content.closest("li")).toBeVisible();
-    await expect(
-      canvas.getByRole("button", { name: /Thinking/ }),
-    ).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() => {
+      const content = canvas.getByText(
+        "I’ll first inspect the research available in your library.",
+      );
+      expect(content.closest("li")).toBeVisible();
+      expect(canvas.getByRole("button", { name: /Thinking/ })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+    });
   },
 };
 

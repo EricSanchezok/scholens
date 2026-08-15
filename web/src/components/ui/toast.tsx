@@ -5,6 +5,7 @@ import { Xmark } from "iconoir-react";
 import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
+import { motionDurations } from "@/design-system/generated/motion-metadata";
 import { cn } from "@/lib/utilities/cn";
 import { keyboardFocusRing } from "./focus";
 
@@ -12,10 +13,11 @@ type ToastNotice = {
   description?: string;
   duration?: number;
   id: string;
+  open: boolean;
   title: string;
 };
 
-type ToastInput = Omit<ToastNotice, "id">;
+type ToastInput = Omit<ToastNotice, "id" | "open">;
 
 const ToastContext = React.createContext<{
   notify: (notice: ToastInput) => string;
@@ -37,11 +39,18 @@ export function ToastProvider({
 }) {
   const [notices, setNotices] = React.useState<ToastNotice[]>([]);
   const dismiss = React.useCallback((id: string) => {
+    setNotices((current) =>
+      current.map((notice) =>
+        notice.id === id ? { ...notice, open: false } : notice,
+      ),
+    );
+  }, []);
+  const remove = React.useCallback((id: string) => {
     setNotices((current) => current.filter((notice) => notice.id !== id));
   }, []);
   const notify = React.useCallback((notice: ToastInput) => {
     const id = crypto.randomUUID();
-    setNotices((current) => [...current, { ...notice, id }]);
+    setNotices((current) => [...current, { ...notice, id, open: true }]);
     return id;
   }, []);
   const value = React.useMemo(() => ({ dismiss, notify }), [dismiss, notify]);
@@ -51,24 +60,59 @@ export function ToastProvider({
       <ToastPrimitive.Provider>
         {children}
         {notices.map((notice) => (
-          <ToastRoot
-            duration={notice.duration}
+          <ManagedToast
+            dismiss={dismiss}
             key={notice.id}
-            onOpenChange={(open) => {
-              if (!open) dismiss(notice.id);
-            }}
-            open
-          >
-            <ToastTitle>{notice.title}</ToastTitle>
-            {notice.description ? (
-              <ToastDescription>{notice.description}</ToastDescription>
-            ) : null}
-            <ToastClose label={dismissLabel} />
-          </ToastRoot>
+            notice={notice}
+            dismissLabel={dismissLabel}
+            remove={remove}
+          />
         ))}
         <ToastViewport />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
+  );
+}
+
+function ManagedToast({
+  dismiss,
+  dismissLabel,
+  notice,
+  remove,
+}: {
+  dismiss: (id: string) => void;
+  dismissLabel: string;
+  notice: ToastNotice;
+  remove: (id: string) => void;
+}) {
+  React.useEffect(() => {
+    if (notice.open) return;
+    const timeout = window.setTimeout(
+      () => remove(notice.id),
+      motionDurations.standard,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [notice.id, notice.open, remove]);
+
+  return (
+    <ToastRoot
+      duration={notice.duration}
+      onAnimationEnd={(event) => {
+        if (event.currentTarget === event.target && !notice.open) {
+          remove(notice.id);
+        }
+      }}
+      onOpenChange={(open) => {
+        if (!open) dismiss(notice.id);
+      }}
+      open={notice.open}
+    >
+      <ToastTitle>{notice.title}</ToastTitle>
+      {notice.description ? (
+        <ToastDescription>{notice.description}</ToastDescription>
+      ) : null}
+      <ToastClose label={dismissLabel} />
+    </ToastRoot>
   );
 }
 
@@ -87,7 +131,7 @@ export const ToastRoot = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitive.Root
     className={cn(
-      "border-line bg-elevated shadow-overlay relative grid gap-1 rounded-[var(--radius-lg)] border px-4 py-3 pr-12",
+      "motion-toast border-line bg-elevated shadow-overlay relative grid gap-1 rounded-[var(--radius-lg)] border px-4 py-3 pr-12",
       className,
     )}
     ref={ref}
@@ -115,7 +159,7 @@ export const ToastClose = ({
   <ToastPrimitive.Close
     aria-label={label}
     className={cn(
-      "hover:bg-hover absolute top-1 right-1 grid size-11 place-items-center rounded-[var(--radius-md)]",
+      "motion-control hover:bg-hover absolute top-1 right-1 grid size-11 place-items-center rounded-[var(--radius-md)]",
       keyboardFocusRing,
     )}
     {...props}

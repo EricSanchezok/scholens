@@ -52,6 +52,12 @@ import {
   OpenPanelIcon,
   QuoteIcon,
 } from "@/design-system/icons/semantic-icons";
+import {
+  AnimatePresence,
+  m,
+  motionTransitions,
+  motionVariants,
+} from "@/design-system/motion";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
   conversationKeys,
@@ -236,7 +242,7 @@ function ProjectPaperRow({
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <div className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-2 transition-colors duration-150 motion-reduce:transition-none">
+    <div className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-2">
       <Link
         className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
@@ -317,7 +323,7 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
   const format = useFormatter();
   const kind = output.item.kind;
   return (
-    <div className="hover:bg-hover flex min-w-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-4 transition-colors">
+    <div className="motion-control hover:bg-hover flex min-w-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-4">
       <div className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
         <Icon glyph={outputIcons[kind]} size={20} tone="secondary" />
       </div>
@@ -666,8 +672,16 @@ export function ProjectDetailWorkspace({
       showMobileBottomNavigation={state.panel !== "chat"}
       signingOut={signingOut}
     >
-      <div className="flex h-full min-h-0">
-        <div className="min-w-0 flex-1 overflow-y-auto">
+      <m.div
+        className="flex h-full min-h-0"
+        layout="size"
+        transition={motionTransitions.layout}
+      >
+        <m.div
+          className="min-w-0 flex-1 overflow-y-auto"
+          layout="size"
+          transition={motionTransitions.layout}
+        >
           <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
             <header className="hidden min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 lg:grid">
               <Link
@@ -1086,19 +1100,22 @@ export function ProjectDetailWorkspace({
               </TabsContent>
             </Tabs>
           </div>
-        </div>
-        {desktopLayout ? (
-          <aside
-            className={
-              state.panel === "chat"
-                ? "border-line flex w-[clamp(23rem,34vw,31.25rem)] shrink-0 border-l"
-                : "hidden"
-            }
-          >
-            {renderChat()}
-          </aside>
-        ) : null}
-      </div>
+        </m.div>
+        <AnimatePresence initial={false}>
+          {desktopLayout && state.panel === "chat" ? (
+            <m.aside
+              animate="animate"
+              className="border-line flex w-[clamp(23rem,34vw,31.25rem)] shrink-0 border-l"
+              exit="exit"
+              initial="initial"
+              key="project-chat"
+              variants={motionVariants.panel}
+            >
+              {renderChat()}
+            </m.aside>
+          ) : null}
+        </AnimatePresence>
+      </m.div>
 
       {!desktopLayout ? (
         <Sheet

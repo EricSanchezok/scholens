@@ -211,3 +211,14 @@ Outputs acceptance lives in section `984:1831` and maps to
 The archived section contains the former Reports, Notes, Recently opened, and
 page-number concepts. It is retained only as design history and is not a code
 or contract target.
+
+## Motion acceptance
+
+Papers replaces its utility row with the selection toolbar in the same layout
+slot, then performs only local row continuity. A newly accepted ingestion may
+settle into its canonical row; progress uses `scaleX`, and indeterminate loading
+uses the shared spinner/skeleton recipes. Filters, sorting, pagination, and tab
+navigation do not animate the full collection or stagger long results. Mobile
+dialog and sheet movement is primitive-owned. Reduced mode removes toolbar and
+row displacement, stops perpetual loading motion, and preserves exact status,
+selection, cancellation, and retry behavior.

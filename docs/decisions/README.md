@@ -52,6 +52,7 @@ change what the accepted record decided.
 - [ADR 0018: Conversation prompts form durable selected branches](./0018-conversation-prompt-branches.md)
 - [ADR 0019: User-owned integration credentials and explicit AI reflow](./0019-user-owned-integration-credentials.md)
 - [ADR 0020: Separate paid subscriptions from product-granted entitlements](./0020-separate-paid-and-product-entitlements.md)
+- [ADR 0021: Semantic Web motion system](./0021-web-motion-system.md)
 
 ## Template
 

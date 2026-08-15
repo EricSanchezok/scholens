@@ -297,6 +297,11 @@ test("opens mobile navigation as a full-screen history hub", async ({
   await expect(dialog).toBeVisible();
   await expect(panel).toBeVisible();
   await expect(overlay).toBeVisible();
+  await dialog.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    );
+  });
 
   const metrics = await dialog.evaluate((element) => {
     const overlayElement = document.querySelector<HTMLElement>(

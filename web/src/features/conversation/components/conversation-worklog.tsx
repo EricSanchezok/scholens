@@ -281,7 +281,7 @@ export function ConversationWorklog({
         <button
           aria-expanded={open}
           className={cn(
-            "hover:text-foreground focus-visible:text-foreground inline-flex min-h-11 w-fit max-w-full items-center gap-1.5 rounded-[var(--radius-sm)] text-left transition-colors motion-reduce:transition-none lg:min-h-8",
+            "motion-control hover:text-foreground focus-visible:text-foreground inline-flex min-h-11 w-fit max-w-full items-center gap-1.5 rounded-[var(--radius-sm)] text-left lg:min-h-8",
             keyboardFocusRing,
           )}
           onClick={toggle}
@@ -292,10 +292,7 @@ export function ConversationWorklog({
             {durationLabel ? <span aria-hidden> · {durationLabel}</span> : null}
           </span>
           <Icon
-            className={cn(
-              "shrink-0 transition-transform duration-150 motion-reduce:transition-none",
-              open && "rotate-180",
-            )}
+            className={cn("motion-icon shrink-0", open && "rotate-180")}
             glyph={ExpandIcon}
             size={16}
             tone="secondary"
@@ -319,7 +316,7 @@ export function ConversationWorklog({
         </span>
       ) : null}
       {open && hasDetails && (
-        <ol className="border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
+        <ol className="settled-content-enter border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
           {rows.map((row) =>
             row.kind === "progress" ? (
               <li

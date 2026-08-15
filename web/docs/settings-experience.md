@@ -35,8 +35,9 @@ Simplified Chinese, 320px containment, and reduced-motion-safe feedback.
 
 ## Panel responsibilities
 
-- General is labeled Appearance & Language and owns application locale and the
-  visual Light, Dark, and System choices only.
+- General is labeled Appearance, motion & language. It owns application locale,
+  the visual Light, Dark, and System choices, and the independent System,
+  Reduced, and Full motion preference.
 - Account presents the authenticated Actor's shared identity as read-only,
   current-browser Sign out, and one external SanchezCloud Account action.
   Profile, email, and password editing are never exposed in Scholens.
@@ -88,8 +89,8 @@ dialogs, feedback, and semantic Iconoir wrappers remain shared components.
 
 ## Acceptance states
 
-Storybook covers Appearance & Language, Account, Usage, Access Keys, Connections,
-Translation, 390px mobile, and Dark Chinese states. Account states cover direct
+Storybook covers Appearance, Motion & Language, Account, Usage, Access Keys,
+Connections, Translation, 390px mobile, and Dark Chinese states. Account states cover direct
 URL navigation, read-only identity, canonical and overridden Account Center,
 current-session Sign out, mobile, and Dark. The shell account menu covers real
 usage success, loading, failure/retry, keyboard open, expanded/collapsed desktop,
@@ -103,3 +104,14 @@ the mobile shell independently.
 
 Feature changes must retain the Figma hierarchy, semantic tokens, generated API
 types, localized copy parity, keyboard behavior, and narrow-content coverage.
+
+## Motion acceptance
+
+Settings keeps one dialog shell while the active panel performs a bounded
+content swap. The navigation selection changes immediately and focus behavior
+does not wait for the transition. Dialog presentation comes from the shared
+responsive overlay recipe. General writes `scholens-motion` and updates the
+root policy live; System follows the media query, Reduced removes spatial and
+perpetual movement, and Full remains explicit even when the OS asks to reduce.
+`Features/Settings/Dialog` → `General` and Motion Lab are the executable
+preference evidence.

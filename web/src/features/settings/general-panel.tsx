@@ -14,6 +14,10 @@ import {
   keyboardFocusRing,
 } from "@/components/ui";
 import { useTheme } from "@/design-system/theme/theme-provider";
+import {
+  motionPreferences,
+  useMotionPreference,
+} from "@/design-system/motion/motion-provider";
 import { useLocalePreference } from "@/i18n/use-locale-preference";
 import { cn } from "@/lib/utilities/cn";
 import { SettingsPanelHeader } from "./settings-layout";
@@ -59,6 +63,8 @@ export function GeneralPanel() {
   const t = useTranslations("Settings");
   const { locale, pending: localePending, setLocale } = useLocalePreference();
   const { preference, setColorSchemePreference } = useTheme();
+  const { preference: motionPreference, setPreference: setMotionPreference } =
+    useMotionPreference();
 
   return (
     <div>
@@ -76,7 +82,7 @@ export function GeneralPanel() {
               <button
                 aria-pressed={preference === option}
                 className={cn(
-                  "hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left transition-colors motion-reduce:transition-none sm:p-2",
+                  "motion-control hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left sm:p-2",
                   keyboardFocusRing,
                   preference === option && "bg-pressed",
                 )}
@@ -87,6 +93,41 @@ export function GeneralPanel() {
                 <AppearancePreview option={option} />
                 <span className="mt-2 block text-center text-xs font-medium sm:text-sm">
                   {t(`appearance.${option}`)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-line-subtle mt-8 border-t pt-7">
+          <h3 className="text-sm font-semibold" id="motion-title">
+            {t("general.motion")}
+          </h3>
+          <p className="text-muted mt-1 max-w-xl text-sm">
+            {t("general.motionDescription")}
+          </p>
+          <div
+            aria-labelledby="motion-title"
+            className="mt-3 grid gap-2 sm:grid-cols-3"
+            role="group"
+          >
+            {motionPreferences.map((option) => (
+              <button
+                aria-pressed={motionPreference === option}
+                className={cn(
+                  "motion-control border-line-subtle hover:bg-hover rounded-[var(--radius-lg)] border px-3 py-3 text-left",
+                  keyboardFocusRing,
+                  motionPreference === option && "bg-pressed border-line",
+                )}
+                key={option}
+                onClick={() => setMotionPreference(option)}
+                type="button"
+              >
+                <span className="block text-sm font-medium">
+                  {t(`motion.${option}.label`)}
+                </span>
+                <span className="text-secondary mt-1 block text-xs leading-5">
+                  {t(`motion.${option}.description`)}
                 </span>
               </button>
             ))}

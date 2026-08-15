@@ -1096,7 +1096,7 @@
     "navigationLabel": "Settings navigation",
     "navigation": {
       "account": "Account",
-      "general": "Appearance & language",
+      "general": "Appearance, motion & language",
       "usage": "Usage",
       "access-keys": "Access keys",
       "connections": "Connections",
@@ -1116,15 +1116,31 @@
       "dark": "Dark",
       "system": "System"
     },
+    "motion": {
+      "system": {
+        "label": "Follow system",
+        "description": "Use your device's Reduce Motion preference."
+      },
+      "reduced": {
+        "label": "Reduce motion",
+        "description": "Remove spatial movement and continuous animation."
+      },
+      "full": {
+        "label": "Full motion",
+        "description": "Use the complete Scholens motion language."
+      }
+    },
     "plan": {
       "basic": "Basic",
       "researcher": "Researcher"
     },
     "general": {
-      "title": "Appearance & language",
-      "description": "Choose how Scholens looks and which language its interface uses.",
+      "title": "Appearance, motion & language",
+      "description": "Choose how Scholens looks, moves, and which language its interface uses.",
       "interfaceLanguage": "Interface language",
-      "appearance": "Appearance"
+      "appearance": "Appearance",
+      "motion": "Motion",
+      "motionDescription": "Motion explains changes and relationships without slowing down your work."
     },
     "account": {
       "title": "Account",

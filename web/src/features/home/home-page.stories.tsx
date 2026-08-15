@@ -248,6 +248,13 @@ export const MobileRecentsDisappearAfterSubmit: Story = {
         canvas.queryByText("Continue your research"),
       ).not.toBeInTheDocument(),
     );
+    await waitFor(() =>
+      expect(
+        canvas.getAllByRole("region", {
+          name: "Suggested follow-up questions",
+        }),
+      ).toHaveLength(1),
+    );
   },
 };
 

@@ -1431,9 +1431,12 @@ test("keeps the context-panel control pinned to the viewport edge", async ({
   expect(before).not.toBeNull();
   await open.click();
   const close = page.getByRole("button", { name: "Close context panel" });
-  const after = await close.boundingBox();
-  expect(after).not.toBeNull();
-  expect(Math.abs((before?.x ?? 0) - (after?.x ?? 0))).toBeLessThanOrEqual(2);
+  await expect
+    .poll(async () => {
+      const after = await close.boundingBox();
+      return Math.abs((before?.x ?? 0) - (after?.x ?? 0));
+    })
+    .toBeLessThanOrEqual(2);
 });
 
 for (const width of [320, 390]) {
@@ -1462,6 +1465,11 @@ for (const width of [320, 390]) {
     const sheet = page.getByRole("dialog", { name: "Full translation" });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByText("Display", { exact: true })).toBeVisible();
+    await sheet.evaluate(async (element) => {
+      await Promise.all(
+        element.getAnimations().map((animation) => animation.finished),
+      );
+    });
 
     const overflow = await page.evaluate(() => ({
       body: document.body.scrollWidth - document.body.clientWidth,

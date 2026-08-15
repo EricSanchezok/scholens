@@ -1,9 +1,14 @@
 import type { Preview } from "@storybook/nextjs-vite";
 import { initialize, mswLoader } from "msw-storybook-addon";
 import { NextIntlClientProvider } from "next-intl";
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 
 import { localeDirection, type AppLocale } from "../src/i18n/config";
+import {
+  MotionProvider,
+  MotionRuntimeProvider,
+  type MotionPreference,
+} from "../src/design-system/motion";
 import { formats } from "../src/i18n/formats";
 import en from "../src/i18n/messages/en.json";
 import zhCN from "../src/i18n/messages/zh-CN.json";
@@ -15,6 +20,12 @@ import "../src/styles/globals.css";
 initialize({ onUnhandledRequest: "error" }, billingHandlers.success);
 
 const messages = { en, "zh-CN": zhCN } as const;
+const isStorybookTest =
+  (import.meta as ImportMeta & { env?: { MODE?: string } }).env?.MODE ===
+  "test";
+const initialMotionPreference: MotionPreference = isStorybookTest
+  ? "reduced"
+  : "system";
 
 const preview: Preview = {
   decorators: [
@@ -23,12 +34,17 @@ const preview: Preview = {
         context.globals.appearance === "dark" ? "dark" : "light";
       const locale: AppLocale =
         context.globals.locale === "zh-CN" ? "zh-CN" : "en";
-      useEffect(() => {
+      const motion = (["system", "reduced", "full"] as const).includes(
+        context.globals.motion,
+      )
+        ? (context.globals.motion as MotionPreference)
+        : "system";
+      useLayoutEffect(() => {
         document.documentElement.dataset.theme = "default";
         document.documentElement.dataset.colorScheme = appearance;
         document.documentElement.lang = locale;
         document.documentElement.dir = localeDirection(locale);
-      }, [appearance, locale]);
+      }, [appearance, locale, motion]);
       return (
         <NextIntlClientProvider
           formats={formats}
@@ -37,15 +53,23 @@ const preview: Preview = {
           now={new Date("2026-08-04T10:00:00Z")}
           timeZone="UTC"
         >
-          <QueryProvider>
-            <div
-              className={`bg-canvas text-foreground min-h-screen ${
-                context.parameters.layout === "fullscreen" ? "" : "p-6"
-              }`}
-            >
-              <Story />
-            </div>
-          </QueryProvider>
+          <MotionProvider
+            initialPreference={motion}
+            key={motion}
+            skipAnimations={isStorybookTest}
+          >
+            <MotionRuntimeProvider>
+              <QueryProvider>
+                <div
+                  className={`bg-canvas text-foreground min-h-screen ${
+                    context.parameters.layout === "fullscreen" ? "" : "p-6"
+                  }`}
+                >
+                  <Story />
+                </div>
+              </QueryProvider>
+            </MotionRuntimeProvider>
+          </MotionProvider>
         </NextIntlClientProvider>
       );
     },
@@ -67,6 +91,18 @@ const preview: Preview = {
         items: [
           { value: "light", title: "Light" },
           { value: "dark", title: "Dark" },
+        ],
+      },
+    },
+    motion: {
+      description: "Motion preference",
+      defaultValue: initialMotionPreference,
+      toolbar: {
+        icon: "lightning",
+        items: [
+          { value: "system", title: "System motion" },
+          { value: "reduced", title: "Reduced motion" },
+          { value: "full", title: "Full motion" },
         ],
       },
     },
@@ -109,6 +145,7 @@ const preview: Preview = {
   initialGlobals: {
     theme: "default",
     appearance: "light",
+    motion: initialMotionPreference,
     locale: "en",
     network: "instant",
     data: "populated",

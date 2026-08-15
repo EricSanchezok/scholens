@@ -127,7 +127,7 @@ export function TransientActionIconButton({
               variant="ghost"
             >
               <Icon
-                className="transition-[opacity,transform] duration-150 motion-reduce:transition-none"
+                className="motion-icon"
                 glyph={Glyph}
                 size={iconSize}
                 tone="secondary"

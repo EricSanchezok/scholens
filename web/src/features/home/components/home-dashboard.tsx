@@ -76,7 +76,7 @@ function PaperCard({ paper }: { paper: LibraryPaper }) {
           {authors || paper.document.original_filename}
         </p>
       </div>
-      <p className="text-muted text-xs">
+      <p className="text-secondary text-xs">
         {t("opened", {
           relative: format.relativeTime(new Date(paper.last_accessed_at)),
         })}
@@ -197,7 +197,7 @@ function MobileRecentLauncher({
                 aria-label={label}
                 aria-pressed={selected}
                 className={cn(
-                  "bg-subtle hover:bg-hover flex min-h-12 w-fit max-w-full min-w-0 items-center gap-2.5 rounded-full px-4 py-2.5 text-left text-sm font-medium transition-colors motion-reduce:transition-none",
+                  "motion-control bg-subtle hover:bg-hover flex min-h-12 w-fit max-w-full min-w-0 items-center gap-2.5 rounded-full px-4 py-2.5 text-left text-sm font-medium",
                   keyboardFocusRing,
                   selected && "bg-pressed",
                 )}

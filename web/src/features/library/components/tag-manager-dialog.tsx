@@ -246,7 +246,7 @@ export function TagManagerDialog({
                   </form>
                 ) : (
                   <div
-                    className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-h-14 items-center gap-3 px-3 transition-colors duration-150 motion-reduce:transition-none"
+                    className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-h-14 items-center gap-3 px-3"
                     key={tag.id}
                   >
                     {assigning ? (

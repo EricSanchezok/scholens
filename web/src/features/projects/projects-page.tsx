@@ -26,6 +26,12 @@ import {
   useToast,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
+import {
+  AnimatePresence,
+  m,
+  motionTransitions,
+  motionVariants,
+} from "@/design-system/motion";
 import { AddIcon, ProjectIcon } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { conversationQueries } from "@/features/conversation";
@@ -279,21 +285,32 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
           ) : (
             <>
               <div className="divide-line-subtle divide-y">
-                {projectsQuery.data.items.map((project) => (
-                  <ProjectRow
-                    key={project.id}
-                    onDelete={(value) =>
-                      setDestructive({ action: "delete", project: value })
-                    }
-                    onEdit={(value) =>
-                      setFormState({ mode: "edit", project: value })
-                    }
-                    onLeave={(value) =>
-                      setDestructive({ action: "leave", project: value })
-                    }
-                    project={project}
-                  />
-                ))}
+                <AnimatePresence initial={false}>
+                  {projectsQuery.data.items.map((project) => (
+                    <m.div
+                      animate="animate"
+                      exit="exit"
+                      initial="initial"
+                      key={project.id}
+                      layout="position"
+                      transition={motionTransitions.layout}
+                      variants={motionVariants.listItem}
+                    >
+                      <ProjectRow
+                        onDelete={(value) =>
+                          setDestructive({ action: "delete", project: value })
+                        }
+                        onEdit={(value) =>
+                          setFormState({ mode: "edit", project: value })
+                        }
+                        onLeave={(value) =>
+                          setDestructive({ action: "leave", project: value })
+                        }
+                        project={project}
+                      />
+                    </m.div>
+                  ))}
+                </AnimatePresence>
               </div>
               {(projectsQuery.data.previous_cursor ||
                 projectsQuery.data.next_cursor) && (

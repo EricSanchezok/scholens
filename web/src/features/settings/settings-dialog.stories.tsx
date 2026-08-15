@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { http, HttpResponse } from "msw";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -6,7 +7,23 @@ import { authHandlers } from "../../../.storybook/msw/auth-handlers";
 import { billingHandlers } from "../../../.storybook/msw/billing-handlers";
 import { Providers } from "@/app/providers";
 import { resetRefreshForTests } from "@/lib/api";
-import { SettingsDialog } from "./settings-dialog";
+import { SettingsDialog, SettingsDialogSurface } from "./settings-dialog";
+
+function ControlledSettingsDialog() {
+  const [section, setSection] = React.useState<"general" | "account">(
+    "general",
+  );
+
+  return (
+    <SettingsDialogSurface
+      accountCenterUrl="https://account-center.example.test/"
+      onSectionChange={(next) => {
+        if (next === "general" || next === "account") setSection(next);
+      }}
+      section={section}
+    />
+  );
+}
 
 const api = "http://127.0.0.1:7301/api/v1";
 let signOutRequests = 0;
@@ -124,7 +141,9 @@ export const General: Story = {
   play: async () => {
     const body = within(document.body);
     await expect(
-      await body.findByRole("heading", { name: "Appearance & language" }),
+      await body.findByRole("heading", {
+        name: "Appearance, motion & language",
+      }),
     ).toBeVisible();
     await expect(body.getByRole("button", { name: "Light" })).toBeVisible();
     await expect(body.getByRole("button", { name: "Dark" })).toBeVisible();
@@ -144,6 +163,32 @@ export const General: Story = {
       "true",
     );
     await expect(localStorage.getItem("scholens-color-scheme")).toBe("dark");
+    await userEvent.click(body.getByRole("button", { name: /Reduce motion/ }));
+    await expect(localStorage.getItem("scholens-motion")).toBe("reduced");
+    await expect(document.documentElement).toHaveAttribute(
+      "data-motion",
+      "reduced",
+    );
+  },
+};
+
+export const NonBlockingPanelReplacement: Story = {
+  globals: { motion: "full" },
+  render: () => <ControlledSettingsDialog />,
+  play: async () => {
+    const body = within(document.body);
+    const initialHeading = await body.findByRole("heading", {
+      name: "Appearance, motion & language",
+    });
+    await waitFor(() => expect(initialHeading).toBeVisible());
+    await userEvent.click(body.getByRole("button", { name: "Account" }));
+    const heading = await body.findByRole("heading", { name: "Account" });
+    const accountCenter = await body.findByRole("link", {
+      name: "Manage SanchezCloud account",
+    });
+    await expect(heading).toBeInTheDocument();
+    accountCenter.focus();
+    await expect(accountCenter).toHaveFocus();
   },
 };
 

@@ -225,7 +225,7 @@ export function ReaderFullTranslationControl({
           className={cn(
             "absolute top-1 right-1 size-1.5 rounded-full",
             status === "partial" ? "bg-danger" : "bg-success",
-            status === "translating" && "animate-pulse",
+            status === "translating" && "motion-skeleton",
           )}
         />
       ) : null}
@@ -272,7 +272,7 @@ export function ReaderFullTranslationControl({
         <SheetTitle className="pr-12 text-lg font-semibold">
           {t("title")}
         </SheetTitle>
-        <SheetDescription className="text-muted mt-1 text-sm">
+        <SheetDescription className="text-secondary mt-1 text-sm">
           {statusLabel}
         </SheetDescription>
         <div className="mt-4">{settings}</div>

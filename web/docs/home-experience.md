@@ -475,3 +475,15 @@ own its composer, reasoning control, keyboard behavior, and conversation state.
 Home does not edit conversation metadata or add a legacy-client compatibility
 layer. Any newly discovered backend gap must block a current Home behavior
 before the contract is expanded.
+
+## Motion acceptance
+
+Home preserves spatial continuity when the desktop Sidebar changes width and
+when the dashboard becomes an active conversation. Sidebar labels disclose
+inside the stable rail; its vertical anchors do not move. An accepted user turn
+and bounded Worklog entries enter as one state change, while streamed answer
+text remains direct and coalesced rather than animating token by token. Context
+Composer resizing is a bounded layout change. Native route navigation and the
+whole page never crossfade. Reduced mode commits the same URL, turn, panel, and
+focus states without spatial layout animation and moves Jump to latest directly
+to its target.

@@ -1096,7 +1096,7 @@
     "navigationLabel": "设置导航",
     "navigation": {
       "account": "账户",
-      "general": "外观与语言",
+      "general": "外观、动态效果与语言",
       "usage": "用量",
       "access-keys": "访问密钥",
       "connections": "连接",
@@ -1116,15 +1116,31 @@
       "dark": "深色",
       "system": "跟随系统"
     },
+    "motion": {
+      "system": {
+        "label": "跟随系统",
+        "description": "使用设备的“减少动态效果”偏好。"
+      },
+      "reduced": {
+        "label": "减少动态效果",
+        "description": "移除空间移动和持续动画。"
+      },
+      "full": {
+        "label": "完整动态效果",
+        "description": "使用完整的 Scholens 动效语言。"
+      }
+    },
     "plan": {
       "basic": "基础版",
       "researcher": "研究者版"
     },
     "general": {
-      "title": "外观与语言",
-      "description": "选择 Scholens 的显示方式与界面语言。",
+      "title": "外观、动态效果与语言",
+      "description": "选择 Scholens 的显示、动态效果与界面语言。",
       "interfaceLanguage": "界面语言",
-      "appearance": "外观"
+      "appearance": "外观",
+      "motion": "动态效果",
+      "motionDescription": "动效用于解释状态与空间关系，不会拖慢你的研究工作。"
     },
     "account": {
       "title": "账户",

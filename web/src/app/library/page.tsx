@@ -1,5 +1,10 @@
 import { LibraryPage } from "@/features/library";
+import { MotionRuntimeProvider } from "@/design-system/motion/motion-runtime-provider";
 
 export default function LibraryRoute() {
-  return <LibraryPage />;
+  return (
+    <MotionRuntimeProvider>
+      <LibraryPage />
+    </MotionRuntimeProvider>
+  );
 }

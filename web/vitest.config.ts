@@ -16,6 +16,8 @@ export default defineConfig({
       "@hookform/resolvers/zod",
       "next/link",
       "next/navigation",
+      "motion/react",
+      "motion/react-m",
       "openapi-fetch",
       "react-hook-form",
       "zod",
@@ -43,7 +45,9 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
-            provider: playwright({}),
+            provider: playwright({
+              contextOptions: { reducedMotion: "reduce" },
+            }),
             instances: [{ browser: "chromium" }],
           },
         },
