@@ -241,7 +241,7 @@ class JobInput(BaseModel):
     job_id: UUID
 
 
-def _search_papers(
+def _search_saved_papers(
     capabilities: ApplicationCapabilities,
     context: ToolExecutionContext,
     arguments: BaseModel,
@@ -924,12 +924,15 @@ def build_workspace_tool_catalog(
 
     definitions = [
         ToolDefinition(
-            name="search_papers",
-            description="Search the server-bound paper collection.",
+            name="search_saved_papers",
+            description=(
+                "Search papers already saved or accessible in the current Scholens "
+                "Library, Project, or selected paper context."
+            ),
             input_model=SearchPapersInput,
             execution=ToolExecutionKind.QUERY,
             required_permission=WorkspacePermission.READ,
-            handler=_search_papers,
+            handler=_search_saved_papers,
             activity_subject_field="query",
         ),
         ToolDefinition(

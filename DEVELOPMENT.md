@@ -121,6 +121,16 @@ Settings; MinerU is connected there as well. All user-owned credentials are
 encrypted with `INTEGRATION_CREDENTIAL_ENCRYPTION_KEY` and are released to a
 worker only for a claimed, owner-scoped job.
 
+For an opt-in local-to-local integration check, start Scholight on its documented
+loopback API port, set the ignored Scholens `server/.env` value to
+`SCHOLIGHT_MCP_URL=http://127.0.0.1:7201/mcp`, and configure the same delegation
+secret in both services. Keep each product on its own schema in the shared local
+PostgreSQL database. A complete smoke test must confirm that the Conversation
+agent sees both Scholens `search_saved_papers` and Scholight `search_papers`, can
+invoke the latter through Scholight, and reports no `connector_tool_name_conflict`.
+Do not commit local secrets or replace the production runtime endpoint while
+performing this check.
+
 **Jobs tip:** set `ZOTERO_SYNC_INTERVAL_SECONDS=60` in `jobs/.env` when testing Celery Beat locally.
 
 ### Local and remote dependency policy

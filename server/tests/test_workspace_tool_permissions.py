@@ -347,7 +347,7 @@ async def test_dispatcher_hides_unknown_profile_external_and_unauthorized_tools(
 def test_workspace_tool_permission_mapping_is_exact() -> None:
     expected = {
         WorkspacePermission.READ: {
-            "search_papers",
+            "search_saved_papers",
             "get_paper",
             "get_paper_abstract",
             "get_paper_content",
