@@ -47,6 +47,8 @@
   --color-info-border: #3b5665;
   --color-info-text: #3b5665;
   --color-overlay-backdrop: rgba(0, 0, 0, 0.4);
+  --color-scrollbar-thumb-hover: #73736e;
+  --color-scrollbar-thumb: #bbbbb5;
   --color-selection-bg: #ececea;
   --color-selection-foreground: #20201e;
   --color-success-bg: #eff8f1;

@@ -29,6 +29,7 @@ import {
 } from "./research-composer";
 import { MessageContent } from "./message-content";
 import { ConversationWorklog } from "./conversation-worklog";
+import { ConversationUserMessage } from "./conversation-user-message";
 import {
   ConversationSources,
   isReferenceBundle,
@@ -39,6 +40,10 @@ export type ConversationTurn =
   components["schemas"]["ConversationTurnResponse"];
 export type ConversationResponseVariant =
   components["schemas"]["ConversationResponseVariantResponse"];
+export type RetryableConversationTurn = Pick<
+  ConversationTurn,
+  "id" | "user_query" | "depth"
+>;
 export type ConversationViewLayout = "workspace" | "side-panel";
 export type ConversationEmptyState = {
   description: string;
@@ -96,6 +101,8 @@ function AssistantMessage({
   onSelectResponse,
   onUseSuggestion,
   onDocumentSourceOpen,
+  durationMs,
+  startedAtMs,
 }: {
   entries: ConversationTraceEntry[];
   content: string;
@@ -117,6 +124,8 @@ function AssistantMessage({
   onDocumentSourceOpen?: (
     source: components["schemas"]["DocumentAnswerSource"],
   ) => void;
+  durationMs?: number | null;
+  startedAtMs?: number;
 }) {
   const t = useTranslations("Home.conversation");
   const [sourcesOpen, setSourcesOpen] = React.useState(false);
@@ -127,12 +136,25 @@ function AssistantMessage({
   const presentationState =
     content && state === "streaming" ? "complete" : state;
   const orderedVariants = canSwitch
-    ? [...(variants ?? [])].sort(
-        (left, right) => left.variant_index - right.variant_index,
-      )
+    ? [...(variants ?? [])]
+        .filter((candidate) => candidate.status === "completed")
+        .sort((left, right) => left.variant_index - right.variant_index)
     : [];
   const selectedVariantIndex = orderedVariants.findIndex(
     (candidate) => candidate.id === response?.id,
+  );
+  const completedActionsVisible = Boolean(
+    response?.status === "completed" &&
+    visibleContent &&
+    (state === "ready" || state === "complete"),
+  );
+  const terminalRetryVisible = Boolean(
+    canRetry &&
+    onRetryResponse &&
+    (response?.status === "failed" ||
+      response?.status === "cancelled" ||
+      state === "error" ||
+      state === "cancelled"),
   );
   return (
     <article aria-label={t("assistantMessage")} className="grid gap-2 lg:gap-3">
@@ -144,6 +166,8 @@ function AssistantMessage({
         provisionalItems={provisionalItems ?? []}
         sourceTotal={sourceTotal}
         state={presentationState}
+        durationMs={durationMs}
+        startedAtMs={startedAtMs}
       />
       {visibleContent && (
         <MessageContent
@@ -157,89 +181,96 @@ function AssistantMessage({
           }}
         />
       )}
-      {response && (
+      {(completedActionsVisible || terminalRetryVisible || suggestions) && (
         <footer className="grid gap-2 lg:max-w-2xl lg:gap-1">
-          {response.status === "completed" &&
-            visibleContent &&
-            (state === "ready" || state === "complete") && (
-              <div
-                className="settled-content-enter flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
-                role="group"
-                aria-label={t("answerActions")}
-              >
-                {canSwitch &&
-                  orderedVariants.length > 1 &&
-                  onSelectResponse && (
-                    <div className="text-secondary flex h-11 items-center lg:h-8">
-                      <IconButton
-                        className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
-                        disabled={selectedVariantIndex <= 0}
-                        label={t("previousResponse")}
-                        onClick={() =>
-                          onSelectResponse(
-                            orderedVariants[selectedVariantIndex - 1]!.id,
-                          )
-                        }
-                        variant="ghost"
-                      >
-                        <Icon glyph={PreviousIcon} size={20} tone="secondary" />
-                      </IconButton>
-                      <span
-                        aria-label={t("responseVersion", {
-                          current: selectedVariantIndex + 1,
-                          total: orderedVariants.length,
-                        })}
-                        className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
-                      >
-                        {selectedVariantIndex + 1} / {orderedVariants.length}
-                      </span>
-                      <IconButton
-                        className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
-                        disabled={
-                          selectedVariantIndex >= orderedVariants.length - 1
-                        }
-                        label={t("nextResponse")}
-                        onClick={() =>
-                          onSelectResponse(
-                            orderedVariants[selectedVariantIndex + 1]!.id,
-                          )
-                        }
-                        variant="ghost"
-                      >
-                        <Icon glyph={NextIcon} size={20} tone="secondary" />
-                      </IconButton>
-                    </div>
-                  )}
-                <CopyActionButton
-                  className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-                  errorLabel={t("copyFailed")}
-                  label={t("copy")}
-                  pendingLabel={t("copying")}
-                  successLabel={t("copied")}
-                  value={visibleContent}
-                />
-                {canRetry && onRetryResponse && (
-                  <IconButton
+          {(completedActionsVisible || terminalRetryVisible) && (
+            <div
+              className="settled-content-enter flex min-h-11 flex-wrap items-center gap-0 lg:min-h-8 lg:pt-1"
+              role="group"
+              aria-label={t("answerActions")}
+            >
+              {completedActionsVisible && (
+                <>
+                  {canSwitch &&
+                    orderedVariants.length > 1 &&
+                    selectedVariantIndex >= 0 &&
+                    onSelectResponse && (
+                      <div className="text-secondary flex h-11 items-center lg:h-8">
+                        <IconButton
+                          className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                          disabled={selectedVariantIndex <= 0}
+                          label={t("previousResponse")}
+                          onClick={() =>
+                            onSelectResponse(
+                              orderedVariants[selectedVariantIndex - 1]!.id,
+                            )
+                          }
+                          variant="ghost"
+                        >
+                          <Icon
+                            glyph={PreviousIcon}
+                            size={20}
+                            tone="secondary"
+                          />
+                        </IconButton>
+                        <span
+                          aria-label={t("responseVersion", {
+                            current: selectedVariantIndex + 1,
+                            total: orderedVariants.length,
+                          })}
+                          className="text-foreground min-w-10 text-center text-sm font-medium tabular-nums"
+                        >
+                          {selectedVariantIndex + 1} / {orderedVariants.length}
+                        </span>
+                        <IconButton
+                          className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
+                          disabled={
+                            selectedVariantIndex >= orderedVariants.length - 1
+                          }
+                          label={t("nextResponse")}
+                          onClick={() =>
+                            onSelectResponse(
+                              orderedVariants[selectedVariantIndex + 1]!.id,
+                            )
+                          }
+                          variant="ghost"
+                        >
+                          <Icon glyph={NextIcon} size={20} tone="secondary" />
+                        </IconButton>
+                      </div>
+                    )}
+                  <CopyActionButton
                     className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-                    label={t("regenerate")}
-                    onClick={onRetryResponse}
-                    variant="ghost"
-                  >
-                    <Icon glyph={RegenerateIcon} size={16} tone="secondary" />
-                  </IconButton>
-                )}
-                <ConversationSources
-                  onDocumentOpen={onDocumentSourceOpen}
-                  onOpenChange={(open) => {
-                    setSourcesOpen(open);
-                    if (!open) setSelectedSourceKey(undefined);
-                  }}
-                  open={sourcesOpen}
-                  references={references}
-                  selectedSourceKey={selectedSourceKey}
-                />
-              </div>
-            )}
+                    errorLabel={t("copyFailed")}
+                    label={t("copy")}
+                    pendingLabel={t("copying")}
+                    successLabel={t("copied")}
+                    value={visibleContent}
+                  />
+                  <ConversationSources
+                    onDocumentOpen={onDocumentSourceOpen}
+                    onOpenChange={(open) => {
+                      setSourcesOpen(open);
+                      if (!open) setSelectedSourceKey(undefined);
+                    }}
+                    open={sourcesOpen}
+                    references={references}
+                    selectedSourceKey={selectedSourceKey}
+                  />
+                </>
+              )}
+              {canRetry && onRetryResponse && (
+                <IconButton
+                  className="size-11 bg-transparent lg:size-8 lg:min-h-8"
+                  label={t("regenerate")}
+                  onClick={onRetryResponse}
+                  variant="ghost"
+                >
+                  <Icon glyph={RegenerateIcon} size={16} tone="secondary" />
+                </IconButton>
+              )}
+            </div>
+          )}
           {onUseSuggestion && suggestions && (
             <FollowUpSuggestions
               onUseSuggestion={onUseSuggestion}
@@ -270,6 +301,8 @@ function MessageHistory({
   suppressLatestControls,
   onRetryResponse,
   onSelectResponse,
+  onEditMessage,
+  onSelectBranch,
   onUseSuggestion,
   onDocumentSourceOpen,
 }: {
@@ -277,8 +310,10 @@ function MessageHistory({
   liveTurn: LiveTurn | null;
   canSend: boolean;
   suppressLatestControls: boolean;
-  onRetryResponse: (turn: ConversationTurn) => void;
+  onRetryResponse: (turn: RetryableConversationTurn) => void;
   onSelectResponse: (turnId: string, responseId: string) => void;
+  onEditMessage: (turn: ConversationTurn, message: string) => Promise<void>;
+  onSelectBranch: (turnId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
   onDocumentSourceOpen?: (
     source: components["schemas"]["DocumentAnswerSource"],
@@ -300,17 +335,22 @@ function MessageHistory({
           turn.id === latestTurnId && !suppressLatestControls;
         return (
           <React.Fragment key={turn.id}>
-            <div className="flex justify-end">
-              <p className="bg-subtle max-w-[86%] rounded-[var(--radius-xl)] px-4 py-3 text-base leading-6 lg:max-w-[80%] lg:rounded-[var(--radius-lg)] lg:text-sm">
-                {turn.user_query}
-              </p>
-            </div>
+            <ConversationUserMessage
+              branch={turn.branch}
+              canEdit={canSend}
+              message={turn.user_query}
+              onEdit={(message) => onEditMessage(turn, message)}
+              onSelectBranch={onSelectBranch}
+            />
             {isLive && liveTurn ? (
               <AssistantMessage
                 canRetry={
                   latestControlsVisible &&
                   canSend &&
-                  (liveTurn.state === "ready" || liveTurn.state === "complete")
+                  (liveTurn.state === "ready" ||
+                    liveTurn.state === "complete" ||
+                    liveTurn.state === "error" ||
+                    liveTurn.state === "cancelled")
                 }
                 canSwitch={
                   latestControlsVisible &&
@@ -337,6 +377,8 @@ function MessageHistory({
                 state={liveTurn.state}
                 suggestions={liveTurn.suggestions}
                 variants={readyTurn?.responses}
+                durationMs={liveTurn.durationMs}
+                startedAtMs={liveTurn.startedAtMs}
               />
             ) : response ? (
               <AssistantMessage
@@ -359,10 +401,19 @@ function MessageHistory({
                   response.trace?.citation_summary?.source_count ??
                   referenceSourceCount(response.references)
                 }
-                state="complete"
+                state={
+                  response.status === "cancelled"
+                    ? "cancelled"
+                    : response.status === "failed"
+                      ? "error"
+                      : response.status === "running"
+                        ? "streaming"
+                        : "complete"
+                }
                 suggestions={turn.suggestions}
                 failure={null}
                 variants={turn.responses}
+                durationMs={response.duration_ms}
               />
             ) : null}
           </React.Fragment>
@@ -389,6 +440,8 @@ export function ConversationView({
   onRetry,
   onRetryResponse,
   onSelectResponse,
+  onEditMessage,
+  onSelectBranch,
   onUseSuggestion,
   canSend,
   submissionPending = false,
@@ -416,8 +469,10 @@ export function ConversationView({
   onSubmit: (message: string) => Promise<void>;
   onStop: () => void;
   onRetry: () => void;
-  onRetryResponse: (turn: ConversationTurn) => void;
+  onRetryResponse: (turn: RetryableConversationTurn) => void;
   onSelectResponse: (turnId: string, responseId: string) => void;
+  onEditMessage: (turn: ConversationTurn, message: string) => Promise<void>;
+  onSelectBranch: (turnId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
   canSend: boolean;
   submissionPending?: boolean;
@@ -439,13 +494,12 @@ export function ConversationView({
   const scrollAnchor = React.useRef<HTMLDivElement>(null);
   const nearBottom = React.useRef(true);
   const [showJumpToLatest, setShowJumpToLatest] = React.useState(false);
-  const visibleTurns = React.useMemo(
-    () =>
-      liveTurn?.generationKind === "initial"
-        ? turns.filter((turn) => turn.id !== liveTurn.turnId)
-        : turns,
-    [liveTurn, turns],
-  );
+  const visibleTurns = React.useMemo(() => {
+    if (!liveTurn || liveTurn.generationKind === "retry") return turns;
+    return turns.filter(
+      (turn) => turn.depth < liveTurn.depth || turn.id === liveTurn.turnId,
+    );
+  }, [liveTurn, turns]);
   const worklogSignature = liveTurn?.entries
     .map((entry) =>
       entry.kind === "activity"
@@ -460,8 +514,10 @@ export function ConversationView({
     (response) => response.id === liveTurn.responseId,
   );
   const suppressLatestControls =
-    submissionPending ||
-    (liveTurn?.generationKind === "initial" && liveTurn.state === "streaming");
+    submissionPending || liveTurn?.state === "streaming";
+  const liveTurnRenderedInHistory = visibleTurns.some(
+    (turn) => turn.id === liveTurn?.turnId,
+  );
 
   const getScroller = React.useCallback(
     () =>
@@ -530,7 +586,7 @@ export function ConversationView({
       className={
         layout === "side-panel"
           ? "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden"
-          : "mx-auto flex min-h-full w-full max-w-[848px] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8"
+          : "mx-auto flex min-h-full w-full max-w-[var(--layout-conversation-lane)] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8 lg:px-0"
       }
       ref={rootRef}
     >
@@ -544,6 +600,7 @@ export function ConversationView({
           layout === "side-panel" ? true : undefined
         }
         ref={layout === "side-panel" ? panelScrollRef : undefined}
+        data-scrollbar-gutter={layout === "side-panel" ? "stable" : undefined}
       >
         {loading ? (
           <p className="text-muted py-12 text-center text-sm" role="status">
@@ -593,66 +650,84 @@ export function ConversationView({
             }
           >
             <MessageHistory
-              canSend={canSend && liveTurn?.state !== "streaming"}
+              canSend={
+                canSend && !submissionPending && liveTurn?.state !== "streaming"
+              }
               liveTurn={liveTurn}
               onRetryResponse={onRetryResponse}
+              onEditMessage={onEditMessage}
+              onSelectBranch={onSelectBranch}
               onSelectResponse={onSelectResponse}
               onUseSuggestion={onUseSuggestion}
               onDocumentSourceOpen={onDocumentSourceOpen}
               suppressLatestControls={suppressLatestControls}
               turns={visibleTurns}
             />
-            {liveTurn?.generationKind === "initial" && (
-              <>
-                <div className="flex justify-end">
-                  <p className="bg-subtle max-w-[86%] rounded-[var(--radius-xl)] px-4 py-3 text-base leading-6 lg:max-w-[80%] lg:rounded-[var(--radius-lg)] lg:text-sm">
-                    {liveTurn.userMessage}
-                  </p>
-                </div>
-                <AssistantMessage
-                  canRetry={
-                    canSend &&
-                    !submissionPending &&
-                    (liveTurn.state === "ready" ||
-                      liveTurn.state === "complete")
-                  }
-                  canSwitch={
-                    !submissionPending &&
-                    Boolean(
-                      liveTurn.readyTurn &&
-                      liveTurn.readyTurn.responses.length > 1,
-                    )
-                  }
-                  content={liveTurn.content}
-                  entries={liveTurn.entries}
-                  key={liveTurn.turnId}
-                  onActivityOpenChange={(open) => {
-                    if (open) nearBottom.current = false;
-                  }}
-                  onRetryResponse={() =>
-                    liveTurn.readyTurn && onRetryResponse(liveTurn.readyTurn)
-                  }
-                  onSelectResponse={(responseId) =>
-                    onSelectResponse(liveTurn.turnId, responseId)
-                  }
-                  onUseSuggestion={
-                    submissionPending ? undefined : onUseSuggestion
-                  }
-                  onDocumentSourceOpen={onDocumentSourceOpen}
-                  provisionalItems={liveTurn.provisionalItems}
-                  references={liveTurn.references}
-                  response={liveResponse}
-                  sourceTotal={
-                    liveTurn.trace?.citation_summary?.source_count ??
-                    referenceSourceCount(liveTurn.references)
-                  }
-                  state={liveTurn.state}
-                  suggestions={liveTurn.suggestions}
-                  variants={liveTurn.readyTurn?.responses}
-                  failure={liveTurn.failure}
-                />
-              </>
-            )}
+            {liveTurn &&
+              liveTurn.generationKind !== "retry" &&
+              !liveTurnRenderedInHistory && (
+                <>
+                  <ConversationUserMessage
+                    branch={{ count: 1, index: 1 }}
+                    canEdit={false}
+                    message={liveTurn.userMessage}
+                    onEdit={async () => undefined}
+                    onSelectBranch={() => undefined}
+                  />
+                  <AssistantMessage
+                    canRetry={
+                      canSend &&
+                      !submissionPending &&
+                      (liveTurn.state === "ready" ||
+                        liveTurn.state === "complete" ||
+                        liveTurn.state === "error" ||
+                        liveTurn.state === "cancelled")
+                    }
+                    canSwitch={
+                      !submissionPending &&
+                      Boolean(
+                        liveTurn.readyTurn &&
+                        liveTurn.readyTurn.responses.length > 1,
+                      )
+                    }
+                    content={liveTurn.content}
+                    entries={liveTurn.entries}
+                    key={liveTurn.turnId}
+                    onActivityOpenChange={(open) => {
+                      if (open) nearBottom.current = false;
+                    }}
+                    onRetryResponse={() =>
+                      onRetryResponse(
+                        liveTurn.readyTurn ?? {
+                          id: liveTurn.turnId,
+                          user_query: liveTurn.userMessage,
+                          depth: liveTurn.depth,
+                        },
+                      )
+                    }
+                    onSelectResponse={(responseId) =>
+                      onSelectResponse(liveTurn.turnId, responseId)
+                    }
+                    onUseSuggestion={
+                      submissionPending ? undefined : onUseSuggestion
+                    }
+                    onDocumentSourceOpen={onDocumentSourceOpen}
+                    provisionalItems={liveTurn.provisionalItems}
+                    references={liveTurn.references}
+                    response={liveResponse}
+                    sourceTotal={
+                      liveTurn.trace?.citation_summary?.source_count ??
+                      referenceSourceCount(liveTurn.references)
+                    }
+                    state={liveTurn.state}
+                    suggestions={liveTurn.suggestions}
+                    variants={liveTurn.readyTurn?.responses}
+                    failure={liveTurn.failure}
+                    durationMs={liveTurn.durationMs}
+                    startedAtMs={liveTurn.startedAtMs}
+                  />
+                </>
+              )}
             <div ref={scrollAnchor} />
           </div>
         )}
@@ -695,15 +770,13 @@ export function ConversationView({
         <div
           className={
             layout === "side-panel"
-              ? "bg-canvas z-20 shrink-0 px-4 pt-2 pb-4"
-              : "pointer-events-none sticky bottom-0 z-20 -mx-4 flex justify-center bg-[linear-gradient(to_top,var(--color-bg-canvas)_78%,transparent)] px-4 pt-5 pb-3 min-[390px]:-mx-5 min-[390px]:px-5 sm:-mx-8 lg:mx-0 lg:px-4 lg:pt-10 lg:pb-6"
+              ? "bg-canvas z-20 shrink-0 px-5 pt-2 pb-4"
+              : "pointer-events-none sticky bottom-0 z-20 -mx-4 flex justify-center bg-[linear-gradient(to_top,var(--color-bg-canvas)_78%,transparent)] px-4 pt-5 pb-3 min-[390px]:-mx-5 min-[390px]:px-5 sm:-mx-8 lg:mx-0 lg:px-0 lg:pt-10 lg:pb-6"
           }
         >
           <div
             className={
-              layout === "side-panel"
-                ? "w-full"
-                : "pointer-events-auto w-full max-w-[720px]"
+              layout === "side-panel" ? "w-full" : "pointer-events-auto w-full"
             }
           >
             <ResearchComposer

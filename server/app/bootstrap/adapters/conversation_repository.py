@@ -106,29 +106,14 @@ class ConversationRepository:
             document_ids=sorted(accessible_documents, key=str),
         )
 
-    def _replace_paper_context(
+    def _paper_context_targets(
         self,
         db: Session,
         *,
         conversation: Conversation,
         user_id: int,
         request: PaperContext,
-    ) -> ConversationWrite[PaperContext]:
-        current_project_ids = set(
-            db.scalars(
-                select(ConversationContextProject.project_id).where(
-                    ConversationContextProject.conversation_id == conversation.id
-                )
-            ).all()
-        )
-        current_document_ids = set(
-            db.scalars(
-                select(ConversationContextDocument.document_id).where(
-                    ConversationContextDocument.conversation_id == conversation.id
-                )
-            ).all()
-        )
-
+    ) -> tuple[str, set[uuid.UUID], set[uuid.UUID]]:
         if isinstance(request, LibraryPaperContext):
             context_kind = "library"
             project_ids: set[uuid.UUID] = set()
@@ -176,6 +161,52 @@ class ConversationRepository:
                         message="A selected paper was not found",
                         kind=FailureKind.NOT_FOUND,
                     )
+
+        return context_kind, project_ids, document_ids
+
+    def validate_paper_context(
+        self,
+        db: Session,
+        *,
+        conversation: Conversation,
+        user_id: int,
+        request: PaperContext,
+    ) -> None:
+        self._paper_context_targets(
+            db,
+            conversation=conversation,
+            user_id=user_id,
+            request=request,
+        )
+
+    def _replace_paper_context(
+        self,
+        db: Session,
+        *,
+        conversation: Conversation,
+        user_id: int,
+        request: PaperContext,
+    ) -> ConversationWrite[PaperContext]:
+        current_project_ids = set(
+            db.scalars(
+                select(ConversationContextProject.project_id).where(
+                    ConversationContextProject.conversation_id == conversation.id
+                )
+            ).all()
+        )
+        current_document_ids = set(
+            db.scalars(
+                select(ConversationContextDocument.document_id).where(
+                    ConversationContextDocument.conversation_id == conversation.id
+                )
+            ).all()
+        )
+        context_kind, project_ids, document_ids = self._paper_context_targets(
+            db,
+            conversation=conversation,
+            user_id=user_id,
+            request=request,
+        )
 
         changed = (
             conversation.paper_context_kind != context_kind

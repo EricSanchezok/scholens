@@ -27,13 +27,15 @@ function readyEvent({
   return {
     type: "response_ready" as const,
     turn: {
+      branch: { count: 1, index: 1 },
+      depth: 1,
       id: turnId,
       user_query: "Question",
       locale: "en" as const,
       time_zone: "Asia/Shanghai",
       reasoning_level: "standard",
-      scope: null,
-      sequence: 1,
+      paper_context: { kind: "library" as const },
+      parent_turn_id: null,
       contexts: [],
       selected_response_id: responseId,
       suggestions,
@@ -45,6 +47,7 @@ function readyEvent({
           content: "Canonical answer",
           references: null,
           artifacts: null,
+          duration_ms: 18_400,
           trace: {
             entries: [{ ...running, state: "succeeded" as const }],
             citation_summary: {
@@ -202,6 +205,7 @@ describe("Home live conversation state", () => {
     expect(turn?.entries[0]).toMatchObject({ state: "succeeded" });
     expect(turn?.trace?.citation_summary?.source_count).toBe(3);
     expect(turn?.readyTurn?.id).toBe(turnId);
+    expect(turn?.durationMs).toBe(18_400);
 
     turn = reduceLiveTurn(turn, event({ type: "complete", turn_id: turnId }));
     expect(turn?.state).toBe("complete");

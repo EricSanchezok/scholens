@@ -11,9 +11,20 @@ export function upsertConversationTurn(
   const items = [...(current?.items ?? [])];
   const index = items.findIndex((candidate) => candidate.id === turn.id);
   if (index >= 0) items[index] = turn;
-  else items.push(turn);
-  items.sort((left, right) => left.sequence - right.sequence);
-  return { items, next_cursor: current?.next_cursor ?? null };
+  else {
+    items.splice(
+      0,
+      items.length,
+      ...items.filter((candidate) => candidate.depth < turn.depth),
+      turn,
+    );
+  }
+  items.sort((left, right) => left.depth - right.depth);
+  return {
+    items,
+    path_revision: (current?.path_revision ?? 0) + (index >= 0 ? 0 : 1),
+    next_cursor: current?.next_cursor ?? null,
+  };
 }
 
 export function updateLatestTurnSuggestions(

@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -68,8 +69,21 @@ class ConversationTurn(Base):
     __table_args__ = (
         UniqueConstraint(
             "conversation_id",
-            "sequence",
-            name="uq_conversation_turns_conversation_sequence",
+            "parent_turn_id",
+            "branch_index",
+            name="uq_conversation_turns_sibling_branch",
+        ),
+        Index(
+            "uq_conversation_turns_root_branch",
+            "conversation_id",
+            "branch_index",
+            unique=True,
+            postgresql_where=text("parent_turn_id IS NULL"),
+        ),
+        CheckConstraint("depth >= 1", name="ck_conversation_turns_depth"),
+        CheckConstraint(
+            "branch_index >= 1",
+            name="ck_conversation_turns_branch_index",
         ),
     )
 
@@ -80,6 +94,22 @@ class ConversationTurn(Base):
         UUID(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    parent_turn_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversation_turns.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    selected_child_turn_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "conversation_turns.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_conversation_turns_selected_child_turn_id",
+        ),
+        nullable=True,
     )
     created_operation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -95,13 +125,12 @@ class ConversationTurn(Base):
     contexts: Mapped[list[dict[str, JsonValue]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
-    scope: Mapped[list[dict[str, JsonValue]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    paper_context: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
     reasoning_level: Mapped[str] = mapped_column(String(16), nullable=False)
     locale: Mapped[str] = mapped_column(String(16), nullable=False)
     time_zone: Mapped[str] = mapped_column(String(100), nullable=False)
-    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False)
+    branch_index: Mapped[int] = mapped_column(Integer, nullable=False)
     selected_response_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(
@@ -114,7 +143,9 @@ class ConversationTurn(Base):
     )
     suggestions: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     conversation: Mapped["Conversation"] = relationship(
-        "Conversation", back_populates="turns"
+        "Conversation",
+        back_populates="turns",
+        foreign_keys=[conversation_id],
     )
     responses: Mapped[list["ConversationResponse"]] = relationship(
         "ConversationResponse",
@@ -143,6 +174,10 @@ class ConversationResponse(Base):
             "status IN ('running', 'completed', 'failed', 'cancelled')",
             name="ck_conversation_responses_status",
         ),
+        CheckConstraint(
+            "duration_ms IS NULL OR duration_ms >= 0",
+            name="ck_conversation_responses_duration_ms",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -167,6 +202,7 @@ class ConversationResponse(Base):
         JSONB, nullable=True
     )
     trace: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     turn: Mapped["ConversationTurn"] = relationship(
         "ConversationTurn",
         back_populates="responses",
@@ -183,6 +219,10 @@ class ConversationResponse(Base):
 class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (
+        CheckConstraint(
+            "path_revision >= 0",
+            name="ck_conversations_path_revision",
+        ),
         CheckConstraint(
             "(scope_type = 'global' AND project_id IS NULL "
             "AND document_id IS NULL AND context_deleted_at IS NULL) OR "
@@ -222,6 +262,22 @@ class Conversation(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    selected_root_turn_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "conversation_turns.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_conversations_selected_root_turn_id",
+        ),
+        nullable=True,
+    )
+    path_revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
     )
     title: Mapped[str] = mapped_column(
         String(240), nullable=False, default=DEFAULT_CONVERSATION_TITLE
@@ -283,8 +339,9 @@ class Conversation(Base):
     turns: Mapped[list["ConversationTurn"]] = relationship(
         "ConversationTurn",
         back_populates="conversation",
-        order_by=ConversationTurn.sequence,
+        order_by=(ConversationTurn.depth, ConversationTurn.branch_index),
         cascade="all, delete-orphan",
+        foreign_keys=[ConversationTurn.conversation_id],
     )
     context_projects: Mapped[list["ConversationContextProject"]] = relationship(
         "ConversationContextProject", cascade="all, delete-orphan"

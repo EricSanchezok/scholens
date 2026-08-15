@@ -132,13 +132,14 @@ Queries, rejected operations, no-ops, technical leases, and replayed tool
 invocations do not create Journal entries. The Journal is append-only and has
 no public read capability or transport endpoint.
 
-Conversation turns are USER root operations. A turn owns the immutable user
-prompt, while model responses, tool calls, citations, and generated titles are
-AGENT child operations that retain the turn correlation. A retry creates a new
-response variant under the same latest turn; selecting a variant does not
-rewrite the prompt. Jobs persist only their origin operation and correlation
-UUIDs, then callbacks resume a new SYSTEM operation after signature and owner
-verification.
+Conversation turns are USER root operations. A turn owns an immutable user
+prompt and its typed context snapshot, while model responses, tool calls,
+citations, and generated titles are AGENT child operations that retain the turn
+correlation. Editing creates a sibling turn and selects that new path; it never
+rewrites the source prompt. A retry creates a response variant under the active
+leaf, and selecting a response variant does not rewrite the prompt. Jobs persist
+only their origin operation and correlation UUIDs, then callbacks resume a new
+SYSTEM operation after signature and owner verification.
 
 A Conversation title sidecar starts with its first turn and is applied once.
 It never blocks answer persistence or the public `response_ready` event. Later
@@ -183,11 +184,19 @@ snapshot, an optional turn-suggestion update, and one terminal event. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 
-The conversation aggregate has a destructive Turn/Response contract rather
-than a compatibility wrapper around messages. Only the latest turn exposes its
-completed response variants and permits retry or selection. Starting a newer
-turn deletes the older turn's unselected variants and its now-stale follow-up
-suggestions; persisted history therefore remains linear and bounded.
+The conversation aggregate has a reset-first Turn/Response tree rather than a
+compatibility wrapper around messages. Conversation and turn selectors define
+one active root-to-leaf path, and a path revision invalidates stale pagination.
+Only the active leaf exposes its response variants and permits retry or response
+selection. Starting a normal child deletes its parent's unselected response
+variants and stale suggestions; edited prompt siblings and their selected
+descendant suffixes remain durable. Agent history contains selected ancestors
+only. Branch creation and selection restore the turn-owned paper context after
+current authorization, and one response may run across the whole Conversation.
+Completed, failed, and cancelled responses persist total duration separately
+from their ordered worklog trace. The latest terminal attempt remains selected,
+and the active leaf exposes terminal attempts so safe failure/cancellation state
+and retry survive refresh without publishing raw exceptions.
 
 Reader selections and annotation threads enter that same aggregate through
 typed turn contexts. Personal Reader conversations are paper-scoped. Reader
@@ -240,6 +249,14 @@ authorized scope titles; the current answer, ordered worklog, provider output,
 tool payloads, and document bodies are not suggestion context. The typed output
 requires exactly three unique questions covering deeper inquiry, comparison or
 verification, and practical use. A retry reuses the turn-owned result.
+
+Conversation generation has one externally observable acceptance boundary.
+Quota, access, immutable context resolution, rate limiting, and concurrency
+acquisition run before product writes. The following short command atomically
+creates the Turn/Response and selected path; for prompt branches it also restores
+the source turn's paper-context snapshot. A command conflict releases the lease.
+After commit, the first streamed event is `start`, so every later error belongs
+to the persisted active leaf and remains safely retryable after refresh.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Command tools commit

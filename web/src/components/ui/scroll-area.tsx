@@ -17,17 +17,26 @@ export const ScrollArea = React.forwardRef<
   >
     <ScrollAreaPrimitive.Viewport
       className="size-full rounded-[inherit]"
+      data-scrollbar-gutter="stable"
       tabIndex={0}
     >
       {children}
     </ScrollAreaPrimitive.Viewport>
-    <ScrollAreaPrimitive.Scrollbar
-      className="flex w-2.5 touch-none p-0.5 select-none"
-      orientation="vertical"
-    >
-      <ScrollAreaPrimitive.Thumb className="bg-line-strong relative flex-1 rounded-full" />
-    </ScrollAreaPrimitive.Scrollbar>
-    <ScrollAreaPrimitive.Corner />
+    {(["vertical", "horizontal"] as const).map((orientation) => (
+      <ScrollAreaPrimitive.Scrollbar
+        className={cn(
+          "flex touch-none p-0.5 select-none",
+          orientation === "vertical"
+            ? "w-[var(--scrollbar-box)]"
+            : "h-[var(--scrollbar-box)] flex-col",
+        )}
+        key={orientation}
+        orientation={orientation}
+      >
+        <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-[var(--color-scrollbar-thumb)] hover:bg-[var(--color-scrollbar-thumb-hover)]" />
+      </ScrollAreaPrimitive.Scrollbar>
+    ))}
+    <ScrollAreaPrimitive.Corner className="bg-transparent" />
   </ScrollAreaPrimitive.Root>
 ));
 ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;

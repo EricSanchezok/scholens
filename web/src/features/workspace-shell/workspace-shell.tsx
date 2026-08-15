@@ -415,7 +415,10 @@ function MobileNavigation({
       <div className="flex min-h-20 shrink-0 items-center px-4 pr-16">
         <MobileActorIdentity actor={actor} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
+        data-scrollbar-gutter="stable"
+      >
         <MobileConversationGroup
           activeConversationId={activeConversationId}
           items={pinned}
@@ -723,7 +726,10 @@ function Sidebar({
           />
         </nav>
         {!collapsed && (
-          <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+          <div
+            className="mt-3 min-h-0 flex-1 overflow-y-auto"
+            data-scrollbar-gutter="stable"
+          >
             <ConversationGroup
               activeConversationId={activeConversationId}
               items={pinned}
@@ -871,6 +877,7 @@ export function WorkspaceShell({
         </header>
         <main
           className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+          data-scrollbar-gutter="stable"
           tabIndex={0}
         >
           {children}

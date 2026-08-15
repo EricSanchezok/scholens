@@ -86,11 +86,17 @@
     "/api/v1/conversations/{conversation_id}/scope": [
       "put"
     ],
+    "/api/v1/conversations/{conversation_id}/selected-branch": [
+      "put"
+    ],
     "/api/v1/conversations/{conversation_id}/tool-permissions": [
       "put"
     ],
     "/api/v1/conversations/{conversation_id}/turns": [
       "get",
+      "post"
+    ],
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/branches": [
       "post"
     ],
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses": [

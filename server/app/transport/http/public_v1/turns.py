@@ -13,6 +13,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationResponseCreateRequest,
     ConversationStreamEventSchema,
     ConversationTurnCreateRequest,
+    ConversationTurnBranchCreateRequest,
 )
 from app.shared.application import (
     Actor,
@@ -140,6 +141,39 @@ async def retry_conversation_turn(
         conversation_id=conversation_id,
         turn_id=turn_id,
         response_id=response.response_id,
+        client_ip=http_client_ip(http_request),
+    )
+    return ConversationEventStreamResponse(stream)
+
+
+@turn_router.post(
+    "/{conversation_id}/turns/{turn_id}/branches",
+    response_class=ConversationEventStreamResponse,
+    responses=_stream_responses(),
+)
+async def branch_conversation_turn(
+    conversation_id: UUID,
+    turn_id: UUID,
+    branch: ConversationTurnBranchCreateRequest,
+    http_request: Request,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+    request_operation: OperationContext = Depends(get_required_operation),
+    operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
+) -> ConversationEventStreamResponse:
+    operation = _conversation_operation(
+        conversation_id=conversation_id,
+        turn_id=branch.turn_id,
+        request_operation=request_operation,
+        operation_factory=operation_factory,
+    )
+    attach_operation_context(http_request, operation, actor_id=str(current_user.id))
+    stream = await chat.branch(
+        actor=current_user,
+        operation=operation,
+        conversation_id=conversation_id,
+        source_turn_id=turn_id,
+        request=branch,
         client_ip=http_client_ip(http_request),
     )
     return ConversationEventStreamResponse(stream)

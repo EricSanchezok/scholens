@@ -59,6 +59,13 @@ as one system rather than a collection of separately themed tools.
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
+Conversation history is durable research provenance. Editing a visible user
+prompt creates an alternate path from that point instead of rewriting the
+original prompt or discarding its answer. Switching prompt versions restores
+the complete selected suffix, sources, worklog, and authorized context for that
+alternative. The interface may present one path at a time, but refresh and
+other conversation surfaces must agree on which path is active.
+
 ## Reading transformations preserve the paper as source of truth
 
 Translation and reading reflow are derived views of an authorized paper. They

@@ -194,13 +194,15 @@ export const homeProjects: Project[] = [
 
 export const homeTurns: ConversationTurn[] = [
   {
+    branch: { count: 1, index: 1 },
+    depth: 1,
     id: "50000000-0000-4000-8000-000000000001",
     user_query: "What is the paper’s central contribution?",
     locale: "en",
     time_zone: "Asia/Shanghai",
     reasoning_level: "standard",
-    scope: null,
-    sequence: 1,
+    paper_context: { kind: "library" },
+    parent_turn_id: null,
     contexts: [],
     selected_response_id: "40000000-0000-4000-8000-000000000002",
     suggestions: [
@@ -231,6 +233,7 @@ export const homeTurns: ConversationTurn[] = [
           ],
         },
         artifacts: null,
+        duration_ms: 21_000,
         trace: {
           entries: [
             {

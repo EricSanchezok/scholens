@@ -20,7 +20,7 @@ class ConversationStreamStartEvent(BaseModel):
     turn_id: uuid.UUID
     response_id: uuid.UUID
     variant_index: int = Field(ge=1)
-    generation_kind: Literal["initial", "retry"]
+    generation_kind: Literal["initial", "retry", "branch"]
 
 
 class ConversationStreamActivityEvent(BaseModel):
@@ -128,6 +128,16 @@ class ConversationTurnCreateRequest(BaseModel):
         except ZoneInfoNotFoundError as exc:
             raise ValueError("time_zone must be a valid IANA time zone") from exc
         return value
+
+
+class ConversationTurnBranchCreateRequest(BaseModel):
+    """Create an edited sibling branch without mutating the source turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    turn_id: uuid.UUID
+    response_id: uuid.UUID
+    user_query: str = Field(min_length=1, max_length=20_000)
 
 
 class ConversationResponseCreateRequest(BaseModel):

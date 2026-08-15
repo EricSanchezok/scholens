@@ -9,6 +9,7 @@ import {
 } from "../../src/features/home/api/fixtures";
 
 const apiPattern = "**/api/v1";
+type ConversationTurn = (typeof homeTurns)[number];
 const actor = {
   id: 7,
   email: "niexiaohangeric@163.com",
@@ -390,8 +391,13 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
     const responseId = `40000000-0000-4000-8000-00000000000${index + 1}`;
     return {
       ...source,
+      branch: { count: 1, index: 1 },
+      depth: index + 1,
       id: turnId,
-      sequence: index + 1,
+      parent_turn_id:
+        index === 0
+          ? null
+          : `50000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       selected_response_id: responseId,
       suggestions: index === 5 ? source.suggestions : null,
       responses: source.responses.map((response) => ({
@@ -415,7 +421,11 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
     (route) =>
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ items: turns, next_cursor: null }),
+        body: JSON.stringify({
+          items: turns,
+          next_cursor: null,
+          path_revision: 1,
+        }),
       }),
   );
   await page.setViewportSize({ width: 390, height: 844 });
@@ -468,6 +478,373 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
     )
     .toBeLessThan(120);
   await expect(jumpToLatest).toBeHidden();
+});
+
+test("edits any prompt into a persistent branch and switches the full suffix", async ({
+  page,
+}) => {
+  const conversation = homeConversations[0]!;
+  const detail = {
+    ...conversation,
+    paper_context: { kind: "library" as const },
+    tool_permissions: [],
+  };
+  const source = homeTurns[0]!;
+  const rootId = source.id;
+  const followUpId = "50000000-0000-4000-8000-000000000002";
+  const followUpResponseId = "40000000-0000-4000-8000-000000000003";
+  const originalQuestion = source.user_query;
+  const followUpQuestion = "What evidence supports that contribution?";
+  let editedTurnId: string | null = null;
+  let editedTurn: ConversationTurn | null = null;
+  let branchCreated = false;
+
+  const originalPath = (): ConversationTurn[] => [
+    {
+      ...source,
+      branch: {
+        count: branchCreated ? 2 : 1,
+        index: 1,
+        next_turn_id: editedTurnId,
+      },
+    },
+    {
+      ...source,
+      branch: { count: 1, index: 1 },
+      depth: 2,
+      id: followUpId,
+      parent_turn_id: rootId,
+      responses: source.responses.map((response) => ({
+        ...response,
+        id: followUpResponseId,
+        content: "The evidence is reported in the evaluation section.",
+      })),
+      selected_response_id: followUpResponseId,
+      suggestions: null,
+      user_query: followUpQuestion,
+    },
+  ];
+  let activePath: ConversationTurn[] = originalPath();
+
+  await page.unroute(`${apiPattern}/conversations**`);
+  await page.route(`${apiPattern}/conversations**`, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+
+    if (
+      pathname.endsWith(`/conversations/${conversation.id}/selected-branch`) &&
+      request.method() === "PUT"
+    ) {
+      const body = request.postDataJSON() as { turn_id: string };
+      if (body.turn_id === rootId) activePath = originalPath();
+      else if (body.turn_id === editedTurnId && editedTurn)
+        activePath = [editedTurn];
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: activePath,
+          next_cursor: null,
+          path_revision: 3,
+        }),
+      });
+      return;
+    }
+
+    if (
+      pathname.endsWith(
+        `/conversations/${conversation.id}/turns/${rootId}/branches`,
+      ) &&
+      request.method() === "POST"
+    ) {
+      const body = request.postDataJSON() as {
+        response_id: string;
+        turn_id: string;
+        user_query: string;
+      };
+      const rejectedEdits: Record<
+        string,
+        { code: string; message: string; status: number }
+      > = {
+        "Rejected edit stays here": {
+          code: "conversation_response_in_progress",
+          message: "Conversation is busy",
+          status: 409,
+        },
+        "Rate limited edit stays here": {
+          code: "rate_limit_exceeded",
+          message: "AI request limit exceeded",
+          status: 429,
+        },
+        "Capacity limited edit stays here": {
+          code: "interactive_concurrency_exceeded",
+          message: "AI request limit exceeded",
+          status: 429,
+        },
+      };
+      const rejection = rejectedEdits[body.user_query];
+      if (rejection) {
+        await route.fulfill({
+          contentType: "application/json",
+          status: rejection.status,
+          body: JSON.stringify({
+            code: rejection.code,
+            message: rejection.message,
+          }),
+        });
+        return;
+      }
+      editedTurnId = body.turn_id;
+      branchCreated = true;
+      const nextEditedTurn: ConversationTurn = {
+        ...source,
+        branch: {
+          count: 2,
+          index: 2,
+          previous_turn_id: rootId,
+        },
+        id: body.turn_id,
+        parent_turn_id: null,
+        responses: [
+          {
+            artifacts: null,
+            content: "The edited question follows a separate answer path.",
+            duration_ms: 18_200,
+            id: body.response_id,
+            references: null,
+            status: "completed",
+            trace: null,
+            variant_index: 1,
+          },
+        ],
+        selected_response_id: body.response_id,
+        suggestions: null,
+        user_query: body.user_query,
+      };
+      editedTurn = nextEditedTurn;
+      activePath = [nextEditedTurn];
+      const events = [
+        {
+          type: "start",
+          conversation_id: conversation.id,
+          generation_kind: "branch",
+          response_id: body.response_id,
+          turn_id: body.turn_id,
+          variant_index: 1,
+        },
+        { type: "response_ready", turn: nextEditedTurn },
+        {
+          type: "complete",
+          response_id: body.response_id,
+          turn_id: body.turn_id,
+        },
+      ];
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: events
+          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+          .join(""),
+      });
+      return;
+    }
+
+    if (
+      editedTurn &&
+      editedTurnId &&
+      pathname.endsWith(
+        `/conversations/${conversation.id}/turns/${editedTurnId}/responses`,
+      ) &&
+      request.method() === "POST"
+    ) {
+      const body = request.postDataJSON() as { response_id: string };
+      const completedResponse = {
+        artifacts: null,
+        content: "The failed branch completed after retry.",
+        duration_ms: 2_900,
+        id: body.response_id,
+        references: null,
+        status: "completed" as const,
+        trace: null,
+        variant_index: 2,
+      };
+      editedTurn = {
+        ...editedTurn,
+        responses: [...editedTurn.responses, completedResponse],
+        selected_response_id: body.response_id,
+      };
+      activePath = [editedTurn];
+      const events = [
+        {
+          type: "start",
+          conversation_id: conversation.id,
+          generation_kind: "retry",
+          response_id: body.response_id,
+          turn_id: editedTurnId,
+          variant_index: 2,
+        },
+        { type: "response_ready", turn: editedTurn },
+        {
+          type: "complete",
+          response_id: body.response_id,
+          turn_id: editedTurnId,
+        },
+      ];
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: events
+          .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+          .join(""),
+      });
+      return;
+    }
+
+    if (
+      pathname.endsWith(`/conversations/${conversation.id}/turns`) &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: activePath,
+          next_cursor: null,
+          path_revision: branchCreated ? 2 : 1,
+        }),
+      });
+      return;
+    }
+    if (pathname.endsWith(`/conversations/${conversation.id}`)) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(detail),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [conversation], next_cursor: null }),
+    });
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?conversation=${conversation.id}`);
+  await expect(page.getByText(followUpQuestion, { exact: true })).toBeVisible();
+
+  const composer = page.getByRole("textbox", { name: "Ask a follow-up" });
+  const composerForm = composer.locator("xpath=ancestor::form");
+  const userMessage = page
+    .getByRole("article", { name: "Your message" })
+    .first();
+  const assistantMessage = page
+    .getByRole("article", { name: "Assistant response" })
+    .first();
+  const [composerBox, userBox, assistantBox] = await Promise.all([
+    composerForm.boundingBox(),
+    userMessage.boundingBox(),
+    assistantMessage.boundingBox(),
+  ]);
+  expect(composerBox?.width).toBeCloseTo(880, 0);
+  expect(
+    Math.abs(
+      (userBox?.x ?? 0) +
+        (userBox?.width ?? 0) -
+        ((composerBox?.x ?? 0) + (composerBox?.width ?? 0)),
+    ),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs((assistantBox?.x ?? 0) - (composerBox?.x ?? 0)),
+  ).toBeLessThanOrEqual(1);
+
+  const messageControls = userMessage.locator("[data-user-message-controls]");
+  await expect(messageControls).toHaveCSS("opacity", "0");
+  await userMessage.hover();
+  await expect(messageControls).toHaveCSS("opacity", "1");
+  await page.getByRole("button", { name: "Edit message" }).first().focus();
+  await expect(messageControls).toHaveCSS("opacity", "1");
+
+  await page.getByRole("button", { name: "Edit message" }).first().click();
+  const editor = page.getByRole("textbox", { name: "Message text" });
+  await editor.fill("Rejected edit stays here");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText(/Your edit is still here/)).toBeVisible();
+  await expect(editor).toHaveValue("Rejected edit stays here");
+  expect(
+    await editor.evaluate((element) => element === document.activeElement),
+  ).toBe(true);
+
+  for (const rejectedEdit of [
+    "Rate limited edit stays here",
+    "Capacity limited edit stays here",
+  ]) {
+    await editor.fill(rejectedEdit);
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText(/Your edit is still here/)).toBeVisible();
+    await expect(editor).toHaveValue(rejectedEdit);
+    expect(
+      await editor.evaluate((element) => element === document.activeElement),
+    ).toBe(true);
+  }
+
+  await editor.fill("What is the paper’s main systems contribution?");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(
+    page.getByText("What is the paper’s main systems contribution?", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(followUpQuestion, { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.getByLabel("Message 2 of 2")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel("Message 2 of 2")).toBeVisible();
+  await expect(page.getByText(followUpQuestion, { exact: true })).toHaveCount(
+    0,
+  );
+
+  await page
+    .getByRole("button", { name: "Previous version of this message" })
+    .click();
+  await expect(page.getByText(originalQuestion, { exact: true })).toBeVisible();
+  await expect(page.getByText(followUpQuestion, { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message 1 of 2")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Next version of this message" })
+    .click();
+  await expect(page.getByLabel("Message 2 of 2")).toBeVisible();
+  await expect(page.getByText(followUpQuestion, { exact: true })).toHaveCount(
+    0,
+  );
+
+  const failedResponseId = editedTurn!.selected_response_id!;
+  const persistedFailed: ConversationTurn = {
+    ...editedTurn!,
+    responses: editedTurn!.responses.map((response) =>
+      response.id === failedResponseId
+        ? {
+            ...response,
+            content: null,
+            duration_ms: 6_200,
+            status: "failed",
+          }
+        : response,
+    ),
+  };
+  editedTurn = persistedFailed;
+  activePath = [persistedFailed];
+  await page.reload();
+  await expect(page.getByText("Could not complete")).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("6s");
+  await page.getByRole("button", { name: "Try another response" }).click();
+  await expect(
+    page.getByText("The failed branch completed after retry."),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("keeps the Home composition contained on a 2560px desktop", async ({

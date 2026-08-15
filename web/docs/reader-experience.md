@@ -9,7 +9,7 @@ own a second conversation protocol or a second Workspace shell.
 The active desktop acceptance source is Figma
 [`50 — Reader`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=390-2).
 The canonical conversation boundary is
-[`Reader conversation contract v2`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=910-2).
+[`Reader conversation contract v3`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=910-2).
 Selection translation follows
 [`51 — Translation`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=720-965)
 for hierarchy and states while code owns responsive containment and accessibility.
@@ -345,7 +345,9 @@ a second control row only for multiline input, long input, or an attached
 passage. The switcher, message viewport, and Composer are separated by spacing
 rather than stacked card borders; the Composer uses the same `border-line`
 resting boundary and desktop raised elevation as Home at the narrower panel
-measure. Its outer surface alone owns keyboard focus. The Jump to latest action
+measure. The transcript and Composer share 20 px horizontal panel insets, so
+user messages align to the Composer's right edge and assistant content aligns
+to its left edge. Its outer surface alone owns keyboard focus. The Jump to latest action
 is anchored to the message-viewport/Composer boundary so it remains fully above
 the Composer at every expanded height.
 An empty paper conversation uses a quiet title and supporting description with
@@ -378,7 +380,10 @@ The shared conversation contract remains unchanged:
 - ordered streaming and Worklog during execution;
 - `response_ready` as the persisted answer boundary;
 - optional turn suggestions in the same stream;
-- identical retry, variant, copy, source, and suggestion behavior;
+- identical all-message Copy/Edit, durable branch selection, retry, completed
+  variant, elapsed-duration, source, and suggestion behavior;
+- a failed or cancelled active leaf that remains visible and retryable after
+  refresh without exposing raw server exceptions;
 - a single responsive Sources panel.
 
 Current-paper sources navigate inside the open document. Other paper sources
@@ -398,19 +403,19 @@ results belong to the Translate panel rather than document metadata.
 Every reusable Reader component needs Storybook coverage and the route needs
 Playwright coverage for the following matrix:
 
-| Surface            | Required states                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                         |
-| Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                        |
-| Search and outline | closed, query with no result, one result, multiple results, desktop reflow rail, mobile reflow sheet      |
-| Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled    |
-| Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                      |
-| AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link         |
-| Annotations        | empty, populated, selected, editing, deleting, permission denied                                          |
-| Ask                | local new chat, streaming, response ready, suggestions delayed, historical, retried variants, source open |
-| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                            |
-| Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                          |
-| Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                      |
+| Surface            | Required states                                                                                                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                                                                                                         |
+| Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                                                                                                        |
+| Search and outline | closed, query with no result, one result, multiple results, desktop reflow rail, mobile reflow sheet                                                                                      |
+| Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled                                                                                    |
+| Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                                                                                                      |
+| AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link                                                                                         |
+| Annotations        | empty, populated, selected, editing, deleting, permission denied                                                                                                                          |
+| Ask                | local new chat, streaming, response ready, suggestions delayed, historical, prompt edit retained on early failure, branch pager, failed leaf after refresh, retried variants, source open |
+| Conversations      | switcher closed/open, loading, empty, searched, pinned, active, local new chat                                                                                                            |
+| Responsive         | desktop, 320, 390, 430, soft keyboard, safe area, reduced motion                                                                                                                          |
+| Appearance         | Light, Dark, English, Simplified Chinese, long title, narrow content                                                                                                                      |
 
 ### Figma and Storybook acceptance mapping
 

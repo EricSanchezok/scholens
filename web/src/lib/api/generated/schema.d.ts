@@ -436,6 +436,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/selected-branch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Select Conversation Branch */
+        put: operations["select_conversation_branch_api_v1_conversations__conversation_id__selected_branch_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
         parameters: {
             query?: never;
@@ -465,6 +482,23 @@ export interface paths {
         put?: never;
         /** Create Conversation Turn */
         post: operations["create_conversation_turn_api_v1_conversations__conversation_id__turns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/branches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Branch Conversation Turn */
+        post: operations["branch_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__branches_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2349,6 +2383,14 @@ export interface components {
             /** Sequence */
             sequence: number;
         };
+        /** ConversationBranchSelectionRequest */
+        ConversationBranchSelectionRequest: {
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+        };
         /** ConversationCapabilitiesResponse */
         ConversationCapabilitiesResponse: {
             /**
@@ -2501,6 +2543,8 @@ export interface components {
             artifacts: components["schemas"]["CitationSnapshot"][] | null;
             /** Content */
             content: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
             /**
              * Id
              * Format: uuid
@@ -2660,7 +2704,7 @@ export interface components {
              * Generation Kind
              * @enum {string}
              */
-            generation_kind: "initial" | "retry";
+            generation_kind: "initial" | "retry" | "branch";
             /**
              * Response Id
              * Format: uuid
@@ -2750,6 +2794,35 @@ export interface components {
             entries?: (components["schemas"]["ConversationProgressEntry"] | components["schemas"]["ConversationActivity"])[];
         };
         /**
+         * ConversationTurnBranchCreateRequest
+         * @description Create an edited sibling branch without mutating the source turn.
+         */
+        ConversationTurnBranchCreateRequest: {
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /** User Query */
+            user_query: string;
+        };
+        /** ConversationTurnBranchResponse */
+        ConversationTurnBranchResponse: {
+            /** Count */
+            count: number;
+            /** Index */
+            index: number;
+            /** Next Turn Id */
+            next_turn_id?: string | null;
+            /** Previous Turn Id */
+            previous_turn_id?: string | null;
+        };
+        /**
          * ConversationTurnCreateRequest
          * @description Create one user turn and its initial generated response.
          */
@@ -2780,8 +2853,11 @@ export interface components {
         };
         /** ConversationTurnResponse */
         ConversationTurnResponse: {
+            branch: components["schemas"]["ConversationTurnBranchResponse"];
             /** Contexts */
             contexts: (components["schemas"]["PaperSelectionTurnContext"] | components["schemas"]["AnnotationThreadTurnContext"])[];
+            /** Depth */
+            depth: number;
             /**
              * Id
              * Format: uuid
@@ -2792,18 +2868,16 @@ export interface components {
              * @enum {string}
              */
             locale: "en" | "zh-CN";
+            /** Paper Context */
+            paper_context: components["schemas"]["LibraryPaperContext"] | components["schemas"]["SelectedPaperContext"];
+            /** Parent Turn Id */
+            parent_turn_id: string | null;
             /** Reasoning Level */
             reasoning_level: string;
             /** Responses */
             responses: components["schemas"]["ConversationResponseVariantResponse"][];
-            /** Scope */
-            scope: {
-                [key: string]: components["schemas"]["JsonValue"];
-            }[] | null;
             /** Selected Response Id */
             selected_response_id: string | null;
-            /** Sequence */
-            sequence: number;
             /** Suggestions */
             suggestions: string[] | null;
             /** Time Zone */
@@ -2817,6 +2891,8 @@ export interface components {
             items: components["schemas"]["ConversationTurnResponse"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Path Revision */
+            path_revision: number;
         };
         /** ConversationUpdateRequest */
         ConversationUpdateRequest: {
@@ -6040,6 +6116,41 @@ export interface operations {
             };
         };
     };
+    select_conversation_branch_api_v1_conversations__conversation_id__selected_branch_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationBranchSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationTurnsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put: {
         parameters: {
             query?: never;
@@ -6121,6 +6232,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ConversationTurnCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Standard SSE stream of typed conversation events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    branch_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__branches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationTurnBranchCreateRequest"];
             };
         };
         responses: {

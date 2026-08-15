@@ -587,7 +587,9 @@ async function mockReaderConversationCreation(page: Page) {
         user_query: string;
       };
       const turn = {
+        branch: { count: 1, index: 1 },
         contexts: [],
+        depth: 1,
         id: body.turn_id,
         locale: "en",
         reasoning_level: "standard",
@@ -602,9 +604,9 @@ async function mockReaderConversationCreation(page: Page) {
             variant_index: 0,
           },
         ],
-        scope: null,
+        paper_context: detail.paper_context,
+        parent_turn_id: null,
         selected_response_id: body.response_id,
-        sequence: 1,
         suggestions: null,
         time_zone: "Asia/Shanghai",
         user_query: body.user_query,
@@ -652,6 +654,7 @@ async function mockReaderConversationCreation(page: Page) {
         body: JSON.stringify({
           items: persistedTurn ? [persistedTurn] : [],
           next_cursor: null,
+          path_revision: persistedTurn ? 1 : 0,
         }),
       });
       return;

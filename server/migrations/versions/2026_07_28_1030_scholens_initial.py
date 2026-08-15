@@ -727,6 +727,8 @@ def upgrade() -> None:
     op.create_table(
         "conversations",
         sa.Column("id", sa.UUID(), nullable=False),
+        sa.Column("selected_root_turn_id", sa.UUID(), nullable=True),
+        sa.Column("path_revision", sa.Integer(), server_default="0", nullable=False),
         sa.Column("title", sa.String(length=240), nullable=False),
         sa.Column("user_id", sa.BigInteger(), nullable=False),
         sa.Column("scope_type", sa.String(length=16), nullable=False),
@@ -759,6 +761,10 @@ def upgrade() -> None:
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
+        ),
+        sa.CheckConstraint(
+            "path_revision >= 0",
+            name="ck_conversations_path_revision",
         ),
         sa.CheckConstraint(
             "(scope_type = 'global' AND project_id IS NULL AND document_id IS NULL AND context_deleted_at IS NULL) OR (scope_type = 'project' AND document_id IS NULL AND ((project_id IS NOT NULL AND context_deleted_at IS NULL) OR (project_id IS NULL AND context_deleted_at IS NOT NULL))) OR (scope_type = 'paper' AND project_id IS NULL AND ((document_id IS NOT NULL AND context_deleted_at IS NULL) OR (document_id IS NULL AND context_deleted_at IS NOT NULL)))",
@@ -1485,6 +1491,8 @@ def upgrade() -> None:
         "conversation_turns",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("conversation_id", sa.UUID(), nullable=False),
+        sa.Column("parent_turn_id", sa.UUID(), nullable=True),
+        sa.Column("selected_child_turn_id", sa.UUID(), nullable=True),
         sa.Column("created_operation_id", sa.UUID(), nullable=False),
         sa.Column("correlation_id", sa.UUID(), nullable=False),
         sa.Column("user_query", sa.Text(), nullable=False),
@@ -1492,11 +1500,16 @@ def upgrade() -> None:
         sa.Column(
             "suggestions", postgresql.JSONB(astext_type=sa.Text()), nullable=True
         ),
-        sa.Column("scope", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "paper_context",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+        ),
         sa.Column("reasoning_level", sa.String(length=16), nullable=False),
         sa.Column("locale", sa.String(length=16), nullable=False),
         sa.Column("time_zone", sa.String(length=100), nullable=False),
-        sa.Column("sequence", sa.Integer(), nullable=False),
+        sa.Column("depth", sa.Integer(), nullable=False),
+        sa.Column("branch_index", sa.Integer(), nullable=False),
         sa.Column("selected_response_id", sa.UUID(), nullable=True),
         sa.Column(
             "created_at",
@@ -1510,15 +1523,46 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.CheckConstraint("depth >= 1", name="ck_conversation_turns_depth"),
+        sa.CheckConstraint(
+            "branch_index >= 1", name="ck_conversation_turns_branch_index"
+        ),
         sa.ForeignKeyConstraint(
             ["conversation_id"], ["scholens.conversations.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["parent_turn_id"],
+            ["scholens.conversation_turns.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["selected_child_turn_id"],
+            ["scholens.conversation_turns.id"],
+            name="fk_conversation_turns_selected_child_turn_id",
+            ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "conversation_id",
-            "sequence",
-            name="uq_conversation_turns_conversation_sequence",
+            "parent_turn_id",
+            "branch_index",
+            name="uq_conversation_turns_sibling_branch",
         ),
+        schema="scholens",
+    )
+    op.create_index(
+        "uq_conversation_turns_root_branch",
+        "conversation_turns",
+        ["conversation_id", "branch_index"],
+        unique=True,
+        schema="scholens",
+        postgresql_where=sa.text("parent_turn_id IS NULL"),
+    )
+    op.create_index(
+        op.f("ix_scholens_conversation_turns_parent_turn_id"),
+        "conversation_turns",
+        ["parent_turn_id"],
+        unique=False,
         schema="scholens",
     )
     op.create_index(
@@ -1546,6 +1590,7 @@ def upgrade() -> None:
         sa.Column("content", sa.Text(), nullable=True),
         sa.Column("references", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("trace", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("duration_ms", sa.Integer(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -1561,6 +1606,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status IN ('running', 'completed', 'failed', 'cancelled')",
             name="ck_conversation_responses_status",
+        ),
+        sa.CheckConstraint(
+            "duration_ms IS NULL OR duration_ms >= 0",
+            name="ck_conversation_responses_duration_ms",
         ),
         sa.ForeignKeyConstraint(
             ["turn_id"], ["scholens.conversation_turns.id"], ondelete="CASCADE"
@@ -1597,6 +1646,16 @@ def upgrade() -> None:
         "conversation_turns",
         "conversation_responses",
         ["selected_response_id"],
+        ["id"],
+        source_schema="scholens",
+        referent_schema="scholens",
+        ondelete="SET NULL",
+    )
+    op.create_foreign_key(
+        "fk_conversations_selected_root_turn_id",
+        "conversations",
+        "conversation_turns",
+        ["selected_root_turn_id"],
         ["id"],
         source_schema="scholens",
         referent_schema="scholens",
@@ -2220,6 +2279,12 @@ def downgrade() -> None:
     )
     op.drop_table("operation_journal_entries", schema="scholens")
     op.drop_constraint(
+        "fk_conversations_selected_root_turn_id",
+        "conversations",
+        schema="scholens",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
         "fk_conversation_turns_selected_response_id",
         "conversation_turns",
         schema="scholens",
@@ -2241,6 +2306,16 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("conversation_responses", schema="scholens")
+    op.drop_index(
+        op.f("ix_scholens_conversation_turns_parent_turn_id"),
+        table_name="conversation_turns",
+        schema="scholens",
+    )
+    op.drop_index(
+        "uq_conversation_turns_root_branch",
+        table_name="conversation_turns",
+        schema="scholens",
+    )
     op.drop_index(
         op.f("ix_scholens_conversation_turns_correlation_id"),
         table_name="conversation_turns",

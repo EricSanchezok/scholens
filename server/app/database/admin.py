@@ -167,7 +167,8 @@ class ConversationTurnAdmin(ModelView, model=ConversationTurn):
     column_list = [
         ConversationTurn.id,
         ConversationTurn.conversation_id,
-        ConversationTurn.sequence,
+        ConversationTurn.depth,
+        ConversationTurn.branch_index,
         ConversationTurn.user_query,
         ConversationTurn.selected_response_id,
     ]

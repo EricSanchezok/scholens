@@ -120,11 +120,25 @@ stable structured output, not another metadata authority or a whole-document
 model rewrite.
 
 Conversation turns are created at
-`POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn
+`POST /api/v1/conversations/{conversation_id}/turns`; retrying the active branch
+leaf
 creates another response variant at
 `POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses`.
-Both generation endpoints stream standard Server-Sent Events. Consumers must handle
-the typed `start`, `assistant_item_start`, `assistant_item_delta`,
+Editing any turn on the active path creates an immutable sibling through
+`POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/branches`.
+`PUT /api/v1/conversations/{conversation_id}/selected-branch` selects a prompt
+version, restores its previously selected descendant suffix and authorized
+paper context, and returns the authoritative active path. All generation
+endpoints complete quota, authorization, context, rate-limit, and concurrency
+preflight before product mutation. Branch acceptance uses one short transaction
+to restore the source paper-context snapshot, create the Turn and Response,
+switch the selected path, and increment its revision. Preflight rejection has no
+Conversation mutation; after acceptance, `start` is necessarily the first SSE
+event and any later failure is a persisted terminal response. Reusing a Turn ID
+is idempotent only when every immutable input and its tree position match;
+otherwise the whole acceptance command returns `conversation_turn_conflict`.
+Selecting the already-active branch is a storage and journal no-op. Consumers
+must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
 `assistant_item_complete`, `activity`, `references`, `response_ready`,
 `suggestions`, `complete`, and `error` events and treat `complete` or `error`
 as terminal. `response_ready` carries the complete persisted turn snapshot and
@@ -142,13 +156,17 @@ adapter rather than maintaining a second dictionary-shaped protocol. Completed
 assistant items must contain visible text; user-visible progress is bounded to
 4,000 characters, and a response without a visible final answer is failed
 instead of persisting an empty response variant. A turn owns the immutable user
-prompt and one or more generated responses; only the latest turn may be retried
-or switch its selected response. Creating the next turn prunes unselected
-variants from the prior turn, so completed history has one canonical response.
-The latest turn may own persisted follow-up suggestions. Suggestion generation
+prompt, typed paper-context snapshot, and one or more generated responses.
+Parent and selected-child pointers form a persistent tree, while the
+Conversation selects one root and publishes a monotonic path revision. Agent
+history contains only the generated turn's selected ancestors. Only the active
+leaf may be retried or switch its selected response, and only one response may
+run in a Conversation at a time. Creating a normal next turn prunes unselected
+response variants from its parent; prompt branches are never pruned as a side
+effect. The active leaf may own persisted follow-up suggestions. Suggestion generation
 starts beside the answer stream and shares the same SSE instead of requiring a
 second HTTP request or polling. It uses no open database transaction while the
-model runs and rechecks latest-turn ownership before persisting. The structured
+model runs and rechecks active-leaf ownership before persisting. The structured
 result is exactly three unique questions:
 one deepening question, one comparison or verification question, and one
 practical-application question. Only the current query, locale, three recent
@@ -157,6 +175,11 @@ current answer, trace data, raw tool output, and document bodies never do. A
 newer turn clears the preceding suggestions, and a late result cannot restore
 them. Suggestions and first-title generation never block `response_ready`; the
 stream retains a bounded two-second sidecar tail before `complete`.
+Completed, failed, and cancelled responses persist their total `duration_ms`;
+the latest terminal attempt remains selected, and the active leaf serializes
+all terminal attempts so failure/cancellation and retry survive refresh. Raw
+exception text remains private diagnostics. The ordered trace remains separate
+inspectable progress rather than a timing store.
 There is no private delimiter. Clients may abort the request, but must not
 automatically retry this non-idempotent operation.
 

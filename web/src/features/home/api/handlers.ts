@@ -33,7 +33,11 @@ const baseHandlers = [
     HttpResponse.json(activeConversation),
   ),
   http.get(`${api}/conversations/:conversationId/turns`, () =>
-    HttpResponse.json({ items: homeTurns, next_cursor: null }),
+    HttpResponse.json({
+      items: homeTurns,
+      next_cursor: null,
+      path_revision: 1,
+    }),
   ),
   http.post(`${api}/conversations`, () =>
     HttpResponse.json(activeConversation, { status: 201 }),
@@ -81,14 +85,16 @@ const baseHandlers = [
         },
       };
       const finalizedTurn = {
+        branch: { count: 1, index: 1 },
+        depth: homeTurns.length + 1,
         id: requestBody.turn_id,
         user_query: requestBody.user_query,
         locale: requestBody.locale,
         time_zone: requestBody.time_zone,
         reasoning_level: requestBody.reasoning_level,
-        scope: null,
+        paper_context: activeConversation.paper_context,
+        parent_turn_id: homeTurns.at(-1)?.id ?? null,
         contexts: [],
-        sequence: homeTurns.length + 1,
         selected_response_id: requestBody.response_id,
         suggestions: null,
         responses: [finalizedResponse],

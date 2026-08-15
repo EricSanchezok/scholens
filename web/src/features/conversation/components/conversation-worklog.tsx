@@ -106,6 +106,18 @@ function worklogSummary(
   });
 }
 
+export function formatWorklogDuration(
+  durationMs: number,
+  t: ReturnType<typeof useTranslations<"Home.conversation">>,
+) {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0
+    ? t("duration.minutesSeconds", { minutes, seconds })
+    : t("duration.seconds", { seconds });
+}
+
 function batchLabel(
   batch: ActivityBatch,
   t: ReturnType<typeof useTranslations<"Home.conversation">>,
@@ -187,6 +199,8 @@ export function ConversationWorklog({
   provisionalItems,
   historical = false,
   onOpenChange,
+  durationMs,
+  startedAtMs,
 }: {
   entries: ConversationTraceEntry[];
   sourceTotal: number;
@@ -195,9 +209,17 @@ export function ConversationWorklog({
   provisionalItems: ProvisionalAssistantItem[];
   historical?: boolean;
   onOpenChange?: (open: boolean) => void;
+  durationMs?: number | null;
+  startedAtMs?: number;
 }) {
   const t = useTranslations("Home.conversation");
   const [manualOpen, setManualOpen] = React.useState<boolean | null>(null);
+  const [liveNow, setLiveNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (state !== "streaming" || startedAtMs === undefined) return;
+    const interval = window.setInterval(() => setLiveNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [startedAtMs, state]);
   const rows = React.useMemo(
     () =>
       groupWorklogEntries([
@@ -220,8 +242,22 @@ export function ConversationWorklog({
     hasDetails ||
     state === "cancelled" ||
     state === "error" ||
-    state === "streaming";
+    state === "streaming" ||
+    durationMs != null;
   const summary = worklogSummary(entries, state, sourceTotal, failure, t);
+  const effectiveDuration =
+    durationMs ??
+    (state === "streaming" && startedAtMs !== undefined
+      ? Math.max(0, liveNow - startedAtMs)
+      : null);
+  const durationLabel =
+    effectiveDuration === null
+      ? null
+      : formatWorklogDuration(effectiveDuration, t);
+  const finalDurationAnnouncement =
+    state !== "streaming" && durationLabel
+      ? t("duration.completed", { duration: durationLabel })
+      : null;
 
   if (!visible) return null;
 
@@ -241,18 +277,15 @@ export function ConversationWorklog({
         <button
           aria-expanded={open}
           className={cn(
-            "hover:text-foreground focus-visible:text-foreground flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-sm)] text-left transition-colors motion-reduce:transition-none lg:min-h-8",
+            "hover:text-foreground focus-visible:text-foreground inline-flex min-h-11 w-fit max-w-full items-center gap-1.5 rounded-[var(--radius-sm)] text-left transition-colors motion-reduce:transition-none lg:min-h-8",
             keyboardFocusRing,
           )}
           onClick={toggle}
           type="button"
         >
-          <span
-            aria-live="polite"
-            className="settled-content-enter min-w-0 flex-1"
-            key={summary}
-          >
+          <span className="settled-content-enter min-w-0" key={summary}>
             {summary}
+            {durationLabel ? <span aria-hidden> · {durationLabel}</span> : null}
           </span>
           <Icon
             className={cn(
@@ -272,9 +305,15 @@ export function ConversationWorklog({
         >
           <span className="settled-content-enter" key={summary}>
             {summary}
+            {durationLabel ? <span aria-hidden> · {durationLabel}</span> : null}
           </span>
         </p>
       )}
+      {finalDurationAnnouncement ? (
+        <span aria-live="polite" className="sr-only">
+          {finalDurationAnnouncement}
+        </span>
+      ) : null}
       {open && hasDetails && (
         <ol className="border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
           {rows.map((row) =>

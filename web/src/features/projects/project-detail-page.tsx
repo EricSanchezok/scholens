@@ -177,6 +177,8 @@ function ProjectChat({
           onReasoningLevelChange={setReasoningLevel}
           onRetry={() => void session.turnsQuery.refetch()}
           onRetryResponse={(turn) => void session.retryResponse(turn)}
+          onEditMessage={(turn, message) => session.editMessage(turn, message)}
+          onSelectBranch={(turnId) => void session.selectBranch(turnId)}
           onSelectResponse={(turnId, responseId) =>
             void session.selectResponse(turnId, responseId)
           }
