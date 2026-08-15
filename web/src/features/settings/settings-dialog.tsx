@@ -81,6 +81,7 @@ export function SettingsDialog({
     >
       <DialogContent
         closeLabel={t("actions.close")}
+        className="lg:h-[min(88dvh,46rem)] lg:w-[min(92vw,68rem)] lg:rounded-[var(--radius-2xl)]"
         placement="responsive-full"
       >
         <DialogTitle className="sr-only">{t("title")}</DialogTitle>
@@ -88,8 +89,8 @@ export function SettingsDialog({
           {t("description")}
         </DialogDescription>
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <aside className="border-line bg-subtle shrink-0 border-b px-4 py-4 lg:w-64 lg:border-r lg:border-b-0 lg:px-4 lg:py-6">
-            <h1 className="mb-4 px-2 text-xl font-semibold tracking-[-0.01em]">
+          <aside className="border-line-subtle bg-subtle shrink-0 border-b px-4 py-4 lg:w-60 lg:border-r lg:border-b-0 lg:px-3 lg:py-6">
+            <h1 className="mb-4 px-3 text-xl font-semibold tracking-[-0.015em]">
               {t("title")}
             </h1>
             <div className="lg:hidden">
@@ -117,9 +118,9 @@ export function SettingsDialog({
                 <button
                   aria-current={active === item ? "page" : undefined}
                   className={cn(
-                    "hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-md)] px-3 text-left text-sm font-medium",
+                    "hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 text-left text-sm font-medium transition-colors motion-reduce:transition-none",
                     keyboardFocusRing,
-                    active === item && "bg-surface shadow-sm",
+                    active === item && "bg-surface",
                   )}
                   key={item}
                   onClick={() => setSection(item)}
@@ -137,7 +138,7 @@ export function SettingsDialog({
               ))}
             </nav>
           </aside>
-          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-10 lg:py-8">
+          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-10 lg:py-9">
             <Panel accountCenterUrl={accountCenterUrl} section={active} />
           </main>
         </div>

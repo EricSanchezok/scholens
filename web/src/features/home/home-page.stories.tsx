@@ -126,8 +126,9 @@ export const AccountMenuOpen: Story = {
     const menu = await body.findByRole("menu");
     await expect(within(menu).getByText(actor.email)).toBeVisible();
     await expect(
-      body.getByRole("menuitemradio", { name: "System" }),
+      body.getByRole("menuitem", { name: "Settings" }),
     ).toBeVisible();
+    await expect(body.queryByRole("menuitemradio")).not.toBeInTheDocument();
   },
 };
 

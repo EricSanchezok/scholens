@@ -17,11 +17,8 @@ import * as React from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
@@ -36,7 +33,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
-import { useTheme } from "@/design-system/theme/theme-provider";
 import type { Actor } from "@/features/authentication";
 import {
   formatDateOnly,
@@ -201,6 +197,7 @@ function AccountMenu({
   settingsTrigger = false,
   signingOut,
   onOpenAccount,
+  onOpenSettings,
   onOpenUsage,
   onSignOut,
 }: {
@@ -210,12 +207,12 @@ function AccountMenu({
   settingsTrigger?: boolean;
   signingOut: boolean;
   onOpenAccount: () => void;
+  onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
 }) {
   const t = useTranslations("WorkspaceShell");
   const format = useFormatter();
-  const { preference, setColorSchemePreference } = useTheme();
   const name = actorName(actor);
   const initial = name.slice(0, 1).toUpperCase();
 
@@ -269,16 +266,16 @@ function AccountMenu({
       <DropdownMenuContent
         align={collapsed || settingsTrigger ? "end" : "start"}
         className={cn(
-          "shadow-overlay",
+          "border-line-subtle shadow-overlay rounded-[var(--radius-xl)] p-1.5",
           collapsed || settingsTrigger
-            ? "w-64"
-            : "w-[var(--radix-dropdown-menu-trigger-width)]",
+            ? "w-72"
+            : "w-[max(var(--radix-dropdown-menu-trigger-width),18rem)]",
         )}
         side={collapsed && !settingsTrigger ? "right" : "top"}
         sideOffset={collapsed || settingsTrigger ? 8 : 4}
       >
-        <DropdownMenuLabel className="flex items-center gap-2.5 px-2 py-2.5">
-          <span className="bg-pressed text-foreground grid size-8 shrink-0 place-items-center rounded-full text-xs font-medium">
+        <DropdownMenuLabel className="flex items-center gap-3 px-2.5 py-3">
+          <span className="bg-pressed text-foreground grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold">
             {initial}
           </span>
           <span className="min-w-0">
@@ -291,7 +288,7 @@ function AccountMenu({
           </span>
         </DropdownMenuLabel>
         {billingUsage.status === "success" ? (
-          <DropdownMenuLabel className="bg-subtle mx-1 mb-1 grid gap-1 rounded-[var(--radius-md)] px-2.5 py-2">
+          <DropdownMenuLabel className="bg-subtle mx-0.5 mb-1.5 grid gap-1.5 rounded-[var(--radius-lg)] px-3 py-2.5">
             <span className="sr-only">{t("account.usageSummary")}</span>
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="text-secondary">{t("account.plan")}</span>
@@ -335,35 +332,30 @@ function AccountMenu({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onOpenAccount}>
+        <DropdownMenuItem
+          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          onSelect={onOpenSettings}
+        >
+          <Icon glyph={SettingsIcon} size={16} tone="secondary" />
+          {t("account.settings")}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          onSelect={onOpenAccount}
+        >
           <Icon glyph={AccountIcon} size={16} tone="secondary" />
           {t("account.accountSettings")}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onOpenUsage}>
+        <DropdownMenuItem
+          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          onSelect={onOpenUsage}
+        >
           <Icon glyph={UsageIcon} size={16} tone="secondary" />
           {t("account.usageSettings")}
         </DropdownMenuItem>
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("account.appearance")}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            onValueChange={(value) =>
-              setColorSchemePreference(value as "light" | "dark" | "system")
-            }
-            value={preference}
-          >
-            <DropdownMenuRadioItem value="light">
-              {t("account.light")}
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="dark">
-              {t("account.dark")}
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="system">
-              {t("account.system")}
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
+          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
           disabled={signingOut}
           onSelect={() => void onSignOut()}
         >
@@ -453,6 +445,7 @@ function MobileNavigation({
   activeConversationId,
   signingOut,
   onOpenAccount,
+  onOpenSettings,
   onOpenUsage,
   onSignOut,
   onSelect,
@@ -464,6 +457,7 @@ function MobileNavigation({
   activeConversationId?: string;
   signingOut: boolean;
   onOpenAccount: () => void;
+  onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
   onSelect: () => void;
@@ -528,6 +522,7 @@ function MobileNavigation({
             billingUsage={billingUsage}
             collapsed={false}
             onOpenAccount={onOpenAccount}
+            onOpenSettings={onOpenSettings}
             onOpenUsage={onOpenUsage}
             onSignOut={onSignOut}
             settingsTrigger
@@ -718,6 +713,7 @@ function Sidebar({
   signingOut,
   onCollapsedChange,
   onOpenAccount,
+  onOpenSettings,
   onOpenUsage,
   onSignOut,
   onSelect,
@@ -732,6 +728,7 @@ function Sidebar({
   signingOut: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onOpenAccount: () => void;
+  onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
   onSelect?: () => void;
@@ -838,6 +835,7 @@ function Sidebar({
           billingUsage={billingUsage}
           collapsed={collapsed}
           onOpenAccount={onOpenAccount}
+          onOpenSettings={onOpenSettings}
           onOpenUsage={onOpenUsage}
           onSignOut={onSignOut}
           signingOut={signingOut}
@@ -914,6 +912,7 @@ export function WorkspaceShell({
           conversations={conversations}
           onCollapsedChange={onCollapsedChange}
           onOpenAccount={() => setSettingsSection("account")}
+          onOpenSettings={() => setSettingsSection("general")}
           onOpenUsage={() => setSettingsSection("usage")}
           onSignOut={onSignOut}
           signingOut={signingOut}
@@ -943,6 +942,10 @@ export function WorkspaceShell({
             onOpenAccount={() => {
               setMobileOpen(false);
               setSettingsSection("account");
+            }}
+            onOpenSettings={() => {
+              setMobileOpen(false);
+              setSettingsSection("general");
             }}
             onOpenUsage={() => {
               setMobileOpen(false);

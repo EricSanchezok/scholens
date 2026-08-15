@@ -573,7 +573,7 @@ export function ProjectDetailWorkspace({
                   {project.title}
                 </h1>
                 <p className="text-secondary mt-2 line-clamp-2 max-w-3xl text-sm">
-                  {project.description || t("card.noDescription")}
+                  {project.description || t("row.noDescription")}
                 </p>
               </div>
               <DropdownMenu>

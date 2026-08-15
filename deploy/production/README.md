@@ -29,13 +29,13 @@ Compose contract, source-map upload, CI image validation, activation, and
 rollback path together. Until that change lands and is verified, production
 continues to serve the legacy client.
 
-The canonical Web build also requires `NEXT_PUBLIC_ACCOUNT_CENTER_URL` so
-Settings can link to the shared Account Center without embedding a SanchezCloud
-domain in application code. It is a build-time public value: it must be injected
-while the future canonical Web image is built and cannot be supplied through
-`/etc/scholens/runtime.env` after the bundle exists. If it is omitted, Web
-deliberately shows Account Center as unavailable; the current legacy-client
-production boundary is unchanged.
+The canonical Web build defaults Settings to
+`https://myaccount.sanchezcloud.net`. For the future canonical Web cutover,
+`NEXT_PUBLIC_ACCOUNT_CENTER_URL` is an optional build-time public value that
+overrides the Account Center host for an explicitly different environment;
+when used, it must be injected while the Web image is built and cannot be
+supplied through `/etc/scholens/runtime.env` after the bundle exists. The
+current legacy-client production boundary is unchanged.
 
 ## Database boundary
 
@@ -129,8 +129,8 @@ release workflow are:
 - `PRODUCTION_PLATFORM` (`linux/amd64` or `linux/arm64`)
 - `PRODUCTION_INSTANCE_ID`
 - public build values `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`,
-  `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, and, for the future
-  canonical Web cutover, `NEXT_PUBLIC_ACCOUNT_CENTER_URL`
+  `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, and the optional future
+  canonical Web override `NEXT_PUBLIC_ACCOUNT_CENTER_URL`
 - `NEXT_PUBLIC_RUM_APPLICATION_ID`, `NEXT_PUBLIC_RUM_GUEST_ROLE_ARN`,
   `NEXT_PUBLIC_RUM_IDENTITY_POOL_ID`, and `RUM_SOURCE_MAP_BUCKET` from the
   observability stack outputs

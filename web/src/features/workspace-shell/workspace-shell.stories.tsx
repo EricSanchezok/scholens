@@ -163,7 +163,19 @@ export const AccountMenuUsage: Story = {
     ).toBeVisible();
 
     await userEvent.click(
-      within(menu).getByRole("menuitem", { name: "Account" }),
+      within(menu).getByRole("menuitem", { name: "Settings" }),
+    );
+    await expect(getRouter().replace).toHaveBeenCalledWith(
+      "/?settings=general",
+      { scroll: false },
+    );
+
+    getRouter().replace.mockClear();
+    await userEvent.click(trigger);
+    await userEvent.click(
+      within(await body.findByRole("menu")).getByRole("menuitem", {
+        name: "Account",
+      }),
     );
     await expect(getRouter().replace).toHaveBeenCalledWith(
       "/?settings=account",
@@ -222,13 +234,13 @@ export const AccountMenuKeyboard: Story = {
     });
     trigger.focus();
     await userEvent.keyboard("{Enter}");
-    const accountItem = await within(document.body).findByRole("menuitem", {
-      name: "Account",
+    const settingsItem = await within(document.body).findByRole("menuitem", {
+      name: "Settings",
     });
-    await expect(accountItem).toHaveFocus();
+    await expect(settingsItem).toHaveFocus();
     await userEvent.keyboard("{Enter}");
     await expect(getRouter().replace).toHaveBeenCalledWith(
-      "/?settings=account",
+      "/?settings=general",
       { scroll: false },
     );
   },
@@ -287,6 +299,9 @@ export const AccountMenuDarkChinese: Story = {
     await expect(await within(menu).findByText("研究者版")).toBeVisible();
     await expect(
       await within(menu).findByText("额度于 2026年8月17日 重置"),
+    ).toBeVisible();
+    await expect(
+      within(menu).getByRole("menuitem", { name: "设置" }),
     ).toBeVisible();
     await expect(
       within(menu).getByRole("menuitem", { name: "账户" }),

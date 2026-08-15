@@ -53,12 +53,9 @@
       "creditsReset": "额度于 {date} 重置",
       "usageLoading": "正在加载套餐与 Token Credits…",
       "usageUnavailable": "用量暂不可用 · 重试",
+      "settings": "设置",
       "accountSettings": "账户",
       "usageSettings": "用量",
-      "appearance": "外观",
-      "light": "浅色",
-      "dark": "深色",
-      "system": "跟随系统",
       "signOut": "退出登录",
       "signingOut": "正在退出…"
     }
@@ -938,9 +935,10 @@
       "conversations": "对话",
       "outputs": "产物"
     },
-    "card": {
+    "row": {
       "noDescription": "暂无描述",
       "openMenu": "打开项目操作",
+      "open": "打开 {title}",
       "updated": "更新于 {date}"
     },
     "empty": {
@@ -1079,8 +1077,8 @@
     "sectionPicker": "设置分类",
     "navigationLabel": "设置导航",
     "navigation": {
-      "general": "通用",
       "account": "账户",
+      "general": "外观与语言",
       "usage": "用量",
       "access-keys": "访问密钥",
       "connections": "连接",
@@ -1093,8 +1091,7 @@
       "edit": "编辑"
     },
     "errors": {
-      "save": "无法保存更改，请重试。",
-      "password": "无法更新密码，请检查当前密码后重试。"
+      "save": "无法保存更改，请重试。"
     },
     "appearance": {
       "light": "浅色",
@@ -1106,39 +1103,17 @@
       "researcher": "研究者版"
     },
     "general": {
-      "title": "通用",
-      "description": "选择 Scholens 应用的界面语言和外观。",
-      "preferences": "偏好",
-      "preferencesDescription": "选择 Scholens 的外观与界面语言。",
+      "title": "外观与语言",
+      "description": "选择 Scholens 的显示方式与界面语言。",
       "interfaceLanguage": "界面语言",
       "appearance": "外观"
     },
     "account": {
       "title": "账户",
-      "description": "管理身份资料、套餐、工作区入口、密码和当前会话。",
+      "description": "查看 Scholens 当前使用的身份，并前往 SanchezCloud 统一管理。",
       "profile": "个人资料",
-      "profileDescription": "名称和邮箱来自共享的 SanchezCloud 身份。",
-      "displayName": "显示名称",
-      "displayNameError": "请输入显示名称。",
-      "email": "邮箱",
-      "plan": "当前套餐",
-      "planDescription": "此套餐来自 Scholens 当前的真实账单状态。",
-      "workspace": "个人工作区",
-      "workspaceDescription": "当前身份合同尚未提供工作区归属详情，请前往账户中心管理共享账户数据。",
-      "unavailable": "此处不可用",
-      "openAccountCenter": "打开账户中心",
-      "accountCenterUnavailable": "当前环境尚未配置账户中心。",
-      "password": "密码",
-      "passwordDescription": "新密码至少需要 12 个字符。",
-      "currentPassword": "当前密码",
-      "newPassword": "新密码",
-      "confirmPassword": "确认新密码",
-      "showPassword": "显示密码",
-      "hidePassword": "隐藏密码",
-      "passwordMismatch": "两次输入的新密码不一致。",
-      "passwordError": "请填写此密码字段。",
-      "passwordUpdated": "密码已更新。",
-      "updatePassword": "更新密码",
+      "profileDescription": "个人资料、邮箱和密码统一在 SanchezCloud Account 中修改。",
+      "openAccountCenter": "管理 SanchezCloud 账户",
       "session": "当前会话",
       "sessionDescription": "退出当前浏览器，不影响其他 SanchezCloud 会话。",
       "signOut": "退出登录",
@@ -1162,10 +1137,7 @@
       "projectPapers": "每个项目的论文数",
       "projectPapersLimit": "最多 {value, number} 篇",
       "projectPapersDescription": "每个独立项目中允许添加的论文数量上限。",
-      "storage": "存储空间",
-      "upgrade": "升级套餐",
-      "manageBilling": "管理账单",
-      "billingUnavailable": "当前版本尚未接通账单操作；此处展示的套餐与额度来自真实数据，仍是权威状态。"
+      "storage": "存储空间"
     },
     "accessKeys": {
       "title": "访问密钥",

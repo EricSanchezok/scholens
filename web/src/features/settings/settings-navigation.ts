@@ -5,8 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 export const settingsSections = [
-  "general",
   "account",
+  "general",
   "usage",
   "access-keys",
   "connections",

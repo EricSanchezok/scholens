@@ -10,13 +10,11 @@ export function SettingsPanelHeader({
   description: string;
 }) {
   return (
-    <header className="mb-6">
+    <header className="mb-7 max-w-2xl">
       <h2 className="text-2xl leading-8 font-semibold tracking-[-0.015em]">
         {title}
       </h2>
-      <p className="text-secondary mt-1 max-w-2xl text-sm leading-6">
-        {description}
-      </p>
+      <p className="text-secondary mt-1.5 text-sm leading-6">{description}</p>
     </header>
   );
 }
@@ -31,7 +29,7 @@ export function SettingsCard({
   return (
     <section
       className={cn(
-        "border-line bg-surface overflow-hidden rounded-[var(--radius-lg)] border",
+        "bg-subtle overflow-hidden rounded-[var(--radius-xl)]",
         className,
       )}
     >
@@ -50,7 +48,7 @@ export function SettingsCardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="border-line flex min-h-16 items-start justify-between gap-4 border-b px-4 py-4 sm:px-5">
+    <div className="flex min-h-16 items-start justify-between gap-4 px-4 pt-4 pb-2 sm:px-5 sm:pt-5">
       <div className="min-w-0">
         <h3 className="text-sm font-semibold">{title}</h3>
         {description ? (

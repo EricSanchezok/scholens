@@ -8,7 +8,7 @@ and the shared Conversation feature.
 
 ## Product and state boundaries
 
-- Project cards show only Server-owned facts: paper count, the current user's
+- Project rows show only Server-owned facts: paper count, the current user's
   private Project-conversation count, visible output count, and computed
   activity time. Figma topic chips are omitted because no Project-tag model
   exists.
@@ -35,7 +35,7 @@ and Zod; dialog and menu disclosure remains local.
 
 Desktop detail keeps Project chat in a 26rem side panel. On mobile, `panel=chat`
 replaces the detail canvas with the full-height conversation surface so the
-Reader-style panel is never compressed beside the content. Papers and cards
+Reader-style panel is never compressed beside the content. Papers and rows
 become one-column compositions below the desktop breakpoints, and all controls
 remain usable at 320px.
 
@@ -60,17 +60,19 @@ remain usable at 320px.
 
 Canonical Figma file: [Scholens — Product Design](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design).
 
-| Acceptance state          | Figma node                    | Story                                               |
-| ------------------------- | ----------------------------- | --------------------------------------------------- |
-| list populated / empty    | `330:2`, `333:249`            | `Features/Projects/List` → `Populated`, `Empty`     |
-| create project            | `334:608`                     | `CreateProject`, `Features/Projects/Project Form`   |
-| card actions              | `335:844`                     | `Features/Projects/Project Card` owner/collaborator |
-| overview + chat           | `528:542`                     | `Features/Projects/Detail` → `OverviewWithChat`     |
-| papers populated / empty  | `530:1036`, `530:1159`        | `Papers`, `PapersEmpty`                             |
-| outputs populated / empty | `532:729`, `532:970`          | `Outputs`, `OutputsEmpty`                           |
-| manage and edit           | `533:945`, `540:1179`         | runtime detail menu and Project Form stories        |
-| mobile chat disclosure    | responsive runtime acceptance | `MobileChat`                                        |
+| Acceptance state          | Figma node                    | Story                                              |
+| ------------------------- | ----------------------------- | -------------------------------------------------- |
+| list populated / empty    | `330:2`, `333:249`            | `Features/Projects/List` → `Populated`, `Empty`    |
+| create project            | `334:608`                     | `CreateProject`, `Features/Projects/Project Form`  |
+| row actions               | `335:844`                     | `Features/Projects/Project Row` owner/collaborator |
+| overview + chat           | `528:542`                     | `Features/Projects/Detail` → `OverviewWithChat`    |
+| papers populated / empty  | `530:1036`, `530:1159`        | `Papers`, `PapersEmpty`                            |
+| outputs populated / empty | `532:729`, `532:970`          | `Outputs`, `OutputsEmpty`                          |
+| manage and edit           | `533:945`, `540:1179`         | runtime detail menu and Project Form stories       |
+| mobile chat disclosure    | responsive runtime acceptance | `MobileChat`                                       |
 
-Intentional differences are the omitted topic chips, “Most active” sort,
-Archive action, and Figma-only Report/Note output labels. Runtime behavior uses
-the real public contract and accessible responsive composition.
+The list implementation uses a single-column, Library-aligned row composition
+instead of the superseded card grid; the active Figma list frames record this
+intent. Other intentional differences are the omitted topic chips, “Most
+active” sort, Archive action, and Figma-only Report/Note output labels. Runtime
+behavior uses the real public contract and accessible responsive composition.
