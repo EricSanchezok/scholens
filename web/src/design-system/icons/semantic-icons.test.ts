@@ -13,9 +13,13 @@ describe("semantic icon registry", () => {
     expect(semanticIcons).toMatchObject({
       AddAnnotationIcon: "Notes",
       AddIcon: "Plus",
+      AppearanceIcon: "SettingsProfiles",
       AskIcon: "ChatBubbleQuestion",
       EditIcon: "EditPencil",
-      NewConversationIcon: "PageEdit",
+      LanguageIcon: "Language",
+      LibraryIcon: "Book",
+      NewConversationIcon: "Edit",
+      UsageIcon: "GraphUp",
     });
   });
 });

@@ -58,7 +58,8 @@ be sticky inside their own regions, but the document shell must not make the
 browser body scroll.
 
 The Reader context selector is a 160 px desktop control that may shrink with
-the toolbar but never wraps. Its selected value is a single-line ellipsis and
+the toolbar but never wraps. It uses the shared compact toolbar Select rather
+than a full-height form field. Its selected value is a single-line ellipsis and
 its accessible name includes the complete current context. The personal label
 is deliberately compact (`Personal` / `个人`); project options retain the real
 title and may use two lines inside a bounded menu rather than widening the
@@ -355,7 +356,7 @@ Reader in personal context lists only conversations whose scope is the current
 paper. Reader in Project context lists the current user's private Project
 conversations whose selected document context includes the open paper. Ask begins
 with a compact, borderless current-conversation switcher and a separate New chat
-action using the shared `NewConversationIcon` (`PageEdit`) from the Workspace
+action using the shared `NewConversationIcon` (`Edit`) from the Workspace
 sidebar. The
 search field and grouped Pinned/Recent list exist only while the switcher is
 open; they are not a permanent row or horizontal pill strip. New chat remains a

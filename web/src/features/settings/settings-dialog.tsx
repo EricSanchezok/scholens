@@ -17,10 +17,10 @@ import {
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import {
   AccountIcon,
+  AppearanceIcon,
   IntegrationIcon,
   KeyIcon,
-  SettingsIcon,
-  TranslationIcon,
+  LanguageIcon,
   UsageIcon,
 } from "@/design-system/icons/semantic-icons";
 import { clientEnvironment } from "@/lib/env/client";
@@ -38,12 +38,12 @@ import { TranslationPanel } from "./translation-panel";
 import { UsagePanel } from "./usage-panel";
 
 const sectionIcons: Record<SettingsSection, IconGlyph> = {
-  general: SettingsIcon,
+  general: AppearanceIcon,
   account: AccountIcon,
   usage: UsageIcon,
   "access-keys": KeyIcon,
   connections: IntegrationIcon,
-  translation: TranslationIcon,
+  translation: LanguageIcon,
 };
 
 function Panel({
@@ -120,17 +120,17 @@ export function SettingsDialog({
                   className={cn(
                     "hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 text-left text-sm font-medium transition-colors motion-reduce:transition-none",
                     keyboardFocusRing,
-                    active === item && "bg-surface",
+                    active === item && "bg-hover",
                   )}
                   key={item}
                   onClick={() => setSection(item)}
                   type="button"
                 >
-                  <span className="grid size-5 shrink-0 place-items-center">
+                  <span className="grid size-6 shrink-0 place-items-center">
                     <Icon
                       glyph={sectionIcons[item]}
                       size={20}
-                      tone="secondary"
+                      tone={active === item ? "primary" : "secondary"}
                     />
                   </span>
                   {t(`navigation.${item}`)}

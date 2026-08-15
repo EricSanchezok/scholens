@@ -766,7 +766,8 @@ export function PapersView({
             >
               <SelectTrigger
                 aria-label={t("sort.label")}
-                className="bg-subtle hover:border-line min-w-0 flex-1 rounded-full border-transparent md:w-auto md:min-w-44 md:flex-none"
+                className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+                variant="quiet"
               >
                 <SelectValue />
               </SelectTrigger>

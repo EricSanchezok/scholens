@@ -178,7 +178,8 @@ export function ReaderToolbar({
             >
               <SelectTrigger
                 aria-label={labels.projectContext(selectedProjectContext)}
-                className="ml-2 h-9 min-h-9 w-40 min-w-0 shrink"
+                className="ml-2 w-40 min-w-0 shrink"
+                variant="compact"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -213,7 +214,8 @@ export function ReaderToolbar({
         >
           <SelectTrigger
             aria-label={labels.projectContext(selectedProjectContext)}
-            className="hidden h-9 min-h-9 w-40 max-w-[40vw] min-w-0 shrink sm:flex 2xl:hidden"
+            className="hidden w-40 max-w-[40vw] min-w-0 shrink sm:flex 2xl:hidden"
+            variant="compact"
           >
             <SelectValue />
           </SelectTrigger>

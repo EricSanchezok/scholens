@@ -890,7 +890,7 @@ export function ProjectDetailWorkspace({
                   >
                     <SelectTrigger
                       aria-label={t("detail.papers.sortLabel")}
-                      className="bg-subtle hover:border-line rounded-full border-transparent"
+                      variant="quiet"
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -989,7 +989,7 @@ export function ProjectDetailWorkspace({
                   >
                     <SelectTrigger
                       aria-label={t("detail.outputs.kindLabel")}
-                      className="bg-subtle hover:border-line rounded-full border-transparent"
+                      variant="quiet"
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -1019,7 +1019,7 @@ export function ProjectDetailWorkspace({
                   >
                     <SelectTrigger
                       aria-label={t("detail.outputs.sortLabel")}
-                      className="bg-subtle hover:border-line rounded-full border-transparent"
+                      variant="quiet"
                     >
                       <SelectValue />
                     </SelectTrigger>
