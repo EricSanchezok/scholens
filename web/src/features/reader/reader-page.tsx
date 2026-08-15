@@ -28,6 +28,7 @@ import { useAuthSession, type Actor } from "@/features/authentication";
 import {
   conversationKeys,
   conversationQueries,
+  setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
 } from "@/features/conversation";
@@ -40,7 +41,6 @@ import {
   getReaderDownloadUrl,
   readerKeys,
   readerQueries,
-  setReaderConversationPinned,
   updateReaderComment,
   updateReaderAnnotationThread,
 } from "./api/queries";
@@ -662,7 +662,7 @@ function ReaderDocumentWorkspace({
     onConversationNew: () =>
       updateLocation({ conversation: null, panel: "ask" }),
     onConversationPin: async (id, pinned) => {
-      await setReaderConversationPinned(id, pinned);
+      await setConversationPinned(id, pinned);
       await queryClient.invalidateQueries({
         queryKey: conversationKeys.lists(),
       });

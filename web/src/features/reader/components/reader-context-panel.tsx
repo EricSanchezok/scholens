@@ -4,15 +4,12 @@ import {
   ConfirmIcon,
   CommentIcon,
   EditIcon,
-  ExpandIcon,
   FilterIcon,
   HighlightColorIcon,
   MoreIcon,
   NextIcon,
-  PinIcon,
   PreviousIcon,
   ReopenIcon,
-  NewConversationIcon,
   ClosePanelIcon,
   DeleteIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -37,14 +34,11 @@ import {
   Input,
   isImeComposing,
   keyboardFocusRing,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  SearchField,
   Textarea,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
+  ConversationSwitcher,
   ConversationView,
   useConversationSession,
   type ReasoningLevel,
@@ -63,8 +57,8 @@ import type {
   ReaderAnnotationAudienceFilter,
   ReaderAnnotationMode,
   ReaderAnnotationStatus,
-  ReaderConversation,
   ReaderContextPanel,
+  ReaderConversation,
   ReaderDocument,
   ReaderDocumentSource,
 } from "../reader-types";
@@ -81,167 +75,6 @@ export function formatReaderFileSize(size: number, locale: string) {
   return `${new Intl.NumberFormat(locale, {
     maximumFractionDigits: unit === 0 ? 0 : 1,
   }).format(value)} ${units[unit]}`;
-}
-
-export function ReaderConversationSwitcher({
-  activeId,
-  conversations,
-  loading,
-  onChange,
-  onNew,
-  onPin,
-  onPinError,
-}: {
-  activeId?: string;
-  conversations: ReaderConversation[];
-  loading: boolean;
-  onChange: (id: string) => void;
-  onNew: () => void;
-  onPin: (id: string, pinned: boolean) => Promise<void>;
-  onPinError: () => void;
-}) {
-  const t = useTranslations("Reader.conversations");
-  const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState("");
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visible = conversations.filter((conversation) =>
-    conversation.title.toLocaleLowerCase().includes(normalizedQuery),
-  );
-  const pinnedConversations = visible.filter(
-    (conversation) => conversation.pinned_at,
-  );
-  const recentConversations = visible.filter(
-    (conversation) => !conversation.pinned_at,
-  );
-
-  const activeConversation = conversations.find(
-    (conversation) => conversation.id === activeId,
-  );
-
-  function renderConversation(conversation: ReaderConversation) {
-    return (
-      <div
-        className={cn(
-          "hover:bg-hover flex min-w-0 items-center rounded-[var(--radius-sm)]",
-          activeId === conversation.id && "bg-accent",
-        )}
-        key={conversation.id}
-      >
-        <button
-          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm"
-          onClick={() => {
-            onChange(conversation.id);
-            setOpen(false);
-          }}
-          type="button"
-        >
-          <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
-          {activeId === conversation.id ? (
-            <Icon glyph={ConfirmIcon} size={16} />
-          ) : null}
-        </button>
-        <IconButton
-          className="size-8 min-h-8"
-          label={conversation.pinned_at ? t("unpin") : t("pin")}
-          onClick={() => {
-            void onPin(conversation.id, !conversation.pinned_at).catch(
-              onPinError,
-            );
-          }}
-          variant="ghost"
-        >
-          <Icon
-            glyph={PinIcon}
-            size={16}
-            tone={conversation.pinned_at ? undefined : "secondary"}
-          />
-        </IconButton>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex shrink-0 items-center gap-1 px-3 pt-3 pb-1">
-      <Popover
-        onOpenChange={(nextOpen) => {
-          setOpen(nextOpen);
-          if (!nextOpen) setQuery("");
-        }}
-        open={open}
-      >
-        <PopoverTrigger asChild>
-          <button
-            aria-expanded={open}
-            className={cn(
-              "hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-2.5 text-left text-sm transition-colors",
-              keyboardFocusRing,
-            )}
-            type="button"
-          >
-            <span className="min-w-0 flex-1 truncate font-medium">
-              {activeConversation?.title ?? t("newDraft")}
-            </span>
-            <Icon glyph={ExpandIcon} size={16} tone="secondary" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          aria-label={t("switcher")}
-          className="w-[min(21rem,calc(100vw-2rem))] p-2"
-        >
-          <SearchField
-            autoFocus
-            className="h-9"
-            onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder={t("search")}
-            value={query}
-          />
-          <div className="mt-2 max-h-[min(22rem,50vh)] overflow-y-auto">
-            {loading ? (
-              <span className="text-muted block px-2 py-3 text-xs">
-                {t("loading")}
-              </span>
-            ) : visible.length === 0 ? (
-              <span className="text-muted block px-2 py-3 text-xs">
-                {t("empty")}
-              </span>
-            ) : (
-              <div className="grid gap-3">
-                {pinnedConversations.length > 0 ? (
-                  <section>
-                    <p className="text-muted px-2 pb-1 text-xs font-medium">
-                      {t("pinned")}
-                    </p>
-                    <div className="grid gap-0.5">
-                      {pinnedConversations.map(renderConversation)}
-                    </div>
-                  </section>
-                ) : null}
-                {recentConversations.length > 0 ? (
-                  <section>
-                    <p className="text-muted px-2 pb-1 text-xs font-medium">
-                      {t("recent")}
-                    </p>
-                    <div className="grid gap-0.5">
-                      {recentConversations.map(renderConversation)}
-                    </div>
-                  </section>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
-      <IconButton
-        className="size-10 min-h-10"
-        label={t("new")}
-        onClick={onNew}
-        variant="ghost"
-      >
-        <Icon glyph={NewConversationIcon} size={20} />
-      </IconButton>
-    </div>
-  );
 }
 
 export function ReaderAnnotationPanel({
@@ -1234,9 +1067,21 @@ export function ReaderContextPanel({
           </div>
         ) : (
           <div className="flex h-full min-h-0 flex-col">
-            <ReaderConversationSwitcher
+            <ConversationSwitcher
               activeId={conversationId}
               conversations={conversations}
+              labels={{
+                empty: t("conversations.empty"),
+                loading: t("conversations.loading"),
+                new: t("conversations.new"),
+                newDraft: t("conversations.newDraft"),
+                pin: t("conversations.pin"),
+                pinned: t("conversations.pinned"),
+                recent: t("conversations.recent"),
+                search: t("conversations.search"),
+                switcher: t("conversations.switcher"),
+                unpin: t("conversations.unpin"),
+              }}
               loading={conversationsLoading}
               onChange={onConversationChange}
               onNew={onConversationNew}

@@ -38,6 +38,21 @@ export async function createConversation(body: ConversationCreateRequest) {
   return data;
 }
 
+export async function setConversationPinned(
+  conversationId: string,
+  pinned: boolean,
+) {
+  const { data } = await apiClient.PATCH(
+    "/api/v1/conversations/{conversation_id}",
+    {
+      params: { path: { conversation_id: conversationId } },
+      body: { pinned },
+    },
+  );
+  if (!data) throw new Error("Update conversation response was empty");
+  return data;
+}
+
 export async function updateConversationContext(
   conversationId: string,
   context:
