@@ -304,6 +304,28 @@ test("supports the Projects critical journey", async ({ page }) => {
 
 const activeProjectId = "20000000-0000-4000-8000-000000000099";
 
+test("fills the desktop Project Chat panel symmetrically", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/projects/${projectFixtures[0]!.id}?panel=chat`);
+
+  const chat = page.getByRole("region", { name: "Project chat" });
+  const composer = chat.getByPlaceholder("Ask a follow-up");
+  await expect(chat).toBeVisible();
+  await expect(composer).toBeVisible();
+
+  const chatBox = await chat.boundingBox();
+  const composerBox = await composer
+    .locator("xpath=ancestor::form")
+    .boundingBox();
+  expect(chatBox).not.toBeNull();
+  expect(composerBox).not.toBeNull();
+
+  const leftInset = composerBox!.x - chatBox!.x;
+  const rightInset =
+    chatBox!.x + chatBox!.width - (composerBox!.x + composerBox!.width);
+  expect(Math.abs(leftInset - rightInset)).toBeLessThanOrEqual(1);
+});
+
 test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/projects/${projectFixtures[0]!.id}`);

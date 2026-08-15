@@ -150,7 +150,7 @@ function ProjectChat({
   });
   return (
     <section
-      className="bg-canvas flex h-full min-h-0 flex-col"
+      className="bg-canvas flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
       aria-label={t("title")}
       data-project-chat
     >
