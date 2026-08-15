@@ -9,7 +9,14 @@ from app.modules.identity.application.identity import (
     LocalIdentity,
 )
 from app.modules.identity.infrastructure.users import user_repository
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
+
+# Stable two-key PostgreSQL advisory-lock namespace: ASCII "SCHO" / "ADMI".
+# Every transaction that can create the first or remove an available admin
+# serializes through this roster lock before re-reading the invariant.
+ADMIN_ROSTER_LOCK_NAMESPACE = (0x5343484F, 0x41444D49)
 
 
 class SqlAlchemyIdentityGateway:
@@ -65,6 +72,11 @@ class SqlAlchemyIdentityGateway:
 
     def available_admin_count(self) -> int:
         return user_repository.available_admin_count(self._db)
+
+    def lock_admin_roster(self) -> None:
+        self._db.execute(
+            select(func.pg_advisory_xact_lock(*ADMIN_ROSTER_LOCK_NAMESPACE))
+        )
 
     def set_blocked(
         self,

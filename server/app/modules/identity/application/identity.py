@@ -84,6 +84,8 @@ class IdentityGateway(Protocol):
 
     def available_admin_count(self) -> int: ...
 
+    def lock_admin_roster(self) -> None: ...
+
     def set_blocked(
         self,
         *,
@@ -231,13 +233,15 @@ class Identity:
                 is_admin=actor.is_admin,
             )
         )
-        target_identity = self._gateway.local_identity(user_id=user_id)
         if request.blocked and user_id == actor.id:
             raise AppError(
                 code="admin_self_block_forbidden",
                 message="An administrator cannot block their own account",
                 kind=FailureKind.CONFLICT,
             )
+        if request.blocked:
+            self._gateway.lock_admin_roster()
+        target_identity = self._gateway.local_identity(user_id=user_id)
         if (
             request.blocked
             and target_identity is not None
@@ -293,6 +297,7 @@ class Identity:
         operation: OperationContext,
         user_id: int,
     ) -> SetUserAdminResponse:
+        self._gateway.lock_admin_roster()
         if self._gateway.available_admin_count() != 0:
             raise AppError(
                 code="admin_bootstrap_closed",
@@ -353,6 +358,8 @@ class Identity:
                 is_admin=actor.is_admin,
             )
         )
+        if not enabled:
+            self._gateway.lock_admin_roster()
         identity = self._gateway.authenticated_identity(user_id=user_id)
         if identity is None:
             raise AppError(

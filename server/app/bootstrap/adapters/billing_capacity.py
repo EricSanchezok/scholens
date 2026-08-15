@@ -5,6 +5,7 @@ from uuid import UUID
 from app.modules.billing.infrastructure.quotas import (
     can_user_create_project,
     can_user_upload_paper,
+    lock_account_resource_quota,
     require_library_document_capacity,
 )
 from app.modules.papers.infrastructure.models import Document
@@ -33,6 +34,7 @@ class BillingProjectCapacity:
         self._db = db
 
     def require_create(self, *, actor: Actor) -> None:
+        lock_account_resource_quota(self._db, user_id=actor.id)
         can_create, _reason = can_user_create_project(self._db, actor)
         if not can_create:
             raise AppError(

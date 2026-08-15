@@ -16,6 +16,28 @@ from app.operator_cli.common import (
     guarded,
 )
 
+USAGE_SCAN_PAGE_SIZE = 500
+
+
+def _row_payload(row: Any, resolution: Any) -> dict[str, object]:
+    return {
+        "user_id": row[0],
+        "email": row[1],
+        "plan": resolution.plan.value,
+        "plan_source": resolution.source,
+        "feature": row[2],
+        "profile": row[3],
+        "provider": row[4],
+        "model": row[5],
+        "input_tokens": int(row[6] or 0),
+        "output_tokens": int(row[7] or 0),
+        "reasoning_tokens": int(row[8] or 0),
+        "cache_hit_tokens": int(row[9] or 0),
+        "cache_miss_tokens": int(row[10] or 0),
+        "total_tokens": int(row[11] or 0),
+        "unknown_usage_events": int(row[12] or 0),
+    }
+
 
 def _token_rows(
     *,
@@ -40,6 +62,7 @@ def _token_rows(
         TokenUsageEvent.provider,
         TokenUsageEvent.model,
     )
+    total_tokens = func.sum(TokenUsageEvent.total_tokens)
     statement = (
         select(
             *dimensions,
@@ -53,8 +76,7 @@ def _token_rows(
         )
         .join(AuthUser, AuthUser.id == TokenUsageEvent.user_id)
         .group_by(*dimensions)
-        .order_by(func.sum(TokenUsageEvent.total_tokens).desc())
-        .limit(limit)
+        .order_by(total_tokens.desc(), *dimensions)
     )
     if email is not None:
         statement = statement.where(AuthUser.email == email)
@@ -68,40 +90,38 @@ def _token_rows(
         statement = statement.where(TokenUsageEvent.week_start == week_start)
 
     with SessionLocal() as db:
-        raw_rows = db.execute(statement).all()
-        users = {
-            user.id: user
-            for user in db.scalars(
-                select(AuthUser).where(
-                    AuthUser.id.in_({int(row[0]) for row in raw_rows})
-                )
-            ).unique()
-        }
         rows: list[dict[str, object]] = []
-        for row in raw_rows:
-            user = users[int(row[0])]
-            resolution = get_user_entitlements(db, actor_from_auth_user(user))
-            if plan is not None and resolution.plan.value != plan:
-                continue
-            rows.append(
-                {
-                    "user_id": row[0],
-                    "email": row[1],
-                    "plan": resolution.plan.value,
-                    "plan_source": resolution.source,
-                    "feature": row[2],
-                    "profile": row[3],
-                    "provider": row[4],
-                    "model": row[5],
-                    "input_tokens": int(row[6] or 0),
-                    "output_tokens": int(row[7] or 0),
-                    "reasoning_tokens": int(row[8] or 0),
-                    "cache_hit_tokens": int(row[9] or 0),
-                    "cache_miss_tokens": int(row[10] or 0),
-                    "total_tokens": int(row[11] or 0),
-                    "unknown_usage_events": int(row[12] or 0),
-                }
-            )
+        offset = 0
+        resolutions: dict[int, Any] = {}
+        while len(rows) < limit:
+            page_limit = limit if plan is None else USAGE_SCAN_PAGE_SIZE
+            raw_rows = db.execute(statement.offset(offset).limit(page_limit)).all()
+            if not raw_rows:
+                break
+            missing_user_ids = {
+                int(row[0]) for row in raw_rows if int(row[0]) not in resolutions
+            }
+            users = {
+                user.id: user
+                for user in db.scalars(
+                    select(AuthUser).where(AuthUser.id.in_(missing_user_ids))
+                ).unique()
+            }
+            for user_id, user in users.items():
+                resolutions[user_id] = get_user_entitlements(
+                    db,
+                    actor_from_auth_user(user),
+                )
+            for row in raw_rows:
+                resolution = resolutions[int(row[0])]
+                if plan is not None and resolution.plan.value != plan:
+                    continue
+                rows.append(_row_payload(row, resolution))
+                if len(rows) == limit:
+                    break
+            if plan is None or len(raw_rows) < page_limit:
+                break
+            offset += len(raw_rows)
     return rows
 
 

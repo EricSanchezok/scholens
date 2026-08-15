@@ -33,6 +33,7 @@ class _Gateway:
         self.grants: dict[int, GrantRecord] = {}
         self.overrides: dict[tuple[int, str], OverrideRecord] = {}
         self.locked: list[int] = []
+        self.reasons: list[str] = []
 
     def lock_account(self, *, user_id: int) -> None:
         self.locked.append(user_id)
@@ -49,7 +50,8 @@ class _Gateway:
         expires_at: datetime,
         reason: str,
     ) -> GrantRecord:
-        del granted_by_user_id, granted_at, reason
+        del granted_by_user_id, granted_at
+        self.reasons.append(reason)
         record = GrantRecord(uuid4(), user_id, expires_at)
         self.grants[user_id] = record
         return record
@@ -62,7 +64,8 @@ class _Gateway:
         revoked_at: datetime,
         reason: str,
     ) -> None:
-        del revoked_by_user_id, revoked_at, reason
+        del revoked_by_user_id, revoked_at
+        self.reasons.append(reason)
         user_id = next(
             user_id for user_id, grant in self.grants.items() if grant.id == grant_id
         )
@@ -84,7 +87,8 @@ class _Gateway:
         expires_at: datetime,
         reason: str,
     ) -> OverrideRecord:
-        del set_by_user_id, set_at, reason
+        del set_by_user_id, set_at
+        self.reasons.append(reason)
         record = OverrideRecord(uuid4(), user_id, resource_key, limit_value, expires_at)
         self.overrides[(user_id, resource_key)] = record
         return record
@@ -97,7 +101,8 @@ class _Gateway:
         revoked_at: datetime,
         reason: str,
     ) -> None:
-        del revoked_by_user_id, revoked_at, reason
+        del revoked_by_user_id, revoked_at
+        self.reasons.append(reason)
         key = next(
             key
             for key, override in self.overrides.items()
@@ -160,6 +165,7 @@ def test_researcher_grant_is_365_days_and_repeated_call_is_unchanged() -> None:
     assert gateway.grants[2].expires_at == now + timedelta(days=365)
     assert repeated[0].changed is False
     assert len(journal.entries) == 1
+    assert gateway.reasons == ["team testing"]
 
 
 def test_batch_targets_are_all_validated_before_any_mutation() -> None:

@@ -407,8 +407,11 @@ the personal Library and Projects owned by that account. A repeated Document
 therefore adds no account cost until its final owned reference disappears.
 Project paper limits remain membership counts, and collaborators reserve quota
 against the Project owner. Account advisory locks and durable upload
-reservations serialize concurrent additions; an already-owned Document may
-reserve zero account units while still reserving one Project slot.
+reservations serialize concurrent additions, including Project creation and
+ownership transfer. Transfer locks both account quota namespaces in stable
+user-ID order and recomputes both owners' completed and active unique-document
+views before committing; an already-owned Document may reserve zero account
+units while still reserving one Project slot.
 
 Effective entitlements combine paid `subscriptions`, product-owned
 `account_plan_grants`, and active `account_quota_overrides`. A paid Researcher
@@ -422,6 +425,11 @@ commands. CLI provenance is recorded as `CliOrigin(command_name,
 invocation_id)` in the append-only Operation Journal. SQLAdmin views are
 read-only; no public administrator API exists for grants, quota overrides,
 subscription mutation, token resets, or arbitrary job state changes.
+Administrator bootstrap and reductions serialize through a dedicated
+transaction advisory lock before re-reading the available-admin roster.
+Free-text entitlement reasons live on entitlement records; identity
+admin/block rationale is required at the CLI but deliberately not copied into
+the Journal safe projection.
 
 ## Adding a capability or adapter
 

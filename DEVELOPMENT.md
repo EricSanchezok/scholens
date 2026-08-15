@@ -268,8 +268,18 @@ local-only reset requires an exact `--actor-email`, a non-empty `--reason`, and
 interactive confirmation or `--yes`. The actor must be an active, verified,
 unblocked Scholens administrator. Repeated idempotent operations report
 `unchanged`; failures use exit code 1 and Click parameter errors use exit code
-2. The CLI never exposes a general job-state editor, Token Credit reset,
+2. Entitlement and quota reasons are persisted on their product records.
+Identity admin/block reasons are required operator rationale but are not
+persisted; their append-only Journal entries retain only the safe command,
+actor, action, and resource projection. The CLI never exposes a general
+job-state editor, Token Credit reset,
 Stripe-subscription editor, or remote database-reset command.
+
+`maintenance backfill-passages --batch-size N --apply` processes at most `N`
+documents in one invocation and one application transaction. Re-run it until
+the reported candidate count reaches zero. It uses ordinary row DML and the
+existing search-vector trigger; the runtime role never receives trigger or
+table DDL privileges.
 
 Useful read-only diagnostics include:
 

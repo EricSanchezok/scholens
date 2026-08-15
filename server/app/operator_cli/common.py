@@ -11,7 +11,9 @@ from typing import Any, Callable, NoReturn, ParamSpec, TypeVar, cast
 from uuid import UUID, uuid4
 
 import click
+from alembic.util.exc import CommandError
 from pydantic import EmailStr, TypeAdapter, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.application import (
     Actor,
@@ -137,7 +139,13 @@ def guarded(function: Callable[P, R]) -> Callable[P, R]:
             _raise_command_error(code=exc.code, message=exc.message)
         except click.ClickException as exc:
             _raise_command_error(code="command_failed", message=safe_error_detail(exc))
-        except (OSError, RuntimeError, ValueError) as exc:
+        except (
+            CommandError,
+            SQLAlchemyError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ) as exc:
             _raise_command_error(
                 code="command_failed",
                 message=safe_error_detail(exc),

@@ -23,17 +23,32 @@ from app.operator_cli.common import (
 )
 
 
-def _summary(db: Any, user: Any, *, include_usage: bool) -> dict[str, object]:
+USER_SCAN_PAGE_SIZE = 500
+
+
+def _entitlement_resolution(db: Any, user: Any) -> Any:
+    from app.modules.billing.infrastructure.quotas import get_user_entitlements
+    from app.modules.identity.infrastructure.users import actor_from_auth_user
+
+    return get_user_entitlements(db, actor_from_auth_user(user))
+
+
+def _summary(
+    db: Any,
+    user: Any,
+    *,
+    include_usage: bool,
+    resolution: Any | None = None,
+) -> dict[str, object]:
     from app.database.models import DurableJob
     from app.modules.billing.application.contracts import UsagePeriod
     from app.modules.billing.infrastructure.quotas import (
-        get_user_entitlements,
         get_user_usage_info,
     )
     from app.modules.identity.infrastructure.users import actor_from_auth_user
 
     actor = actor_from_auth_user(user)
-    resolution = get_user_entitlements(db, actor)
+    resolution = resolution or _entitlement_resolution(db, user)
     jobs = dict(
         db.execute(
             select(DurableJob.status, func.count(DurableJob.id))
@@ -63,6 +78,49 @@ def _summary(db: Any, user: Any, *, include_usage: bool) -> dict[str, object]:
             UsagePeriod.CURRENT_WEEK,
         )["usage"]
     return payload
+
+
+def _list_summaries(
+    db: Any,
+    statement: Any,
+    *,
+    plan: str | None,
+    limit: int,
+) -> list[dict[str, object]]:
+    """Scan identities deterministically before materializing costly summaries."""
+    from app.database.models import AuthUser
+
+    if plan is None:
+        users = list(db.scalars(statement.order_by(AuthUser.id).limit(limit)).unique())
+        return [_summary(db, user, include_usage=True) for user in users]
+
+    rows: list[dict[str, object]] = []
+    after_id = 0
+    while len(rows) < limit:
+        users = list(
+            db.scalars(
+                statement.where(AuthUser.id > after_id)
+                .order_by(AuthUser.id)
+                .limit(USER_SCAN_PAGE_SIZE)
+            ).unique()
+        )
+        if not users:
+            break
+        for user in users:
+            resolution = _entitlement_resolution(db, user)
+            if resolution.plan.value == plan:
+                rows.append(
+                    _summary(
+                        db,
+                        user,
+                        include_usage=True,
+                        resolution=resolution,
+                    )
+                )
+                if len(rows) == limit:
+                    break
+        after_id = users[-1].id
+    return rows
 
 
 @click.group("users", cls=OutputGroup)
@@ -102,13 +160,7 @@ def list_users(
             )
         if status:
             statement = statement.where(AuthUser.status == status)
-        query_limit = 500 if plan else limit
-        users = list(
-            db.scalars(statement.order_by(AuthUser.id).limit(query_limit)).unique()
-        )
-        rows = [_summary(db, user, include_usage=True) for user in users]
-        if plan:
-            rows = [row for row in rows if row["plan"] == plan][:limit]
+        rows = _list_summaries(db, statement, plan=plan, limit=limit)
     emit(
         state,
         rows,
@@ -190,9 +242,11 @@ def _admin_options(function: Any) -> Any:
     function = click.option("--yes", is_flag=True, help="Skip confirmation prompt.")(
         function
     )
-    function = click.option("--reason", required=True, help="Auditable change reason.")(
-        function
-    )
+    function = click.option(
+        "--reason",
+        required=True,
+        help="Required operator rationale; not persisted.",
+    )(function)
     function = click.option("--email", required=True, callback=email_callback)(function)
     function = click.option("--actor-email", required=True, callback=email_callback)(
         function

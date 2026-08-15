@@ -637,39 +637,81 @@ jobs:
             exit 1
           fi
 
+          SCHOLENS_POSTGRES_TEST_URL="postgresql+psycopg2://scholens_app:${APP_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
+          SCHOLENS_POSTGRES_TEST_ADMIN_URL="postgresql+psycopg2://postgres:${PGPASSWORD}@127.0.0.1:5432/sanchezcloud" \
+            server/.venv/bin/pytest \
+              server/tests/test_postgres_quota_invariants.py -q
+
           PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app -d sanchezcloud \
             -v ON_ERROR_STOP=1 -c \
             "INSERT INTO auth.users
                (email, password_hash, status, email_verified_at)
              VALUES
-               ('ci-cli-admin@example.invalid', 'fixture', 'active', now()),
-               ('ci-cli-target@example.invalid', 'fixture', 'active', now());"
+               ('ci-cli-admin@example.com', 'fixture', 'active', now()),
+               ('ci-cli-target@example.com', 'fixture', 'active', now());"
 
           export DATABASE_URL="postgresql+psycopg2://scholens_app:${APP_PASSWORD}@127.0.0.1:5432/sanchezcloud"
           server/.venv/bin/scholens users bootstrap-admin \
-            --email ci-cli-admin@example.invalid --yes
+            --email ci-cli-admin@example.com --yes
           server/.venv/bin/scholens entitlements grant-researcher \
-            --actor-email ci-cli-admin@example.invalid \
-            --email ci-cli-target@example.invalid \
+            --actor-email ci-cli-admin@example.com \
+            --email ci-cli-target@example.com \
             --reason 'CI entitlement integration' --yes
           server/.venv/bin/scholens entitlements grant-researcher \
-            --actor-email ci-cli-admin@example.invalid \
-            --email ci-cli-target@example.invalid \
+            --actor-email ci-cli-admin@example.com \
+            --email ci-cli-target@example.com \
             --reason 'CI entitlement integration' --yes --json \
             | grep -q '"status": "unchanged"'
           server/.venv/bin/scholens entitlements quota-set \
-            --actor-email ci-cli-admin@example.invalid \
-            --email ci-cli-target@example.invalid \
+            --actor-email ci-cli-admin@example.com \
+            --email ci-cli-target@example.com \
             --resource paper_uploads --value 0 \
             --reason 'CI quota boundary' --yes
           server/.venv/bin/scholens entitlements quota-clear \
-            --actor-email ci-cli-admin@example.invalid \
-            --email ci-cli-target@example.invalid \
+            --actor-email ci-cli-admin@example.com \
+            --email ci-cli-target@example.com \
             --resource paper_uploads --reason 'CI quota boundary complete' --yes
           server/.venv/bin/scholens entitlements revoke-researcher \
-            --actor-email ci-cli-admin@example.invalid \
-            --email ci-cli-target@example.invalid \
+            --actor-email ci-cli-admin@example.com \
+            --email ci-cli-target@example.com \
             --reason 'CI entitlement complete' --yes
+          PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app \
+            -d sanchezcloud -tAc \
+            "SELECT EXISTS (
+               SELECT 1 FROM scholens.account_plan_grants
+               WHERE reason = 'CI entitlement integration'
+                 AND revocation_reason = 'CI entitlement complete'
+             )
+             AND EXISTS (
+               SELECT 1 FROM scholens.account_quota_overrides
+               WHERE reason = 'CI quota boundary'
+                 AND revocation_reason = 'CI quota boundary complete'
+             )" \
+            | grep -qx t
+
+          (
+            cd server
+            DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
+              .venv/bin/alembic downgrade b12d7d620e91
+          )
+          PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app \
+            -d sanchezcloud -tAc \
+            "SELECT EXISTS (
+               SELECT 1 FROM scholens.operation_journal_entries
+               WHERE origin_kind = 'cli'
+             )
+             AND to_regclass('scholens.account_plan_grants') IS NULL
+             AND to_regclass('scholens.account_quota_overrides') IS NULL" \
+            | grep -qx t
+          SCHOLENS_MIGRATION_DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
+            server/.venv/bin/scholens db upgrade --yes
+          PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app \
+            -d sanchezcloud -tAc \
+            "SELECT EXISTS (
+               SELECT 1 FROM scholens.operation_journal_entries
+               WHERE origin_kind = 'cli'
+             )" \
+            | grep -qx t
 
           export LOCAL_DATABASE_ADMIN_URL="postgresql://postgres:${PGPASSWORD}@127.0.0.1:55432/sanchezcloud"
           export SCHOLENS_MIGRATION_DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:55432/sanchezcloud"
@@ -680,8 +722,8 @@ jobs:
             -d sanchezcloud -v ON_ERROR_STOP=1 -c \
             "DELETE FROM auth.users
              WHERE email IN (
-               'ci-cli-admin@example.invalid',
-               'ci-cli-target@example.invalid'
+               'ci-cli-admin@example.com',
+               'ci-cli-target@example.com'
              );"
 
   all-checks-passed:

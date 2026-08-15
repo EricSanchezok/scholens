@@ -27,7 +27,11 @@ def maintenance_group() -> None:
 @click.option("--actor-email", required=True, callback=email_callback)
 @click.option("--reason", required=True)
 @click.option(
-    "--batch-size", type=click.IntRange(1, 5000), default=100, show_default=True
+    "--batch-size",
+    type=click.IntRange(1, 5000),
+    default=100,
+    show_default=True,
+    help="Maximum documents processed in this invocation and transaction.",
 )
 @click.option(
     "--apply", is_flag=True, help="Apply changes; otherwise only count candidates."

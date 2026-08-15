@@ -34,7 +34,7 @@ from app.modules.billing.infrastructure.quotas import (
 from app.modules.projects.infrastructure.access import require_project_permission
 from app.shared.application import Actor
 from app.modules.jobs.infrastructure.repository import CreateJob, job_repository
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 ACTIVE_UPLOAD_STATUSES = (JobStatus.PENDING, JobStatus.RUNNING)
@@ -112,6 +112,79 @@ def _has_active_duplicate_reservation(
     return bool(db.scalar(statement))
 
 
+def _locked_transfer_reservations(
+    db: Session,
+    *,
+    owner_ids: tuple[int, ...],
+    project_id: UUID,
+) -> list[tuple[UploadReservation, DurableJob]]:
+    """Lock both accounts' complete active-digest views for a transfer."""
+    return list(
+        db.execute(
+            select(UploadReservation, DurableJob)
+            .join(DurableJob, DurableJob.id == UploadReservation.id)
+            .where(
+                DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
+                or_(
+                    UploadReservation.quota_owner_id.in_(owner_ids),
+                    DurableJob.project_id == project_id,
+                ),
+            )
+            .order_by(UploadReservation.id)
+            .with_for_update()
+        )
+        .tuples()
+        .all()
+    )
+
+
+def _input_size_kb(job: DurableJob) -> int:
+    input_size = job.payload.get("input_size_bytes")
+    if (
+        isinstance(input_size, bool)
+        or not isinstance(input_size, int)
+        or input_size <= 0
+    ):
+        raise AppError(
+            code="project_transfer_reservation_invalid",
+            message="An active upload does not have a valid reserved input size",
+            kind=FailureKind.CONFLICT,
+        )
+    return math.ceil(input_size / 1024)
+
+
+def _reprice_active_reservations(
+    rows: list[tuple[UploadReservation, DurableJob]],
+    *,
+    owner_id: int,
+    new_owner_id: int,
+    project_id: UUID,
+    completed_digests: set[str],
+) -> list[tuple[UploadReservation, DurableJob, int, int]]:
+    """Price one owner's active digests in the post-transfer ownership view."""
+    covered_digests = set(completed_digests)
+    unique_rows = {
+        reservation.id: (reservation, job)
+        for reservation, job in rows
+        if (
+            new_owner_id if job.project_id == project_id else reservation.quota_owner_id
+        )
+        == owner_id
+    }
+    ordered_rows = sorted(
+        unique_rows.values(),
+        key=lambda row: str(row[0].id),
+    )
+    pricing: list[tuple[UploadReservation, DurableJob, int, int]] = []
+    for reservation, job in ordered_rows:
+        if reservation.content_sha256 in covered_digests:
+            pricing.append((reservation, job, 0, 0))
+            continue
+        covered_digests.add(reservation.content_sha256)
+        pricing.append((reservation, job, 1, _input_size_kb(job)))
+    return pricing
+
+
 def reassign_project_quota_owner(
     db: Session,
     *,
@@ -124,9 +197,16 @@ def reassign_project_quota_owner(
     the unique document union; Project membership and pending associations are
     still counted independently for the per-Project limit.
     """
-    lock_account_resource_quota(db, user_id=new_owner_id)
-    owner = get_quota_user(db, user_id=new_owner_id)
-    limits = get_user_entitlements(db, owner).limits.as_limits()
+    old_owner_id = project.owner_id
+    owner_ids = tuple(sorted((old_owner_id, new_owner_id)))
+    for owner_id in owner_ids:
+        lock_account_resource_quota(db, user_id=owner_id)
+    owners = {owner_id: get_quota_user(db, user_id=owner_id) for owner_id in owner_ids}
+    limits_by_owner = {
+        owner_id: get_user_entitlements(db, owner).limits.as_limits()
+        for owner_id, owner in owners.items()
+    }
+    new_owner_limits = limits_by_owner[new_owner_id]
 
     owned_project_count = int(
         db.scalar(
@@ -134,7 +214,7 @@ def reassign_project_quota_owner(
         )
         or 0
     )
-    if owned_project_count + 1 > limits[PROJECTS_KEY]:
+    if owned_project_count + 1 > new_owner_limits[PROJECTS_KEY]:
         raise AppError(
             code="project_transfer_quota_exceeded",
             message="The new owner has reached their Project limit",
@@ -149,98 +229,87 @@ def reassign_project_quota_owner(
         )
         or 0
     )
-    if project_document_count > limits[PROJECT_PAPERS_KEY]:
+    if project_document_count > new_owner_limits[PROJECT_PAPERS_KEY]:
         raise AppError(
             code="project_transfer_paper_quota_exceeded",
             message="This Project exceeds the new owner's per-Project paper limit",
             kind=FailureKind.CONFLICT,
         )
 
-    project_active_count, project_active_size_kb = tuple(
-        int(value)
-        for value in db.execute(
-            select(
-                func.count(UploadReservation.id),
-                func.coalesce(func.sum(UploadReservation.reserved_size_kb), 0),
-            )
-            .join(DurableJob, DurableJob.id == UploadReservation.id)
-            .where(
-                DurableJob.project_id == project.id,
-                DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
-            )
-        ).one()
-    )
-    existing_active_count, existing_active_size_kb = _active_account_reservations(
+    active_rows = _locked_transfer_reservations(
         db,
-        owner_id=new_owner_id,
+        owner_ids=owner_ids,
+        project_id=project.id,
     )
 
-    project_documents = list(
-        db.scalars(
-            select(Document)
-            .join(ProjectPaper, ProjectPaper.document_id == Document.id)
-            .where(
-                ProjectPaper.project_id == project.id,
-                Document.processing_status == "completed",
+    completed_by_owner = {
+        old_owner_id: resource_usage_repository.completed_documents(
+            db,
+            user_id=old_owner_id,
+            exclude_project_id=project.id,
+        ),
+        new_owner_id: resource_usage_repository.completed_documents(
+            db,
+            user_id=new_owner_id,
+            include_project_id=project.id,
+        ),
+    }
+    pricing_by_owner = {
+        owner_id: _reprice_active_reservations(
+            active_rows,
+            owner_id=owner_id,
+            new_owner_id=new_owner_id,
+            project_id=project.id,
+            completed_digests={
+                document.sha256 for document in completed_by_owner[owner_id]
+            },
+        )
+        for owner_id in owner_ids
+    }
+    for owner_id in owner_ids:
+        documents = completed_by_owner[owner_id]
+        pricing = pricing_by_owner[owner_id]
+        active_count = sum(reference_count for _, _, reference_count, _ in pricing)
+        active_size_kb = sum(size_kb for _, _, _, size_kb in pricing)
+        limits = limits_by_owner[owner_id]
+        if len(documents) + active_count > limits[PAPER_UPLOAD_KEY]:
+            raise AppError(
+                code="project_transfer_paper_quota_exceeded",
+                message="The transfer would exceed an owner's paper limit",
+                kind=FailureKind.CONFLICT,
             )
-        ).all()
-    )
+        completed_size_kb = (
+            sum(document.size_bytes for document in documents) + 1023
+        ) // 1024
+        if completed_size_kb + active_size_kb > limits[KB_SIZE_KEY]:
+            raise AppError(
+                code="project_transfer_storage_quota_exceeded",
+                message="The transfer would exceed an owner's storage limit",
+                kind=FailureKind.CONFLICT,
+            )
 
-    existing_document_ids = resource_usage_repository.owned_document_ids(
-        db, user_id=owner.id
-    )
-    incremental_documents = [
-        document
-        for document in project_documents
-        if document.id not in existing_document_ids
-    ]
-    completed_count = resource_usage_repository.completed_reference_count(
-        db, user_id=owner.id
+    pending_project_slots = sum(
+        1
+        for _, job in active_rows
+        if job.project_id == project.id and job.document_id is None
     )
     if (
-        completed_count
-        + existing_active_count
-        + len(incremental_documents)
-        + project_active_count
-        > limits[PAPER_UPLOAD_KEY]
+        project_document_count + pending_project_slots
+        > new_owner_limits[PROJECT_PAPERS_KEY]
     ):
         raise AppError(
             code="project_transfer_paper_quota_exceeded",
-            message="The Project would exceed the new owner's paper limit",
+            message="This Project exceeds the new owner's per-Project paper limit",
             kind=FailureKind.CONFLICT,
         )
 
-    completed_size_kb = resource_usage_repository.completed_storage_kb(
-        db, user_id=owner.id
-    )
-    incremental_size_kb = sum(
-        (document.size_bytes + 1023) // 1024 for document in incremental_documents
-    )
-    if (
-        completed_size_kb
-        + existing_active_size_kb
-        + incremental_size_kb
-        + project_active_size_kb
-        > limits[KB_SIZE_KEY]
-    ):
-        raise AppError(
-            code="project_transfer_storage_quota_exceeded",
-            message="The Project would exceed the new owner's storage limit",
-            kind=FailureKind.CONFLICT,
-        )
-
-    db.execute(
-        update(UploadReservation)
-        .where(
-            UploadReservation.id.in_(
-                select(DurableJob.id).where(
-                    DurableJob.project_id == project.id,
-                    DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
-                )
-            ),
-        )
-        .values(quota_owner_id=new_owner_id)
-    )
+    for pricing in pricing_by_owner.values():
+        for reservation, job, reference_count, size_kb in pricing:
+            reservation.reserved_reference_count = reference_count
+            reservation.reserved_size_kb = size_kb
+            if job.project_id == project.id:
+                reservation.quota_owner_id = new_owner_id
+    db.flush()
 
 
 def reserve_upload(

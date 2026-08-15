@@ -75,6 +75,7 @@ def test_final_available_admin_cannot_be_revoked_or_blocked() -> None:
         )
 
     assert block_error.value.code == "last_admin_required"
+    assert gateway.lock_admin_roster.call_count == 2
     gateway.set_admin.assert_not_called()
     gateway.set_blocked.assert_not_called()
 
@@ -91,4 +92,5 @@ def test_bootstrap_admin_closes_after_the_first_available_admin() -> None:
         )
 
     assert error.value.code == "admin_bootstrap_closed"
+    gateway.lock_admin_roster.assert_called_once_with()
     gateway.set_admin.assert_not_called()

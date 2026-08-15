@@ -82,7 +82,14 @@ application service, and write CLI provenance to the append-only Operation
 Journal. Except for `users bootstrap-admin` and the local-only guarded reset,
 mutations require an active verified administrator via `--actor-email`, an
 explicit `--reason`, and confirmation or `--yes`. SQLAdmin is a read-only
-diagnostic surface.
+diagnostic surface. Entitlement reasons are durable product data. Identity
+admin/block reasons are required operator rationale but are not persisted;
+the Journal stores their bounded safe action/resource projection instead.
+
+Passage backfill is a bounded, repeatable runtime operation: `--batch-size`
+caps the documents handled by one invocation and transaction. It relies on
+normal INSERT permissions and the existing tsvector trigger, never runtime
+trigger DDL.
 
 The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
 enabled.

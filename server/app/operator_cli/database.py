@@ -89,6 +89,10 @@ def status_command(state: CliState) -> None:
 def upgrade_command(state: CliState, yes: bool) -> None:
     database_url = migration_database_url()
     before = migration_status()
+    if before.get("schema_owned_by_role") is not True:
+        raise click.ClickException(
+            "The migration database role must own the scholens schema."
+        )
     if before["up_to_date"]:
         emit(
             state,

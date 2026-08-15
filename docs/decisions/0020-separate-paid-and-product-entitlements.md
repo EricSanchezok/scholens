@@ -38,6 +38,15 @@ Operator mutations run through the application service and Unit of Work via
 the private `scholens` CLI. A `CliOrigin` stores the normalized command name and
 an invocation UUID in the append-only Operation Journal. No public
 administrator API is introduced, and SQLAdmin business views are read-only.
+Entitlement reasons remain on the entitlement records. Identity admin/block
+commands require operator rationale as an acknowledgement, but do not persist
+that arbitrary prose in the Journal's safe projection. Their action, actor,
+resource, command name, and invocation UUID remain durable.
+
+Because Journal rows cannot be rewritten or deleted, the migration's `cli`
+origin vocabulary is a one-way compatibility extension: downgrading the
+entitlement tables intentionally retains `cli` in the origin check constraint
+so historical audit rows remain valid.
 
 ## Alternatives considered
 
@@ -74,5 +83,6 @@ outside this decision.
 Domain and application tests cover paid/granted precedence, expiry,
 revocation, zero-valued overrides, idempotence, batch prevalidation, and
 last-administrator protection. CI applies the incremental product migration
-twice with the migration role, exercises grant/override commands, and runs the
-guarded local reset while asserting that `auth` is unchanged.
+twice, performs a real downgrade with existing CLI Journal rows, exercises
+grant/override commands, and runs the guarded local reset while asserting that
+`auth` is unchanged.

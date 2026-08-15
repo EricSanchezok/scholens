@@ -200,19 +200,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "ck_operation_journal_origin",
-        "operation_journal_entries",
-        schema="scholens",
-        type_="check",
-    )
-    op.create_check_constraint(
-        "ck_operation_journal_origin",
-        "operation_journal_entries",
-        "origin_kind IN ('http', 'conversation', 'mcp', 'job', 'webhook', "
-        "'oauth_callback', 'scheduler')",
-        schema="scholens",
-    )
+    # Intentionally retain ``cli`` in the origin vocabulary. Operation Journal
+    # rows are append-only, so contracting this check after any CLI invocation
+    # would either make downgrade fail or require rewriting audit history. This
+    # is a one-way vocabulary extension even when the entitlement tables are
+    # downgraded.
     op.drop_index(
         "uq_account_quota_overrides_unrevoked_resource",
         table_name="account_quota_overrides",
