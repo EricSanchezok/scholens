@@ -10,28 +10,48 @@ const endpoint = "http://127.0.0.1:7301/api/v1/papers/:documentId/reflow";
 const completed = {
   blocks: [
     {
+      asset_id: null,
+      group_id: null,
       heading_level: 1,
       id: "title",
       index: 0,
       kind: "title",
-      page_number: 1,
-      source_markdown: "# A Responsive Reading Surface",
+      presentation_status: "verbatim",
+      render_markdown: "# A Responsive Reading Surface",
+      source_spans: [
+        {
+          page_number: 1,
+          source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.2 },
+          source_text: "A Responsive Reading Surface",
+        },
+      ],
     },
     {
+      asset_id: null,
+      group_id: null,
       heading_level: null,
       id: "paragraph",
       index: 1,
       kind: "paragraph",
-      page_number: 1,
-      source_markdown:
+      presentation_status: "verbatim",
+      render_markdown:
         "This source paragraph remains exact while its reading layout adapts to the viewport.",
+      source_spans: [
+        {
+          page_number: 1,
+          source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.32 },
+          source_text:
+            "This source paragraph remains exact while its reading layout adapts to the viewport.",
+        },
+      ],
     },
   ],
+  assets: [],
   document_id: "completed-document",
   error_code: null,
   job_id: "10000000-0000-4000-8000-000000000001",
-  profile_revision: "reflow-profile-v1",
-  prompt_revision: "reflow-layout-v1",
+  parser_revision: "mineru-content-list-v1",
+  pipeline_revision: "mineru-continuous-ast-v1",
   status: "completed",
   updated_at: "2026-08-14T00:00:00Z",
   warnings: [],
@@ -57,8 +77,8 @@ const handlers = [
           ...completed,
           blocks: [],
           document_id: documentId,
-          profile_revision: null,
-          prompt_revision: null,
+          parser_revision: null,
+          pipeline_revision: null,
           status: "pending",
         });
       }
@@ -75,8 +95,8 @@ const handlers = [
         ...completed,
         blocks: [],
         document_id: documentId,
-        profile_revision: null,
-        prompt_revision: null,
+        parser_revision: null,
+        pipeline_revision: null,
         status: "processing",
       });
     }
@@ -90,8 +110,8 @@ const handlers = [
         ...completed,
         blocks: [],
         document_id: documentId,
-        profile_revision: null,
-        prompt_revision: null,
+        parser_revision: null,
+        pipeline_revision: null,
         status: "pending",
       },
       { status: 202 },
@@ -105,10 +125,19 @@ const meta = {
   args: {
     documentId: "completed-document",
     fullTranslationEnabled: false,
-    onFullTranslationEnabledChange: fn(),
-    onOpenPdfPage: fn(),
+    onOutlineChange: fn(),
+    onOpenPdfSource: fn(),
+    onTranslationStatusChange: fn(),
+    preferences: {
+      auto_translate_selection: true,
+      custom_instructions: null,
+      full_translation_display: "bilingual",
+      show_translation_marker: true,
+      source_language: "auto",
+      target_language: "zh-CN",
+      translate_references: false,
+    },
     targetLanguage: "zh-CN",
-    title: "A Responsive Reading Surface",
     translationCacheVersion: "preferences-v1",
   },
   decorators: [

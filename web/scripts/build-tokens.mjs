@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import prettier from "prettier";
 import StyleDictionary from "style-dictionary";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -88,6 +89,7 @@ await build({
     "border",
     "focus",
     "type",
+    "font",
     "opacity",
   ],
 });
@@ -104,6 +106,20 @@ for (const appearance of ["light", "dark"]) {
     selector: `[data-theme=\"default\"][data-color-scheme=\"${appearance}\"]`,
     prefixes: ["color", "elevation"],
   });
+}
+
+for (const output of [
+  "dimensions.css",
+  "colors-light.css",
+  "colors-dark.css",
+]) {
+  const outputPath = path.join(outputDirectory, output);
+  const source = await fs.readFile(outputPath, "utf8");
+  await fs.writeFile(
+    outputPath,
+    await prettier.format(source, { parser: "css" }),
+    "utf8",
+  );
 }
 
 const metadata =

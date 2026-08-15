@@ -114,6 +114,8 @@ class PaperLibraryGateway(Protocol):
 
     def paper_count(self, *, user_id: int) -> int: ...
 
+    def ingestion_counts(self, *, user_id: int) -> tuple[int, int]: ...
+
     def get(self, *, user_id: int, document_id: UUID) -> LibraryPaperResponse: ...
 
     def update(
@@ -314,8 +316,13 @@ class PaperLibrary:
         )
 
     def summary(self, *, actor: Actor) -> LibrarySummaryResponse:
+        ingestion_count, attention_count = self._gateway.ingestion_counts(
+            user_id=actor.id
+        )
         return LibrarySummaryResponse(
             paper_count=self._gateway.paper_count(user_id=actor.id),
+            ingestion_count=ingestion_count,
+            attention_count=attention_count,
             output_count=self._outputs.count(user_id=actor.id),
         )
 

@@ -3,6 +3,9 @@
   --control-md: 44px;
   --control-sm: 36px;
   --focus-width: 2px;
+  --font-reading-serif:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Noto Serif",
+    "Source Han Serif SC", "Songti SC", serif;
   --icon-lg: 24px;
   --icon-md: 20px;
   --icon-sm: 16px;

@@ -3609,8 +3609,106 @@
         "title": "DocumentProcessingStatus",
         "type": "string"
       },
+      "DocumentReflowAssetResponse": {
+        "properties": {
+          "checksum": {
+            "title": "Checksum",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "raster",
+              "vector",
+              "composite",
+              "table_preview"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_number": {
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "source_rect": {
+            "$ref": "#/components/schemas/ReflowSourceRectPayload"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "content_type",
+          "width",
+          "height",
+          "page_number",
+          "source_rect",
+          "checksum"
+        ],
+        "title": "DocumentReflowAssetResponse",
+        "type": "object"
+      },
+      "DocumentReflowAssetUrlResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "url",
+          "expires_in"
+        ],
+        "title": "DocumentReflowAssetUrlResponse",
+        "type": "object"
+      },
       "DocumentReflowBlockResponse": {
         "properties": {
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
           "heading_level": {
             "anyOf": [
               {
@@ -3632,8 +3730,12 @@
           },
           "kind": {
             "enum": [
+              "eyebrow",
               "title",
               "authors",
+              "affiliations",
+              "abstract",
+              "keywords",
               "heading",
               "paragraph",
               "list",
@@ -3641,41 +3743,58 @@
               "equation",
               "table",
               "figure",
+              "caption",
               "code",
+              "footnote",
               "references"
             ],
             "title": "Kind",
             "type": "string"
           },
-          "page_number": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+          "presentation_status": {
+            "enum": [
+              "verbatim",
+              "repaired",
+              "degraded"
             ],
-            "title": "Page Number"
-          },
-          "source_markdown": {
-            "title": "Source Markdown",
+            "title": "Presentation Status",
             "type": "string"
+          },
+          "render_markdown": {
+            "title": "Render Markdown",
+            "type": "string"
+          },
+          "source_spans": {
+            "items": {
+              "$ref": "#/components/schemas/ReflowSourceSpanPayload"
+            },
+            "title": "Source Spans",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "index",
           "kind",
-          "source_markdown",
+          "render_markdown",
+          "group_id",
           "heading_level",
-          "page_number"
+          "source_spans",
+          "presentation_status",
+          "asset_id"
         ],
         "title": "DocumentReflowBlockResponse",
         "type": "object"
       },
       "DocumentReflowResponse": {
         "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentReflowAssetResponse"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
           "blocks": {
             "items": {
               "$ref": "#/components/schemas/DocumentReflowBlockResponse"
@@ -3704,7 +3823,7 @@
             "title": "Job Id",
             "type": "string"
           },
-          "profile_revision": {
+          "parser_revision": {
             "anyOf": [
               {
                 "type": "string"
@@ -3713,9 +3832,9 @@
                 "type": "null"
               }
             ],
-            "title": "Profile Revision"
+            "title": "Parser Revision"
           },
-          "prompt_revision": {
+          "pipeline_revision": {
             "anyOf": [
               {
                 "type": "string"
@@ -3724,7 +3843,7 @@
                 "type": "null"
               }
             ],
-            "title": "Prompt Revision"
+            "title": "Pipeline Revision"
           },
           "status": {
             "enum": [
@@ -3754,10 +3873,11 @@
           "status",
           "job_id",
           "error_code",
-          "prompt_revision",
-          "profile_revision",
+          "pipeline_revision",
+          "parser_revision",
           "warnings",
           "blocks",
+          "assets",
           "updated_at"
         ],
         "title": "DocumentReflowResponse",
@@ -5060,6 +5180,16 @@
       },
       "LibrarySummaryResponse": {
         "properties": {
+          "attention_count": {
+            "minimum": 0.0,
+            "title": "Attention Count",
+            "type": "integer"
+          },
+          "ingestion_count": {
+            "minimum": 0.0,
+            "title": "Ingestion Count",
+            "type": "integer"
+          },
           "output_count": {
             "minimum": 0.0,
             "title": "Output Count",
@@ -5073,6 +5203,8 @@
         },
         "required": [
           "paper_count",
+          "ingestion_count",
+          "attention_count",
           "output_count"
         ],
         "title": "LibrarySummaryResponse",
@@ -7245,6 +7377,68 @@
         "title": "ReferenceBundle",
         "type": "object"
       },
+      "ReflowSourceRectPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "width": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "ReflowSourceRectPayload",
+        "type": "object"
+      },
+      "ReflowSourceSpanPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "source_rect": {
+            "$ref": "#/components/schemas/ReflowSourceRectPayload"
+          },
+          "source_text": {
+            "minLength": 1,
+            "title": "Source Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_number",
+          "source_rect",
+          "source_text"
+        ],
+        "title": "ReflowSourceSpanPayload",
+        "type": "object"
+      },
       "RegisterRequest": {
         "properties": {
           "display_name": {
@@ -8221,6 +8415,18 @@
             ],
             "title": "Custom Instructions"
           },
+          "full_translation_display": {
+            "enum": [
+              "bilingual",
+              "translation_only"
+            ],
+            "title": "Full Translation Display",
+            "type": "string"
+          },
+          "show_translation_marker": {
+            "title": "Show Translation Marker",
+            "type": "boolean"
+          },
           "source_language": {
             "title": "Source Language",
             "type": "string"
@@ -8228,13 +8434,20 @@
           "target_language": {
             "title": "Target Language",
             "type": "string"
+          },
+          "translate_references": {
+            "title": "Translate References",
+            "type": "boolean"
           }
         },
         "required": [
           "source_language",
           "target_language",
           "custom_instructions",
-          "auto_translate_selection"
+          "auto_translate_selection",
+          "full_translation_display",
+          "translate_references",
+          "show_translation_marker"
         ],
         "title": "TranslationPreferencesResponse",
         "type": "object"
@@ -8258,6 +8471,18 @@
             "maxLength": 2000,
             "title": "Custom Instructions"
           },
+          "full_translation_display": {
+            "enum": [
+              "bilingual",
+              "translation_only"
+            ],
+            "title": "Full Translation Display",
+            "type": "string"
+          },
+          "show_translation_marker": {
+            "title": "Show Translation Marker",
+            "type": "boolean"
+          },
           "source_language": {
             "maxLength": 35,
             "title": "Source Language",
@@ -8267,12 +8492,19 @@
             "maxLength": 35,
             "title": "Target Language",
             "type": "string"
+          },
+          "translate_references": {
+            "title": "Translate References",
+            "type": "boolean"
           }
         },
         "required": [
           "source_language",
           "target_language",
-          "auto_translate_selection"
+          "auto_translate_selection",
+          "full_translation_display",
+          "translate_references",
+          "show_translation_marker"
         ],
         "title": "TranslationPreferencesUpdateRequest",
         "type": "object"
@@ -13781,6 +14013,63 @@
           }
         ],
         "summary": "Get Document Reflow",
+        "tags": [
+          "reflows"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reflow/assets/{asset_id}/url": {
+      "get": {
+        "operationId": "get_document_reflow_asset_url_api_v1_papers__document_id__reflow_assets__asset_id__url_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowAssetUrlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Document Reflow Asset Url",
         "tags": [
           "reflows"
         ]

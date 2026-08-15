@@ -154,7 +154,10 @@ SCHOLENS_AI_DEEPSEEK_BASE_URL=https://api.deepseek.com
 SCHOLENS_AI_STANDARD_MODEL=deepseek:deepseek-v4-flash
 SCHOLENS_AI_DEEP_MODEL=deepseek:deepseek-v4-pro
 SCHOLENS_AI_TRANSLATION_MODEL=deepseek:deepseek-v4-flash
-SCHOLENS_AI_REFLOW_MODEL=deepseek:deepseek-v4-flash
 ```
+
+AI 重排不使用通用对话模型。它直接消费 MinerU 的稳定
+`content_list.json` 结构化输出，并保留页码、坐标和图片资产；因此只需配置上文的
+MinerU 凭据。DeepSeek 仍用于对话、元数据提取和全文翻译。
 
 API Key 只保存在未提交的 `.env` 或生产密钥服务中，不要粘贴到聊天、Issue、日志或 Git 历史。模型 ID 可能调整，上线前应再次核对 [DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)。

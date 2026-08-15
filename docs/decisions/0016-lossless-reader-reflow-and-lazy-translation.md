@@ -1,6 +1,6 @@
 # 0016 — Lossless Reader reflow and lazy full translation
 
-Status: Accepted
+Status: Superseded by [ADR 0017](./0017-evidence-driven-reader-reflow.md)
 Date: 2026-08-14
 Owners: Scholens
 

@@ -36,7 +36,7 @@ from app.modules.papers.infrastructure.models import (
 from app.modules.papers.infrastructure.models import LibraryPaperTag
 from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.domain.enums import JobStatus
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 
@@ -224,12 +224,58 @@ class SqlAlchemyPaperLibraryGateway:
                 )
             )
 
+        active_standalone_reservations: list[UploadReservation] = []
+        if not tag_ids:
+            reservation_filters = [
+                DurableJob.requested_by_id == user_id,
+                DurableJob.project_id.is_(None),
+                DurableJob.status.in_(
+                    [
+                        JobStatus.PENDING.value,
+                        JobStatus.RUNNING.value,
+                        JobStatus.FAILED.value,
+                    ]
+                ),
+                UploadReservation.superseded_by_id.is_(None),
+                or_(
+                    DurableJob.document_id.is_(None),
+                    ~exists(
+                        select(LibraryPaper.id).where(
+                            LibraryPaper.user_id == user_id,
+                            LibraryPaper.document_id == DurableJob.document_id,
+                        )
+                    ),
+                ),
+            ]
+            if query is not None:
+                reservation_filters.append(
+                    func.lower(UploadReservation.display_name).like(
+                        f"%{query.lower()}%"
+                    )
+                )
+            active_standalone_reservations = list(
+                self._db.scalars(
+                    select(UploadReservation)
+                    .join(DurableJob, DurableJob.id == UploadReservation.id)
+                    .options(selectinload(UploadReservation.job))
+                    .where(*reservation_filters)
+                    .order_by(DurableJob.created_at.desc(), DurableJob.id.desc())
+                ).all()
+            )
+
         count_statement = (
             select(func.count(LibraryPaper.id))
             .join(Document, Document.id == LibraryPaper.document_id)
             .where(*filters)
         )
-        total_count = int(self._db.scalar(count_statement) or 0)
+        paper_count = int(self._db.scalar(count_statement) or 0)
+        total_count = paper_count + len(active_standalone_reservations)
+
+        visible_standalone_reservations = (
+            active_standalone_reservations
+            if position is None and direction is LibraryPageDirection.FORWARD
+            else []
+        )
 
         effective_ascending = (
             natural_ascending
@@ -256,6 +302,7 @@ class SqlAlchemyPaperLibraryGateway:
         id_order = (
             LibraryPaper.id.asc() if effective_ascending else LibraryPaper.id.desc()
         )
+        paper_limit = max(0, limit - len(visible_standalone_reservations))
         entries = list(
             self._db.scalars(
                 select(LibraryPaper)
@@ -266,11 +313,11 @@ class SqlAlchemyPaperLibraryGateway:
                 )
                 .where(*filters)
                 .order_by(order, id_order)
-                .limit(limit + 1)
+                .limit(paper_limit + 1)
             ).all()
         )
-        has_more = len(entries) > limit
-        entries = entries[:limit]
+        has_more = len(entries) > paper_limit
+        entries = entries[:paper_limit]
         if direction is LibraryPageDirection.BACKWARD:
             entries.reverse()
         reservations_by_document: dict[UUID, UploadReservation] = {}
@@ -300,7 +347,12 @@ class SqlAlchemyPaperLibraryGateway:
                 if document_id is not None:
                     reservations_by_document.setdefault(document_id, reservation)
 
-        responses: list[LibraryPaperListEntry] = []
+        responses: list[LibraryPaperListEntry] = [
+            LibraryPaperListIngestionEntry(
+                ingestion=library_ingestion_response(reservation)
+            )
+            for reservation in visible_standalone_reservations
+        ]
         for entry in entries:
             lifecycle_reservation = reservations_by_document.get(entry.document_id)
             if lifecycle_reservation is not None:
@@ -338,6 +390,28 @@ class SqlAlchemyPaperLibraryGateway:
             )
             or 0
         )
+
+    def ingestion_counts(self, *, user_id: int) -> tuple[int, int]:
+        rows = self._db.execute(
+            select(DurableJob.status, func.count(DurableJob.id))
+            .join(UploadReservation, UploadReservation.id == DurableJob.id)
+            .where(
+                DurableJob.requested_by_id == user_id,
+                DurableJob.project_id.is_(None),
+                DurableJob.status.in_(
+                    [
+                        JobStatus.PENDING.value,
+                        JobStatus.RUNNING.value,
+                        JobStatus.FAILED.value,
+                    ]
+                ),
+                UploadReservation.superseded_by_id.is_(None),
+            )
+            .group_by(DurableJob.status)
+        ).all()
+        by_status = {str(status): int(count) for status, count in rows}
+        attention_count = by_status.get(JobStatus.FAILED.value, 0)
+        return sum(by_status.values()), attention_count
 
     def get(self, *, user_id: int, document_id: UUID) -> LibraryPaperResponse:
         return library_paper_response(

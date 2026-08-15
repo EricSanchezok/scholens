@@ -95,6 +95,12 @@ as `bg-primary`, `bg-elevated`, `text-foreground`, and `border-line`.
 variables present while silently removing the component utility rules that
 consume them.
 
+`font.reading-serif` is a deliberately narrow content role for English source
+text in the AI reflow academic reading surface. It is not a product-interface
+font and must not replace Geist in navigation, controls, metadata, or translated
+text. Reader translations continue to use the product sans stack so source and
+translation remain distinguishable without introducing decorative chrome.
+
 Interactive descendants inherit the state of their shared control. In
 particular, an icon inside a disabled button resolves to the shared disabled
 icon role even when its enabled state is inverse. Composite controls may

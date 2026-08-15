@@ -26,6 +26,10 @@ import {
 export type ReaderFitMode = "width" | "page" | "custom";
 export type ReaderSelection =
   components["schemas"]["PaperSelectionTurnContext"];
+export type ReaderPdfSourceTarget = {
+  page_number: number;
+  source_rect: NormalizedSelectionRect;
+};
 
 type SelectionRect = {
   height: number;
@@ -202,6 +206,31 @@ export function selectReaderViewportPage(
   return best?.pageNumber;
 }
 
+export function readerPdfSourceScrollTop({
+  container,
+  page,
+  sourceRect,
+}: {
+  container: {
+    clientHeight: number;
+    scrollHeight: number;
+    scrollTop: number;
+    top: number;
+  };
+  page: { height: number; top: number };
+  sourceRect: NormalizedSelectionRect;
+}) {
+  const sourceCenter =
+    page.top -
+    container.top +
+    container.scrollTop +
+    (sourceRect.y + sourceRect.height / 2) * page.height;
+  return Math.min(
+    Math.max(sourceCenter - container.clientHeight / 2, 0),
+    Math.max(container.scrollHeight - container.clientHeight, 0),
+  );
+}
+
 export function groupReaderAnnotationsByAnchor(
   annotations: ReaderAnnotationSummary[],
 ): ReaderAnnotationSummary[][] {
@@ -263,6 +292,7 @@ function PdfPageSurface({
   onActiveTextSelectionChange,
   projectContext,
   translationPreview,
+  sourceTarget,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -295,6 +325,7 @@ function PdfPageSurface({
   onTranslateSelection?: (selection: ReaderSelection) => void;
   projectContext?: boolean;
   translationPreview?: ReaderSelectionTranslationPreview;
+  sourceTarget?: ReaderPdfSourceTarget;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -626,6 +657,14 @@ function PdfPageSurface({
           <ReaderSelectionOverlay rects={activeTextSelection.anchor.rects} />
         </div>
       ) : null}
+      {sourceTarget?.page_number === pageNumber ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-20"
+          data-reflow-source-overlay
+        >
+          <ReaderSelectionOverlay rects={[sourceTarget.source_rect]} />
+        </div>
+      ) : null}
       {activeTextSelection &&
         activeTextSelection.page_number === pageNumber &&
         selectionLabels && (
@@ -679,6 +718,7 @@ export function PdfPage({
   onActiveTextSelectionChange,
   projectContext,
   translationPreview,
+  sourceTarget,
 }: {
   adapter: PdfDocumentAdapter;
   annotationLinkLabel: string;
@@ -711,6 +751,7 @@ export function PdfPage({
   onTranslateSelection?: (selection: ReaderSelection) => void;
   projectContext?: boolean;
   translationPreview?: ReaderSelectionTranslationPreview;
+  sourceTarget?: ReaderPdfSourceTarget;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
@@ -812,6 +853,33 @@ export function PdfPage({
   }, [containerSize.height, containerSize.width, pageNumber]);
 
   React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !sourceTarget) return;
+    const frame = window.requestAnimationFrame(() => {
+      const page = container.querySelector<HTMLElement>(
+        `[data-pdf-page-number="${sourceTarget.page_number}"]`,
+      );
+      if (!page) return;
+      const containerRect = container.getBoundingClientRect();
+      const pageRect = page.getBoundingClientRect();
+      container.scrollTo({
+        behavior: "auto",
+        top: readerPdfSourceScrollTop({
+          container: {
+            clientHeight: container.clientHeight,
+            scrollHeight: container.scrollHeight,
+            scrollTop: container.scrollTop,
+            top: containerRect.top,
+          },
+          page: { height: pageRect.height, top: pageRect.top },
+          sourceRect: sourceTarget.source_rect,
+        }),
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [containerSize.height, containerSize.width, sourceTarget]);
+
+  React.useEffect(() => {
     if (!selectedAnnotationId) return;
     const frame = window.requestAnimationFrame(() => {
       const target = [
@@ -883,6 +951,7 @@ export function PdfPage({
               previewAnnotationId={previewAnnotationId}
               selectionLabels={selectionLabels}
               translationPreview={translationPreview}
+              sourceTarget={sourceTarget}
               zoom={zoom}
             />
           ),

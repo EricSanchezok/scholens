@@ -60,5 +60,19 @@
       "$value": { "value": 11, "unit": "px" }
     }
   },
+  "font": {
+    "reading-serif": {
+      "$type": "fontFamily",
+      "$value": [
+        "Iowan Old Style",
+        "Palatino Linotype",
+        "Book Antiqua",
+        "Noto Serif",
+        "Source Han Serif SC",
+        "Songti SC",
+        "serif"
+      ]
+    }
+  },
   "opacity": { "disabled": { "$type": "number", "$value": 0.38 } }
 }

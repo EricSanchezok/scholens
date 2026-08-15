@@ -15,7 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -50,8 +50,8 @@ class DocumentReflow(Base):
         Integer, nullable=False, default=1, server_default="1"
     )
     source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    prompt_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    profile_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pipeline_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parser_revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
     warnings: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, default=list, server_default="{}"
     )
@@ -74,6 +74,40 @@ class DocumentReflow(Base):
         cascade="all, delete-orphan",
         order_by="DocumentReflowBlock.block_index",
     )
+    assets: Mapped[list["DocumentReflowAsset"]] = relationship(
+        back_populates="reflow",
+        cascade="all, delete-orphan",
+        order_by="DocumentReflowAsset.page_number, DocumentReflowAsset.id",
+    )
+
+
+class DocumentReflowAsset(Base):
+    __tablename__ = "document_reflow_assets"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('raster', 'vector', 'composite', 'table_preview')",
+            name="ck_reflow_assets_kind",
+        ),
+        CheckConstraint("width > 0 AND height > 0", name="ck_reflow_assets_size"),
+        CheckConstraint("page_number > 0", name="ck_reflow_assets_page"),
+        Index("ix_document_reflow_assets_document", "document_id", "page_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("document_reflows.document_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    object_key: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_rect: Mapped[dict[str, float]] = mapped_column(JSONB, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    reflow: Mapped[DocumentReflow] = relationship(back_populates="assets")
 
 
 class DocumentReflowBlock(Base):
@@ -86,9 +120,14 @@ class DocumentReflowBlock(Base):
         ),
         CheckConstraint("block_index >= 0", name="ck_reflow_blocks_index"),
         CheckConstraint(
-            "kind IN ('title', 'authors', 'heading', 'paragraph', 'list', "
-            "'quote', 'equation', 'table', 'figure', 'code', 'references')",
+            "kind IN ('eyebrow', 'title', 'authors', 'affiliations', 'abstract', "
+            "'keywords', 'heading', 'paragraph', 'list', 'quote', 'equation', "
+            "'table', 'figure', 'caption', 'code', 'footnote', 'references')",
             name="ck_reflow_blocks_kind",
+        ),
+        CheckConstraint(
+            "presentation_status IN ('verbatim', 'repaired', 'degraded')",
+            name="ck_reflow_blocks_presentation_status",
         ),
         CheckConstraint(
             "heading_level IS NULL OR heading_level BETWEEN 1 AND 6",
@@ -105,7 +144,14 @@ class DocumentReflowBlock(Base):
     )
     block_index: Mapped[int] = mapped_column(Integer, nullable=False)
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
-    source_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    render_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    group_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     heading_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_spans: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    presentation_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("document_reflow_assets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     reflow: Mapped[DocumentReflow] = relationship(back_populates="blocks")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -18,8 +17,10 @@ from app.modules.operation_journal.domain import OperationChange, ResourceRef
 from app.modules.papers.infrastructure.models import Document
 from app.modules.reflows.infrastructure.models import (
     DocumentReflow,
+    DocumentReflowAsset,
     DocumentReflowBlock,
 )
+from app.bootstrap.adapters.storage_cleanup import schedule_storage_deletion
 from app.modules.reflows.application.reflows import (
     DOCUMENT_REFLOW_COMPLETED,
     DOCUMENT_REFLOW_FAILED,
@@ -28,10 +29,6 @@ from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import JobOperation, JobStatus
 from sqlalchemy.orm import Session
-
-
-def _source_hash(markdown: str) -> str:
-    return hashlib.sha256(" ".join(markdown.split()).encode()).hexdigest()
 
 
 def _require_scope(
@@ -113,18 +110,20 @@ def complete_document_reflow(
     result = callback.result
     if result is None:
         raise RuntimeError("validated_reflow_callback_without_result")
-    expected_hash = _source_hash(document.raw_content or "")
-    block_content_hash = _source_hash(
-        "\n\n".join(block.source_markdown for block in result.blocks)
-    )
     indexes = [block.index for block in result.blocks]
     block_ids = [block.id for block in result.blocks]
+    asset_ids = [asset.id for asset in result.assets]
+    asset_id_set = set(asset_ids)
     if (
         result.document_id != document.id
-        or result.source_hash != expected_hash
-        or block_content_hash != expected_hash
+        or result.source_hash != document.sha256
         or indexes != list(range(len(result.blocks)))
         or len(set(block_ids)) != len(block_ids)
+        or len(asset_id_set) != len(asset_ids)
+        or any(
+            block.asset_id is not None and block.asset_id not in asset_id_set
+            for block in result.blocks
+        )
     ):
         raise AppError(
             code="document_reflow_result_invalid",
@@ -132,23 +131,52 @@ def complete_document_reflow(
             kind=FailureKind.UNPROCESSABLE,
         )
 
+    old_asset_keys = {asset.object_key for asset in artifact.assets}
+    new_asset_keys = {asset.object_key for asset in result.assets}
     artifact.blocks.clear()
+    artifact.assets.clear()
+    artifact.assets.extend(
+        DocumentReflowAsset(
+            id=asset.id,
+            document_id=document.id,
+            object_key=asset.object_key,
+            kind=asset.kind,
+            content_type=asset.content_type,
+            width=asset.width,
+            height=asset.height,
+            page_number=asset.page_number,
+            source_rect=asset.source_rect.model_dump(mode="json"),
+            checksum=asset.checksum,
+        )
+        for asset in result.assets
+    )
+    db.flush()
     artifact.blocks.extend(
         DocumentReflowBlock(
             id=block.id,
             document_id=document.id,
             block_index=block.index,
             kind=block.kind,
-            source_markdown=block.source_markdown,
+            render_markdown=block.render_markdown,
+            group_id=block.group_id,
             heading_level=block.heading_level,
-            page_number=block.page_number,
+            source_spans=[span.model_dump(mode="json") for span in block.source_spans],
+            presentation_status=block.presentation_status,
+            asset_id=block.asset_id,
         )
         for block in result.blocks
     )
+    schedule_storage_deletion(
+        db,
+        object_keys=old_asset_keys - new_asset_keys,
+        idempotency_key=f"document-reflow:{document.id}:{artifact.attempt_count}",
+        origin_operation_id=job.origin_operation_id,
+        correlation_id=job.correlation_id,
+    )
     artifact.status = "completed"
     artifact.source_hash = result.source_hash
-    artifact.prompt_revision = result.prompt_revision
-    artifact.profile_revision = result.profile_revision
+    artifact.pipeline_revision = result.pipeline_revision
+    artifact.parser_revision = result.parser_revision
     artifact.warnings = result.warnings
     artifact.error_code = None
     artifact.completed_at = datetime.now(UTC)

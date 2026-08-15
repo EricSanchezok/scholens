@@ -5,6 +5,7 @@ import {
   groupReaderAnnotationsByAnchor,
   normalizeReaderSelectionRects,
   readerAnnotationPaintMode,
+  readerPdfSourceScrollTop,
   selectReaderViewportPage,
 } from "./pdf-page";
 import type { ReaderAnnotationSummary } from "../reader-types";
@@ -86,6 +87,38 @@ describe("selectReaderViewportPage", () => {
         { pageNumber: 2, top: 400, bottom: 900 },
       ]),
     ).toBe(2);
+  });
+});
+
+describe("readerPdfSourceScrollTop", () => {
+  it("centers a normalized evidence rectangle inside the PDF viewport", () => {
+    expect(
+      readerPdfSourceScrollTop({
+        container: {
+          clientHeight: 800,
+          scrollHeight: 3000,
+          scrollTop: 500,
+          top: 100,
+        },
+        page: { height: 1000, top: 300 },
+        sourceRect: { height: 0.1, width: 0.7, x: 0.15, y: 0.4 },
+      }),
+    ).toBe(750);
+  });
+
+  it("clamps evidence navigation at the document boundaries", () => {
+    expect(
+      readerPdfSourceScrollTop({
+        container: {
+          clientHeight: 800,
+          scrollHeight: 1200,
+          scrollTop: 0,
+          top: 100,
+        },
+        page: { height: 1000, top: 100 },
+        sourceRect: { height: 0.02, width: 0.7, x: 0.15, y: 0 },
+      }),
+    ).toBe(0);
   });
 });
 

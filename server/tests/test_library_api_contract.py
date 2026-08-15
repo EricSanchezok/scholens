@@ -147,13 +147,19 @@ def test_library_list_projects_one_lifecycle_row_for_an_ingesting_paper() -> Non
         source_kind="upload",
     )
     reservation.job = job
+    standalone_results = MagicMock()
+    standalone_results.all.return_value = []
     paper_results = MagicMock()
     paper_results.all.return_value = [entry]
     reservation_results = MagicMock()
     reservation_results.all.return_value = [reservation]
     db = MagicMock(spec=Session)
     db.scalar.return_value = 1
-    db.scalars.side_effect = [paper_results, reservation_results]
+    db.scalars.side_effect = [
+        standalone_results,
+        paper_results,
+        reservation_results,
+    ]
 
     page = SqlAlchemyPaperLibraryGateway(
         db,
@@ -179,13 +185,19 @@ def test_library_list_projects_one_lifecycle_row_for_an_ingesting_paper() -> Non
 def test_library_list_does_not_replace_a_personal_paper_with_project_work() -> None:
     entry = _entry()
     entry.document.preview_s3_key = None
+    standalone_results = MagicMock()
+    standalone_results.all.return_value = []
     paper_results = MagicMock()
     paper_results.all.return_value = [entry]
     reservation_results = MagicMock()
     reservation_results.all.return_value = []
     db = MagicMock(spec=Session)
     db.scalar.return_value = 1
-    db.scalars.side_effect = [paper_results, reservation_results]
+    db.scalars.side_effect = [
+        standalone_results,
+        paper_results,
+        reservation_results,
+    ]
 
     page = SqlAlchemyPaperLibraryGateway(
         db,
@@ -203,8 +215,91 @@ def test_library_list_does_not_replace_a_personal_paper_with_project_work() -> N
 
     assert len(page.items) == 1
     assert page.items[0].entry_type == "paper"
-    reservation_statement = str(db.scalars.call_args_list[1].args[0])
+    reservation_statement = str(db.scalars.call_args_list[2].args[0])
     assert "jobs.project_id IS NULL" in reservation_statement
+
+
+def test_library_list_includes_an_unattached_upload_reservation() -> None:
+    entry = _entry()
+    entry.document.preview_s3_key = None
+    job = DurableJob(
+        id=uuid4(),
+        operation=JobOperation.PDF_PROCESS.value,
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        requested_by_id=entry.user_id,
+        project_id=None,
+        document_id=None,
+        idempotency_key=f"paper-test:{uuid4()}",
+        status=JobStatus.RUNNING.value,
+        progress_code="uploading",
+        payload={},
+        created_at=entry.created_at,
+    )
+    reservation = UploadReservation(
+        id=job.id,
+        quota_owner_id=entry.user_id,
+        content_sha256="b" * 64,
+        display_name="still-processing.pdf",
+        source_kind="upload",
+    )
+    reservation.job = job
+    standalone_results = MagicMock()
+    standalone_results.all.return_value = [reservation]
+    paper_results = MagicMock()
+    paper_results.all.return_value = [entry]
+    overlay_results = MagicMock()
+    overlay_results.all.return_value = []
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    db.scalars.side_effect = [
+        standalone_results,
+        paper_results,
+        overlay_results,
+    ]
+
+    page = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+        personal_annotations_removed=MagicMock(),
+    ).list(
+        user_id=entry.user_id,
+        query=None,
+        tag_ids=(),
+        sort=LibraryPaperSort.ADDED_DESC,
+        limit=20,
+        direction=LibraryPageDirection.FORWARD,
+        position=None,
+    )
+
+    assert page.total_count == 2
+    assert [item.entry_type for item in page.items] == ["ingestion", "paper"]
+    assert page.items[0].ingestion.id == reservation.id
+    assert page.items[0].ingestion.display_name == "still-processing.pdf"
+    assert len(page.positions) == 1
+
+
+def test_library_summary_counts_active_and_failed_ingestions() -> None:
+    rows = MagicMock()
+    rows.all.return_value = [
+        (JobStatus.RUNNING.value, 2),
+        (JobStatus.PENDING.value, 1),
+        (JobStatus.FAILED.value, 3),
+    ]
+    db = MagicMock(spec=Session)
+    db.execute.return_value = rows
+
+    ingestion_count, attention_count = SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+        personal_annotations_removed=MagicMock(),
+    ).ingestion_counts(user_id=1)
+
+    assert ingestion_count == 6
+    assert attention_count == 3
+    statement = str(db.execute.call_args.args[0])
+    assert "upload_reservations.superseded_by_id IS NULL" in statement
+    assert "jobs.project_id IS NULL" in statement
 
 
 def test_library_removal_deletes_only_the_actor_personal_annotation_threads(

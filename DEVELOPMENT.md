@@ -8,10 +8,12 @@ independently for isolated component development. More detail:
 
 ## Prerequisites
 
-Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 22 LTS, pnpm + Yarn,
-PostgreSQL, and Docker (RabbitMQ + Redis for jobs). Avoid odd-numbered Node
-releases; the frontend dependency graph follows the active/LTS Node support
-window enforced in `client/package.json`.
+Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 22 LTS, Corepack,
+PostgreSQL, and Docker (RabbitMQ + Redis for jobs). The deployment gate also
+requires `shellcheck` and `cfn-lint`; install the latter with
+`uv tool install cfn-lint`. Avoid odd-numbered Node releases; the frontend
+dependency graph follows the active/LTS Node support window enforced in
+`client/package.json`.
 
 ## Local development contract
 
@@ -81,6 +83,11 @@ client build context is the safer operational boundary.
 `CELERY_API_URL=http://127.0.0.1:7302`; jobs needs
 `WEBHOOK_BASE_URL=http://127.0.0.1:7301`.
 
+AI configuration has one canonical namespace: `SCHOLENS_AI_*`. Remove obsolete
+unprefixed `DEEPSEEK_*` variables after moving their current credential and
+endpoint values; the runtime intentionally provides no alias or fallback for
+the superseded names.
+
 ### Required for a minimal local stack
 
 | Variable                                                                                          | Where                                                  |
@@ -137,12 +144,15 @@ Unless `AUTH_DATABASE_URL` is explicitly set, both sanchezcloud-identity and Sch
 ```bash
 git clone <your-scholens-fork-url> scholens && cd scholens
 
-# Install dependencies (first time or after lockfile changes)
-cd server && uv sync
-cd ../jobs && uv sync
-cd ../packages && uv sync --frozen --all-packages
-cd ../client && corepack yarn install
-cd ../web && corepack enable && pnpm install --frozen-lockfile
+# Install the exact locked dependencies (first time or after lockfile changes)
+cd server && uv sync --frozen --group dev
+cd ../jobs && uv sync --frozen --group dev
+cd ../packages && uv sync --frozen --all-packages --group dev
+cd ../client && corepack yarn install --frozen-lockfile
+cd ../web && corepack pnpm install --frozen-lockfile
+
+# Install the deployment-contract linter outside the project environments.
+uv tool install cfn-lint
 
 # Create private runtime files by copying only each service's section from
 # .env.example; do not copy the complete catalog into browser runtimes.
@@ -162,6 +172,27 @@ Create roles and schemas with a local database administrator following the
 runtime role and must not own schemas. Alembic intentionally refuses to migrate
 a `scholens` schema owned by another role. Never use the server's daily runtime
 command as a migration shortcut.
+
+### Repair a prepared checkout
+
+If a checkout moves, a Python virtual environment still references an old
+absolute path, or a dependency directory becomes incomplete, stop the local
+services and rerun the locked sync commands above in the affected directory.
+Never copy or borrow `.venv`, `node_modules`, or generated build output from
+another checkout. Confirm the active frontend runtime with `node --version`;
+it must report Node 22 before installing dependencies or running gates.
+
+If a Python launcher still has a shebang for the old checkout after a normal
+sync, rebuild that service's installed environment from the same lockfile with
+`uv sync --frozen --group dev --reinstall`. Use the equivalent
+`--all-packages --group dev --reinstall` form for `packages/`. Verify that no
+script under the affected `.venv/bin` contains the previous checkout path.
+
+This is an explicit maintenance operation, not part of daily startup. The
+`--frozen`/`--frozen-lockfile` flags repair installed environments without
+changing committed dependency resolution. If a lockfile itself must change,
+make that a reviewed dependency update and commit the manifest and lockfile
+together.
 
 ## Start locally (daily)
 

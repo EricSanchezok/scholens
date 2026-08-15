@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 
 class ParserBackend(StrEnum):
@@ -26,6 +27,14 @@ class ParsedDocument:
     parser_version: str
     warning_code: str | None = None
     archive_bytes: bytes | None = None
+
+
+@dataclass(frozen=True)
+class MinerUArchive:
+    """Validated MinerU structure plus safely addressable archive files."""
+
+    content_list: tuple[dict[str, Any], ...]
+    files: dict[str, bytes]
 
 
 @dataclass(frozen=True)

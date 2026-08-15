@@ -1,4 +1,6 @@
 from .contracts import (
+    DocumentReflowAssetResponse,
+    DocumentReflowAssetUrlResponse,
     DocumentReflowBlockResponse,
     DocumentReflowResponse,
     DocumentReflowStatus,
@@ -6,6 +8,8 @@ from .contracts import (
 from .reflows import DocumentReflows
 
 __all__ = [
+    "DocumentReflowAssetResponse",
+    "DocumentReflowAssetUrlResponse",
     "DocumentReflowBlockResponse",
     "DocumentReflowResponse",
     "DocumentReflowStatus",

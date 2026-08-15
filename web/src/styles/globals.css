@@ -2,6 +2,7 @@
 @import "../design-system/generated/colors-light.css";
 @import "../design-system/generated/colors-dark.css";
 @import "tailwindcss";
+@import "katex/dist/katex.min.css";
 
 @layer base {
   * {
@@ -165,4 +166,8 @@ body {
 
 .pdf-selection-overlay {
   color: var(--color-document-selection-bg);
+}
+
+[data-reflow-source-overlay] .pdf-selection-overlay {
+  color: var(--color-document-search-current);
 }

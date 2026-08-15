@@ -304,6 +304,27 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
       case "pdf_encrypted":
         description = t("errors.pdf_encrypted");
         break;
+      case "pdf_content_insufficient":
+        description = t("errors.pdf_content_insufficient");
+        break;
+      case "pdf_processing_timeout":
+        description = t("errors.pdf_processing_timeout");
+        break;
+      case "paper_ingestion_downloading_failed":
+        description = t("errors.paper_ingestion_downloading_failed");
+        break;
+      case "paper_ingestion_parsing_failed":
+        description = t("errors.paper_ingestion_parsing_failed");
+        break;
+      case "paper_ingestion_metadata_failed":
+        description = t("errors.paper_ingestion_metadata_failed");
+        break;
+      case "paper_ingestion_indexing_failed":
+        description = t("errors.paper_ingestion_indexing_failed");
+        break;
+      case "paper_ingestion_finalizing_failed":
+        description = t("errors.paper_ingestion_finalizing_failed");
+        break;
       case "service_unavailable":
         description = t("errors.service_unavailable");
         break;
@@ -348,9 +369,16 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
         )}
         {!active && <Icon glyph={WarningIcon} size={16} tone="danger" />}
         <span className={ingestion.state === "failed" ? "text-danger" : ""}>
-          {description}
+          {ingestion.state === "failed"
+            ? t("failedAt", { stage: t(`stage.${ingestion.stage}`) })
+            : description}
         </span>
       </span>
+      {ingestion.state === "failed" && (
+        <span className="text-secondary mt-1 block text-xs leading-4">
+          {description}
+        </span>
+      )}
     </span>
   );
 }
@@ -504,9 +532,11 @@ function MobileTagFilter({
 }
 
 export function PapersView({
+  attentionCount,
   data,
   error,
   ingestions,
+  ingestionCount,
   loading,
   onCreateTag,
   onDeleteTag,
@@ -524,12 +554,15 @@ export function PapersView({
   onTagFilterChange,
   search,
   sort,
+  paperCount,
   tagIds,
   tags,
 }: {
+  attentionCount: number;
   data?: PaperList;
   error?: unknown;
   ingestions: PaperIngestionRow[];
+  ingestionCount: number;
   loading: boolean;
   onCreateTag: (name: string) => Promise<LibraryTag>;
   onDeleteTag: (tagId: string) => Promise<void>;
@@ -547,6 +580,7 @@ export function PapersView({
   onTagFilterChange: (tagIds: string[]) => void;
   search: React.ReactNode;
   sort: PaperSort;
+  paperCount: number;
   tagIds: string[];
   tags: TagItem[];
 }) {
@@ -720,8 +754,16 @@ export function PapersView({
               </SelectContent>
             </Select>
             {data && (
-              <span className="text-secondary ml-auto shrink-0 text-sm md:ml-2">
-                {t("count", { count: data.total_count })}
+              <span className="text-secondary ml-auto shrink-0 text-right text-sm md:ml-2">
+                {t("count", { count: paperCount })}
+                {ingestionCount > 0 && (
+                  <span className="block text-xs sm:inline">
+                    {t("ingestionCount", {
+                      attentionCount,
+                      count: ingestionCount,
+                    })}
+                  </span>
+                )}
               </span>
             )}
           </div>

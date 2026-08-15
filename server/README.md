@@ -111,9 +111,13 @@ failed artifact may be retried with
 `POST /api/v1/papers/{document_id}/reflow/retries`. PDF completion schedules a
 separate DurableJob and outbox dispatch, but reflow scheduling or execution
 failure never changes the successful PDF processing state. Callback completion
-persists blocks only after the ordered content fingerprint matches the
-canonical parser Markdown. Reflow is a derived reading layout, not another PDF
-parser or metadata authority.
+persists blocks and derived assets only after source fingerprint, ordered source
+spans, asset references, and page coordinates validate.
+`GET /api/v1/papers/{document_id}/reflow/assets/{asset_id}/url` authorizes the
+paper again before returning a short-lived derived-asset URL; object keys remain
+private. Reflow is an evidence-bound reading reconstruction over MinerU's
+stable structured output, not another metadata authority or a whole-document
+model rewrite.
 
 Conversation turns are created at
 `POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn
@@ -164,7 +168,9 @@ loses that response, it reconciles or repeats the same parameters with the same
 returns completed papers and active/failed ingestions as one discriminated
 collection, with exactly one lifecycle row per personal membership: an active
 or failed ingestion replaces that paper's completed projection until it reaches
-a terminal success state. PDF content SHA-256 is the server-side duplicate
+a terminal success state. The Library summary reports successful papers
+separately from current and failed ingestions, and unattached reservations stay
+visible at the beginning of the first forward page. PDF content SHA-256 is the server-side duplicate
 authority, including concurrent requests. `DELETE
 /api/v1/paper-ingestions/{job_id}` cancels an owned ingestion, and late worker
 callbacks cannot restore it.

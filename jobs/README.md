@@ -59,17 +59,21 @@ cleared after Server acknowledges the result.
 
 After Server accepts a successful PDF callback, it dispatches a separate
 `generate_document_reflow` task to the `reflow` queue. The worker downloads the
-already-persisted canonical Markdown; it does not parse the PDF again and does
-not alter the parser order above. Source units preserve fenced code and display
-math, and requests are bounded to 20,000 source characters.
+original PDF and submits it to MinerU. Reflow consumes the stable
+`content_list.json` from the returned archive instead of flattening Markdown and
+asking a language model to rediscover structure. MinerU's reading order, block
+types, page indices, normalized rectangles, tables, equations, lists, and image
+paths become a continuous academic Markdown AST.
 
-The provider-neutral `reflow` profile classifies layout roles only. Every AI
-response must contain each supplied source index exactly once and in ascending
-order. A malformed response or provider failure falls back for that chunk to a
-deterministic local classification and records `ai_chunk_fallback:<index>`.
-Stable block IDs, exact source Markdown, page projections, source fingerprint,
-prompt revision, profile revision, and warnings return through the signed
-generic job callback. Server is the persistence authority.
+Deterministic normalization removes unsafe HTML residue, converts supported
+superscript/subscript markup, joins parser-only line wrapping, and filters page
+chrome. Every rendered block retains one or more source spans with the original
+item index, page, rectangle, and text. Missing visual assets or unsupported
+items degrade only that block to a PDF fallback; there is no reflow-specific
+LLM profile and no whole-document rewrite. Stable block and asset IDs, safe
+render Markdown, source spans, presentation status, source fingerprint, parser
+revision, and warnings return through the signed callback. Server remains the
+persistence authority.
 
 ## Code layout
 
@@ -82,7 +86,7 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
-├── reflow.py        # Lossless source units, AI layout validation, fallback
+├── reflow.py        # MinerU content-list normalization and continuous AST
 ├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py
 └── webhook_signing.py
@@ -114,8 +118,14 @@ configuration is absent.
 Install dependencies when setting up the service:
 
 ```bash
-uv sync
+uv sync --frozen --group dev
 ```
+
+Rerun this command after moving the checkout or when `jobs/.venv` contains a
+stale interpreter path. Do not point Jobs at or copy a virtual environment
+from another worktree; each checkout is rebuilt from `jobs/uv.lock`. If an
+installed launcher still references the old absolute path, force a lockfile-
+identical rebuild with `uv sync --frozen --group dev --reinstall`.
 
 Run the complete Jobs quality gate from the repository root. The runner has no
 dependency-installation, migration, or persistent service-startup side effects:

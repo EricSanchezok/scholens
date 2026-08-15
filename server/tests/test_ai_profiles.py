@@ -15,14 +15,12 @@ def test_default_profiles_are_explicit_and_translation_never_thinks() -> None:
     standard = resolve_profile(AIProfileName.STANDARD, environment={})
     deep = resolve_profile(AIProfileName.DEEP, environment={})
     translation = resolve_profile(AIProfileName.TRANSLATION, environment={})
-    reflow = resolve_profile(AIProfileName.REFLOW, environment={})
 
     assert standard.model == "deepseek:deepseek-v4-flash"
     assert deep.model == "deepseek:deepseek-v4-pro"
     assert deep.thinking.value == "enabled"
     assert deep.thinking_effort.value == "max"
     assert translation.thinking.value == "disabled"
-    assert reflow.thinking.value == "disabled"
     assert profile_model_settings(translation)["extra_body"] == {
         "thinking": {"type": "disabled"}
     }

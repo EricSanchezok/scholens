@@ -52,7 +52,9 @@ Public resources use canonical identifiers:
 The reviewed public surface is stored in
 `server/openapi/v1-contract.json`. A contract test fails whenever a route is
 added, removed, renamed, or changes method without an intentional snapshot
-update.
+update. `python -m app.scripts.export_public_openapi` regenerates both the full
+public schema and this reduced route/method review surface; reviewers must still
+confirm that every resulting public route is intentional.
 
 ## Module rules
 
@@ -94,10 +96,13 @@ failure -> command: fail/release
 
 Document reflow follows the durable form of this rule. PDF or Zotero completion
 commits the canonical Document update, reflow artifact, DurableJob, and dispatch
-outbox together, then a dedicated worker performs AI classification outside the
-transaction. The signed callback resumes a short SYSTEM operation and validates
-lossless source identity before replacing the artifact's ordered blocks. Reflow
-failure is independent from PDF ingestion success.
+outbox together, then a dedicated worker submits the original PDF to MinerU and
+maps its stable ordered `content_list.json` to continuous semantic Markdown
+blocks outside the transaction. The signed callback resumes a short SYSTEM
+operation, validates source fingerprint, block order, source spans, and asset
+references, then atomically replaces the artifact's ordered blocks and assets.
+Reflow failure, including an isolated missing-asset degradation, remains
+independent from PDF ingestion success.
 
 Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and
 Zotero import/sync follow this shape. Agent and MCP paper tools obtain a fresh
@@ -205,7 +210,9 @@ of truth.
 
 Reader selection translation is a paper-authorized streaming workflow.
 `GET|PUT /api/v1/me/translation-preferences` owns source language, target
-language, custom instructions, and automatic-selection behavior;
+language, custom instructions, automatic-selection behavior, bilingual or
+translation-only full-translation presentation, reference opt-in, and the
+translation-marker preference;
 `POST /api/v1/papers/{document_id}/selection-translations` streams standard
 `start`, `delta`, `complete`, and `error` events. The workflow checks paper
 access before looking up a durable result, so shared result reuse never becomes
@@ -218,6 +225,11 @@ completed result; Redis owns only rate limits, concurrency leases, and a short
 single-flight lease. Cache hits bypass provider quota and AI capacity checks.
 Only the request holding the single-flight lease may call the provider and
 settle usage.
+
+For reflow blocks, the normalized source is the repaired `render_markdown`
+rather than the parser's raw Markdown. This keeps the durable cache aligned with
+the evidence-validated text actually shown to the reader while the browser
+continues to send only the authorized block identity.
 
 Follow-up suggestions are a non-critical turn sidecar started before answer
 streaming. The model call runs outside an application transaction; the final
@@ -296,9 +308,10 @@ The Library exposes two deliberately different collections:
   a target Document independently of their personal or Project audience. The
   browser does not join permissions itself.
 
-`GET /api/v1/library/summary` returns visible Paper and Output counts. Both list
-endpoints use signed Previous/Next keyset cursors bound to user, collection,
-filters, sort, and limit. Paper sources enter through the discriminated
+`GET /api/v1/library/summary` returns successful Paper and Output counts plus
+the number of current ingestion lifecycles and failed ingestions that require
+attention. Both list endpoints use signed Previous/Next keyset cursors bound to
+user, collection, filters, sort, and limit. Paper sources enter through the discriminated
 `POST /api/v1/paper-ingestions/sources` contract (`doi`, `arxiv`, or direct PDF
 `url`); URL resolution and PDF validation remain server-owned. Failed jobs are
 retried by creating a new durable job from the persisted source, never by
@@ -310,8 +323,12 @@ outbox record are committed and the ingestion is already visible through the
 Papers list union. The response is the canonical ingestion projection rather
 than an upload-only acknowledgement. That union emits exactly one row per
 personal membership: an active or failed ingestion replaces the completed
-paper projection instead of being prepended as a second row. Browser content
-hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
+paper projection instead of being prepended as a second row. Unattached active
+or failed reservations are pinned before completed rows on the first forward
+page so every accepted file remains observable before it owns a Document.
+Failed rows expose the preserved filename, bounded lifecycle stage, safe error
+code, Retry, and remove actions; provider diagnostics stay server-side. Browser
+content hashing is an early UX filter only; the Server's SHA-256 checks and uniqueness
 constraints remain authoritative for repeated and concurrent uploads. `DELETE
 /api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
 replay and ignore late worker callbacks. The worker reports bounded lifecycle

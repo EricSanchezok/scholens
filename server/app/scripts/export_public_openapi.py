@@ -22,6 +22,7 @@ from app.transport.http.errors import ApiErrorResponse
 
 PUBLIC_PREFIX = "/api/v1"
 OUTPUT = Path(__file__).resolve().parents[2] / "openapi" / "public-v1.json"
+SURFACE_OUTPUT = Path(__file__).resolve().parents[2] / "openapi" / "v1-contract.json"
 
 _AUTH_FAILURES: dict[str, dict[str, tuple[int, ...]]] = {
     "/api/v1/auth/login": {"post": (401, 422, 429, 503)},
@@ -90,9 +91,29 @@ def public_openapi_schema() -> dict[str, Any]:
 
 
 def main() -> None:
+    schema = public_openapi_schema()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
-        json.dumps(public_openapi_schema(), indent=2, sort_keys=True) + "\n",
+        json.dumps(schema, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    application_schema = app.openapi()
+    surface = {
+        "info": {
+            "title": application_schema["info"]["title"],
+            "version": application_schema["info"]["version"],
+        },
+        "paths": {
+            path: sorted(
+                method
+                for method in operations
+                if method in {"get", "post", "put", "patch", "delete"}
+            )
+            for path, operations in sorted(application_schema["paths"].items())
+        },
+    }
+    SURFACE_OUTPUT.write_text(
+        json.dumps(surface, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 

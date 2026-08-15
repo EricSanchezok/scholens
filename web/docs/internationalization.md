@@ -23,6 +23,13 @@ auth integration owns account-locale persistence, `useLocalePreference` writes
 the cookie and refreshes Server Components. Do not invent a second preference
 store.
 
+Reader full translation follows a separate state contract. `translate=full`
+is the shareable on/off state for the current Reader route; target language,
+`bilingual` versus `translation_only` presentation, reference translation, the
+translation marker, and custom instructions are durable user translation
+preferences. Changing any of them must not change the interface locale or add a
+locale segment to the URL. References remain untranslated by default.
+
 ## Files and responsibilities
 
 ```text

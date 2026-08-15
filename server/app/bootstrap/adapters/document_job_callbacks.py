@@ -99,6 +99,36 @@ from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
 
+SAFE_PDF_FAILURE_CODES = frozenset(
+    {
+        "pdf_content_insufficient",
+        "pdf_processing_timeout",
+        "paper_ingestion_downloading_failed",
+        "paper_ingestion_parsing_failed",
+        "paper_ingestion_metadata_failed",
+        "paper_ingestion_indexing_failed",
+        "paper_ingestion_finalizing_failed",
+    }
+)
+PDF_PROGRESS_FAILURE_CODES = {
+    "downloading": "paper_ingestion_downloading_failed",
+    "parsing": "paper_ingestion_parsing_failed",
+    "extracting_metadata": "paper_ingestion_metadata_failed",
+    "indexing": "paper_ingestion_indexing_failed",
+    "finalizing": "paper_ingestion_finalizing_failed",
+}
+
+
+def _safe_pdf_failure_code(*, reason: str, progress_code: str | None) -> str:
+    if reason in SAFE_PDF_FAILURE_CODES:
+        return reason
+    if progress_code is None:
+        return "paper_ingestion_parsing_failed"
+    return PDF_PROGRESS_FAILURE_CODES.get(
+        progress_code,
+        "paper_ingestion_parsing_failed",
+    )
+
 
 def _ensure_reflow(
     db: Session,
@@ -340,11 +370,16 @@ def handle_failed_upload(
                 )
             db.flush()
 
+    persisted_error_code = _safe_pdf_failure_code(
+        reason=reason,
+        progress_code=job.job.progress_code if job is not None else None,
+    )
+
     try:
         job_repository.fail(
             db,
             job_id=uuid.UUID(job_id),
-            error_code="pdf_processing_failed",
+            error_code=persisted_error_code,
         )
     except AppError as exc:
         if exc.code != "job_not_found":

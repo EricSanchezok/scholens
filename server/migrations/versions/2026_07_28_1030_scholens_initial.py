@@ -572,6 +572,24 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
+            "full_translation_display",
+            sa.String(length=24),
+            server_default="bilingual",
+            nullable=False,
+        ),
+        sa.Column(
+            "translate_references",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+        sa.Column(
+            "show_translation_marker",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
@@ -599,6 +617,10 @@ def upgrade() -> None:
             "OR (length(custom_instructions) BETWEEN 1 AND 2000 "
             "AND custom_instructions = btrim(custom_instructions))",
             name="ck_translation_preferences_instructions",
+        ),
+        sa.CheckConstraint(
+            "full_translation_display IN ('bilingual', 'translation_only')",
+            name="ck_translation_preferences_display",
         ),
         sa.ForeignKeyConstraint(["user_id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("user_id"),
@@ -958,8 +980,8 @@ def upgrade() -> None:
         ),
         sa.Column("attempt_count", sa.Integer(), server_default="1", nullable=False),
         sa.Column("source_hash", sa.String(length=64), nullable=True),
-        sa.Column("prompt_revision", sa.String(length=64), nullable=True),
-        sa.Column("profile_revision", sa.String(length=64), nullable=True),
+        sa.Column("pipeline_revision", sa.String(length=64), nullable=True),
+        sa.Column("parser_revision", sa.String(length=64), nullable=True),
         sa.Column(
             "warnings",
             postgresql.ARRAY(sa.Text()),
@@ -993,14 +1015,71 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_table(
+        "document_reflow_assets",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("document_id", sa.UUID(), nullable=False),
+        sa.Column("object_key", sa.String(length=1024), nullable=False),
+        sa.Column("kind", sa.String(length=24), nullable=False),
+        sa.Column("content_type", sa.String(length=128), nullable=False),
+        sa.Column("width", sa.Integer(), nullable=False),
+        sa.Column("height", sa.Integer(), nullable=False),
+        sa.Column("page_number", sa.Integer(), nullable=False),
+        sa.Column(
+            "source_rect",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+        ),
+        sa.Column("checksum", sa.String(length=64), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "kind IN ('raster', 'vector', 'composite', 'table_preview')",
+            name="ck_reflow_assets_kind",
+        ),
+        sa.CheckConstraint("width > 0 AND height > 0", name="ck_reflow_assets_size"),
+        sa.CheckConstraint("page_number > 0", name="ck_reflow_assets_page"),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["scholens.document_reflows.document_id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("object_key"),
+        schema="scholens",
+    )
+    op.create_index(
+        "ix_document_reflow_assets_document",
+        "document_reflow_assets",
+        ["document_id", "page_number"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_table(
         "document_reflow_blocks",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("document_id", sa.UUID(), nullable=False),
         sa.Column("block_index", sa.Integer(), nullable=False),
         sa.Column("kind", sa.String(length=24), nullable=False),
-        sa.Column("source_markdown", sa.Text(), nullable=False),
+        sa.Column("render_markdown", sa.Text(), nullable=False),
+        sa.Column("group_id", sa.String(length=128), nullable=True),
         sa.Column("heading_level", sa.Integer(), nullable=True),
-        sa.Column("page_number", sa.Integer(), nullable=True),
+        sa.Column(
+            "source_spans",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+        ),
+        sa.Column("presentation_status", sa.String(length=16), nullable=False),
+        sa.Column("asset_id", sa.String(length=128), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -1015,9 +1094,19 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("block_index >= 0", name="ck_reflow_blocks_index"),
         sa.CheckConstraint(
-            "kind IN ('title', 'authors', 'heading', 'paragraph', 'list', "
-            "'quote', 'equation', 'table', 'figure', 'code', 'references')",
+            "kind IN ('eyebrow', 'title', 'authors', 'affiliations', 'abstract', "
+            "'keywords', 'heading', 'paragraph', 'list', 'quote', 'equation', "
+            "'table', 'figure', 'caption', 'code', 'footnote', 'references')",
             name="ck_reflow_blocks_kind",
+        ),
+        sa.CheckConstraint(
+            "presentation_status IN ('verbatim', 'repaired', 'degraded')",
+            name="ck_reflow_blocks_presentation_status",
+        ),
+        sa.ForeignKeyConstraint(
+            ["asset_id"],
+            ["scholens.document_reflow_assets.id"],
+            ondelete="SET NULL",
         ),
         sa.CheckConstraint(
             "heading_level IS NULL OR heading_level BETWEEN 1 AND 6",
@@ -2241,6 +2330,12 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("document_reflow_blocks", schema="scholens")
+    op.drop_index(
+        "ix_document_reflow_assets_document",
+        table_name="document_reflow_assets",
+        schema="scholens",
+    )
+    op.drop_table("document_reflow_assets", schema="scholens")
     op.drop_table("document_reflows", schema="scholens")
     op.drop_index(
         op.f("ix_scholens_jobs_origin_operation_id"),

@@ -35,8 +35,10 @@ const meta = {
   title: "Features/Library/Paper ingestion rows",
   component: PapersView,
   args: {
+    attentionCount: 0,
     data: emptyList,
     ingestions: [row("processing", "parsing")],
+    ingestionCount: 1,
     loading: false,
     onCreateTag: async (name: string) => ({ color: null, id: name, name }),
     onDeleteTag: async () => undefined,
@@ -58,6 +60,7 @@ const meta = {
     onTagFilterChange: () => undefined,
     search: <div />,
     sort: "added_desc",
+    paperCount: 0,
     tagIds: [],
     tags: [],
   },
@@ -141,6 +144,7 @@ export const Cancelling: Story = {
 
 export const Failed: Story = {
   args: {
+    attentionCount: 1,
     ingestions: [row("failed", "queued", "paper_source_pdf_unavailable")],
   },
   play: async ({ canvasElement }) => {
@@ -163,6 +167,7 @@ export const Failed: Story = {
 export const Mobile390Lifecycle: Story = {
   globals: { viewport: { value: "mobile", isRotated: false } },
   args: {
+    attentionCount: 1,
     ingestions: [
       row("uploading", "uploading"),
       row("processing", "extracting_metadata"),

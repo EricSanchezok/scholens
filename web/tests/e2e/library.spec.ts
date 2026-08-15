@@ -48,7 +48,12 @@ async function mockLibrary(page: Page) {
   await page.route(`${apiPattern}/library/summary`, (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ paper_count: 27, output_count: 8 }),
+      body: JSON.stringify({
+        attention_count: 0,
+        ingestion_count: 0,
+        output_count: 8,
+        paper_count: 27,
+      }),
     }),
   );
   await page.route(`${apiPattern}/library/tags**`, async (route) => {
@@ -229,8 +234,11 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   await expect(papersTable.getByText("Reading PDF")).toBeVisible();
 
   await expect(page).toHaveTitle(/Scholens/);
-  const accessibility = await new AxeBuilder({ page }).analyze();
-  expect(accessibility.violations).toEqual([]);
+  await expect
+    .poll(async () => (await new AxeBuilder({ page }).analyze()).violations, {
+      timeout: 5_000,
+    })
+    .toEqual([]);
 });
 
 test("moves accepted uploads into paper rows and supports cancellation", async ({

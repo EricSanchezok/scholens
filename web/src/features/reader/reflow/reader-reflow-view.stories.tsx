@@ -1,96 +1,146 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import * as React from "react";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, within } from "storybook/test";
 
+import type { DocumentReflowBlock } from "./api";
 import {
   ReaderReflowView,
   type ReaderReflowLabels,
 } from "./reader-reflow-view";
 
 const labels: ReaderReflowLabels = {
+  degradedDescription:
+    "This content cannot be reconstructed reliably without guessing.",
+  degradedTitle: "Could not reflow reliably",
   document: "AI-reflowed paper",
   figurePlaceholder: "Figure",
-  fullTranslation: "Full translation",
-  fullTranslationDescription:
-    "Translate nearby sections as you read. Completed sections are cached.",
   openPdfPage: (page) => `PDF p. ${page}`,
   original: "Original text",
+  paperInformation: "Paper information",
+  repaired: "AI-assisted repair",
   retryTranslation: "Retry translation",
   translated: "Translated text",
-  translating: "Translating this section…",
   translationFailed: "This section could not be translated.",
+  translationMarker: "Translation",
 };
 
-const blocks = [
-  {
-    heading_level: 1,
-    id: "title",
+function block(
+  id: string,
+  kind: DocumentReflowBlock["kind"],
+  source: string,
+  overrides: Partial<DocumentReflowBlock> = {},
+): DocumentReflowBlock {
+  return {
+    asset_id: null,
+    group_id: null,
+    heading_level: kind === "heading" ? 2 : null,
+    id,
     index: 0,
-    kind: "title" as const,
-    page_number: 1,
-    source_markdown:
-      "# LitSearch: A Retrieval Benchmark for Scientific Literature Search",
-  },
-  {
-    heading_level: null,
-    id: "authors",
-    index: 1,
-    kind: "authors" as const,
-    page_number: 1,
-    source_markdown:
-      "Anirudh Ajith · Mengzhou Xia · Alexis Chevalier · Tanya Goyal",
-  },
-  {
-    heading_level: 2,
-    id: "abstract",
-    index: 2,
-    kind: "heading" as const,
-    page_number: 1,
-    source_markdown: "## Abstract",
-  },
-  {
-    heading_level: null,
-    id: "paragraph",
-    index: 3,
-    kind: "paragraph" as const,
-    page_number: 1,
-    source_markdown:
-      "Literature search questions often require a deep understanding of research concepts and the ability to reason across entire articles. We introduce **LitSearch**, a retrieval benchmark comprising 597 realistic queries about recent ML and NLP papers.",
-  },
-  {
-    heading_level: 2,
-    id: "method",
-    index: 4,
-    kind: "heading" as const,
-    page_number: 3,
-    source_markdown: "## 1 Introduction",
-  },
-  {
-    heading_level: null,
-    id: "table",
+    kind,
+    presentation_status: "verbatim",
+    render_markdown: source,
+    source_spans: [
+      {
+        page_number: 1,
+        source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.2 },
+        source_text: source,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+const blocks: DocumentReflowBlock[] = [
+  block("eyebrow", "eyebrow", "Research article", { index: 0 }),
+  block(
+    "title",
+    "title",
+    "# LitSearch: A Retrieval Benchmark for Scientific Literature Search",
+    { heading_level: 1, index: 1 },
+  ),
+  block(
+    "authors",
+    "authors",
+    "Anirudh Ajith<sup>1</sup> · Mengzhou Xia<sup>2</sup>",
+    { index: 2 },
+  ),
+  block(
+    "affiliations",
+    "affiliations",
+    "1 Carnegie Mellon University  \\n2 Princeton University",
+    { index: 3 },
+  ),
+  block(
+    "abstract",
+    "abstract",
+    "**Abstract.** Literature search requires reasoning across entire papers.",
+    { index: 4 },
+  ),
+  block("keywords", "keywords", "**Keywords:** retrieval, evaluation", {
     index: 5,
-    kind: "table" as const,
-    page_number: 4,
-    source_markdown:
-      "| Retriever | Recall@5 |\n| --- | ---: |\n| BM25 | 42.1 |\n| Dense | 66.9 |",
-  },
+  }),
+  block("introduction", "heading", "## 1 Introduction", {
+    index: 6,
+  }),
+  block(
+    "paragraph",
+    "paragraph",
+    "We introduce **LitSearch**, a benchmark with 597 realistic queries and deterministic evidence links.",
+    { index: 7 },
+  ),
+  block("list", "list", "- Natural queries\n- Expert-reviewed evidence", {
+    index: 8,
+  }),
+  block("quote", "quote", "> Evidence must remain traceable to the PDF.", {
+    index: 9,
+  }),
+  block("equation", "equation", "$$R@5 = \\frac{|D_5 \\cap G|}{|G|}$$", {
+    index: 10,
+  }),
+  block(
+    "table",
+    "table",
+    "| Retriever | Recall@5 |\n| --- | ---: |\n| BM25 | 42.1 |\n| Dense | 66.9 |",
+    { index: 11 },
+  ),
+  block("figure", "figure", "Figure 1. Retrieval evaluation pipeline", {
+    index: 12,
+  }),
+  block("caption", "caption", "Figure 1: The evaluation pipeline.", {
+    index: 13,
+  }),
+  block("code", "code", "```python\nscore = recall(results, gold)\n```", {
+    index: 14,
+  }),
+  block("footnote", "footnote", "1. Authors contributed equally.", {
+    index: 15,
+  }),
+  block("references", "references", "## References\nAjith et al. (2026).", {
+    index: 16,
+    source_spans: [
+      {
+        page_number: 12,
+        source_rect: { height: 0.08, width: 0.72, x: 0.14, y: 0.2 },
+        source_text: "References Ajith et al. (2026).",
+      },
+    ],
+  }),
 ];
 
 const translated = {
   abstract: {
     cacheHit: true,
     status: "completed" as const,
-    text: "## 摘要",
+    text: "**摘要。** 文献检索需要对整篇论文进行推理。",
   },
-  authors: {
+  introduction: {
     cacheHit: true,
     status: "completed" as const,
-    text: "Anirudh Ajith · Mengzhou Xia · Alexis Chevalier · Tanya Goyal",
+    text: "## 1 引言",
   },
   paragraph: {
     cacheHit: false,
     status: "completed" as const,
-    text: "文献检索问题通常需要深入理解研究概念，并具备对整篇文章进行推理的能力。我们提出了 **LitSearch**：一个包含 597 个近期机器学习与自然语言处理论文真实查询的检索基准。",
+    text: "我们提出 **LitSearch**：一个包含 597 个真实查询并保留确定性证据链接的基准。",
   },
   title: {
     cacheHit: true,
@@ -103,15 +153,18 @@ const meta = {
   title: "Reader/Reflow/ReaderReflowView",
   component: ReaderReflowView,
   args: {
+    assets: [],
     blocks,
+    documentId: "10000000-0000-4000-8000-000000000001",
+    fullTranslationDisplay: "bilingual",
     fullTranslationEnabled: false,
     labels,
-    onFullTranslationEnabledChange: fn(),
-    onOpenPdfPage: fn(),
+    onOpenPdfSource: fn(),
     onRequestTranslation: fn(),
     onRetryTranslation: fn(),
-    title: "LitSearch",
+    showTranslationMarker: true,
     targetLanguage: "zh-CN",
+    translateReferences: false,
     translations: {},
   },
   parameters: { layout: "fullscreen" },
@@ -120,10 +173,25 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Original: Story = {};
+export const AcademicStructure: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Paper information")).toBeVisible();
+    await expect(canvasElement.textContent).not.toContain("<sup>");
+    await expect(canvasElement.querySelector(".katex")).not.toBeNull();
+  },
+};
 
-export const Translated: Story = {
+export const Bilingual: Story = {
   args: { fullTranslationEnabled: true, translations: translated },
+};
+
+export const TranslationOnly: Story = {
+  args: {
+    fullTranslationDisplay: "translation_only",
+    fullTranslationEnabled: true,
+    translations: translated,
+  },
 };
 
 export const Streaming: Story = {
@@ -131,8 +199,8 @@ export const Streaming: Story = {
     fullTranslationEnabled: true,
     translations: {
       ...translated,
-      method: { status: "streaming", text: "## 1 引言" },
-      table: { status: "queued", text: "" },
+      list: { status: "queued", text: "" },
+      quote: { status: "streaming", text: "证据必须" },
     },
   },
 };
@@ -152,9 +220,6 @@ export const TranslationError: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      canvas.getByText("文献检索问题通常需要深入理解研究概念。"),
-    ).toBeVisible();
-    await expect(
       canvas.getByText("This section could not be translated."),
     ).toBeVisible();
     await expect(
@@ -163,39 +228,27 @@ export const TranslationError: Story = {
   },
 };
 
-export const Mobile: Story = {
+export const DegradedEvidence: Story = {
+  args: {
+    blocks: [
+      block("damaged-table", "table", "untrusted reconstructed table", {
+        presentation_status: "degraded",
+      }),
+    ],
+  },
+};
+
+export const SmallMobile: Story = {
   args: { fullTranslationEnabled: true, translations: translated },
-  globals: { viewport: { value: "mobile" } },
+  globals: { viewport: { value: "smallMobile" } },
+};
+
+export const LargeMobile: Story = {
+  args: { fullTranslationEnabled: true, translations: translated },
+  globals: { viewport: { value: "largeMobile" } },
 };
 
 export const Dark: Story = {
   args: { fullTranslationEnabled: true, translations: translated },
   globals: { appearance: "dark" },
-};
-
-export const InteractiveToggle: Story = {
-  render: (args) => {
-    function Harness() {
-      const [enabled, setEnabled] = React.useState(false);
-      return (
-        <ReaderReflowView
-          {...args}
-          fullTranslationEnabled={enabled}
-          onFullTranslationEnabledChange={setEnabled}
-          translations={enabled ? translated : {}}
-        />
-      );
-    }
-    return <Harness />;
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    const toggle = canvas.getByRole("switch", { name: "Full translation" });
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
-    await userEvent.click(toggle);
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
-    await expect(
-      canvas.getByText("LitSearch：面向科学文献检索的检索基准"),
-    ).toBeVisible();
-  },
 };

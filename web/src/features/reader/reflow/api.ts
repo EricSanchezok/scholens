@@ -17,11 +17,17 @@ export type { SelectionTranslationEvent } from "../translation/api";
 export type DocumentReflow = components["schemas"]["DocumentReflowResponse"];
 export type DocumentReflowBlock =
   components["schemas"]["DocumentReflowBlockResponse"];
+export type DocumentReflowAsset =
+  components["schemas"]["DocumentReflowAssetResponse"];
+export type DocumentReflowSourceSpan =
+  components["schemas"]["ReflowSourceSpanPayload"];
 
 export const reflowKeys = {
   all: ["reader", "reflow"] as const,
   document: (documentId: string) =>
     ["reader", "reflow", "document", documentId] as const,
+  asset: (documentId: string, assetId: string) =>
+    ["reader", "reflow", "asset", documentId, assetId] as const,
 };
 
 export const reflowQueries = {
@@ -45,6 +51,26 @@ export const reflowQueries = {
         return status === "pending" || status === "processing" ? 1_500 : false;
       },
       retry: false,
+    }),
+  asset: (documentId: string, assetId: string | undefined, enabled: boolean) =>
+    queryOptions({
+      enabled: enabled && Boolean(assetId),
+      queryKey: reflowKeys.asset(documentId, assetId ?? "missing"),
+      queryFn: async ({ signal }) => {
+        if (!assetId) throw new Error("Reflow asset id is missing");
+        const { data } = await apiClient.GET(
+          "/api/v1/papers/{document_id}/reflow/assets/{asset_id}/url",
+          {
+            params: {
+              path: { asset_id: assetId, document_id: documentId },
+            },
+            signal,
+          },
+        );
+        if (!data) throw new Error("Reflow asset URL response was empty");
+        return data;
+      },
+      staleTime: 4 * 60_000,
     }),
 };
 

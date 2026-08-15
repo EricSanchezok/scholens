@@ -429,7 +429,7 @@ def _prepare_reflow_block_translation(
         document_id=document_id,
         paper_title=source.paper_title,
         block_id=source.block.id,
-        source_markdown=source.block.source_markdown,
+        source_markdown=source.block.render_markdown,
     )
 
 

@@ -238,6 +238,9 @@
     "/api/v1/papers/{document_id}/reflow": [
       "get"
     ],
+    "/api/v1/papers/{document_id}/reflow/assets/{asset_id}/url": [
+      "get"
+    ],
     "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": [
       "post"
     ],

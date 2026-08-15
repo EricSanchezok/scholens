@@ -34,8 +34,12 @@ Create or refresh the dedicated environment explicitly when dependencies
 change:
 
 ```bash
-uv sync --directory packages --frozen --all-packages
+uv sync --directory packages --frozen --all-packages --group dev
 ```
+
+Each checkout owns this environment. Recreate it from `packages/uv.lock` after
+moving the repository or detecting a stale interpreter path instead of copying
+`packages/.venv` from another worktree.
 
 The quality gate itself is read-only with respect to dependencies:
 

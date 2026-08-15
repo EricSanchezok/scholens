@@ -20,6 +20,15 @@ const documentationRoots = [
   path.join(webRoot, "docs"),
 ];
 const markdownLinkPattern = /!?(?:\[[^\]]*\])\(([^)]+)\)/g;
+const ignoredDocumentationDirectories = new Set([
+  ".git",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".venv",
+  "__pycache__",
+  "node_modules",
+]);
 
 async function collectMarkdown(target) {
   const entries = await readdir(target, { withFileTypes: true }).catch(
@@ -29,8 +38,12 @@ async function collectMarkdown(target) {
   const files = [];
   for (const entry of entries) {
     const entryPath = path.join(target, entry.name);
-    if (entry.isDirectory()) files.push(...(await collectMarkdown(entryPath)));
-    else if (entry.name.endsWith(".md")) files.push(entryPath);
+    if (
+      entry.isDirectory() &&
+      !ignoredDocumentationDirectories.has(entry.name)
+    ) {
+      files.push(...(await collectMarkdown(entryPath)));
+    } else if (entry.name.endsWith(".md")) files.push(entryPath);
   }
   return files;
 }

@@ -10,6 +10,7 @@ from src.tasks import (
     JOB_PROGRESS_TIMEOUT_SECONDS,
     JobCancelled,
     ProgressReporter,
+    _pdf_failure_code,
 )
 
 
@@ -17,6 +18,25 @@ def _response(*, claimed: bool = True) -> MagicMock:
     response = MagicMock()
     response.json.return_value = {"claimed": claimed}
     return response
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected"),
+    [
+        (None, "paper_ingestion_downloading_failed"),
+        ("downloading", "paper_ingestion_downloading_failed"),
+        ("parsing", "paper_ingestion_parsing_failed"),
+        ("extracting_metadata", "paper_ingestion_metadata_failed"),
+        ("indexing", "paper_ingestion_indexing_failed"),
+        ("finalizing", "paper_ingestion_finalizing_failed"),
+        ("unexpected", "paper_ingestion_parsing_failed"),
+    ],
+)
+def test_pdf_failure_code_preserves_the_failed_lifecycle_stage(
+    stage: str | None,
+    expected: str,
+) -> None:
+    assert _pdf_failure_code(stage) == expected
 
 
 def test_progress_reporter_normalizes_stage_and_uses_short_timeout(

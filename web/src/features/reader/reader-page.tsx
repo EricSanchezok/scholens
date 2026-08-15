@@ -41,6 +41,7 @@ import {
 import {
   PdfPage,
   type ReaderFitMode,
+  type ReaderPdfSourceTarget,
   type ReaderSelection,
 } from "./components/pdf-page";
 import { PdfThumbnail } from "./components/pdf-thumbnail";
@@ -74,8 +75,12 @@ import {
   readReaderView,
   readSourcePage,
 } from "./reader-routing";
-import { ReaderTranslationPanel, useReaderTranslation } from "./translation";
-import { ReaderReflowSurface } from "./reflow";
+import {
+  ReaderTranslationPanel,
+  useReaderTranslation,
+  type FullTranslationStatus,
+} from "./translation";
+import { ReaderReflowSurface, type ReaderReflowOutlineItem } from "./reflow";
 import type {
   ReaderAnnotationAudience,
   ReaderAnnotationAudienceFilter,
@@ -146,6 +151,13 @@ function ReaderDocumentWorkspace({
   const lastContextPanelRef = React.useRef<ReaderContextPanelName>("ask");
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
+  const [fullTranslationStatus, setFullTranslationStatus] =
+    React.useState<FullTranslationStatus>("idle");
+  const [reflowOutline, setReflowOutline] = React.useState<
+    ReaderReflowOutlineItem[]
+  >([]);
+  const [reflowSourceTarget, setReflowSourceTarget] =
+    React.useState<ReaderPdfSourceTarget>();
   const documentQuery = useQuery(readerQueries.document(documentId));
   const projectsQuery = useQuery(readerQueries.projects(documentId));
   const translation = useReaderTranslation({
@@ -160,6 +172,8 @@ function ReaderDocumentWorkspace({
           translation.effectivePreferences.custom_instructions ?? null,
         sourceLanguage: translation.effectivePreferences.source_language,
         targetLanguage: translation.effectivePreferences.target_language,
+        translateReferences:
+          translation.effectivePreferences.translate_references,
       })
     : undefined;
 
@@ -505,12 +519,14 @@ function ReaderDocumentWorkspace({
     () => ({
       download: t("toolbar.download"),
       closeSearch: t("search.close"),
+      closePanel: t("toolbar.closePanel"),
       fit: t("toolbar.fit"),
       fitPage: t("toolbar.fitPage"),
       fitWidth: t("toolbar.fitWidth"),
       nextPage: t("toolbar.nextPage"),
       nextSearchResult: t("search.next"),
       noSearchResults: t("search.empty"),
+      moreActions: t("toolbar.moreActions"),
       openPanel: t("toolbar.openPanel"),
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
@@ -799,7 +815,11 @@ function ReaderDocumentWorkspace({
                     } else setMobileOutlineOpen(true);
                   }}
                   onOpenPanel={() =>
-                    updateLocation({ panel: lastContextPanelRef.current })
+                    updateLocation({
+                      panel: desktopPanelOpen
+                        ? null
+                        : lastContextPanelRef.current,
+                    })
                   }
                   onOpenSearch={() => setSearchOpen(true)}
                   onPageChange={(page) => {
@@ -858,7 +878,32 @@ function ReaderDocumentWorkspace({
                         }
                       : undefined
                   }
+                  reflowOutline={reflowOutline.map((item) => ({
+                    ...item,
+                    onSelect: () => {
+                      const target = Array.from(
+                        window.document.querySelectorAll<HTMLElement>(
+                          "[data-reflow-block]",
+                        ),
+                      ).find(
+                        (element) => element.dataset.reflowBlock === item.id,
+                      );
+                      target?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
+                    },
+                  }))}
                   title={title}
+                  translation={{
+                    enabled: fullTranslationEnabled,
+                    onEnabledChange: (enabled) =>
+                      updateLocation({ translate: enabled }),
+                    onPreferencesChange: translation.updatePreferences,
+                    preferences: translation.effectivePreferences,
+                    saving: translation.preferencesSaving,
+                    status: fullTranslationStatus,
+                  }}
                   view={readerView}
                   zoom={zoom}
                 />
@@ -997,6 +1042,7 @@ function ReaderDocumentWorkspace({
                             }
                           : undefined
                       }
+                      sourceTarget={reflowSourceTarget}
                       zoom={zoom}
                     />
                   ) : null}
@@ -1004,17 +1050,20 @@ function ReaderDocumentWorkspace({
                     <ReaderReflowSurface
                       documentId={documentId}
                       fullTranslationEnabled={fullTranslationEnabled}
-                      onFullTranslationEnabledChange={(enabled) =>
-                        updateLocation({ translate: enabled })
-                      }
-                      onOpenPdfPage={(page) =>
-                        updateLocation({ page, view: "pdf" })
-                      }
+                      onOutlineChange={setReflowOutline}
+                      onOpenPdfSource={(source) => {
+                        setReflowSourceTarget(source);
+                        updateLocation({
+                          page: source.page_number,
+                          view: "pdf",
+                        });
+                      }}
+                      onTranslationStatusChange={setFullTranslationStatus}
+                      preferences={translation.effectivePreferences}
                       targetLanguage={
                         translation.effectivePreferences?.target_language ??
                         "zh-CN"
                       }
-                      title={title}
                       translationCacheVersion={translationCacheVersion}
                     />
                   ) : null}

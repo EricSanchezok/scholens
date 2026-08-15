@@ -27,7 +27,6 @@ class AIProfileName(StrEnum):
     STANDARD = "standard"
     DEEP = "deep"
     TRANSLATION = "translation"
-    REFLOW = "reflow"
 
 
 class AIThinkingMode(StrEnum):
@@ -59,11 +58,6 @@ _DEFAULTS: dict[AIProfileName, tuple[str, AIThinkingMode, AIThinkingEffort]] = {
         AIThinkingEffort.MAX,
     ),
     AIProfileName.TRANSLATION: (
-        "deepseek:deepseek-v4-flash",
-        AIThinkingMode.DISABLED,
-        AIThinkingEffort.NONE,
-    ),
-    AIProfileName.REFLOW: (
         "deepseek:deepseek-v4-flash",
         AIThinkingMode.DISABLED,
         AIThinkingEffort.NONE,

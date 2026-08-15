@@ -4,12 +4,14 @@ import { fn } from "storybook/test";
 import { ReaderToolbar } from "./reader-toolbar";
 
 const labels = {
+  closePanel: "Close context panel",
   download: "Download PDF",
   closeSearch: "Close PDF search",
   fit: "Fit",
   fitPage: "Fit page",
   fitWidth: "Fit width",
   nextPage: "Next page",
+  moreActions: "More actions",
   nextSearchResult: "Next match",
   noSearchResults: "No matches",
   openPanel: "Open context panel",
@@ -48,6 +50,22 @@ const meta = {
     panelOpen: false,
     navigationMode: "thumbnails",
     title: "Retrieval-Augmented Generation: Foundations and Open Questions",
+    translation: {
+      enabled: false,
+      onEnabledChange: fn(),
+      onPreferencesChange: fn(async () => undefined),
+      preferences: {
+        auto_translate_selection: true,
+        custom_instructions: null,
+        full_translation_display: "bilingual",
+        show_translation_marker: true,
+        source_language: "auto",
+        target_language: "zh-CN",
+        translate_references: false,
+      },
+      saving: false,
+      status: "idle",
+    },
     metadata: "A. Researcher · 10.1000/rag.2026",
     zoom: 1,
     view: "pdf",

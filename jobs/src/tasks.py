@@ -56,6 +56,21 @@ PDF_PROGRESS_MARKERS = (
     ("processing", "parsing"),
 )
 
+PDF_STAGE_FAILURE_CODES = {
+    "downloading": "paper_ingestion_downloading_failed",
+    "parsing": "paper_ingestion_parsing_failed",
+    "extracting_metadata": "paper_ingestion_metadata_failed",
+    "indexing": "paper_ingestion_indexing_failed",
+    "finalizing": "paper_ingestion_finalizing_failed",
+}
+
+
+def _pdf_failure_code(stage: str | None) -> str:
+    return PDF_STAGE_FAILURE_CODES.get(
+        stage or "downloading",
+        "paper_ingestion_parsing_failed",
+    )
+
 
 def _normalize_pdf_progress(status: str, *, current: str) -> str:
     normalized = status.casefold()
@@ -109,6 +124,10 @@ class ProgressReporter:
     def check_cancelled(self) -> None:
         if self._cancelled.is_set():
             raise JobCancelled("paper_ingestion_cancelled")
+
+    @property
+    def stage(self) -> str:
+        return self._progress_code
 
     def _heartbeat_loop(self) -> None:
         while not self._stop.wait(JOB_HEARTBEAT_SECONDS):
@@ -196,6 +215,7 @@ def upload_and_process_file(
     if not _claim_job(claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
+    progress: ProgressReporter | None = None
 
     try:
         with ProgressReporter(
@@ -285,6 +305,8 @@ def upload_and_process_file(
         raise
 
     except Exception as exc:
+        failure_stage = progress.stage if progress is not None else "downloading"
+        failure_code = _pdf_failure_code(failure_stage)
         diagnostics = (
             exc.diagnostic_fields()
             if isinstance(exc, ParserError)
@@ -300,9 +322,9 @@ def upload_and_process_file(
             "result": {
                 "success": False,
                 "job_id": task_id,
-                "error": "pdf_processing_failed",
+                "error": failure_code,
             },
-            "error": "pdf_processing_failed",
+            "error": failure_code,
             "usage_events": usage_events,
         }
         if _deliver_webhook(webhook_url, failure_payload, task_id=task_id):
@@ -461,17 +483,17 @@ def generate_document_reflow_task(
     usage_events: list[dict[str, Any]] = []
     try:
         parsed = DocumentReflowRequest.model_validate(request)
-        markdown = s3_service.download_file_to_bytes(parsed.canonical_s3_key).decode(
-            "utf-8"
-        )
+        pdf_bytes = s3_service.download_file_to_bytes(parsed.pdf_s3_key)
         with collect_token_usage(task_id) as usage:
             usage_events = usage.events
             result = asyncio.run(
                 generate_document_reflow(
                     document_id=parsed.document_id,
                     title=parsed.title,
-                    markdown=markdown,
-                    page_offset_map=parsed.page_offset_map,
+                    pdf_bytes=pdf_bytes,
+                    write_asset=lambda data, key, content_type: (
+                        s3_service.upload_bytes_to_key(data, key, content_type)
+                    ),
                 )
             )
         payload = {

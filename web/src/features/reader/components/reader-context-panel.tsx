@@ -1188,7 +1188,7 @@ export function ReaderContextPanel({
         )}
         <IconButton
           className="ml-auto"
-          label={t("closePanel")}
+          label={t("toolbar.closePanel")}
           onClick={onClose}
           variant="ghost"
         >

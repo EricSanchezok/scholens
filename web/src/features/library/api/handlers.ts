@@ -18,7 +18,12 @@ const populatedHandlers = [
     HttpResponse.json({ items: libraryConversations, next_cursor: null }),
   ),
   http.get(`${api}/library/summary`, () =>
-    HttpResponse.json({ output_count: 8, paper_count: libraryPapers.length }),
+    HttpResponse.json({
+      attention_count: 0,
+      ingestion_count: 0,
+      output_count: 8,
+      paper_count: libraryPapers.length,
+    }),
   ),
   http.get(`${api}/library/tags`, () =>
     HttpResponse.json({ items: libraryTags, next_cursor: null }),
