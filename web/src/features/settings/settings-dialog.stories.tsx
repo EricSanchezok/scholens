@@ -215,6 +215,14 @@ export const Usage: Story = {
     await expect(await body.findByText("Papers per project")).toBeVisible();
     await expect(await body.findByText("Up to 120")).toBeVisible();
     await expect(await body.findByText("768 MiB / 3 GiB")).toBeVisible();
+    const period = body.getByRole("combobox", { name: "Usage period" });
+    await userEvent.click(period);
+    await userEvent.click(
+      await body.findByRole("option", { name: "Last 4 weeks" }),
+    );
+    await expect(
+      await body.findByRole("combobox", { name: "Usage period" }),
+    ).toHaveTextContent("Last 4 weeks");
     await expect(
       body.queryByRole("button", { name: "Upgrade" }),
     ).not.toBeInTheDocument();
@@ -295,6 +303,40 @@ export const InvalidConnection: Story = {
   },
 };
 
+export const MinerUDeferredVerification: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/integrations`, () =>
+          HttpResponse.json({
+            items: integrations.map((integration) =>
+              integration.provider === "mineru"
+                ? {
+                    ...integration,
+                    enabled: true,
+                    state: "connected_unverified",
+                    updated_at: "2026-08-15T08:00:00Z",
+                  }
+                : integration,
+            ),
+          }),
+        ),
+      ],
+    },
+    nextjs: navigation("connections"),
+  },
+  play: async () => {
+    const body = within(document.body);
+    const mineru = await body.findByText("MinerU");
+    const row = mineru.closest("article");
+    await expect(row).not.toBeNull();
+    await expect(
+      within(row as HTMLElement).getByText("Saved · verifies on first use"),
+    ).toBeVisible();
+  },
+};
+
 export const Translation: Story = {
   parameters: { nextjs: navigation("translation") },
   play: async () => {
@@ -307,6 +349,14 @@ export const Translation: Story = {
         "Preserve domain-specific English terminology.",
       ),
     ).toBeVisible();
+    const sourceLanguage = body.getByRole("combobox", {
+      name: "Source language",
+    });
+    await userEvent.click(sourceLanguage);
+    await userEvent.click(
+      await body.findByRole("option", { name: "Japanese" }),
+    );
+    await expect(sourceLanguage).toHaveTextContent("Japanese");
   },
 };
 

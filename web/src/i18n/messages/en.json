@@ -1200,7 +1200,7 @@
       },
       "state": {
         "connected": "Connected",
-        "connected_unverified": "Saved · not yet verified",
+        "connected_unverified": "Saved · verifies on first use",
         "invalid": "Needs attention",
         "disabled": "Disabled",
         "disconnected": "Not connected"
