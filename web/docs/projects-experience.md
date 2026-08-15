@@ -54,6 +54,11 @@ pill-shaped search and sorting controls, quiet separators, local row hover, and
 unboxed empty states. Paper, conversation, and output counts live with the
 project title metadata instead of in a separate metric card.
 
+Project rows and Project-detail paper rows follow the shared collection-row
+and overflow contract in [Component Development](./component-development.md).
+Each row has one primary Link for its content region; its menu remains an
+independent action target and is always discoverable on touch layouts.
+
 ## API contract
 
 - `GET /api/v1/projects` supports `q`, `sort`, signed bidirectional `cursor`,

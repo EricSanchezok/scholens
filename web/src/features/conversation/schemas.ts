@@ -4,4 +4,6 @@ export const composerSchema = z.object({
   message: z.string().trim().min(1).max(20_000),
 });
 
+export const conversationTitleSchema = z.string().trim().min(1).max(240);
+
 export type ComposerValues = z.infer<typeof composerSchema>;

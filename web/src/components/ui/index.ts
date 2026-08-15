@@ -8,6 +8,7 @@ export * from "./field";
 export * from "./focus";
 export * from "./ime";
 export * from "./input";
+export * from "./overflow-menu-button";
 export * from "./scroll-area";
 export * from "./select";
 export * from "./selection-controls";

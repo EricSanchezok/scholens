@@ -1,8 +1,40 @@
 import type { components } from "@/lib/api/generated/schema";
 
 type ConversationTurn = components["schemas"]["ConversationTurnResponse"];
+type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
+export type ConversationListResponse =
+  components["schemas"]["ConversationListResponse"];
 export type ConversationTurnsResponse =
   components["schemas"]["ConversationTurnsResponse"];
+
+export function updateConversationSummary(
+  current: ConversationListResponse | undefined,
+  conversationId: string,
+  patch: Partial<ConversationSummary>,
+): ConversationListResponse | undefined {
+  if (!current) return current;
+  return {
+    ...current,
+    items: current.items.map((conversation) =>
+      conversation.id === conversationId
+        ? { ...conversation, ...patch }
+        : conversation,
+    ),
+  };
+}
+
+export function removeConversationSummary(
+  current: ConversationListResponse | undefined,
+  conversationId: string,
+): ConversationListResponse | undefined {
+  if (!current) return current;
+  return {
+    ...current,
+    items: current.items.filter(
+      (conversation) => conversation.id !== conversationId,
+    ),
+  };
+}
 
 export function upsertConversationTurn(
   current: ConversationTurnsResponse | undefined,

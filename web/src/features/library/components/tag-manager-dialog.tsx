@@ -3,7 +3,6 @@
 import {
   EditIcon,
   TagIcon,
-  MoreIcon,
   AddIcon,
   DeleteIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -31,8 +30,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  IconButton,
   Input,
+  OverflowMenuButton,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
@@ -247,7 +246,7 @@ export function TagManagerDialog({
                   </form>
                 ) : (
                   <div
-                    className="hover:bg-hover flex min-h-14 items-center gap-3 px-3"
+                    className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-h-14 items-center gap-3 px-3 transition-colors duration-150 motion-reduce:transition-none"
                     key={tag.id}
                   >
                     {assigning ? (
@@ -276,13 +275,10 @@ export function TagManagerDialog({
                     </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <IconButton
-                          className="size-9 min-h-9"
+                        <OverflowMenuButton
                           label={t("actionsLabel", { name: tag.name })}
-                          variant="ghost"
-                        >
-                          <Icon glyph={MoreIcon} size={20} tone="secondary" />
-                        </IconButton>
+                          visibility="contextual"
+                        />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => beginRename(tag)}>

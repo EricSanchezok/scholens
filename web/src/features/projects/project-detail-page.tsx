@@ -23,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
+  OverflowMenuButton,
   SearchField,
   Select,
   SelectContent,
@@ -48,7 +49,6 @@ import {
   DataTableIcon,
   DeleteIcon,
   EditIcon,
-  MoreIcon,
   OpenPanelIcon,
   QuoteIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -236,7 +236,7 @@ function ProjectPaperRow({
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2">
+    <div className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-2 transition-colors duration-150 motion-reduce:transition-none">
       <Link
         className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
@@ -245,22 +245,20 @@ function ProjectPaperRow({
           <span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">
             {paper.title || t("untitled")}
           </span>
-          <span className="text-muted mt-1 block truncate text-xs">
+          <span className="text-secondary mt-1 block truncate text-xs">
             {paper.authors?.join(", ") || t("unknownAuthors")}
           </span>
         </span>
-        <span className="text-muted text-xs">{t("openReader")}</span>
+        <span className="text-secondary text-xs">{t("openReader")}</span>
       </Link>
       {canRemove && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <IconButton
+            <OverflowMenuButton
               label={t("openMenu")}
               onClick={(event) => onActionTrigger(event.currentTarget)}
-              variant="ghost"
-            >
-              <Icon glyph={MoreIcon} size={20} />
-            </IconButton>
+              visibility="contextual"
+            />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem destructive onSelect={() => onRemove(paper)}>
@@ -355,9 +353,7 @@ function ProjectManageMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label={t("detail.manage")} variant="ghost">
-          <Icon glyph={MoreIcon} size={20} />
-        </IconButton>
+        <OverflowMenuButton label={t("detail.manage")} visibility="always" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {project.capabilities.manage_papers ? (

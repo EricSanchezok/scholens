@@ -19,8 +19,8 @@ const labels = {
   previousPage: "Previous page",
   previousSearchResult: "Previous match",
   returnLibrary: "Return to library",
-  projectContext: "Reader context",
-  personalContext: "Personal reading",
+  projectContext: (context: string) => `Reader context: ${context}`,
+  personalContext: "Personal",
   pdfView: "PDF",
   reflowView: "AI reflow",
   search: "Search PDF",
@@ -173,6 +173,33 @@ export const ProjectContext: Story = {
       ],
       projectId: "project-1",
     },
+  },
+};
+
+export const LongProjectContext: Story = {
+  args: {
+    projectContext: {
+      onChange: fn(),
+      options: [
+        {
+          id: "project-long",
+          title:
+            "A cross-institutional review of reasoning compression and evaluation methods",
+        },
+      ],
+      projectId: "project-long",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const trigger = within(canvasElement).getByRole("combobox", {
+      name: /Reader context:/,
+    });
+    const value = trigger.querySelector('[data-slot="select-value"]');
+    await expect(trigger.scrollWidth).toBeLessThanOrEqual(trigger.clientWidth);
+    await expect(value).not.toBeNull();
+    await expect(window.getComputedStyle(value as Element).whiteSpace).toBe(
+      "nowrap",
+    );
   },
 };
 

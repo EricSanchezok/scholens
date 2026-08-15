@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
+import { http, HttpResponse } from "msw";
 import * as React from "react";
 
 import { actor, authHandlers } from "../../../.storybook/msw/auth-handlers";
@@ -47,9 +48,11 @@ const longIdentityActor = {
 function ShellStory({
   activeDestination = "library",
   storyActor = actor,
+  storyConversations = conversations,
 }: {
   activeDestination?: "ask" | "library" | "projects";
   storyActor?: typeof actor;
+  storyConversations?: Conversation[];
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
   return (
@@ -57,7 +60,7 @@ function ShellStory({
       activeDestination={activeDestination}
       actor={storyActor}
       collapsed={collapsed}
-      conversations={conversations}
+      conversations={storyConversations}
       mobileHeaderCenter={
         <span className="block truncate text-base font-semibold">Library</span>
       }
@@ -144,6 +147,221 @@ export const DesktopCollapsed: Story = {
     );
     await expect(
       canvas.getByRole("button", { name: "Expand sidebar" }),
+    ).toBeVisible();
+  },
+};
+
+const conversationMutationHandlers = [
+  http.patch(
+    "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
+    async ({ request }) => {
+      const body = (await request.json()) as {
+        pinned?: boolean;
+        title?: string;
+      };
+      return HttpResponse.json({
+        ...conversations[0],
+        pinned_at: body.pinned ? "2026-08-15T12:00:00Z" : null,
+        title: body.title ?? conversations[0]!.title,
+      });
+    },
+  ),
+  http.delete(
+    "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+];
+
+export const ConversationActions: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        ...conversationMutationHandlers,
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const row = canvasElement.querySelector(
+      `[data-conversation-row="${conversations[0]!.id}"]`,
+    );
+    await expect(row).not.toBeNull();
+    await userEvent.hover(row as Element);
+    const trigger = canvas.getByRole("button", {
+      name: `Open actions for ${conversations[0]!.title}`,
+    });
+    trigger.focus();
+    await expect(trigger).toHaveFocus();
+
+    await userEvent.click(trigger);
+    await userEvent.click(
+      await body.findByRole("menuitem", { name: "Rename" }),
+    );
+    const input = canvas.getByRole("textbox", { name: "Conversation title" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "思维链压缩方法");
+    await fireEvent.compositionStart(input);
+    await fireEvent.keyDown(input, {
+      isComposing: true,
+      key: "Enter",
+      keyCode: 229,
+    });
+    await expect(input).toBeVisible();
+    await fireEvent.compositionEnd(input, { data: "法" });
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(
+        canvas.queryByRole("textbox", { name: "Conversation title" }),
+      ).not.toBeInTheDocument(),
+    );
+
+    await userEvent.hover(row as Element);
+    const restoredTrigger = canvas.getByRole("button", {
+      name: `Open actions for ${conversations[0]!.title}`,
+    });
+    await expect(restoredTrigger).toHaveFocus();
+    await userEvent.click(restoredTrigger);
+    await userEvent.click(await body.findByRole("menuitem", { name: "Pin" }));
+  },
+};
+
+export const ConversationDelete: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        ...conversationMutationHandlers,
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const row = canvasElement.querySelector(
+      `[data-conversation-row="${conversations[0]!.id}"]`,
+    );
+    await userEvent.hover(row as Element);
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: `Open actions for ${conversations[0]!.title}`,
+      }),
+    );
+    await userEvent.click(
+      await body.findByRole("menuitem", { name: "Delete" }),
+    );
+    const dialog = await body.findByRole("alertdialog");
+    await expect(dialog).toHaveTextContent(conversations[0]!.title);
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(body.queryByRole("alertdialog")).not.toBeInTheDocument(),
+    );
+  },
+};
+
+export const ConversationRenameFailure: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        http.patch(
+          "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
+          () => HttpResponse.json({ detail: "Rename failed" }, { status: 503 }),
+        ),
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const row = canvasElement.querySelector("[data-conversation-row]");
+    await userEvent.hover(row as Element);
+    await userEvent.click(
+      canvas.getByRole("button", { name: /Open actions for/ }),
+    );
+    await userEvent.click(
+      await body.findByRole("menuitem", { name: "Rename" }),
+    );
+    const input = canvas.getByRole("textbox", { name: "Conversation title" });
+    await userEvent.clear(input);
+    await userEvent.type(input, "A title that the server rejects{Enter}");
+    await expect(input).toBeVisible();
+    await expect(
+      await body.findByText("Conversation could not be updated. Try again."),
+    ).toBeVisible();
+    await waitFor(() => expect(input).toBeEnabled());
+    await waitFor(() => expect(input).toHaveFocus());
+  },
+};
+
+export const ConversationDeleteFailure: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        http.delete(
+          "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
+          () => HttpResponse.json({ detail: "Delete failed" }, { status: 503 }),
+        ),
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const row = canvasElement.querySelector("[data-conversation-row]");
+    await userEvent.hover(row as Element);
+    await userEvent.click(
+      canvas.getByRole("button", { name: /Open actions for/ }),
+    );
+    await userEvent.click(
+      await body.findByRole("menuitem", { name: "Delete" }),
+    );
+    const dialog = await body.findByRole("alertdialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Delete" }),
+    );
+    await expect(dialog).toBeVisible();
+    await expect(row as Element).toBeInTheDocument();
+    await expect(
+      await body.findByText("Conversation could not be updated. Try again."),
+    ).toBeVisible();
+  },
+};
+
+export const ConversationPermissions: Story = {
+  args: {
+    storyConversations: [
+      {
+        ...conversations[0]!,
+        capabilities: {
+          ...conversations[0]!.capabilities,
+          delete: false,
+          pin: false,
+          rename: false,
+        },
+      },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const row = canvasElement.querySelector("[data-conversation-row]");
+    await userEvent.hover(row as Element);
+    await userEvent.click(
+      canvas.getByRole("button", { name: /Open actions for/ }),
+    );
+    const menu = await body.findByRole("menu");
+    await expect(within(menu).getAllByRole("menuitem")).toHaveLength(1);
+    await expect(
+      within(menu).getByRole("menuitem", { name: "Open in new tab" }),
     ).toBeVisible();
   },
 };
@@ -263,6 +481,45 @@ export const MobileNavigation: Story = {
     await expect(
       within(dialog).getByRole("link", { name: "New chat" }),
     ).toBeVisible();
+  },
+};
+
+export const MobileConversationRename: Story = {
+  globals: { viewport: { value: "mobile", isRotated: false } },
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        ...conversationMutationHandlers,
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Open navigation" }),
+    );
+    const navigation = await body.findByRole("dialog", {
+      name: "Open navigation",
+    });
+    await userEvent.click(
+      within(navigation).getByRole("button", { name: /Open actions for/ }),
+    );
+    await userEvent.click(
+      await body.findByRole("menuitem", { name: "Rename" }),
+    );
+    const renameDialog = await body.findByRole("dialog", {
+      name: "Rename conversation",
+    });
+    const input = within(renameDialog).getByRole("textbox", {
+      name: "Conversation title",
+    });
+    await expect(input).toHaveFocus();
+    await userEvent.clear(input);
+    await userEvent.type(input, "Mobile research notes{Enter}");
+    await waitFor(() => expect(renameDialog).not.toBeInTheDocument());
   },
 };
 

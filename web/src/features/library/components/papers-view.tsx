@@ -7,13 +7,14 @@ import {
   FilterIcon,
   ProjectIcon,
   TagIcon,
-  MoreIcon,
   RetryIcon,
   DeleteIcon,
   WarningIcon,
   DismissIcon,
 } from "@/design-system/icons/semantic-icons";
 import { useFormatter, useTranslations } from "next-intl";
+import type { Route } from "next";
+import Link from "next/link";
 import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
@@ -32,6 +33,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   IconButton,
+  keyboardFocusRing,
+  OverflowMenuButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -173,7 +176,7 @@ function SelectablePaperThumbnail({
           "bg-surface absolute inset-0 grid place-items-center rounded-[var(--radius-md)] transition-opacity duration-150 motion-reduce:transition-none",
           checked || selectionMode
             ? "pointer-events-auto opacity-100"
-            : "pointer-events-none opacity-0 md:pointer-events-auto md:group-focus-within/paper:opacity-100 md:group-hover/paper:opacity-100",
+            : "pointer-events-none opacity-0 md:pointer-events-auto md:group-focus-within/interactive-row:opacity-100 md:group-hover/interactive-row:opacity-100",
         )}
         data-selection-overlay
       >
@@ -187,7 +190,7 @@ function SelectablePaperThumbnail({
   );
 }
 
-function PaperDetails({ onOpen, paper }: { onOpen: () => void; paper: Paper }) {
+function PaperDetails({ paper }: { paper: Paper }) {
   const metadata = paperMetadata(paper);
   const secondary = [
     ...metadata.authors.slice(0, 2),
@@ -196,25 +199,27 @@ function PaperDetails({ onOpen, paper }: { onOpen: () => void; paper: Paper }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <div className="min-w-0">
-      <button
-        className="hover:text-secondary line-clamp-2 text-left text-sm leading-5 font-semibold [overflow-wrap:anywhere] transition-colors md:line-clamp-1"
-        onClick={onOpen}
-        type="button"
-      >
+    <Link
+      className={cn(
+        "block min-w-0 rounded-[var(--radius-sm)]",
+        keyboardFocusRing,
+      )}
+      href={`/reader/${paper.document.document_id}` as Route}
+    >
+      <span className="hover:text-secondary line-clamp-2 block text-left text-sm leading-5 font-semibold [overflow-wrap:anywhere] transition-colors md:line-clamp-1">
         {metadata.title}
-      </button>
-      <div className="text-secondary mt-1 truncate text-xs">
+      </span>
+      <span className="text-secondary mt-1 block truncate text-xs">
         {secondary || paper.document.original_filename}
-      </div>
+      </span>
       {paper.tags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <span className="mt-2 flex flex-wrap gap-1.5">
           {paper.tags.slice(0, 3).map((tag) => (
             <TagPill key={tag.id} name={tag.name} />
           ))}
-        </div>
+        </span>
       )}
-    </div>
+    </Link>
   );
 }
 
@@ -237,12 +242,10 @@ function PaperActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton
+        <OverflowMenuButton
           label={t("open", { title: paperMetadata(paper).title })}
-          variant="ghost"
-        >
-          <Icon glyph={MoreIcon} size={20} tone="secondary" />
-        </IconButton>
+          visibility="contextual"
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {onSelect && (
@@ -885,7 +888,10 @@ export function PapersView({
                     const id = paper.document.document_id;
                     const metadata = paperMetadata(paper);
                     return (
-                      <tr className="hover:bg-hover group/paper" key={id}>
+                      <tr
+                        className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed transition-colors duration-150 motion-reduce:transition-none"
+                        key={id}
+                      >
                         <td className="px-3 py-3 align-middle">
                           <SelectablePaperThumbnail
                             checked={selected.includes(id)}
@@ -898,17 +904,20 @@ export function PapersView({
                           />
                         </td>
                         <td className="px-2 py-3 align-middle">
-                          <PaperDetails
-                            onOpen={() => onOpenPaper(id)}
-                            paper={paper}
-                          />
+                          <PaperDetails paper={paper} />
                         </td>
-                        <td className="text-secondary px-3 py-3 align-middle text-sm">
+                        <td
+                          className="text-secondary cursor-pointer px-3 py-3 align-middle text-sm"
+                          onClick={() => onOpenPaper(id)}
+                        >
                           {format.dateTime(new Date(paper.created_at), {
                             dateStyle: "medium",
                           })}
                         </td>
-                        <td className="text-secondary px-3 py-3 align-middle text-sm">
+                        <td
+                          className="text-secondary cursor-pointer px-3 py-3 align-middle text-sm"
+                          onClick={() => onOpenPaper(id)}
+                        >
                           {metadata.publishDate
                             ? format.dateTime(new Date(metadata.publishDate), {
                                 year: "numeric",
@@ -961,7 +970,10 @@ export function PapersView({
                 const id = paper.document.document_id;
                 const metadata = paperMetadata(paper);
                 return (
-                  <li className="group/paper min-w-0 py-4" key={id}>
+                  <li
+                    className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed min-w-0 rounded-[var(--radius-lg)] px-2 py-4 transition-colors duration-150 motion-reduce:transition-none"
+                    key={id}
+                  >
                     <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3">
                       <SelectablePaperThumbnail
                         checked={selected.includes(id)}
@@ -971,10 +983,7 @@ export function PapersView({
                         selectionMode={selected.length > 0}
                       />
                       <div className="min-w-0" data-paper-content>
-                        <PaperDetails
-                          onOpen={() => onOpenPaper(id)}
-                          paper={paper}
-                        />
+                        <PaperDetails paper={paper} />
                         <div
                           className="text-secondary mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs"
                           data-paper-mobile-metadata

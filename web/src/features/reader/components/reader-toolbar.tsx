@@ -60,7 +60,7 @@ export type ReaderToolbarLabels = {
   openPanel: string;
   closePanel: string;
   returnLibrary: string;
-  projectContext: string;
+  projectContext: (context: string) => string;
   personalContext: string;
   pdfView: string;
   reflowView: string;
@@ -137,6 +137,12 @@ export function ReaderToolbar({
   view: ReaderDocumentView;
   zoom: number;
 }) {
+  const selectedProjectContext = projectContext?.projectId
+    ? (projectContext.options.find(
+        (project) => project.id === projectContext.projectId,
+      )?.title ?? labels.personalContext)
+    : labels.personalContext;
+
   return (
     <div
       aria-label={labels.page}
@@ -171,17 +177,24 @@ export function ReaderToolbar({
               value={projectContext.projectId ?? "personal"}
             >
               <SelectTrigger
-                aria-label={labels.projectContext}
-                className="ml-2 h-9 min-h-9 w-40"
+                aria-label={labels.projectContext(selectedProjectContext)}
+                className="ml-2 h-9 min-h-9 w-40 min-w-0 shrink"
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="personal">
+              <SelectContent className="max-w-80">
+                <SelectItem
+                  className="max-w-80 [overflow-wrap:anywhere] whitespace-normal"
+                  value="personal"
+                >
                   {labels.personalContext}
                 </SelectItem>
                 {projectContext.options.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
+                  <SelectItem
+                    className="max-w-80 [overflow-wrap:anywhere] whitespace-normal"
+                    key={project.id}
+                    value={project.id}
+                  >
                     {project.title}
                   </SelectItem>
                 ))}
@@ -199,15 +212,24 @@ export function ReaderToolbar({
           value={projectContext.projectId ?? "personal"}
         >
           <SelectTrigger
-            aria-label={labels.projectContext}
-            className="hidden h-9 min-h-9 min-w-0 flex-1 sm:flex 2xl:hidden"
+            aria-label={labels.projectContext(selectedProjectContext)}
+            className="hidden h-9 min-h-9 w-40 max-w-[40vw] min-w-0 shrink sm:flex 2xl:hidden"
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="personal">{labels.personalContext}</SelectItem>
+          <SelectContent className="max-w-80">
+            <SelectItem
+              className="max-w-80 [overflow-wrap:anywhere] whitespace-normal"
+              value="personal"
+            >
+              {labels.personalContext}
+            </SelectItem>
             {projectContext.options.map((project) => (
-              <SelectItem key={project.id} value={project.id}>
+              <SelectItem
+                className="max-w-80 [overflow-wrap:anywhere] whitespace-normal"
+                key={project.id}
+                value={project.id}
+              >
                 {project.title}
               </SelectItem>
             ))}

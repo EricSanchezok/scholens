@@ -18,7 +18,7 @@ the deliberately deferred boundaries.
   an unsent draft. Sidebar, picker, and in-progress stream state remain local.
 - Desktop and mobile share one navigation model, actor state, conversation
   state, and `AppShell` boundary, but use device-appropriate compositions. The
-  desktop sidebar is 240 px when expanded and 64 px when collapsed. Phones use
+  desktop sidebar is 264 px when expanded and 64 px when collapsed. Phones use
   a persistent bottom bar for Ask, Library, and Projects. Their full-screen,
   opaque navigation hub is reserved for the account identity, conversation
   search, and pinned/recent history; it does not render the desktop Sidebar
@@ -30,7 +30,7 @@ the deliberately deferred boundaries.
   Sidebar and mobile Dock remain outside that scroll ownership. Message content
   keeps only the padding needed for its in-flow Composer, so scrolling to the
   latest turn cannot expose an artificial blank page below the answer.
-- The desktop conversation lane has one 880 px maximum measure shared by the
+- The desktop conversation lane has one 832 px maximum measure shared by the
   transcript and Composer. User messages align to its right edge; assistant
   messages and Worklogs align to its left edge. The Reader side-panel adapter
   keeps the same relationship with 20 px horizontal insets rather than adding
@@ -39,7 +39,8 @@ the deliberately deferred boundaries.
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary
   navigation uses 40 px rows with 16 px glyphs in fixed slots, conversation
-  history uses 32 px rows, and the account trigger uses a 48 px row. Expanded
+  history uses 36 px rows so its contextual action retains a full desktop hit
+  target, and the account trigger uses a 48 px row. Expanded
   sidebar navigation, conversation titles, and the actor name share the 13 px
   `type.sidebar` role; the product label retains the 14 px UI role and the email
   retains the 11 px caption role. The account trigger preserves its full hit
@@ -50,6 +51,14 @@ the deliberately deferred boundaries.
   one quiet boundary. Navigation, history, and account controls do not become
   independent cards; only the current or hovered row receives a rounded local
   surface. This keeps the shell visually continuous with Library and Projects.
+- Every conversation row exposes Open in new tab plus capability-gated Rename,
+  Pin/Unpin, and Delete actions through the shared overflow contract. Desktop
+  rename stays inline; mobile rename uses a safe-area-aware bottom dialog.
+  Rename and pin optimistically update every conversation-list cache and roll
+  back on failure. Delete waits for Server success before removing the row; if
+  it deletes the active conversation, only the `conversation` URL parameter is
+  removed so the Reader document, Project, panel, and other navigation state
+  remain intact.
 - The phone navigation hub fills the viewport and owns an opaque sidebar
   surface above a lower stacking-level backdrop. Its history is independently
   scrollable between fixed account and utility regions. Visible controls retain

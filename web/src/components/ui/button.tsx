@@ -18,6 +18,8 @@ export const buttonVariants = cva(
           "border-line bg-surface text-foreground hover:bg-hover active:bg-pressed disabled:bg-[var(--color-action-disabled-bg)]",
         ghost:
           "border-transparent bg-transparent text-foreground hover:bg-hover active:bg-pressed disabled:bg-transparent",
+        overflow:
+          "border-transparent bg-transparent text-foreground hover:bg-pressed active:bg-pressed data-[state=open]:bg-pressed disabled:bg-transparent",
         danger:
           "border-[var(--color-danger-border)] bg-state-danger-bg text-danger hover:brightness-95 disabled:bg-[var(--color-action-disabled-bg)]",
       },

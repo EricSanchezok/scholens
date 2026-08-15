@@ -1,9 +1,41 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  removeConversationSummary,
+  updateConversationSummary,
   updateLatestTurnSuggestions,
   upsertConversationTurn,
 } from "./conversation-cache";
+
+type ConversationList = NonNullable<
+  Parameters<typeof updateConversationSummary>[0]
+>;
+
+function fixtureConversation(id: string, title: string) {
+  return {
+    archived_at: null,
+    capabilities: {
+      archive: true,
+      delete: true,
+      detach: false,
+      move: true,
+      pin: true,
+      rename: true,
+      send: true,
+      share: false,
+    },
+    id,
+    pinned_at: null,
+    read_only: false,
+    read_only_reason: null,
+    scope_access: "active" as const,
+    scope_id: null,
+    scope_label: null,
+    scope_type: "global" as const,
+    title,
+    updated_at: "2026-08-15T12:00:00Z",
+  };
+}
 
 type ConversationTurn = NonNullable<
   Parameters<typeof upsertConversationTurn>[1]
@@ -104,5 +136,44 @@ describe("conversation turn cache", () => {
         "Stale three",
       ]),
     ).toBe(cache);
+  });
+});
+
+describe("conversation list cache", () => {
+  const first = fixtureConversation(
+    "50000000-0000-4000-8000-000000000001",
+    "First",
+  );
+  const second = fixtureConversation(
+    "50000000-0000-4000-8000-000000000002",
+    "Second",
+  );
+  const cache: ConversationList = {
+    items: [first, second],
+    next_cursor: "next-page",
+  };
+
+  it("updates a matching summary without changing pagination", () => {
+    const next = updateConversationSummary(cache, first.id, {
+      pinned_at: "2026-08-15T13:00:00Z",
+      title: "Renamed",
+    });
+
+    expect(next?.items).toEqual([
+      {
+        ...first,
+        pinned_at: "2026-08-15T13:00:00Z",
+        title: "Renamed",
+      },
+      second,
+    ]);
+    expect(next?.next_cursor).toBe("next-page");
+  });
+
+  it("removes only the deleted summary", () => {
+    const next = removeConversationSummary(cache, first.id);
+
+    expect(next?.items).toEqual([second]);
+    expect(next?.next_cursor).toBe("next-page");
   });
 });

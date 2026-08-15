@@ -72,6 +72,29 @@ actually shared.
 - Motion must explain state or spatial continuity and respect reduced-motion;
   decorative motion requires a product reason.
 
+### Collection rows and nested actions
+
+Collections keep their native structure (`table`, `article`, `li`, or another
+domain-appropriate element); do not route them through a generic row component.
+They share this interaction contract instead:
+
+- The row uses `bg-hover` for hover and `focus-within`, and `bg-pressed` for
+  touch/pressed feedback. The transition is 150 ms and becomes immediate under
+  reduced motion.
+- One real Link owns the primary content region. Nested checkboxes, overflow
+  menus, and other controls are siblings of that Link and must not trigger its
+  navigation. A semantic table keeps the title as its only keyboard Link;
+  non-action cells may extend pointer navigation without adding duplicate Tab
+  stops.
+- Overflow entry points use `OverflowMenuButton`. `contextual` visibility is
+  revealed by row hover, row focus-within, current state, or an open menu on a
+  fine pointer; touch layouts always show it. The button owns a 36 px desktop
+  and 44 px touch target, `bg-pressed` hover/open feedback, the shared focus
+  ring, and its accessible label.
+- The row and its overflow button deliberately use different feedback colors;
+  do not add scaling, glow, bounce, gradients, or a second page-local More
+  button recipe.
+
 ## Action feedback contract
 
 Classify an action by what changes before choosing its feedback. This prevents
@@ -167,7 +190,7 @@ Current baseline:
 
 | Component group                                      | Status          |
 | ---------------------------------------------------- | --------------- |
-| Button, IconButton, LinkButton                       | Ready           |
+| Button, IconButton, LinkButton, OverflowMenuButton   | Ready           |
 | Input, PasswordInput, Field, Checkbox, Select        | Ready           |
 | Alert, Toast, Progress, Skeleton, AsyncFeedback      | Ready           |
 | TransientActionIconButton, CopyActionButton          | Ready           |

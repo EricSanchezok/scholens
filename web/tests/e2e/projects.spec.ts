@@ -296,6 +296,7 @@ test("supports the Projects critical journey", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Evidence review" }),
   ).toBeVisible();
+  await expect(page).toHaveTitle(/Scholens/);
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);

@@ -41,7 +41,24 @@
       "recent": "最近",
       "empty": "对话会显示在这里。",
       "noMatches": "没有匹配的对话",
-      "conversationContext": "研究上下文"
+      "conversationContext": "研究上下文",
+      "openActions": "打开“{title}”的操作菜单",
+      "openNewTab": "在新标签页打开",
+      "rename": "重命名",
+      "renameTitle": "重命名对话",
+      "renameDescription": "设置一个清晰、便于之后查找的标题。",
+      "renameLabel": "对话标题",
+      "saveRename": "保存",
+      "cancelRename": "取消",
+      "closeRename": "关闭重命名对话框",
+      "pin": "置顶",
+      "unpin": "取消置顶",
+      "delete": "删除",
+      "deleteTitle": "删除对话？",
+      "deleteDescription": "“{title}”及其中的消息将被永久删除，此操作无法撤销。",
+      "confirmDelete": "删除",
+      "cancelDelete": "取消",
+      "actionFailed": "无法更新对话，请重试。"
     },
     "account": {
       "openMenu": "打开账号菜单",
@@ -685,8 +702,8 @@
       "unavailableDescription": "该对话可能已被删除、访问权限已变化，或属于其他阅读范围。Reader 已返回这篇论文的新对话。"
     },
     "projects": {
-      "selector": "阅读范围",
-      "personal": "个人阅读",
+      "selector": "阅读范围：{context}",
+      "personal": "个人",
       "unavailableTitle": "已切换为个人阅读",
       "unavailableDescription": "你已无法访问该项目，阅读器已返回个人范围。"
     },

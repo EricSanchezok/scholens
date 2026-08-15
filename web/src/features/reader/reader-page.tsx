@@ -539,7 +539,7 @@ function ReaderDocumentWorkspace({
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
       previousSearchResult: t("search.previous"),
-      projectContext: t("projects.selector"),
+      projectContext: (context: string) => t("projects.selector", { context }),
       personalContext: t("projects.personal"),
       pdfView: t("toolbar.pdfView"),
       reflowView: t("toolbar.reflowView"),
