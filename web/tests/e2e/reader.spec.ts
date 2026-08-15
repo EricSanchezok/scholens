@@ -725,14 +725,12 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await page.getByRole("button", { name: "Previous page" }).click();
   await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
 
-  const navigationToggle = page.getByRole("button", {
-    name: "Show document outline",
-  });
-  await navigationToggle.click();
   await expect(
-    page.getByRole("button", { name: "Show page thumbnails" }),
+    page.getByRole("button", { name: "Show document outline" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "Page thumbnails" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Show page thumbnails" }).click();
 
   const pageDoesNotOwnViewportScroll = await page.evaluate(() => ({
     body: document.body.scrollHeight <= window.innerHeight,
@@ -1354,6 +1352,13 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
     1,
   );
 
+  await page.getByRole("button", { name: "Show document outline" }).click();
+  const outline = page.getByRole("navigation", { name: "Document outline" });
+  await expect(outline).toBeVisible();
+  await outline.getByRole("button", { name: "1 Method" }).click();
+  await page.getByRole("button", { name: "Hide document outline" }).click();
+  await expect(outline).toHaveCount(0);
+
   await page
     .getByRole("button", { name: "Full translation: Not enabled" })
     .click();
@@ -1412,6 +1417,18 @@ for (const width of [320, 390]) {
     await mockReaderReflow(page);
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`/reader/${paperDocument.document_id}?view=reflow`);
+
+    await expect(
+      page.getByRole("button", { name: "More actions" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Show document outline" }).click();
+    const outline = page.getByRole("dialog", { name: "Document outline" });
+    await expect(outline).toBeVisible();
+    await expect(
+      outline.getByRole("button", { name: "1 Method" }),
+    ).toBeVisible();
+    await outline.getByRole("button", { name: "1 Method" }).click();
+    await expect(outline).toHaveCount(0);
 
     await page
       .getByRole("button", { name: "Full translation: Not enabled" })

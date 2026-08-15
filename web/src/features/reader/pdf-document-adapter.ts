@@ -9,12 +9,6 @@ import {
   type ReaderSearchMatch,
 } from "./reader-search";
 
-export type PdfOutlineEntry = {
-  title: string;
-  destination: unknown;
-  children: PdfOutlineEntry[];
-};
-
 let workerConfigured = false;
 const activeCanvasRenders = new WeakMap<HTMLCanvasElement, Promise<void>>();
 
@@ -28,16 +22,6 @@ async function loadPdfJs() {
     workerConfigured = true;
   }
   return pdfjs;
-}
-
-function normalizeOutline(
-  items: Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>,
-): PdfOutlineEntry[] {
-  return (items ?? []).map<PdfOutlineEntry>((item) => ({
-    title: item.title,
-    destination: item.dest,
-    children: normalizeOutline(item.items),
-  }));
 }
 
 export class PdfDocumentAdapter {
@@ -76,10 +60,6 @@ export class PdfDocumentAdapter {
 
   getPage(pageNumber: number) {
     return this.document.getPage(pageNumber);
-  }
-
-  async getOutline() {
-    return normalizeOutline(await this.document.getOutline());
   }
 
   async resolveDestination(destination: unknown) {

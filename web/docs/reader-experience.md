@@ -46,7 +46,7 @@ owned, top-aligned work regions:
 
 1. the document region, whose toolbar combines Back to Library, the truncated
    paper identity, page controls, view controls, and document actions above the
-   thumbnail rail and PDF canvas;
+   PDF thumbnail rail or the AI reflow outline and reading surface;
 2. the contextual region, whose equally tall toolbar contains Ask,
    Annotations, Translate, Details, and Collapse above the active panel.
 
@@ -64,7 +64,8 @@ place the open action beside whichever document tool happens to be last.
 
 Reader has four independently scrollable regions where applicable:
 
-1. document navigation, showing either page thumbnails or the PDF outline;
+1. document navigation, showing PDF page thumbnails or the optional AI reflow
+   outline;
 2. the continuous PDF document canvas;
 3. the active contextual panel;
 4. the paper-conversation list disclosure.
@@ -72,10 +73,10 @@ Reader has four independently scrollable regions where applicable:
 Search is not a fifth panel. On desktop and mobile it temporarily replaces the
 document toolbar controls with a compact query field, result position, and
 previous/next controls. The PDF remains visible and interactive while search is
-active. On desktop, one toggle in the document toolbar switches the left
-document-navigation region between page thumbnails and Outline. Its icon and
-accessible name always describe the destination state; it never opens a modal
-or obscures the document.
+active. PDF view keeps its page-thumbnail rail and does not expose the PDF's
+optional embedded bookmark tree. In AI reflow, the Outline control expands or
+collapses a dedicated left navigation rail built from the semantic heading
+blocks; it never opens a popover over the paper.
 
 At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 
@@ -85,8 +86,9 @@ At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 - the PDF remains visible as the primary surface;
 - Ask, Annotations, Translate, and Details open as full-height bottom panels
   with safe-area padding;
-- Search remains in the compact document toolbar, while Outline uses a
-  full-height document-navigation panel because the thumbnail rail is absent;
+- Search remains in the compact PDF toolbar. AI reflow exposes Outline as its
+  own icon and opens the same semantic outline content in the shared responsive
+  bottom-sheet pattern used by Sources;
 - dismissing a panel preserves page, zoom, search result, draft, selection, and
   active conversation;
 - the soft keyboard resizes the active panel without moving document controls
@@ -109,12 +111,12 @@ The URL is the shareable reading state:
   canonical PDF default;
 - `translate`: `full` to lazily translate visible reflow blocks, or omitted.
 
-Zoom, fit mode, desktop document-navigation mode, mobile Outline disclosure,
-search disclosure, search query, search match index, draft text, active browser
-selection, pending turn context, annotation editor state, and panel animation
-state are local. Invalid page, panel, and conversation parameters are
-normalized after the document metadata is known and must not produce a second
-history entry.
+Zoom, fit mode, desktop AI reflow Outline disclosure, mobile AI reflow Outline
+disclosure, search disclosure, search query, search match index, draft text,
+active browser selection, pending turn context, annotation editor state, and
+panel animation state are local. Invalid page, panel, and conversation
+parameters are normalized after the document metadata is known and must not
+produce a second history entry.
 
 ## PDF surface
 
@@ -127,14 +129,13 @@ The document surface supports:
 
 - continuous vertical page scrolling with lazy nearby-page rendering;
 - viewport-driven current-page updates in the URL, while previous/next,
-  thumbnails, outline destinations, search results, and direct page input
-  scroll the same document surface;
+  thumbnails, internal PDF links, search results, and direct page input scroll
+  the same document surface;
 - icon-only page controls retain their footprint at the first and last page,
   but express the unavailable direction with a muted icon and no filled block;
 - lazy page thumbnails;
 - zoom in/out, fit width, and fit page;
 - PDF text search with result count and previous/next traversal;
-- PDF outline navigation and an explicit no-outline state;
 - download URL refresh exactly once when a signed URL expires;
 - Canvas, Text, and Annotation layers without mutating the source PDF.
 
@@ -161,6 +162,13 @@ not preserve PDF page whitespace or restart layout at page boundaries. Every
 block retains ordered MinerU source spans and can return to the exact source
 page and rectangle. Degraded blocks offer a compact PDF fallback and never
 display guessed content.
+
+Reflow headings form one semantic outline shared by both responsive
+presentations. Desktop expands it as a left navigation rail beside the paper;
+mobile opens it from the bottom with the shared Dialog handle, header, body,
+safe-area, focus-trap, and dismissal behavior used by Sources. Selecting an
+entry scrolls the reflow surface to its exact block and closes the mobile sheet.
+The toolbar never substitutes an overflow-menu glyph for the Outline action.
 
 Full translation is a toolbar action: a desktop popover and mobile bottom sheet
 own language, bilingual/translation-only presentation, reference opt-in,
@@ -392,7 +400,7 @@ Playwright coverage for the following matrix:
 | ------------------ | --------------------------------------------------------------------------------------------------------- |
 | Document           | loading, ready, processing, failed, unauthorized, unavailable, damaged, encrypted                         |
 | Navigation         | first page, middle page, last page, direct page input, fit width, fit page, zoomed                        |
-| Search and outline | closed, query with no result, one result, multiple results, no outline, nested outline                    |
+| Search and outline | closed, query with no result, one result, multiple results, desktop reflow rail, mobile reflow sheet      |
 | Selection          | toolbar, highlight palette, committed Ask context, translation preview, note editor, copied, cancelled    |
 | Translation        | idle, ready, streaming, cached, quota exhausted, retryable error, custom preferences                      |
 | AI reflow          | pending, original, translated, streaming block, failed block, job failure, retry, PDF return link         |
@@ -422,6 +430,7 @@ the named `50 — Reader` states rather than inventing links:
 | Mobile translation            | `NarrowMobile`                                            |
 | Dark translation              | `CompletedDark`                                           |
 | AI reflow semantic structure  | `AcademicStructure`, `DegradedEvidence`                   |
+| AI reflow outline             | `DesktopSidebar`, `Narrow`, `Dark`                        |
 | AI reflow translation modes   | `Bilingual`, `TranslationOnly`, `Streaming`               |
 | AI reflow translation error   | `TranslationError`, `PartialFailure`                      |
 | AI reflow toolbar settings    | `DesktopPopover`                                          |
@@ -446,13 +455,13 @@ Reader remains a vertical feature rather than a second application shell:
 - `pdf-document-adapter.ts` owns the PDF.js contract, while `pdf-page.tsx` owns
   the Canvas, Text, Annotation, selection, and search-overlay surface;
 - `reader-toolbar.tsx` owns the compact, non-modal PDF search experience;
-- `reader-document-navigation.tsx` owns desktop Pages/Outline navigation and
-  the shared outline tree used by the mobile document-navigation panel;
+- `reader-document-navigation.tsx` owns the desktop PDF thumbnail rail;
 - `reader-context-panel.tsx` owns contextual navigation and composes Ask,
   Annotations, Translate, Details, and the paper-conversation switcher;
 - `translation/` owns translation preferences, the standard SSE adapter, the
   selection lifecycle controller, and translation panel states;
-- `reflow/` owns the typed artifact query, block-only SSE adapter, bounded
+- `reflow/` owns the typed artifact query, semantic Outline shared by the
+  desktop rail and mobile bottom sheet, block-only SSE adapter, bounded
   visible-block scheduler, and responsive reflow presentation;
 - `features/conversation` owns the shared turn lifecycle, streaming response,
   worklog, sources, suggestions, answer actions, and composer used by both Home
