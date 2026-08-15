@@ -192,7 +192,9 @@ jobs:
           persist-credentials: false
       - name: Resolve checked-out image revision
         id: image-revision
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "identity_revision=$(python scripts/release_manifest.py identity-revision)" >> "$GITHUB_OUTPUT"
       - name: Mint read-only SanchezCloud Identity token
         id: identity-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
@@ -236,6 +238,8 @@ jobs:
           push: false
           load: true
           tags: scholens-api:ci
+          build-args: |
+            SANCHEZCLOUD_IDENTITY_REVISION=${{ steps.image-revision.outputs.identity_revision }}
           secrets: |
             github_token=${{ steps.identity-token.outputs.token }}
       - name: Build jobs image

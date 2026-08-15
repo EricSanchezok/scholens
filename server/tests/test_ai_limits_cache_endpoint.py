@@ -25,7 +25,7 @@ class _Pipeline:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("feature", ["chat", "audio", "upload"])
+@pytest.mark.parametrize("feature", ["chat", "research", "upload"])
 async def test_product_limiters_create_redis_client_from_production_split_fields(
     monkeypatch: pytest.MonkeyPatch,
     feature: str,

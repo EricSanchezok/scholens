@@ -1,9 +1,5 @@
 [
   {
-    "ParameterKey": "GitHubOidcProviderArn",
-    "ParameterValue": "arn:aws:iam::919651863140:oidc-provider/token.actions.githubusercontent.com"
-  },
-  {
     "ParameterKey": "ProductionDomain",
     "ParameterValue": "scholens.sanchezcloud.net"
   },

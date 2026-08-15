@@ -1,0 +1,307 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Scholens administrator-owned IAM bootstrap boundary
+Parameters:
+  GitHubOidcProviderArn: {AllowedPattern: '^arn:[^:]+:iam::[0-9]{12}:oidc-provider/token\.actions\.githubusercontent\.com$', Type: String}
+  GitHubOidcSubjectPrefix: {AllowedPattern: '^repo:[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+$', Default: 'repo:EricSanchezok@115814526/scholens@1308990084', Type: String}
+  RdsSecurityGroupId: {Default: sg-0ac42d2a5ddffaddf, Type: 'AWS::EC2::SecurityGroup::Id'}
+  ScholightMcpDelegationSecretArn: {AllowedPattern: '^arn:[^:]+:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9/_+=.@-]+$', Type: String}
+  ScholightMcpDelegationKmsKeyArn: {AllowedPattern: '^arn:[^:]+:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+$', Type: String}
+Resources:
+  RuntimeTaskPermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: SanchezCloudScholensRuntimeTaskBoundary
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: ['s3:AbortMultipartUpload', 's3:DeleteObject', 's3:GetObject', 's3:ListBucket', 's3:PutObject'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-content-${AWS::AccountId}-${AWS::Region}', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-content-${AWS::AccountId}-${AWS::Region}/*', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}/*']}
+        - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+        - {Action: ['sqs:ChangeMessageVisibility', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes', 'sqs:GetQueueUrl', 'sqs:ReceiveMessage', 'sqs:SendMessage'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:scholens-production-*'}
+        - {Action: 'ecs:UpdateTaskProtection', Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: '*'}
+        - {Action: ['xray:PutTraceSegments', 'xray:PutTelemetryRecords'], Effect: Allow, Resource: '*'}
+        - {Action: 'cloudwatch:PutMetricData', Condition: {StringEquals: {'cloudwatch:namespace': Scholens/Production}}, Effect: Allow, Resource: '*'}
+        - {Action: ['logs:CreateLogStream', 'logs:DescribeLogStreams', 'logs:PutLogEvents'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*'}
+  SchedulerInvocationPermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: SanchezCloudScholensSchedulerInvocationBoundary
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 'ecs:RunTask', Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/sanchezcloud-scholens-scheduler:*'}
+        - Action: iam:PassRole
+          Effect: Allow
+          Resource: [!Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensTaskExecutionRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerTaskRole']
+          Condition: {StringEquals: {'iam:PassedToService': ecs-tasks.amazonaws.com}}
+        - {Action: 'sqs:SendMessage', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:scholens-production-scheduler-dlq'}
+  FoundationCloudFormationServiceRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensFoundationCloudFormationServiceRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRole', Effect: Allow, Principal: {Service: cloudformation.amazonaws.com}}], Version: '2012-10-17'}
+      Policies:
+      - PolicyName: ManageScholensFoundationDataPlane
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - {Action: ['ec2:Describe*', 'elasticache:Describe*', 'kms:ListAliases'], Effect: Allow, Resource: '*'}
+          - {Action: ['kms:DescribeKey', 'kms:GetKeyPolicy', 'kms:ListResourceTags'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+          - {Action: 'kms:CreateKey', Condition: {StringEquals: {'aws:RequestTag/ManagedBy': CloudFormation, 'aws:RequestTag/Product': Scholens}}, Effect: Allow, Resource: '*'}
+          - {Action: ['kms:CreateGrant', 'kms:Decrypt', 'kms:EnableKeyRotation', 'kms:Encrypt', 'kms:GenerateDataKey', 'kms:PutKeyPolicy', 'kms:RevokeGrant', 'kms:TagResource', 'kms:UntagResource', 'kms:UpdateKeyDescription'], Condition: {StringEquals: {'aws:ResourceTag/ManagedBy': CloudFormation, 'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+          - {Action: ['kms:CreateAlias', 'kms:DeleteAlias', 'kms:UpdateAlias'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/sanchezcloud-scholens-*', !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*']}
+          - {Action: ['s3:CreateBucket', 's3:DeleteBucket', 's3:GetBucketAcl', 's3:GetBucketCORS', 's3:GetBucketObjectLockConfiguration', 's3:GetBucketOwnershipControls', 's3:GetBucketPolicy', 's3:GetBucketPublicAccessBlock', 's3:GetBucketTagging', 's3:GetBucketVersioning', 's3:GetEncryptionConfiguration', 's3:GetLifecycleConfiguration', 's3:PutBucketCORS', 's3:PutBucketObjectLockConfiguration', 's3:PutBucketOwnershipControls', 's3:PutBucketPolicy', 's3:PutBucketPublicAccessBlock', 's3:PutBucketTagging', 's3:PutBucketVersioning', 's3:PutEncryptionConfiguration', 's3:PutLifecycleConfiguration', 's3:TagResource', 's3:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-*'}
+          - {Action: ['ecr:CreateRepository', 'ecr:DeleteLifecyclePolicy', 'ecr:DeleteRepository', 'ecr:DescribeRepositories', 'ecr:GetLifecyclePolicy', 'ecr:PutImageScanningConfiguration', 'ecr:PutImageTagMutability', 'ecr:PutLifecyclePolicy', 'ecr:SetRepositoryPolicy', 'ecr:TagResource', 'ecr:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-*'}
+          - {Action: ['secretsmanager:CreateSecret', 'secretsmanager:DeleteResourcePolicy', 'secretsmanager:DeleteSecret', 'secretsmanager:DescribeSecret', 'secretsmanager:GetResourcePolicy', 'secretsmanager:PutResourcePolicy', 'secretsmanager:RemoveRegionsFromReplication', 'secretsmanager:ReplicateSecretToRegions', 'secretsmanager:RestoreSecret', 'secretsmanager:TagResource', 'secretsmanager:UntagResource', 'secretsmanager:UpdateSecret'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/*', !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/database/scholens-*']}
+          - {Action: 'secretsmanager:GetRandomPassword', Effect: Allow, Resource: '*'}
+          - {Action: 'secretsmanager:GetSecretValue', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/cache-*'}
+          - {Action: ['sqs:CreateQueue', 'sqs:DeleteQueue', 'sqs:GetQueueAttributes', 'sqs:GetQueueUrl', 'sqs:ListQueueTags', 'sqs:SetQueueAttributes', 'sqs:TagQueue', 'sqs:UntagQueue'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:scholens-production-*'}
+          - {Action: ['elasticache:AddTagsToResource', 'elasticache:CreateServerlessCache', 'elasticache:CreateUser', 'elasticache:CreateUserGroup', 'elasticache:DeleteServerlessCache', 'elasticache:DeleteUser', 'elasticache:DeleteUserGroup', 'elasticache:ListTagsForResource', 'elasticache:ModifyServerlessCache', 'elasticache:ModifyUser', 'elasticache:ModifyUserGroup', 'elasticache:RemoveTagsFromResource'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${AWS::AccountId}:serverlesscache:scholens-*', !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${AWS::AccountId}:user:scholens-*', !Sub 'arn:${AWS::Partition}:elasticache:${AWS::Region}:${AWS::AccountId}:usergroup:scholens-*']}
+          - Action: iam:CreateServiceLinkedRole
+            Effect: Allow
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/elasticache.amazonaws.com/*
+            Condition: {StringEquals: {'iam:AWSServiceName': elasticache.amazonaws.com}}
+          - Effect: Allow
+            Action: ec2:CreateSecurityGroup
+            Resource:
+            - !Sub
+              - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+              - VpcId: !ImportValue sanchezcloud-production-vpc-id
+            - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
+            Condition: {StringEquals: {'aws:RequestTag/ManagedBy': CloudFormation, 'aws:RequestTag/Product': Scholens}}
+          - {Action: ['ec2:AuthorizeSecurityGroupEgress', 'ec2:AuthorizeSecurityGroupIngress', 'ec2:DeleteSecurityGroup', 'ec2:RevokeSecurityGroupEgress', 'ec2:RevokeSecurityGroupIngress', 'ec2:UpdateSecurityGroupRuleDescriptionsEgress', 'ec2:UpdateSecurityGroupRuleDescriptionsIngress'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'}
+          - {Action: ['ec2:AuthorizeSecurityGroupIngress', 'ec2:RevokeSecurityGroupIngress'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${RdsSecurityGroupId}'}
+          - {Action: ['ec2:CreateTags', 'ec2:DeleteTags'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'}
+          - {Action: ['sns:CreateTopic', 'sns:DeleteTopic', 'sns:GetTopicAttributes', 'sns:ListSubscriptionsByTopic', 'sns:SetTopicAttributes', 'sns:Subscribe', 'sns:TagResource', 'sns:Unsubscribe', 'sns:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:sns:${AWS::Region}:${AWS::AccountId}:sanchezcloud-scholens-*'}
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensTaskExecutionRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRole', Effect: Allow, Principal: {Service: ecs-tasks.amazonaws.com}}], Version: '2012-10-17'}
+      ManagedPolicyArns: [!Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']
+      Policies:
+      - PolicyName: ReadScholensTaskSecrets
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action: secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/database/scholens-runtime-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/database/scholens-migrator-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/core-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/ai-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/mail-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/billing-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/integrations-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/cache-api-*'
+            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/cache-jobs-*'
+            - !Ref ScholightMcpDelegationSecretArn
+          - {Action: 'kms:Decrypt', Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+          - {Action: 'kms:Decrypt', Effect: Allow, Resource: !Ref ScholightMcpDelegationKmsKeyArn}
+  RuntimeIamControlPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: SanchezCloudScholensRuntimeIamControl
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action: ['iam:DeleteRole', 'iam:DeleteRolePolicy', 'iam:GetRole', 'iam:GetRolePolicy', 'iam:ListAttachedRolePolicies', 'iam:ListRolePolicies', 'iam:PutRolePolicy', 'iam:TagRole', 'iam:UntagRole', 'iam:UpdateAssumeRolePolicy', 'iam:UpdateRole', 'iam:UpdateRoleDescription']
+          Effect: Allow
+          Resource:
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensApiTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensDocumentWorkerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensResearchWorkerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMaintenanceWorkerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMigrationTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerInvocationRole'
+        - Action: ['iam:CreateRole', 'iam:PutRolePermissionsBoundary']
+          Effect: Allow
+          Resource: [!Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensApiTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensDocumentWorkerTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensResearchWorkerTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMaintenanceWorkerTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMigrationTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerTaskRole']
+          Condition: {ArnEquals: {'iam:PermissionsBoundary': !Ref RuntimeTaskPermissionsBoundary}}
+        - {Action: ['iam:CreateRole', 'iam:PutRolePermissionsBoundary'], Condition: {ArnEquals: {'iam:PermissionsBoundary': !Ref SchedulerInvocationPermissionsBoundary}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerInvocationRole'}
+        - {Action: 'iam:ListRoles', Effect: Allow, Resource: '*'}
+        - {Action: ['iam:CreatePolicy', 'iam:CreatePolicyVersion', 'iam:DeletePolicy', 'iam:DeletePolicyVersion', 'iam:GetPolicy', 'iam:GetPolicyVersion', 'iam:ListEntitiesForPolicy', 'iam:ListPolicyVersions', 'iam:SetDefaultPolicyVersion'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/SanchezCloudScholensTelemetry'}
+        - {Action: 'iam:ListPolicies', Effect: Allow, Resource: '*'}
+        - Action: ['iam:AttachRolePolicy', 'iam:DetachRolePolicy']
+          Condition: {ArnEquals: {'iam:PolicyARN': !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/SanchezCloudScholensTelemetry'}}
+          Effect: Allow
+          Resource:
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensApiTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensDocumentWorkerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensResearchWorkerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMaintenanceWorkerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMigrationTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerTaskRole'
+          - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerInvocationRole'
+        - {Action: ['iam:GetPolicy', 'iam:GetPolicyVersion', 'iam:ListPolicyVersions'], Effect: Allow, Resource: [!Ref RuntimeTaskPermissionsBoundary, !Ref SchedulerInvocationPermissionsBoundary]}
+        - Action: iam:PassRole
+          Effect: Allow
+          Resource: [!GetAtt TaskExecutionRole.Arn, !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensApiTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensDocumentWorkerTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensResearchWorkerTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMaintenanceWorkerTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMigrationTaskRole', !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerTaskRole']
+          Condition: {StringEquals: {'iam:PassedToService': ecs-tasks.amazonaws.com}}
+        - {Action: 'iam:PassRole', Condition: {StringEquals: {'iam:PassedToService': scheduler.amazonaws.com}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensSchedulerInvocationRole'}
+        - Action: iam:CreateServiceLinkedRole
+          Effect: Allow
+          Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/*
+          Condition: {StringEquals: {'iam:AWSServiceName': [ecs.amazonaws.com, ecs.application-autoscaling.amazonaws.com, elasticloadbalancing.amazonaws.com]}}
+  RuntimeComputePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: SanchezCloudScholensRuntimeCompute
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: ['application-autoscaling:Describe*', 'cloudwatch:GetMetricData', 'ec2:Describe*', 'ecs:Describe*', 'ecs:List*', 'elasticloadbalancing:Describe*', 'logs:DescribeLogGroups', 'scheduler:ListSchedules', 'servicediscovery:Get*', 'servicediscovery:List*'], Effect: Allow, Resource: '*'}
+        - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+        - {Action: 's3:GetObject', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/cloudformation/*'}
+        - {Action: 'secretsmanager:GetSecretValue', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/edge-*'}
+        - Effect: Allow
+          Action: ec2:CreateSecurityGroup
+          Resource:
+          - !Sub
+            - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+            - VpcId: !ImportValue sanchezcloud-production-vpc-id
+          - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
+          Condition: {StringEquals: {'aws:RequestTag/ManagedBy': CloudFormation, 'aws:RequestTag/Product': Scholens}}
+        - {Action: ['ec2:AuthorizeSecurityGroupEgress', 'ec2:AuthorizeSecurityGroupIngress', 'ec2:DeleteSecurityGroup', 'ec2:RevokeSecurityGroupEgress', 'ec2:RevokeSecurityGroupIngress', 'ec2:UpdateSecurityGroupRuleDescriptionsEgress', 'ec2:UpdateSecurityGroupRuleDescriptionsIngress'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'}
+        - {Action: ['ec2:AuthorizeSecurityGroupIngress', 'ec2:RevokeSecurityGroupIngress'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${RdsSecurityGroupId}'}
+        - {Action: ['ec2:CreateTags', 'ec2:DeleteTags'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'}
+        - {Action: ['ecs:CreateService', 'ecs:DeleteService', 'ecs:DeregisterTaskDefinition', 'ecs:RegisterTaskDefinition', 'ecs:StopServiceDeployment', 'ecs:TagResource', 'ecs:UntagResource', 'ecs:UpdateService', 'elasticloadbalancing:AddTags', 'elasticloadbalancing:CreateListener', 'elasticloadbalancing:CreateLoadBalancer', 'elasticloadbalancing:CreateRule', 'elasticloadbalancing:CreateTargetGroup', 'elasticloadbalancing:DeleteListener', 'elasticloadbalancing:DeleteLoadBalancer', 'elasticloadbalancing:DeleteRule', 'elasticloadbalancing:DeleteTargetGroup', 'elasticloadbalancing:DeregisterTargets', 'elasticloadbalancing:ModifyCapacityReservation', 'elasticloadbalancing:ModifyIpPools', 'elasticloadbalancing:ModifyListener', 'elasticloadbalancing:ModifyListenerAttributes', 'elasticloadbalancing:ModifyLoadBalancerAttributes', 'elasticloadbalancing:ModifyRule', 'elasticloadbalancing:ModifyTargetGroup', 'elasticloadbalancing:ModifyTargetGroupAttributes', 'elasticloadbalancing:RegisterTargets', 'elasticloadbalancing:RemoveTags', 'elasticloadbalancing:SetIpAddressType', 'elasticloadbalancing:SetRulePriorities', 'elasticloadbalancing:SetSecurityGroups', 'elasticloadbalancing:SetSubnets', 'application-autoscaling:DeleteScalingPolicy', 'application-autoscaling:DeregisterScalableTarget', 'application-autoscaling:PutScalingPolicy', 'application-autoscaling:RegisterScalableTarget'], Effect: Allow, Resource: '*'}
+  RuntimeOperationsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ManagedPolicyName: SanchezCloudScholensRuntimeOperations
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: ['logs:CreateLogGroup', 'logs:DeleteLogGroup', 'logs:DeleteRetentionPolicy', 'logs:ListTagsForResource', 'logs:PutRetentionPolicy', 'logs:TagResource', 'logs:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*'}
+        - {Action: ['cloudwatch:DeleteAlarms', 'cloudwatch:DescribeAlarms', 'cloudwatch:ListTagsForResource', 'cloudwatch:PutMetricAlarm', 'cloudwatch:TagResource', 'cloudwatch:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:sanchezcloud-scholens-*'}
+        - {Action: ['cloudwatch:DeleteDashboards', 'cloudwatch:GetDashboard', 'cloudwatch:ListDashboards', 'cloudwatch:ListTagsForResource', 'cloudwatch:PutDashboard', 'cloudwatch:TagResource', 'cloudwatch:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:cloudwatch::${AWS::AccountId}:dashboard/SanchezCloud-Scholens'}
+        - {Action: ['scheduler:CreateSchedule', 'scheduler:DeleteSchedule', 'scheduler:GetSchedule', 'scheduler:ListSchedules', 'scheduler:UpdateSchedule'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/scholens-*'}
+        - {Action: ['servicediscovery:CreateService', 'servicediscovery:DeleteService', 'servicediscovery:DeleteServiceAttributes', 'servicediscovery:GetOperation', 'servicediscovery:GetServiceAttributes', 'servicediscovery:ListTagsForResource', 'servicediscovery:TagResource', 'servicediscovery:UntagResource', 'servicediscovery:UpdateService', 'servicediscovery:UpdateServiceAttributes'], Condition: {StringEqualsIfExists: {'aws:RequestTag/Product': Scholens}}, Effect: Allow, Resource: '*'}
+        - {Action: ['elasticloadbalancing:CreateWebACLAssociation', 'elasticloadbalancing:DeleteWebACLAssociation', 'elasticloadbalancing:GetLoadBalancerWebACL'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/app/sanchezcloud-scholens/*'}
+        - {Action: 'elasticloadbalancing:DescribeWebACLAssociation', Effect: Allow, Resource: '*'}
+        - {Action: ['wafv2:AssociateWebACL', 'wafv2:CreateRegexPatternSet', 'wafv2:CreateWebACL', 'wafv2:DeleteRegexPatternSet', 'wafv2:DeleteWebACL', 'wafv2:DisassociateWebACL', 'wafv2:GetRegexPatternSet', 'wafv2:GetWebACL', 'wafv2:GetWebACLForResource', 'wafv2:ListResourcesForWebACL', 'wafv2:ListTagsForResource', 'wafv2:TagResource', 'wafv2:UntagResource', 'wafv2:UpdateRegexPatternSet', 'wafv2:UpdateWebACL'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/sanchezcloud-scholens/*', !Sub 'arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:regional/regexpatternset/sanchezcloud-scholens-*/*']}
+  RuntimeCloudFormationServiceRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensRuntimeCloudFormationServiceRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRole', Effect: Allow, Principal: {Service: cloudformation.amazonaws.com}}], Version: '2012-10-17'}
+      ManagedPolicyArns: [!Ref RuntimeIamControlPolicy, !Ref RuntimeComputePolicy, !Ref RuntimeOperationsPolicy]
+  PublishRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensImagePublishRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRoleWithWebIdentity', Condition: {StringEquals: {token.actions.githubusercontent.com:aud: sts.amazonaws.com, token.actions.githubusercontent.com:sub: !Sub '${GitHubOidcSubjectPrefix}:environment:image-publish'}}, Effect: Allow, Principal: {Federated: !Ref GitHubOidcProviderArn}}], Version: '2012-10-17'}
+      Policies:
+      - PolicyName: PublishImmutableScholensRelease
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - {Action: 'ecr:GetAuthorizationToken', Effect: Allow, Resource: '*'}
+          - {Action: ['ecr:BatchCheckLayerAvailability', 'ecr:BatchGetImage', 'ecr:CompleteLayerUpload', 'ecr:DescribeImages', 'ecr:DescribeImageScanFindings', 'ecr:GetDownloadUrlForLayer', 'ecr:InitiateLayerUpload', 'ecr:PutImage', 'ecr:UploadLayerPart'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-web', !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-api', !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-jobs']}
+          - {Action: ['s3:GetBucketLocation', 's3:ListBucket'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}'}
+          - {Action: ['s3:GetObject', 's3:PutObject'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/releases/*', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/source-maps/*']}
+          - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+  ProductionDeployRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensProductionDeployRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRoleWithWebIdentity', Condition: {StringEquals: {token.actions.githubusercontent.com:aud: sts.amazonaws.com, token.actions.githubusercontent.com:sub: !Sub '${GitHubOidcSubjectPrefix}:environment:production'}}, Effect: Allow, Principal: {Federated: !Ref GitHubOidcProviderArn}}], Version: '2012-10-17'}
+      Policies:
+      - PolicyName: DeployScholensProduction
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - {Action: ['cloudformation:CreateChangeSet', 'cloudformation:CreateStack', 'cloudformation:DeleteChangeSet', 'cloudformation:DescribeChangeSet', 'cloudformation:DescribeStackEvents', 'cloudformation:DescribeStackResources', 'cloudformation:DescribeStacks', 'cloudformation:ExecuteChangeSet', 'cloudformation:GetTemplate', 'cloudformation:GetTemplateSummary', 'cloudformation:ListChangeSets', 'cloudformation:UpdateStack', 'cloudformation:UpdateTerminationProtection'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/sanchezcloud-scholens-production/*'}
+          - {Action: ['cloudformation:DescribeStacks', 'cloudformation:ListExports', 'cloudformation:ValidateTemplate'], Effect: Allow, Resource: '*'}
+          - {Action: 'iam:PassRole', Condition: {StringEquals: {'iam:PassedToService': cloudformation.amazonaws.com}}, Effect: Allow, Resource: !GetAtt RuntimeCloudFormationServiceRole.Arn}
+          - {Action: 's3:GetObject', Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/releases/*', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/migrations/*']}
+          - {Action: ['s3:GetObject', 's3:PutObject'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/cloudformation/*'}
+          - {Action: ['s3:GetBucketLocation', 's3:ListBucket'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}'}
+          - {Action: ['ecs:DescribeServices', 'ecs:DescribeTasks'], Effect: Allow, Resource: '*'}
+          - {Action: ['ecr:BatchGetImage', 'ecr:DescribeImages', 'ecr:DescribeImageScanFindings'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-web', !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-api', !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-jobs']}
+          - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+  DatabaseDeployRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensDatabaseDeployRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRoleWithWebIdentity', Condition: {StringEquals: {token.actions.githubusercontent.com:aud: sts.amazonaws.com, token.actions.githubusercontent.com:sub: !Sub '${GitHubOidcSubjectPrefix}:environment:database-production'}}, Effect: Allow, Principal: {Federated: !Ref GitHubOidcProviderArn}}], Version: '2012-10-17'}
+      Policies:
+      - PolicyName: RunScholensMigrations
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - {Action: ['cloudformation:DescribeStacks', 'cloudformation:ListExports'], Effect: Allow, Resource: '*'}
+          - {Action: 'ecs:RegisterTaskDefinition', Effect: Allow, Resource: '*'}
+          - {Action: ['ecs:DeregisterTaskDefinition', 'ecs:DescribeTaskDefinition'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/sanchezcloud-scholens-migration:*'}
+          - {Action: ['ecs:DescribeTasks', 'ecs:StopTask'], Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/sanchezcloud-production/*'}
+          - {Action: 'ecs:RunTask', Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/sanchezcloud-scholens-migration:*'}
+          - {Action: 'iam:PassRole', Condition: {StringEquals: {'iam:PassedToService': ecs-tasks.amazonaws.com}}, Effect: Allow, Resource: [!GetAtt TaskExecutionRole.Arn, !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMigrationTaskRole']}
+          - {Action: 's3:GetObject', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/releases/*'}
+          - {Action: ['s3:GetObject', 's3:PutObject'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/migrations/*'}
+          - {Action: 's3:ListBucket', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}'}
+          - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+          - {Action: 'logs:GetLogEvents', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/migration:log-stream:sanchezcloud/migration/*'}
+  InfrastructureDeployRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensInfrastructureDeployRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRoleWithWebIdentity', Condition: {StringEquals: {token.actions.githubusercontent.com:aud: sts.amazonaws.com, token.actions.githubusercontent.com:sub: !Sub '${GitHubOidcSubjectPrefix}:environment:infrastructure-production'}}, Effect: Allow, Principal: {Federated: !Ref GitHubOidcProviderArn}}], Version: '2012-10-17'}
+      Policies:
+      - PolicyName: UpdateScholensFoundation
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - {Action: ['cloudformation:CreateChangeSet', 'cloudformation:DeleteChangeSet', 'cloudformation:DescribeChangeSet', 'cloudformation:DescribeStackEvents', 'cloudformation:DescribeStacks', 'cloudformation:ExecuteChangeSet', 'cloudformation:GetTemplate', 'cloudformation:GetTemplateSummary', 'cloudformation:ListChangeSets', 'cloudformation:UpdateStack'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/sanchezcloud-scholens-foundation/*'}
+          - {Action: ['cloudformation:ListExports', 'cloudformation:ValidateTemplate'], Effect: Allow, Resource: '*'}
+          - {Action: 'iam:PassRole', Condition: {StringEquals: {'iam:PassedToService': cloudformation.amazonaws.com}}, Effect: Allow, Resource: !GetAtt FoundationCloudFormationServiceRole.Arn}
+  DiagnosticBreakGlassRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RoleName: SanchezCloudScholensDiagnosticBreakGlassRole
+      AssumeRolePolicyDocument: {Statement: [{Action: 'sts:AssumeRole', Condition: {Bool: {'aws:MultiFactorAuthPresent': 'true'}}, Effect: Allow, Principal: {AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'}}], Version: '2012-10-17'}
+      Policies:
+      - PolicyName: ReadDiagnosticSnapshots
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - {Action: ['s3:GetObject', 's3:ListBucket'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}/*']}
+          - {Action: 'kms:Decrypt', Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
+Outputs:
+  FoundationCloudFormationServiceRoleArn: {Value: !GetAtt FoundationCloudFormationServiceRole.Arn, Export: {Name: sanchezcloud-scholens-foundation-cloudformation-role-arn}}
+  RuntimeCloudFormationServiceRoleArn: {Value: !GetAtt RuntimeCloudFormationServiceRole.Arn, Export: {Name: sanchezcloud-scholens-runtime-cloudformation-role-arn}}
+  TaskExecutionRoleArn: {Value: !GetAtt TaskExecutionRole.Arn, Export: {Name: sanchezcloud-scholens-task-execution-role-arn}}
+  RuntimeTaskPermissionsBoundaryArn: {Value: !Ref RuntimeTaskPermissionsBoundary, Export: {Name: sanchezcloud-scholens-runtime-task-boundary-arn}}
+  SchedulerInvocationPermissionsBoundaryArn: {Value: !Ref SchedulerInvocationPermissionsBoundary, Export: {Name: sanchezcloud-scholens-scheduler-invocation-boundary-arn}}
+  ScholightMcpDelegationSecretArn: {Value: !Ref ScholightMcpDelegationSecretArn, Export: {Name: sanchezcloud-scholens-scholight-mcp-delegation-secret-arn}}
+  PublishRoleArn: {Value: !GetAtt PublishRole.Arn}
+  ProductionDeployRoleArn: {Value: !GetAtt ProductionDeployRole.Arn}
+  DatabaseDeployRoleArn: {Value: !GetAtt DatabaseDeployRole.Arn}
+  InfrastructureDeployRoleArn: {Value: !GetAtt InfrastructureDeployRole.Arn}

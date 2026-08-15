@@ -13,8 +13,7 @@ target "web-runtime" {
     NEXT_PUBLIC_API_URL           = PRODUCTION_API_URL
     NEXT_PUBLIC_ACCOUNT_CENTER_URL = ACCOUNT_CENTER_URL
   }
-  tags = ["${REGISTRY}/sanchezcloud-scholens-web:git-${RELEASE_SHA}"]
-  output = ["type=registry"]
+  output = ["type=registry,name=${REGISTRY}/sanchezcloud-scholens-web,push-by-digest=true,name-canonical=true"]
   attest = ["type=provenance,mode=max", "type=sbom"]
 }
 

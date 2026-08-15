@@ -36,6 +36,20 @@ def test_direct_production_cache_uses_the_same_contract() -> None:
     )
 
 
+def test_split_credentials_preserve_literal_percent_escape_text() -> None:
+    assert resolve_cache_url(
+        host="scholens.xxxxxx.0001.apse1.cache.amazonaws.com",
+        port="6379",
+        username="runtime%2Fuser",
+        password="secret%2Fvalue",
+        tls=True,
+        environment="production",
+    ) == (
+        "rediss://runtime%252Fuser:secret%252Fvalue@"
+        "scholens.xxxxxx.0001.apse1.cache.amazonaws.com:6379/0"
+    )
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

@@ -85,3 +85,23 @@ def test_cors_allowed_origins_defaults_to_canonical_client_domain() -> None:
     )
 
     assert settings.cors_allowed_origins == ["http://localhost:3000"]
+
+
+@pytest.mark.parametrize("trusted_proxy_cidr", [None, "not-a-cidr"])
+def test_production_cloudflare_trust_requires_a_valid_proxy_cidr(
+    trusted_proxy_cidr: str | None,
+) -> None:
+    with pytest.raises(ValidationError, match="TRUSTED_PROXY_CIDR|validation error"):
+        AppSettings(
+            environment="production",
+            paper_search_cursor_secret="production-search-cursor-secret-value",
+            integration_credential_encryption_key=(
+                "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+            ),
+            scholight_mcp_delegation_jwt_secret="s" * 32,
+            cache_url=(
+                "rediss://api:secret@scholens.abc.0001.apse1.cache.amazonaws.com:6379/0"
+            ),
+            trust_cloudflare_client_ip=True,
+            trusted_proxy_cidr=trusted_proxy_cidr,
+        )

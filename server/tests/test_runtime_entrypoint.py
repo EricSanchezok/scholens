@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.bootstrap.runtime_entrypoint import _database_url
+import json
+import subprocess
+
+from app.bootstrap.runtime_entrypoint import _database_url, main
 
 
 def test_database_url_escapes_credentials_and_requires_tls(monkeypatch) -> None:
@@ -63,3 +66,36 @@ def test_production_database_rejects_unsafe_endpoint(
 
     with pytest.raises(RuntimeError):
         _database_url()
+
+
+def test_migration_fails_when_identity_ledger_is_not_exact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_HOST", "db.example.invalid")
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "sanchezcloud")
+    monkeypatch.setenv("DATABASE_USERNAME", "scholens_migrator")
+    monkeypatch.setenv("DATABASE_PASSWORD", "secret")
+    monkeypatch.setenv("RELEASE_SHA", "a" * 40)
+    monkeypatch.setattr("sys.argv", ["runtime_entrypoint", "migrate"])
+    results = iter(
+        (
+            subprocess.CompletedProcess(
+                [],
+                0,
+                stdout=json.dumps(
+                    {
+                        "up_to_date": True,
+                        "current_revisions": ["head"],
+                        "expected_revisions": ["head"],
+                    }
+                ),
+            ),
+            subprocess.CompletedProcess([], 0),
+            subprocess.CompletedProcess([], 0, stdout="0\n"),
+        )
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: next(results))
+
+    with pytest.raises(RuntimeError, match="exactly match"):
+        main()

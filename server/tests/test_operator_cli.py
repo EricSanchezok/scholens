@@ -61,7 +61,7 @@ def test_doctor_json_is_machine_readable_and_never_calls_models(
         "_database",
         "_migration",
         "_redis",
-        "_rabbitmq",
+        "_job_broker",
         "_jobs",
         "_s3",
         "_ai_profiles",
@@ -83,7 +83,7 @@ def test_doctor_failure_is_json_exit_one_and_redacts_url_password(
         "_configuration",
         "_migration",
         "_redis",
-        "_rabbitmq",
+        "_job_broker",
         "_jobs",
         "_s3",
         "_ai_profiles",
@@ -105,6 +105,45 @@ def test_doctor_failure_is_json_exit_one_and_redacts_url_password(
     assert "operator:***@database.example" in result.output
 
 
+def test_production_doctor_checks_predefined_sqs_queues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queue_urls = {
+        "SQS_DOCUMENT_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/document",
+        "SQS_RESEARCH_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/research",
+        "SQS_MAINTENANCE_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/maintenance",
+    }
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("CELERY_BROKER_URL", "sqs://")
+    monkeypatch.setenv("AWS_REGION", "ap-southeast-1")
+    for name, value in queue_urls.items():
+        monkeypatch.setenv(name, value)
+
+    client = MagicMock()
+    monkeypatch.setattr(health.boto3, "client", lambda *args, **kwargs: client)
+
+    result = health._job_broker()
+
+    assert result == {
+        "reachable": True,
+        "transport": "sqs",
+        "queues": ["document", "maintenance", "research"],
+    }
+    assert client.get_queue_attributes.call_count == 3
+    assert {
+        call.kwargs["QueueUrl"] for call in client.get_queue_attributes.call_args_list
+    } == set(queue_urls.values())
+    assert all(
+        call.kwargs["AttributeNames"] == ["QueueArn"]
+        for call in client.get_queue_attributes.call_args_list
+    )
+    assert health._jobs() == {
+        "reachable": True,
+        "deployed": False,
+        "mode": "worker-only",
+    }
+
+
 def test_reset_requires_the_exact_confirmation_phrase() -> None:
     result = CliRunner().invoke(cli, ["dev", "reset-product"], input="WRONG\n")
 
@@ -122,6 +161,7 @@ def test_database_upgrade_reports_unchanged_without_running_alembic(
         lambda: {
             "up_to_date": True,
             "current_revisions": ["head"],
+            "expected_revisions": ["head"],
             "schema_owned_by_role": True,
         },
     )
@@ -133,6 +173,35 @@ def test_database_upgrade_reports_unchanged_without_running_alembic(
     assert result.exit_code == 0
     assert json.loads(result.output)["status"] == "unchanged"
     upgrade.assert_not_called()
+
+
+def test_database_upgrade_fails_when_ledger_does_not_reach_unique_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(database, "migration_database_url", lambda: "postgresql://x")
+    statuses = iter(
+        (
+            {
+                "up_to_date": False,
+                "current_revisions": ["old"],
+                "expected_revisions": ["head"],
+                "schema_owned_by_role": True,
+            },
+            {
+                "up_to_date": False,
+                "current_revisions": ["old"],
+                "expected_revisions": ["head"],
+                "schema_owned_by_role": True,
+            },
+        )
+    )
+    monkeypatch.setattr(database, "migration_status", lambda: next(statuses))
+    monkeypatch.setattr(database.command, "upgrade", MagicMock())
+
+    result = CliRunner().invoke(cli, ["db", "upgrade", "--yes", "--json"])
+
+    assert result.exit_code == 1
+    assert "did not converge to the one expected Scholens head" in result.output
 
 
 def test_database_upgrade_rejects_non_owner_before_confirmation(
@@ -242,7 +311,8 @@ def test_identity_commands_do_not_collect_an_unpersisted_reason() -> None:
             ],
         )
         assert rejected.exit_code == 2
-        assert "No such option '--reason'" in rejected.output
+        assert "No such option" in rejected.output
+        assert "--reason" in rejected.output
 
 
 @pytest.mark.parametrize(
@@ -273,7 +343,8 @@ def test_non_prose_commands_reject_an_unpersisted_reason(
         [*command, *required_options, "--reason", "discarded prose", "--yes"],
     )
     assert rejected.exit_code == 2
-    assert "No such option '--reason'" in rejected.output
+    assert "No such option" in rejected.output
+    assert "--reason" in rejected.output
 
 
 def test_users_plan_filter_scans_beyond_first_five_hundred(

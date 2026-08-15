@@ -65,7 +65,33 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.release_sha }}
           persist-credentials: false
+      - name: Configure AWS publishing credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Recover an existing immutable manifest
+        id: existing
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
+        run: |
+          account_id=$(aws sts get-caller-identity --query Account --output text)
+          bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          key="releases/${RELEASE_SHA}/manifest.json"
+          if aws s3api head-object --bucket "$bucket" --key "$key" >/dev/null 2>&1; then
+            aws s3api get-object --bucket "$bucket" --key "$key" release-manifest.json >/dev/null
+            python scripts/release_manifest.py verify \
+              --manifest release-manifest.json \
+              --expected-release-sha "$RELEASE_SHA" \
+              --expected-account-id "$account_id" \
+              --expected-region "$AWS_REGION"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Mint read-only SanchezCloud Identity token
+        if: steps.existing.outputs.exists == 'false'
         id: identity-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
@@ -75,6 +101,7 @@ jobs:
           repositories: sanchezcloud-identity
           permission-contents: read
       - name: Configure private dependency access
+        if: steps.existing.outputs.exists == 'false'
         env:
           IDENTITY_READ_TOKEN: ${{ steps.identity-token.outputs.token }}
         run: >-
@@ -82,28 +109,27 @@ jobs:
           url."https://x-access-token:${IDENTITY_READ_TOKEN}@github.com/".insteadOf
           "https://github.com/"
       - name: Set up uv
+        if: steps.existing.outputs.exists == 'false'
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: "0.9.2"
           enable-cache: true
       - name: Resolve Identity schema contract
+        if: steps.existing.outputs.exists == 'false'
         id: identity
         run: |
           uv sync --project server --frozen --no-dev
           schema_version=$(server/.venv/bin/python -c \
             'import sanchezcloud_identity as identity; print(identity.AUTH_SCHEMA_VERSION)')
           echo "schema_version=$schema_version" >> "$GITHUB_OUTPUT"
-      - name: Configure AWS publishing credentials
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
-        with:
-          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+          echo "revision=$(python scripts/release_manifest.py identity-revision)" >> "$GITHUB_OUTPUT"
       - name: Log in to ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build Web and export source maps from one build graph
+        if: steps.existing.outputs.exists == 'false'
         id: web
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
@@ -119,6 +145,7 @@ jobs:
           find web-source-maps -type f -name '*.map' -print -quit | grep -q .
           test -s web-source-maps/index.json
       - name: Build and push API
+        if: steps.existing.outputs.exists == 'false'
         id: api
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -126,13 +153,15 @@ jobs:
           file: server/Dockerfile
           target: runtime
           platforms: linux/amd64
-          push: true
-          tags: ${{ steps.ecr.outputs.registry }}/sanchezcloud-scholens-api:git-${{ needs.prepare.outputs.release_sha }}
+          outputs: type=image,name=${{ steps.ecr.outputs.registry }}/sanchezcloud-scholens-api,push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            SANCHEZCLOUD_IDENTITY_REVISION=${{ steps.identity.outputs.revision }}
           provenance: mode=max
           sbom: true
           secrets: |
             github_token=${{ steps.identity-token.outputs.token }}
       - name: Build and push jobs
+        if: steps.existing.outputs.exists == 'false'
         id: jobs
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -140,11 +169,23 @@ jobs:
           file: jobs/Dockerfile
           target: runtime
           platforms: linux/amd64
-          push: true
-          tags: ${{ steps.ecr.outputs.registry }}/sanchezcloud-scholens-jobs:git-${{ needs.prepare.outputs.release_sha }}
+          outputs: type=image,name=${{ steps.ecr.outputs.registry }}/sanchezcloud-scholens-jobs,push-by-digest=true,name-canonical=true,push=true
           provenance: mode=max
           sbom: true
+      - name: Wait for digest-bound ECR vulnerability scans
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          JOBS_DIGEST: ${{ steps.jobs.outputs.digest }}
+        run: |
+          python scripts/ecr_scan_contract.py \
+            --image "web=sanchezcloud-scholens-web@${WEB_DIGEST}" \
+            --image "api=sanchezcloud-scholens-api@${API_DIGEST}" \
+            --image "jobs=sanchezcloud-scholens-jobs@${JOBS_DIGEST}" \
+            --output image-scans.json
       - name: Create deterministic release manifest
+        if: steps.existing.outputs.exists == 'false'
         env:
           RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
           CREATED_AT: ${{ needs.prepare.outputs.created_at }}
@@ -166,6 +207,7 @@ jobs:
             --api-image "$REGISTRY/sanchezcloud-scholens-api@$API_DIGEST" \
             --jobs-image "$REGISTRY/sanchezcloud-scholens-jobs@$JOBS_DIGEST" \
             --source-maps-index web-source-maps/index.json \
+            --image-scan-attestation image-scans.json \
             --output release-manifest.json
           python scripts/release_manifest.py verify \
             --manifest release-manifest.json \
@@ -173,6 +215,7 @@ jobs:
             --expected-account-id "${REGISTRY%%.*}" \
             --expected-region "$AWS_REGION"
       - name: Store immutable release assets
+        if: steps.existing.outputs.exists == 'false'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
@@ -213,16 +256,80 @@ jobs:
           }
           while IFS= read -r -d '' source_map; do
             relative=${source_map#web-source-maps/}
+            prefix=$(jq -er .source_maps.prefix release-manifest.json)
             put_immutable \
-              "$source_map" "source-maps/${RELEASE_SHA}/${relative}" \
+              "$source_map" "${prefix}${relative}" \
               application/json
           done < <(find web-source-maps -type f -name '*.map' -print0 | sort -z)
+          index_key=$(jq -er .source_maps.index_key release-manifest.json)
           put_immutable \
             web-source-maps/index.json \
-            "source-maps/${RELEASE_SHA}/index.json" \
+            "$index_key" \
             application/json
           key="releases/${RELEASE_SHA}/manifest.json"
           put_immutable release-manifest.json "$key" application/json
+      - name: Verify immutable assets and promote final SHA tags
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
+        run: |
+          account_id=$(aws sts get-caller-identity --query Account --output text)
+          bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          scan_args=()
+          for component in web api jobs; do
+            image=$(jq -er --arg component "$component" '.images[$component]' release-manifest.json)
+            repository=${image#*/}
+            repository=${repository%@*}
+            digest=${image##*@}
+            scan_args+=(--image "${component}=${repository}@${digest}")
+            docker buildx imagetools inspect "$image" >/dev/null
+            docker buildx imagetools inspect "$image" \
+              --format '{{json .Provenance}}' | jq -e 'type == "object"' >/dev/null
+            docker buildx imagetools inspect "$image" \
+              --format '{{json .SBOM}}' | jq -e 'type == "object"' >/dev/null
+          done
+          python scripts/ecr_scan_contract.py \
+            "${scan_args[@]}" --output live-image-scans.json
+          python scripts/release_manifest.py verify-image-scans \
+            --manifest release-manifest.json \
+            --image-scan-attestation live-image-scans.json
+
+          index_key=$(jq -er .source_maps.index_key release-manifest.json)
+          aws s3api get-object --bucket "$bucket" --key "$index_key" \
+            verified-source-map-index.json >/dev/null
+          test "$(sha256sum verified-source-map-index.json | cut -d' ' -f1)" = \
+            "$(jq -er .source_maps.index_sha256 release-manifest.json)"
+          while IFS=$'\t' read -r path checksum size; do
+            object=$(mktemp)
+            aws s3api get-object --bucket "$bucket" \
+              --key "$(jq -er .source_maps.prefix release-manifest.json)${path}" \
+              "$object" >/dev/null
+            test "$(sha256sum "$object" | cut -d' ' -f1)" = "$checksum"
+            test "$(wc -c < "$object" | tr -d ' ')" = "$size"
+            rm -f "$object"
+          done < <(jq -r '.files[] | [.path,.sha256,.size] | @tsv' \
+            verified-source-map-index.json)
+
+          for component in web api jobs; do
+            image=$(jq -er --arg component "$component" '.images[$component]' release-manifest.json)
+            repository=${image#*/}
+            repository=${repository%@*}
+            digest=${image##*@}
+            final_tag="git-${RELEASE_SHA}"
+            if existing_digest=$(aws ecr describe-images \
+              --repository-name "$repository" \
+              --image-ids imageTag="$final_tag" \
+              --query 'imageDetails[0].imageDigest' --output text 2>/dev/null); then
+              test "$existing_digest" = "$digest"
+            else
+              docker buildx imagetools create \
+                --tag "${image%@*}:${final_tag}" "$image"
+              test "$(aws ecr describe-images \
+                --repository-name "$repository" \
+                --image-ids imageTag="$final_tag" \
+                --query 'imageDetails[0].imageDigest' --output text)" = "$digest"
+            fi
+          done
       - name: Upload release manifest to workflow artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

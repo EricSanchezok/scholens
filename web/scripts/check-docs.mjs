@@ -15,7 +15,7 @@ const documentationRoots = [
   path.join(repositoryRoot, "server", "README.md"),
   path.join(repositoryRoot, "jobs", "README.md"),
   path.join(repositoryRoot, "client", "README.md"),
-  path.join(repositoryRoot, "deploy", "production"),
+  path.join(repositoryRoot, "deploy", "ecs"),
   path.join(webRoot, "README.md"),
   path.join(webRoot, "docs"),
 ];

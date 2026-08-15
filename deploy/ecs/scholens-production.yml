@@ -25,6 +25,12 @@ Parameters:
   ReleaseSha:
     Type: String
     AllowedPattern: ^[0-9a-f]{40}$
+  EdgeSecretVersionId:
+    Type: String
+    AllowedPattern: ^[A-Za-z0-9-]{32,64}$
+  EdgeSecretPreviousVersionId:
+    Type: String
+    AllowedPattern: ^[A-Za-z0-9-]{32,64}$
   ApplicationEnabled:
     Type: String
     Default: 'false'
@@ -53,6 +59,15 @@ Parameters:
   ApiRequestsPerTarget:
     Type: Number
     Default: 300
+    MinValue: 1
+  ApiMaxCapacity:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 3
+  RdsConnectionAlarmThreshold:
+    Type: Number
+    Default: 75
     MinValue: 1
   AdotImage:
     Type: String
@@ -156,15 +171,13 @@ Resources:
       Name: sanchezcloud-scholens
       Scheme: internet-facing
       Type: application
-      IpAddressType: dualstack
+      IpAddressType: ipv4
       SecurityGroups:
       - Ref: LoadBalancerSecurityGroup
       Subnets:
       - Fn::ImportValue: sanchezcloud-production-public-subnet-1
       - Fn::ImportValue: sanchezcloud-production-public-subnet-2
       LoadBalancerAttributes:
-      - Key: deletion_protection.enabled
-        Value: 'true'
       - Key: idle_timeout.timeout_seconds
         Value: '300'
       - Key: routing.http.drop_invalid_header_fields.enabled
@@ -276,14 +289,47 @@ Resources:
       - Field: path-pattern
         PathPatternConfig:
           Values:
-          - /api/v1*
-          - /webhooks/v1*
-          - /mcp*
-          - /admin*
+          - /api/v1
+          - /api/v1/*
+          - /webhooks/v1
+          - /webhooks/v1/*
       Actions:
       - Type: forward
         TargetGroupArn:
           Ref: ApiTargetGroup
+  OperatorListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Ref: HttpsListener
+      Priority: 11
+      Conditions:
+      - Field: path-pattern
+        PathPatternConfig:
+          Values:
+          - /mcp
+          - /mcp/*
+          - /admin
+          - /admin/*
+      Actions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: ApiTargetGroup
+  LargeBodyPathSet:
+    Type: AWS::WAFv2::RegexPatternSet
+    Properties:
+      Name: sanchezcloud-scholens-large-body-paths
+      Scope: REGIONAL
+      RegularExpressionList:
+      - ^/mcp$
+      - ^/webhooks/v1/stripe$
+      - ^/api/v1/conversations(?:/.*)?$
+      - ^/api/v1/paper-ingestions(?:/.*)?$
+      Tags:
+      - {Key: System, Value: SanchezCloud}
+      - {Key: Product, Value: Scholens}
+      - {Key: Environment, Value: production}
+      - {Key: ManagedBy, Value: CloudFormation}
   WebAcl:
     Type: AWS::WAFv2::WebACL
     Properties:
@@ -294,7 +340,7 @@ Resources:
       VisibilityConfig:
         CloudWatchMetricsEnabled: true
         MetricName: sanchezcloud-scholens
-        SampledRequestsEnabled: true
+        SampledRequestsEnabled: false
       Rules:
       - Name: RequireCloudflareOriginToken
         Priority: 0
@@ -303,25 +349,66 @@ Resources:
         Statement:
           NotStatement:
             Statement:
-              ByteMatchStatement:
-                FieldToMatch:
-                  SingleHeader:
-                    Name: x-scholens-origin
-                PositionalConstraint: EXACTLY
-                SearchString:
-                  Fn::Sub:
-                  - '{{resolve:secretsmanager:${Secret}:SecretString:origin_token}}'
-                  - Secret:
-                      Fn::ImportValue: sanchezcloud-scholens-edge-secret-arn
-                TextTransformations:
-                - Priority: 0
-                  Type: NONE
+              OrStatement:
+                Statements:
+                - ByteMatchStatement:
+                    FieldToMatch:
+                      SingleHeader:
+                        Name: x-scholens-origin
+                    PositionalConstraint: EXACTLY
+                    SearchString:
+                      Fn::Sub:
+                      - '{{resolve:secretsmanager:${Secret}:SecretString:origin_token::${Version}}}'
+                      - Secret:
+                          Fn::ImportValue: sanchezcloud-scholens-edge-secret-arn
+                        Version:
+                          Ref: EdgeSecretVersionId
+                    TextTransformations:
+                    - Priority: 0
+                      Type: NONE
+                - ByteMatchStatement:
+                    FieldToMatch:
+                      SingleHeader:
+                        Name: x-scholens-origin
+                    PositionalConstraint: EXACTLY
+                    SearchString:
+                      Fn::Sub:
+                      - '{{resolve:secretsmanager:${Secret}:SecretString:origin_token::${Version}}}'
+                      - Secret:
+                          Fn::ImportValue: sanchezcloud-scholens-edge-secret-arn
+                        Version:
+                          Ref: EdgeSecretPreviousVersionId
+                    TextTransformations:
+                    - Priority: 0
+                      Type: NONE
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
           MetricName: scholens-origin-token
           SampledRequestsEnabled: false
-      - Name: CommonThreats
+      - Name: CommonThreatsStandardBodies
         Priority: 10
+        OverrideAction:
+          None: {}
+        Statement:
+          ManagedRuleGroupStatement:
+            VendorName: AWS
+            Name: AWSManagedRulesCommonRuleSet
+            ScopeDownStatement:
+              NotStatement:
+                Statement:
+                  RegexPatternSetReferenceStatement:
+                    Arn:
+                      Fn::GetAtt: [LargeBodyPathSet, Arn]
+                    FieldToMatch:
+                      UriPath: {}
+                    TextTransformations:
+                    - {Priority: 0, Type: NONE}
+        VisibilityConfig:
+          CloudWatchMetricsEnabled: true
+          MetricName: scholens-common-threats-standard-body
+          SampledRequestsEnabled: false
+      - Name: CommonThreatsReviewedLargeBodies
+        Priority: 11
         OverrideAction:
           None: {}
         Statement:
@@ -330,10 +417,18 @@ Resources:
             Name: AWSManagedRulesCommonRuleSet
             ExcludedRules:
             - Name: SizeRestrictions_BODY
+            ScopeDownStatement:
+              RegexPatternSetReferenceStatement:
+                Arn:
+                  Fn::GetAtt: [LargeBodyPathSet, Arn]
+                FieldToMatch:
+                  UriPath: {}
+                TextTransformations:
+                - {Priority: 0, Type: NONE}
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
-          MetricName: scholens-common-threats
-          SampledRequestsEnabled: true
+          MetricName: scholens-common-threats-reviewed-large-body
+          SampledRequestsEnabled: false
       - Name: IpReputation
         Priority: 20
         OverrideAction:
@@ -345,7 +440,7 @@ Resources:
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
           MetricName: scholens-ip-reputation
-          SampledRequestsEnabled: true
+          SampledRequestsEnabled: false
       - Name: CloudflareClientRateLimit
         Priority: 30
         Action:
@@ -360,7 +455,7 @@ Resources:
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
           MetricName: scholens-client-rate
-          SampledRequestsEnabled: true
+          SampledRequestsEnabled: false
       Tags:
       - Key: System
         Value: SanchezCloud
@@ -436,6 +531,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensApiTaskRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-runtime-task-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -469,7 +566,9 @@ Resources:
             Resource:
               Fn::ImportValue: sanchezcloud-scholens-content-key-arn
           - Effect: Allow
-            Action: sqs:SendMessage
+            Action:
+            - sqs:GetQueueAttributes
+            - sqs:SendMessage
             Resource:
             - Fn::ImportValue: sanchezcloud-scholens-document-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-research-queue-arn
@@ -500,6 +599,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensDocumentWorkerTaskRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-runtime-task-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -573,6 +674,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensResearchWorkerTaskRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-runtime-task-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -646,6 +749,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensMaintenanceWorkerTaskRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-runtime-task-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -719,6 +824,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensMigrationTaskRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-runtime-task-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -739,6 +846,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensSchedulerTaskRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-runtime-task-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -746,6 +855,15 @@ Resources:
           Principal:
             Service: ecs-tasks.amazonaws.com
           Action: sts:AssumeRole
+      Policies:
+      - PolicyName: EnqueueScholensMaintenance
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: sqs:SendMessage
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-arn
       Tags:
       - Key: System
         Value: SanchezCloud
@@ -759,6 +877,8 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SanchezCloudScholensSchedulerInvocationRole
+      PermissionsBoundary:
+        Fn::ImportValue: sanchezcloud-scholens-scheduler-invocation-boundary-arn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -946,6 +1066,11 @@ Resources:
         Environment:
         - Name: ENVIRONMENT
           Value: production
+        - Name: TRUST_CLOUDFLARE_CLIENT_IP
+          Value: 'true'
+        - Name: TRUSTED_PROXY_CIDR
+          Value:
+            Fn::ImportValue: sanchezcloud-production-vpc-cidr
         - Name: RELEASE_SHA
           Value:
             Ref: ReleaseSha
@@ -953,6 +1078,10 @@ Resources:
           Value: '8000'
         - Name: WEB_CONCURRENCY
           Value: '2'
+        - Name: DATABASE_POOL_SIZE
+          Value: '2'
+        - Name: DATABASE_MAX_OVERFLOW
+          Value: '1'
         - Name: HOME
           Value: /tmp
         - Name: CLIENT_DOMAIN
@@ -964,9 +1093,9 @@ Resources:
         - Name: AUTH_PG_SSL_ROOT_CERT
           Value: /etc/ssl/certs/global-bundle.pem
         - Name: AUTH_PG_POOL_MIN_SIZE
-          Value: '2'
+          Value: '1'
         - Name: AUTH_PG_POOL_MAX_SIZE
-          Value: '10'
+          Value: '2'
         - Name: AUTH_JWT_ACCESS_TOKEN_TTL_MINUTES
           Value: '15'
         - Name: AUTH_JWT_REFRESH_TOKEN_TTL_DAYS
@@ -979,9 +1108,6 @@ Resources:
           Value: Scholens
         - Name: AUTH_ALIYUN_DM_REPLY_TO_ADDRESS
           Value: 'true'
-        - Name: FORWARDED_ALLOW_IPS
-          Value:
-            Fn::ImportValue: sanchezcloud-production-vpc-cidr
         - Name: PAPER_SEARCH_BACKEND
           Value: postgres_fts
         - Name: CELERY_BROKER_URL
@@ -1255,7 +1381,7 @@ Resources:
             Fn::Sub:
             - '${Secret}:mcp_delegation_jwt_secret::'
             - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-scholight-mcp-delegation-secret-arn
+                Fn::ImportValue: sanchezcloud-scholight-mcp-delegation-secret-arn
         HealthCheck:
           Command:
           - CMD
@@ -2203,7 +2329,9 @@ Resources:
         Value: CloudFormation
   ApiService:
     Type: AWS::ECS::Service
-    DependsOn: ApiListenerRule
+    DependsOn:
+    - ApiListenerRule
+    - OperatorListenerRule
     Properties:
       ServiceName: scholens-api
       Cluster:
@@ -2439,7 +2567,7 @@ Resources:
       MaxCapacity:
         Fn::If:
         - RunApplication
-        - 8
+        - Ref: ApiMaxCapacity
         - 0
       RoleARN:
         Fn::Sub: 
@@ -2961,6 +3089,25 @@ Resources:
       TreatMissingData: notBreaching
       AlarmActions:
       - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  DatabaseConnectionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-shared-rds-connections-near-capacity
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+      - Name: DBInstanceIdentifier
+        Value: sanchezcloud-pg
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 2
+      Threshold:
+        Ref: RdsConnectionAlarmThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
   Dashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
@@ -3036,9 +3183,6 @@ Outputs:
       Fn::GetAtt:
       - LoadBalancer
       - CanonicalHostedZoneID
-  TaskSecurityGroupId:
-    Value:
-      Fn::ImportValue: sanchezcloud-scholens-application-sg-id
   MigrationTaskDefinitionArn:
     Value:
       Ref: MigrationTaskDefinition

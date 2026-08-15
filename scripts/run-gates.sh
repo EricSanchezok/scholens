@@ -164,9 +164,11 @@ run_deployment() {
   (
     cd "$REPOSITORY_ROOT"
     cfn-lint --non-zero-exit-code error \
+      deploy/ecs/scholens-foundation-bootstrap.yml \
       deploy/ecs/scholens-foundation.yml \
       deploy/ecs/scholens-production.yml
     if grep -En '(^|[[:space:]])(&[[:alnum:]_-]+|\*[[:alnum:]_-]+|<<:)' \
+      deploy/ecs/scholens-foundation-bootstrap.yml \
       deploy/ecs/scholens-foundation.yml \
       deploy/ecs/scholens-production.yml; then
       printf 'CloudFormation templates must not contain YAML aliases or merges\n' >&2
@@ -175,6 +177,7 @@ run_deployment() {
     "$server_environment/python" scripts/release_manifest.py --help >/dev/null
     "$server_environment/pytest" -q \
       server/tests/test_deployment_contract.py \
+      server/tests/test_ecr_scan_contract.py \
       server/tests/test_release_manifest.py \
       server/tests/test_runtime_entrypoint.py
   )

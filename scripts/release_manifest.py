@@ -23,6 +23,42 @@ IMAGE_PATTERN = re.compile(
     r"sanchezcloud-scholens-(?P<component>web|api|jobs)@sha256:[0-9a-f]{64}"
 )
 CHECKSUM_PATTERN = re.compile(r"[0-9a-f]{64}")
+SCAN_SEVERITIES = ("CRITICAL", "HIGH")
+
+
+def _source_root(path: Path) -> Path:
+    root = path.resolve()
+    required = (
+        root / "server" / "pyproject.toml",
+        root / "server" / "uv.lock",
+        root / "deploy" / "ecs" / "scholens-production.yml",
+    )
+    if not root.is_dir() or not all(item.is_file() for item in required):
+        raise ValueError("source root does not contain a complete Scholens release")
+    return root
+
+
+def _template_parameter_names(path: Path) -> tuple[str, ...]:
+    """Read top-level CloudFormation parameter names without executing old source."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ValueError("CloudFormation template is unreadable") from exc
+    in_parameters = False
+    names: list[str] = []
+    for line in lines:
+        if not in_parameters:
+            if line == "Parameters:":
+                in_parameters = True
+            continue
+        if line and not line[0].isspace():
+            break
+        match = re.fullmatch(r"  ([A-Za-z][A-Za-z0-9]*):(?:.*)", line)
+        if match is not None:
+            names.append(match.group(1))
+    if not in_parameters or not names or len(names) != len(set(names)):
+        raise ValueError("CloudFormation template has an invalid Parameters section")
+    return tuple(names)
 
 
 def _sha256(path: Path) -> str:
@@ -117,12 +153,6 @@ def _validate_source_maps_contract(
 ) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("source map contract must be an object")
-    expected_prefix = f"source-maps/{release_sha}/"
-    expected_index_key = f"{expected_prefix}index.json"
-    if value.get("prefix") != expected_prefix:
-        raise ValueError("source map prefix does not match release SHA")
-    if value.get("index_key") != expected_index_key:
-        raise ValueError("source map index key does not match release SHA")
     for name in ("index_sha256", "aggregate_sha256"):
         checksum = value.get(name)
         if (
@@ -130,6 +160,12 @@ def _validate_source_maps_contract(
             or CHECKSUM_PATTERN.fullmatch(checksum) is None
         ):
             raise ValueError(f"source map {name} is invalid")
+    expected_prefix = f"source-maps/{release_sha}/{value['aggregate_sha256']}/"
+    expected_index_key = f"{expected_prefix}index.json"
+    if value.get("prefix") != expected_prefix:
+        raise ValueError("source map prefix is not content-addressed")
+    if value.get("index_key") != expected_index_key:
+        raise ValueError("source map index key does not match its content address")
     file_count = value.get("file_count")
     if (
         not isinstance(file_count, int)
@@ -194,8 +230,8 @@ def _source_maps_contract(path: Path, *, release_sha: str) -> dict[str, Any]:
         raise ValueError("source map aggregate checksum is invalid")
     return _validate_source_maps_contract(
         {
-            "prefix": f"source-maps/{release_sha}/",
-            "index_key": f"source-maps/{release_sha}/index.json",
+            "prefix": f"source-maps/{release_sha}/{aggregate}/",
+            "index_key": f"source-maps/{release_sha}/{aggregate}/index.json",
             "index_sha256": _sha256(path),
             "aggregate_sha256": aggregate,
             "file_count": len(files),
@@ -204,7 +240,7 @@ def _source_maps_contract(path: Path, *, release_sha: str) -> dict[str, Any]:
     )
 
 
-def _identity_contract(schema_version: int) -> dict[str, Any]:
+def _identity_resolution() -> tuple[str, str]:
     pyproject = tomllib.loads(
         (ROOT / "server/pyproject.toml").read_text(encoding="utf-8")
     )
@@ -216,16 +252,66 @@ def _identity_contract(schema_version: int) -> dict[str, Any]:
     reference = dependency.rsplit("@", 1)[-1]
     lock = (ROOT / "server/uv.lock").read_text(encoding="utf-8")
     match = re.search(
-        r"sanchezcloud-identity\.git\?(?:rev|tag)=[^#\"\s]+#([0-9a-f]{40})",
+        r"sanchezcloud-identity\.git\?(?:rev|tag)=([^#\"\s]+)#([0-9a-f]{40})",
         lock,
     )
     if match is None:
         raise ValueError("uv.lock does not pin SanchezCloud Identity to a commit SHA")
+    if match.group(1) != reference:
+        raise ValueError("uv.lock Identity reference does not match pyproject.toml")
+    return reference, match.group(2)
+
+
+def _identity_contract(schema_version: int) -> dict[str, Any]:
+    reference, commit_sha = _identity_resolution()
     return {
         "reference": reference,
-        "commit_sha": match.group(1),
+        "commit_sha": commit_sha,
         "schema_version": schema_version,
     }
+
+
+def _validate_image_scans(value: object, *, images: dict[str, str]) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != set(IMAGE_COMPONENTS):
+        raise ValueError("image scan contract must cover every release image")
+    scans: dict[str, Any] = {}
+    for component in IMAGE_COMPONENTS:
+        item = value.get(component)
+        if not isinstance(item, dict):
+            raise ValueError(f"{component} image scan contract must be an object")
+        digest = images[component].rsplit("@", 1)[-1]
+        if item.get("digest") != digest or item.get("status") != "COMPLETE":
+            raise ValueError(f"{component} image scan does not match its digest")
+        scan_digest = item.get("scan_digest")
+        if (
+            not isinstance(scan_digest, str)
+            or CHECKSUM_PATTERN.fullmatch(scan_digest.removeprefix("sha256:")) is None
+        ):
+            raise ValueError(f"{component} image scan digest is invalid")
+        if item.get("platform") != "linux/amd64":
+            raise ValueError(f"{component} image scan platform is invalid")
+        try:
+            completed_at = datetime.fromisoformat(
+                str(item.get("completed_at", "")).replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise ValueError(f"{component} image scan timestamp is invalid") from exc
+        if completed_at.tzinfo is None:
+            raise ValueError(f"{component} image scan timestamp lacks timezone")
+        findings = item.get("findings")
+        if not isinstance(findings, dict) or set(findings) != set(SCAN_SEVERITIES):
+            raise ValueError(f"{component} image scan severities are incomplete")
+        if any(findings[severity] != 0 for severity in SCAN_SEVERITIES):
+            raise ValueError(f"{component} image has unwaived HIGH/CRITICAL findings")
+        scans[component] = {
+            "digest": digest,
+            "scan_digest": scan_digest,
+            "platform": "linux/amd64",
+            "status": "COMPLETE",
+            "completed_at": completed_at.isoformat().replace("+00:00", "Z"),
+            "findings": {severity: 0 for severity in SCAN_SEVERITIES},
+        }
+    return scans
 
 
 def _validate_https_url(value: str, *, name: str) -> str:
@@ -281,11 +367,18 @@ def create_manifest(args: argparse.Namespace) -> dict[str, Any]:
             source_maps,
             release_sha=args.release_sha,
         )
+    image_scans = getattr(args, "image_scans_contract", None)
+    if image_scans is None:
+        image_scans = json.loads(
+            args.image_scan_attestation.read_text(encoding="utf-8")
+        )
+    image_scans = _validate_image_scans(image_scans, images=images)
     return {
         "contract_version": 2,
         "release_sha": args.release_sha,
         "created_at": created_at.isoformat().replace("+00:00", "Z"),
         "images": images,
+        "image_scans": image_scans,
         "identity": _identity_contract(args.identity_schema_version),
         "scholens_migrations": _migration_contract(),
         "public_openapi_sha256": _sha256(ROOT / "server/openapi/public-v1.json"),
@@ -297,7 +390,10 @@ def create_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "source_maps": source_maps,
         "artifacts": {
             "attestations": "oci-registry",
-            "source_maps": f"source-maps/{args.release_sha}/",
+            "migration_attestation": (
+                f"migrations/{args.release_sha}/attestation.json"
+            ),
+            "source_maps": source_maps["prefix"],
         },
     }
 
@@ -342,6 +438,7 @@ def verify_manifest(
                 "account_center_url"
             ),
             source_maps_contract=manifest.get("source_maps"),
+            image_scans_contract=manifest.get("image_scans"),
             **{
                 f"{name}_image": manifest.get("images", {}).get(name, "")
                 for name in IMAGE_COMPONENTS
@@ -352,6 +449,103 @@ def verify_manifest(
         raise ValueError(
             "release manifest does not match the checked-out source contract"
         )
+
+
+def _validate_runtime_migration_proof(
+    proof: object,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    expected = {
+        "contract_version": 1,
+        "release_sha": manifest["release_sha"],
+        "scholens": {
+            "current_revisions": [manifest["scholens_migrations"]["head"]],
+            "expected_revisions": [manifest["scholens_migrations"]["head"]],
+            "up_to_date": True,
+        },
+        "identity": {
+            "policy": "exact",
+            "required_schema_version": manifest["identity"]["schema_version"],
+            "installed_schema_version": manifest["identity"]["schema_version"],
+        },
+    }
+    if proof != expected:
+        raise ValueError("runtime migration proof does not match the release contract")
+    return expected
+
+
+def migration_attestation(
+    manifest: dict[str, Any],
+    runtime_proof: object | None = None,
+) -> dict[str, Any]:
+    """Build a retry-safe proof that the manifest's database contract ran."""
+    verify_manifest(manifest)
+    canonical_manifest = json.dumps(
+        manifest,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    if runtime_proof is None:
+        runtime_proof = {
+            "contract_version": 1,
+            "release_sha": manifest["release_sha"],
+            "scholens": {
+                "current_revisions": [manifest["scholens_migrations"]["head"]],
+                "expected_revisions": [manifest["scholens_migrations"]["head"]],
+                "up_to_date": True,
+            },
+            "identity": {
+                "policy": "exact",
+                "required_schema_version": manifest["identity"]["schema_version"],
+                "installed_schema_version": manifest["identity"]["schema_version"],
+            },
+        }
+    proof = _validate_runtime_migration_proof(runtime_proof, manifest)
+    return {
+        "contract_version": 1,
+        "release_sha": manifest["release_sha"],
+        "release_manifest_sha256": hashlib.sha256(canonical_manifest).hexdigest(),
+        "scholens_migrations": manifest["scholens_migrations"],
+        "identity": manifest["identity"],
+        "database_runtime_proof": proof,
+    }
+
+
+def verify_migration_attestation(
+    attestation: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    if attestation != migration_attestation(manifest):
+        raise ValueError("migration attestation does not match the release manifest")
+
+
+def verify_current_database_contract(
+    current: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    """Require the live database contract to remain compatible with a release."""
+    if current.get("contract_version") != 1:
+        raise ValueError("current database proof has an unsupported contract")
+    if SHA_PATTERN.fullmatch(str(current.get("release_sha", ""))) is None:
+        raise ValueError("current database proof has an invalid release SHA")
+    if (
+        CHECKSUM_PATTERN.fullmatch(str(current.get("release_manifest_sha256", "")))
+        is None
+    ):
+        raise ValueError("current database proof has an invalid manifest checksum")
+    if current.get("scholens_migrations") != manifest.get("scholens_migrations"):
+        raise ValueError("current database migration contract does not match release")
+    if current.get("identity") != manifest.get("identity"):
+        raise ValueError("current Identity contract does not match release")
+
+
+def verify_database_contract(
+    attestation: dict[str, Any],
+    current: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    verify_migration_attestation(attestation, manifest)
+    verify_current_database_contract(current, manifest)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -366,25 +560,51 @@ def _parser() -> argparse.ArgumentParser:
     for component in IMAGE_COMPONENTS:
         create.add_argument(f"--{component}-image", required=True)
     create.add_argument("--source-maps-index", type=Path, required=True)
+    create.add_argument("--image-scan-attestation", type=Path, required=True)
     create.add_argument("--output", type=Path, required=True)
     verify = subparsers.add_parser("verify")
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--expected-release-sha")
     verify.add_argument("--expected-account-id", required=True)
     verify.add_argument("--expected-region", required=True)
+    verify.add_argument("--source-root", type=Path)
+    create_attestation = subparsers.add_parser("create-migration-attestation")
+    create_attestation.add_argument("--manifest", type=Path, required=True)
+    create_attestation.add_argument("--runtime-proof", type=Path, required=True)
+    create_attestation.add_argument("--output", type=Path, required=True)
+    create_attestation.add_argument("--source-root", type=Path)
+    verify_attestation = subparsers.add_parser("verify-migration-attestation")
+    verify_attestation.add_argument("--manifest", type=Path, required=True)
+    verify_attestation.add_argument("--attestation", type=Path, required=True)
+    verify_attestation.add_argument("--source-root", type=Path)
+    verify_database = subparsers.add_parser("verify-database-contract")
+    verify_database.add_argument("--manifest", type=Path, required=True)
+    verify_database.add_argument("--attestation", type=Path, required=True)
+    verify_database.add_argument("--current", type=Path, required=True)
+    verify_database.add_argument("--source-root", type=Path)
+    verify_scans = subparsers.add_parser("verify-image-scans")
+    verify_scans.add_argument("--manifest", type=Path, required=True)
+    verify_scans.add_argument("--image-scan-attestation", type=Path, required=True)
+    subparsers.add_parser("identity-revision")
+    template_parameters = subparsers.add_parser("template-parameters")
+    template_parameters.add_argument("--template", type=Path, required=True)
     return parser
 
 
 def main() -> int:
+    global ROOT
     args = _parser().parse_args()
     try:
+        source_root = getattr(args, "source_root", None)
+        if source_root is not None:
+            ROOT = _source_root(source_root)
         if args.command == "create":
             manifest = create_manifest(args)
             args.output.write_text(
                 json.dumps(manifest, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-        else:
+        elif args.command == "verify":
             manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
             verify_manifest(
                 manifest,
@@ -392,6 +612,47 @@ def main() -> int:
                 expected_account_id=args.expected_account_id,
                 expected_region=args.expected_region,
             )
+        elif args.command == "identity-revision":
+            print(_identity_resolution()[1])
+        elif args.command == "template-parameters":
+            for name in _template_parameter_names(args.template):
+                print(name)
+        elif args.command == "create-migration-attestation":
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            runtime_proof = json.loads(args.runtime_proof.read_text(encoding="utf-8"))
+            attestation = migration_attestation(manifest, runtime_proof)
+            args.output.write_text(
+                json.dumps(attestation, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        elif args.command == "verify-migration-attestation":
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            attestation = json.loads(args.attestation.read_text(encoding="utf-8"))
+            verify_migration_attestation(attestation, manifest)
+        elif args.command == "verify-database-contract":
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            attestation = json.loads(args.attestation.read_text(encoding="utf-8"))
+            current = json.loads(args.current.read_text(encoding="utf-8"))
+            verify_database_contract(attestation, current, manifest)
+        else:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            scans = json.loads(args.image_scan_attestation.read_text(encoding="utf-8"))
+            live = _validate_image_scans(scans, images=manifest["images"])
+            recorded = _validate_image_scans(
+                manifest.get("image_scans"), images=manifest["images"]
+            )
+            for component in IMAGE_COMPONENTS:
+                for field in (
+                    "digest",
+                    "scan_digest",
+                    "platform",
+                    "status",
+                    "findings",
+                ):
+                    if live[component][field] != recorded[component][field]:
+                        raise ValueError(
+                            "live ECR scan results do not match release manifest"
+                        )
     except (
         KeyError,
         StopIteration,

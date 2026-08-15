@@ -55,13 +55,20 @@ def _host(value: str, *, field: str, managed_suffix: re.Pattern[str] | None) -> 
     return canonical
 
 
-def _credential(value: str | None, *, field: str, required: bool) -> str:
-    decoded = unquote(value or "")
-    if any(character in decoded for character in "\r\n"):
+def _credential(
+    value: str | None,
+    *,
+    field: str,
+    required: bool,
+    url_encoded: bool,
+) -> str:
+    raw = value or ""
+    credential = unquote(raw) if url_encoded else raw
+    if any(character in credential for character in "\r\n"):
         raise EndpointConfigurationError(f"{field} must not contain CR or LF")
-    if required and not decoded:
+    if required and not credential:
         raise EndpointConfigurationError(f"{field} is required in production")
-    return quote(decoded, safe="")
+    return quote(credential, safe="")
 
 
 def _tls_flag(value: bool | str) -> bool:
@@ -119,11 +126,13 @@ def resolve_cache_url(
             parsed.username,
             field="CACHE_USERNAME",
             required=production,
+            url_encoded=True,
         )
         cache_password = _credential(
             parsed.password,
             field="CACHE_PASSWORD",
             required=production,
+            url_encoded=True,
         )
         cache_tls = parsed.scheme == "rediss"
     elif host:
@@ -137,11 +146,13 @@ def resolve_cache_url(
             username,
             field="CACHE_USERNAME",
             required=production,
+            url_encoded=False,
         )
         cache_password = _credential(
             password,
             field="CACHE_PASSWORD",
             required=production,
+            url_encoded=False,
         )
         cache_tls = _tls_flag(tls)
     elif production:

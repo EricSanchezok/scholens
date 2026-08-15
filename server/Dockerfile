@@ -3,7 +3,9 @@ ARG RDS_GLOBAL_BUNDLE_URL=https://truststore.pki.rds.amazonaws.com/global/global
 ARG RDS_GLOBAL_BUNDLE_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
 FROM ${PYTHON_IMAGE} AS builder
 
-ARG SANCHEZCLOUD_IDENTITY_REVISION=6acd693b52257a229cfb84b5ad252fb6d7a5d263
+ARG RDS_GLOBAL_BUNDLE_URL
+ARG RDS_GLOBAL_BUNDLE_SHA256
+ARG SANCHEZCLOUD_IDENTITY_REVISION
 ARG SANCHEZCLOUD_IDENTITY_ARCHIVE=https://api.github.com/repos/EricSanchezok/sanchezcloud-identity/tarball
 
 RUN apt-get update \
@@ -13,7 +15,8 @@ RUN apt-get update \
 
 WORKDIR /app
 RUN --mount=type=secret,id=github_token \
-    mkdir -p /app/sanchezcloud-identity \
+    printf '%s' "${SANCHEZCLOUD_IDENTITY_REVISION}" | grep -Eq '^[0-9a-f]{40}$' \
+    && mkdir -p /app/sanchezcloud-identity \
     && curl --fail --location --silent --show-error \
         --header "Authorization: Bearer $(tr -d '\n' </run/secrets/github_token)" \
         --header "X-GitHub-Api-Version: 2022-11-28" \

@@ -263,8 +263,7 @@ class AuthenticatedMcpApplication:
             await self._send_auth_error(send, status_code=503)
             return
 
-        client = scope.get("client")
-        client_ip = normalize_client_ip(client[0] if client else None)
+        client_ip = normalize_client_ip(scope.setdefault("state", {}).get("client_ip"))
         scope.setdefault("state", {})["authenticated"] = True
         scope["state"]["actor_id"] = str(authenticated.actor.id)
         update_context(actor_id=str(authenticated.actor.id), origin="mcp")

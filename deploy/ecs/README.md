@@ -6,7 +6,18 @@ Docker Compose, RabbitMQ, Redis, Celery result-backend, or legacy-client product
 
 ## Architecture
 
-Two CloudFormation stacks deliberately separate retained data from replaceable runtime.
+Three CloudFormation stacks separate the administrator-owned execution boundary, retained
+data, and replaceable runtime.
+
+### `sanchezcloud-scholens-foundation-bootstrap`
+
+An administrator creates this small retained stack first. It owns both CloudFormation
+service roles, the ECS execution role, the four GitHub OIDC roles, the diagnostic role,
+the two permissions boundaries, and the runtime CloudFormation managed policies. The
+foundation service role can reconcile only the Scholens retained data plane and cannot
+mutate IAM. The runtime service role can reconcile only its exact, boundary-constrained
+runtime task and scheduler roles. Neither service role can modify the bootstrap stack or
+its own permissions. Every bootstrap update remains a separate administrator operation.
 
 ### `sanchezcloud-scholens-foundation`
 
@@ -19,17 +30,18 @@ It owns:
   scheduler DLQ;
 - a TLS- and RBAC-enabled Valkey 8 ElastiCache Serverless cache;
 - database, application, provider, mail, billing, integration, and edge secrets;
-- the alert SNS topic, persistent application/cache security groups, ECS execution role,
-  CloudFormation service role, and scoped GitHub OIDC roles.
+- the alert SNS topic and persistent application/cache security groups.
 
-Retained resources have both `DeletionPolicy: Retain` and
-`UpdateReplacePolicy: Retain`. Deleting the stack is never a rollback or cleanup method.
+Retained resources use `DeletionPolicy: RetainExceptOnCreate` and
+`UpdateReplacePolicy: Retain`: a failed initial creation cleans up its unused resources,
+while deleting or replacing a successfully created stack retains them. Stack deletion is
+never an incident rollback or cleanup method.
 
 ### `sanchezcloud-scholens-production`
 
 Every release updates the runtime stack with digest-qualified images. It owns:
 
-- one dual-stack public ALB with TLS, WAF, and separate Web/API target groups;
+- one public IPv4 ALB with TLS, WAF, and separate Web/API target groups;
 - canonical Web and FastAPI services, each with two on-demand Fargate tasks at steady
   state;
 - document, research, and maintenance Celery services with one on-demand base task and
@@ -55,14 +67,26 @@ The pinned ADOT sidecar sends traces to X-Ray and metrics to CloudWatch. Applica
 worker task roles are separate; the execution role can pull images and inject only the
 reviewed secrets.
 
-The CloudFormation service role is not an account administrator. IAM access is restricted
-to `SanchezCloudScholens*` roles and `iam:PassRole` is additionally bound to the exact
-receiving service. KMS keys, buckets, secrets, repositories, queues, schedules, topics,
-log groups, alarms, dashboards, ALB/WAF resources, and runtime task families use Scholens
-ARNs or product/stack tags. `Resource: "*"` remains only where the AWS authorization model
-requires it or where a create operation has no resource ARN yet: service/resource discovery
-(`Describe*`, selected `List*`, Cloud Map reads), KMS `CreateKey` and `ListAliases`, Secrets
-Manager `GetRandomPassword`, service-linked-role creation with an exact service condition,
+The unified `scholens doctor` command is transport-aware: production validates all three
+predefined SQS queues and never probes RabbitMQ, while local AMQP development keeps its
+RabbitMQ socket check.
+
+Neither CloudFormation service role is an account administrator. The administrator-owned
+foundation role has no IAM mutation actions. The runtime role may create or update only
+boundary-constrained `SanchezCloudScholens*TaskRole` roles, the exact scheduler invocation
+role, and the exact telemetry policy; it cannot remove a permissions boundary. Every
+`iam:PassRole` is additionally bound to the exact receiving service. Runtime IAM roles
+and their telemetry policy are replaceable control-plane resources and deliberately have
+no retention policy; CloudFormation cleans them up on a failed create or controlled stack
+deletion. Stack termination protection blocks casual deletion without preventing
+CloudFormation from rolling back a failed resource create.
+
+KMS keys, buckets, secrets, repositories, queues, schedules, topics, log groups, alarms,
+dashboards, ALB/WAF resources, and runtime task families use Scholens ARNs or product/stack
+tags. `Resource: "*"` remains only where the AWS authorization model requires it or where a
+create operation has no resource ARN yet: service/resource discovery (`Describe*`, selected
+`List*`, Cloud Map reads), KMS `CreateKey` and `ListAliases`, Secrets Manager
+`GetRandomPassword`, service-linked-role creation with an exact service condition,
 ECS/ELB/Application Auto Scaling creation and registration, Cloud Map service creation with
 a product request-tag condition, CloudWatch alarm discovery, and the documented WAF/ALB
 association read or disassociation calls. Deployment contract tests keep broad IAM, KMS,
@@ -77,28 +101,47 @@ CI and deployment use four workflows:
 
 1. `CI` runs the repository gates and image build tests.
 2. `Publish immutable release` runs automatically only after successful `main` CI. It
-   builds linux/amd64 images, emits SBOM/provenance attestations, exports the Web image
-   and private source-map index from one BuildKit graph, conditionally writes every map,
-   and writes one immutable `releases/<sha>/manifest.json`.
+   builds linux/amd64 images, emits SBOM/provenance attestations, resolves each OCI index
+   to its exact runtime child, rejects any unwaived HIGH/CRITICAL ECR finding, exports the
+   Web image and private source-map index from one BuildKit graph, conditionally writes
+   every content-addressed map, and writes one immutable `releases/<sha>/manifest.json`.
 3. `Run protected product migration` clones only the reviewed migration task definition,
    replaces its API image with the selected manifest digest, runs it once, checks the
-   container exit code, and deregisters that candidate revision.
+   unique Scholens head and exact Identity schema proof, writes an immutable per-release
+   migration attestation plus the versioned current database contract, and deregisters the
+   candidate revision.
 4. `Deploy immutable release` verifies the manifest against the checked-out source,
-   deploys the runtime stack through its CloudFormation service role, waits for all ECS
-   services, and checks Web and API health through Cloudflare.
+   rechecks live digest-bound ECR results and the current database contract, deploys the
+   runtime stack through its CloudFormation service role, waits for all ECS services, and
+   checks Web and API health through Cloudflare. A failed smoke test automatically restores
+   the prior database-compatible immutable release or disables the failed candidate.
+
+The release workflow keeps its verifier and orchestration scripts on the trusted workflow
+`main` SHA. Candidate and rollback commits are checked out only as data in separate
+directories; the current verifier reads their manifest-bound source and template without
+executing old control-plane code. Template parameter overrides are intersected with the
+selected immutable template. Supported parameters not explicitly changed retain the
+existing stack value, so parameter additions do not make an older compatible template
+undeployable.
 
 Publishing never changes production. Deploy and rollback both select an exact 40-character
 commit SHA already contained in `main`. Rollback redeploys an older immutable manifest; it
 does not move tags, rebuild images, reverse a migration, or restore a database snapshot.
 
 The runtime template exceeds CloudFormation's inline limit. The production workflow uses
-the release bucket's short-lived `cloudformation/<sha>/` prefix. Release manifests remain
-immutable; CloudFormation packages expire after 30 days and source maps after 365 days.
+the release bucket's `cloudformation/<sha>/` prefix. Release manifests remain immutable;
+CloudFormation packages and source maps expire only after their 365-day compliance
+retention has elapsed.
 
 ## One-time AWS setup
 
-The first foundation creation must use an administrator session because the stack creates
-the OIDC and CloudFormation roles that protect all later updates:
+First deploy and drain the reviewed Scholight delegation-secret runtime change described
+below. Resolve its retained secret and exact KMS key exports before creating the Scholens
+bootstrap; they are required bootstrap inputs, not values to copy manually. Then use an
+administrator session to create the bootstrap and use its restricted foundation service
+role to create the retained data plane. Both files are below the repository's 48,000-byte
+bootstrap ceiling and use CloudFormation `TemplateBody`; no unmanaged temporary bucket is
+involved.
 
 ```bash
 delegation_secret_arn=$(aws cloudformation list-exports \
@@ -114,31 +157,55 @@ test "$delegation_kms_key_arn" != None
 
 aws cloudformation validate-template \
   --region ap-southeast-1 \
+  --template-body file://deploy/ecs/scholens-foundation-bootstrap.yml
+
+aws cloudformation deploy \
+  --region ap-southeast-1 \
+  --stack-name sanchezcloud-scholens-foundation-bootstrap \
+  --template-file deploy/ecs/scholens-foundation-bootstrap.yml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+    GitHubOidcProviderArn=<provider-arn> \
+    RdsSecurityGroupId=<shared-rds-security-group-id> \
+    ScholightMcpDelegationSecretArn="$delegation_secret_arn" \
+    ScholightMcpDelegationKmsKeyArn="$delegation_kms_key_arn" \
+  --tags \
+    System=SanchezCloud \
+    Product=Scholens \
+    Environment=production \
+    ManagedBy=CloudFormation
+
+foundation_role_arn=$(aws cloudformation list-exports \
+  --region ap-southeast-1 \
+  --query 'Exports[?Name==`sanchezcloud-scholens-foundation-cloudformation-role-arn`].Value|[0]' \
+  --output text)
+test "$foundation_role_arn" != None
+
+aws cloudformation validate-template \
+  --region ap-southeast-1 \
   --template-body file://deploy/ecs/scholens-foundation.yml
 
 aws cloudformation deploy \
   --region ap-southeast-1 \
   --stack-name sanchezcloud-scholens-foundation \
   --template-file deploy/ecs/scholens-foundation.yml \
-  --capabilities CAPABILITY_NAMED_IAM \
+  --role-arn "$foundation_role_arn" \
   --tags \
     System=SanchezCloud \
     Product=Scholens \
     Environment=production \
     ManagedBy=CloudFormation \
   --parameter-overrides \
-    GitHubOidcProviderArn=<provider-arn> \
     ProductionDomain=scholens.sanchezcloud.net \
-    AlertEmail=<operator-email> \
-    ScholightMcpDelegationSecretArn="$delegation_secret_arn" \
-    ScholightMcpDelegationKmsKeyArn="$delegation_kms_key_arn"
+    AlertEmail=<operator-email>
 ```
 
-Those exports exist only after the reviewed Scholight delegation-secret change is
-deployed. The raw UTF-8 foundation template stays below 48 KiB, so first creation uses
-CloudFormation `TemplateBody` directly and never depends on an unmanaged bootstrap bucket.
-Standard resource tags are inherited from the four stack tags above; the protected
-foundation workflow supplies the same tags on every later update.
+The bootstrap deployment intentionally has no `--role-arn`: it is the administrator-owned
+IAM security plane. The foundation deployment always uses the exported restricted role and
+therefore fails closed if its template tries to mutate IAM. Standard resource tags are
+inherited from the four stack tags above; the protected foundation workflow supplies the
+same tags on later data-plane updates. Any role, managed-policy, permissions-boundary, or
+bootstrap permission change requires a separately reviewed administrator update.
 
 Confirm the SNS email subscription. Later foundation changes use the protected
 `Update production foundation` workflow; `plan` creates, describes, and deletes a change
@@ -150,23 +217,64 @@ does not own DNS.
 
 ## Secrets and database roles
 
-CloudFormation creates secret containers, not external provider credentials or PostgreSQL
-roles. Never copy production secret values into GitHub.
+CloudFormation generates the database, cache, core, and edge secret containers and their
+initial random values. It creates the AI, mail, billing, and integration containers with no
+value at all, so later foundation changes cannot reset operator-owned provider credentials.
+CloudFormation never creates PostgreSQL roles. Never copy production secret values into
+GitHub.
 
 Required secret groups are:
 
 - `/sanchezcloud/database/scholens-runtime` and `-migrator`;
 - `/sanchezcloud/scholens/production/core`;
-- `/sanchezcloud/scholens/production/ai-providers`;
+- `/sanchezcloud/scholens/production/cache-api` and `cache-jobs`;
+- `/sanchezcloud/scholens/production/ai`;
 - `/sanchezcloud/scholens/production/mail`;
 - `/sanchezcloud/scholens/production/billing`;
 - `/sanchezcloud/scholens/production/integrations`;
 - `/sanchezcloud/scholens/production/edge`.
 
-Generate independent values for every JWT, HMAC, session, cursor, encryption, callback,
-and origin token. Provider fields must be filled with the corresponding production
-credentials. The shared Scholight delegation secret is imported read-only from Scholight's
-foundation and is not copied into a Scholens secret.
+Before the first runtime deployment, use an administrator session to write complete new
+versions for the operator-managed containers and to replace the empty generated core
+fields. Generate independent values for every JWT, HMAC, session, cursor, encryption,
+callback, and origin token. Required JSON keys are:
+
+- core: `auth_jwt_secret`, `admin_session_secret`, `paper_search_cursor_secret`,
+  `jobs_webhook_signing_secret`, `integration_credential_encryption_key`;
+- AI: `deepseek_api_key`, `openai_api_key`, `openalex_api_key`, `moss_api_key`,
+  `moss_voice_id`;
+- mail: `aliyun_access_key_id`, `aliyun_access_key_secret`, `aliyun_account_name`,
+  `resend_api_key`, `resend_from_address`, `resend_reply_to_address`,
+  `profile_notification_email`;
+- billing: `stripe_api_key`, `stripe_webhook_secret`;
+- integrations: `zotero_client_key`, `zotero_client_secret`.
+
+Run this read-only preflight for each secret after writing its reviewed version (replace
+the sample key array for that container); it rejects missing, non-string, and empty values:
+
+```bash
+secret_json=$(aws secretsmanager get-secret-value \
+  --secret-id /sanchezcloud/scholens/production/ai \
+  --query SecretString --output text)
+jq -e --argjson required \
+  '["deepseek_api_key","openai_api_key","openalex_api_key","moss_api_key","moss_voice_id"]' \
+  '. as $doc | all($required[]; . as $key | ($doc[$key] | type == "string" and length > 0))' \
+  <<<"$secret_json"
+```
+
+Repeat the same shape check for core, mail, billing, and integrations. The generated
+database secrets must contain non-empty `host`, `port`, `dbname`, `username`, and
+`password`; cache secrets must contain non-empty `username` and `password`; the edge
+secret must contain a non-empty `origin_token`. ECS injects individual JSON fields and
+will not start with an absent key, so this preflight is a first-release gate. The shared
+Scholight delegation secret is imported read-only from Scholight's foundation and is not
+copied into a Scholens secret.
+
+The deploy workflow takes the current and previous edge-secret version IDs explicitly.
+Outside a rotation, pass the current version ID twice. During rotation, first create the new
+secret version, configure Cloudflare to send the new token, and deploy with the new and old
+version IDs. After propagation is verified, deploy again with the new ID in both inputs;
+only then retire the old version. The workflow role never reads the origin token.
 
 The cross-product migration order is strict: deploy the Scholight foundation to create
 and export the retained delegation secret and its exact configuration-key ARN; deploy
@@ -187,15 +295,18 @@ DDL; the product migrator cannot modify `auth.*`.
 
 ## GitHub environments
 
-Create four protected environments. `production`, `database-production`, and
-`infrastructure-production` require a reviewer.
+Create four protected environments. Configure deployment branches so every environment
+allows only the `main` branch and must not allow tags, arbitrary branches, or an
+"all branches" policy. `production`, `database-production`, and
+`infrastructure-production` require distinct reviewer rules; keep `image-publish`
+restricted to `main` even if it does not require a human approval.
 
 | Environment | Variables |
 | --- | --- |
 | `image-publish` | `AWS_REGION`, `AWS_PUBLISH_ROLE_ARN`, `IDENTITY_READER_APP_ID`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL` |
 | `database-production` | `AWS_REGION`, `AWS_DATABASE_ROLE_ARN` |
-| `production` | `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `PRODUCTION_DOMAIN`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`, `PRODUCTION_CERTIFICATE_ARN`, `RDS_SECURITY_GROUP_ID`, `STRIPE_MONTHLY_PRICE_ID`, `STRIPE_YEARLY_PRICE_ID`, `POSTHOG_API_KEY` |
-| `infrastructure-production` | `AWS_REGION`, `AWS_INFRASTRUCTURE_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_GITHUB_OIDC_PROVIDER_ARN`, `PRODUCTION_DOMAIN`, `ALERT_EMAIL` |
+| `production` | `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`, `PRODUCTION_DOMAIN`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`, `PRODUCTION_CERTIFICATE_ARN`, `RDS_SECURITY_GROUP_ID`, `STRIPE_MONTHLY_PRICE_ID`, `STRIPE_YEARLY_PRICE_ID`, `POSTHOG_API_KEY` |
+| `infrastructure-production` | `AWS_REGION`, `AWS_INFRASTRUCTURE_ROLE_ARN`, `AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN`, `AWS_GITHUB_OIDC_PROVIDER_ARN`, `PRODUCTION_DOMAIN`, `ALERT_EMAIL` |
 
 `IDENTITY_READER_PRIVATE_KEY` is the only repository dependency-reader secret. AWS access
 uses OIDC; there are no long-lived AWS access keys in GitHub.
@@ -206,21 +317,32 @@ Create a proxied CNAME for `scholens.sanchezcloud.net` pointing to the runtime s
 `LoadBalancerDnsName`. Configure Cloudflare to send `x-scholens-origin` with the
 `origin_token` value from the edge secret. Do not expose that value to browser code.
 
-Use Full (strict) TLS, preserve the `Host` header, and keep proxying enabled. The WAF blocks
-requests that bypass Cloudflare or omit the origin header, then applies AWS managed common
-threat/IP reputation rules and a `CF-Connecting-IP` rate limit. Verify that the ALB DNS name
-fails without the header and the public hostname succeeds through Cloudflare.
+Use Full (strict) TLS, preserve the `Host` header, and keep proxying enabled. Configure a
+Cloudflare Managed Transform or equivalent reviewed rule to overwrite
+`CF-Connecting-IP`; never preserve a client-supplied value. The application disables
+Uvicorn proxy-header rewriting, verifies the raw peer against the imported production VPC
+CIDR, then uses the single canonical `CF-Connecting-IP` value for request logs and all
+application rate limits. Missing, repeated, malformed, or untrusted headers fail closed.
+
+The WAF blocks requests that bypass Cloudflare or omit the origin header, then applies AWS
+managed common-threat/IP-reputation rules and a `CF-Connecting-IP` rate limit. Sampled
+requests are disabled on the entire Web ACL and every rule because normal requests carry
+the origin secret; aggregated CloudWatch metrics remain enabled. During origin-token
+rotation, check WAF/CloudTrail access history for unexpected prior visibility before
+retiring the old version. Verify that the ALB DNS name fails without the header and the
+public hostname succeeds through Cloudflare.
 
 ## First release
 
 1. Merge the reviewed release implementation into `main` and let CI pass.
-2. Create the foundation stack, confirm SNS, fill all required secrets, create database
-   roles/grants, and validate the ACM certificate.
+2. Create the administrator-owned bootstrap and foundation stacks in the documented order,
+   confirm SNS, fill all required secrets, create database roles/grants, and validate the
+   ACM certificate.
 3. Configure the four GitHub environments and Cloudflare origin rule.
 4. Let `Publish immutable release` create the first manifest.
 5. Run `Deploy immutable release` for that SHA with `ApplicationEnabled=false` and
-   `SchedulerState=DISABLED`. This creates the reviewed migration task while every service
-   remains at zero.
+   `SchedulerState=DISABLED`, supplying the reviewed edge-secret version IDs. This creates
+   the reviewed migration task while every service remains at zero.
 6. Run `Run protected product migration` for the same SHA, then rerun
    `database-bootstrap.sql` as the database owner to refresh runtime grants.
 7. Deploy the same SHA with `ApplicationEnabled=true`, still with the scheduler disabled.
@@ -231,7 +353,20 @@ fails without the header and the public hostname succeeds through Cloudflare.
 
 ## Capacity and failure handling
 
-- Web scales 2–6 and API scales 2–8 on CPU, memory, and ALB request targets.
+- Web scales 2–6 and API scales 2–3 on CPU, memory, and ALB request targets.
+- API is capped at three tasks for the shared RDS budget; each of its two Gunicorn workers
+  uses a two-connection pool with one overflow slot. The shared RDS connection alarm is a
+  separate early-warning gate, not permission to exceed that task cap.
+- The Scholens API ceiling is therefore `3 tasks × 2 workers × (3 product + 2 Identity)` =
+  30 connections. Reserve no more than 36 connections for Scholens and budget every other
+  product sharing `sanchezcloud-pg` separately below the instance limit. Increase the task
+  cap or either pool only after a reviewed move to a larger Multi-AZ instance or RDS Proxy,
+  with a new aggregate connection budget and alarm threshold.
+- The inherited shared database is currently `db.t4g.micro`, publicly accessible, and
+  single-AZ. Scholens does not mutate it. Before release, verify its security group admits
+  only the application/migrator groups and verify the client remains `sslmode=verify-full`.
+  Before a production SLA, the platform owner must review capacity and upgrade it to
+  Multi-AZ; public accessibility must also receive a separate platform security review.
 - Workers scale on SQS backlog per running task. Scale-in is deliberately slower than
   scale-out, SQS visibility is 45 minutes, and workers request task protection while a job
   is active.
@@ -248,6 +383,6 @@ Local verification is side-effect free:
 ./scripts/run-gates.sh deployment
 ```
 
-That lane lints both templates, rejects YAML aliases unsupported by CloudFormation, and
+That lane lints all three templates, rejects YAML aliases unsupported by CloudFormation, and
 runs the deployment, manifest, and runtime-entrypoint contract tests. AWS API validation
 is performed separately with an authenticated operator session.

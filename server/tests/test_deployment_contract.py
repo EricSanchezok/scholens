@@ -10,7 +10,7 @@ import yaml
 
 ROOT = Path(__file__).parents[2]
 ECS = ROOT / "deploy" / "ecs"
-FOUNDATION_INLINE_LIMIT = 48 * 1024
+FOUNDATION_INLINE_LIMIT = 48_000
 
 
 class _CloudFormationLoader(yaml.SafeLoader):
@@ -43,21 +43,52 @@ def load_template(name: str) -> dict[str, object]:
 
 
 def test_foundation_fits_cloudformation_inline_bootstrap_limit() -> None:
-    template = ECS / "scholens-foundation.yml"
-    assert len(template.read_bytes()) < FOUNDATION_INLINE_LIMIT
+    for name in (
+        "scholens-foundation-bootstrap.yml",
+        "scholens-foundation.yml",
+    ):
+        assert len((ECS / name).read_bytes()) < FOUNDATION_INLINE_LIMIT
 
 
 def test_foundation_inline_role_policies_fit_iam_aggregate_quota() -> None:
-    resources = load_template("scholens-foundation.yml")["Resources"]
-    for name, resource in resources.items():
-        if resource["Type"] != "AWS::IAM::Role":
-            continue
-        policies = resource.get("Properties", {}).get("Policies", [])
-        aggregate = sum(
-            len(json.dumps(policy["PolicyDocument"], separators=(",", ":")))
-            for policy in policies
+    for template_name in (
+        "scholens-foundation-bootstrap.yml",
+        "scholens-foundation.yml",
+    ):
+        resources = load_template(template_name)["Resources"]
+        for name, resource in resources.items():
+            if resource["Type"] != "AWS::IAM::Role":
+                continue
+            policies = resource.get("Properties", {}).get("Policies", [])
+            aggregate = sum(
+                len(json.dumps(policy["PolicyDocument"], separators=(",", ":")))
+                for policy in policies
+            )
+            assert aggregate <= 10_240, (
+                f"{template_name}:{name} inline policies use {aggregate} bytes"
+            )
+
+
+def test_bootstrap_managed_policies_fit_iam_document_quota() -> None:
+    resources = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    managed_policies = {
+        name: resource
+        for name, resource in resources.items()
+        if resource["Type"] == "AWS::IAM::ManagedPolicy"
+    }
+    assert {
+        "RuntimeIamControlPolicy",
+        "RuntimeComputePolicy",
+        "RuntimeOperationsPolicy",
+    } <= set(managed_policies)
+    for name, resource in managed_policies.items():
+        size = len(
+            json.dumps(
+                resource["Properties"]["PolicyDocument"],
+                separators=(",", ":"),
+            )
         )
-        assert aggregate <= 10_240, f"{name} inline policies use {aggregate} bytes"
+        assert size <= 6_144, f"{name} managed policy uses {size} characters"
 
 
 def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
@@ -75,7 +106,7 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
     }
     for resource in resources.values():
         if resource["Type"] in retained_types:
-            assert resource["DeletionPolicy"] == "Retain"
+            assert resource["DeletionPolicy"] == "RetainExceptOnCreate"
             assert resource["UpdateReplacePolicy"] == "Retain"
 
     repositories = [
@@ -103,6 +134,14 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
     assert release["ObjectLockConfiguration"] == {
         "ObjectLockEnabled": "Enabled",
         "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 365}},
+    }
+    lifecycle = {
+        rule["Id"]: rule for rule in release["LifecycleConfiguration"]["Rules"]
+    }
+    assert lifecycle["ExpireCloudFormationArtifacts"]["ExpirationInDays"] == 365
+    assert lifecycle["ExpireSourceMaps"]["ExpirationInDays"] == 365
+    assert lifecycle["ExpireSourceMaps"]["NoncurrentVersionExpiration"] == {
+        "NoncurrentDays": 365
     }
 
 
@@ -148,27 +187,38 @@ def _actions(statement: dict[str, object]) -> set[str]:
     return {value} if isinstance(value, str) else set(value)
 
 
-def test_foundation_roles_enforce_immutable_release_and_scoped_secrets() -> None:
-    resources = load_template("scholens-foundation.yml")["Resources"]
+def test_bootstrap_roles_enforce_immutable_release_and_scoped_secrets() -> None:
+    resources = load_template("scholens-foundation-bootstrap.yml")["Resources"]
     publish = _policy_statements(resources["PublishRole"])
     production = _policy_statements(resources["ProductionDeployRole"])
+    database = _policy_statements(resources["DatabaseDeployRole"])
     execution = _policy_statements(resources["TaskExecutionRole"])
 
     assert all("s3:BypassGovernanceRetention" not in _actions(item) for item in publish)
     publish_put = next(item for item in publish if "s3:PutObject" in _actions(item))
     assert publish_put["Resource"] == [
-        {"Fn::Sub": "${ReleaseBucket.Arn}/releases/*"},
-        {"Fn::Sub": "${ReleaseBucket.Arn}/source-maps/*"},
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-"
+                "${AWS::AccountId}-${AWS::Region}/releases/*"
+            )
+        },
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-"
+                "${AWS::AccountId}-${AWS::Region}/source-maps/*"
+            )
+        },
     ]
     production_put = next(
         item for item in production if "s3:PutObject" in _actions(item)
     )
-    assert production_put["Resource"] == {
-        "Fn::Sub": "${ReleaseBucket.Arn}/cloudformation/*"
-    }
+    assert "cloudformation/*" in str(production_put["Resource"])
+    database_put = next(item for item in database if "s3:PutObject" in _actions(item))
+    assert "migrations/*" in str(database_put["Resource"])
     assert not any(
         "secretsmanager:GetSecretValue" in _actions(item)
-        and item["Resource"] == {"Ref": "EdgeSecret"}
+        and "production/edge" in str(item["Resource"])
         for item in production
     )
     execution_secret = next(
@@ -176,11 +226,37 @@ def test_foundation_roles_enforce_immutable_release_and_scoped_secrets() -> None
     )
     assert {"Ref": "ScholightMcpDelegationSecretArn"} in execution_secret["Resource"]
     assert "sanchezcloud-scholight-core-secret-arn" not in str(execution)
+    scan_actions = {
+        "ecr:BatchGetImage",
+        "ecr:DescribeImages",
+        "ecr:DescribeImageScanFindings",
+    }
+    for role in (publish, production):
+        scan = next(item for item in role if scan_actions <= _actions(item))
+        assert len(scan["Resource"]) == 3
+        assert all(
+            "repository/sanchezcloud-scholens-" in str(value)
+            for value in scan["Resource"]
+        )
 
 
 def test_cloudformation_role_has_current_scoped_waf_association_permissions() -> None:
-    resources = load_template("scholens-foundation.yml")["Resources"]
-    statements = _policy_statements(resources["CloudFormationServiceRole"])
+    resources = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    runtime = resources["RuntimeCloudFormationServiceRole"]
+    assert runtime["Properties"]["ManagedPolicyArns"] == [
+        {"Ref": "RuntimeIamControlPolicy"},
+        {"Ref": "RuntimeComputePolicy"},
+        {"Ref": "RuntimeOperationsPolicy"},
+    ]
+    statements = [
+        statement
+        for name in (
+            "RuntimeIamControlPolicy",
+            "RuntimeComputePolicy",
+            "RuntimeOperationsPolicy",
+        )
+        for statement in resources[name]["Properties"]["PolicyDocument"]["Statement"]
+    ]
     association_actions = {
         "elasticloadbalancing:CreateWebACLAssociation",
         "elasticloadbalancing:DeleteWebACLAssociation",
@@ -208,12 +284,12 @@ def test_cloudformation_role_has_current_scoped_waf_association_permissions() ->
         "wafv2:ListResourcesForWebACL",
     }
     web_acl = next(item for item in statements if web_acl_actions <= _actions(item))
-    assert web_acl["Resource"] == {
+    assert {
         "Fn::Sub": (
             "arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:"
             "regional/webacl/sanchezcloud-scholens/*"
         )
-    }
+    } in web_acl["Resource"]
     iam_actions = {
         action
         for statement in statements
@@ -222,20 +298,93 @@ def test_cloudformation_role_has_current_scoped_waf_association_permissions() ->
     }
     assert "iam:*" not in iam_actions
 
+    runtime_role_names = {
+        "SanchezCloudScholensApiTaskRole",
+        "SanchezCloudScholensDocumentWorkerTaskRole",
+        "SanchezCloudScholensResearchWorkerTaskRole",
+        "SanchezCloudScholensMaintenanceWorkerTaskRole",
+        "SanchezCloudScholensMigrationTaskRole",
+        "SanchezCloudScholensSchedulerTaskRole",
+        "SanchezCloudScholensSchedulerInvocationRole",
+    }
+    role_mutation_actions = {
+        "iam:AttachRolePolicy",
+        "iam:CreateRole",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:PutRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+    }
+    role_mutations = [
+        item for item in statements if _actions(item) & role_mutation_actions
+    ]
+    assert role_mutations
+    for statement in role_mutations:
+        values = (
+            statement["Resource"]
+            if isinstance(statement["Resource"], list)
+            else [statement["Resource"]]
+        )
+        assert all(
+            any(role_name in str(value) for role_name in runtime_role_names)
+            for value in values
+        )
+        assert "CloudFormationServiceRole" not in str(values)
+
+    create_role = [item for item in statements if "iam:CreateRole" in _actions(item)]
+    assert len(create_role) == 2
+    assert {
+        str(item["Condition"]["ArnEquals"]["iam:PermissionsBoundary"])
+        for item in create_role
+    } == {
+        str({"Ref": "RuntimeTaskPermissionsBoundary"}),
+        str({"Ref": "SchedulerInvocationPermissionsBoundary"}),
+    }
+    pass_roles = [item for item in statements if "iam:PassRole" in _actions(item)]
+    assert len(pass_roles) == 2
+    assert {
+        item["Condition"]["StringEquals"]["iam:PassedToService"] for item in pass_roles
+    } == {"ecs-tasks.amazonaws.com", "scheduler.amazonaws.com"}
+    assert all(
+        "CloudFormationServiceRole" not in str(item["Resource"]) for item in pass_roles
+    )
+    assert "TaskExecutionRole" in str(pass_roles)
+
+    policy_lifecycle = {
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:ListEntitiesForPolicy",
+        "iam:SetDefaultPolicyVersion",
+    }
+    telemetry = next(item for item in statements if policy_lifecycle <= _actions(item))
+    assert telemetry["Resource"] == {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/"
+            "SanchezCloudScholensTelemetry"
+        )
+    }
+
     iam_statements = [
         item
         for item in statements
         if any(action.startswith("iam:") for action in _actions(item))
     ]
     for item in iam_statements:
-        assert item["Resource"] != "*"
+        if item["Resource"] == "*":
+            assert _actions(item) <= {"iam:ListPolicies", "iam:ListRoles"}
+            continue
         if "iam:CreateServiceLinkedRole" in _actions(item):
             assert "role/aws-service-role/*" in str(item["Resource"])
             assert "iam:AWSServiceName" in str(item["Condition"])
-        else:
+        elif any("Role" in action for action in _actions(item)):
             assert "role/SanchezCloudScholens" in str(item["Resource"])
 
-    for service in ("ecr:", "secretsmanager:"):
+    for service in ("secretsmanager:",):
         scoped = [
             item
             for item in statements
@@ -254,12 +403,129 @@ def test_cloudformation_role_has_current_scoped_waf_association_permissions() ->
         if item["Resource"] == "*"
         for action in _actions(item)
     }
+    assert not any(action.startswith(("ecr:", "s3:")) for action in broad_actions)
+    assert {action for action in broad_actions if action.startswith("iam:")} <= {
+        "iam:ListPolicies",
+        "iam:ListRoles",
+    }
+    assert not any(action.startswith("secretsmanager:") for action in broad_actions)
+    assert "iam:DeleteRolePermissionsBoundary" not in iam_actions
+
+
+def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() -> None:
+    foundation = load_template("scholens-foundation.yml")
+    bootstrap = load_template("scholens-foundation-bootstrap.yml")
+    resources = foundation["Resources"]
+    bootstrap_resources = bootstrap["Resources"]
+
     assert not any(
-        action.startswith(("iam:", "ecr:", "s3:")) for action in broad_actions
+        resource["Type"].startswith("AWS::IAM::") for resource in resources.values()
     )
-    assert {
-        action for action in broad_actions if action.startswith("secretsmanager:")
-    } <= {"secretsmanager:GetRandomPassword"}
+
+    runtime = bootstrap_resources["RuntimeCloudFormationServiceRole"]
+    assert runtime["Properties"]["RoleName"] == (
+        "SanchezCloudScholensRuntimeCloudFormationServiceRole"
+    )
+    assert "FoundationCloudFormationServiceRole" not in str(runtime)
+
+    production_pass = next(
+        item
+        for item in _policy_statements(bootstrap_resources["ProductionDeployRole"])
+        if "iam:PassRole" in _actions(item)
+    )
+    assert production_pass["Resource"] == {
+        "Fn::GetAtt": ["RuntimeCloudFormationServiceRole", "Arn"]
+    }
+    infrastructure_pass = next(
+        item
+        for item in _policy_statements(bootstrap_resources["InfrastructureDeployRole"])
+        if "iam:PassRole" in _actions(item)
+    )
+    assert infrastructure_pass["Resource"] == {
+        "Fn::GetAtt": ["FoundationCloudFormationServiceRole", "Arn"]
+    }
+
+    bootstrap_role = bootstrap_resources["FoundationCloudFormationServiceRole"]
+    assert bootstrap_role["Properties"]["RoleName"] == (
+        "SanchezCloudScholensFoundationCloudFormationServiceRole"
+    )
+    bootstrap_statements = _policy_statements(bootstrap_role)
+    bootstrap_iam_actions = {
+        action
+        for item in bootstrap_statements
+        for action in _actions(item)
+        if action.startswith("iam:")
+    }
+    assert bootstrap_iam_actions == {"iam:CreateServiceLinkedRole"}
+    service_linked = next(
+        item
+        for item in bootstrap_statements
+        if "iam:CreateServiceLinkedRole" in _actions(item)
+    )
+    assert "elasticache.amazonaws.com" in str(service_linked["Resource"])
+    assert service_linked["Condition"] == {
+        "StringEquals": {"iam:AWSServiceName": "elasticache.amazonaws.com"}
+    }
+    forbidden_iam_mutations = {
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:DeleteRolePolicy",
+        "iam:PassRole",
+        "iam:PutRolePermissionsBoundary",
+        "iam:PutRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:UpdateRoleDescription",
+    }
+    assert not (bootstrap_iam_actions & forbidden_iam_mutations)
+
+    admin_owned_roles = {
+        "FoundationCloudFormationServiceRole",
+        "RuntimeCloudFormationServiceRole",
+        "TaskExecutionRole",
+        "PublishRole",
+        "ProductionDeployRole",
+        "DatabaseDeployRole",
+        "InfrastructureDeployRole",
+        "DiagnosticBreakGlassRole",
+    }
+    assert admin_owned_roles <= set(bootstrap_resources)
+    for name in admin_owned_roles:
+        resource = bootstrap_resources[name]
+        assert resource["DeletionPolicy"] == "RetainExceptOnCreate"
+        assert resource["UpdateReplacePolicy"] == "Retain"
+
+    boundaries = {
+        "RuntimeTaskPermissionsBoundary",
+        "SchedulerInvocationPermissionsBoundary",
+    }
+    for name in boundaries:
+        resource = bootstrap_resources[name]
+        assert resource["Type"] == "AWS::IAM::ManagedPolicy"
+        assert resource["DeletionPolicy"] == "RetainExceptOnCreate"
+        assert resource["UpdateReplacePolicy"] == "Retain"
+        statements = resource["Properties"]["PolicyDocument"]["Statement"]
+        assert not any(
+            _actions(statement) == {"*"} and statement["Resource"] == "*"
+            for statement in statements
+        )
+
+    runtime_resources = {
+        "TelemetryPolicy",
+        "ApiTaskRole",
+        "DocumentWorkerTaskRole",
+        "ResearchWorkerTaskRole",
+        "MaintenanceWorkerTaskRole",
+        "MigrationTaskRole",
+        "SchedulerTaskRole",
+        "SchedulerInvocationRole",
+    }
+    for name in runtime_resources:
+        assert resources.get(name) is None
+        resource = load_template("scholens-production.yml")["Resources"][name]
+        assert "DeletionPolicy" not in resource
+        assert "UpdateReplacePolicy" not in resource
 
 
 def test_disabled_application_cannot_be_resurrected_by_autoscaling() -> None:
@@ -310,6 +576,22 @@ def test_unhealthy_target_alarms_use_load_balancer_and_target_group() -> None:
 
 def test_scheduler_and_worker_task_protection_are_cluster_scoped() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
+    for name in (
+        "ApiTaskRole",
+        "DocumentWorkerTaskRole",
+        "ResearchWorkerTaskRole",
+        "MaintenanceWorkerTaskRole",
+        "MigrationTaskRole",
+        "SchedulerTaskRole",
+    ):
+        assert resources[name]["Properties"]["PermissionsBoundary"] == {
+            "Fn::ImportValue": "sanchezcloud-scholens-runtime-task-boundary-arn"
+        }
+    assert resources["SchedulerInvocationRole"]["Properties"][
+        "PermissionsBoundary"
+    ] == {
+        "Fn::ImportValue": ("sanchezcloud-scholens-scheduler-invocation-boundary-arn")
+    }
     scheduler = _policy_statements(resources["SchedulerInvocationRole"])
     pass_role = next(item for item in scheduler if "iam:PassRole" in _actions(item))
     assert pass_role["Condition"] == {
@@ -415,6 +697,34 @@ def test_production_uses_the_unified_migration_cli_and_gunicorn_runtime() -> Non
     )
     assert '["scholens", "db", "upgrade", "--yes", "--json"]' in entrypoint
     assert '["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]' in entrypoint
+
+
+def test_api_scaling_respects_the_shared_rds_connection_budget() -> None:
+    template = load_template("scholens-production.yml")
+    parameters = template["Parameters"]
+    resources = template["Resources"]
+    container = resources["ApiTaskDefinition"]["Properties"]["ContainerDefinitions"][0]
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+
+    api_tasks = parameters["ApiMaxCapacity"]["MaxValue"]
+    workers = int(environment["WEB_CONCURRENCY"])
+    product_pool = int(environment["DATABASE_POOL_SIZE"]) + int(
+        environment["DATABASE_MAX_OVERFLOW"]
+    )
+    identity_pool = int(environment["AUTH_PG_POOL_MAX_SIZE"])
+    scholens_budget = 36
+
+    assert api_tasks * workers * (product_pool + identity_pool) == 30
+    assert api_tasks * workers * (product_pool + identity_pool) < scholens_budget
+    assert environment["TRUST_CLOUDFLARE_CLIENT_IP"] == "true"
+    assert "FORWARDED_ALLOW_IPS" not in environment
+
+    alarm = resources["DatabaseConnectionsAlarm"]["Properties"]
+    assert alarm["MetricName"] == "DatabaseConnections"
+    assert alarm["Dimensions"] == [
+        {"Name": "DBInstanceIdentifier", "Value": "sanchezcloud-pg"}
+    ]
+    assert parameters["RdsConnectionAlarmThreshold"]["Default"] == 75
 
 
 def test_python_images_copy_shared_packages_before_locked_sync() -> None:
@@ -531,7 +841,9 @@ def test_identity_revision_is_consistent_across_runtime_and_ci() -> None:
     )
     assert match is not None
     revision = match.group(1)
-    assert f"ARG SANCHEZCLOUD_IDENTITY_REVISION={revision}" in dockerfile
+    assert "ARG SANCHEZCLOUD_IDENTITY_REVISION\n" in dockerfile
+    assert "scripts/release_manifest.py identity-revision" in ci
+    assert "SANCHEZCLOUD_IDENTITY_REVISION=${{" in ci
     assert "server/.venv/bin/sanchezcloud-identity migrate" in ci
     assert ".ci/sanchezcloud-identity" not in ci
     assert f"ref: {revision}" not in ci
@@ -568,9 +880,64 @@ def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
     assert "environment: production" in workflows["release.yml"]
     assert "aws cloudformation deploy" in workflows["release.yml"]
     assert "--s3-bucket" in workflows["release.yml"]
+    assert "create-migration-attestation" in workflows["database-production.yml"]
+    assert "migrations/current.json" in workflows["database-production.yml"]
+    assert "--if-none-match '*'" in workflows["database-production.yml"]
+    assert "verify-database-contract" in workflows["release.yml"]
+    assert "migrations/current.json" in workflows["release.yml"]
+    assert "Capture previous immutable deployment" in workflows["release.yml"]
+    assert "Restore previous release after failed smoke" in workflows["release.yml"]
+    assert "recovery_enabled=false" in workflows["release.yml"]
+    assert "recovery_scheduler=DISABLED" in workflows["release.yml"]
+    assert "push-by-digest=true" in workflows["publish.yml"]
+    assert "ecr_scan_contract.py" in workflows["publish.yml"]
+    assert "verify-image-scans" in workflows["publish.yml"]
+    assert "imagetools create" in workflows["publish.yml"]
+    assert "ecr_scan_contract.py" in workflows["release.yml"]
+    assert "verify-image-scans" in workflows["release.yml"]
     combined = "\n".join(workflows.values())
     assert "deploy/production" not in combined
     assert "aws ssm send-command" not in combined
+
+
+def test_release_uses_current_control_plane_for_candidate_and_rollback_data() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Check out trusted release control plane" in workflow
+    assert "ref: ${{ github.sha }}" in workflow
+    assert 'test "$GITHUB_REF" = refs/heads/main' in workflow
+    assert "path: release-source" in workflow
+    assert "git -C release-source merge-base --is-ancestor" in workflow
+    assert "rollback-source/scripts/release_manifest.py" not in workflow
+    assert workflow.count("python scripts/release_manifest.py verify") >= 4
+    assert "--source-root release-source" in workflow
+    assert "--source-root rollback-source" in workflow
+    assert "template-parameters --template" in workflow
+    assert workflow.count('--parameter-overrides "${parameter_overrides[@]}"') == 2
+    assert '--template-file "$template"' in workflow
+    assert "recovery_template=release-source/deploy/ecs/scholens-production.yml" in (
+        workflow
+    )
+
+
+def test_publish_is_retry_safe_at_every_immutable_commit_boundary() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+        encoding="utf-8"
+    )
+
+    recover = workflow.index("Recover an existing immutable manifest")
+    build = workflow.index("Build Web and export source maps from one build graph")
+    store = workflow.index("Store immutable release assets")
+    promote = workflow.index("Verify immutable assets and promote final SHA tags")
+    assert recover < build < store < promote
+    assert workflow.count("if: steps.existing.outputs.exists == 'false'") >= 8
+    assert "push-by-digest=true" in workflow
+    assert "git-${RELEASE_SHA}" in workflow
+    assert "if existing_digest=$(aws ecr describe-images" in workflow
+    assert 'test "$existing_digest" = "$digest"' in workflow
+    assert "docker buildx imagetools create" in workflow
 
 
 def test_web_image_and_source_maps_share_one_buildkit_graph() -> None:
@@ -592,6 +959,32 @@ def test_web_image_and_source_maps_share_one_buildkit_graph() -> None:
     assert "node scripts/package-source-maps.mjs" in build_stage
     assert "COPY --from=build" in dockerfile.split("AS runtime", maxsplit=1)[1]
     assert "COPY --from=build /tmp/scholens-source-maps/ /" in dockerfile
+    dockerignore = (ROOT / "web" / ".dockerignore").read_text(encoding="utf-8")
+    for generated_path in (
+        "node_modules",
+        ".next",
+        "storybook-static",
+        "coverage",
+        "playwright-report",
+        "test-results",
+    ):
+        assert generated_path in dockerignore.splitlines()
+
+
+def test_api_task_can_diagnose_only_the_predefined_sqs_queues() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    statements = _policy_statements(resources["ApiTaskRole"])
+    queues = next(
+        item
+        for item in statements
+        if {"sqs:GetQueueAttributes", "sqs:SendMessage"} <= _actions(item)
+    )
+
+    assert queues["Resource"] == [
+        {"Fn::ImportValue": "sanchezcloud-scholens-document-queue-arn"},
+        {"Fn::ImportValue": "sanchezcloud-scholens-research-queue-arn"},
+        {"Fn::ImportValue": "sanchezcloud-scholens-maintenance-queue-arn"},
+    ]
 
 
 def test_release_objects_are_conditionally_created_and_byte_compared() -> None:
@@ -602,8 +995,12 @@ def test_release_objects_are_conditionally_created_and_byte_compared() -> None:
     assert "aws s3 cp --recursive" not in workflow
     assert "--if-none-match '*'" in workflow
     assert workflow.count("cmp --silent") >= 2
-    assert '"source-maps/${RELEASE_SHA}/index.json"' in workflow
+    assert "prefix=$(jq -er .source_maps.prefix release-manifest.json)" in workflow
+    assert (
+        "index_key=$(jq -er .source_maps.index_key release-manifest.json)" in workflow
+    )
     assert "--source-maps-index web-source-maps/index.json" in workflow
+    assert "--image-scan-attestation image-scans.json" in workflow
 
 
 def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None:
@@ -617,10 +1014,13 @@ def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None
     assert "stoppedReason:stoppedReason" in workflow
     assert "reason:reason" in workflow
     assert "logStreamName:logStreamName" in workflow
+    assert "sanchezcloud-scholens-application-sg-id" in workflow
+    assert "TaskSecurityGroupId" not in workflow
 
 
 def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -> None:
     readme = (ECS / "README.md").read_text(encoding="utf-8")
+    bootstrap = (ECS / "scholens-foundation-bootstrap.yml").read_text(encoding="utf-8")
     workflow = (
         ROOT / ".github" / "workflows" / "infrastructure-production.yml"
     ).read_text(encoding="utf-8")
@@ -632,7 +1032,12 @@ def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -
         "ScholightMcpDelegationKmsKeyArn",
     ):
         assert contract in readme
-        assert contract in workflow
+    for contract in (
+        "ScholightMcpDelegationSecretArn",
+        "ScholightMcpDelegationKmsKeyArn",
+        "sanchezcloud-scholens-scholight-mcp-delegation-secret-arn",
+    ):
+        assert contract in bootstrap
     for tag in (
         "System=SanchezCloud",
         "Product=Scholens",
@@ -641,6 +1046,26 @@ def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -
     ):
         assert tag in readme
         assert tag in workflow
+    assert "scholens-foundation-bootstrap.yml" in readme
+    assert "AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN" in readme
+    assert "AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN" in workflow
+    assert '--role-arn "$FOUNDATION_CLOUDFORMATION_ROLE_ARN"' in workflow
+    assert "AWS_CLOUDFORMATION_ROLE_ARN" not in workflow
+
+
+def test_foundation_plan_fails_closed_except_for_aws_no_changes() -> None:
+    workflow = (
+        ROOT / ".github" / "workflows" / "infrastructure-production.yml"
+    ).read_text(encoding="utf-8")
+    wait_block = workflow.split("wait change-set-create-complete", 1)[1].split(
+        "describe-change-set", 1
+    )[0]
+
+    assert "trap cleanup_change_set EXIT" in workflow
+    assert "|| true" not in wait_block
+    assert '"$status" == "FAILED"' in workflow
+    assert "didn't contain changes" in workflow
+    assert 'test "$status" = "CREATE_COMPLETE"' in workflow
 
 
 def test_candidate_identity_compatibility_workflow_is_standardized() -> None:
@@ -885,16 +1310,103 @@ def test_pdf_viewer_has_one_browser_only_loading_boundary() -> None:
 def test_alb_routes_only_reviewed_public_api_prefixes() -> None:
     template = load_template("scholens-production.yml")
     resources = template["Resources"]
-    values = resources["ApiListenerRule"]["Properties"]["Conditions"][0][
-        "PathPatternConfig"
-    ]["Values"]
+    values = {
+        value
+        for rule in ("ApiListenerRule", "OperatorListenerRule")
+        for value in resources[rule]["Properties"]["Conditions"][0][
+            "PathPatternConfig"
+        ]["Values"]
+    }
 
-    assert values == ["/api/v1*", "/webhooks/v1*", "/mcp*", "/admin*"]
+    assert values == {
+        "/api/v1",
+        "/api/v1/*",
+        "/webhooks/v1",
+        "/webhooks/v1/*",
+        "/mcp",
+        "/mcp/*",
+        "/admin",
+        "/admin/*",
+    }
     assert all("internal" not in value for value in values)
     assert resources["LoadBalancer"]["Properties"]["Scheme"] == "internet-facing"
+    assert resources["LoadBalancer"]["Properties"]["IpAddressType"] == "ipv4"
+    ingress = resources["LoadBalancerSecurityGroup"]["Properties"][
+        "SecurityGroupIngress"
+    ]
+    assert all("CidrIpv6" not in rule for rule in ingress)
     assert resources["WebAcl"]["Properties"]["Rules"][0]["Name"] == (
         "RequireCloudflareOriginToken"
     )
+    assert resources["ApiService"]["DependsOn"] == [
+        "ApiListenerRule",
+        "OperatorListenerRule",
+    ]
+
+
+def test_waf_large_body_exceptions_are_path_scoped() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    rules = {rule["Name"]: rule for rule in resources["WebAcl"]["Properties"]["Rules"]}
+    standard = rules["CommonThreatsStandardBodies"]["Statement"][
+        "ManagedRuleGroupStatement"
+    ]
+    reviewed = rules["CommonThreatsReviewedLargeBodies"]["Statement"][
+        "ManagedRuleGroupStatement"
+    ]
+
+    assert "ExcludedRules" not in standard
+    assert reviewed["ExcludedRules"] == [{"Name": "SizeRestrictions_BODY"}]
+    assert resources["LargeBodyPathSet"]["Properties"]["RegularExpressionList"] == [
+        "^/mcp$",
+        "^/webhooks/v1/stripe$",
+        "^/api/v1/conversations(?:/.*)?$",
+        "^/api/v1/paper-ingestions(?:/.*)?$",
+    ]
+    assert str(standard["ScopeDownStatement"]).count("LargeBodyPathSet") == 1
+    assert str(reviewed["ScopeDownStatement"]).count("LargeBodyPathSet") == 1
+    assert "'FieldToMatch': {'UriPath': {}}" in str(standard["ScopeDownStatement"])
+    assert "'FieldToMatch': {'UriPath': {}}" in str(reviewed["ScopeDownStatement"])
+
+
+def test_waf_never_samples_requests_that_carry_the_origin_secret() -> None:
+    web_acl = load_template("scholens-production.yml")["Resources"]["WebAcl"]
+
+    assert web_acl["Properties"]["VisibilityConfig"]["SampledRequestsEnabled"] is False
+    assert all(
+        rule["VisibilityConfig"]["SampledRequestsEnabled"] is False
+        for rule in web_acl["Properties"]["Rules"]
+    )
+
+
+def test_runbook_locks_production_environment_and_secret_preflights() -> None:
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+
+    for environment in (
+        "image-publish",
+        "database-production",
+        "production",
+        "infrastructure-production",
+    ):
+        assert environment in readme
+    assert "only the `main` branch" in readme
+    assert "must not allow tags" in readme
+    assert "/sanchezcloud/scholens/production/ai`" in readme
+    assert "/sanchezcloud/scholens/production/ai-providers" not in readme
+    assert "get-secret-value" in readme
+    assert "all($required[];" in readme
+    for generated in ("cache-api", "cache-jobs", "database", "core", "edge"):
+        assert generated in readme
+    for operator_managed in ("ai", "mail", "billing", "integrations"):
+        assert operator_managed in readme
+
+
+def test_operator_managed_secret_containers_have_no_cloudformation_value() -> None:
+    resources = load_template("scholens-foundation.yml")["Resources"]
+
+    for name in ("AiSecret", "MailSecret", "BillingSecret", "IntegrationsSecret"):
+        properties = resources[name]["Properties"]
+        assert "SecretString" not in properties
+        assert "GenerateSecretString" not in properties
 
 
 def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
@@ -920,6 +1432,11 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     server_dockerfile = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY --from=builder /app/migrations/ /app/migrations/" in server_dockerfile
     assert "SCHOLENS_SERVER_ROOT=/app" in server_dockerfile
+    builder = server_dockerfile.split("FROM ${PYTHON_IMAGE} AS builder", maxsplit=1)[
+        1
+    ].split("FROM ${PYTHON_IMAGE} AS runtime", maxsplit=1)[0]
+    assert "ARG RDS_GLOBAL_BUNDLE_URL" in builder
+    assert "ARG RDS_GLOBAL_BUNDLE_SHA256" in builder
 
     for lane in (
         "server",

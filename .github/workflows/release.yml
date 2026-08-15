@@ -24,13 +24,21 @@ on:
         default: DISABLED
         type: choice
         options: [DISABLED, ENABLED]
+      edge_secret_version_id:
+        description: Exact current Secrets Manager version ID for the Cloudflare origin token
+        required: true
+        type: string
+      edge_secret_previous_version_id:
+        description: Previous accepted token version during rotation; otherwise repeat the current version ID
+        required: true
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: scholens-production
+  group: scholens-production-control-plane
   cancel-in-progress: false
 
 jobs:
@@ -49,16 +57,28 @@ jobs:
             echo "The scheduler cannot run while application services are disabled" >&2
             exit 1
           fi
-      - name: Check out exact release source
+      - name: Check out trusted release control plane
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require control plane to be from main
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Check out exact release source as data
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.release_sha }}
+          path: release-source
           persist-credentials: false
           fetch-depth: 0
-      - name: Require revision to be merged into main
+      - name: Require release revision to be merged into main
         env:
           RELEASE_SHA: ${{ inputs.release_sha }}
-        run: git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+        run: git -C release-source merge-base --is-ancestor "$RELEASE_SHA" origin/main
       - name: Configure AWS deployment credentials
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
@@ -78,9 +98,75 @@ jobs:
             --manifest release-manifest.json \
             --expected-release-sha "$RELEASE_SHA" \
             --expected-account-id "$account_id" \
-            --expected-region "$AWS_REGION"
+            --expected-region "$AWS_REGION" \
+            --source-root release-source
           test "$(jq -r .web_public_config.api_url release-manifest.json)" = "$PRODUCTION_API_URL"
           test "$(jq -r .web_public_config.account_center_url release-manifest.json)" = "$ACCOUNT_CENTER_URL"
+          scan_args=()
+          for component in web api jobs; do
+            image=$(jq -er --arg component "$component" '.images[$component]' release-manifest.json)
+            repository=${image#*/}
+            repository=${repository%@*}
+            digest=${image##*@}
+            scan_args+=(--image "${component}=${repository}@${digest}")
+          done
+          python scripts/ecr_scan_contract.py \
+            "${scan_args[@]}" --output live-image-scans.json
+          python scripts/release_manifest.py verify-image-scans \
+            --manifest release-manifest.json \
+            --image-scan-attestation live-image-scans.json
+      - name: Capture previous immutable deployment
+        id: previous
+        run: |
+          if parameters=$(aws cloudformation describe-stacks \
+            --stack-name sanchezcloud-scholens-production \
+            --query 'Stacks[0].Parameters' --output json 2>describe-stack-error.txt); then
+            parameter() {
+              jq -er --arg key "$1" \
+                '.[] | select(.ParameterKey == $key) | .ParameterValue' \
+                <<<"$parameters"
+            }
+            {
+              echo "exists=true"
+              echo "release_sha=$(parameter ReleaseSha)"
+              echo "application_enabled=$(parameter ApplicationEnabled)"
+              echo "scheduler_state=$(parameter SchedulerState)"
+            } >> "$GITHUB_OUTPUT"
+          elif grep -q 'does not exist' describe-stack-error.txt; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            cat describe-stack-error.txt >&2
+            exit 1
+          fi
+      - name: Require fail-closed first runtime bootstrap
+        if: steps.previous.outputs.exists == 'false'
+        env:
+          OPERATION: ${{ inputs.operation }}
+          APPLICATION_ENABLED: ${{ inputs.application_enabled }}
+          SCHEDULER_STATE: ${{ inputs.scheduler_state }}
+        run: |
+          test "$OPERATION" = deploy
+          test "$APPLICATION_ENABLED" = false
+          test "$SCHEDULER_STATE" = DISABLED
+      - name: Require matching protected migration attestation
+        if: steps.previous.outputs.exists == 'true'
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          account_id=$(aws sts get-caller-identity --query Account --output text)
+          bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          key="migrations/${RELEASE_SHA}/attestation.json"
+          aws s3api get-object \
+            --bucket "$bucket" --key "$key" migration-attestation.json >/dev/null
+          aws s3api get-object \
+            --bucket "$bucket" --key migrations/current.json \
+            migration-current.json >/dev/null
+          python scripts/release_manifest.py verify-database-contract \
+            --manifest release-manifest.json \
+            --attestation migration-attestation.json \
+            --current migration-current.json \
+            --source-root release-source
       - name: Deploy digest-qualified ECS release
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
@@ -88,39 +174,54 @@ jobs:
           DOMAIN_NAME: ${{ vars.PRODUCTION_DOMAIN }}
           CERTIFICATE_ARN: ${{ vars.PRODUCTION_CERTIFICATE_ARN }}
           RDS_SECURITY_GROUP_ID: ${{ vars.RDS_SECURITY_GROUP_ID }}
-          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
           APPLICATION_ENABLED: ${{ inputs.application_enabled }}
           SCHEDULER_STATE: ${{ inputs.scheduler_state }}
           STRIPE_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MONTHLY_PRICE_ID }}
           STRIPE_YEARLY_PRICE_ID: ${{ vars.STRIPE_YEARLY_PRICE_ID }}
           POSTHOG_API_KEY: ${{ vars.POSTHOG_API_KEY }}
+          EDGE_SECRET_VERSION_ID: ${{ inputs.edge_secret_version_id }}
+          EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
           template_bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
           web_image=$(jq -r .images.web release-manifest.json)
           api_image=$(jq -r .images.api release-manifest.json)
           jobs_image=$(jq -r .images.jobs release-manifest.json)
+          template=release-source/deploy/ecs/scholens-production.yml
+          mapfile -t supported_parameters < <(python scripts/release_manifest.py \
+            template-parameters --template "$template")
+          parameter_overrides=()
+          for parameter in "${supported_parameters[@]}"; do
+            case "$parameter" in
+              DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
+              CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
+              RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
+              WebImage) parameter_overrides+=("WebImage=$web_image") ;;
+              ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
+              JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
+              ReleaseSha) parameter_overrides+=("ReleaseSha=$RELEASE_SHA") ;;
+              EdgeSecretVersionId) parameter_overrides+=("EdgeSecretVersionId=$EDGE_SECRET_VERSION_ID") ;;
+              EdgeSecretPreviousVersionId) parameter_overrides+=("EdgeSecretPreviousVersionId=$EDGE_SECRET_PREVIOUS_VERSION_ID") ;;
+              ApplicationEnabled) parameter_overrides+=("ApplicationEnabled=$APPLICATION_ENABLED") ;;
+              SchedulerState) parameter_overrides+=("SchedulerState=$SCHEDULER_STATE") ;;
+              StripeMonthlyPriceId) parameter_overrides+=("StripeMonthlyPriceId=$STRIPE_MONTHLY_PRICE_ID") ;;
+              StripeYearlyPriceId) parameter_overrides+=("StripeYearlyPriceId=$STRIPE_YEARLY_PRICE_ID") ;;
+              PostHogApiKey) parameter_overrides+=("PostHogApiKey=$POSTHOG_API_KEY") ;;
+            esac
+          done
           aws cloudformation deploy \
             --stack-name sanchezcloud-scholens-production \
-            --template-file deploy/ecs/scholens-production.yml \
+            --template-file "$template" \
             --s3-bucket "$template_bucket" \
             --s3-prefix "cloudformation/${RELEASE_SHA}" \
             --role-arn "$CLOUDFORMATION_ROLE_ARN" \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --parameter-overrides \
-              DomainName="$DOMAIN_NAME" \
-              CertificateArn="$CERTIFICATE_ARN" \
-              RdsSecurityGroupId="$RDS_SECURITY_GROUP_ID" \
-              WebImage="$web_image" \
-              ApiImage="$api_image" \
-              JobsImage="$jobs_image" \
-              ReleaseSha="$RELEASE_SHA" \
-              ApplicationEnabled="$APPLICATION_ENABLED" \
-              SchedulerState="$SCHEDULER_STATE" \
-              StripeMonthlyPriceId="$STRIPE_MONTHLY_PRICE_ID" \
-              StripeYearlyPriceId="$STRIPE_YEARLY_PRICE_ID" \
-              PostHogApiKey="$POSTHOG_API_KEY"
+            --parameter-overrides "${parameter_overrides[@]}"
+          aws cloudformation update-termination-protection \
+            --stack-name sanchezcloud-scholens-production \
+            --enable-termination-protection
       - name: Wait for services to stabilize
         run: |
           # JMESPath uses literal backticks.
@@ -134,6 +235,8 @@ jobs:
             --cluster sanchezcloud-production \
             --services "${services[@]}"
       - name: Verify public deployment
+        id: smoke
+        continue-on-error: true
         if: inputs.application_enabled == 'true'
         env:
           PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
@@ -152,6 +255,129 @@ jobs:
           }
           retry "https://${PRODUCTION_DOMAIN}/healthz"
           retry "https://${PRODUCTION_DOMAIN}/api/v1/healthz"
+      - name: Restore previous release after failed smoke
+        if: steps.smoke.outcome == 'failure'
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          PREVIOUS_EXISTS: ${{ steps.previous.outputs.exists }}
+          PREVIOUS_RELEASE_SHA: ${{ steps.previous.outputs.release_sha }}
+          PREVIOUS_APPLICATION_ENABLED: ${{ steps.previous.outputs.application_enabled }}
+          PREVIOUS_SCHEDULER_STATE: ${{ steps.previous.outputs.scheduler_state }}
+          DOMAIN_NAME: ${{ vars.PRODUCTION_DOMAIN }}
+          CERTIFICATE_ARN: ${{ vars.PRODUCTION_CERTIFICATE_ARN }}
+          RDS_SECURITY_GROUP_ID: ${{ vars.RDS_SECURITY_GROUP_ID }}
+          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
+          STRIPE_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MONTHLY_PRICE_ID }}
+          STRIPE_YEARLY_PRICE_ID: ${{ vars.STRIPE_YEARLY_PRICE_ID }}
+          POSTHOG_API_KEY: ${{ vars.POSTHOG_API_KEY }}
+          EDGE_SECRET_VERSION_ID: ${{ inputs.edge_secret_version_id }}
+          EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
+        run: |
+          account_id=$(aws sts get-caller-identity --query Account --output text)
+          bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          aws cloudformation describe-stack-events \
+            --stack-name sanchezcloud-scholens-production \
+            --max-items 20 \
+            --query 'StackEvents[].{Time:Timestamp,Status:ResourceStatus,LogicalId:LogicalResourceId,Reason:ResourceStatusReason}' || true
+          recovered_previous=false
+          if [[ "$PREVIOUS_EXISTS" == true && "$PREVIOUS_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            recovery_sha=$PREVIOUS_RELEASE_SHA
+            if aws s3api get-object \
+              --bucket "$bucket" \
+              --key "releases/${recovery_sha}/manifest.json" \
+              recovery-manifest.json >/dev/null && \
+              aws s3api get-object \
+              --bucket "$bucket" \
+              --key "migrations/${recovery_sha}/attestation.json" \
+              recovery-attestation.json >/dev/null && \
+              git worktree add --detach rollback-source "$recovery_sha" && \
+              python scripts/release_manifest.py verify \
+              --manifest recovery-manifest.json \
+              --expected-release-sha "$recovery_sha" \
+              --expected-account-id "$account_id" \
+              --expected-region "$AWS_REGION" \
+              --source-root rollback-source && \
+              python scripts/release_manifest.py verify-database-contract \
+              --manifest recovery-manifest.json \
+              --attestation recovery-attestation.json \
+              --current migration-current.json \
+              --source-root rollback-source; then
+              recovery_enabled=$PREVIOUS_APPLICATION_ENABLED
+              recovery_scheduler=$PREVIOUS_SCHEDULER_STATE
+              recovery_template=rollback-source/deploy/ecs/scholens-production.yml
+              recovered_previous=true
+            else
+              echo "Previous release failed current verification; disabling the candidate instead." >&2
+            fi
+          elif [[ "$PREVIOUS_EXISTS" == true ]]; then
+            echo "Previous release SHA is invalid; disabling the candidate instead." >&2
+          fi
+          if [[ "$recovered_previous" != true ]]; then
+            recovery_sha=$RELEASE_SHA
+            recovery_enabled=false
+            recovery_scheduler=DISABLED
+            cp release-manifest.json recovery-manifest.json
+            recovery_template=release-source/deploy/ecs/scholens-production.yml
+          fi
+          web_image=$(jq -r .images.web recovery-manifest.json)
+          api_image=$(jq -r .images.api recovery-manifest.json)
+          jobs_image=$(jq -r .images.jobs recovery-manifest.json)
+          mapfile -t supported_parameters < <(python scripts/release_manifest.py \
+            template-parameters --template "$recovery_template")
+          parameter_overrides=()
+          for parameter in "${supported_parameters[@]}"; do
+            case "$parameter" in
+              DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
+              CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
+              RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
+              WebImage) parameter_overrides+=("WebImage=$web_image") ;;
+              ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
+              JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
+              ReleaseSha) parameter_overrides+=("ReleaseSha=$recovery_sha") ;;
+              EdgeSecretVersionId) parameter_overrides+=("EdgeSecretVersionId=$EDGE_SECRET_VERSION_ID") ;;
+              EdgeSecretPreviousVersionId) parameter_overrides+=("EdgeSecretPreviousVersionId=$EDGE_SECRET_PREVIOUS_VERSION_ID") ;;
+              ApplicationEnabled) parameter_overrides+=("ApplicationEnabled=$recovery_enabled") ;;
+              SchedulerState) parameter_overrides+=("SchedulerState=$recovery_scheduler") ;;
+              StripeMonthlyPriceId) parameter_overrides+=("StripeMonthlyPriceId=$STRIPE_MONTHLY_PRICE_ID") ;;
+              StripeYearlyPriceId) parameter_overrides+=("StripeYearlyPriceId=$STRIPE_YEARLY_PRICE_ID") ;;
+              PostHogApiKey) parameter_overrides+=("PostHogApiKey=$POSTHOG_API_KEY") ;;
+            esac
+          done
+          aws cloudformation deploy \
+            --stack-name sanchezcloud-scholens-production \
+            --template-file "$recovery_template" \
+            --s3-bucket "$bucket" \
+            --s3-prefix "cloudformation/${recovery_sha}/smoke-recovery" \
+            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameter_overrides[@]}"
+          aws cloudformation update-termination-protection \
+            --stack-name sanchezcloud-scholens-production \
+            --enable-termination-protection
+          # JMESPath uses literal backticks.
+          # shellcheck disable=SC2016
+          mapfile -t services < <(aws cloudformation describe-stack-resources \
+            --stack-name sanchezcloud-scholens-production \
+            --query 'StackResources[?ResourceType==`AWS::ECS::Service`].PhysicalResourceId' \
+            --output text | tr '\t' '\n')
+          (( ${#services[@]} > 0 ))
+          aws ecs wait services-stable \
+            --cluster sanchezcloud-production \
+            --services "${services[@]}"
+          {
+            echo "### Automatic smoke recovery"
+            echo "- Failed candidate: \`${RELEASE_SHA}\`"
+            echo "- Restored release: \`${recovery_sha}\`"
+            echo "- Application: \`${recovery_enabled}\`"
+            echo "- Scheduler: \`${recovery_scheduler}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail the rejected release after recovery
+        if: steps.smoke.outcome == 'failure'
+        run: |
+          echo "Candidate smoke checks failed; recovery completed." >&2
+          exit 1
       - name: Record release operation
         run: |
           {

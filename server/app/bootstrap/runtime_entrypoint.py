@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 from urllib.parse import quote
 
@@ -49,7 +51,64 @@ def main() -> int:
     if command == "api":
         executable = ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]
     elif command == "migrate":
-        executable = ["scholens", "db", "upgrade", "--yes", "--json"]
+        migration = subprocess.run(
+            ["scholens", "db", "upgrade", "--yes", "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(migration.stdout)
+        if payload.get("up_to_date") is not True:
+            raise RuntimeError("Scholens migration did not converge")
+        subprocess.run(
+            [
+                "sanchezcloud-identity",
+                "check-schema",
+                "--database-url",
+                database_url,
+            ],
+            check=True,
+        )
+        installed = int(
+            subprocess.run(
+                [
+                    "sanchezcloud-identity",
+                    "schema-version",
+                    "--database-url",
+                    database_url,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        from sanchezcloud_identity import AUTH_SCHEMA_VERSION
+
+        if installed != AUTH_SCHEMA_VERSION:
+            raise RuntimeError(
+                "installed auth schema must exactly match the release contract"
+            )
+        proof = {
+            "contract_version": 1,
+            "release_sha": os.environ["RELEASE_SHA"],
+            "scholens": {
+                "current_revisions": payload["current_revisions"],
+                "expected_revisions": payload["expected_revisions"],
+                "up_to_date": True,
+            },
+            "identity": {
+                "policy": "exact",
+                "required_schema_version": AUTH_SCHEMA_VERSION,
+                "installed_schema_version": installed,
+            },
+        }
+        sys.stdout.write(
+            "SCHOLENS_MIGRATION_PROOF="
+            + json.dumps(proof, separators=(",", ":"), sort_keys=True)
+            + "\n"
+        )
+        sys.stdout.flush()
+        return 0
     else:
         raise RuntimeError(f"unsupported runtime command: {command}")
     os.execvp(executable[0], executable)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, IPvAnyNetwork, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.bootstrap.cache_endpoint import cache_url_from_fields
@@ -25,6 +25,8 @@ class AppSettings(BaseSettings):
     diagnostic_snapshot_bucket: str | None = None
     diagnostic_snapshot_kms_key_id: str | None = None
     diagnostic_success_sample_rate: float = Field(default=0.01, ge=0, le=1)
+    trust_cloudflare_client_ip: bool = False
+    trusted_proxy_cidr: IPvAnyNetwork | None = None
     client_domain: str = "http://127.0.0.1:7300"
     client_allowed_origins: str | None = None
     paper_search_backend: Literal["postgres_fts"] = "postgres_fts"
@@ -95,6 +97,14 @@ class AppSettings(BaseSettings):
         ):
             raise ValueError(
                 "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET is required in production"
+            )
+        if (
+            self.environment.casefold() == "production"
+            and self.trust_cloudflare_client_ip
+            and self.trusted_proxy_cidr is None
+        ):
+            raise ValueError(
+                "TRUSTED_PROXY_CIDR is required when Cloudflare client IP is trusted"
             )
         if self.environment.casefold() == "production":
             self.resolved_cache_url

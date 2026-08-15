@@ -19,7 +19,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: scholens-infrastructure-production
+  group: scholens-production-control-plane
   cancel-in-progress: false
 
 jobs:
@@ -53,76 +53,70 @@ jobs:
       - name: Preview foundation change set
         if: inputs.operation == 'plan'
         env:
-          GITHUB_OIDC_PROVIDER_ARN: ${{ vars.AWS_GITHUB_OIDC_PROVIDER_ARN }}
           PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
           ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
-          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+          FOUNDATION_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN }}
         run: |
-          # JMESPath uses literal backticks.
-          # shellcheck disable=SC2016
-          delegation_secret_arn=$(aws cloudformation list-exports \
-            --query 'Exports[?Name==`sanchezcloud-scholight-mcp-delegation-secret-arn`].Value|[0]' \
-            --output text)
-          # shellcheck disable=SC2016
-          delegation_kms_key_arn=$(aws cloudformation list-exports \
-            --query 'Exports[?Name==`sanchezcloud-scholight-configuration-key-arn`].Value|[0]' \
-            --output text)
-          test "$delegation_secret_arn" != None
-          test "$delegation_kms_key_arn" != None
           change_set="github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup_change_set() {
+            aws cloudformation delete-change-set \
+              --stack-name sanchezcloud-scholens-foundation \
+              --change-set-name "$change_set" >/dev/null 2>&1 || true
+          }
+          trap cleanup_change_set EXIT
           aws cloudformation create-change-set \
             --stack-name sanchezcloud-scholens-foundation \
             --change-set-name "$change_set" \
             --change-set-type UPDATE \
             --template-body file://deploy/ecs/scholens-foundation.yml \
-            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
-            --capabilities CAPABILITY_NAMED_IAM \
+            --role-arn "$FOUNDATION_CLOUDFORMATION_ROLE_ARN" \
             --parameters \
-              ParameterKey=GitHubOidcProviderArn,ParameterValue="$GITHUB_OIDC_PROVIDER_ARN" \
               ParameterKey=ProductionDomain,ParameterValue="$PRODUCTION_DOMAIN" \
               ParameterKey=AlertEmail,ParameterValue="$ALERT_EMAIL" \
-              ParameterKey=ScholightMcpDelegationSecretArn,ParameterValue="$delegation_secret_arn" \
-              ParameterKey=ScholightMcpDelegationKmsKeyArn,ParameterValue="$delegation_kms_key_arn" \
             --tags \
               Key=System,Value=SanchezCloud \
               Key=Product,Value=Scholens \
               Key=Environment,Value=production \
               Key=ManagedBy,Value=CloudFormation \
             >/dev/null
+          set +e
           aws cloudformation wait change-set-create-complete \
             --stack-name sanchezcloud-scholens-foundation \
-            --change-set-name "$change_set" || true
+            --change-set-name "$change_set"
+          wait_status=$?
+          set -e
           aws cloudformation describe-change-set \
             --stack-name sanchezcloud-scholens-foundation \
             --change-set-name "$change_set" \
             --query '{Status:Status,Reason:StatusReason,Changes:Changes[].ResourceChange.{Action:Action,LogicalId:LogicalResourceId,Type:ResourceType,Replacement:Replacement}}'
-          aws cloudformation delete-change-set \
+          status=$(aws cloudformation describe-change-set \
             --stack-name sanchezcloud-scholens-foundation \
-            --change-set-name "$change_set"
+            --change-set-name "$change_set" \
+            --query Status --output text)
+          reason=$(aws cloudformation describe-change-set \
+            --stack-name sanchezcloud-scholens-foundation \
+            --change-set-name "$change_set" \
+            --query StatusReason --output text)
+          if [[ "$wait_status" -ne 0 ]]; then
+            if [[ "$status" == "FAILED" && "$reason" == *"didn't contain changes"* ]]; then
+              echo "No foundation changes."
+              exit 0
+            fi
+            echo "Foundation change set failed: $status: $reason" >&2
+            exit 1
+          fi
+          test "$status" = "CREATE_COMPLETE"
       - name: Apply foundation change set
         if: inputs.operation == 'apply'
         env:
-          GITHUB_OIDC_PROVIDER_ARN: ${{ vars.AWS_GITHUB_OIDC_PROVIDER_ARN }}
           PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
           ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
-          CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+          FOUNDATION_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN }}
         run: |
-          # JMESPath uses literal backticks.
-          # shellcheck disable=SC2016
-          delegation_secret_arn=$(aws cloudformation list-exports \
-            --query 'Exports[?Name==`sanchezcloud-scholight-mcp-delegation-secret-arn`].Value|[0]' \
-            --output text)
-          # shellcheck disable=SC2016
-          delegation_kms_key_arn=$(aws cloudformation list-exports \
-            --query 'Exports[?Name==`sanchezcloud-scholight-configuration-key-arn`].Value|[0]' \
-            --output text)
-          test "$delegation_secret_arn" != None
-          test "$delegation_kms_key_arn" != None
           aws cloudformation deploy \
             --stack-name sanchezcloud-scholens-foundation \
             --template-file deploy/ecs/scholens-foundation.yml \
-            --role-arn "$CLOUDFORMATION_ROLE_ARN" \
-            --capabilities CAPABILITY_NAMED_IAM \
+            --role-arn "$FOUNDATION_CLOUDFORMATION_ROLE_ARN" \
             --no-fail-on-empty-changeset \
             --tags \
               System=SanchezCloud \
@@ -130,11 +124,8 @@ jobs:
               Environment=production \
               ManagedBy=CloudFormation \
             --parameter-overrides \
-              GitHubOidcProviderArn="$GITHUB_OIDC_PROVIDER_ARN" \
               ProductionDomain="$PRODUCTION_DOMAIN" \
-              AlertEmail="$ALERT_EMAIL" \
-              ScholightMcpDelegationSecretArn="$delegation_secret_arn" \
-              ScholightMcpDelegationKmsKeyArn="$delegation_kms_key_arn"
+              AlertEmail="$ALERT_EMAIL"
       - name: Record foundation operation
         run: |
           {
