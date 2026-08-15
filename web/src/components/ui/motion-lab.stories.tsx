@@ -16,6 +16,7 @@ import {
 import {
   motionDurations,
   motionEasings,
+  motionSprings,
 } from "@/design-system/generated/motion-metadata";
 import {
   AnimatePresence,
@@ -32,6 +33,10 @@ const durationEntries = Object.entries(motionDurations) as [
 const easingEntries = Object.entries(motionEasings) as [
   keyof typeof motionEasings,
   readonly number[],
+][];
+const springEntries = Object.entries(motionSprings) as [
+  keyof typeof motionSprings,
+  (typeof motionSprings)[keyof typeof motionSprings],
 ][];
 
 function MotionLab() {
@@ -98,6 +103,40 @@ function MotionLab() {
               <code className="text-muted mt-2 block text-xs leading-5">
                 {value.join(", ")}
               </code>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="spring-heading">
+        <h2 className="text-lg font-semibold" id="spring-heading">
+          Layout springs
+        </h2>
+        <p className="text-secondary mt-1 text-sm">
+          Generated runtime metadata preserves a shared physical response
+          without feature-level tuning.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {springEntries.map(([name, value]) => (
+            <article
+              className="border-line bg-surface rounded-[var(--radius-lg)] border p-4"
+              key={name}
+            >
+              <h3 className="font-medium">{name} spring</h3>
+              <dl className="text-muted mt-3 grid grid-cols-3 gap-3 text-sm tabular-nums">
+                <div>
+                  <dt className="text-xs">Stiffness</dt>
+                  <dd className="mt-1 text-current">{value.stiffness}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs">Damping</dt>
+                  <dd className="mt-1 text-current">{value.damping}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs">Mass</dt>
+                  <dd className="mt-1 text-current">{value.mass}</dd>
+                </div>
+              </dl>
             </article>
           ))}
         </div>
@@ -227,6 +266,12 @@ export const FullMotion: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(/resolved: full/)).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { name: "layout spring" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { name: "gentle spring" }),
+    ).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Add finding" }));
     await waitFor(() => expect(canvas.getByText("Finding 1")).toBeVisible());
     await userEvent.click(

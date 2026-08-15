@@ -170,11 +170,13 @@ Theme and Appearance remain independent. Adding Ocean must not create combined
 `Ocean Light` and `Ocean Dark` mode names.
 
 Motion is an independent generated foundation. `motion.json` owns the shared
-duration and easing scale; `tokens:build` emits `generated/motion.css` for CSS
-recipes and `generated/motion-metadata.ts` for the runtime adapter. Springs are
-semantic runtime configuration because DTCG has no portable spring type. Do not
-copy a duration, Bézier curve, or spring into a feature. The complete authoring,
-preference, and reduced-motion contract is in [Motion system](./motion.md).
+duration, easing, and spring parameter scale. Because DTCG has no portable
+compound spring type, stiffness, damping, and mass use standard numeric tokens;
+`tokens:build` assembles those runtime-only values into
+`generated/motion-metadata.ts` and excludes them from generated CSS. The same
+build emits `generated/motion.css` for CSS recipes. Do not copy a duration,
+Bézier curve, or spring into a feature. The complete authoring, preference, and
+reduced-motion contract is in [Motion system](./motion.md).
 
 ## Adding a theme
 

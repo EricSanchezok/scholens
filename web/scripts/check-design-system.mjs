@@ -197,7 +197,7 @@ for (const [tokenPath, token] of effects) {
   }
 }
 
-const requiredMotionTokens = [
+const requiredCssMotionTokens = [
   "motion.duration.instant",
   "motion.duration.feedback",
   "motion.duration.fast",
@@ -209,6 +209,15 @@ const requiredMotionTokens = [
   "motion.easing.exit",
   "motion.easing.in-out",
 ];
+const requiredMotionTokens = [
+  ...requiredCssMotionTokens,
+  "motion.spring.layout.stiffness",
+  "motion.spring.layout.damping",
+  "motion.spring.layout.mass",
+  "motion.spring.gentle.stiffness",
+  "motion.spring.gentle.damping",
+  "motion.spring.gentle.mass",
+];
 for (const tokenPath of requiredMotionTokens) {
   if (!motion.has(tokenPath))
     report(`${tokenPath}: required motion token missing`);
@@ -216,7 +225,9 @@ for (const tokenPath of requiredMotionTokens) {
 for (const [tokenPath, token] of motion) {
   const expectedType = tokenPath.startsWith("motion.duration.")
     ? "duration"
-    : "cubicBezier";
+    : tokenPath.startsWith("motion.easing.")
+      ? "cubicBezier"
+      : "number";
   if (token.$type !== expectedType) {
     report(`${tokenPath}: expected ${expectedType}, found ${token.$type}`);
   }
@@ -234,6 +245,14 @@ for (const [tokenPath, token] of motion) {
   ) {
     report(`${tokenPath}: cubicBezier must contain four numeric coordinates`);
   }
+  if (
+    expectedType === "number" &&
+    (typeof token.$value !== "number" ||
+      !Number.isFinite(token.$value) ||
+      token.$value <= 0)
+  ) {
+    report(`${tokenPath}: spring parameters must be positive finite numbers`);
+  }
 }
 
 const globalsPath = path.join(sourceRoot, "styles", "globals.css");
@@ -246,6 +265,10 @@ const generatedMotion = await readFile(
   path.join(generatedRoot, "motion.css"),
   "utf8",
 );
+const motionConfig = await readFile(
+  path.join(sourceRoot, "design-system", "motion", "motion-config.ts"),
+  "utf8",
+);
 const motionRecipesPath = path.join(
   sourceRoot,
   "design-system",
@@ -253,6 +276,25 @@ const motionRecipesPath = path.join(
   "motion-recipes.css",
 );
 const motionRecipes = await readFile(motionRecipesPath, "utf8");
+if (generatedMotion.includes("--motion-spring-")) {
+  report(
+    "src/design-system/generated/motion.css: runtime-only spring parameters must not be exposed as CSS variables",
+  );
+}
+for (const springName of ["layout", "gentle"]) {
+  if (!motionConfig.includes(`...motionSprings.${springName}`)) {
+    report(
+      `src/design-system/motion/motion-config.ts: ${springName} must consume generated motionSprings metadata`,
+    );
+  }
+}
+for (const match of motionConfig.matchAll(
+  /\b(?:stiffness|damping|mass)\s*:\s*\d/g,
+)) {
+  report(
+    `src/design-system/motion/motion-config.ts:${lineNumber(motionConfig, match.index)}: spring numbers belong to motion.json`,
+  );
+}
 const tailwindImportIndex = globals.indexOf('@import "tailwindcss";');
 const foundationImportIndex = globals.indexOf(
   '@import "../design-system/generated/dimensions.css";',
@@ -271,7 +313,7 @@ if (!generatedFoundation.includes("@theme inline")) {
     "src/design-system/generated/dimensions.css: Tailwind adapter was not generated",
   );
 }
-for (const tokenPath of requiredMotionTokens) {
+for (const tokenPath of requiredCssMotionTokens) {
   const variable = `--${tokenPath.replaceAll(".", "-")}:`;
   if (!generatedMotion.includes(variable)) {
     report(`src/design-system/generated/motion.css: missing ${variable}`);

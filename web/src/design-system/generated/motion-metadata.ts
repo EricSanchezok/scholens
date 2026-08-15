@@ -20,5 +20,19 @@ export const motionCssEasings = {
   in_out: "cubic-bezier(0.65, 0, 0.35, 1)",
 } as const;
 
+export const motionSprings = {
+  layout: {
+    stiffness: 360,
+    damping: 34,
+    mass: 0.85,
+  },
+  gentle: {
+    stiffness: 280,
+    damping: 30,
+    mass: 0.9,
+  },
+} as const;
+
 export type MotionDurationName = keyof typeof motionDurations;
 export type MotionEasingName = keyof typeof motionEasings;
+export type MotionSpringName = keyof typeof motionSprings;
