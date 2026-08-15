@@ -10,7 +10,6 @@ from app.modules.conversations.application.contracts.answer_packet import (
 )
 from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.shared.domain import (
-    JsonValue,
     WorkspacePermission,
     ordered_workspace_permissions,
 )
@@ -197,17 +196,29 @@ class ConversationResponseVariantResponse(BaseModel):
     references: ReferenceBundle | None
     artifacts: list[CitationSnapshot] | None
     trace: ConversationTrace | None
+    duration_ms: int | None = Field(default=None, ge=0)
+
+
+class ConversationTurnBranchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=1)
+    count: int = Field(ge=1)
+    previous_turn_id: UUID | None = None
+    next_turn_id: UUID | None = None
 
 
 class ConversationTurnResponse(BaseModel):
     id: UUID
+    parent_turn_id: UUID | None
     user_query: str
     contexts: list[TurnContext]
-    scope: list[dict[str, JsonValue]] | None
+    paper_context: PaperContext
     reasoning_level: str
     locale: Literal["en", "zh-CN"]
     time_zone: str
-    sequence: int
+    depth: int = Field(ge=1)
+    branch: ConversationTurnBranchResponse
     selected_response_id: UUID | None
     suggestions: list[str] | None
     responses: list[ConversationResponseVariantResponse]
@@ -215,4 +226,11 @@ class ConversationTurnResponse(BaseModel):
 
 class ConversationTurnsResponse(BaseModel):
     items: list[ConversationTurnResponse]
+    path_revision: int = Field(ge=0)
     next_cursor: str | None = None
+
+
+class ConversationBranchSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn_id: UUID

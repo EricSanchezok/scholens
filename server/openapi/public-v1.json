@@ -1707,6 +1707,21 @@
         "title": "ConversationAssistantItem",
         "type": "object"
       },
+      "ConversationBranchSelectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id"
+        ],
+        "title": "ConversationBranchSelectionRequest",
+        "type": "object"
+      },
       "ConversationCapabilitiesResponse": {
         "properties": {
           "archive": {
@@ -2153,6 +2168,18 @@
             ],
             "title": "Content"
           },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2488,7 +2515,8 @@
           "generation_kind": {
             "enum": [
               "initial",
-              "retry"
+              "retry",
+              "branch"
             ],
             "title": "Generation Kind",
             "type": "string"
@@ -2747,6 +2775,80 @@
         "title": "ConversationTrace",
         "type": "object"
       },
+      "ConversationTurnBranchCreateRequest": {
+        "additionalProperties": false,
+        "description": "Create an edited sibling branch without mutating the source turn.",
+        "properties": {
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "user_query": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "User Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "response_id",
+          "user_query"
+        ],
+        "title": "ConversationTurnBranchCreateRequest",
+        "type": "object"
+      },
+      "ConversationTurnBranchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "index": {
+            "minimum": 1.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "next_turn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Turn Id"
+          },
+          "previous_turn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Turn Id"
+          }
+        },
+        "required": [
+          "index",
+          "count"
+        ],
+        "title": "ConversationTurnBranchResponse",
+        "type": "object"
+      },
       "ConversationTurnCreateRequest": {
         "additionalProperties": false,
         "description": "Create one user turn and its initial generated response.",
@@ -2820,6 +2922,9 @@
       },
       "ConversationTurnResponse": {
         "properties": {
+          "branch": {
+            "$ref": "#/components/schemas/ConversationTurnBranchResponse"
+          },
           "contexts": {
             "items": {
               "discriminator": {
@@ -2841,6 +2946,11 @@
             "title": "Contexts",
             "type": "array"
           },
+          "depth": {
+            "minimum": 1.0,
+            "title": "Depth",
+            "type": "integer"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2854,6 +2964,36 @@
             "title": "Locale",
             "type": "string"
           },
+          "paper_context": {
+            "discriminator": {
+              "mapping": {
+                "library": "#/components/schemas/LibraryPaperContext",
+                "selection": "#/components/schemas/SelectedPaperContext"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LibraryPaperContext"
+              },
+              {
+                "$ref": "#/components/schemas/SelectedPaperContext"
+              }
+            ],
+            "title": "Paper Context"
+          },
+          "parent_turn_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Turn Id"
+          },
           "reasoning_level": {
             "title": "Reasoning Level",
             "type": "string"
@@ -2864,23 +3004,6 @@
             },
             "title": "Responses",
             "type": "array"
-          },
-          "scope": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/JsonValue"
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scope"
           },
           "selected_response_id": {
             "anyOf": [
@@ -2893,10 +3016,6 @@
               }
             ],
             "title": "Selected Response Id"
-          },
-          "sequence": {
-            "title": "Sequence",
-            "type": "integer"
           },
           "suggestions": {
             "anyOf": [
@@ -2923,13 +3042,15 @@
         },
         "required": [
           "id",
+          "parent_turn_id",
           "user_query",
           "contexts",
-          "scope",
+          "paper_context",
           "reasoning_level",
           "locale",
           "time_zone",
-          "sequence",
+          "depth",
+          "branch",
           "selected_response_id",
           "suggestions",
           "responses"
@@ -2956,10 +3077,16 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "path_revision": {
+            "minimum": 0.0,
+            "title": "Path Revision",
+            "type": "integer"
           }
         },
         "required": [
-          "items"
+          "items",
+          "path_revision"
         ],
         "title": "ConversationTurnsResponse",
         "type": "object"
@@ -10866,6 +10993,61 @@
         "summary": "Move Conversation"
       }
     },
+    "/api/v1/conversations/{conversation_id}/selected-branch": {
+      "put": {
+        "operationId": "select_conversation_branch_api_v1_conversations__conversation_id__selected_branch_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationBranchSelectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTurnsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Select Conversation Branch"
+      }
+    },
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
       "put": {
         "operationId": "update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put",
@@ -11046,6 +11228,72 @@
           }
         ],
         "summary": "Create Conversation Turn"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/branches": {
+      "post": {
+        "operationId": "branch_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__branches_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationTurnBranchCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Standard SSE stream of typed conversation events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Branch Conversation Turn"
       }
     },
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses": {

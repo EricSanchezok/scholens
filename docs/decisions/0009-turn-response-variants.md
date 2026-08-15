@@ -1,6 +1,6 @@
 # 0009 — Conversation turns own response variants
 
-Status: Accepted
+Status: Superseded by [ADR 0018](./0018-conversation-prompt-branches.md)
 Date: 2026-08-08
 Owners: Scholens
 

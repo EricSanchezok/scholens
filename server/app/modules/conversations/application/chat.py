@@ -9,6 +9,7 @@ from typing import Literal, Protocol
 from uuid import UUID
 
 from app.modules.conversations.application.contracts.turns import (
+    ConversationTurnBranchCreateRequest,
     ConversationTurnCreateRequest,
 )
 from app.modules.conversations.application.contracts.trace import ConversationTrace
@@ -87,6 +88,7 @@ class PersistedChatResponse:
     content: str
     references: dict[str, JsonValue] | None
     trace: ConversationTrace | None
+    duration_ms: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +99,7 @@ class ConversationTurnStart:
     correlation_id: UUID
     turn_created: bool
     response_created: bool
-    generation_kind: Literal["initial", "retry"]
+    generation_kind: Literal["initial", "retry", "branch"]
     suggestions: tuple[str, ...]
 
 
@@ -121,7 +123,7 @@ class ConversationChatDataGateway(Protocol):
         *,
         actor: Actor,
         conversation_id: UUID,
-        exclude_turn_id: UUID | None,
+        before_turn_id: UUID,
     ) -> list[ChatHistoryMessage]: ...
 
     def context(
@@ -145,13 +147,14 @@ class ConversationChatDataGateway(Protocol):
         conversation_id: UUID,
         turn_id: UUID,
         response_id: UUID,
-        generation_kind: Literal["initial", "retry"],
+        generation_kind: Literal["initial", "retry", "branch"],
         user_content: str,
         contexts: list[dict[str, JsonValue]],
-        scope: list[dict[str, JsonValue]] | None,
+        paper_context: dict[str, JsonValue],
         reasoning_level: str,
         locale: str,
         time_zone: str,
+        branch_from_turn_id: UUID | None,
         created_operation_id: UUID,
         correlation_id: UUID,
     ) -> ConversationTurnStart: ...
@@ -167,6 +170,7 @@ class ConversationChatDataGateway(Protocol):
         assistant_references: dict[str, JsonValue] | None,
         assistant_trace: ConversationTrace | None,
         artifacts: list[dict[str, JsonValue]],
+        duration_ms: int,
         created_operation_id: UUID,
         correlation_id: UUID,
     ) -> ConversationTurnCompletion: ...
@@ -178,6 +182,7 @@ class ConversationChatDataGateway(Protocol):
         conversation_id: UUID,
         response_id: UUID,
         status: str,
+        duration_ms: int,
     ) -> None: ...
 
     def save_turn_suggestions(
@@ -196,6 +201,15 @@ class ConversationChatDataGateway(Protocol):
         conversation_id: UUID,
         turn_id: UUID,
         response_id: UUID,
+    ) -> ConversationTurnCreateRequest: ...
+
+    def branch_request(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        request: ConversationTurnBranchCreateRequest,
     ) -> ConversationTurnCreateRequest: ...
 
 
@@ -224,12 +238,12 @@ class ConversationChatData:
         *,
         actor: Actor,
         conversation_id: UUID,
-        exclude_turn_id: UUID | None = None,
+        before_turn_id: UUID,
     ) -> list[ChatHistoryMessage]:
         return self._gateway.history(
             actor=actor,
             conversation_id=conversation_id,
-            exclude_turn_id=exclude_turn_id,
+            before_turn_id=before_turn_id,
         )
 
     def context(
@@ -259,13 +273,14 @@ class ConversationChatData:
         conversation_id: UUID,
         turn_id: UUID,
         response_id: UUID,
-        generation_kind: Literal["initial", "retry"],
+        generation_kind: Literal["initial", "retry", "branch"],
         user_content: str,
         contexts: list[dict[str, JsonValue]],
-        scope: list[dict[str, JsonValue]] | None,
+        paper_context: dict[str, JsonValue],
         reasoning_level: str,
         locale: str,
         time_zone: str,
+        branch_from_turn_id: UUID | None = None,
     ) -> ConversationTurnStart:
         result = self._gateway.start_turn(
             actor=actor,
@@ -275,10 +290,11 @@ class ConversationChatData:
             generation_kind=generation_kind,
             user_content=user_content,
             contexts=contexts,
-            scope=scope,
+            paper_context=paper_context,
             reasoning_level=reasoning_level,
             locale=locale,
             time_zone=time_zone,
+            branch_from_turn_id=branch_from_turn_id,
             created_operation_id=operation.trace.operation_id,
             correlation_id=operation.trace.correlation_id,
         )
@@ -323,6 +339,7 @@ class ConversationChatData:
         assistant_references: dict[str, JsonValue] | None,
         assistant_trace: ConversationTrace | None,
         artifacts: list[dict[str, JsonValue]],
+        duration_ms: int,
     ) -> ConversationTurnCompletion:
         result = self._gateway.complete_turn(
             actor=actor,
@@ -333,6 +350,7 @@ class ConversationChatData:
             assistant_references=assistant_references,
             assistant_trace=assistant_trace,
             artifacts=artifacts,
+            duration_ms=duration_ms,
             created_operation_id=operation.trace.operation_id,
             correlation_id=operation.trace.correlation_id,
         )
@@ -367,12 +385,14 @@ class ConversationChatData:
         conversation_id: UUID,
         response_id: UUID,
         status: str,
+        duration_ms: int,
     ) -> None:
         self._gateway.finish_response(
             actor=actor,
             conversation_id=conversation_id,
             response_id=response_id,
             status=status,
+            duration_ms=duration_ms,
         )
 
     def save_turn_suggestions(
@@ -405,6 +425,21 @@ class ConversationChatData:
             response_id=response_id,
         )
 
+    def branch_request(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        request: ConversationTurnBranchCreateRequest,
+    ) -> ConversationTurnCreateRequest:
+        return self._gateway.branch_request(
+            actor=actor,
+            conversation_id=conversation_id,
+            source_turn_id=source_turn_id,
+            request=request,
+        )
+
 
 class ConversationChatGateway(Protocol):
     async def stream(
@@ -415,7 +450,8 @@ class ConversationChatGateway(Protocol):
         conversation_id: UUID,
         request: ConversationTurnCreateRequest,
         client_ip: str,
-        generation_kind: Literal["initial", "retry"] = "initial",
+        generation_kind: Literal["initial", "retry", "branch"] = "initial",
+        branch_from_turn_id: UUID | None = None,
     ) -> AsyncIterator[str]: ...
 
     async def retry(
@@ -426,6 +462,17 @@ class ConversationChatGateway(Protocol):
         conversation_id: UUID,
         turn_id: UUID,
         response_id: UUID,
+        client_ip: str,
+    ) -> AsyncIterator[str]: ...
+
+    async def branch(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        request: ConversationTurnBranchCreateRequest,
         client_ip: str,
     ) -> AsyncIterator[str]: ...
 
@@ -442,7 +489,8 @@ class ConversationChat:
         conversation_id: UUID,
         request: ConversationTurnCreateRequest,
         client_ip: str,
-        generation_kind: Literal["initial", "retry"] = "initial",
+        generation_kind: Literal["initial", "retry", "branch"] = "initial",
+        branch_from_turn_id: UUID | None = None,
     ) -> AsyncIterator[str]:
         return await self._gateway.stream(
             actor=actor,
@@ -451,6 +499,7 @@ class ConversationChat:
             request=request,
             client_ip=client_ip,
             generation_kind=generation_kind,
+            branch_from_turn_id=branch_from_turn_id,
         )
 
     async def retry(
@@ -469,6 +518,25 @@ class ConversationChat:
             conversation_id=conversation_id,
             turn_id=turn_id,
             response_id=response_id,
+            client_ip=client_ip,
+        )
+
+    async def branch(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        request: ConversationTurnBranchCreateRequest,
+        client_ip: str,
+    ) -> AsyncIterator[str]:
+        return await self._gateway.branch(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            source_turn_id=source_turn_id,
+            request=request,
             client_ip=client_ip,
         )
 

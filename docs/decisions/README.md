@@ -40,7 +40,7 @@ change what the accepted record decided.
 - [ADR 0006: Fixed local-development port block](./0006-local-development-port-contract.md)
 - [ADR 0007: Generated design-system contract](./0007-generated-design-system-contract.md)
 - [ADR 0008: Single Conversation agent](./0008-single-conversation-agent.md)
-- [ADR 0009: Conversation turns own response variants](./0009-turn-response-variants.md)
+- [ADR 0009: Conversation turns own response variants (superseded)](./0009-turn-response-variants.md)
 - [ADR 0010: Turn suggestions and two-stage response readiness](./0010-turn-suggestions-and-response-ready.md)
 - [ADR 0011: Library projections and signed keyset pagination](./0011-library-projections-and-keyset-pagination.md)
 - [ADR 0012: Atomic paper-ingestion acceptance and cooperative cancellation](./0012-atomic-paper-ingestion-lifecycle.md)
@@ -49,6 +49,7 @@ change what the accepted record decided.
 - [ADR 0015: Durable Reader selection translation](./0015-durable-reader-selection-translation.md)
 - [ADR 0016: Lossless Reader reflow and lazy full translation](./0016-lossless-reader-reflow-and-lazy-translation.md)
 - [ADR 0017: Evidence-driven Reader reflow and controlled document translation](./0017-evidence-driven-reader-reflow.md)
+- [ADR 0018: Conversation prompts form durable selected branches](./0018-conversation-prompt-branches.md)
 
 ## Template
 

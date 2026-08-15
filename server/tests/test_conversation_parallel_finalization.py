@@ -74,11 +74,36 @@ class _Runtime:
         )
 
 
+class _FailingRuntime:
+    def __init__(self, suggestions_started: asyncio.Event) -> None:
+        self._suggestions_started = suggestions_started
+
+    async def stream(self, **_: object):
+        await asyncio.wait_for(self._suggestions_started.wait(), timeout=0.5)
+        if False:
+            yield None
+        raise RuntimeError("agent failed")
+
+
+class _BlockedRuntime:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def stream(self, **_: object):
+        self.started.set()
+        await self.release.wait()
+        if False:
+            yield None
+
+
 class _ChatData:
     def __init__(self, request: ConversationTurnCreateRequest) -> None:
         self.request = request
         self.suggestions: list[str] | None = None
         self.completed = False
+        self.complete_duration_ms: int | None = None
+        self.finished: tuple[str, int] | None = None
 
     def prepare(self, **_: object) -> ConversationChatScope:
         return ConversationChatScope(
@@ -109,6 +134,7 @@ class _ChatData:
                 content="",
                 references=None,
                 trace=None,
+                duration_ms=None,
             ),
             turn_operation_id=uuid4(),
             correlation_id=uuid4(),
@@ -121,8 +147,9 @@ class _ChatData:
     def history(self, **_: object) -> list[object]:
         return []
 
-    def complete_turn(self, **_: object) -> ConversationTurnCompletion:
+    def complete_turn(self, **kwargs: object) -> ConversationTurnCompletion:
         self.completed = True
+        self.complete_duration_ms = int(kwargs["duration_ms"])
         return ConversationTurnCompletion(
             response=PersistedChatResponse(
                 id=self.request.response_id,
@@ -132,6 +159,7 @@ class _ChatData:
                 content="Answer",
                 references=None,
                 trace=None,
+                duration_ms=self.complete_duration_ms,
             ),
             created=True,
             citation_ids=(),
@@ -143,8 +171,8 @@ class _ChatData:
         self.suggestions = list(suggestions)
         return True
 
-    def finish_response(self, **_: object) -> None:
-        return None
+    def finish_response(self, **kwargs: object) -> None:
+        self.finished = (str(kwargs["status"]), int(kwargs["duration_ms"]))
 
 
 class _Conversations:
@@ -157,13 +185,15 @@ class _Conversations:
             items=[
                 ConversationTurnResponse(
                     id=request.turn_id,
+                    parent_turn_id=None,
                     user_query=request.user_query,
                     contexts=[],
-                    scope=None,
+                    paper_context={"kind": "library"},
                     reasoning_level="standard",
                     locale="en",
                     time_zone="UTC",
-                    sequence=1,
+                    depth=1,
+                    branch={"index": 1, "count": 1},
                     selected_response_id=request.response_id,
                     suggestions=self._chat_data.suggestions,
                     responses=[
@@ -175,10 +205,12 @@ class _Conversations:
                             references=None,
                             artifacts=None,
                             trace=None,
+                            duration_ms=self._chat_data.complete_duration_ms,
                         )
                     ],
                 )
-            ]
+            ],
+            path_revision=1,
         )
 
 
@@ -196,21 +228,7 @@ class _Executor:
         return callback(self.capabilities)
 
 
-@pytest.mark.asyncio
-async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = ConversationTurnCreateRequest(
-        turn_id=uuid4(),
-        response_id=uuid4(),
-        user_query="Question",
-        locale="en",
-        time_zone="UTC",
-    )
-    chat_data = _ChatData(request)
-    started = asyncio.Event()
-    release = asyncio.Event()
-
+def _patch_stream_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     async def acquire(**_: object) -> object:
         return object()
 
@@ -233,6 +251,24 @@ async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
     monkeypatch.setattr(
         "app.bootstrap.adapters.conversation_chat.track_event", lambda *_, **__: None
     )
+
+
+@pytest.mark.asyncio
+async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = ConversationTurnCreateRequest(
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        user_query="Question",
+        locale="en",
+        time_zone="UTC",
+    )
+    chat_data = _ChatData(request)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    _patch_stream_dependencies(monkeypatch)
 
     operation = SimpleNamespace(
         trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
@@ -272,3 +308,105 @@ async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
     assert event_types.index("response_ready") < event_types.index("suggestions")
     assert event_types[-1] == "complete"
     assert chat_data.suggestions == ["Deepen?", "Verify?", "Apply?"]
+    assert chat_data.complete_duration_ms is not None
+    assert chat_data.complete_duration_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_failed_stream_persists_terminal_status_and_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = ConversationTurnCreateRequest(
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        user_query="Question",
+        locale="en",
+        time_zone="UTC",
+    )
+    chat_data = _ChatData(request)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    _patch_stream_dependencies(monkeypatch)
+    operation = SimpleNamespace(
+        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
+        origin="test",
+        credential=None,
+    )
+    source = await stream_conversation_agent(
+        request,
+        conversation_id=uuid4(),
+        client_ip="127.0.0.1",
+        executor=_Executor(chat_data),
+        current_user=Actor(
+            id=7,
+            email="reader@example.com",
+            status="active",
+            email_verified=True,
+        ),
+        runtime=_FailingRuntime(started),
+        operation=operation,
+        operation_factory=SimpleNamespace(resume=lambda **_: operation),
+        suggestion_generator=_SuggestionGenerator(started, release),
+    )
+
+    event_types = [_payload(event)["type"] async for event in source]
+
+    assert event_types == ["start", "error"]
+    assert chat_data.finished is not None
+    assert chat_data.finished[0] == "failed"
+    assert chat_data.finished[1] >= 0
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_persists_terminal_status_and_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = ConversationTurnCreateRequest(
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        user_query="Question",
+        locale="en",
+        time_zone="UTC",
+    )
+    chat_data = _ChatData(request)
+    runtime = _BlockedRuntime()
+    suggestions_started = asyncio.Event()
+    suggestions_release = asyncio.Event()
+    _patch_stream_dependencies(monkeypatch)
+    operation = SimpleNamespace(
+        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
+        origin="test",
+        credential=None,
+    )
+    source = await stream_conversation_agent(
+        request,
+        conversation_id=uuid4(),
+        client_ip="127.0.0.1",
+        executor=_Executor(chat_data),
+        current_user=Actor(
+            id=7,
+            email="reader@example.com",
+            status="active",
+            email_verified=True,
+        ),
+        runtime=runtime,
+        operation=operation,
+        operation_factory=SimpleNamespace(resume=lambda **_: operation),
+        suggestion_generator=_SuggestionGenerator(
+            suggestions_started,
+            suggestions_release,
+        ),
+    )
+    iterator = source.__aiter__()
+    assert _payload(await anext(iterator))["type"] == "start"
+    pending = asyncio.create_task(anext(iterator))
+    await asyncio.wait_for(runtime.started.wait(), timeout=0.5)
+
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending
+    await iterator.aclose()
+
+    assert chat_data.finished is not None
+    assert chat_data.finished[0] == "cancelled"
+    assert chat_data.finished[1] >= 0

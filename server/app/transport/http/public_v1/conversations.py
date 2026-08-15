@@ -11,6 +11,7 @@ from app.bootstrap.execution import (
 from app.database.product_analytics import track_event
 from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
+    ConversationBranchSelectionRequest,
     ConversationDetailResponse,
     ConversationListResponse,
     ConversationListRequest,
@@ -157,6 +158,29 @@ def select_conversation_response(
             conversation_id=conversation_id,
             turn_id=turn_id,
             response_id=request.response_id,
+        )
+    )
+
+
+@conversation_router.put(
+    "/{conversation_id}/selected-branch",
+    response_model=ConversationTurnsResponse,
+)
+def select_conversation_branch(
+    conversation_id: UUID,
+    request: ConversationBranchSelectionRequest,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+    current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
+) -> ConversationTurnsResponse:
+    return executor.command(
+        lambda capabilities: capabilities.conversations.select_branch(
+            actor=current_user,
+            operation=operation,
+            conversation_id=conversation_id,
+            request=request,
         )
     )
 

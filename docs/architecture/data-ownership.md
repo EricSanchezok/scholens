@@ -53,23 +53,31 @@ remain advisory until Scholens is declared production-ready in the consumer regi
 ## Conversation storage
 
 Scholens owns conversation state entirely inside `scholens.*`. A
-`conversation_turns` row is the immutable user request and owns one or more
-`conversation_responses`. The turn's selected response is the sole model-history
-branch. References, research items, artifacts, and worklog trace belong to a
-concrete response ID. Follow-up suggestions belong to the turn because retries
-and selected variants share the same next-question context.
+`conversation_turns` row is an immutable user request and owns one or more
+`conversation_responses`. Parent and selected-child links form persistent
+prompt branches; the Conversation's selected root and the selected child at
+each depth define the authoritative active path. A monotonic path revision keeps
+pagination from combining different selections. The turn's selected response
+is the sole answer used for model history on that path. References, research
+items, artifacts, worklog trace, and total duration belong to a concrete
+response ID. Follow-up suggestions belong to the turn because retries and
+selected response variants share the same next-question context.
 
-A turn also owns its typed Reader context. A `paper_selection` captures the
+A turn also owns its typed paper-context snapshot and Reader context. A
+`paper_selection` captures the
 authorized Document, selected text, one-based page, and normalized PDF anchor;
 an `annotation_thread` captures an authorized Research Item reference.
 Arbitrary reference dictionaries and parallel annotation-ID fields are not
 persisted.
 
-Only the latest turn may retain multiple completed response variants. Creating
-the next turn removes unselected variants from the previous turn and clears its
-no-longer-visible suggestions. No Identity, Scholight, or Jobs schema owns or
-selects a conversation response; callbacks may update Scholens-owned artifacts
-only through the Server's verified application boundary.
+Only the active leaf may expose multiple completed response variants. Creating
+a normal child removes unselected response variants from its parent and clears
+its no-longer-visible suggestions. Editing creates a sibling without deleting
+the source or either subtree; selecting a prompt branch restores its stored
+selected suffix and reauthorizes the selected leaf's paper context. No Identity,
+Scholight, or Jobs schema owns or selects a conversation response; callbacks may
+update Scholens-owned artifacts only through the Server's verified application
+boundary.
 
 ## Library storage and projections
 

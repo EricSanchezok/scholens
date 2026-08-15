@@ -7,7 +7,6 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
 from typing import Literal, Protocol
 
 from app.bootstrap.capabilities import ApplicationCapabilities
@@ -33,6 +32,7 @@ from app.modules.conversations.application.contracts.answer_packet import (
 )
 from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
+    ConversationTurnBranchCreateRequest,
     ConversationTurnCreateRequest,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
@@ -209,7 +209,8 @@ async def stream_conversation_agent(
     operation: OperationContext,
     operation_factory: OperationContextFactory,
     suggestion_generator: ConversationSuggestionGenerator,
-    generation_kind: Literal["initial", "retry"] = "initial",
+    generation_kind: Literal["initial", "retry", "branch"] = "initial",
+    branch_from_turn_id: uuid.UUID | None = None,
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
 ) -> AsyncGenerator[str, None]:
     """Run one contextual agent and expose its sanitized product event stream."""
@@ -259,6 +260,9 @@ async def stream_conversation_agent(
     serialized_contexts = [
         context.model_dump(mode="json") for context in request.contexts
     ]
+    paper_context = _JSON_OBJECT.validate_python(
+        conversation_scope.paper_context.model_dump(mode="json")
+    )
     turn_start = executor.command(
         lambda capabilities: capabilities.conversation_chat_data.start_turn(
             actor=current_user,
@@ -269,10 +273,11 @@ async def stream_conversation_agent(
             generation_kind=generation_kind,
             user_content=request.user_query,
             contexts=_JSON_OBJECT_LIST.validate_python(serialized_contexts),
-            scope=_JSON_OBJECT_LIST.validate_python(scope_snapshot),
+            paper_context=paper_context,
             reasoning_level=request.reasoning_level.value,
             locale=request.locale,
             time_zone=request.time_zone,
+            branch_from_turn_id=branch_from_turn_id,
         )
     )
     start_event = encode_conversation_sse(
@@ -352,6 +357,11 @@ async def stream_conversation_agent(
     if not turn_start.response_created:
         raise RuntimeError("Conversation response is already in progress")
 
+    response_started_at = time.perf_counter()
+
+    def elapsed_ms() -> int:
+        return max(0, round((time.perf_counter() - response_started_at) * 1_000))
+
     try:
         await enforce_rate_limit(
             user_id=int(current_user.id),
@@ -363,16 +373,36 @@ async def stream_conversation_agent(
             category="interactive",
         )
     except AILimitExceeded as exc:
+        executor.command(
+            lambda capabilities: capabilities.conversation_chat_data.finish_response(
+                actor=current_user,
+                conversation_id=conversation_id,
+                response_id=request.response_id,
+                status="failed",
+                duration_ms=elapsed_ms(),
+            )
+        )
         raise ai_limit_app_error(
             exc,
             exceeded_message="AI request limit exceeded",
         ) from None
+    except Exception:
+        executor.command(
+            lambda capabilities: capabilities.conversation_chat_data.finish_response(
+                actor=current_user,
+                conversation_id=conversation_id,
+                response_id=request.response_id,
+                status="failed",
+                duration_ms=elapsed_ms(),
+            )
+        )
+        raise
 
     prior_history = executor.query(
         lambda capabilities: capabilities.conversation_chat_data.history(
             actor=current_user,
             conversation_id=conversation_id,
-            exclude_turn_id=request.turn_id,
+            before_turn_id=request.turn_id,
         )
     )
     suggestion_task: asyncio.Task[tuple[str, str, str] | None] | None = None
@@ -424,14 +454,12 @@ async def stream_conversation_agent(
         },
     }
 
-    async def run_response_generator() -> AsyncGenerator[str, None]:
+    async def produce_response() -> AsyncGenerator[str, None]:
         yield start_event
         final_content = ""
         artifacts: list[dict[str, JsonValue]] = []
         references: ReferenceBundle | None = None
         trace: ConversationTrace | None = None
-        started_at = datetime.now(timezone.utc)
-
         async for event in runtime.stream(
             request=request,
             actor=current_user,
@@ -491,6 +519,7 @@ async def stream_conversation_agent(
                 ),
                 assistant_trace=trace,
                 artifacts=artifacts,
+                duration_ms=elapsed_ms(),
             )
         )
 
@@ -556,7 +585,7 @@ async def stream_conversation_agent(
                 "has_turn_context": bool(request.contexts),
                 "has_references": references is not None,
                 "reasoning_level": request.reasoning_level.value,
-                "time_taken": (datetime.now(timezone.utc) - started_at).total_seconds(),
+                "time_taken": elapsed_ms() / 1_000,
                 "answer_to_ready_ms": (ready_at - answer_finished_at) * 1_000,
                 "suggestions_ready_before_answer": suggestion_finished_before_answer,
                 "suggestions_tail_ms": suggestions_tail_ms,
@@ -584,6 +613,37 @@ async def stream_conversation_agent(
             )
         )
 
+    async def run_response_generator() -> AsyncGenerator[str, None]:
+        try:
+            async for event in produce_response():
+                yield event
+        except asyncio.CancelledError:
+            executor.command(
+                lambda capabilities: (
+                    capabilities.conversation_chat_data.finish_response(
+                        actor=current_user,
+                        conversation_id=conversation_id,
+                        response_id=request.response_id,
+                        status="cancelled",
+                        duration_ms=elapsed_ms(),
+                    )
+                )
+            )
+            raise
+        except Exception:
+            executor.command(
+                lambda capabilities: (
+                    capabilities.conversation_chat_data.finish_response(
+                        actor=current_user,
+                        conversation_id=conversation_id,
+                        response_id=request.response_id,
+                        status="failed",
+                        duration_ms=elapsed_ms(),
+                    )
+                )
+            )
+            raise
+
     async def response_generator() -> AsyncGenerator[str, None]:
         try:
             with llm_usage_context(user_id=int(current_user.id), feature="chat"):
@@ -608,6 +668,7 @@ async def stream_conversation_agent(
                         conversation_id=conversation_id,
                         response_id=request.response_id,
                         status="cancelled",
+                        duration_ms=elapsed_ms(),
                     )
                 )
             )
@@ -620,6 +681,7 @@ async def stream_conversation_agent(
                         conversation_id=conversation_id,
                         response_id=request.response_id,
                         status="failed",
+                        duration_ms=elapsed_ms(),
                     )
                 )
             )
@@ -662,7 +724,8 @@ class DefaultConversationChatGateway:
         conversation_id: uuid.UUID,
         request: ConversationTurnCreateRequest,
         client_ip: str,
-        generation_kind: Literal["initial", "retry"] = "initial",
+        generation_kind: Literal["initial", "retry", "branch"] = "initial",
+        branch_from_turn_id: uuid.UUID | None = None,
     ) -> AsyncGenerator[str, None]:
         return await stream_conversation_agent(
             request,
@@ -675,6 +738,7 @@ class DefaultConversationChatGateway:
             operation_factory=self._operation_factory,
             suggestion_generator=self._suggestion_generator,
             generation_kind=generation_kind,
+            branch_from_turn_id=branch_from_turn_id,
             diagnostic_recorder=self._diagnostic_recorder,
         )
 
@@ -703,4 +767,32 @@ class DefaultConversationChatGateway:
             request=request,
             client_ip=client_ip,
             generation_kind="retry",
+        )
+
+    async def branch(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: uuid.UUID,
+        source_turn_id: uuid.UUID,
+        request: ConversationTurnBranchCreateRequest,
+        client_ip: str,
+    ) -> AsyncGenerator[str, None]:
+        turn_request = self._executor.command(
+            lambda capabilities: capabilities.conversation_chat_data.branch_request(
+                actor=actor,
+                conversation_id=conversation_id,
+                source_turn_id=source_turn_id,
+                request=request,
+            )
+        )
+        return await self.stream(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            request=turn_request,
+            client_ip=client_ip,
+            generation_kind="branch",
+            branch_from_turn_id=source_turn_id,
         )

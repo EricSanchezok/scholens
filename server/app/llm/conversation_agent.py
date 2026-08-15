@@ -264,7 +264,7 @@ class ScholensConversationAgent:
             lambda capabilities: capabilities.conversation_chat_data.history(
                 actor=actor,
                 conversation_id=conversation_id,
-                exclude_turn_id=request.turn_id,
+                before_turn_id=request.turn_id,
             )
         )
         tool_access = ToolAccess(

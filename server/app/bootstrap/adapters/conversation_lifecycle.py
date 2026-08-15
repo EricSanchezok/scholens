@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.database.models import Conversation
 from app.modules.conversations.application.contracts.conversations import (
+    ConversationBranchSelectionRequest,
     ConversationCreateRequest,
     ConversationDetailResponse,
     ConversationMoveRequest,
@@ -14,13 +15,13 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationToolPermissionsRequest,
     ConversationToolPermissionsResponse,
     PaperContext,
-    ConversationTurnResponse,
     ConversationResponseVariantResponse,
 )
 from app.modules.conversations.application.conversations import (
     ConversationChange,
     ConversationListPosition,
     ConversationPage,
+    ConversationTurnsPage,
 )
 from app.shared.domain.enums import ConversationScopeType
 from app.modules.conversations.infrastructure.presenters import (
@@ -30,6 +31,10 @@ from app.modules.conversations.infrastructure.presenters import (
 from app.modules.conversations.infrastructure.turn_repository import turn_repository
 from app.bootstrap.adapters.conversation_repository import conversation_repository
 from sqlalchemy.orm import Session
+from pydantic import TypeAdapter
+
+
+_PAPER_CONTEXT: TypeAdapter[PaperContext] = TypeAdapter(PaperContext)
 
 
 class SqlAlchemyConversationGateway:
@@ -129,20 +134,56 @@ class SqlAlchemyConversationGateway:
         conversation_id: UUID,
         offset: int,
         limit: int,
-    ) -> list[ConversationTurnResponse]:
-        return serialize_turns(
-            turn_repository.list_turns(
+    ) -> ConversationTurnsPage:
+        conversation, turns = turn_repository.list_turns(
+            self._db,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            offset=offset,
+            limit=limit,
+        )
+        return ConversationTurnsPage(
+            items=serialize_turns(
+                turns,
+                active_leaf_id=(turns[-1].id if offset == 0 and turns else None),
+                branch_groups=turn_repository.branch_groups(
+                    self._db,
+                    conversation_id=conversation_id,
+                ),
+            ),
+            path_revision=conversation.path_revision,
+        )
+
+    def select_branch(
+        self,
+        *,
+        user_id: int,
+        conversation_id: UUID,
+        request: ConversationBranchSelectionRequest,
+    ) -> ConversationTurnsPage:
+        conversation, path = turn_repository.select_branch(
+            self._db,
+            conversation_id=conversation_id,
+            turn_id=request.turn_id,
+            user_id=user_id,
+        )
+        if path:
+            conversation_repository.update_paper_context(
                 self._db,
                 conversation_id=conversation_id,
                 user_id=user_id,
-                offset=offset,
-                limit=limit,
+                request=_PAPER_CONTEXT.validate_python(path[-1].paper_context),
+            )
+        return ConversationTurnsPage(
+            items=serialize_turns(
+                path,
+                active_leaf_id=path[-1].id if path else None,
+                branch_groups=turn_repository.branch_groups(
+                    self._db,
+                    conversation_id=conversation_id,
+                ),
             ),
-            latest_turn_id=turn_repository.latest_turn_id(
-                self._db,
-                conversation_id=conversation_id,
-                user_id=user_id,
-            ),
+            path_revision=conversation.path_revision,
         )
 
     def select_response(

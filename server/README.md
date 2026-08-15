@@ -120,10 +120,16 @@ stable structured output, not another metadata authority or a whole-document
 model rewrite.
 
 Conversation turns are created at
-`POST /api/v1/conversations/{conversation_id}/turns`; retrying the latest turn
+`POST /api/v1/conversations/{conversation_id}/turns`; retrying the active branch
+leaf
 creates another response variant at
 `POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses`.
-Both generation endpoints stream standard Server-Sent Events. Consumers must handle
+Editing any turn on the active path creates an immutable sibling through
+`POST /api/v1/conversations/{conversation_id}/turns/{turn_id}/branches`.
+`PUT /api/v1/conversations/{conversation_id}/selected-branch` selects a prompt
+version, restores its previously selected descendant suffix and authorized
+paper context, and returns the authoritative active path. All generation
+endpoints stream standard Server-Sent Events. Consumers must handle
 the typed `start`, `assistant_item_start`, `assistant_item_delta`,
 `assistant_item_complete`, `activity`, `references`, `response_ready`,
 `suggestions`, `complete`, and `error` events and treat `complete` or `error`
@@ -142,13 +148,17 @@ adapter rather than maintaining a second dictionary-shaped protocol. Completed
 assistant items must contain visible text; user-visible progress is bounded to
 4,000 characters, and a response without a visible final answer is failed
 instead of persisting an empty response variant. A turn owns the immutable user
-prompt and one or more generated responses; only the latest turn may be retried
-or switch its selected response. Creating the next turn prunes unselected
-variants from the prior turn, so completed history has one canonical response.
-The latest turn may own persisted follow-up suggestions. Suggestion generation
+prompt, typed paper-context snapshot, and one or more generated responses.
+Parent and selected-child pointers form a persistent tree, while the
+Conversation selects one root and publishes a monotonic path revision. Agent
+history contains only the generated turn's selected ancestors. Only the active
+leaf may be retried or switch its selected response, and only one response may
+run in a Conversation at a time. Creating a normal next turn prunes unselected
+response variants from its parent; prompt branches are never pruned as a side
+effect. The active leaf may own persisted follow-up suggestions. Suggestion generation
 starts beside the answer stream and shares the same SSE instead of requiring a
 second HTTP request or polling. It uses no open database transaction while the
-model runs and rechecks latest-turn ownership before persisting. The structured
+model runs and rechecks active-leaf ownership before persisting. The structured
 result is exactly three unique questions:
 one deepening question, one comparison or verification question, and one
 practical-application question. Only the current query, locale, three recent
@@ -157,6 +167,9 @@ current answer, trace data, raw tool output, and document bodies never do. A
 newer turn clears the preceding suggestions, and a late result cannot restore
 them. Suggestions and first-title generation never block `response_ready`; the
 stream retains a bounded two-second sidecar tail before `complete`.
+Completed, failed, and cancelled responses persist their total `duration_ms`;
+the ordered trace remains separate inspectable progress rather than a timing
+store.
 There is no private delimiter. Clients may abort the request, but must not
 automatically retry this non-idempotent operation.
 

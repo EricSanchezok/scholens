@@ -12,6 +12,7 @@ from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import OperationAction, ResourceRef
 from app.modules.conversations.application.contracts.conversations import (
     ConversationCreateRequest,
+    ConversationBranchSelectionRequest,
     ConversationDetailResponse,
     ConversationListResponse,
     ConversationListRequest,
@@ -41,6 +42,7 @@ CONVERSATION_TOOL_PERMISSIONS_UPDATED = OperationAction(
     "conversation.tool_permissions_updated"
 )
 CONVERSATION_RESPONSE_SELECTED = OperationAction("conversation.response_selected")
+CONVERSATION_BRANCH_SELECTED = OperationAction("conversation.branch_selected")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,12 @@ class ConversationListPosition:
 class ConversationPage:
     items: list[ConversationSummaryResponse]
     next_position: ConversationListPosition | None
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationTurnsPage:
+    items: list[ConversationTurnResponse]
+    path_revision: int
 
 
 class ConversationGateway(Protocol):
@@ -93,7 +101,15 @@ class ConversationGateway(Protocol):
         conversation_id: UUID,
         offset: int,
         limit: int,
-    ) -> list[ConversationTurnResponse]: ...
+    ) -> ConversationTurnsPage: ...
+
+    def select_branch(
+        self,
+        *,
+        user_id: int,
+        conversation_id: UUID,
+        request: ConversationBranchSelectionRequest,
+    ) -> ConversationTurnsPage: ...
 
     def select_response(
         self,
@@ -264,20 +280,36 @@ class Conversations:
         limit: int,
     ) -> ConversationTurnsResponse:
         fingerprint = f"{actor.id}:{conversation_id}:{limit}"
-        offset = (
-            self._turn_cursors.decode(
+        requested_revision: int | None = None
+        offset = 0
+        if cursor:
+            values = self._turn_cursors.decode_keyset(
                 cursor=cursor,
                 fingerprint=fingerprint,
+                arity=2,
             )
-            if cursor
-            else 0
-        )
-        turns = self._gateway.turns(
+            try:
+                requested_revision = int(values[0])
+                offset = int(values[1])
+            except ValueError as exc:
+                raise AppError(
+                    code="conversation_cursor_expired",
+                    message="Conversation cursor is invalid or expired",
+                    kind=FailureKind.CONFLICT,
+                ) from exc
+        page = self._gateway.turns(
             user_id=actor.id,
             conversation_id=conversation_id,
             offset=offset,
             limit=limit + 1,
         )
+        if requested_revision is not None and requested_revision != page.path_revision:
+            raise AppError(
+                code="conversation_path_changed",
+                message="The selected conversation branch changed",
+                kind=FailureKind.CONFLICT,
+            )
+        turns = page.items
         has_more = len(turns) > limit
         if has_more:
             # The gateway returns chronological order, so discard the oldest
@@ -285,14 +317,42 @@ class Conversations:
             turns = turns[1:]
         return ConversationTurnsResponse(
             items=turns,
+            path_revision=page.path_revision,
             next_cursor=(
-                self._turn_cursors.encode(
+                self._turn_cursors.encode_keyset(
                     fingerprint=fingerprint,
-                    offset=offset + limit,
+                    values=(str(page.path_revision), str(offset + limit)),
                 )
                 if has_more
                 else None
             ),
+        )
+
+    def select_branch(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        request: ConversationBranchSelectionRequest,
+    ) -> ConversationTurnsResponse:
+        page = self._gateway.select_branch(
+            user_id=actor.id,
+            conversation_id=conversation_id,
+            request=request,
+        )
+        self._journal.append(
+            actor=actor,
+            operation=operation,
+            action=CONVERSATION_BRANCH_SELECTED,
+            resources=(
+                ResourceRef("conversation", str(conversation_id)),
+                ResourceRef("conversation_turn", str(request.turn_id)),
+            ),
+        )
+        return ConversationTurnsResponse(
+            items=page.items,
+            path_revision=page.path_revision,
         )
 
     def update(
