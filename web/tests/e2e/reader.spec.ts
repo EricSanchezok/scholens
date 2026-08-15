@@ -456,7 +456,10 @@ async function mockReader(page: Page) {
   );
 }
 
-async function mockReaderReflow(page: Page) {
+async function mockReaderReflow(
+  page: Page,
+  options: { delayMs?: number } = {},
+) {
   let preferences = {
     auto_translate_selection: true,
     custom_instructions: null as string | null,
@@ -484,8 +487,11 @@ async function mockReaderReflow(page: Page) {
   );
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/reflow`,
-    (route) =>
-      route.fulfill({
+    async (route) => {
+      if (options.delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      }
+      await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           assets: [],
@@ -499,7 +505,8 @@ async function mockReaderReflow(page: Page) {
           updated_at: "2026-08-14T00:00:00Z",
           warnings: [],
         }),
-      }),
+      });
+    },
   );
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/reflow/blocks/*/translations`,
@@ -1386,6 +1393,20 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
     }),
   ).toHaveCount(0);
   await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
+});
+
+test("keeps the reflow outline action stable while headings load", async ({
+  page,
+}) => {
+  await mockReaderReflow(page, { delayMs: 1_000 });
+  await page.goto(`/reader/${paperDocument.document_id}?view=reflow`);
+
+  const outline = page.getByRole("button", {
+    name: "Show document outline",
+  });
+  await expect(outline).toBeVisible();
+  await expect(outline).toBeDisabled();
+  await expect(outline).toBeEnabled();
 });
 
 test("hides full translation in the PDF view", async ({ page }) => {

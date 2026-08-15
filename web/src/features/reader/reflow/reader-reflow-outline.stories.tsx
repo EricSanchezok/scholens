@@ -42,6 +42,16 @@ type Story = StoryObj<typeof meta>;
 export const DesktopSidebar: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const outlineButtons = canvas.getAllByRole("button");
+    const buttonBounds = outlineButtons.map((button) =>
+      button.getBoundingClientRect(),
+    );
+
+    for (let index = 1; index < buttonBounds.length; index += 1) {
+      await expect(buttonBounds[index]!.top).toBeGreaterThanOrEqual(
+        buttonBounds[index - 1]!.bottom,
+      );
+    }
     await userEvent.click(
       canvas.getByRole("button", { name: "2.1 Retrieval" }),
     );

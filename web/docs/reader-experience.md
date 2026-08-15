@@ -76,7 +76,9 @@ previous/next controls. The PDF remains visible and interactive while search is
 active. PDF view keeps its page-thumbnail rail and does not expose the PDF's
 optional embedded bookmark tree. In AI reflow, the Outline control expands or
 collapses a dedicated left navigation rail built from the semantic heading
-blocks; it never opens a popover over the paper.
+blocks; it never opens a popover over the paper. The control occupies its stable
+toolbar position immediately when AI reflow opens and remains disabled only
+until the semantic headings are available, avoiding asynchronous layout shift.
 
 At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
 

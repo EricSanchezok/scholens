@@ -130,6 +130,19 @@ export const ReflowOutlineOpen: Story = {
   args: { outlineAvailable: true, outlineOpen: true, view: "reflow" },
 };
 
+export const ReflowOutlineLoading: Story = {
+  args: { outlineAvailable: false, view: "reflow" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("button", { name: labels.showOutline }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: labels.showOutline }),
+    ).toBeDisabled();
+  },
+};
+
 export const ReflowSmallMobile: Story = {
   args: { outlineAvailable: true, view: "reflow" },
   globals: { viewport: { value: "smallMobile" } },

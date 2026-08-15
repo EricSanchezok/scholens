@@ -58,7 +58,7 @@ function ReaderReflowOutlineItems({
         <li key={entry.id}>
           <Button
             className={cn(
-              "h-auto min-h-11 w-full items-start justify-start px-2 py-2 text-left font-normal whitespace-normal md:min-h-9 md:py-1.5",
+              "h-auto min-h-11 w-full items-start justify-start px-2 py-2 text-left font-normal whitespace-normal sm:h-auto md:min-h-9 md:py-1.5",
               depth === 0 ? "text-foreground font-medium" : "text-secondary",
             )}
             onClick={() => onSelect(entry.id)}

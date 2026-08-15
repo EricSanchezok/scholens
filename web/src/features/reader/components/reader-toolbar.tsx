@@ -390,9 +390,10 @@ export function ReaderToolbar({
                 <Icon glyph={SearchIcon} size={20} />
               </IconButton>
             ) : null}
-            {view === "reflow" && outlineAvailable ? (
+            {view === "reflow" ? (
               <IconButton
                 aria-pressed={outlineOpen}
+                disabled={!outlineAvailable}
                 label={outlineOpen ? labels.hideOutline : labels.showOutline}
                 onClick={onToggleOutline}
                 variant={outlineOpen ? "secondary" : "ghost"}
