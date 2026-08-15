@@ -25,6 +25,18 @@
       "standard": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1] },
       "exit": { "$type": "cubicBezier", "$value": [0.4, 0, 1, 1] },
       "in-out": { "$type": "cubicBezier", "$value": [0.65, 0, 0.35, 1] }
+    },
+    "spring": {
+      "layout": {
+        "stiffness": { "$type": "number", "$value": 360 },
+        "damping": { "$type": "number", "$value": 34 },
+        "mass": { "$type": "number", "$value": 0.85 }
+      },
+      "gentle": {
+        "stiffness": { "$type": "number", "$value": 280 },
+        "damping": { "$type": "number", "$value": 30 },
+        "mass": { "$type": "number", "$value": 0.9 }
+      }
     }
   }
 }

@@ -3,6 +3,7 @@ import type { Transition, Variants } from "motion/react";
 import {
   motionDurations,
   motionEasings,
+  motionSprings,
 } from "@/design-system/generated/motion-metadata";
 
 const seconds = (milliseconds: number) => milliseconds / 1000;
@@ -26,15 +27,11 @@ export const motionTransitions = {
   },
   layout: {
     type: "spring",
-    stiffness: 360,
-    damping: 34,
-    mass: 0.85,
+    ...motionSprings.layout,
   },
   gentle: {
     type: "spring",
-    stiffness: 280,
-    damping: 30,
-    mass: 0.9,
+    ...motionSprings.gentle,
   },
 } satisfies Record<string, Transition>;
 

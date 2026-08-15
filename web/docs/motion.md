@@ -66,10 +66,13 @@ continuous PDF pages, long virtualized collections, or route-level crossfades.
 | `in-out`   | `.65, 0, .35, 1` | Symmetric bounded progress           |
 
 Runtime layout motion uses one responsive spring (`stiffness: 360`, `damping:
-34`, `mass: .85`) and one gentler spring (`280`, `30`, `.9`). Feature code does
-not tune a new spring to make one screen feel different. Continuous spinner and
-skeleton cycles are multiples of the deliberate duration token; they stop in
-reduced mode.
+34`, `mass: .85`) and one gentler spring (`280`, `30`, `.9`). Their three
+parameters are DTCG numeric tokens under `motion.spring.*`; token generation
+assembles the typed runtime metadata because DTCG has no portable compound
+spring type. Feature code consumes the semantic transition and does not tune a
+new spring to make one screen feel different. Continuous spinner and skeleton
+cycles are multiples of the deliberate duration token; they stop in reduced
+mode.
 
 ## Semantic recipes
 

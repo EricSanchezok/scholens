@@ -76,20 +76,21 @@ strict CSS-first build before the bounded rail FLIP. That base measured 725 B
 above `main`. Adding global `MotionConfig` added 279 B; `LazyMotion` added
 12,341 B; one raw `m.div` added 4,855 B; `AnimatePresence` added 1,987 B; and
 the Scholens semantic wrapper/barrel added 685 B. The reconstructed
-global-runtime total was 20,872 B above `main`. The final CSS/WAAPI candidate,
-including the rail FLIP and generated CSS easing metadata, measures 1,353 B
-above `main`. This evidence is why the runtime boundary is route-local rather
-than global.
+global-runtime total was 20,872 B above `main`. The CSS/WAAPI candidate with
+the rail FLIP and generated CSS easing metadata measured 1,353 B above `main`;
+the later generated spring-token source adds 67 B for a final 1,420 B. This
+evidence is why the runtime boundary is route-local rather than global.
 
-The final route-owned measurement was:
+The final route-owned measurement, including the generated spring-token
+follow-up, was:
 
 | Production route     | `main` gzip | Candidate gzip | Delta     | Motion ownership                         |
 | -------------------- | ----------- | -------------- | --------- | ---------------------------------------- |
-| Home `/`             | 458,460 B   | 459,813 B      | +1,353 B  | CSS/WAAPI; no Motion React initial chunk |
-| Login `/login`       | 322,580 B   | 323,231 B      | +651 B    | CSS-first; no Motion React initial chunk |
-| Library `/library`   | 469,216 B   | 490,447 B      | +21,231 B | route-local runtime                      |
-| Projects `/projects` | 465,246 B   | 486,372 B      | +21,126 B | route-local runtime                      |
-| Reader `/reader/:id` | 569,321 B   | 590,632 B      | +21,311 B | route-local runtime                      |
+| Home `/`             | 458,460 B   | 459,880 B      | +1,420 B  | CSS/WAAPI; no Motion React initial chunk |
+| Login `/login`       | 322,580 B   | 323,298 B      | +718 B    | CSS-first; no Motion React initial chunk |
+| Library `/library`   | 469,216 B   | 490,493 B      | +21,277 B | route-local runtime                      |
+| Projects `/projects` | 465,246 B   | 486,418 B      | +21,172 B | route-local runtime                      |
+| Reader `/reader/:id` | 569,321 B   | 590,678 B      | +21,357 B | route-local runtime                      |
 
 The two shared initial runtime chunks total 19,581 B gzip on opted-in routes;
 the remaining 1,545–1,730 B is route integration and feature wrapper code. The
@@ -125,6 +126,10 @@ builds, and Node zlib level 9.
 
 Motion is intentionally less flexible at feature call sites. New timings,
 easings, springs, or recipes require a system-level reason and documentation.
+Spring stiffness, damping, and mass are standard numeric DTCG tokens assembled
+into generated runtime metadata; no feature or runtime adapter owns a second
+numeric source. Because compound spring types are not portable in DTCG, these
+runtime-only values are intentionally omitted from generated CSS.
 Shared primitives gain consistent feedback and overlays; product features can
 compose a small vocabulary without copying configuration. The asynchronous
 Motion feature chunk adds a dependency only after entering a runtime-enabled
