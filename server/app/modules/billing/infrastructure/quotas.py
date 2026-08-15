@@ -7,19 +7,27 @@ from datetime import datetime, timedelta, timezone
 from app.modules.billing.infrastructure.usage_repository import (
     resource_usage_repository,
 )
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
 from app.modules.billing.infrastructure.subscription_repository import (
     subscription_repository,
+)
+from app.modules.billing.infrastructure.entitlement_repository import (
+    entitlement_repository,
 )
 from app.modules.billing.domain import (
     AccountCapacityFacts,
     SubscriptionFacts,
-    effective_plan,
+    EntitlementResolution,
+    PlanGrantFacts,
     entitlements_for,
     paper_upload_denial,
     project_creation_denial,
     remaining,
     require_account_document_capacity,
     require_project_paper_capacity,
+    resolve_entitlements,
 )
 from app.modules.billing.application.contracts import UsagePeriod
 from app.database.models import (
@@ -40,14 +48,25 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def get_user_subscription_plan(db: Session, user: Actor) -> SubscriptionPlan:
-    """
-    Get the user's current subscription plan.
-    Returns BASIC if no active subscription is found.
-    """
+def get_user_entitlements(
+    db: Session,
+    user: Actor,
+    *,
+    now: datetime | None = None,
+) -> EntitlementResolution:
+    current_time = now or datetime.now(timezone.utc)
     subscription = subscription_repository.get_by_user_id(db, user.id)
-
-    facts = (
+    grant = entitlement_repository.active_plan_grant(
+        db,
+        user_id=user.id,
+        now=current_time,
+    )
+    override_models = entitlement_repository.active_quota_overrides(
+        db,
+        user_id=user.id,
+        now=current_time,
+    )
+    subscription_facts = (
         SubscriptionFacts(
             plan=SubscriptionPlan(subscription.plan),
             status=SubscriptionStatus(subscription.status),
@@ -56,17 +75,34 @@ def get_user_subscription_plan(db: Session, user: Actor) -> SubscriptionPlan:
         if subscription is not None
         else None
     )
-    return effective_plan(facts, now=datetime.now(timezone.utc))
+    grant_facts = (
+        PlanGrantFacts(
+            plan=SubscriptionPlan(grant.plan),
+            expires_at=grant.expires_at,
+            revoked_at=grant.revoked_at,
+        )
+        if grant is not None
+        else None
+    )
+    return resolve_entitlements(
+        subscription_facts,
+        grant=grant_facts,
+        overrides={model.resource_key: model.limit_value for model in override_models},
+        now=current_time,
+    )
+
+
+def get_user_subscription_plan(db: Session, user: Actor) -> SubscriptionPlan:
+    """
+    Get the user's current subscription plan.
+    Returns BASIC if no active subscription is found.
+    """
+    return get_user_entitlements(db, user).plan
 
 
 def get_plan_limits(plan: SubscriptionPlan) -> dict[str, int]:
     """Get the limits for a specific subscription plan."""
     return entitlements_for(plan).as_limits()
-
-
-def lock_account_resource_quota(db: Session, *, user_id: int) -> None:
-    """Serialize resource grants for one account within the current transaction."""
-    db.execute(select(func.pg_advisory_xact_lock(user_id)))
 
 
 def get_quota_user(db: Session, *, user_id: int) -> Actor:
@@ -102,21 +138,29 @@ def _require_incremental_account_capacity(
         return
 
     owner = get_quota_user(db, user_id=owner_id)
-    plan = get_user_subscription_plan(db, owner)
+    resolution = get_user_entitlements(db, owner)
+    plan = resolution.plan
+    existing_ids = resource_usage_repository.owned_document_ids(db, user_id=owner.id)
+    incremental_documents = [
+        document for document in documents if document.id not in existing_ids
+    ]
     current_count = resource_usage_repository.completed_reference_count(
         db, user_id=owner.id
     )
     current_size = resource_usage_repository.completed_storage_kb(db, user_id=owner.id)
-    added_size = sum((document.size_bytes + 1023) // 1024 for document in documents)
+    added_size = sum(
+        (document.size_bytes + 1023) // 1024 for document in incremental_documents
+    )
     require_account_document_capacity(
         plan,
         AccountCapacityFacts(
             current_documents=current_count,
             current_storage_kb=current_size,
-            added_documents=len(documents),
+            added_documents=len(incremental_documents),
             added_storage_kb=added_size,
             project_owner=project_owner,
         ),
+        limits=resolution.limits,
     )
 
 
@@ -132,7 +176,8 @@ def require_project_document_capacity(
         return
     lock_account_resource_quota(db, user_id=owner_id)
     owner = get_quota_user(db, user_id=owner_id)
-    plan = get_user_subscription_plan(db, owner)
+    resolution = get_user_entitlements(db, owner)
+    plan = resolution.plan
     current_project_count = int(
         db.scalar(
             select(func.count(ProjectPaper.id)).where(
@@ -145,6 +190,7 @@ def require_project_document_capacity(
         plan,
         current_documents=current_project_count,
         added_documents=len(documents),
+        limits=resolution.limits,
     )
 
     _require_incremental_account_capacity(
@@ -177,8 +223,8 @@ def get_remaining_paper_upload_slots(db: Session, user: Actor) -> int:
     Returns 0 when at or over limit. All current plans have a finite paper
     upload limit, so there is no unlimited case to special-case.
     """
-    plan = get_user_subscription_plan(db, user)
-    paper_limit = entitlements_for(plan).paper_uploads
+    resolution = get_user_entitlements(db, user)
+    paper_limit = resolution.limits.paper_uploads
     current_paper_count = resource_usage_repository.completed_reference_count(
         db, user_id=user.id
     )
@@ -192,13 +238,18 @@ def can_user_upload_paper(db: Session, user: Actor) -> tuple[bool, str | None]:
     Returns:
         Whether the action is allowed and an optional user-facing reason.
     """
-    plan = get_user_subscription_plan(db, user)
+    resolution = get_user_entitlements(db, user)
+    plan = resolution.plan
     current_paper_count = resource_usage_repository.completed_reference_count(
         db, user_id=user.id
     )
-    denial = paper_upload_denial(plan, current_documents=current_paper_count)
+    denial = paper_upload_denial(
+        plan,
+        current_documents=current_paper_count,
+        limits=resolution.limits,
+    )
     if denial is not None:
-        paper_limit = entitlements_for(plan).paper_uploads
+        paper_limit = resolution.limits.paper_uploads
         track_event(
             "action_blocked_limit_reached",
             user_id=str(user.id),
@@ -225,14 +276,19 @@ def can_user_create_project(db: Session, user: Actor) -> tuple[bool, str | None]
     Returns:
         Whether the action is allowed and an optional user-facing reason.
     """
-    plan = get_user_subscription_plan(db, user)
+    resolution = get_user_entitlements(db, user)
+    plan = resolution.plan
     current_project_count = int(
         db.scalar(select(func.count(Project.id)).where(Project.owner_id == user.id))
         or 0
     )
-    denial = project_creation_denial(plan, current_projects=current_project_count)
+    denial = project_creation_denial(
+        plan,
+        current_projects=current_project_count,
+        limits=resolution.limits,
+    )
     if denial is not None:
-        project_limit = entitlements_for(plan).projects
+        project_limit = resolution.limits.projects
         track_event(
             "action_blocked_limit_reached",
             user_id=str(user.id),
@@ -254,7 +310,7 @@ def can_user_create_project(db: Session, user: Actor) -> tuple[bool, str | None]
 
 def can_user_auto_sync_zotero(db: Session, user: Actor) -> bool:
     """Return True if the user's plan allows automatic Zotero sync (Researcher only)."""
-    return entitlements_for(get_user_subscription_plan(db, user)).zotero_auto_sync
+    return get_user_entitlements(db, user).limits.zotero_auto_sync
 
 
 def get_user_usage_info(
@@ -265,8 +321,9 @@ def get_user_usage_info(
     """Return current resources plus a Monday-aligned Token Credit window."""
     from app.llm.token_credits import utc_week_start
 
-    plan = get_user_subscription_plan(db, user)
-    limits = entitlements_for(plan)
+    resolution = get_user_entitlements(db, user)
+    plan = resolution.plan
+    limits = resolution.limits
     current_paper_count = resource_usage_repository.completed_reference_count(
         db, user_id=user.id
     )

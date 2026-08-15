@@ -7,6 +7,8 @@ from .entitlements import (
     PROJECTS_KEY,
     TOKEN_CREDITS_KEY,
     AccountCapacityFacts,
+    EntitlementResolution,
+    PlanGrantFacts,
     PlanEntitlements,
     SubscriptionFacts,
     effective_plan,
@@ -14,6 +16,7 @@ from .entitlements import (
     paper_upload_denial,
     project_creation_denial,
     remaining,
+    resolve_entitlements,
     require_account_document_capacity,
     require_project_paper_capacity,
 )
@@ -25,6 +28,8 @@ __all__ = [
     "PROJECTS_KEY",
     "TOKEN_CREDITS_KEY",
     "AccountCapacityFacts",
+    "EntitlementResolution",
+    "PlanGrantFacts",
     "PlanEntitlements",
     "SubscriptionFacts",
     "effective_plan",
@@ -32,6 +37,7 @@ __all__ = [
     "paper_upload_denial",
     "project_creation_denial",
     "remaining",
+    "resolve_entitlements",
     "require_account_document_capacity",
     "require_project_paper_capacity",
 ]

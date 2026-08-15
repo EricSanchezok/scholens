@@ -45,6 +45,7 @@ COPY --from=builder /app/migrations/ /app/migrations/
 COPY --from=builder /app/alembic.ini /app/gunicorn.config.py /app/
 
 ENV PATH=/app/.venv/bin:$PATH \
+    SCHOLENS_SERVER_ROOT=/app \
     ENVIRONMENT=production \
     PORT=8000
 

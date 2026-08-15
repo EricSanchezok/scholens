@@ -2,6 +2,8 @@ from app.database.admin_auth import build_admin_authentication_backend
 from app.database.database import engine
 from app.database.models import (
     AnnotationComment,
+    AccountPlanGrant,
+    AccountQuotaOverride,
     Conversation,
     ConversationResponse,
     ConversationTurn,
@@ -24,7 +26,13 @@ from fastapi import FastAPI
 from sqladmin import Admin, ModelView
 
 
-class AuthUserAdmin(ModelView, model=AuthUser):
+class ReadOnlyModelView(ModelView):
+    can_create = False
+    can_edit = False
+    can_delete = False
+
+
+class AuthUserAdmin(ReadOnlyModelView, model=AuthUser):
     name = "SanchezCloud Identity User"
     name_plural = "SanchezCloud Identity Users"
     column_list = [
@@ -36,12 +44,9 @@ class AuthUserAdmin(ModelView, model=AuthUser):
         AuthUser.created_at,
     ]
     column_searchable_list = [AuthUser.email, AuthUser.display_name]
-    can_create = False
-    can_edit = False
-    can_delete = False
 
 
-class UserProfileAdmin(ModelView, model=UserProfile):
+class UserProfileAdmin(ReadOnlyModelView, model=UserProfile):
     name = "Scholens User Profile"
     name_plural = "Scholens User Profiles"
     column_list = [
@@ -52,11 +57,9 @@ class UserProfileAdmin(ModelView, model=UserProfile):
         UserProfile.created_at,
     ]
     column_searchable_list = [UserProfile.user_id, UserProfile.locale]
-    can_create = False
-    can_delete = False
 
 
-class OnboardingAdmin(ModelView, model=Onboarding):
+class OnboardingAdmin(ReadOnlyModelView, model=Onboarding):
     column_list = [
         Onboarding.id,
         Onboarding.user_id,
@@ -68,7 +71,7 @@ class OnboardingAdmin(ModelView, model=Onboarding):
     ]
 
 
-class SubscriptionAdmin(ModelView, model=Subscription):
+class SubscriptionAdmin(ReadOnlyModelView, model=Subscription):
     column_list = [
         Subscription.id,
         Subscription.user_id,
@@ -77,14 +80,36 @@ class SubscriptionAdmin(ModelView, model=Subscription):
         Subscription.created_at,
         Subscription.cancel_at_period_end,
     ]
+
+
+class AccountPlanGrantAdmin(ReadOnlyModelView, model=AccountPlanGrant):
+    column_list = [
+        AccountPlanGrant.id,
+        AccountPlanGrant.user_id,
+        AccountPlanGrant.plan,
+        AccountPlanGrant.granted_by_user_id,
+        AccountPlanGrant.expires_at,
+        AccountPlanGrant.revoked_at,
+    ]
+    column_searchable_list = [AccountPlanGrant.user_id, AccountPlanGrant.plan]
+
+
+class AccountQuotaOverrideAdmin(ReadOnlyModelView, model=AccountQuotaOverride):
+    column_list = [
+        AccountQuotaOverride.id,
+        AccountQuotaOverride.user_id,
+        AccountQuotaOverride.resource_key,
+        AccountQuotaOverride.limit_value,
+        AccountQuotaOverride.expires_at,
+        AccountQuotaOverride.revoked_at,
+    ]
     column_searchable_list = [
-        Subscription.user_id,
-        Subscription.plan,
-        Subscription.status,
+        AccountQuotaOverride.user_id,
+        AccountQuotaOverride.resource_key,
     ]
 
 
-class ProjectAdmin(ModelView, model=Project):
+class ProjectAdmin(ReadOnlyModelView, model=Project):
     column_list = [
         Project.id,
         Project.title,
@@ -94,7 +119,7 @@ class ProjectAdmin(ModelView, model=Project):
     column_searchable_list = [Project.title]
 
 
-class ProjectCollaboratorAdmin(ModelView, model=ProjectCollaborator):
+class ProjectCollaboratorAdmin(ReadOnlyModelView, model=ProjectCollaborator):
     column_list = [
         ProjectCollaborator.id,
         "project",
@@ -117,7 +142,7 @@ class ProjectCollaboratorAdmin(ModelView, model=ProjectCollaborator):
     ]
 
 
-class ProjectPaperAdmin(ModelView, model=ProjectPaper):
+class ProjectPaperAdmin(ReadOnlyModelView, model=ProjectPaper):
     column_list = [
         ProjectPaper.id,
         ProjectPaper.project_id,
@@ -126,7 +151,7 @@ class ProjectPaperAdmin(ModelView, model=ProjectPaper):
     column_searchable_list = [ProjectPaper.project_id, ProjectPaper.document_id]
 
 
-class AnnotationThreadAdmin(ModelView, model=AnnotationThread):
+class AnnotationThreadAdmin(ReadOnlyModelView, model=AnnotationThread):
     column_list = [
         AnnotationThread.research_item_id,
         AnnotationThread.quote_text,
@@ -136,12 +161,12 @@ class AnnotationThreadAdmin(ModelView, model=AnnotationThread):
     column_searchable_list = [AnnotationThread.quote_text]
 
 
-class PaperAdmin(ModelView, model=Document):
+class PaperAdmin(ReadOnlyModelView, model=Document):
     column_list = [Document.id, Document.title, Document.created_by_id]
     column_searchable_list = [Document.title]
 
 
-class AnnotationCommentAdmin(ModelView, model=AnnotationComment):
+class AnnotationCommentAdmin(ReadOnlyModelView, model=AnnotationComment):
     column_list = [
         AnnotationComment.id,
         AnnotationComment.thread_id,
@@ -151,7 +176,7 @@ class AnnotationCommentAdmin(ModelView, model=AnnotationComment):
     column_searchable_list = [AnnotationComment.content]
 
 
-class ConversationAdmin(ModelView, model=Conversation):
+class ConversationAdmin(ReadOnlyModelView, model=Conversation):
     column_list = [
         Conversation.id,
         Conversation.user_id,
@@ -163,7 +188,7 @@ class ConversationAdmin(ModelView, model=Conversation):
     column_searchable_list = [Conversation.title]
 
 
-class ConversationTurnAdmin(ModelView, model=ConversationTurn):
+class ConversationTurnAdmin(ReadOnlyModelView, model=ConversationTurn):
     column_list = [
         ConversationTurn.id,
         ConversationTurn.conversation_id,
@@ -175,7 +200,7 @@ class ConversationTurnAdmin(ModelView, model=ConversationTurn):
     column_searchable_list = [ConversationTurn.user_query]
 
 
-class ConversationResponseAdmin(ModelView, model=ConversationResponse):
+class ConversationResponseAdmin(ReadOnlyModelView, model=ConversationResponse):
     column_list = [
         ConversationResponse.id,
         ConversationResponse.turn_id,
@@ -185,7 +210,7 @@ class ConversationResponseAdmin(ModelView, model=ConversationResponse):
     column_searchable_list = [ConversationResponse.content]
 
 
-class DurableJobAdmin(ModelView, model=DurableJob):
+class DurableJobAdmin(ReadOnlyModelView, model=DurableJob):
     column_list = [
         DurableJob.id,
         DurableJob.operation,
@@ -202,7 +227,7 @@ class DurableJobAdmin(ModelView, model=DurableJob):
     ]
 
 
-class ProjectInvitationAdmin(ModelView, model=ProjectInvitation):
+class ProjectInvitationAdmin(ReadOnlyModelView, model=ProjectInvitation):
     column_list = [
         ProjectInvitation.id,
         ProjectInvitation.project_id,
@@ -216,7 +241,7 @@ class ProjectInvitationAdmin(ModelView, model=ProjectInvitation):
     ]
 
 
-class ZoteroConnectionAdmin(ModelView, model=ZoteroConnection):
+class ZoteroConnectionAdmin(ReadOnlyModelView, model=ZoteroConnection):
     name = "Zotero Connection"
     name_plural = "Zotero Connections"
     icon = "fa-solid fa-plug"
@@ -232,7 +257,7 @@ class ZoteroConnectionAdmin(ModelView, model=ZoteroConnection):
     ]
 
 
-class ZoteroImportedItemAdmin(ModelView, model=ZoteroImportedItem):
+class ZoteroImportedItemAdmin(ReadOnlyModelView, model=ZoteroImportedItem):
     name = "Zotero Imported Item"
     name_plural = "Zotero Imported Items"
     icon = "fa-solid fa-file-import"
@@ -272,7 +297,7 @@ class ZoteroImportedItemAdmin(ModelView, model=ZoteroImportedItem):
     ]
 
 
-class ZoteroOAuthPendingAdmin(ModelView, model=ZoteroOAuthPending):
+class ZoteroOAuthPendingAdmin(ReadOnlyModelView, model=ZoteroOAuthPending):
     name = "Zotero OAuth Pending"
     name_plural = "Zotero OAuth Pending"
     icon = "fa-solid fa-hourglass-half"
@@ -311,6 +336,8 @@ def setup_admin(app: FastAPI) -> None:
     admin.add_view(ProjectCollaboratorAdmin)
     admin.add_view(ProjectPaperAdmin)
     admin.add_view(SubscriptionAdmin)
+    admin.add_view(AccountPlanGrantAdmin)
+    admin.add_view(AccountQuotaOverrideAdmin)
     admin.add_view(DurableJobAdmin)
     admin.add_view(ZoteroConnectionAdmin)
     admin.add_view(ZoteroImportedItemAdmin)

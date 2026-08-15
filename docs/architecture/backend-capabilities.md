@@ -52,7 +52,7 @@ Public resources use canonical identifiers:
 The reviewed public surface is stored in
 `server/openapi/v1-contract.json`. A contract test fails whenever a route is
 added, removed, renamed, or changes method without an intentional snapshot
-update. `python -m app.scripts.export_public_openapi` regenerates both the full
+update. `scholens contract export` regenerates both the full
 public schema and this reduced route/method review surface; reviewers must still
 confirm that every resulting public route is intentional.
 
@@ -401,6 +401,46 @@ is persisted and returned in KiB; public fields therefore use the explicit
 must convert those quantities from KiB rather than treating them as bytes.
 `period_end` is the inclusive final day of the selected window, not a timestamp
 or the next reset instant.
+
+Account paper and storage usage is the unique union of completed Documents in
+the personal Library and Projects owned by that account. A repeated Document
+therefore adds no account cost until its final owned reference disappears.
+Project paper limits remain membership counts, and collaborators reserve quota
+against the Project owner. Account advisory locks and durable upload
+reservations serialize concurrent additions, including Project creation and
+ownership transfer. Transfer locks both account quota namespaces in stable
+user-ID order and recomputes both owners' completed and active unique-document
+views before committing; an already-owned Document may reserve zero account
+units while still reserving one Project slot.
+Paid subscriptions, product entitlements, and capacity writes share one
+billing-owned PostgreSQL bigint advisory key. The key is a stable BLAKE2b-64
+digest of a versioned account-resource namespace plus the complete bigint user
+ID. Theoretical hash collisions only serialize unrelated accounts
+conservatively; they cannot bypass capacity checks. This one-key space is
+distinct from the administrator roster's two-key namespace.
+
+Effective entitlements combine paid `subscriptions`, product-owned
+`account_plan_grants`, and active `account_quota_overrides`. A paid Researcher
+and a granted Researcher are evaluated independently, numerical overrides
+replace only their named limit, and expired/revoked records are ignored. This
+resolution is shared by HTTP usage, upload/project checks, Zotero sync, and AI
+Token Credit enforcement; the public `plan/limits/usage` shape is unchanged.
+
+Operator writes use the same application capabilities and Unit of Work as HTTP
+commands. CLI provenance is recorded as `CliOrigin(command_name,
+invocation_id)` in the append-only Operation Journal. SQLAdmin views are
+read-only; no public administrator API exists for grants, quota overrides,
+subscription mutation, token resets, or arbitrary job state changes.
+Administrator bootstrap and reductions serialize through a dedicated
+transaction advisory lock before re-reading the available-admin roster.
+Every privileged operator command takes that same roster lock, then locks and
+re-reads its actor's AuthUser and UserProfile rows before authorization. This
+keeps the lock order consistent with revoke/block and holds the live admin fact
+through the mutation transaction.
+Free-text entitlement reasons live on entitlement records. Identity
+admin/block, development bootstrap, and passage-maintenance commands do not
+accept prose with no persistence destination; they retain only their structured
+Journal safe projection plus explicit confirmation where a write occurs.
 
 ## Adding a capability or adapter
 

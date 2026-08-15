@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from app.shared.application.operation_context import (
     ConversationOrigin,
+    CliOrigin,
     CredentialKind,
     CredentialRef,
     HttpOrigin,
@@ -77,6 +78,11 @@ def _request() -> RequestReference:
         (
             OperationInitiator.SYSTEM,
             SchedulerOrigin("document_gc", uuid4()),
+            None,
+        ),
+        (
+            OperationInitiator.USER,
+            CliOrigin("entitlements.grant-researcher", uuid4()),
             None,
         ),
     ],

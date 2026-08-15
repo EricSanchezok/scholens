@@ -16,6 +16,7 @@ from app.modules.operation_journal.domain import (
 from app.shared.application.actor import Actor
 from app.shared.application.clock import Clock
 from app.shared.application.operation_context import (
+    CliOrigin,
     ConversationOrigin,
     HttpOrigin,
     JobOrigin,
@@ -179,6 +180,15 @@ def _project_origin(operation: OperationContext) -> _OriginProjection:
         return _OriginProjection(
             origin_name=origin.task_name,
             origin_reference=str(origin.run_id),
+            request_id=None,
+            conversation_id=None,
+            turn_id=None,
+            job_id=None,
+        )
+    if isinstance(origin, CliOrigin):
+        return _OriginProjection(
+            origin_name=origin.command_name,
+            origin_reference=str(origin.invocation_id),
             request_id=None,
             conversation_id=None,
             turn_id=None,

@@ -6,11 +6,13 @@ import pytest
 
 from app.modules.billing.domain import (
     AccountCapacityFacts,
+    PlanGrantFacts,
     SubscriptionFacts,
     effective_plan,
     entitlements_for,
     require_account_document_capacity,
     require_project_paper_capacity,
+    resolve_entitlements,
 )
 from app.modules.identity.domain import (
     AccountAccessFacts,
@@ -81,6 +83,69 @@ def test_effective_plan_requires_an_active_unexpired_subscription() -> None:
     )
     assert effective_plan(active, now=now) is SubscriptionPlan.RESEARCHER
     assert effective_plan(expired, now=now) is SubscriptionPlan.BASIC
+
+
+def test_product_plan_limits_match_the_promotional_capacity_contract() -> None:
+    basic = entitlements_for(SubscriptionPlan.BASIC)
+    researcher = entitlements_for(SubscriptionPlan.RESEARCHER)
+
+    assert basic.as_limits() == {
+        "paper_uploads": 300,
+        "knowledge_base_size_kb": 5 * 1024 * 1024,
+        "token_credits_weekly": 30_000_000,
+        "projects": 10,
+        "project_papers": 300,
+    }
+    assert basic.zotero_auto_sync is False
+    assert researcher.as_limits() == {
+        "paper_uploads": 5_000,
+        "knowledge_base_size_kb": 100 * 1024 * 1024,
+        "token_credits_weekly": 300_000_000,
+        "projects": 100,
+        "project_papers": 5_000,
+    }
+    assert researcher.zotero_auto_sync is True
+
+
+def test_paid_and_granted_researcher_are_resolved_independently() -> None:
+    now = datetime(2026, 8, 16, tzinfo=UTC)
+    active_paid = SubscriptionFacts(
+        SubscriptionPlan.RESEARCHER,
+        SubscriptionStatus.ACTIVE,
+        now + timedelta(days=1),
+    )
+    active_grant = PlanGrantFacts(
+        SubscriptionPlan.RESEARCHER,
+        now + timedelta(days=365),
+    )
+    expired_grant = PlanGrantFacts(
+        SubscriptionPlan.RESEARCHER,
+        now,
+    )
+
+    paid = resolve_entitlements(active_paid, grant=active_grant, now=now)
+    granted = resolve_entitlements(None, grant=active_grant, now=now)
+    expired = resolve_entitlements(None, grant=expired_grant, now=now)
+
+    assert paid.plan is SubscriptionPlan.RESEARCHER
+    assert paid.source == "subscription"
+    assert granted.plan is SubscriptionPlan.RESEARCHER
+    assert granted.source == "grant"
+    assert granted.grant_expires_at == active_grant.expires_at
+    assert expired.plan is SubscriptionPlan.BASIC
+    assert expired.source == "basic"
+
+
+def test_quota_overrides_replace_individual_limits_and_allow_zero() -> None:
+    resolution = resolve_entitlements(
+        None,
+        now=datetime(2026, 8, 16, tzinfo=UTC),
+        overrides={"paper_uploads": 0, "token_credits_weekly": 42},
+    )
+
+    assert resolution.limits.paper_uploads == 0
+    assert resolution.limits.token_credits_weekly == 42
+    assert resolution.limits.projects == 10
 
 
 def test_billing_domain_enforces_account_and_project_capacity() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.modules.identity.infrastructure.models import AuthUser, UserProfile
 from app.shared.application import Actor
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, joinedload
 
@@ -60,6 +60,34 @@ class UserRepository:
         profile.is_blocked = blocked
         db.flush()
         return True
+
+    def set_admin(
+        self,
+        db: Session,
+        *,
+        profile: UserProfile,
+        enabled: bool,
+    ) -> bool:
+        if profile.is_admin == enabled:
+            return False
+        profile.is_admin = enabled
+        db.flush()
+        return True
+
+    def available_admin_count(self, db: Session) -> int:
+        return int(
+            db.scalar(
+                select(func.count(UserProfile.user_id))
+                .join(AuthUser, AuthUser.id == UserProfile.user_id)
+                .where(
+                    UserProfile.is_admin.is_(True),
+                    UserProfile.is_blocked.is_(False),
+                    AuthUser.status == "active",
+                    AuthUser.email_verified_at.is_not(None),
+                )
+            )
+            or 0
+        )
 
 
 user_repository = UserRepository()

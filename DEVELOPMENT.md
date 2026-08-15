@@ -26,7 +26,7 @@ this host-port contract.
 | Service           | Host port | Start                                          |
 | ----------------- | --------- | ---------------------------------------------- |
 | Web (canonical)   | 7300      | `pnpm dev` in `web/`                           |
-| Server API        | 7301      | `uv run --frozen --no-sync start` in `server/` |
+| Server API        | 7301      | `uv run --frozen --no-sync scholens serve` in `server/` |
 | Jobs API          | 7302      | `uv run --frozen --no-sync start` in `jobs/`   |
 | Legacy client     | 7303      | `corepack yarn dev` in `client/`               |
 | Storybook         | 7306      | `pnpm storybook` in `web/`                     |
@@ -179,8 +179,10 @@ touch server/.env jobs/.env web/.env.local client/.env.local
 # Provision identity from sanchezcloud-identity first. Then provision the local
 # product owner/role and apply Scholens migrations explicitly with the migrator.
 cd server
-DATABASE_URL='postgresql+psycopg2://scholens_migrator:<local-password>@127.0.0.1:55432/sanchezcloud' \
-  uv run python -m app.scripts.migrate_product
+SCHOLENS_MIGRATION_DATABASE_URL='postgresql+psycopg2://scholens_migrator:<local-password>@127.0.0.1:55432/sanchezcloud' \
+  uv run scholens db upgrade --yes
+SCHOLENS_MIGRATION_DATABASE_URL='postgresql+psycopg2://scholens_migrator:<local-password>@127.0.0.1:55432/sanchezcloud' \
+  uv run scholens db status
 ```
 
 Create roles and schemas with a local database administrator following the
@@ -222,7 +224,7 @@ Use separate terminals:
 | Profile | Directory       | Command                                                                      |
 | ------- | --------------- | ---------------------------------------------------------------------------- |
 | Infra   | repository root | `docker compose -f jobs/compose.local.yaml up -d redis` — AI limits on 56379 |
-| Default | `server/`       | `uv run --frozen --no-sync start` — validate local PostgreSQL; API 7301      |
+| Default | `server/`       | `uv run --frozen --no-sync scholens serve` — validate local PostgreSQL; API 7301 |
 | Default | `web/`          | `pnpm dev` — canonical web on 7300                                           |
 | Jobs    | `jobs/`         | `uv run --frozen --no-sync start` — broker, worker, Beat, and API 7302       |
 | Legacy  | `client/`       | `corepack yarn dev` — comparison UI on 7303                                  |
@@ -251,6 +253,47 @@ If any registered port is occupied, stop the conflicting process or change the
 other project's contract deliberately in all affected repositories. Do not
 silently select a random port, because callback URLs, CORS, cookies, tests, and
 service-to-service URLs rely on these stable endpoints.
+
+## Operator and development CLI
+
+Run `uv run scholens --help` from `server/`. The unified entry point owns local
+serving, dependency diagnostics, user/admin inspection, product entitlement
+grants, temporary quota overrides, usage reports, safe job inspection,
+migrations, contract generation, deterministic verification, and guarded
+maintenance/development operations. Put `--json` after any concrete command
+for automation, for example `uv run scholens users show --email ... --json`.
+
+Every business write other than first-admin bootstrap and the destructive
+local-only reset requires an exact `--actor-email` and interactive confirmation
+or `--yes`. Entitlement and quota commands also require `--reason`, which
+persists on their product records. Identity, development, and maintenance
+commands do not collect arbitrary reason prose;
+their append-only Journal entries retain the structured command, actor, action,
+and resource projection. The actor must be active, verified, and unblocked.
+Repeated idempotent operations report `unchanged`; failures use exit code 1 and
+Click parameter errors use exit code 2. The CLI never exposes a general job-state
+editor, Token Credit reset,
+Stripe-subscription editor, or remote database-reset command.
+
+Operator authorization is transaction-scoped: privileged commands lock the
+administrator roster and then re-read the actor's locked identity/profile
+projection. Revoke and block use the same lock order, preventing a previously
+read admin snapshot from authorizing a later write after privilege reduction.
+
+`maintenance backfill-passages --batch-size N --apply` processes at most `N`
+documents in one invocation and one application transaction. Re-run it until
+the reported candidate count reaches zero. It uses ordinary row DML and the
+existing search-vector trigger; the runtime role never receives trigger or
+table DDL privileges.
+
+Useful read-only diagnostics include:
+
+```bash
+uv run scholens doctor --json
+uv run scholens users list --plan researcher
+uv run scholens usage report --week-start 2026-08-10 --json
+uv run scholens jobs failures --json
+```
 
 Before adding replacement-frontend product code, read the
 [`web/docs` engineering handbook](./web/docs/README.md). It defines dependency
@@ -304,35 +347,20 @@ requirements.
 
 Scholens owns `scholens`; sanchezcloud-identity independently owns `auth`.
 Local product data is disposable during this pre-release phase, but `auth`
-must never be dropped:
-
-```sql
-DROP SCHEMA IF EXISTS scholens CASCADE;
-CREATE SCHEMA scholens AUTHORIZATION scholens_migrator;
-```
-
-Run those statements with a local database administrator, substitute the
-actual local product migration role, then rebuild and verify the schema:
+must never be dropped. Configure `LOCAL_DATABASE_ADMIN_URL` and
+`SCHOLENS_MIGRATION_DATABASE_URL` for exactly
+`127.0.0.1:55432/sanchezcloud`, then run:
 
 ```bash
 cd server
-uv run alembic upgrade head
-uv run alembic upgrade head  # intentional no-op/idempotency check
-uv run alembic check         # must report no new upgrade operations
+uv run scholens dev reset-product
 ```
 
-A schema reset also removes every runtime grant on the dropped objects. After
-the migration checks pass, re-run the reviewed, idempotent grant contract as
-the local database owner before starting Server:
-
-```bash
-cd ..
-psql "$LOCAL_DATABASE_ADMIN_URL" \
-  -v auth_migrator_role=auth_migrator \
-  -v product_migrator_role=scholens_migrator \
-  -v app_role=scholens_app \
-  -f deploy/production/bootstrap-db.sql
-```
+The command requires the exact phrase `RESET-SCHOLENS-LOCAL`, drops and
+recreates only `scholens`, applies product migrations, reapplies the reviewed
+runtime grants, and compares the Identity schema and user count before and
+after. It rejects every other host, port, database, or migration role. Use
+`uv run scholens db status` afterward for a read-only revision check.
 
 Do not grant ownership to `scholens_app` or grant it either migration ledger.
 The bootstrap intentionally leaves the operation journal append-only and is

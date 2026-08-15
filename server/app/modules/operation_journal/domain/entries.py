@@ -21,6 +21,7 @@ _ORIGIN_KINDS = frozenset(
         "webhook",
         "oauth_callback",
         "scheduler",
+        "cli",
     }
 )
 _INITIATORS = frozenset({"user", "agent", "system"})
@@ -279,6 +280,30 @@ def _validate_origin_projection(entry: OperationJournalEntry) -> None:
             )
         ):
             raise ValueError("scheduler journal identifiers are invalid")
+        return
+    if entry.origin_kind == "cli":
+        _validate_optional_safe_projection(
+            entry.origin_name,
+            field_name="origin_name",
+        )
+        if entry.origin_name is None or entry.origin_reference is None:
+            raise ValueError("CLI journal projection is incomplete")
+        try:
+            invocation_id = UUID(entry.origin_reference)
+        except (AttributeError, ValueError) as error:
+            raise ValueError("CLI origin_reference must be a UUID") from error
+        if str(invocation_id) != entry.origin_reference or invocation_id.int == 0:
+            raise ValueError("CLI origin_reference must be a canonical UUID")
+        if any(
+            value is not None
+            for value in (
+                entry.request_id,
+                entry.conversation_id,
+                entry.turn_id,
+                entry.job_id,
+            )
+        ):
+            raise ValueError("CLI journal identifiers are invalid")
 
 
 def _validate_credential_projection(entry: OperationJournalEntry) -> None:

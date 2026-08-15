@@ -62,13 +62,40 @@ uv run --frozen --no-sync start
 2. Start the API server:
 
 ```bash
-uv run --frozen --no-sync start
+uv run --frozen --no-sync scholens serve
 ```
 
 The command binds to `127.0.0.1:7301`, rejects any `DATABASE_URL` other than
 the shared local PostgreSQL at `127.0.0.1:55432/sanchezcloud`, and does not run
 migrations. Apply product migrations explicitly with the `scholens_migrator`
 role as documented in [`../DEVELOPMENT.md`](../DEVELOPMENT.md).
+
+## Operator CLI
+
+`scholens` is the only Server command-line entry point. Its command families
+are `doctor`, `users`, `entitlements`, `usage`, `jobs`, `db`, `contract`,
+`verify`, `maintenance`, and `dev`. Every concrete command accepts `--json`.
+Run `uv run scholens <group> --help` for the authoritative option set.
+
+Business mutations execute through `ApplicationExecutor` and the owning
+application service, and write CLI provenance to the append-only Operation
+Journal. Except for `users bootstrap-admin` and the local-only guarded reset,
+mutations require an active verified administrator via `--actor-email` and
+confirmation or `--yes`. Entitlement and quota commands also require
+`--reason`; those reasons are durable product data. Identity, development, and
+maintenance commands do not collect arbitrary prose, and the Journal stores
+their structured action/resource projection. SQLAdmin is a read-only diagnostic
+surface.
+
+Privileged commands authorize inside their application transaction by locking
+the administrator roster, then the actor identity/profile rows, and re-reading
+the live status. Admin revoke/block follows the same lock order, so a stale CLI
+Actor snapshot cannot outlive a committed privilege reduction.
+
+Passage backfill is a bounded, repeatable runtime operation: `--batch-size`
+caps the documents handled by one invocation and transaction. It relies on
+normal INSERT permissions and the existing tsvector trigger, never runtime
+trigger DDL.
 
 The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
 enabled.
@@ -220,7 +247,7 @@ uv run alembic revision --autogenerate -m "migration message"
 To apply the migration, run:
 
 ```bash
-uv run alembic upgrade head
+uv run scholens db upgrade
 ```
 
 To downgrade the migration, run:
@@ -229,7 +256,8 @@ To downgrade the migration, run:
 uv run alembic downgrade -1
 ```
 
-Before committing a migration, run `uv run alembic check`. Alembic compares
+Before committing a migration, run `uv run alembic check` and
+`uv run scholens db status`. Alembic compares
 only the `scholens` schema; `auth` belongs to sanchezcloud-identity and other product
 schemas are deliberately outside this migration environment. The local
 product-only reset procedure is documented in

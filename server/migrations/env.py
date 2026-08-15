@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging.config import fileConfig
 from typing import Any
 
@@ -18,7 +19,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 settings = Settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+database_url = os.getenv("SCHOLENS_MIGRATION_DATABASE_URL") or settings.DATABASE_URL
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 

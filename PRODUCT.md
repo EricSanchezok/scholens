@@ -66,6 +66,34 @@ the complete selected suffix, sources, worklog, and authorized context for that
 alternative. The interface may present one path at a time, but refresh and
 other conversation surfaces must agree on which path is active.
 
+## Plans should support a complete research workflow
+
+The promotional Basic plan is intentionally useful enough for a researcher to
+build a real working library instead of merely evaluating an upload screen.
+Researcher is the high-comfort plan used by paying customers and internal team
+members. Current product limits are:
+
+| Plan | Papers | Storage | Projects | Papers per Project | Weekly Token Credits | Zotero auto-sync |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Basic | 300 | 5 GiB | 10 | 300 | 30,000,000 | No |
+| Researcher | 5,000 | 100 GiB | 100 | 5,000 | 300,000,000 | Yes |
+
+Paper count and storage are account-level unique-document quantities. A paper
+in a personal Library and any number of Projects owned by the same person is
+charged once to that account. Each Project still counts its own memberships,
+and its owner—not a collaborator who adds a paper—carries the Project and
+account quota responsibility.
+
+An expired entitlement never removes existing research. An over-limit account
+remains readable and may remove resources, but cannot add another paper or
+Project or begin AI work beyond its current Token Credit limit. Token windows
+reset on Monday UTC and continue to use provider-reported raw total tokens.
+
+Researcher access may come from a paid subscription or an explicitly expiring
+product grant. Those records are independent: an internal grant never pretends
+that a payment occurred, and losing a grant never downgrades an otherwise
+active paid Researcher.
+
 ## Reading transformations preserve the paper as source of truth
 
 Translation and reading reflow are derived views of an authorized paper. They

@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -17,6 +18,7 @@ from app.bootstrap.adapters.upload_reservations import (
     reserve_upload,
 )
 from app.modules.jobs.infrastructure.repository import PersistedJob
+from app.modules.billing.domain import entitlements_for
 
 
 def _quota_patches(*, active_count: int = 0, active_size_kb: int = 0):
@@ -27,8 +29,10 @@ def _quota_patches(*, active_count: int = 0, active_size_kb: int = 0):
             return_value=MagicMock(),
         ),
         patch(
-            "app.bootstrap.adapters.upload_reservations.get_user_subscription_plan",
-            return_value=SubscriptionPlan.BASIC,
+            "app.bootstrap.adapters.upload_reservations.get_user_entitlements",
+            return_value=SimpleNamespace(
+                limits=entitlements_for(SubscriptionPlan.BASIC)
+            ),
         ),
         patch(
             "app.bootstrap.adapters.upload_reservations._active_account_reservations",
@@ -60,8 +64,30 @@ def _durable_job(*, requester_id: int, project_id=None) -> DurableJob:
         project_id=project_id,
         idempotency_key=f"pdf-reservation:{job_id}",
         status=JobStatus.PENDING.value,
-        payload={},
+        payload={"input_size_bytes": 2_048},
     )
+
+
+def _reservation(
+    *,
+    owner_id: int,
+    digest: str,
+    project_id=None,
+    reference_count: int,
+    size_kb: int,
+) -> tuple[UploadReservation, DurableJob]:
+    job = _durable_job(requester_id=owner_id, project_id=project_id)
+    reservation = UploadReservation(
+        id=job.id,
+        quota_owner_id=owner_id,
+        content_sha256=digest,
+        display_name="pending.pdf",
+        source_kind="upload",
+        reserved_reference_count=reference_count,
+        reserved_size_kb=size_kb,
+    )
+    reservation.job = job
+    return reservation, job
 
 
 def test_personal_upload_is_reserved_to_requester() -> None:
@@ -113,7 +139,7 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
     project_id = uuid4()
     project = Project(id=project_id, title="Shared corpus", owner_id=91)
     db = MagicMock()
-    db.scalar.side_effect = [project, None, 3]
+    db.scalar.side_effect = [project, None, 0, 3]
     requester = MagicMock(id=17)
     durable_job = _durable_job(requester_id=17, project_id=project_id)
     patches = _quota_patches()
@@ -168,7 +194,7 @@ def test_active_reservations_prevent_concurrent_paper_quota_bypass() -> None:
     db = MagicMock()
     db.scalar.return_value = None
     requester = MagicMock(id=17)
-    patches = _quota_patches(active_count=10)
+    patches = _quota_patches(active_count=300)
 
     with (
         patches[0],
@@ -233,6 +259,49 @@ def test_same_document_cannot_be_reserved_twice_for_one_library() -> None:
     assert error.value.code == "document_upload_in_progress"
     db.add.assert_not_called()
     db.commit.assert_not_called()
+
+
+def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
+    project_id = uuid4()
+    document_id = uuid4()
+    project = Project(id=project_id, title="Full project", owner_id=91)
+    db = MagicMock()
+    db.scalar.side_effect = [project, document_id, 0, 0, 300]
+    patches = _quota_patches()
+
+    with (
+        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
+            return_value=0,
+        ),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.resource_usage_repository.contains_document",
+            return_value=True,
+        ),
+        patches[0],
+        patches[1],
+        patches[2],
+        patches[3],
+        patches[4],
+        patches[5],
+        patches[6],
+        pytest.raises(AppError) as error,
+    ):
+        reserve_upload(
+            db,
+            requester=MagicMock(id=17),
+            origin_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            project_id=project_id,
+            input_size_bytes=1_024,
+            original_filename="shared.pdf",
+            display_name="shared.pdf",
+            source_kind="upload",
+            content_sha256="f" * 64,
+        )
+
+    assert error.value.code == "project_paper_quota_exceeded"
 
 
 def test_empty_upload_is_rejected_before_any_reservation() -> None:
@@ -342,62 +411,146 @@ def test_idempotency_key_does_not_resurrect_a_cancelled_ingestion() -> None:
     db.add.assert_not_called()
 
 
-def test_project_transfer_accounts_for_documents_and_active_reservations() -> None:
-    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
-    digest = "e" * 64
-    incremental = Document(
-        id=uuid4(),
-        sha256=digest,
-        original_filename="completed.pdf",
-        mime_type="application/pdf",
-        size_bytes=100 * 1024,
-        s3_object_key=f"documents/{digest}/source.pdf",
-    )
+def _run_transfer(
+    *,
+    project: Project,
+    active_rows: list[tuple[UploadReservation, DurableJob]],
+    old_documents: list[Document] | None = None,
+    new_documents: list[Document] | None = None,
+) -> tuple[MagicMock, MagicMock]:
     db = MagicMock()
-    db.scalar.side_effect = [1, 4]
-    project_active_usage = MagicMock()
-    project_active_usage.one.return_value = (2, 60)
-    reassignment_result = MagicMock()
-    db.execute.side_effect = [project_active_usage, reassignment_result]
-    documents = MagicMock()
-    documents.all.return_value = [incremental]
-    db.scalars.return_value = documents
-
+    db.scalar.side_effect = [1, 0]
+    completed_documents = MagicMock(
+        side_effect=[old_documents or [], new_documents or []]
+    )
     with (
         patch(
             "app.bootstrap.adapters.upload_reservations.lock_account_resource_quota"
         ) as quota_lock,
         patch(
             "app.bootstrap.adapters.upload_reservations.get_quota_user",
-            return_value=MagicMock(),
+            side_effect=lambda _db, *, user_id: MagicMock(id=user_id),
         ),
         patch(
-            "app.bootstrap.adapters.upload_reservations.get_user_subscription_plan",
-            return_value=SubscriptionPlan.BASIC,
+            "app.bootstrap.adapters.upload_reservations.get_user_entitlements",
+            return_value=SimpleNamespace(
+                limits=entitlements_for(SubscriptionPlan.BASIC)
+            ),
         ),
         patch(
-            "app.bootstrap.adapters.upload_reservations._active_account_reservations",
-            return_value=(1, 40),
+            "app.bootstrap.adapters.upload_reservations._locked_transfer_reservations",
+            return_value=active_rows,
         ),
         patch(
-            "app.bootstrap.adapters.upload_reservations.resource_usage_repository.completed_reference_count",
-            return_value=2,
-        ),
-        patch(
-            "app.bootstrap.adapters.upload_reservations.resource_usage_repository.completed_storage_kb",
-            return_value=200,
+            "app.bootstrap.adapters.upload_reservations.resource_usage_repository.completed_documents",
+            completed_documents,
         ),
     ):
         reassign_project_quota_owner(db, project=project, new_owner_id=20)
+    return db, quota_lock
 
-    quota_lock.assert_called_once_with(db, user_id=20)
-    assert db.execute.call_count == 2
+
+def test_project_transfer_reprices_old_owner_pending_duplicate_for_both_owners() -> (
+    None
+):
+    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
+    transferred, transferred_job = _reservation(
+        owner_id=10,
+        digest="e" * 64,
+        project_id=project.id,
+        reference_count=1,
+        size_kb=2,
+    )
+    old_duplicate, old_duplicate_job = _reservation(
+        owner_id=10,
+        digest="e" * 64,
+        reference_count=0,
+        size_kb=0,
+    )
+
+    db, quota_lock = _run_transfer(
+        project=project,
+        active_rows=[
+            (transferred, transferred_job),
+            (old_duplicate, old_duplicate_job),
+        ],
+    )
+
+    assert quota_lock.call_args_list == [
+        ((db,), {"user_id": 10}),
+        ((db,), {"user_id": 20}),
+    ]
+    assert transferred.quota_owner_id == 20
+    assert transferred.reserved_reference_count == 1
+    assert transferred.reserved_size_kb == 2
+    assert old_duplicate.quota_owner_id == 10
+    assert old_duplicate.reserved_reference_count == 1
+    assert old_duplicate.reserved_size_kb == 2
+    db.flush.assert_called_once()
+
+
+def test_project_transfer_reprices_old_owner_duplicate_as_new_owner_increment() -> None:
+    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
+    transferred, job = _reservation(
+        owner_id=10,
+        digest="e" * 64,
+        project_id=project.id,
+        reference_count=0,
+        size_kb=0,
+    )
+    old_document = Document(
+        id=uuid4(),
+        sha256="e" * 64,
+        original_filename="old.pdf",
+        mime_type="application/pdf",
+        size_bytes=2_048,
+        s3_object_key="documents/old/source.pdf",
+    )
+
+    _run_transfer(
+        project=project,
+        active_rows=[(transferred, job)],
+        old_documents=[old_document],
+    )
+
+    assert transferred.quota_owner_id == 20
+    assert transferred.reserved_reference_count == 1
+    assert transferred.reserved_size_kb == 2
+
+
+def test_project_transfer_reprices_new_owner_duplicate_to_zero() -> None:
+    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
+    transferred, job = _reservation(
+        owner_id=10,
+        digest="f" * 64,
+        project_id=project.id,
+        reference_count=1,
+        size_kb=2,
+    )
+    new_document = Document(
+        id=uuid4(),
+        sha256="f" * 64,
+        original_filename="new.pdf",
+        mime_type="application/pdf",
+        size_bytes=2_048,
+        s3_object_key="documents/new/source.pdf",
+    )
+
+    _run_transfer(
+        project=project,
+        active_rows=[(transferred, job)],
+        new_documents=[new_document],
+    )
+
+    assert transferred.quota_owner_id == 20
+    assert transferred.reserved_reference_count == 0
+    assert transferred.reserved_size_kb == 0
 
 
 def test_project_transfer_rejects_new_owner_project_limit() -> None:
     project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
     db = MagicMock()
-    db.scalar.return_value = 2
+    db.scalar.return_value = 10
 
     with (
         patch("app.bootstrap.adapters.upload_reservations.lock_account_resource_quota"),
@@ -406,8 +559,10 @@ def test_project_transfer_rejects_new_owner_project_limit() -> None:
             return_value=MagicMock(),
         ),
         patch(
-            "app.bootstrap.adapters.upload_reservations.get_user_subscription_plan",
-            return_value=SubscriptionPlan.BASIC,
+            "app.bootstrap.adapters.upload_reservations.get_user_entitlements",
+            return_value=SimpleNamespace(
+                limits=entitlements_for(SubscriptionPlan.BASIC)
+            ),
         ),
         pytest.raises(AppError) as error,
     ):

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
 from app.modules.billing.application.contracts import UsagePeriod
 from app.modules.billing.infrastructure import quotas
+from app.modules.billing.domain import resolve_entitlements
 from app.shared.application import Actor
-from app.shared.domain.enums import SubscriptionPlan
 
 
 class _UsageDatabase:
@@ -44,8 +44,11 @@ def test_usage_period_aggregates_monday_aligned_token_windows(
 ) -> None:
     monkeypatch.setattr(
         quotas,
-        "get_user_subscription_plan",
-        lambda _db, _actor: SubscriptionPlan.BASIC,
+        "get_user_entitlements",
+        lambda _db, _actor: resolve_entitlements(
+            None,
+            now=datetime.now(UTC),
+        ),
     )
     monkeypatch.setattr(
         quotas.resource_usage_repository,
@@ -73,14 +76,14 @@ def test_usage_period_aggregates_monday_aligned_token_windows(
     assert response["period_end"] == date(2026, 8, 16)
     limits = response["limits"]
     assert isinstance(limits, dict)
-    assert limits["knowledge_base_size_kb"] == 200 * 1024
+    assert limits["knowledge_base_size_kb"] == 5 * 1024 * 1024
     assert "knowledge_base_size" not in limits
     usage = response["usage"]
     assert isinstance(usage, dict)
     assert usage["knowledge_base_size_kb"] == 1_024
-    assert usage["knowledge_base_size_remaining_kb"] == 199 * 1024
+    assert usage["knowledge_base_size_remaining_kb"] == 5 * 1024 * 1024 - 1_024
     assert "knowledge_base_size" not in usage
-    assert usage["token_credits_limit"] == 3_000_000 * weeks
+    assert usage["token_credits_limit"] == 30_000_000 * weeks
     assert usage["token_credits_used"] == 4_000_000 * weeks
-    assert usage["token_credits_remaining"] == 0
-    assert usage["token_credits_overage"] == 1_000_000 * weeks
+    assert usage["token_credits_remaining"] == 26_000_000 * weeks
+    assert usage["token_credits_overage"] == 0
