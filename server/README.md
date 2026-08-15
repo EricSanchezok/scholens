@@ -81,11 +81,11 @@ Business mutations execute through `ApplicationExecutor` and the owning
 application service, and write CLI provenance to the append-only Operation
 Journal. Except for `users bootstrap-admin` and the local-only guarded reset,
 mutations require an active verified administrator via `--actor-email` and
-confirmation or `--yes`. Entitlement, quota, development, and maintenance
-commands also require `--reason`; entitlement reasons are durable product data.
-Identity admin/block commands do not collect arbitrary prose, and the Journal
-stores their structured action/resource projection. SQLAdmin is a read-only
-diagnostic surface.
+confirmation or `--yes`. Entitlement and quota commands also require
+`--reason`; those reasons are durable product data. Identity, development, and
+maintenance commands do not collect arbitrary prose, and the Journal stores
+their structured action/resource projection. SQLAdmin is a read-only diagnostic
+surface.
 
 Privileged commands authorize inside their application transaction by locking
 the administrator roster, then the actor identity/profile rows, and re-reading

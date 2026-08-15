@@ -172,6 +172,38 @@ def test_researcher_grant_is_365_days_and_repeated_call_is_unchanged() -> None:
     assert gateway.reasons == ["team testing"]
 
 
+def test_one_day_grant_near_expiry_is_extended() -> None:
+    now = datetime(2026, 8, 16, tzinfo=UTC)
+    gateway = _Gateway()
+    clock = _Clock(now)
+    service = EntitlementAdmin(
+        gateway,
+        journal=_Journal(),  # type: ignore[arg-type]
+        clock=clock,
+    )
+
+    first = service.grant_researcher(
+        actor=_actor(1, admin=True),
+        operation=_operation(),  # type: ignore[arg-type]
+        targets=(_actor(2),),
+        days=1,
+        reason="short test grant",
+    )
+    clock.current += timedelta(hours=23, minutes=59)
+    extended = service.grant_researcher(
+        actor=_actor(1, admin=True),
+        operation=_operation(),  # type: ignore[arg-type]
+        targets=(_actor(2),),
+        days=1,
+        reason="extend short test grant",
+    )
+
+    assert first[0].changed is True
+    assert extended[0].changed is True
+    assert extended[0].resource_id != first[0].resource_id
+    assert gateway.grants[2].expires_at == clock.current + timedelta(days=1)
+
+
 def test_batch_targets_are_all_validated_before_any_mutation() -> None:
     gateway = _Gateway()
     gateway.live_targets[3] = _actor(3, verified=False)
@@ -226,6 +258,54 @@ def test_zero_quota_override_is_valid_and_can_be_cleared() -> None:
     assert cleared.changed is True
     assert gateway.overrides == {}
     assert len(journal.entries) == 2
+
+
+def test_quota_override_retries_are_tolerated_but_near_expiry_is_extended() -> None:
+    now = datetime(2026, 8, 16, tzinfo=UTC)
+    gateway = _Gateway()
+    clock = _Clock(now)
+    service = EntitlementAdmin(
+        gateway,
+        journal=_Journal(),  # type: ignore[arg-type]
+        clock=clock,
+    )
+    target = _actor(2)
+
+    first = service.set_quota(
+        actor=_actor(1, admin=True),
+        operation=_operation(),  # type: ignore[arg-type]
+        target=target,
+        resource_key="projects",
+        limit_value=1,
+        days=1,
+        reason="short boundary",
+    )
+    clock.current += timedelta(seconds=5)
+    retry = service.set_quota(
+        actor=_actor(1, admin=True),
+        operation=_operation(),  # type: ignore[arg-type]
+        target=target,
+        resource_key="projects",
+        limit_value=1,
+        days=1,
+        reason="short boundary",
+    )
+    clock.current += timedelta(hours=23, minutes=59)
+    extended = service.set_quota(
+        actor=_actor(1, admin=True),
+        operation=_operation(),  # type: ignore[arg-type]
+        target=target,
+        resource_key="projects",
+        limit_value=1,
+        days=1,
+        reason="extend short boundary",
+    )
+
+    assert first.changed is True
+    assert retry.changed is False
+    assert retry.resource_id == first.resource_id
+    assert extended.changed is True
+    assert extended.resource_id != first.resource_id
 
 
 def test_researcher_revoke_batch_is_atomic_shape_and_idempotent() -> None:

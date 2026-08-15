@@ -245,6 +245,37 @@ def test_identity_commands_do_not_collect_an_unpersisted_reason() -> None:
         assert "No such option '--reason'" in rejected.output
 
 
+@pytest.mark.parametrize(
+    ("command", "required_options"),
+    [
+        (
+            ("dev", "bootstrap-account"),
+            ("--actor-email", "admin@example.com", "--email", "target@example.com"),
+        ),
+        (
+            ("maintenance", "backfill-passages"),
+            ("--actor-email", "admin@example.com"),
+        ),
+    ],
+)
+def test_non_prose_commands_reject_an_unpersisted_reason(
+    command: tuple[str, str],
+    required_options: tuple[str, ...],
+) -> None:
+    runner = CliRunner()
+    help_result = runner.invoke(cli, [*command, "--help"])
+
+    assert help_result.exit_code == 0
+    assert "--reason" not in help_result.output
+
+    rejected = runner.invoke(
+        cli,
+        [*command, *required_options, "--reason", "discarded prose", "--yes"],
+    )
+    assert rejected.exit_code == 2
+    assert "No such option '--reason'" in rejected.output
+
+
 def test_users_plan_filter_scans_beyond_first_five_hundred(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

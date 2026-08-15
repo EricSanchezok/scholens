@@ -1,30 +1,36 @@
 """Billing-owned PostgreSQL lock namespace for account entitlement and quota writes."""
 
+import hashlib
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-# Two-key PostgreSQL advisory namespace: ASCII "BILL" plus the auth user ID.
-# Keeping the resource type in the first int32 key prevents accidental
-# collisions with unrelated global locks while preserving one shared lock for
-# entitlement changes and every account-capacity mutation.
-ACCOUNT_QUOTA_LOCK_NAMESPACE = 0x42494C4C
-POSTGRES_INT32_MIN = -(2**31)
-POSTGRES_INT32_MAX = 2**31 - 1
+# One-key PostgreSQL advisory locks occupy a key space distinct from two-key
+# locks. This versioned domain separator preserves the entire auth bigint ID
+# range without sharing raw IDs with unrelated one-key lock users. A theoretical
+# 64-bit hash collision only adds conservative serialization.
+ACCOUNT_QUOTA_LOCK_NAMESPACE = b"scholens.billing.account-resource-quota.v1"
+POSTGRES_BIGINT_MIN = -(2**63)
+POSTGRES_BIGINT_MAX = 2**63 - 1
 
 
-def account_quota_lock_key(user_id: int) -> tuple[int, int]:
+def account_quota_lock_key(user_id: int) -> int:
     if (
         isinstance(user_id, bool)
         or not isinstance(user_id, int)
-        or not POSTGRES_INT32_MIN <= user_id <= POSTGRES_INT32_MAX
+        or not POSTGRES_BIGINT_MIN <= user_id <= POSTGRES_BIGINT_MAX
     ):
-        raise ValueError("Account quota lock user_id must fit PostgreSQL int32")
-    return ACCOUNT_QUOTA_LOCK_NAMESPACE, user_id
+        raise ValueError("Account quota lock user_id must fit PostgreSQL bigint")
+    digest = hashlib.blake2b(
+        ACCOUNT_QUOTA_LOCK_NAMESPACE + b"\0" + str(user_id).encode("ascii"),
+        digest_size=8,
+    ).digest()
+    return int.from_bytes(digest, byteorder="big", signed=True)
 
 
 def lock_account_resource_quota(db: Session, *, user_id: int) -> None:
     """Serialize entitlement and resource-capacity writes for one account."""
-    db.execute(select(func.pg_advisory_xact_lock(*account_quota_lock_key(user_id))))
+    db.execute(select(func.pg_advisory_xact_lock(account_quota_lock_key(user_id))))
 
 
 __all__ = [

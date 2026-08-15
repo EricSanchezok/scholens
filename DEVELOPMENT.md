@@ -265,9 +265,9 @@ for automation, for example `uv run scholens users show --email ... --json`.
 
 Every business write other than first-admin bootstrap and the destructive
 local-only reset requires an exact `--actor-email` and interactive confirmation
-or `--yes`. Entitlement, quota, development, and maintenance commands also
-require `--reason`; entitlement and quota reasons persist on their product
-records. Identity admin/block commands do not collect arbitrary reason prose;
+or `--yes`. Entitlement and quota commands also require `--reason`, which
+persists on their product records. Identity, development, and maintenance
+commands do not collect arbitrary reason prose;
 their append-only Journal entries retain the structured command, actor, action,
 and resource projection. The actor must be active, verified, and unblocked.
 Repeated idempotent operations report `unchanged`; failures use exit code 1 and

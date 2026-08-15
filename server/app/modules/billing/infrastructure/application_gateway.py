@@ -30,6 +30,9 @@ from app.modules.billing.application.ports import (
     UsageReader,
 )
 from app.modules.billing.infrastructure.config import YOUR_DOMAIN
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
 from app.modules.billing.infrastructure.quotas import get_user_usage_info
 from app.modules.billing.infrastructure.subscription_repository import (
     subscription_repository,
@@ -80,6 +83,7 @@ class SqlAlchemySubscriptionStore(SubscriptionStore):
         return _record(model) if model else None
 
     def save(self, user_id: int, **changes: object) -> SubscriptionWriteResult:
+        lock_account_resource_quota(self._db, user_id=user_id)
         existing = subscription_repository.get_by_user_id(self._db, user_id)
         if existing is not None:
             applied = {

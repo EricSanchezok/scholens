@@ -25,7 +25,6 @@ def maintenance_group() -> None:
 
 @maintenance_group.command("backfill-passages")
 @click.option("--actor-email", required=True, callback=email_callback)
-@click.option("--reason", required=True)
 @click.option(
     "--batch-size",
     type=click.IntRange(1, 5000),
@@ -42,12 +41,10 @@ def maintenance_group() -> None:
 def backfill_passages(
     state: CliState,
     actor_email: str,
-    reason: str,
     batch_size: int,
     apply: bool,
     yes: bool,
 ) -> None:
-    del reason
     actor_user = load_user(actor_email)
     if apply:
         confirm("Backfill missing document passages?", yes=yes)

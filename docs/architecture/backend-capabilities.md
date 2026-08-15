@@ -412,9 +412,12 @@ ownership transfer. Transfer locks both account quota namespaces in stable
 user-ID order and recomputes both owners' completed and active unique-document
 views before committing; an already-owned Document may reserve zero account
 units while still reserving one Project slot.
-Entitlement and capacity writes share one billing-owned two-int PostgreSQL
-advisory-lock namespace (`BILL`, int32 user ID), distinct from unrelated locks
-and from the administrator-roster namespace.
+Paid subscriptions, product entitlements, and capacity writes share one
+billing-owned PostgreSQL bigint advisory key. The key is a stable BLAKE2b-64
+digest of a versioned account-resource namespace plus the complete bigint user
+ID. Theoretical hash collisions only serialize unrelated accounts
+conservatively; they cannot bypass capacity checks. This one-key space is
+distinct from the administrator roster's two-key namespace.
 
 Effective entitlements combine paid `subscriptions`, product-owned
 `account_plan_grants`, and active `account_quota_overrides`. A paid Researcher
@@ -434,9 +437,10 @@ Every privileged operator command takes that same roster lock, then locks and
 re-reads its actor's AuthUser and UserProfile rows before authorization. This
 keeps the lock order consistent with revoke/block and holds the live admin fact
 through the mutation transaction.
-Free-text entitlement reasons live on entitlement records; identity
-admin/block commands do not accept free-text rationale, and retain only their
-structured Journal safe projection plus explicit confirmation.
+Free-text entitlement reasons live on entitlement records. Identity
+admin/block, development bootstrap, and passage-maintenance commands do not
+accept prose with no persistence destination; they retain only their structured
+Journal safe projection plus explicit confirmation where a write occurs.
 
 ## Adding a capability or adapter
 

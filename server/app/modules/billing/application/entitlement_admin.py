@@ -32,6 +32,7 @@ QUOTA_KEYS = frozenset(
         PROJECT_PAPERS_KEY,
     }
 )
+OPERATOR_RETRY_TOLERANCE = timedelta(minutes=5)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,8 +204,9 @@ class EntitlementAdmin:
             existing = self._gateway.current_grant(user_id=target.id)
             # Re-running a duration-based operator command must not churn the
             # grant merely because its wall clock moved by a few seconds.
-            if existing is not None and existing.expires_at >= expires_at - timedelta(
-                days=1
+            if (
+                existing is not None
+                and existing.expires_at >= expires_at - OPERATOR_RETRY_TOLERANCE
             ):
                 results.append(
                     MutationResult(
@@ -352,7 +354,7 @@ class EntitlementAdmin:
         if (
             existing is not None
             and existing.limit_value == limit_value
-            and existing.expires_at >= expires_at - timedelta(days=1)
+            and existing.expires_at >= expires_at - OPERATOR_RETRY_TOLERANCE
         ):
             return MutationResult(
                 user_id=locked_target.id,

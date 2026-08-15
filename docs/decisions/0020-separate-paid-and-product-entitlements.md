@@ -43,9 +43,12 @@ commands do not collect arbitrary reason prose that the Journal contract would
 discard; explicit confirmation provides acknowledgement, while action, actor,
 resource, command name, and invocation UUID remain durable.
 
-Account capacity and entitlement writes share a billing-owned two-int advisory
-lock (`BILL`, user ID). Batch targets are locked in stable user-ID order and
-their AuthUser/UserProfile facts are re-read before mutation. Privileged CLI
+Account capacity, paid-subscription, and product-entitlement writes share a
+billing-owned one-key advisory lock. Its signed-bigint key is a stable
+BLAKE2b-64 digest of a versioned namespace plus the complete auth bigint user
+ID; a theoretical collision causes only conservative extra serialization.
+Batch targets are locked in stable user-ID order and their
+AuthUser/UserProfile facts are re-read before mutation. Privileged CLI
 authorization similarly holds the administrator-roster lock followed by the
 actor rows for the whole Unit of Work; revoke/block follows that same order.
 

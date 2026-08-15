@@ -9,13 +9,19 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.bootstrap.adapters.billing_capacity import BillingProjectCapacity
 from app.bootstrap.adapters.project_repository import project_repository
 from app.bootstrap.adapters.upload_reservations import reserve_upload
 from app.modules.billing.application.entitlement_admin import EntitlementAdmin
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
+from app.modules.billing.infrastructure.application_gateway import (
+    SqlAlchemySubscriptionStore,
+)
 from app.modules.billing.infrastructure.entitlement_admin_gateway import (
     SqlAlchemyEntitlementAdminGateway,
 )
@@ -817,6 +823,88 @@ def test_admin_reduction_waits_for_locked_operator_authorization(change: str) ->
         allow_operator_commit.set()
         _delete_users(admin_engine, [user_id for user_id, _ in users])
         app_engine.dispose()
+        admin_engine.dispose()
+
+
+def test_paid_subscription_write_uses_the_account_capacity_lock() -> None:
+    assert APP_DATABASE_URL is not None and ADMIN_DATABASE_URL is not None
+    holder_engine = create_engine(APP_DATABASE_URL)
+    writer_engine = create_engine(APP_DATABASE_URL)
+    admin_engine = create_engine(ADMIN_DATABASE_URL)
+    holder_sessions = sessionmaker(bind=holder_engine, expire_on_commit=False)
+    writer_sessions = sessionmaker(bind=writer_engine, expire_on_commit=False)
+    users = _create_users(admin_engine, "pg-subscription-lock", 1)
+    user_id, _email = users[0]
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO scholens.subscriptions "
+                "(id, user_id, plan, status, cancel_at_period_end) "
+                "VALUES (:id, :user_id, 'basic', 'active', false)"
+            ),
+            {"id": uuid4(), "user_id": user_id},
+        )
+    lock_held = threading.Event()
+    writer_lock_attempted = threading.Event()
+    allow_holder_commit = threading.Event()
+
+    @event.listens_for(writer_engine, "before_cursor_execute")
+    def _observe_writer_lock(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        if "pg_advisory_xact_lock" in statement:
+            writer_lock_attempted.set()
+
+    def hold_capacity_lock() -> None:
+        with holder_sessions.begin() as db:
+            lock_account_resource_quota(db, user_id=user_id)
+            lock_held.set()
+            assert allow_holder_commit.wait(timeout=5)
+
+    def save_subscription() -> str:
+        assert lock_held.wait(timeout=5)
+        with writer_sessions.begin() as db:
+            result = SqlAlchemySubscriptionStore(db).save(
+                user_id,
+                plan="researcher",
+                status="active",
+            )
+        return result.record.plan
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            holder_future = executor.submit(hold_capacity_lock)
+            assert lock_held.wait(timeout=5)
+            writer_future = executor.submit(save_subscription)
+            assert writer_lock_attempted.wait(timeout=5)
+            assert not writer_future.done()
+            allow_holder_commit.set()
+            holder_future.result(timeout=5)
+            assert writer_future.result(timeout=5) == "researcher"
+
+        with admin_engine.connect() as connection:
+            assert (
+                int(
+                    connection.scalar(
+                        text(
+                            "SELECT COUNT(*) FROM scholens.subscriptions "
+                            "WHERE user_id = :user_id AND plan = 'researcher'"
+                        ),
+                        {"user_id": user_id},
+                    )
+                )
+                == 1
+            )
+    finally:
+        allow_holder_commit.set()
+        _delete_users(admin_engine, [user_id])
+        holder_engine.dispose()
+        writer_engine.dispose()
         admin_engine.dispose()
 
 

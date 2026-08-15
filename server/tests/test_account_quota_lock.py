@@ -35,14 +35,24 @@ def test_quota_and_entitlement_paths_share_the_billing_lock_namespace() -> None:
         lock_target_identity=MagicMock(),
     ).lock_account(user_id=17)
 
-    assert account_quota_lock_key(17) == (ACCOUNT_QUOTA_LOCK_NAMESPACE, 17)
+    assert ACCOUNT_QUOTA_LOCK_NAMESPACE == (
+        b"scholens.billing.account-resource-quota.v1"
+    )
+    assert account_quota_lock_key(17) == -5458996180660805398
     assert _compiled_lock(quota_db) == _compiled_lock(entitlement_db)
     assert _compiled_lock(quota_db) == (
-        "SELECT pg_advisory_xact_lock(1112099916, 17) AS pg_advisory_xact_lock_1"
+        "SELECT pg_advisory_xact_lock(-5458996180660805398) AS pg_advisory_xact_lock_1"
     )
 
 
-@pytest.mark.parametrize("user_id", [True, -(2**31) - 1, 2**31])
-def test_account_quota_lock_rejects_non_int32_user_ids(user_id: object) -> None:
-    with pytest.raises(ValueError, match="must fit PostgreSQL int32"):
+@pytest.mark.parametrize("user_id", [-(2**63), 2**63 - 1])
+def test_account_quota_lock_supports_full_bigint_user_ids(user_id: int) -> None:
+    key = account_quota_lock_key(user_id)
+
+    assert -(2**63) <= key <= 2**63 - 1
+
+
+@pytest.mark.parametrize("user_id", [True, -(2**63) - 1, 2**63])
+def test_account_quota_lock_rejects_non_bigint_user_ids(user_id: object) -> None:
+    with pytest.raises(ValueError, match="must fit PostgreSQL bigint"):
         account_quota_lock_key(user_id)  # type: ignore[arg-type]

@@ -115,7 +115,6 @@ def development_group() -> None:
 @development_group.command("bootstrap-account")
 @click.option("--actor-email", required=True, callback=email_callback)
 @click.option("--email", required=True, callback=email_callback)
-@click.option("--reason", required=True)
 @click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
 @click.pass_obj
 @guarded
@@ -123,12 +122,10 @@ def bootstrap_account(
     state: CliState,
     actor_email: str,
     email: str,
-    reason: str,
     yes: bool,
 ) -> None:
     from app.modules.identity.application.identity import AuthenticatedIdentity
 
-    del reason
     actor_user = load_user(actor_email)
     target = load_user(email)
     confirm(f"Create the Scholens profile for existing identity {email}?", yes=yes)
