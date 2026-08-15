@@ -12,17 +12,13 @@ import {
   ReaderReflowView,
   reflowMarkdownPlainText,
 } from "./reader-reflow-view";
+import type { ReaderReflowOutlineItem } from "./reader-reflow-outline";
 import type { DocumentReflowSourceSpan } from "./api";
 import { useReflowTranslations } from "./use-reflow-translations";
 import type {
   FullTranslationStatus,
   TranslationPreferences,
 } from "../translation";
-
-export type ReaderReflowOutlineItem = {
-  id: string;
-  label: string;
-};
 
 export function ReaderReflowSurface({
   documentId,
@@ -65,6 +61,7 @@ export function ReaderReflowSurface({
         .map((block) => ({
           id: block.id,
           label: reflowMarkdownPlainText(block.render_markdown),
+          level: block.heading_level ?? 2,
         }))
         .filter((item) => item.label.length > 0),
     [completedReflow?.blocks],

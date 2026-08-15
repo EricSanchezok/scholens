@@ -456,7 +456,10 @@ async function mockReader(page: Page) {
   );
 }
 
-async function mockReaderReflow(page: Page) {
+async function mockReaderReflow(
+  page: Page,
+  options: { delayMs?: number } = {},
+) {
   let preferences = {
     auto_translate_selection: true,
     custom_instructions: null as string | null,
@@ -484,8 +487,11 @@ async function mockReaderReflow(page: Page) {
   );
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/reflow`,
-    (route) =>
-      route.fulfill({
+    async (route) => {
+      if (options.delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+      }
+      await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           assets: [],
@@ -499,7 +505,8 @@ async function mockReaderReflow(page: Page) {
           updated_at: "2026-08-14T00:00:00Z",
           warnings: [],
         }),
-      }),
+      });
+    },
   );
   await page.route(
     `${apiPattern}/papers/${paperDocument.document_id}/reflow/blocks/*/translations`,
@@ -725,14 +732,12 @@ test("opens a Library paper in the desktop Reader and restores route state", asy
   await page.getByRole("button", { name: "Previous page" }).click();
   await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
 
-  const navigationToggle = page.getByRole("button", {
-    name: "Show document outline",
-  });
-  await navigationToggle.click();
   await expect(
-    page.getByRole("button", { name: "Show page thumbnails" }),
+    page.getByRole("button", { name: "Show document outline" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "Page thumbnails" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Show page thumbnails" }).click();
 
   const pageDoesNotOwnViewportScroll = await page.evaluate(() => ({
     body: document.body.scrollHeight <= window.innerHeight,
@@ -1354,6 +1359,13 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
     1,
   );
 
+  await page.getByRole("button", { name: "Show document outline" }).click();
+  const outline = page.getByRole("navigation", { name: "Document outline" });
+  await expect(outline).toBeVisible();
+  await outline.getByRole("button", { name: "1 Method" }).click();
+  await page.getByRole("button", { name: "Hide document outline" }).click();
+  await expect(outline).toHaveCount(0);
+
   await page
     .getByRole("button", { name: "Full translation: Not enabled" })
     .click();
@@ -1381,6 +1393,20 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
     }),
   ).toHaveCount(0);
   await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
+});
+
+test("keeps the reflow outline action stable while headings load", async ({
+  page,
+}) => {
+  await mockReaderReflow(page, { delayMs: 1_000 });
+  await page.goto(`/reader/${paperDocument.document_id}?view=reflow`);
+
+  const outline = page.getByRole("button", {
+    name: "Show document outline",
+  });
+  await expect(outline).toBeVisible();
+  await expect(outline).toBeDisabled();
+  await expect(outline).toBeEnabled();
 });
 
 test("hides full translation in the PDF view", async ({ page }) => {
@@ -1412,6 +1438,18 @@ for (const width of [320, 390]) {
     await mockReaderReflow(page);
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`/reader/${paperDocument.document_id}?view=reflow`);
+
+    await expect(
+      page.getByRole("button", { name: "More actions" }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Show document outline" }).click();
+    const outline = page.getByRole("dialog", { name: "Document outline" });
+    await expect(outline).toBeVisible();
+    await expect(
+      outline.getByRole("button", { name: "1 Method" }),
+    ).toBeVisible();
+    await outline.getByRole("button", { name: "1 Method" }).click();
+    await expect(outline).toHaveCount(0);
 
     await page
       .getByRole("button", { name: "Full translation: Not enabled" })

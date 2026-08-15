@@ -428,9 +428,7 @@
     "pdfErrorTitle": "Could not render this PDF",
     "thumbnail": "Open page {page}",
     "navigation": {
-      "label": "Document navigation",
-      "pages": "Pages",
-      "outline": "Outline"
+      "label": "Page thumbnails"
     },
     "contextPanel": "Reader context panel",
     "documentCanvas": "PDF document",
@@ -443,8 +441,8 @@
       "fit": "Fit",
       "fitPage": "Fit page",
       "fitWidth": "Fit width",
+      "hideOutline": "Hide document outline",
       "nextPage": "Next page",
-      "moreActions": "More actions",
       "openPanel": "Open context panel",
       "page": "Page",
       "pdfView": "PDF",
@@ -452,7 +450,6 @@
       "reflowView": "AI reflow",
       "search": "Search PDF",
       "showOutline": "Show document outline",
-      "showPages": "Show page thumbnails",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out"
     },
@@ -518,8 +515,7 @@
     },
     "outline": {
       "title": "Document outline",
-      "description": "Jump to a section in this paper.",
-      "empty": "This PDF does not include an outline."
+      "description": "Jump to a section in this AI-reflowed paper."
     },
     "details": {
       "title": "Title",

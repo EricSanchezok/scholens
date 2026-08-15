@@ -7,11 +7,9 @@ import {
   OutlineIcon,
   PreviousIcon,
   NextIcon,
-  DocumentIcon,
   SearchIcon,
   OpenPanelIcon,
   DismissIcon,
-  MoreIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -56,11 +54,10 @@ export type ReaderToolbarLabels = {
   previousSearchResult: string;
   nextSearchResult: string;
   showOutline: string;
-  showPages: string;
+  hideOutline: string;
   download: string;
   openPanel: string;
   closePanel: string;
-  moreActions: string;
   returnLibrary: string;
   projectContext: string;
   personalContext: string;
@@ -75,7 +72,7 @@ export function ReaderToolbar({
   metadata,
   onDownload,
   onFitModeChange,
-  onToggleNavigation,
+  onToggleOutline,
   onOpenPanel,
   onOpenSearch,
   onPageChange,
@@ -86,12 +83,12 @@ export function ReaderToolbar({
   pageNumber,
   panelOpen,
   projectContext,
-  navigationMode,
+  outlineAvailable,
+  outlineOpen,
   title,
   view,
   search,
   translation,
-  reflowOutline,
   zoom,
 }: {
   className?: string;
@@ -100,7 +97,7 @@ export function ReaderToolbar({
   metadata?: string;
   onDownload: () => void;
   onFitModeChange: (fit: ReaderFitMode) => void;
-  onToggleNavigation: () => void;
+  onToggleOutline: () => void;
   onOpenPanel: () => void;
   onOpenSearch: () => void;
   onPageChange: (page: number) => void;
@@ -115,7 +112,8 @@ export function ReaderToolbar({
     options: Array<{ id: string; title: string }>;
     projectId?: string;
   };
-  navigationMode: "outline" | "thumbnails";
+  outlineAvailable: boolean;
+  outlineOpen: boolean;
   search?: {
     currentIndex: number;
     matchCount: number;
@@ -134,11 +132,6 @@ export function ReaderToolbar({
     saving: boolean;
     status: FullTranslationStatus;
   };
-  reflowOutline?: Array<{
-    id: string;
-    label: string;
-    onSelect: () => void;
-  }>;
   title: string;
   view: ReaderDocumentView;
   zoom: number;
@@ -147,7 +140,7 @@ export function ReaderToolbar({
     <div
       aria-label={labels.page}
       className={cn(
-        "border-line bg-surface flex h-14 shrink-0 items-center gap-2 border-b px-2 sm:px-3",
+        "border-line bg-surface flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-3",
         className,
       )}
       role="toolbar"
@@ -292,7 +285,7 @@ export function ReaderToolbar({
           >
             <Button
               aria-pressed={view === "pdf"}
-              className="px-2.5 sm:h-8 sm:min-h-8"
+              className="px-2 sm:h-8 sm:min-h-8 sm:px-2.5"
               onClick={() => onViewChange("pdf")}
               size="sm"
               variant={view === "pdf" ? "secondary" : "ghost"}
@@ -301,7 +294,7 @@ export function ReaderToolbar({
             </Button>
             <Button
               aria-pressed={view === "reflow"}
-              className="px-2.5 sm:h-8 sm:min-h-8"
+              className="px-2 sm:h-8 sm:min-h-8 sm:px-2.5"
               onClick={() => onViewChange("reflow")}
               size="sm"
               variant={view === "reflow" ? "secondary" : "ghost"}
@@ -389,55 +382,24 @@ export function ReaderToolbar({
 
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
             {view === "pdf" ? (
-              <>
-                <IconButton
-                  label={labels.search}
-                  onClick={onOpenSearch}
-                  variant="ghost"
-                >
-                  <Icon glyph={SearchIcon} size={20} />
-                </IconButton>
-                <IconButton
-                  aria-pressed={navigationMode === "outline"}
-                  label={
-                    navigationMode === "outline"
-                      ? labels.showPages
-                      : labels.showOutline
-                  }
-                  onClick={onToggleNavigation}
-                  variant="ghost"
-                >
-                  <Icon
-                    glyph={
-                      navigationMode === "outline" ? DocumentIcon : OutlineIcon
-                    }
-                    size={20}
-                  />
-                </IconButton>
-              </>
+              <IconButton
+                label={labels.search}
+                onClick={onOpenSearch}
+                variant="ghost"
+              >
+                <Icon glyph={SearchIcon} size={20} />
+              </IconButton>
             ) : null}
-            {view === "reflow" && reflowOutline?.length ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton
-                    className="hidden sm:inline-flex"
-                    label={labels.showOutline}
-                    variant="ghost"
-                  >
-                    <Icon glyph={OutlineIcon} size={20} />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="max-h-80 w-72 overflow-y-auto"
-                >
-                  {reflowOutline.map((item) => (
-                    <DropdownMenuItem key={item.id} onSelect={item.onSelect}>
-                      <span className="truncate">{item.label}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+            {view === "reflow" ? (
+              <IconButton
+                aria-pressed={outlineOpen}
+                disabled={!outlineAvailable}
+                label={outlineOpen ? labels.hideOutline : labels.showOutline}
+                onClick={onToggleOutline}
+                variant={outlineOpen ? "secondary" : "ghost"}
+              >
+                <Icon glyph={OutlineIcon} size={20} />
+              </IconButton>
             ) : null}
             {view === "reflow" ? (
               <ReaderFullTranslationControl
@@ -450,43 +412,12 @@ export function ReaderToolbar({
               />
             ) : null}
             <IconButton
-              className="hidden sm:inline-flex"
               label={labels.download}
               onClick={onDownload}
               variant="ghost"
             >
               <Icon glyph={DownloadIcon} size={20} />
             </IconButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton
-                  className="inline-flex sm:hidden"
-                  label={labels.moreActions}
-                  variant="ghost"
-                >
-                  <Icon glyph={MoreIcon} size={20} />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {view === "pdf" ? (
-                  <DropdownMenuItem onSelect={onOpenSearch}>
-                    <Icon glyph={SearchIcon} size={20} />
-                    {labels.search}
-                  </DropdownMenuItem>
-                ) : null}
-                {view === "reflow" && reflowOutline?.length
-                  ? reflowOutline.map((item) => (
-                      <DropdownMenuItem key={item.id} onSelect={item.onSelect}>
-                        <span className="max-w-56 truncate">{item.label}</span>
-                      </DropdownMenuItem>
-                    ))
-                  : null}
-                <DropdownMenuItem onSelect={onDownload}>
-                  <Icon glyph={DownloadIcon} size={20} />
-                  {labels.download}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             {!panelOpen ? (
               <IconButton
                 aria-pressed={false}

@@ -428,9 +428,7 @@
     "pdfErrorTitle": "无法渲染此 PDF",
     "thumbnail": "打开第 {page} 页",
     "navigation": {
-      "label": "文档导航",
-      "pages": "页面",
-      "outline": "目录"
+      "label": "页面缩略图"
     },
     "contextPanel": "阅读器上下文面板",
     "documentCanvas": "PDF 文档",
@@ -443,16 +441,15 @@
       "fit": "适配",
       "fitPage": "适合页面",
       "fitWidth": "适合宽度",
+      "hideOutline": "收起论文目录",
       "nextPage": "下一页",
-      "moreActions": "更多操作",
       "openPanel": "打开上下文面板",
       "page": "页码",
       "pdfView": "PDF",
       "previousPage": "上一页",
       "reflowView": "AI 重排",
       "search": "搜索 PDF",
-      "showOutline": "显示论文目录",
-      "showPages": "显示页面缩略图",
+      "showOutline": "展开论文目录",
       "zoomIn": "放大",
       "zoomOut": "缩小"
     },
@@ -518,8 +515,7 @@
     },
     "outline": {
       "title": "论文目录",
-      "description": "跳转到论文中的章节。",
-      "empty": "这份 PDF 不包含目录。"
+      "description": "跳转到 AI 重排论文中的章节。"
     },
     "details": {
       "title": "标题",

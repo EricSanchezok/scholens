@@ -9,10 +9,16 @@ import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHandle,
+  DialogHeader,
+  DialogTitle,
   IconButton,
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetTitle,
   useToast,
 } from "@/components/ui";
@@ -53,18 +59,12 @@ import {
   ReaderContextPanel,
   type ReaderContextPanelProps,
 } from "./components/reader-context-panel";
-import {
-  ReaderDocumentNavigation,
-  ReaderOutline,
-} from "./components/reader-document-navigation";
+import { ReaderDocumentNavigation } from "./components/reader-document-navigation";
 import {
   ReaderToolbar,
   type ReaderToolbarLabels,
 } from "./components/reader-toolbar";
-import {
-  PdfDocumentAdapter,
-  type PdfOutlineEntry,
-} from "./pdf-document-adapter";
+import { PdfDocumentAdapter } from "./pdf-document-adapter";
 import { moveReaderSearchCursor } from "./reader-search";
 import { compareReaderAnnotationsBySource } from "./reader-annotations";
 import type { ReaderHighlightColor } from "./reader-highlight-colors";
@@ -80,14 +80,17 @@ import {
   useReaderTranslation,
   type FullTranslationStatus,
 } from "./translation";
-import { ReaderReflowSurface, type ReaderReflowOutlineItem } from "./reflow";
+import {
+  ReaderReflowOutline,
+  ReaderReflowSurface,
+  type ReaderReflowOutlineItem,
+} from "./reflow";
 import type {
   ReaderAnnotationAudience,
   ReaderAnnotationAudienceFilter,
   ReaderAnnotationMode,
   ReaderAnnotationStatus,
   ReaderContextPanel as ReaderContextPanelName,
-  ReaderNavigationMode,
 } from "./reader-types";
 
 function ReaderDocumentWorkspace({
@@ -119,10 +122,9 @@ function ReaderDocumentWorkspace({
   const [pageCount, setPageCount] = React.useState(1);
   const [fitMode, setFitMode] = React.useState<ReaderFitMode>("width");
   const [zoom, setZoom] = React.useState(1);
-  const [outline, setOutline] = React.useState<PdfOutlineEntry[]>([]);
-  const [navigationMode, setNavigationMode] =
-    React.useState<ReaderNavigationMode>("thumbnails");
-  const [mobileOutlineOpen, setMobileOutlineOpen] = React.useState(false);
+  const [reflowOutlineOpen, setReflowOutlineOpen] = React.useState(false);
+  const [mobileReflowOutlineOpen, setMobileReflowOutlineOpen] =
+    React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchState, setSearchState] = React.useState<{
@@ -450,7 +452,6 @@ function ReaderDocumentWorkspace({
         }
         setAdapterState({ adapter: nextAdapter, documentId });
         setPageCount(nextAdapter.pageCount);
-        setOutline(await nextAdapter.getOutline());
       })
       .catch((error: unknown) => {
         if (active) setAdapterErrorState({ documentId, error });
@@ -497,6 +498,13 @@ function ReaderDocumentWorkspace({
     [adapter, updateLocation],
   );
 
+  const scrollToReflowOutlineItem = React.useCallback((id: string) => {
+    const target = Array.from(
+      window.document.querySelectorAll<HTMLElement>("[data-reflow-block]"),
+    ).find((element) => element.dataset.reflowBlock === id);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   async function handleSignOut() {
     setSigningOut(true);
     try {
@@ -523,10 +531,10 @@ function ReaderDocumentWorkspace({
       fit: t("toolbar.fit"),
       fitPage: t("toolbar.fitPage"),
       fitWidth: t("toolbar.fitWidth"),
+      hideOutline: t("toolbar.hideOutline"),
       nextPage: t("toolbar.nextPage"),
       nextSearchResult: t("search.next"),
       noSearchResults: t("search.empty"),
-      moreActions: t("toolbar.moreActions"),
       openPanel: t("toolbar.openPanel"),
       page: t("toolbar.page"),
       previousPage: t("toolbar.previousPage"),
@@ -538,7 +546,6 @@ function ReaderDocumentWorkspace({
       returnLibrary: t("returnLibrary"),
       search: t("toolbar.search"),
       showOutline: t("toolbar.showOutline"),
-      showPages: t("toolbar.showPages"),
       zoomIn: t("toolbar.zoomIn"),
       zoomOut: t("toolbar.zoomOut"),
     }),
@@ -806,13 +813,10 @@ function ReaderDocumentWorkspace({
                   metadata={documentMetadata}
                   onDownload={() => void handleDownload()}
                   onFitModeChange={setFitMode}
-                  navigationMode={navigationMode}
-                  onToggleNavigation={() => {
+                  onToggleOutline={() => {
                     if (showDocumentNavigation) {
-                      setNavigationMode((current) =>
-                        current === "outline" ? "thumbnails" : "outline",
-                      );
-                    } else setMobileOutlineOpen(true);
+                      setReflowOutlineOpen((current) => !current);
+                    } else setMobileReflowOutlineOpen(true);
                   }}
                   onOpenPanel={() =>
                     updateLocation({
@@ -832,6 +836,7 @@ function ReaderDocumentWorkspace({
                   onViewChange={(nextView) => {
                     closeSearch();
                     setActiveTextSelection(undefined);
+                    setMobileReflowOutlineOpen(false);
                     updateLocation({ view: nextView });
                   }}
                   onZoomChange={(nextZoom) => {
@@ -841,6 +846,12 @@ function ReaderDocumentWorkspace({
                   pageCount={pageCount}
                   pageNumber={pageNumber}
                   panelOpen={desktopPanelOpen}
+                  outlineAvailable={reflowOutline.length > 0}
+                  outlineOpen={
+                    showDocumentNavigation
+                      ? reflowOutlineOpen
+                      : mobileReflowOutlineOpen
+                  }
                   projectContext={{
                     onChange: (nextProjectId) => {
                       setSelectedAnnotationId(undefined);
@@ -878,22 +889,6 @@ function ReaderDocumentWorkspace({
                         }
                       : undefined
                   }
-                  reflowOutline={reflowOutline.map((item) => ({
-                    ...item,
-                    onSelect: () => {
-                      const target = Array.from(
-                        window.document.querySelectorAll<HTMLElement>(
-                          "[data-reflow-block]",
-                        ),
-                      ).find(
-                        (element) => element.dataset.reflowBlock === item.id,
-                      );
-                      target?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    },
-                  }))}
                   title={title}
                   translation={{
                     enabled: fullTranslationEnabled,
@@ -911,17 +906,7 @@ function ReaderDocumentWorkspace({
                   {readerView === "pdf" &&
                     adapter &&
                     showDocumentNavigation && (
-                      <ReaderDocumentNavigation
-                        labels={{
-                          emptyOutline: t("outline.empty"),
-                          navigation: t("navigation.label"),
-                        }}
-                        mode={navigationMode}
-                        onOutlineSelect={(destination) =>
-                          void resolveDestination(destination)
-                        }
-                        outline={outline}
-                      >
+                      <ReaderDocumentNavigation label={t("navigation.label")}>
                         <div className="grid gap-1">
                           {Array.from(
                             { length: pageCount },
@@ -1046,6 +1031,18 @@ function ReaderDocumentWorkspace({
                       zoom={zoom}
                     />
                   ) : null}
+                  {readerView === "reflow" &&
+                  showDocumentNavigation &&
+                  reflowOutlineOpen &&
+                  reflowOutline.length > 0 ? (
+                    <aside className="border-line bg-canvas w-64 shrink-0 overflow-y-auto border-r">
+                      <ReaderReflowOutline
+                        entries={reflowOutline}
+                        label={t("outline.title")}
+                        onSelect={scrollToReflowOutlineItem}
+                      />
+                    </aside>
+                  ) : null}
                   {readerView === "reflow" ? (
                     <ReaderReflowSurface
                       documentId={documentId}
@@ -1076,39 +1073,41 @@ function ReaderDocumentWorkspace({
           )}
       </div>
 
-      <Sheet
-        onOpenChange={setMobileOutlineOpen}
-        open={!showDocumentNavigation && mobileOutlineOpen}
+      <Dialog
+        onOpenChange={setMobileReflowOutlineOpen}
+        open={
+          readerView === "reflow" &&
+          !showDocumentNavigation &&
+          mobileReflowOutlineOpen
+        }
       >
-        <SheetContent
-          className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0"
+        <DialogContent
+          aria-describedby="reader-reflow-outline-description"
+          aria-label={t("outline.title")}
           closeLabel={t("closePanel")}
+          placement="responsive-bottom"
         >
-          <div className="flex h-full flex-col px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            <SheetTitle className="pr-12 text-lg font-semibold">
-              {t("outline.title")}
-            </SheetTitle>
-            <SheetDescription className="text-muted mt-1 text-sm">
+          <DialogHandle />
+          <DialogHeader>
+            <DialogTitle>{t("outline.title")}</DialogTitle>
+            <DialogDescription id="reader-reflow-outline-description">
               {t("outline.description")}
-            </SheetDescription>
-            <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
-              {outline.length > 0 ? (
-                <ReaderOutline
-                  entries={outline}
-                  onSelect={(destination) => {
-                    setMobileOutlineOpen(false);
-                    void resolveDestination(destination);
-                  }}
-                />
-              ) : (
-                <p className="text-muted py-12 text-center text-sm">
-                  {t("outline.empty")}
-                </p>
-              )}
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="p-0 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:p-0">
+            <ReaderReflowOutline
+              entries={reflowOutline}
+              label={t("outline.title")}
+              onSelect={(id) => {
+                setMobileReflowOutlineOpen(false);
+                window.requestAnimationFrame(() =>
+                  scrollToReflowOutlineItem(id),
+                );
+              }}
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       <Sheet
         onOpenChange={(open) => {

@@ -1,31 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { fn } from "storybook/test";
 
 import { ReaderDocumentNavigation } from "./reader-document-navigation";
-
-const outline = [
-  {
-    children: [],
-    destination: "introduction",
-    title: "1 Introduction",
-  },
-  {
-    children: [
-      {
-        children: [],
-        destination: "retrieval",
-        title: "2.1 Retrieval",
-      },
-      {
-        children: [],
-        destination: "generation",
-        title: "2.2 Generation",
-      },
-    ],
-    destination: "method",
-    title: "2 Method",
-  },
-];
 
 const meta = {
   title: "Reader/ReaderDocumentNavigation",
@@ -44,13 +19,7 @@ const meta = {
         ))}
       </div>
     ),
-    labels: {
-      emptyOutline: "This PDF does not include an outline.",
-      navigation: "Document navigation",
-    },
-    mode: "thumbnails",
-    onOutlineSelect: fn(),
-    outline,
+    label: "Page thumbnails",
   },
   parameters: {
     layout: "fullscreen",
@@ -61,11 +30,3 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Pages: Story = {};
-
-export const Outline: Story = {
-  args: { mode: "outline" },
-};
-
-export const EmptyOutline: Story = {
-  args: { mode: "outline", outline: [] },
-};
