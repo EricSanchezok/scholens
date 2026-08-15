@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
   IconButton,
   Input,
+  isImeComposing,
   keyboardFocusRing,
   Popover,
   PopoverContent,
@@ -926,10 +927,7 @@ export function ReaderAnnotationPanel({
                         }));
                       }}
                       onKeyDown={(event) => {
-                        if (
-                          event.key === "Enter" &&
-                          !event.nativeEvent.isComposing
-                        ) {
+                        if (event.key === "Enter" && !isImeComposing(event)) {
                           event.preventDefault();
                           void submitReply(annotation);
                         }

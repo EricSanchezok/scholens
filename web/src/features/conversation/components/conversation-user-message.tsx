@@ -6,14 +6,18 @@ import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { CopyActionButton } from "@/components/feedback";
-import { Button, IconButton, keyboardFocusRing } from "@/components/ui";
+import {
+  Button,
+  IconButton,
+  isImeComposing,
+  useTextControlFocus,
+} from "@/components/ui";
 import {
   EditIcon,
   NextIcon,
   PreviousIcon,
 } from "@/design-system/icons/semantic-icons";
 import { Icon } from "@/design-system/icons/icon";
-import { cn } from "@/lib/utilities/cn";
 import { composerSchema, type ComposerValues } from "../schemas";
 
 export type PromptBranch = {
@@ -45,7 +49,12 @@ export function ConversationUserMessage({
     mode: "onChange",
     resolver: zodResolver(composerSchema),
   });
+  const messageRegistration = form.register("message");
   const value = useWatch({ control: form.control, name: "message" });
+  const { focusHandlers, focusOrigin } =
+    useTextControlFocus<HTMLTextAreaElement>({
+      onBlur: messageRegistration.onBlur,
+    });
 
   React.useEffect(() => {
     if (!editing) form.reset({ message });
@@ -84,28 +93,33 @@ export function ConversationUserMessage({
     return (
       <form
         aria-label={t("editMessageForm")}
-        className="border-line bg-subtle ml-auto grid w-full gap-3 rounded-[var(--radius-xl)] border p-3 sm:p-4 lg:max-w-[80%]"
+        className="border-line bg-subtle ml-auto flex w-full flex-col gap-3 rounded-[var(--radius-2xl)] border px-4 pt-3 pb-2 lg:max-w-[80%]"
+        data-focus-surface
         onSubmit={form.handleSubmit(save)}
       >
         <textarea
           aria-label={t("editMessageLabel")}
-          className={cn(
-            "placeholder:text-muted min-h-24 w-full resize-y bg-transparent px-1 py-1 text-base leading-6 outline-none lg:min-h-20 lg:text-sm",
-            keyboardFocusRing,
-          )}
+          className="placeholder:text-muted [field-sizing:content] max-h-72 min-h-12 w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-base leading-6 outline-none focus-visible:outline-none lg:text-sm"
+          data-focus-delegate="surface"
+          data-focus-origin={focusOrigin ?? undefined}
           disabled={saving}
           maxLength={20_000}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
+            if (event.key === "Escape" && !isImeComposing(event)) {
               event.preventDefault();
               if (!saving) cancel();
             }
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            if (
+              event.key === "Enter" &&
+              (event.metaKey || event.ctrlKey) &&
+              !isImeComposing(event)
+            ) {
               event.preventDefault();
               void form.handleSubmit(save)();
             }
           }}
-          {...form.register("message")}
+          {...messageRegistration}
+          {...focusHandlers}
         />
         {saveFailed ? (
           <p aria-live="polite" className="text-danger text-sm" role="alert">
@@ -114,6 +128,7 @@ export function ConversationUserMessage({
         ) : null}
         <div className="flex justify-end gap-2">
           <Button
+            className="rounded-full px-4"
             disabled={saving}
             onClick={cancel}
             size="sm"
@@ -123,6 +138,7 @@ export function ConversationUserMessage({
             {t("cancelEdit")}
           </Button>
           <Button
+            className="rounded-full px-4"
             disabled={
               saving ||
               !form.formState.isValid ||
@@ -149,11 +165,34 @@ export function ConversationUserMessage({
       </p>
       <footer
         aria-label={t("userMessageActions")}
-        className="grid min-h-11 grid-cols-[1fr_auto_1fr] items-center lg:min-h-8"
+        className="flex min-h-11 items-center justify-end lg:min-h-8"
         role="group"
       >
+        <div
+          className="flex transition-opacity motion-reduce:transition-none [@media(hover:hover)]:lg:opacity-0 [@media(hover:hover)]:lg:group-focus-within/user-message:opacity-100 [@media(hover:hover)]:lg:group-hover/user-message:opacity-100"
+          data-user-message-controls
+        >
+          {canEdit ? (
+            <IconButton
+              className="size-11 bg-transparent lg:size-8 lg:min-h-8"
+              label={t("editMessage")}
+              onClick={() => setEditing(true)}
+              variant="ghost"
+            >
+              <Icon glyph={EditIcon} size={16} tone="secondary" />
+            </IconButton>
+          ) : null}
+          <CopyActionButton
+            className="size-11 bg-transparent lg:size-8 lg:min-h-8"
+            errorLabel={t("copyMessageFailed")}
+            label={t("copyMessage")}
+            pendingLabel={t("copyingMessage")}
+            successLabel={t("messageCopied")}
+            value={message}
+          />
+        </div>
         {hasBranches ? (
-          <div className="text-secondary col-start-2 flex h-11 items-center lg:h-8">
+          <div className="text-secondary flex h-11 items-center lg:h-8">
             <IconButton
               className="size-11 bg-transparent disabled:bg-transparent disabled:opacity-100 lg:size-8 lg:min-h-8"
               disabled={!branch.previous_turn_id}
@@ -188,29 +227,6 @@ export function ConversationUserMessage({
             </IconButton>
           </div>
         ) : null}
-        <div
-          className="col-start-3 flex justify-self-end transition-opacity motion-reduce:transition-none [@media(hover:hover)]:lg:opacity-0 [@media(hover:hover)]:lg:group-focus-within/user-message:opacity-100 [@media(hover:hover)]:lg:group-hover/user-message:opacity-100"
-          data-user-message-controls
-        >
-          <CopyActionButton
-            className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-            errorLabel={t("copyMessageFailed")}
-            label={t("copyMessage")}
-            pendingLabel={t("copyingMessage")}
-            successLabel={t("messageCopied")}
-            value={message}
-          />
-          {canEdit ? (
-            <IconButton
-              className="size-11 bg-transparent lg:size-8 lg:min-h-8"
-              label={t("editMessage")}
-              onClick={() => setEditing(true)}
-              variant="ghost"
-            >
-              <Icon glyph={EditIcon} size={16} tone="secondary" />
-            </IconButton>
-          ) : null}
-        </div>
       </footer>
     </article>
   );

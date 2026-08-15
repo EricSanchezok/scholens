@@ -22,6 +22,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
   IconButton,
+  isImeComposing,
   keyboardFocusRing,
   Popover,
   PopoverContent,
@@ -543,7 +544,11 @@ export function ResearchComposer({
           data-focus-origin={focusOrigin ?? undefined}
           disabled={busy || unavailable}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !isImeComposing(event)
+            ) {
               event.preventDefault();
               void composerForm.handleSubmit(submit)();
             }
@@ -646,7 +651,11 @@ export function ResearchComposer({
         disabled={busy || unavailable}
         onKeyDown={(event) => {
           if (event.key === "@") setPickerOpen(true);
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !isImeComposing(event)
+          ) {
             event.preventDefault();
             void composerForm.handleSubmit(submit)();
           }
