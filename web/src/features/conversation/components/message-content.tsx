@@ -113,10 +113,12 @@ export function MessageContent({
   content,
   annotations,
   onCitationOpen,
+  streaming = false,
 }: {
   content: string;
   annotations?: CitationAnnotation[];
   onCitationOpen?: (sourceKeys: number[]) => void;
+  streaming?: boolean;
 }) {
   const t = useTranslations("Home.conversation");
   const renderedContent = React.useMemo(
@@ -126,6 +128,9 @@ export function MessageContent({
   const components = React.useMemo<Components>(
     () => ({
       ...baseComponents,
+      p: ({ children }) => (
+        <p className={streaming ? undefined : "text-pretty"}>{children}</p>
+      ),
       a: ({ children, href }) => {
         if (href?.startsWith("#scholens-source=")) {
           const sourceKeys = href
@@ -161,7 +166,7 @@ export function MessageContent({
         );
       },
     }),
-    [onCitationOpen, t],
+    [onCitationOpen, streaming, t],
   );
   return (
     <div className="max-w-[72ch] min-w-0 text-base leading-7 [overflow-wrap:anywhere] lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4">

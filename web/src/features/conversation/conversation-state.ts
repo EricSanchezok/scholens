@@ -267,3 +267,10 @@ export function reduceLiveTurn(
       };
   }
 }
+
+export function reduceLiveTurnEvents(
+  current: LiveTurn | null,
+  events: ConversationStreamEvent[],
+) {
+  return events.reduce<LiveTurn | null>(reduceLiveTurn, current);
+}

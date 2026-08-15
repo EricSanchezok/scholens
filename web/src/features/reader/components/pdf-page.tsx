@@ -670,6 +670,7 @@ function PdfPageSurface({
         selectionLabels && (
           <div data-reader-selection-toolbar>
             <ReaderSelectionToolbar
+              boundaryRef={scrollContainerRef}
               labels={selectionLabels}
               onAsk={() => onAskSelection?.(activeTextSelection)}
               onComment={() => onCommentSelection?.(activeTextSelection)}

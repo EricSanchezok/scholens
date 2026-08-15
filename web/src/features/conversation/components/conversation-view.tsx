@@ -35,6 +35,7 @@ import {
   isReferenceBundle,
   referenceSourceCount,
 } from "./conversation-sources";
+import { useConversationAutoScroll } from "../use-conversation-auto-scroll";
 
 export type ConversationTurn =
   components["schemas"]["ConversationTurnResponse"];
@@ -491,25 +492,12 @@ export function ConversationView({
   const t = useTranslations("Home.conversation");
   const rootRef = React.useRef<HTMLDivElement>(null);
   const panelScrollRef = React.useRef<HTMLDivElement>(null);
-  const scrollAnchor = React.useRef<HTMLDivElement>(null);
-  const nearBottom = React.useRef(true);
-  const [showJumpToLatest, setShowJumpToLatest] = React.useState(false);
   const visibleTurns = React.useMemo(() => {
     if (!liveTurn || liveTurn.generationKind === "retry") return turns;
     return turns.filter(
       (turn) => turn.depth < liveTurn.depth || turn.id === liveTurn.turnId,
     );
   }, [liveTurn, turns]);
-  const worklogSignature = liveTurn?.entries
-    .map((entry) =>
-      entry.kind === "activity"
-        ? `${entry.id}:${entry.state}`
-        : `${entry.id}:${entry.content.length}`,
-    )
-    .join("|");
-  const provisionalSignature = liveTurn?.provisionalItems
-    .map((item) => `${item.id}:${item.content.length}`)
-    .join("|");
   const liveResponse = liveTurn?.readyTurn?.responses.find(
     (response) => response.id === liveTurn.responseId,
   );
@@ -520,66 +508,16 @@ export function ConversationView({
   );
 
   const getScroller = React.useCallback(
-    () =>
+    (): HTMLElement | null =>
       layout === "side-panel"
         ? panelScrollRef.current
-        : (rootRef.current?.closest("[data-conversation-scroll-root]") ??
-          rootRef.current?.closest("main")),
+        : ((rootRef.current?.closest("[data-conversation-scroll-root]") ??
+            rootRef.current?.closest("main") ??
+            null) as HTMLElement | null),
     [layout],
   );
-
-  React.useEffect(() => {
-    const scrollRoot = getScroller();
-    if (!scrollRoot) return;
-    const scroller = scrollRoot;
-    function updateProximity() {
-      const gap =
-        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-      const nextNearBottom = gap < 120;
-      nearBottom.current = nextNearBottom;
-      setShowJumpToLatest(
-        scroller.scrollHeight > scroller.clientHeight + 32 && !nextNearBottom,
-      );
-    }
-    const initialFrame = window.requestAnimationFrame(updateProximity);
-    scroller.addEventListener("scroll", updateProximity, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(initialFrame);
-      scroller.removeEventListener("scroll", updateProximity);
-    };
-  }, [getScroller]);
-
-  React.useEffect(() => {
-    if (!nearBottom.current) {
-      setShowJumpToLatest(true);
-      return;
-    }
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    scrollAnchor.current?.scrollIntoView({
-      behavior: reducedMotion ? "auto" : "smooth",
-      block: "end",
-    });
-  }, [
-    worklogSignature,
-    liveTurn?.content,
-    liveTurn?.suggestions,
-    provisionalSignature,
-    visibleTurns.length,
-  ]);
-
-  function jumpToLatest() {
-    nearBottom.current = true;
-    setShowJumpToLatest(false);
-    const reducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    scrollAnchor.current?.scrollIntoView({
-      behavior: reducedMotion ? "auto" : "smooth",
-      block: "end",
-    });
-  }
+  const { contentRef, jumpToLatest, pauseFollowing, showJumpToLatest } =
+    useConversationAutoScroll({ getScroller });
 
   return (
     <div
@@ -602,135 +540,143 @@ export function ConversationView({
         ref={layout === "side-panel" ? panelScrollRef : undefined}
         data-scrollbar-gutter={layout === "side-panel" ? "stable" : undefined}
       >
-        {loading ? (
-          <p className="text-muted py-12 text-center text-sm" role="status">
-            {t("loading")}
-          </p>
-        ) : error ? (
-          <div
-            className="grid place-items-center py-12 text-center"
-            role="alert"
-          >
-            <Icon glyph={WarningIcon} size={24} tone="secondary" />
-            <p className="mt-3 text-sm font-medium">{t("error")}</p>
-            <Button
-              className="mt-4"
-              onClick={onRetry}
-              size="sm"
-              variant="secondary"
+        <div
+          className={
+            layout === "side-panel" ? "flex min-h-full flex-col" : "min-h-full"
+          }
+          ref={contentRef}
+        >
+          {loading ? (
+            <p className="text-muted py-12 text-center text-sm" role="status">
+              {t("loading")}
+            </p>
+          ) : error ? (
+            <div
+              className="grid place-items-center py-12 text-center"
+              role="alert"
             >
-              {t("retry")}
-            </Button>
-          </div>
-        ) : visibleTurns.length === 0 && !liveTurn ? (
-          <div
-            className={
-              layout === "side-panel"
-                ? "m-auto max-w-[20rem] px-4 py-12 text-center"
-                : "py-12 text-center"
-            }
-          >
-            {emptyState ? (
-              <>
-                <p className="text-primary text-base font-medium">
-                  {emptyState.title}
-                </p>
-                <p className="text-muted mt-2 text-sm leading-6">
-                  {emptyState.description}
-                </p>
-              </>
-            ) : (
-              <p className="text-muted text-sm">{t("empty")}</p>
-            )}
-          </div>
-        ) : (
-          <div
-            className={
-              layout === "side-panel" ? "grid gap-7" : "grid gap-9 lg:gap-8"
-            }
-          >
-            <MessageHistory
-              canSend={
-                canSend && !submissionPending && liveTurn?.state !== "streaming"
+              <Icon glyph={WarningIcon} size={24} tone="secondary" />
+              <p className="mt-3 text-sm font-medium">{t("error")}</p>
+              <Button
+                className="mt-4"
+                onClick={onRetry}
+                size="sm"
+                variant="secondary"
+              >
+                {t("retry")}
+              </Button>
+            </div>
+          ) : visibleTurns.length === 0 && !liveTurn ? (
+            <div
+              className={
+                layout === "side-panel"
+                  ? "m-auto max-w-[20rem] px-4 py-12 text-center"
+                  : "py-12 text-center"
               }
-              liveTurn={liveTurn}
-              onRetryResponse={onRetryResponse}
-              onEditMessage={onEditMessage}
-              onSelectBranch={onSelectBranch}
-              onSelectResponse={onSelectResponse}
-              onUseSuggestion={onUseSuggestion}
-              onDocumentSourceOpen={onDocumentSourceOpen}
-              suppressLatestControls={suppressLatestControls}
-              turns={visibleTurns}
-            />
-            {liveTurn &&
-              liveTurn.generationKind !== "retry" &&
-              !liveTurnRenderedInHistory && (
+            >
+              {emptyState ? (
                 <>
-                  <ConversationUserMessage
-                    branch={{ count: 1, index: 1 }}
-                    canEdit={false}
-                    message={liveTurn.userMessage}
-                    onEdit={async () => undefined}
-                    onSelectBranch={() => undefined}
-                  />
-                  <AssistantMessage
-                    canRetry={
-                      canSend &&
-                      !submissionPending &&
-                      (liveTurn.state === "ready" ||
-                        liveTurn.state === "complete" ||
-                        liveTurn.state === "error" ||
-                        liveTurn.state === "cancelled")
-                    }
-                    canSwitch={
-                      !submissionPending &&
-                      Boolean(
-                        liveTurn.readyTurn &&
-                        liveTurn.readyTurn.responses.length > 1,
-                      )
-                    }
-                    content={liveTurn.content}
-                    entries={liveTurn.entries}
-                    key={liveTurn.turnId}
-                    onActivityOpenChange={(open) => {
-                      if (open) nearBottom.current = false;
-                    }}
-                    onRetryResponse={() =>
-                      onRetryResponse(
-                        liveTurn.readyTurn ?? {
-                          id: liveTurn.turnId,
-                          user_query: liveTurn.userMessage,
-                          depth: liveTurn.depth,
-                        },
-                      )
-                    }
-                    onSelectResponse={(responseId) =>
-                      onSelectResponse(liveTurn.turnId, responseId)
-                    }
-                    onUseSuggestion={
-                      submissionPending ? undefined : onUseSuggestion
-                    }
-                    onDocumentSourceOpen={onDocumentSourceOpen}
-                    provisionalItems={liveTurn.provisionalItems}
-                    references={liveTurn.references}
-                    response={liveResponse}
-                    sourceTotal={
-                      liveTurn.trace?.citation_summary?.source_count ??
-                      referenceSourceCount(liveTurn.references)
-                    }
-                    state={liveTurn.state}
-                    suggestions={liveTurn.suggestions}
-                    variants={liveTurn.readyTurn?.responses}
-                    failure={liveTurn.failure}
-                    durationMs={liveTurn.durationMs}
-                    startedAtMs={liveTurn.startedAtMs}
-                  />
+                  <p className="text-primary text-base font-medium">
+                    {emptyState.title}
+                  </p>
+                  <p className="text-muted mt-2 text-sm leading-6">
+                    {emptyState.description}
+                  </p>
                 </>
+              ) : (
+                <p className="text-muted text-sm">{t("empty")}</p>
               )}
-            <div ref={scrollAnchor} />
-          </div>
-        )}
+            </div>
+          ) : (
+            <div
+              className={
+                layout === "side-panel" ? "grid gap-7" : "grid gap-9 lg:gap-8"
+              }
+            >
+              <MessageHistory
+                canSend={
+                  canSend &&
+                  !submissionPending &&
+                  liveTurn?.state !== "streaming"
+                }
+                liveTurn={liveTurn}
+                onRetryResponse={onRetryResponse}
+                onEditMessage={onEditMessage}
+                onSelectBranch={onSelectBranch}
+                onSelectResponse={onSelectResponse}
+                onUseSuggestion={onUseSuggestion}
+                onDocumentSourceOpen={onDocumentSourceOpen}
+                suppressLatestControls={suppressLatestControls}
+                turns={visibleTurns}
+              />
+              {liveTurn &&
+                liveTurn.generationKind !== "retry" &&
+                !liveTurnRenderedInHistory && (
+                  <>
+                    <ConversationUserMessage
+                      branch={{ count: 1, index: 1 }}
+                      canEdit={false}
+                      message={liveTurn.userMessage}
+                      onEdit={async () => undefined}
+                      onSelectBranch={() => undefined}
+                    />
+                    <AssistantMessage
+                      canRetry={
+                        canSend &&
+                        !submissionPending &&
+                        (liveTurn.state === "ready" ||
+                          liveTurn.state === "complete" ||
+                          liveTurn.state === "error" ||
+                          liveTurn.state === "cancelled")
+                      }
+                      canSwitch={
+                        !submissionPending &&
+                        Boolean(
+                          liveTurn.readyTurn &&
+                          liveTurn.readyTurn.responses.length > 1,
+                        )
+                      }
+                      content={liveTurn.content}
+                      entries={liveTurn.entries}
+                      key={liveTurn.turnId}
+                      onActivityOpenChange={(open) => {
+                        if (open) pauseFollowing();
+                      }}
+                      onRetryResponse={() =>
+                        onRetryResponse(
+                          liveTurn.readyTurn ?? {
+                            id: liveTurn.turnId,
+                            user_query: liveTurn.userMessage,
+                            depth: liveTurn.depth,
+                          },
+                        )
+                      }
+                      onSelectResponse={(responseId) =>
+                        onSelectResponse(liveTurn.turnId, responseId)
+                      }
+                      onUseSuggestion={
+                        submissionPending ? undefined : onUseSuggestion
+                      }
+                      onDocumentSourceOpen={onDocumentSourceOpen}
+                      provisionalItems={liveTurn.provisionalItems}
+                      references={liveTurn.references}
+                      response={liveResponse}
+                      sourceTotal={
+                        liveTurn.trace?.citation_summary?.source_count ??
+                        referenceSourceCount(liveTurn.references)
+                      }
+                      state={liveTurn.state}
+                      suggestions={liveTurn.suggestions}
+                      variants={liveTurn.readyTurn?.responses}
+                      failure={liveTurn.failure}
+                      durationMs={liveTurn.durationMs}
+                      startedAtMs={liveTurn.startedAtMs}
+                    />
+                  </>
+                )}
+            </div>
+          )}
+        </div>
       </div>
       {showJumpToLatest && layout === "side-panel" && (
         <div className="pointer-events-none relative z-30 h-0 shrink-0">
