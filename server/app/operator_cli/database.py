@@ -92,11 +92,11 @@ def migration_status() -> dict[str, object]:
 def _require_unique_current_head(payload: dict[str, object]) -> None:
     expected_value = payload.get("expected_revisions")
     current_value = payload.get("current_revisions")
-    if not isinstance(expected_value, list) or not all(
+    if not isinstance(expected_value, (list, tuple)) or not all(
         isinstance(value, str) for value in expected_value
     ):
         raise RuntimeError("expected migration revisions are malformed")
-    if not isinstance(current_value, list) or not all(
+    if not isinstance(current_value, (list, tuple)) or not all(
         isinstance(value, str) for value in current_value
     ):
         raise RuntimeError("current migration revisions are malformed")

@@ -175,6 +175,30 @@ def test_database_upgrade_reports_unchanged_without_running_alembic(
     upgrade.assert_not_called()
 
 
+def test_database_upgrade_accepts_native_alembic_revision_tuples(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(database, "migration_database_url", lambda: "postgresql://x")
+    monkeypatch.setattr(
+        database,
+        "migration_status",
+        lambda: {
+            "up_to_date": True,
+            "current_revisions": ("head",),
+            "expected_revisions": ("head",),
+            "schema_owned_by_role": True,
+        },
+    )
+    upgrade = MagicMock()
+    monkeypatch.setattr(database.command, "upgrade", upgrade)
+
+    result = CliRunner().invoke(cli, ["db", "upgrade", "--json"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["current_revisions"] == ["head"]
+    upgrade.assert_not_called()
+
+
 def test_database_upgrade_fails_when_ledger_does_not_reach_unique_head(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
