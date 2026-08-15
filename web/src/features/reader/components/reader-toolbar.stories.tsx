@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { fn } from "storybook/test";
+import { expect, fn, within } from "storybook/test";
 
 import { ReaderToolbar } from "./reader-toolbar";
 
@@ -78,7 +78,21 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Desktop: Story = {};
+export const Desktop: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const toolbar = canvas.getByRole("toolbar", { name: labels.page });
+    const panelToggle = canvas.getByRole("button", {
+      name: labels.openPanel,
+    });
+    const toolbarBounds = toolbar.getBoundingClientRect();
+    const toggleBounds = panelToggle.getBoundingClientRect();
+
+    await expect(toolbarBounds.right - toggleBounds.right).toBeLessThanOrEqual(
+      16,
+    );
+  },
+};
 
 export const Narrow: Story = {
   globals: { viewport: { value: "mobile" } },
