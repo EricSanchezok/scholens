@@ -1383,18 +1383,12 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
   await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
 });
 
-test("explains why full translation is unavailable in the PDF view", async ({
-  page,
-}) => {
+test("hides full translation in the PDF view", async ({ page }) => {
   await page.goto(`/reader/${paperDocument.document_id}`);
   const translation = page.getByRole("button", {
     name: "Full translation: Not enabled",
   });
-  await expect(translation).toBeDisabled();
-  await expect(translation).toHaveAttribute(
-    "title",
-    "Switch to AI reflow to use full translation",
-  );
+  await expect(translation).toHaveCount(0);
 });
 
 test("keeps the context-panel control pinned to the viewport edge", async ({

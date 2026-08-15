@@ -493,7 +493,6 @@
         "save": "保存指令",
         "title": "自定义翻译指令"
       },
-      "pdfUnavailable": "切换到 AI 重排后使用全文翻译",
       "showMarker": "显示译文标识",
       "status": {
         "complete": "当前论文的可翻译内容已完成",

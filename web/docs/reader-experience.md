@@ -164,8 +164,8 @@ display guessed content.
 
 Full translation is a toolbar action: a desktop popover and mobile bottom sheet
 own language, bilingual/translation-only presentation, reference opt-in,
-translation markers, and custom instructions. It is visible but disabled in PDF
-view. In reflow it observes semantic blocks in and near the viewport, streams at
+translation markers, and custom instructions. It is exposed only in AI reflow;
+PDF view does not render an unavailable translation action. In reflow it observes semantic blocks in and near the viewport, streams at
 most two translations concurrently, defaults to source followed by translation,
 and retries one failed block without resetting the document. Disabling it aborts
 in-flight browser work. The server's revisioned durable cache keys the repaired
@@ -424,7 +424,7 @@ the named `50 — Reader` states rather than inventing links:
 | AI reflow semantic structure  | `AcademicStructure`, `DegradedEvidence`                   |
 | AI reflow translation modes   | `Bilingual`, `TranslationOnly`, `Streaming`               |
 | AI reflow translation error   | `TranslationError`, `PartialFailure`                      |
-| AI reflow toolbar settings    | `DesktopPopover`, `PdfUnavailable`                        |
+| AI reflow toolbar settings    | `DesktopPopover`                                          |
 | AI reflow mobile/Dark         | `SmallMobile`, `LargeMobile`, `MobileBottomSheet`, `Dark` |
 
 The Project discussion stories deliberately show flat replies from two

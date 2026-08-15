@@ -20,16 +20,11 @@ import {
   SheetTitle,
   Switch,
   Textarea,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { TranslationIcon } from "@/design-system/icons/semantic-icons";
 import { cn } from "@/lib/utilities/cn";
 import { useDesktopReaderToolbar } from "../hooks/use-reader-layout";
-import type { ReaderDocumentView } from "../reader-types";
 import type { TranslationPreferences } from "./api";
 import { TranslationLanguageSelect } from "./reader-translation-panel";
 
@@ -199,7 +194,6 @@ export function ReaderFullTranslationControl({
   preferences,
   saving,
   status,
-  view,
 }: {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
@@ -209,22 +203,18 @@ export function ReaderFullTranslationControl({
   preferences?: TranslationPreferences;
   saving: boolean;
   status: FullTranslationStatus;
-  view: ReaderDocumentView;
 }) {
   const t = useTranslations("Reader.fullTranslation");
   const desktop = useDesktopReaderToolbar();
   const [open, setOpen] = React.useState(false);
-  const unavailable = view !== "reflow";
   const statusLabel = t(`status.${status}`);
   const trigger = (
     <Button
       aria-label={`${t("title")}: ${statusLabel}`}
       aria-pressed={enabled}
       className="relative gap-2 px-2.5"
-      disabled={unavailable}
-      onClick={unavailable ? undefined : () => setOpen(true)}
+      onClick={() => setOpen(true)}
       size="sm"
-      title={unavailable ? t("pdfUnavailable") : undefined}
       variant={enabled ? "secondary" : "ghost"}
     >
       <Icon glyph={TranslationIcon} size={20} />
@@ -241,21 +231,6 @@ export function ReaderFullTranslationControl({
       ) : null}
     </Button>
   );
-
-  if (unavailable) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex" tabIndex={0}>
-              {trigger}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{t("pdfUnavailable")}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
 
   const settings = (
     <TranslationSettings

@@ -23,7 +23,6 @@ const meta = {
     preferences,
     saving: false,
     status: "translating",
-    view: "reflow",
   },
   parameters: { layout: "centered" },
 } satisfies Meta<typeof ReaderFullTranslationControl>;
@@ -49,10 +48,6 @@ export const Completed: Story = {
 
 export const PartialFailure: Story = {
   args: { status: "partial" },
-};
-
-export const PdfUnavailable: Story = {
-  args: { enabled: false, status: "idle", view: "pdf" },
 };
 
 export const MobileBottomSheet: Story = {
