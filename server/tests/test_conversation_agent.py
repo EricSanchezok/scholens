@@ -75,7 +75,7 @@ def _catalog() -> ToolCatalog[Any]:
     return ToolCatalog(
         [
             ToolDefinition(
-                name="search_papers",
+                name="search_saved_papers",
                 description="Search the authorized paper collection.",
                 input_model=SearchInput,
                 execution=ToolExecutionKind.QUERY,
@@ -87,7 +87,7 @@ def _catalog() -> ToolCatalog[Any]:
         [
             ToolProfile(
                 name=CONVERSATION_TOOL_PROFILE,
-                tool_names=frozenset({"search_papers"}),
+                tool_names=frozenset({"search_saved_papers"}),
             )
         ],
     )
@@ -315,7 +315,7 @@ async def test_text_before_tool_is_completed_as_progress_before_activity() -> No
             yield "I will inspect the available research."
             yield {
                 0: DeltaToolCall(
-                    name="search_papers",
+                    name="search_saved_papers",
                     json_args='{"query":"reasoning compression"}',
                     tool_call_id="search-progress",
                 )
@@ -384,7 +384,7 @@ async def test_progress_is_bounded_without_breaking_the_final_answer() -> None:
             yield long_progress
             yield {
                 0: DeltaToolCall(
-                    name="search_papers",
+                    name="search_saved_papers",
                     json_args='{"query":"bounded progress"}',
                     tool_call_id="search-bounded",
                 )
@@ -429,7 +429,7 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
             yield f"[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]"
             yield {
                 0: DeltaToolCall(
-                    name="search_papers",
+                    name="search_saved_papers",
                     json_args='{"query":"hidden marker"}',
                     tool_call_id="search-hidden",
                 )
@@ -493,7 +493,7 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
         if not has_result:
             yield {
                 0: DeltaToolCall(
-                    name="search_papers",
+                    name="search_saved_papers",
                     json_args='{"query":"reasoning compression"}',
                     tool_call_id="search-1",
                 )
@@ -533,7 +533,9 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
             artifact_count=0,
         ),
     ]
-    assert dispatcher.calls == [("search_papers", {"query": "reasoning compression"})]
+    assert dispatcher.calls == [
+        ("search_saved_papers", {"query": "reasoning compression"})
+    ]
     assert _final_text(events) == "Grounded claim"
     references = next(
         ReferenceBundle.model_validate(event.references)
@@ -552,7 +554,7 @@ async def test_tool_failure_can_continue_to_a_natural_answer() -> None:
     dispatcher = _Dispatcher(fail=True)
     events = await _events(
         model=TestModel(
-            call_tools=["search_papers"],
+            call_tools=["search_saved_papers"],
             custom_output_text="I could not search, but here is what I can explain.",
         ),
         dispatcher=dispatcher,
@@ -584,7 +586,7 @@ async def test_multiple_tools_preserve_order_and_terminal_state() -> None:
             yield f"Research stage {sequence}."
             yield {
                 0: DeltaToolCall(
-                    name="search_papers",
+                    name="search_saved_papers",
                     json_args=f'{{"query":"topic {sequence}"}}',
                     tool_call_id=f"search-{sequence}",
                 )
@@ -650,7 +652,7 @@ async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
             sequence = result_count + 1
             yield {
                 0: DeltaToolCall(
-                    name="search_papers",
+                    name="search_saved_papers",
                     json_args='{"query":"same topic"}',
                     tool_call_id=f"search-{sequence}",
                 )
@@ -737,7 +739,7 @@ async def test_agent_enforces_maximum_tool_call_budget() -> None:
         )
         yield {
             0: DeltaToolCall(
-                name="search_papers",
+                name="search_saved_papers",
                 json_args=f'{{"query":"topic {result_count}"}}',
                 tool_call_id=f"search-{result_count}",
             )

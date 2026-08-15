@@ -121,6 +121,15 @@ status, revision, verification information, and a masked secret hint, never the
 credential. Scholight remains built in. The superseded connector CRUD surface
 and shared MinerU environment credential do not exist.
 
+Connector MCP tools retain the native names returned by their owning server;
+Scholens does not add provider prefixes or maintain aliases. Resolution is
+deterministic and rejects a later tool whose name is already reserved or exposed.
+The canonical Scholens tool `search_saved_papers` searches papers already
+accessible in the current Library, Project, or selected-paper context, while
+Scholight's native `search_papers` searches for external literature. This naming
+keeps stored-corpus retrieval distinct from discovery without introducing a
+second connector contract.
+
 Server encrypts integration credentials at rest with the deployment-owned
 `INTEGRATION_CREDENTIAL_ENCRYPTION_KEY`. A worker can decrypt nothing itself:
 only a signed request for a currently running, owner-scoped PDF or reflow job

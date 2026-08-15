@@ -238,6 +238,41 @@ async def test_resolver_is_read_gated_before_loading_credentials() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scholight_search_coexists_with_saved_paper_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver = ConnectorToolResolver(
+        credential_loader=lambda _actor: (),
+        settings=_ScholightSettings(),
+    )
+
+    async def discover(connection: object) -> list[dict[str, object]]:
+        assert connection.provider is IntegrationProvider.SCHOLIGHT  # type: ignore[attr-defined]
+        return [
+            {
+                "name": "search_papers",
+                "description": "Discover external academic papers.",
+                "parameters": {"type": "object"},
+            }
+        ]
+
+    monkeypatch.setattr(
+        "app.modules.integrations.connectors.infrastructure.mcp._list_declarations",
+        discover,
+    )
+
+    resolved = await resolver.resolve(
+        actor=_actor(),
+        permissions=frozenset({WorkspacePermission.READ}),
+        reserved_names={"search_saved_papers"},
+    )
+
+    assert [item["name"] for item in resolved.declarations] == ["search_papers"]
+    assert resolved.provider_for("search_papers") is IntegrationProvider.SCHOLIGHT
+    assert resolved.issues == ()
+
+
+@pytest.mark.asyncio
 async def test_resolver_isolates_failures_and_routes_by_bound_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -45,8 +45,10 @@ are documented in
 
 Scholight is an automatically authenticated built-in integration. AnySearch,
 Tavily, Exa, and Firecrawl are optional user-level connections. Their native MCP
-tool schemas are discovered dynamically; the runtime does not maintain a
-second capability map or provider-specific tool wrappers.
+tool schemas and names are discovered dynamically; the runtime does not maintain
+a second capability map, provider-specific tool wrappers, or renamed connector
+aliases. A connector tool whose native name conflicts with another exposed tool
+is omitted explicitly instead of overriding it.
 
 ## Start the Application
 
@@ -266,7 +268,10 @@ contracts described above.
 The response agent is one contextual Pydantic AI runtime with access to the
 authorized subset of the canonical workspace and connector tools:
 
-- `search_papers`
+- `search_saved_papers` for papers already accessible in the current Scholens
+  Library, Project, or selected paper context
+- connector-native discovery tools such as Scholight's `search_papers` for
+  finding external literature
 - `get_paper_abstract`
 - `search_paper_content`
 - `get_paper_content_range`

@@ -291,7 +291,8 @@ async def test_mcp_tool_list_uses_access_key_permission_snapshot() -> None:
             )
 
     tool_names = {tool["name"] for tool in response.json()["result"]["tools"]}
-    assert "search_papers" in tool_names
+    assert "search_saved_papers" in tool_names
+    assert "search_papers" not in tool_names
     assert "create_project" not in tool_names
     assert "delete_project" not in tool_names
     assert "finish_tool_use" not in tool_names
