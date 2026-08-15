@@ -439,15 +439,16 @@ export function ReaderToolbar({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
-            <ReaderFullTranslationControl
-              enabled={translation.enabled}
-              onEnabledChange={translation.onEnabledChange}
-              onPreferencesChange={translation.onPreferencesChange}
-              preferences={translation.preferences}
-              saving={translation.saving}
-              status={translation.status}
-              view={view}
-            />
+            {view === "reflow" ? (
+              <ReaderFullTranslationControl
+                enabled={translation.enabled}
+                onEnabledChange={translation.onEnabledChange}
+                onPreferencesChange={translation.onPreferencesChange}
+                preferences={translation.preferences}
+                saving={translation.saving}
+                status={translation.status}
+              />
+            ) : null}
             <IconButton
               className="hidden sm:inline-flex"
               label={labels.download}

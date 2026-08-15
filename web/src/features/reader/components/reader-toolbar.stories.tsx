@@ -88,6 +88,9 @@ export const Desktop: Story = {
     const toolbarBounds = toolbar.getBoundingClientRect();
     const toggleBounds = panelToggle.getBoundingClientRect();
 
+    await expect(
+      canvas.queryByRole("button", { name: /Full translation/ }),
+    ).not.toBeInTheDocument();
     await expect(toolbarBounds.right - toggleBounds.right).toBeLessThanOrEqual(
       16,
     );
@@ -116,6 +119,12 @@ export const OutlineVisible: Story = {
 
 export const Reflow: Story = {
   args: { view: "reflow" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("button", { name: /Full translation/ }),
+    ).toBeVisible();
+  },
 };
 
 export const ProjectContext: Story = {

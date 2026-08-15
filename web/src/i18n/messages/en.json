@@ -493,7 +493,6 @@
         "save": "Save instructions",
         "title": "Custom translation instructions"
       },
-      "pdfUnavailable": "Switch to AI reflow to use full translation",
       "showMarker": "Show translation marker",
       "status": {
         "complete": "All translatable content in this paper is complete",

@@ -43,6 +43,11 @@ from app.modules.translations.infrastructure.singleflight import (
     RedisTranslationSingleFlight,
 )
 from app.modules.translations.infrastructure.models import TranslationResult
+from app.modules.translations.infrastructure.provider import (
+    TRANSLATION_PROMPT_REVISION,
+    _translation_system_prompt,
+    _translation_user_content,
+)
 from app.shared.application import (
     Actor,
     CredentialKind,
@@ -247,6 +252,25 @@ def test_translation_normalization_and_cache_identity_are_deterministic() -> Non
         custom_instructions_hash=identity.custom_instructions_hash,
     )
     assert translation_identity_key(identity) != translation_identity_key(changed_title)
+
+
+def test_translation_provider_sends_only_the_exact_source_unit_to_the_model() -> None:
+    source_text = "Selected paragraph only.\n\nWith its original structure."
+    spec = TranslationStreamSpec(
+        paper_title="A title that is context, not source text",
+        source_text=source_text,
+        source_language="auto",
+        target_language="zh-CN",
+        custom_instructions="Preserve domain terms.",
+    )
+
+    assert TRANSLATION_PROMPT_REVISION == "academic-translation-v3"
+    assert spec.paper_title is not None
+    assert _translation_user_content(spec) == source_text
+    assert spec.paper_title not in _translation_user_content(spec)
+    assert '"source_text"' not in _translation_user_content(spec)
+    assert spec.paper_title not in _translation_system_prompt(spec)
+    assert "Preserve domain terms." in _translation_system_prompt(spec)
 
 
 def test_persistent_translation_results_never_store_source_text() -> None:
