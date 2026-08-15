@@ -240,7 +240,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
             }
             value={state.sort}
           >
-            <SelectTrigger aria-label={t("sort.label")} variant="quiet">
+            <SelectTrigger aria-label={t("sort.label")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

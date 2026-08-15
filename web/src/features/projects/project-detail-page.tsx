@@ -888,10 +888,7 @@ export function ProjectDetailWorkspace({
                     }
                     value={state.paperSort}
                   >
-                    <SelectTrigger
-                      aria-label={t("detail.papers.sortLabel")}
-                      variant="quiet"
-                    >
+                    <SelectTrigger aria-label={t("detail.papers.sortLabel")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -987,10 +984,7 @@ export function ProjectDetailWorkspace({
                     }
                     value={state.outputKinds[0] ?? "all"}
                   >
-                    <SelectTrigger
-                      aria-label={t("detail.outputs.kindLabel")}
-                      variant="quiet"
-                    >
+                    <SelectTrigger aria-label={t("detail.outputs.kindLabel")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1017,10 +1011,7 @@ export function ProjectDetailWorkspace({
                     }
                     value={state.outputSort}
                   >
-                    <SelectTrigger
-                      aria-label={t("detail.outputs.sortLabel")}
-                      variant="quiet"
-                    >
+                    <SelectTrigger aria-label={t("detail.outputs.sortLabel")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

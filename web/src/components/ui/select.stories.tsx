@@ -104,16 +104,12 @@ export const VisualVariants: Story = {
   render: () => (
     <div className="grid gap-5">
       <div className="grid gap-2">
-        <span className="text-caption text-secondary">Form field</span>
+        <span className="text-caption text-secondary">Default density</span>
         <LanguageSelect variant="field" />
       </div>
       <div className="grid gap-2">
-        <span className="text-caption text-secondary">Toolbar</span>
+        <span className="text-caption text-secondary">Compact density</span>
         <LanguageSelect variant="compact" />
-      </div>
-      <div className="grid gap-2">
-        <span className="text-caption text-secondary">Filter</span>
-        <LanguageSelect variant="quiet" />
       </div>
     </div>
   ),

@@ -206,7 +206,6 @@ export function OutputsView({
             <SelectTrigger
               aria-label={t("sort.label")}
               className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
-              variant="quiet"
             >
               <SelectValue />
             </SelectTrigger>

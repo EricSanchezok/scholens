@@ -18,9 +18,9 @@ Settings query parameter and preserves other workspace state.
 
 Desktop navigation uses 20 px semantic glyphs in fixed 24 px slots. The active
 row and its icon strengthen together on one quiet hover surface; inactive icons
-remain secondary. The narrow panel selector keeps the standard form-field
-Select treatment rather than adopting the compact toolbar or quiet filter
-variants.
+remain secondary. Settings selectors use the same light-line Select surface as
+Reader and collection sorting; only dense desktop toolbars opt into its compact
+height. Hover and open state never strengthen the resting border.
 
 The user menu is the sole shell entry point on desktop and mobile. It uses the
 same current-week billing query as Usage to show the live localized plan, Token

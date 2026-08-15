@@ -28,16 +28,12 @@ export const SelectValue = React.forwardRef<
 SelectValue.displayName = SelectPrimitive.Value.displayName;
 
 export const selectTriggerVariants = cva(
-  `group/select disabled:text-disabled flex w-full items-center justify-between gap-2 border px-3 text-sm transition-colors motion-reduce:transition-none disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-[var(--color-danger-border)] ${keyboardFocusRing}`,
+  `group/select border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border px-3 text-sm transition-colors motion-reduce:transition-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-subtle aria-invalid:border-[var(--color-danger-border)] ${keyboardFocusRing}`,
   {
     variants: {
       variant: {
-        field:
-          "border-line bg-surface h-11 rounded-[var(--radius-md)] hover:border-control data-[state=open]:border-control",
-        compact:
-          "border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle h-11 rounded-[var(--radius-lg)] sm:h-9",
-        quiet:
-          "bg-subtle hover:bg-hover data-[state=open]:bg-hover h-11 rounded-full border-transparent",
+        field: "h-11",
+        compact: "h-11 sm:h-9",
       },
     },
     defaultVariants: { variant: "field" },
