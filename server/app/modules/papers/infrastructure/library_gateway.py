@@ -36,6 +36,7 @@ from app.modules.papers.infrastructure.models import (
 from app.modules.papers.infrastructure.models import LibraryPaperTag
 from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.domain.enums import JobStatus
+from app.modules.jobs.application.failures import actionable_job_failure
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -121,7 +122,7 @@ def library_ingestion_response(
             "stage": stage,
             "project_id": job.project_id,
             "document_id": job.document_id,
-            "error_code": job.error_code,
+            "failure": actionable_job_failure(job.error_code),
             "created_at": job.created_at,
         }
     )

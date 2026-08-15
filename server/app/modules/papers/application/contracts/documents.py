@@ -13,6 +13,7 @@ from app.shared.domain.enums import (
 )
 from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.modules.research.application.contracts import ResearchItemResponse
+from app.modules.jobs.application.contracts import ActionableJobFailure
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -157,7 +158,7 @@ class LibraryPaperIngestionResponse(BaseModel):
     ]
     project_id: UUID | None
     document_id: UUID | None
-    error_code: str | None
+    failure: ActionableJobFailure | None = None
     created_at: datetime
 
 

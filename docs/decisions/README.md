@@ -50,6 +50,7 @@ change what the accepted record decided.
 - [ADR 0016: Lossless Reader reflow and lazy full translation](./0016-lossless-reader-reflow-and-lazy-translation.md)
 - [ADR 0017: Evidence-driven Reader reflow and controlled document translation](./0017-evidence-driven-reader-reflow.md)
 - [ADR 0018: Conversation prompts form durable selected branches](./0018-conversation-prompt-branches.md)
+- [ADR 0019: User-owned integration credentials and explicit AI reflow](./0019-user-owned-integration-credentials.md)
 
 ## Template
 

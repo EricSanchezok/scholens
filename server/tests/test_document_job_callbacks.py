@@ -62,6 +62,7 @@ def _actor() -> Actor:
             "paper_ingestion_metadata_failed",
         ),
         ("pdf_content_insufficient", "parsing", "pdf_content_insufficient"),
+        ("mineru_response_unsafe", "parsing", "mineru_response_unsafe"),
         (
             "provider leaked a private diagnostic",
             "indexing",
@@ -154,9 +155,6 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
             )
         ),
     )
-    ensure_reflow = MagicMock(return_value=uuid4())
-    monkeypatch.setattr(document_job_callbacks, "_ensure_reflow", ensure_reflow)
-
     citation = ResponseCitation(index=1, text="Supporting passage")
     result = PDFProcessingResult(
         success=True,
@@ -199,12 +197,6 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         "status": "webhook processed",
         "document_id": str(document_id),
     }
-    ensure_reflow.assert_called_once_with(
-        db,
-        actor=actor,
-        operation=operation,
-        document_id=document_id,
-    )
     assert all(
         not str(change.action).startswith("conversation.") for change in handled.changes
     )

@@ -90,29 +90,35 @@ the superseded names.
 
 ### Required for a minimal local stack
 
-| Variable                                                                                          | Where                                                  |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `DATABASE_URL`                                                                                    | server                                                 |
-| `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)        |
-| `MINERU_API_TOKEN`                                                                                | jobs                                                   |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                  |
-| `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`                                                      | server + jobs                                          |
-| `CELERY_API_URL`                                                                                  | server                                                 |
-| `WEBHOOK_BASE_URL`                                                                                | jobs                                                   |
-| `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                 |
-| `AUTH_ALIYUN_DM_ACCESS_KEY_ID`, `AUTH_ALIYUN_DM_ACCESS_KEY_SECRET`, `AUTH_ALIYUN_DM_ACCOUNT_NAME` | server; verification/reset mail                        |
-| `CLIENT_DOMAIN`                                                                                   | server canonical URL (`http://127.0.0.1:7300`)         |
-| `CLIENT_ALLOWED_ORIGINS`                                                                          | server (`http://127.0.0.1:7300,http://127.0.0.1:7303`) |
-| `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                    |
+| Variable                                                                                          | Where                                                     |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `DATABASE_URL`                                                                                    | server                                                    |
+| `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)           |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                     |
+| `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`                                                      | server + jobs                                             |
+| `CELERY_API_URL`                                                                                  | server                                                    |
+| `WEBHOOK_BASE_URL`                                                                                | jobs                                                      |
+| `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                    |
+| `AUTH_ALIYUN_DM_ACCESS_KEY_ID`, `AUTH_ALIYUN_DM_ACCESS_KEY_SECRET`, `AUTH_ALIYUN_DM_ACCOUNT_NAME` | server; verification/reset mail                           |
+| `CLIENT_DOMAIN`                                                                                   | server canonical URL (`http://127.0.0.1:7300`)            |
+| `CLIENT_ALLOWED_ORIGINS`                                                                          | server (`http://127.0.0.1:7300,http://127.0.0.1:7303`)    |
+| `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                       |
+| `NEXT_PUBLIC_ACCOUNT_CENTER_URL`                                                                  | web; shared Account Center link (`http://127.0.0.1:7100`) |
 
 MOSS Voice is required only for audio overviews. Zotero, Stripe, email, PostHog,
 and admin variables are grouped in the root `.env.example`.
+
+`NEXT_PUBLIC_ACCOUNT_CENTER_URL` is optional at runtime but must be set for the
+Settings → Account link to be actionable. When it is absent, Web renders an
+explicit unavailable state; it never guesses an Account Center host.
 
 Scholens discovers remote model tools through MCP. Scholight is the built-in
 provider: `SCHOLIGHT_MCP_URL` selects its fixed endpoint and
 `SCHOLIGHT_MCP_DELEGATION_JWT_SECRET` signs a fresh 60-second delegation for the
 current user. AnySearch, Tavily, Exa, and Firecrawl are connected per user in
-Settings; their encrypted API keys use `CONNECTOR_CREDENTIAL_ENCRYPTION_KEY`.
+Settings; MinerU is connected there as well. All user-owned credentials are
+encrypted with `INTEGRATION_CREDENTIAL_ENCRYPTION_KEY` and are released to a
+worker only for a claimed, owner-scoped job.
 
 **Jobs tip:** set `ZOTERO_SYNC_INTERVAL_SECONDS=60` in `jobs/.env` when testing Celery Beat locally.
 

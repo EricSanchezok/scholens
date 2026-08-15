@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
 import tempfile
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Awaitable, Callable, Literal
 
 from src.llm_client import llm_client
 from src.pdf.local import (
@@ -21,6 +22,7 @@ from src.pdf.local import (
 from src.pdf.mineru import MinerUClient, MinerUConfig
 from src.pdf.models import (
     LocalPDFAnalysis,
+    MinerUCredential,
     ParsedDocument,
     ParserConfigurationError,
     ParserContentError,
@@ -38,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 
 LOCAL_ENGINE_TIMEOUT_SECONDS = 120.0
+MinerUCredentialLoader = Callable[[], Awaitable[MinerUCredential]]
+MinerUOutcome = Callable[
+    [str, Literal["verified", "invalid", "failed"], str | None], None
+]
 
 
 async def _upload_preview(
@@ -107,16 +113,51 @@ async def _upload_mineru_archive(
 async def _parse_with_mineru(
     pdf_bytes: bytes,
     *,
-    data_id: str,
+    document_sha256: str,
+    purpose: str,
+    credential_loader: MinerUCredentialLoader | None,
+    outcome_callback: MinerUOutcome | None,
     status_callback: Callable[[str], None],
 ) -> ParsedDocument:
-    config = MinerUConfig.from_env()
-    if config is None:
-        raise ParserConfigurationError("MinerU is not configured")
+    if credential_loader is None:
+        raise ParserConfigurationError(
+            "A MinerU credential is required",
+            error_code="mineru_credential_required",
+        )
+    credential = await credential_loader()
+    config = MinerUConfig.from_runtime(token=credential.token)
+    checkpoint_scope = hashlib.sha256(
+        f"{purpose}:{document_sha256}:{credential.revision}".encode()
+    ).hexdigest()
     status_callback("Parsing scanned PDF with MinerU")
     client = MinerUClient(config)
     try:
-        return await client.parse_file(pdf_bytes, data_id=data_id)
+        parsed = await client.parse_file(pdf_bytes, data_id=checkpoint_scope)
+        if outcome_callback is not None:
+            outcome_callback(credential.revision, "verified", None)
+        try:
+            await client.state_store.clear(checkpoint_scope)
+        except ParserTransientError:
+            logger.warning("job.mineru.checkpoint.clear_failed", exc_info=True)
+        return parsed
+    except ParserConfigurationError as exc:
+        if outcome_callback is not None:
+            outcome_callback(credential.revision, "invalid", exc.error_code)
+        raise
+    except ParserError as exc:
+        if (
+            isinstance(exc, ParserContentError)
+            and exc.error_code == "pdf_content_insufficient"
+        ):
+            exc.error_code = "mineru_content_insufficient"
+        if outcome_callback is not None:
+            outcome_callback(credential.revision, "failed", exc.error_code)
+        if not isinstance(exc, ParserTransientError):
+            try:
+                await client.state_store.clear(checkpoint_scope)
+            except ParserTransientError:
+                logger.warning("job.mineru.checkpoint.clear_failed", exc_info=True)
+        raise
     finally:
         await client.close()
 
@@ -168,6 +209,8 @@ async def process_pdf_file(
     job_id: str,
     status_callback: Callable[[str], None],
     skip_metadata_extraction: bool = False,
+    mineru_credential_loader: MinerUCredentialLoader | None = None,
+    mineru_outcome_callback: MinerUOutcome | None = None,
 ) -> PDFProcessingResult:
     start_time = datetime.now(timezone.utc)
     document_sha256 = _document_sha256_from_source_key(s3_object_key)
@@ -178,14 +221,14 @@ async def process_pdf_file(
 
         if is_scanned_candidate(analysis):
             # A scanned PDF has no usable text layer; only MinerU OCR can help.
-            try:
-                document = await _parse_with_mineru(
-                    pdf_bytes,
-                    data_id=job_id,
-                    status_callback=status_callback,
-                )
-            except (ParserTransientError, ParserContentError) as exc:
-                raise ParserContentError("Scanned PDF requires MinerU") from exc
+            document = await _parse_with_mineru(
+                pdf_bytes,
+                document_sha256=document_sha256,
+                purpose="pdf-ingestion",
+                credential_loader=mineru_credential_loader,
+                outcome_callback=mineru_outcome_callback,
+                status_callback=status_callback,
+            )
         else:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
                 temp_file.write(pdf_bytes)
@@ -204,7 +247,10 @@ async def process_pdf_file(
                 try:
                     document = await _parse_with_mineru(
                         pdf_bytes,
-                        data_id=job_id,
+                        document_sha256=document_sha256,
+                        purpose="pdf-ingestion",
+                        credential_loader=mineru_credential_loader,
+                        outcome_callback=mineru_outcome_callback,
                         status_callback=status_callback,
                     )
                 except ParserSecurityError:
@@ -249,14 +295,14 @@ async def process_pdf_file(
             page_offset_map=document.page_offset_map,
             duration=(datetime.now(timezone.utc) - start_time).total_seconds(),
         )
-    except ParserContentError:
+    except ParserContentError as exc:
         logger.warning(
             "job.pdf_content.insufficient",
             extra={"job_id": job_id},
         )
         return PDFProcessingResult(
             success=False,
-            error="pdf_content_insufficient",
+            error=exc.error_code,
             job_id=job_id,
             duration=(datetime.now(timezone.utc) - start_time).total_seconds(),
         )

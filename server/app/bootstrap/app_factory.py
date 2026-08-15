@@ -13,7 +13,7 @@ from app.transport.http.public_v1.auth import (
     topics_router,
 )
 from app.transport.http.public_v1.access_keys import access_keys_router
-from app.transport.http.public_v1.connectors import connectors_router
+from app.transport.http.public_v1.integrations import integrations_router
 from app.transport.http.public_v1.conversations import conversation_router
 from app.transport.http.public_v1.document_uploads import document_upload_router
 from app.transport.http.public_v1.documents import (
@@ -70,7 +70,7 @@ from app.bootstrap.execution import (
     create_application_executor,
     create_billing_workflow,
     create_connector_tool_resolver,
-    create_connector_workflow,
+    create_integration_workflow,
     create_conversation_agent_runtime,
     create_conversation_chat,
     create_citation_workflow,
@@ -160,7 +160,7 @@ def _public_router() -> APIRouter:
         prefix="/me/access-keys",
         tags=["access-keys"],
     )
-    router.include_router(connectors_router, prefix="/me/connectors")
+    router.include_router(integrations_router, prefix="/me/integrations")
     router.include_router(zotero_router, prefix="/integrations/zotero")
     return router
 
@@ -192,7 +192,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         settings=runtime_settings,
     )
     application.state.connector_tool_resolver = connector_tool_resolver
-    application.state.connector_workflow = create_connector_workflow(
+    application.state.integration_workflow = create_integration_workflow(
         executor=executor,
         resolver=connector_tool_resolver,
     )

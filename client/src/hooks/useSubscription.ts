@@ -44,9 +44,9 @@ export const useSubscription = (): UseSubscriptionReturn => {
 // Helper functions for common subscription checks
 export const getStorageUsagePercentage = (subscription: SubscriptionData | null): number => {
     if (!subscription) return 0;
-    const total = subscription.limits.knowledge_base_size;
+    const total = subscription.limits.knowledge_base_size_kb;
     if (total === 0) return 0;
-    return (subscription.usage.knowledge_base_size / total) * 100;
+    return (subscription.usage.knowledge_base_size_kb / total) * 100;
 };
 
 export const isStorageNearLimit = (subscription: SubscriptionData | null, threshold: number = 75): boolean => {

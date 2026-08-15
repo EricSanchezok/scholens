@@ -30,7 +30,7 @@ function accepted(id: string, displayName: string): Ingestion {
     created_at: "2026-08-12T02:00:00Z",
     display_name: displayName,
     document_id: "00000000-0000-4000-8000-000000000099",
-    error_code: null,
+    failure: null,
     id,
     project_id: null,
     source_kind: "upload",

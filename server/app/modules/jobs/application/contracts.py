@@ -10,11 +10,38 @@ from app.shared.domain import JsonValue
 from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.modules.papers.application.contracts.extraction import PaperMetadataExtraction
 from app.modules.papers.application.contracts.extraction import DataTableRow
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 
 class JobClaimResponse(BaseModel):
     claimed: bool
+
+
+class JobIntegrationCredentialResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    credential: SecretStr
+    credential_revision: UUID
+
+    @field_serializer("credential", when_used="json")
+    def serialize_credential(self, credential: SecretStr) -> str:
+        return credential.get_secret_value()
+
+
+class ActionableJobFailure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1, max_length=128)
+    retryable: bool
+    required_integration: Literal["mineru"] | None = None
 
 
 class JobProgressRequest(BaseModel):
@@ -63,6 +90,15 @@ class TokenUsageEventPayload(BaseModel):
     status: str = Field(default="settled", pattern="^(settled|unknown)$")
 
 
+class IntegrationUseEventPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["mineru"]
+    credential_revision: UUID
+    outcome: Literal["verified", "invalid", "failed"]
+    error_code: str | None = Field(default=None, min_length=1, max_length=128)
+
+
 class PDFProcessingResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -106,6 +142,7 @@ class PdfProcessingWebhookData(BaseModel):
     result: PDFProcessingResult
     error: str | None = None
     usage_events: list[TokenUsageEventPayload] = Field(default_factory=list)
+    integration_events: list[IntegrationUseEventPayload] = Field(default_factory=list)
 
 
 class JobResponse(BaseModel):
@@ -294,6 +331,8 @@ class DocumentReflowTaskPayload(BaseModel):
     document_id: UUID
     title: str = Field(min_length=1, max_length=1_000)
     pdf_s3_key: str = Field(min_length=1, max_length=1_024)
+    mineru_archive_s3_key: str | None = Field(default=None, max_length=1_024)
+    mineru_archive_parser_revision: str | None = Field(default=None, max_length=160)
 
 
 class ReflowSourceSpanPayload(BaseModel):
@@ -352,6 +391,7 @@ class DocumentReflowWebhookData(BaseModel):
     result: DocumentReflowResultPayload | None = None
     error: str | None = None
     usage_events: list[TokenUsageEventPayload] = Field(default_factory=list)
+    integration_events: list[IntegrationUseEventPayload] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_state(self) -> "DocumentReflowWebhookData":

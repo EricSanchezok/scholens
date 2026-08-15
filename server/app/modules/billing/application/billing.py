@@ -19,6 +19,7 @@ from app.modules.billing.application.contracts import (
     SubscriptionResponse,
     SubscriptionSummary,
     UsageResponse,
+    UsagePeriod,
 )
 from app.modules.billing.application.ports import (
     ProviderCheckoutSession,
@@ -379,8 +380,8 @@ class Billing:
             backend_subscription_status=backend_status,
         )
 
-    def get_usage(self, actor: Actor) -> UsageResponse:
-        return self._usage.read(actor)
+    def get_usage(self, actor: Actor, period: UsagePeriod) -> UsageResponse:
+        return self._usage.read(actor, period)
 
     def webhook_owner_id(
         self,

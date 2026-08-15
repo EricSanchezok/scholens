@@ -442,15 +442,12 @@ def test_mutation_status_and_idempotency_contracts_are_stable() -> None:
         "/api/v1/integrations/zotero/imports",
         "/api/v1/integrations/zotero/sync-runs",
         "/api/v1/papers/{document_id}/audio-overviews",
-        "/api/v1/papers/{document_id}/reflow/retries",
+        "/api/v1/papers/{document_id}/reflow/attempts",
         "/api/v1/projects/{project_id}/audio-overviews",
         "/api/v1/projects/{project_id}/data-tables",
     }
     idempotent_mutations = async_mutations - {
         "/api/v1/integrations/zotero/sync-runs",
-        # Reflow retry is state-idempotent: only a failed artifact can enqueue,
-        # and subsequent requests return its active durable job.
-        "/api/v1/papers/{document_id}/reflow/retries",
     }
     created_resources = {
         "/api/v1/conversations",

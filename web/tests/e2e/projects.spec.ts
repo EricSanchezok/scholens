@@ -8,6 +8,7 @@ import {
   projectOutputFixtures,
   projectPaperFixtures,
 } from "../../src/features/projects/api/fixtures";
+import { mockBillingUsage } from "./billing-fixture";
 
 const apiPattern = "**/api/v1";
 const actor = {
@@ -23,6 +24,7 @@ const actor = {
 };
 
 async function mockProjects(page: Page) {
+  await mockBillingUsage(page);
   let activeProject = projectFixtures[0]!;
   let paperRemoved = false;
   await page.route(`${apiPattern}/auth/refresh`, (route) =>

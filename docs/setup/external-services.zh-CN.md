@@ -107,10 +107,12 @@ DirectMail 请求结果。不要把密钥写入 `web/.env.local`、截图、Issu
 1. 打开 [MinerU](https://mineru.net/) 并注册或登录。
 2. 进入 [API Token 页面](https://mineru.net/apiManage/token) 创建 Token。
 3. 在 [API 文档](https://mineru.net/apiManage/docs) 中确认异步解析接口及当前限制。
-4. 将 Token 写入 `jobs/.env`：
+4. 登录 Scholens，在 Settings → Connections → MinerU 中粘贴 Token。Token
+   由 Server 加密保存，只会在 PDF 或 AI 重排任务成功 claim 后，按任务临时交给 Worker。
+
+`jobs/.env` 只保留非敏感运行参数：
 
 ```dotenv
-MINERU_API_TOKEN=
 MINERU_API_BASE_URL=https://mineru.net/api/v4
 MINERU_MODEL_VERSION=vlm
 ```
@@ -118,7 +120,7 @@ MINERU_MODEL_VERSION=vlm
 Scholens Jobs 采用本地优先的解析策略：数字版 PDF（文本层完好的 arXiv/期刊论文）
 由 `pymupdf4llm` 在本地解析（失败时尝试 `markitdown`），文档内容不会离开服务器。
 MinerU 仅用于扫描件（文本层不足或只有重复水印的 PDF），以及本地解析失败时的
-救援路径；它会收到一个短期 S3 签名 URL，轮询解析结果，并将 Markdown 与解析 ZIP
+救援路径；Worker 会通过 MinerU 的短期上传地址发送 PDF、轮询解析结果，并将 Markdown 与解析 ZIP
 重新保存到自己的 S3。真实论文会离开 AWS 边界并交给 MinerU 处理，因此在上传敏感
 或未公开论文前，需要确认其隐私条款和数据保留政策。
 

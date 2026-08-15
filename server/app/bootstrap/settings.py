@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PUBLIC_API_PREFIX = "/api/v1"
 WEBHOOK_API_PREFIX = "/webhooks/v1"
 INTERNAL_API_PREFIX = "/internal/v1"
-_DEVELOPMENT_CONNECTOR_KEY = "ZGV2ZWxvcG1lbnQtY29ubmVjdG9yLWtleS0zMiEhISE="
+_DEVELOPMENT_INTEGRATION_KEY = "ZGV2ZWxvcG1lbnQtaW50ZWdyYXRpb24ta2V5LTMyISE="
 
 
 class AppSettings(BaseSettings):
@@ -31,7 +31,7 @@ class AppSettings(BaseSettings):
         min_length=32,
     )
     ai_limit_redis_url: str | None = None
-    connector_credential_encryption_key: str = _DEVELOPMENT_CONNECTOR_KEY
+    integration_credential_encryption_key: str = _DEVELOPMENT_INTEGRATION_KEY
     scholight_mcp_url: str = "https://scholight.sanchezcloud.net/api/mcp"
     scholight_mcp_delegation_jwt_secret: str | None = None
 
@@ -45,16 +45,16 @@ class AppSettings(BaseSettings):
     @model_validator(mode="after")
     def reject_development_secrets_in_production(self) -> AppSettings:
         try:
-            connector_key = base64.urlsafe_b64decode(
-                self.connector_credential_encryption_key.encode()
+            integration_key = base64.urlsafe_b64decode(
+                self.integration_credential_encryption_key.encode()
             )
         except Exception as exc:
             raise ValueError(
-                "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY must be URL-safe base64"
+                "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY must be URL-safe base64"
             ) from exc
-        if len(connector_key) != 32:
+        if len(integration_key) != 32:
             raise ValueError(
-                "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes"
+                "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes"
             )
         if (
             self.environment.casefold() == "production"
@@ -64,10 +64,11 @@ class AppSettings(BaseSettings):
             raise ValueError("PAPER_SEARCH_CURSOR_SECRET is required in production")
         if (
             self.environment.casefold() == "production"
-            and self.connector_credential_encryption_key == _DEVELOPMENT_CONNECTOR_KEY
+            and self.integration_credential_encryption_key
+            == _DEVELOPMENT_INTEGRATION_KEY
         ):
             raise ValueError(
-                "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY is required in production"
+                "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY is required in production"
             )
         if self.environment.casefold() == "production" and (
             self.scholight_mcp_delegation_jwt_secret is None

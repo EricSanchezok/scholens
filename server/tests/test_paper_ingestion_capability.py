@@ -54,7 +54,7 @@ def _accepted(*, replayed: bool = False) -> AcceptedIngestion:
                 "stage": "queued",
                 "project_id": None,
                 "document_id": uuid4(),
-                "error_code": None,
+                "failure": None,
                 "created_at": "2026-08-12T00:00:00Z",
             }
         ),

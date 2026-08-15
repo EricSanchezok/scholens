@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from app.modules.jobs.application.contracts import (
     JobClaimResponse,
     JobFailureCallback,
+    IntegrationUseEventPayload,
     TokenUsageEventPayload,
 )
 from app.modules.jobs.application.actions import (
@@ -41,6 +43,15 @@ class JobLifecyclePort(Protocol):
     def progress(self, *, job_id: UUID, progress_code: str) -> bool: ...
 
     def fail(self, *, job_id: UUID, error_code: str) -> bool: ...
+
+    def credential_scope(self, *, job_id: UUID) -> JobCredentialScope: ...
+
+
+@dataclass(frozen=True, slots=True)
+class JobCredentialScope:
+    requested_by_id: int
+    operation: JobOperation
+    status: JobStatus
 
 
 class JobCompletionHandler(Protocol):
@@ -146,11 +157,16 @@ class JobCallbacks:
         handlers: dict[JobOperation, RegisteredJobCallback],
         schedules: ScheduledJobPort,
         journal: OperationJournal,
+        record_integration_outcome: Callable[
+            [Actor, OperationContext, IntegrationUseEventPayload], bool
+        ]
+        | None = None,
     ) -> None:
         self._lifecycle = lifecycle
         self._handlers = handlers
         self._schedules = schedules
         self._journal = journal
+        self._record_integration_outcome = record_integration_outcome
 
     def claim(self, *, job_id: UUID) -> JobClaimResponse:
         return JobClaimResponse(claimed=self._lifecycle.claim(job_id=job_id))
@@ -165,6 +181,25 @@ class JobCallbacks:
                 progress_code=progress_code,
             )
         )
+
+    def integration_credential_scope(self, *, job_id: UUID) -> JobCredentialScope:
+        scope = self._lifecycle.credential_scope(job_id=job_id)
+        if scope.operation not in {
+            JobOperation.PDF_PROCESS,
+            JobOperation.DOCUMENT_REFLOW,
+        }:
+            raise AppError(
+                code="job_integration_credential_forbidden",
+                message="This job cannot access integration credentials",
+                kind=FailureKind.PERMISSION_DENIED,
+            )
+        if scope.status is not JobStatus.RUNNING:
+            raise AppError(
+                code="job_not_running",
+                message="Integration credentials are available only to a running job",
+                kind=FailureKind.CONFLICT,
+            )
+        return scope
 
     async def complete(
         self,
@@ -186,6 +221,12 @@ class JobCallbacks:
             job_id=job_id,
             callback=callback,
         )
+        integration_events = getattr(callback, "integration_events", ())
+        if integration_events:
+            if actor is None or self._record_integration_outcome is None:
+                raise RuntimeError("job_integration_outcome_recorder_missing")
+            for event in integration_events:
+                self._record_integration_outcome(actor, operation, event)
         return self._record_completion(
             actor=actor,
             operation=operation,

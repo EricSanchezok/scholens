@@ -1,5 +1,6 @@
 export const semanticIcons = {
   AddAnnotationIcon: "Notes",
+  AccountIcon: "User",
   AddIcon: "Plus",
   AskIcon: "ChatBubbleQuestion",
   AudioIcon: "Headset",
@@ -11,6 +12,8 @@ export const semanticIcons = {
   CommentIcon: "ChatBubble",
   CopyIcon: "Copy",
   DataTableIcon: "TableRows",
+  IntegrationIcon: "Network",
+  KeyIcon: "Key",
   DeleteIcon: "Trash",
   DismissIcon: "Xmark",
   DocumentIcon: "Page",
@@ -49,6 +52,7 @@ export const semanticIcons = {
   SuccessIcon: "CheckCircle",
   TagIcon: "Label",
   TranslationIcon: "Translate",
+  UsageIcon: "StatsUpSquare",
   UploadIcon: "Upload",
   WarningIcon: "WarningTriangle",
   WorkspaceActionIcon: "TaskList",
@@ -58,6 +62,7 @@ export const semanticIcons = {
 
 export {
   Notes as AddAnnotationIcon,
+  User as AccountIcon,
   Plus as AddIcon,
   ChatBubbleQuestion as AskIcon,
   Headset as AudioIcon,
@@ -69,6 +74,8 @@ export {
   ChatBubble as CommentIcon,
   Copy as CopyIcon,
   TableRows as DataTableIcon,
+  Network as IntegrationIcon,
+  Key as KeyIcon,
   Trash as DeleteIcon,
   Xmark as DismissIcon,
   Page as DocumentIcon,
@@ -107,6 +114,7 @@ export {
   CheckCircle as SuccessIcon,
   Label as TagIcon,
   Translate as TranslationIcon,
+  StatsUpSquare as UsageIcon,
   Upload as UploadIcon,
   WarningTriangle as WarningIcon,
   TaskList as WorkspaceActionIcon,

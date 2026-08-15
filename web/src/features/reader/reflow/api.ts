@@ -74,12 +74,18 @@ export const reflowQueries = {
     }),
 };
 
-export async function retryDocumentReflow(documentId: string) {
+export async function requestDocumentReflowAttempt(
+  documentId: string,
+  idempotencyKey: string,
+) {
   const { data } = await apiClient.POST(
-    "/api/v1/papers/{document_id}/reflow/retries",
-    { params: { path: { document_id: documentId } } },
+    "/api/v1/papers/{document_id}/reflow/attempts",
+    {
+      headers: { "idempotency-key": idempotencyKey },
+      params: { path: { document_id: documentId } },
+    },
   );
-  if (!data) throw new Error("Document reflow retry response was empty");
+  if (!data) throw new Error("Document reflow attempt response was empty");
   return data;
 }
 

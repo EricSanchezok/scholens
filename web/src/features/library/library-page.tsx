@@ -20,6 +20,8 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
+import { integrationQueries } from "@/features/integrations";
+import { useSettingsNavigation } from "@/features/settings";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
   createLibraryTag,
@@ -85,6 +87,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const toast = useToast();
   const t = useTranslations("Library");
   const { signOut } = useAuthSession();
+  const { setSection: setSettingsSection } = useSettingsNavigation();
   const parsed = React.useMemo(
     () => parseLibrarySearch(new URLSearchParams(searchParams.toString())),
     [searchParams],
@@ -92,6 +95,18 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [pendingMineruRetry, setPendingMineruRetry] = React.useState<string>();
+  const resumingMineruRetry = React.useRef(false);
+  const runAction = React.useCallback(
+    async (action: () => Promise<unknown>) => {
+      try {
+        await action();
+      } catch {
+        toast.notify({ title: t("common.actionFailed") });
+      }
+    },
+    [t, toast],
+  );
 
   const replaceSearch = React.useCallback(
     (patch: Partial<LibrarySearchState>) => {
@@ -134,6 +149,34 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       if (parsed.cursor) replaceSearch({ cursor: undefined });
     },
   });
+  const integrations = useQuery({
+    ...integrationQueries.current(),
+    enabled: Boolean(pendingMineruRetry),
+  });
+  const mineru = integrations.data?.items.find(
+    (integration) => integration.provider === "mineru",
+  );
+  React.useEffect(() => {
+    if (
+      pendingMineruRetry &&
+      !resumingMineruRetry.current &&
+      mineru?.enabled &&
+      ["connected", "connected_unverified"].includes(mineru.state)
+    ) {
+      const ingestionId = pendingMineruRetry;
+      resumingMineruRetry.current = true;
+      void runAction(() => ingestion.retry(ingestionId)).finally(() => {
+        resumingMineruRetry.current = false;
+        setPendingMineruRetry(undefined);
+      });
+    }
+  }, [
+    ingestion,
+    mineru?.enabled,
+    mineru?.state,
+    pendingMineruRetry,
+    runAction,
+  ]);
   const removeMutation = useMutation({
     mutationFn: removeLibraryPapers,
     onSuccess: async () => {
@@ -194,14 +237,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       ]);
     },
   });
-
-  async function runAction(action: () => Promise<unknown>) {
-    try {
-      await action();
-    } catch {
-      toast.notify({ title: t("common.actionFailed") });
-    }
-  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -333,7 +368,15 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 runAction(() => removeMutation.mutateAsync(documentIds))
               }
               onRetryIngestion={(id) =>
-                void runAction(() => ingestion.retry(id))
+                (() => {
+                  const row = ingestion.rows.find((item) => item.id === id);
+                  if (row?.requiredIntegration === "mineru") {
+                    setPendingMineruRetry(id);
+                    setSettingsSection("connections");
+                    return;
+                  }
+                  void runAction(() => ingestion.retry(id));
+                })()
               }
               onRetryLoad={() => void papersQuery.refetch()}
               onSortChange={(sort: PaperSort) =>

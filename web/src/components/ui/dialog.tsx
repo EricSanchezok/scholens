@@ -15,6 +15,8 @@ const contentClass =
   "border-line bg-elevated shadow-modal fixed top-1/2 left-1/2 z-[80] flex max-h-[min(88dvh,46rem)] w-[min(92vw,36rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-xl)] border p-0";
 const responsiveBottomContentClass =
   "border-line bg-elevated shadow-modal fixed inset-x-0 bottom-0 z-[80] flex max-h-[calc(100dvh-max(env(safe-area-inset-top),1rem))] w-full flex-col overflow-hidden rounded-t-[var(--radius-xl)] border border-b-0 p-0 lg:top-1/2 lg:left-1/2 lg:bottom-auto lg:max-h-[min(82dvh,46rem)] lg:w-[min(92vw,36rem)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-[var(--radius-xl)] lg:border";
+const responsiveFullContentClass =
+  "border-line bg-elevated shadow-modal fixed inset-0 z-[80] flex h-dvh w-full flex-col overflow-hidden p-0 lg:inset-auto lg:top-1/2 lg:left-1/2 lg:h-[min(90dvh,47.5rem)] lg:w-[min(94vw,70rem)] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-[var(--radius-xl)] lg:border";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
@@ -90,7 +92,7 @@ export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     closeLabel: string;
-    placement?: "center" | "responsive-bottom";
+    placement?: "center" | "responsive-bottom" | "responsive-full";
   }
 >(
   (
@@ -106,7 +108,9 @@ export const DialogContent = React.forwardRef<
         className={cn(
           placement === "responsive-bottom"
             ? responsiveBottomContentClass
-            : contentClass,
+            : placement === "responsive-full"
+              ? responsiveFullContentClass
+              : contentClass,
           className,
         )}
         data-slot="dialog-content"

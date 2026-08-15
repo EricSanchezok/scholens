@@ -123,10 +123,11 @@ from app.modules.access_keys.infrastructure import (
     SecureAccessKeySecrets,
     SqlAlchemyAccessKeyGateway,
 )
-from app.modules.integrations.connectors.application import Connectors
-from app.modules.integrations.connectors.infrastructure import (
-    AesGcmConnectorCredentialCipher,
-    SqlAlchemyConnectorGateway,
+from app.modules.integrations.connections.application import Integrations
+from app.modules.integrations.connections.domain import IntegrationProvider
+from app.modules.integrations.connections.infrastructure import (
+    AesGcmIntegrationCredentialCipher,
+    SqlAlchemyIntegrationGateway,
 )
 from app.modules.operation_journal.application import OperationJournal
 from app.shared.infrastructure import SystemClock
@@ -145,6 +146,7 @@ from app.modules.translations.infrastructure.entitlements import (
     SqlTranslationEntitlements,
 )
 from app.modules.reflows.application import DocumentReflows
+from app.modules.reflows.application.reflows import ReflowIntegrationAccess
 from app.bootstrap.adapters.document_reflow import SqlDocumentReflowGateway
 from app.bootstrap.adapters.zotero_gateway import (
     DefaultZoteroGateway,
@@ -334,12 +336,15 @@ def build_paper_details(*, db: Session) -> GetPaperDetails:
 
 
 def build_document_reflows(
-    *, db: Session, journal: OperationJournal
+    *,
+    db: Session,
+    journal: OperationJournal,
+    require_mineru: ReflowIntegrationAccess,
 ) -> DocumentReflows:
     return DocumentReflows(
         access=build_paper_details(db=db),
         gateway=SqlDocumentReflowGateway(db),
-        entitlements=SqlTranslationEntitlements(db),
+        require_mineru=require_mineru,
         journal=journal,
     )
 
@@ -403,6 +408,7 @@ def build_job_callbacks(
     *,
     db: Session,
     journal: OperationJournal,
+    integrations: Integrations,
 ) -> JobCallbacks:
     # Callback adapters touch several domain modules and are loaded only by
     # the internal callback transport, avoiding composition-root import cycles.
@@ -455,6 +461,16 @@ def build_job_callbacks(
         },
         schedules=ZoteroSyncSchedule(db),
         journal=journal,
+        record_integration_outcome=lambda actor, operation, event: (
+            integrations.record_outcome(
+                actor=actor,
+                operation=operation,
+                provider=IntegrationProvider(event.provider),
+                credential_revision=event.credential_revision,
+                outcome=event.outcome,
+                error_code=event.error_code,
+            )
+        ),
     )
 
 
@@ -556,16 +572,16 @@ def build_access_keys(
     )
 
 
-def build_connectors(
+def build_integrations(
     *,
     db: Session,
     credential_encryption_key: str,
     scholight_configured: bool,
     journal: OperationJournal,
-) -> Connectors:
-    return Connectors(
-        gateway=SqlAlchemyConnectorGateway(db),
-        cipher=AesGcmConnectorCredentialCipher(credential_encryption_key),
+) -> Integrations:
+    return Integrations(
+        gateway=SqlAlchemyIntegrationGateway(db),
+        cipher=AesGcmIntegrationCredentialCipher(credential_encryption_key),
         clock=SystemClock(),
         journal=journal,
         scholight_configured=scholight_configured,

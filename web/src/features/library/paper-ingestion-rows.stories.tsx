@@ -25,6 +25,7 @@ function row(
     displayName: `${stage.replaceAll("_", "-")}.pdf`,
     errorCode,
     id: `${state}-${stage}`,
+    retryable: true,
     sourceKind: "upload",
     stage,
     state,
@@ -160,6 +161,68 @@ export const Failed: Story = {
     ).toBeVisible();
     await expect(
       canvas.getAllByRole("button", { name: "Remove failed import" })[0],
+    ).toBeVisible();
+  },
+};
+
+export const MinerUClassifiedFailures: Story = {
+  args: {
+    attentionCount: 6,
+    ingestions: [
+      {
+        ...row("failed", "parsing", "mineru_credential_required"),
+        displayName: "credential-required.pdf",
+        id: "mineru-credential-required",
+        requiredIntegration: "mineru",
+      },
+      {
+        ...row("failed", "parsing", "mineru_credential_invalid"),
+        displayName: "credential-invalid.pdf",
+        id: "mineru-credential-invalid",
+        requiredIntegration: "mineru",
+      },
+      {
+        ...row("failed", "parsing", "mineru_rate_limited"),
+        displayName: "rate-limited.pdf",
+        id: "mineru-rate-limited",
+      },
+      {
+        ...row("failed", "parsing", "mineru_unavailable"),
+        displayName: "unavailable.pdf",
+        id: "mineru-unavailable",
+      },
+      {
+        ...row("failed", "parsing", "mineru_content_insufficient"),
+        displayName: "content-insufficient.pdf",
+        id: "mineru-content-insufficient",
+        retryable: false,
+      },
+      {
+        ...row("failed", "parsing", "mineru_response_unsafe"),
+        displayName: "unsafe-response.pdf",
+        id: "mineru-response-unsafe",
+        retryable: false,
+      },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const copies = [
+      "This scanned PDF needs your MinerU token before processing can continue.",
+      "Your MinerU token is no longer valid. Replace it in Settings and retry.",
+      "MinerU is rate limiting requests. Retry after a short wait.",
+      "MinerU is temporarily unavailable. The source and checkpoint are preserved for retry.",
+      "MinerU could not recover enough reliable content from this PDF.",
+      "MinerU returned an unsafe or invalid archive. Processing stopped without using it.",
+    ];
+    for (const copy of copies) {
+      const matches = await canvas.findAllByText(copy);
+      await expect(
+        matches.some((element) => element.getClientRects().length > 0),
+      ).toBe(true);
+    }
+    await expect(
+      canvas.getAllByRole("button", { name: "Connect MinerU" })[0],
     ).toBeVisible();
   },
 };

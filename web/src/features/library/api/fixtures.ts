@@ -279,7 +279,7 @@ export const processingIngestion: LibraryPaperIngestion = {
   created_at: now,
   document_id: null,
   display_name: "agentic-systems.pdf",
-  error_code: null,
+  failure: null,
   id: "75000000-0000-4000-8000-000000000001",
   project_id: null,
   source_kind: "upload",
@@ -290,7 +290,11 @@ export const processingIngestion: LibraryPaperIngestion = {
 export const failedIngestion: LibraryPaperIngestion = {
   ...processingIngestion,
   display_name: "encrypted-paper.pdf",
-  error_code: "paper_source_pdf_unavailable",
+  failure: {
+    code: "paper_source_pdf_unavailable",
+    required_integration: null,
+    retryable: true,
+  },
   id: "75000000-0000-4000-8000-000000000002",
   stage: "queued",
   state: "failed",

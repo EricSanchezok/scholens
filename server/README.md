@@ -43,8 +43,8 @@ resource semantics, transaction ownership, and the replaceable search boundary
 are documented in
 [`../docs/architecture/backend-capabilities.md`](../docs/architecture/backend-capabilities.md).
 
-Scholight is an automatically authenticated built-in connector. AnySearch,
-Tavily, Exa, and Firecrawl are optional user-level connectors. Their native MCP
+Scholight is an automatically authenticated built-in integration. AnySearch,
+Tavily, Exa, and Firecrawl are optional user-level connections. Their native MCP
 tool schemas are discovered dynamically; the runtime does not maintain a
 second capability map or provider-specific tool wrappers.
 
@@ -106,18 +106,21 @@ the source hash and translated result, and uses Redis only for capacity and
 single-flight coordination. A durable result hit does not consume Token Credits
 or provider capacity.
 
-Document reflow is exposed at `GET /api/v1/papers/{document_id}/reflow`; only a
-failed artifact may be retried with
-`POST /api/v1/papers/{document_id}/reflow/retries`. PDF completion schedules a
-separate DurableJob and outbox dispatch, but reflow scheduling or execution
-failure never changes the successful PDF processing state. Callback completion
+Document reflow is exposed at `GET /api/v1/papers/{document_id}/reflow` and is
+requested explicitly with `POST /api/v1/papers/{document_id}/reflow/attempts`.
+An active or completed artifact is returned without requiring MinerU; a new or
+failed attempt requires the user's enabled MinerU connection. PDF completion
+never schedules reflow, and reflow failure never changes the successful PDF
+processing state. Callback completion
 persists blocks and derived assets only after source fingerprint, ordered source
 spans, asset references, and page coordinates validate.
 `GET /api/v1/papers/{document_id}/reflow/assets/{asset_id}/url` authorizes the
 paper again before returning a short-lived derived-asset URL; object keys remain
 private. Reflow is an evidence-bound reading reconstruction over MinerU's
 stable structured output, not another metadata authority or a whole-document
-model rewrite.
+model rewrite. Jobs obtains the user-owned token only after claiming an
+eligible job; callback outcomes are revision-bound so a late attempt cannot
+invalidate a replacement credential.
 
 Conversation turns are created at
 `POST /api/v1/conversations/{conversation_id}/turns`; retrying the active branch

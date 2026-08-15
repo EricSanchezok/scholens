@@ -1,27 +1,27 @@
-"""Authenticated encryption for third-party Connector API keys."""
+"""Authenticated encryption for user-owned integration credentials."""
 
 from __future__ import annotations
 
 import base64
 import os
 
-from app.modules.integrations.connectors.domain import ConnectorProvider
+from app.modules.integrations.connections.domain import IntegrationProvider
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _VERSION = "v1"
 
 
-class AesGcmConnectorCredentialCipher:
+class AesGcmIntegrationCredentialCipher:
     def __init__(self, encoded_key: str) -> None:
         try:
             key = base64.urlsafe_b64decode(encoded_key.encode())
         except Exception as exc:
             raise ValueError(
-                "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY must be URL-safe base64"
+                "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY must be URL-safe base64"
             ) from exc
         if len(key) != 32:
             raise ValueError(
-                "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes"
+                "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY must decode to 32 bytes"
             )
         self._cipher = AESGCM(key)
 
@@ -29,7 +29,7 @@ class AesGcmConnectorCredentialCipher:
         self,
         *,
         user_id: int,
-        provider: ConnectorProvider,
+        provider: IntegrationProvider,
         plaintext: str,
     ) -> str:
         nonce = os.urandom(12)
@@ -45,7 +45,7 @@ class AesGcmConnectorCredentialCipher:
         self,
         *,
         user_id: int,
-        provider: ConnectorProvider,
+        provider: IntegrationProvider,
         ciphertext: str,
     ) -> str:
         try:
@@ -60,8 +60,8 @@ class AesGcmConnectorCredentialCipher:
                 _aad(user_id, provider),
             ).decode()
         except Exception as exc:
-            raise ValueError("connector credential decryption failed") from exc
+            raise ValueError("integration credential decryption failed") from exc
 
 
-def _aad(user_id: int, provider: ConnectorProvider) -> bytes:
-    return f"scholens:connector:{_VERSION}:{user_id}:{provider.value}".encode()
+def _aad(user_id: int, provider: IntegrationProvider) -> bytes:
+    return f"scholens:integration:{_VERSION}:{user_id}:{provider.value}".encode()

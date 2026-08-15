@@ -30,6 +30,8 @@ export type PaperIngestionRow = {
   displayName: string;
   errorCode?: string;
   id: string;
+  requiredIntegration?: "mineru";
+  retryable: boolean;
   sourceKind: "upload" | "doi" | "arxiv" | "url";
   stage:
     | "uploading"
@@ -84,8 +86,10 @@ function serverRow(ingestion: Ingestion): PaperIngestionRow {
   return {
     createdAt: ingestion.created_at,
     displayName: ingestion.display_name,
-    errorCode: ingestion.error_code ?? undefined,
+    errorCode: ingestion.failure?.code ?? undefined,
     id: ingestion.id,
+    requiredIntegration: ingestion.failure?.required_integration ?? undefined,
+    retryable: ingestion.failure?.retryable ?? true,
     sourceKind: ingestion.source_kind,
     stage: ingestion.stage,
     state: ingestion.state,
@@ -274,6 +278,7 @@ export function usePaperIngestions(
         id: upload.id,
         idempotencyKey: upload.idempotencyKey,
         sourceKind: "upload",
+        retryable: true,
         stage: index < MAX_CONCURRENT_UPLOADS ? "uploading" : "queued",
         state: index < MAX_CONCURRENT_UPLOADS ? "uploading" : "queued",
       }));

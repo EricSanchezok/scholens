@@ -9,7 +9,7 @@ from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import SubscriptionPlan, SubscriptionStatus
 
 PAPER_UPLOAD_KEY = "paper_uploads"
-KB_SIZE_KEY = "knowledge_base_size"
+KB_SIZE_KEY = "knowledge_base_size_kb"
 TOKEN_CREDITS_KEY = "token_credits_weekly"
 PROJECTS_KEY = "projects"
 PROJECT_PAPERS_KEY = "project_papers"

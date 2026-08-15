@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -38,6 +38,12 @@ class MinerUArchive:
 
 
 @dataclass(frozen=True)
+class MinerUCredential:
+    token: str = field(repr=False)
+    revision: str
+
+
+@dataclass(frozen=True)
 class LocalPDFAnalysis:
     markdown: str
     page_offset_map: dict[int, list[int]]
@@ -55,6 +61,7 @@ class ParserError(Exception):
         self,
         message: str,
         *,
+        error_code: str = "pdf_parser_failed",
         phase: str | None = None,
         task_id: str | None = None,
         mineru_code: str | None = None,
@@ -63,6 +70,7 @@ class ParserError(Exception):
         exception_type: str | None = None,
     ) -> None:
         super().__init__(message)
+        self.error_code = error_code
         self.phase = phase
         self.task_id = task_id
         self.mineru_code = mineru_code
@@ -93,6 +101,7 @@ class ParserTransientError(ParserError):
         self,
         message: str,
         *,
+        error_code: str = "mineru_unavailable",
         retry_after: float | None = None,
         phase: str | None = None,
         task_id: str | None = None,
@@ -103,6 +112,7 @@ class ParserTransientError(ParserError):
     ) -> None:
         super().__init__(
             message,
+            error_code=error_code,
             phase=phase,
             task_id=task_id,
             mineru_code=mineru_code,
@@ -116,10 +126,37 @@ class ParserTransientError(ParserError):
 class ParserContentError(ParserError):
     """The document or provider result cannot produce usable content."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "pdf_content_insufficient",
+        **details: Any,
+    ) -> None:
+        super().__init__(message, error_code=error_code, **details)
+
 
 class ParserConfigurationError(ParserError):
     """A required parser credential or runtime setting is invalid."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "mineru_runtime_invalid",
+        **details: Any,
+    ) -> None:
+        super().__init__(message, error_code=error_code, **details)
+
 
 class ParserSecurityError(ParserError):
     """An external response failed a security boundary."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "mineru_response_unsafe",
+        **details: Any,
+    ) -> None:
+        super().__init__(message, error_code=error_code, **details)

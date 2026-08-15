@@ -228,6 +228,39 @@
         "title": "AccessTokenResponse",
         "type": "object"
       },
+      "ActionableJobFailure": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "required_integration": {
+            "anyOf": [
+              {
+                "const": "mineru",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Integration"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "retryable"
+        ],
+        "title": "ActionableJobFailure",
+        "type": "object"
+      },
       "Actor": {
         "description": "The product identity required to authorize a business operation.\n\nTransport-specific credentials and sanchezcloud-identity records are deliberately not\nexposed beyond the identity adapter.",
         "properties": {
@@ -1466,109 +1499,6 @@
           "already_exists"
         ],
         "title": "CollectPublicPaperResponse",
-        "type": "object"
-      },
-      "ConnectorConnectRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "api_key": {
-            "format": "password",
-            "maxLength": 2048,
-            "minLength": 8,
-            "title": "Api Key",
-            "type": "string",
-            "writeOnly": true
-          }
-        },
-        "required": [
-          "api_key"
-        ],
-        "title": "ConnectorConnectRequest",
-        "type": "object"
-      },
-      "ConnectorListResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ConnectorResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "title": "ConnectorListResponse",
-        "type": "object"
-      },
-      "ConnectorProvider": {
-        "enum": [
-          "scholight",
-          "anysearch",
-          "tavily",
-          "exa",
-          "firecrawl"
-        ],
-        "title": "ConnectorProvider",
-        "type": "string"
-      },
-      "ConnectorResponse": {
-        "properties": {
-          "built_in": {
-            "title": "Built In",
-            "type": "boolean"
-          },
-          "connected": {
-            "title": "Connected",
-            "type": "boolean"
-          },
-          "display_name": {
-            "title": "Display Name",
-            "type": "string"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/ConnectorProvider"
-          },
-          "verified_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verified At"
-          }
-        },
-        "required": [
-          "provider",
-          "display_name",
-          "built_in",
-          "connected",
-          "enabled"
-        ],
-        "title": "ConnectorResponse",
-        "type": "object"
-      },
-      "ConnectorUpdateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "ConnectorUpdateRequest",
         "type": "object"
       },
       "ConversationActivity": {
@@ -3922,6 +3852,10 @@
             "title": "Assets",
             "type": "array"
           },
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "blocks": {
             "items": {
               "$ref": "#/components/schemas/DocumentReflowBlockResponse"
@@ -3934,21 +3868,27 @@
             "title": "Document Id",
             "type": "string"
           },
-          "error_code": {
+          "failure": {
             "anyOf": [
               {
+                "$ref": "#/components/schemas/ActionableJobFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Error Code"
-          },
-          "job_id": {
-            "format": "uuid",
-            "title": "Job Id",
-            "type": "string"
+            "title": "Job Id"
           },
           "parser_revision": {
             "anyOf": [
@@ -3974,6 +3914,7 @@
           },
           "status": {
             "enum": [
+              "not_requested",
               "pending",
               "processing",
               "completed",
@@ -3983,9 +3924,16 @@
             "type": "string"
           },
           "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "warnings": {
             "items": {
@@ -3999,7 +3947,8 @@
           "document_id",
           "status",
           "job_id",
-          "error_code",
+          "attempt_count",
+          "failure",
           "pipeline_revision",
           "parser_revision",
           "warnings",
@@ -4432,6 +4381,157 @@
           }
         },
         "title": "Institution",
+        "type": "object"
+      },
+      "IntegrationConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "format": "password",
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Credential",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "credential"
+        ],
+        "title": "IntegrationConnectRequest",
+        "type": "object"
+      },
+      "IntegrationConnectionResponse": {
+        "properties": {
+          "category": {
+            "enum": [
+              "built_in",
+              "parsing",
+              "search"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "managed": {
+            "title": "Managed",
+            "type": "boolean"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/IntegrationProvider"
+          },
+          "state": {
+            "enum": [
+              "disconnected",
+              "connected_unverified",
+              "connected",
+              "disabled",
+              "invalid"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "provider",
+          "category",
+          "managed",
+          "state",
+          "enabled"
+        ],
+        "title": "IntegrationConnectionResponse",
+        "type": "object"
+      },
+      "IntegrationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationConnectionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "IntegrationListResponse",
+        "type": "object"
+      },
+      "IntegrationProvider": {
+        "enum": [
+          "scholight",
+          "mineru",
+          "anysearch",
+          "tavily",
+          "exa",
+          "firecrawl"
+        ],
+        "title": "IntegrationProvider",
+        "type": "string"
+      },
+      "IntegrationUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "IntegrationUpdateRequest",
         "type": "object"
       },
       "IntervalChangeResponse": {
@@ -4877,16 +4977,15 @@
             ],
             "title": "Document Id"
           },
-          "error_code": {
+          "failure": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ActionableJobFailure"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Code"
+            ]
           },
           "id": {
             "format": "uuid",
@@ -4945,7 +5044,6 @@
           "stage",
           "project_id",
           "document_id",
-          "error_code",
           "created_at"
         ],
         "title": "LibraryPaperIngestionResponse",
@@ -8246,8 +8344,8 @@
       },
       "SubscriptionLimits": {
         "properties": {
-          "knowledge_base_size": {
-            "title": "Knowledge Base Size",
+          "knowledge_base_size_kb": {
+            "title": "Knowledge Base Size Kb",
             "type": "integer"
           },
           "paper_uploads": {
@@ -8269,7 +8367,7 @@
         },
         "required": [
           "paper_uploads",
-          "knowledge_base_size",
+          "knowledge_base_size_kb",
           "token_credits_weekly",
           "projects",
           "project_papers"
@@ -8377,12 +8475,12 @@
       },
       "SubscriptionUsage": {
         "properties": {
-          "knowledge_base_size": {
-            "title": "Knowledge Base Size",
+          "knowledge_base_size_kb": {
+            "title": "Knowledge Base Size Kb",
             "type": "integer"
           },
-          "knowledge_base_size_remaining": {
-            "title": "Knowledge Base Size Remaining",
+          "knowledge_base_size_remaining_kb": {
+            "title": "Knowledge Base Size Remaining Kb",
             "type": "integer"
           },
           "paper_uploads": {
@@ -8401,6 +8499,10 @@
             "title": "Projects Remaining",
             "type": "integer"
           },
+          "token_credits_limit": {
+            "title": "Token Credits Limit",
+            "type": "integer"
+          },
           "token_credits_overage": {
             "title": "Token Credits Overage",
             "type": "integer"
@@ -8412,18 +8514,14 @@
           "token_credits_used": {
             "title": "Token Credits Used",
             "type": "integer"
-          },
-          "token_credits_weekly": {
-            "title": "Token Credits Weekly",
-            "type": "integer"
           }
         },
         "required": [
           "paper_uploads",
           "paper_uploads_remaining",
-          "knowledge_base_size",
-          "knowledge_base_size_remaining",
-          "token_credits_weekly",
+          "knowledge_base_size_kb",
+          "knowledge_base_size_remaining_kb",
+          "token_credits_limit",
           "token_credits_used",
           "token_credits_remaining",
           "token_credits_overage",
@@ -8780,10 +8878,32 @@
         "title": "UrlPaperSource",
         "type": "object"
       },
+      "UsagePeriod": {
+        "enum": [
+          "current_week",
+          "four_weeks",
+          "twelve_weeks"
+        ],
+        "title": "UsagePeriod",
+        "type": "string"
+      },
       "UsageResponse": {
         "properties": {
           "limits": {
             "$ref": "#/components/schemas/SubscriptionLimits"
+          },
+          "period": {
+            "$ref": "#/components/schemas/UsagePeriod"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
           },
           "plan": {
             "title": "Plan",
@@ -8795,6 +8915,9 @@
         },
         "required": [
           "plan",
+          "period",
+          "period_start",
+          "period_end",
           "limits",
           "usage"
         ],
@@ -10515,6 +10638,17 @@
     "/api/v1/billing/usage": {
       "get": {
         "operationId": "get_user_usage_api_v1_billing_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/UsagePeriod",
+              "default": "current_week"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10525,6 +10659,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -13040,15 +13184,15 @@
         ]
       }
     },
-    "/api/v1/me/connectors": {
+    "/api/v1/me/integrations": {
       "get": {
-        "operationId": "list_connectors_api_v1_me_connectors_get",
+        "operationId": "list_integrations_api_v1_me_integrations_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConnectorListResponse"
+                  "$ref": "#/components/schemas/IntegrationListResponse"
                 }
               }
             },
@@ -13060,15 +13204,15 @@
             "BearerAuth": []
           }
         ],
-        "summary": "List Connectors",
+        "summary": "List Integrations",
         "tags": [
-          "connectors"
+          "integrations"
         ]
       }
     },
-    "/api/v1/me/connectors/{provider}": {
+    "/api/v1/me/integrations/{provider}": {
       "delete": {
-        "operationId": "disconnect_connector_api_v1_me_connectors__provider__delete",
+        "operationId": "disconnect_integration_api_v1_me_integrations__provider__delete",
         "parameters": [
           {
             "in": "path",
@@ -13100,13 +13244,13 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Disconnect Connector",
+        "summary": "Disconnect Integration",
         "tags": [
-          "connectors"
+          "integrations"
         ]
       },
       "patch": {
-        "operationId": "update_connector_api_v1_me_connectors__provider__patch",
+        "operationId": "update_integration_api_v1_me_integrations__provider__patch",
         "parameters": [
           {
             "in": "path",
@@ -13122,7 +13266,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConnectorUpdateRequest"
+                "$ref": "#/components/schemas/IntegrationUpdateRequest"
               }
             }
           },
@@ -13133,7 +13277,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConnectorResponse"
+                  "$ref": "#/components/schemas/IntegrationConnectionResponse"
                 }
               }
             },
@@ -13155,13 +13299,13 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Update Connector",
+        "summary": "Update Integration",
         "tags": [
-          "connectors"
+          "integrations"
         ]
       },
       "put": {
-        "operationId": "connect_connector_api_v1_me_connectors__provider__put",
+        "operationId": "connect_integration_api_v1_me_integrations__provider__put",
         "parameters": [
           {
             "in": "path",
@@ -13177,7 +13321,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConnectorConnectRequest"
+                "$ref": "#/components/schemas/IntegrationConnectRequest"
               }
             }
           },
@@ -13188,7 +13332,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConnectorResponse"
+                  "$ref": "#/components/schemas/IntegrationConnectionResponse"
                 }
               }
             },
@@ -13210,9 +13354,9 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Connect Connector",
+        "summary": "Connect Integration",
         "tags": [
-          "connectors"
+          "integrations"
         ]
       }
     },
@@ -14323,6 +14467,71 @@
         ]
       }
     },
+    "/api/v1/papers/{document_id}/reflow/attempts": {
+      "post": {
+        "operationId": "create_document_reflow_attempt_api_v1_papers__document_id__reflow_attempts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentReflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Document Reflow Attempt",
+        "tags": [
+          "reflows"
+        ]
+      }
+    },
     "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
       "post": {
         "operationId": "stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post",
@@ -14377,54 +14586,6 @@
         "summary": "Stream Reflow Block Translation",
         "tags": [
           "translations"
-        ]
-      }
-    },
-    "/api/v1/papers/{document_id}/reflow/retries": {
-      "post": {
-        "operationId": "retry_document_reflow_api_v1_papers__document_id__reflow_retries_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "document_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Document Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocumentReflowResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Retry Document Reflow",
-        "tags": [
-          "reflows"
         ]
       }
     },

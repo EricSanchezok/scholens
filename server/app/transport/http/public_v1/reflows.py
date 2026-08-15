@@ -15,7 +15,7 @@ from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 
 paper_reflows_router = APIRouter(tags=["reflows"])
 
@@ -61,12 +61,13 @@ def get_document_reflow_asset_url(
 
 
 @paper_reflows_router.post(
-    "/{document_id}/reflow/retries",
+    "/{document_id}/reflow/attempts",
     response_model=DocumentReflowResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def retry_document_reflow(
+def create_document_reflow_attempt(
     document_id: UUID,
+    idempotency_key: str | None = Header(default=None, max_length=128),
     actor: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
@@ -74,10 +75,11 @@ def retry_document_reflow(
     ),
 ) -> DocumentReflowResponse:
     return executor.command(
-        lambda capabilities: capabilities.document_reflows.retry(
+        lambda capabilities: capabilities.document_reflows.request_attempt(
             actor=actor,
             operation=operation,
             document_id=document_id,
+            idempotency_key=idempotency_key,
         )
     )
 

@@ -12,7 +12,7 @@ import random
 import socket
 import time
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Callable
 from urllib.parse import urljoin, urlsplit
@@ -59,7 +59,7 @@ CONFIGURATION_API_CODES = {"A0202", "A0211"}
 
 @dataclass(frozen=True)
 class MinerUConfig:
-    token: str
+    token: str = field(repr=False)
     base_url: str
     model_version: str
     poll_seconds: float
@@ -68,15 +68,13 @@ class MinerUConfig:
     max_archive_bytes: int
 
     @classmethod
-    def from_env(cls) -> MinerUConfig | None:
-        token = os.getenv("MINERU_API_TOKEN")
+    def from_runtime(cls, *, token: str) -> MinerUConfig:
         environment = os.getenv("ENVIRONMENT", "development").lower()
-        if not token:
-            if environment == "production":
-                raise ParserConfigurationError(
-                    "MINERU_API_TOKEN is required in production"
-                )
-            return None
+        if not token.strip():
+            raise ParserConfigurationError(
+                "A MinerU credential is required",
+                error_code="mineru_credential_required",
+            )
 
         base_url = os.getenv("MINERU_API_BASE_URL", "https://mineru.net/api/v4").rstrip(
             "/"
@@ -216,15 +214,12 @@ def canonical_markdown(
 class MinerUClient:
     def __init__(
         self,
-        config: MinerUConfig | None = None,
+        config: MinerUConfig,
         state_store: ParserTaskState | None = None,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        resolved_config = config or MinerUConfig.from_env()
-        if resolved_config is None:
-            raise ParserConfigurationError("MinerU is not configured")
-        self.config = resolved_config
+        self.config = config
         self.state_store = state_store or ParserStateStore()
         self.transport = transport
         self.headers = {"Authorization": f"Bearer {self.config.token}"}
@@ -296,6 +291,7 @@ class MinerUClient:
         if response.status_code in {401, 403}:
             raise ParserConfigurationError(
                 f"MinerU authorization failed during {phase}",
+                error_code="mineru_credential_invalid",
                 phase=phase,
                 task_id=task_id,
                 trace_id=trace_id,
@@ -304,6 +300,11 @@ class MinerUClient:
         if response.status_code == 429 or response.status_code >= 500:
             raise ParserTransientError(
                 f"MinerU is temporarily unavailable during {phase}",
+                error_code=(
+                    "mineru_rate_limited"
+                    if response.status_code == 429
+                    else "mineru_unavailable"
+                ),
                 retry_after=cls._retry_after(response),
                 phase=phase,
                 task_id=task_id,
@@ -335,6 +336,7 @@ class MinerUClient:
         if code in CONFIGURATION_API_CODES:
             raise ParserConfigurationError(
                 f"MinerU credentials failed during {phase}",
+                error_code="mineru_credential_invalid",
                 phase=phase,
                 task_id=task_id,
                 mineru_code=code[:80],
@@ -344,6 +346,7 @@ class MinerUClient:
         if code in TRANSIENT_API_CODES:
             raise ParserTransientError(
                 f"MinerU is temporarily unavailable during {phase}",
+                error_code="mineru_unavailable",
                 phase=phase,
                 task_id=task_id,
                 mineru_code=code[:80],

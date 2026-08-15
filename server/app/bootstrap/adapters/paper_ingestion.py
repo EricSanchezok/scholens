@@ -31,7 +31,6 @@ from app.helpers.ai_limits import (
 from app.helpers.paper_search import get_work_by_doi, normalize_doi
 from app.helpers.parser import validate_pdf_content, validate_url_and_fetch_pdf
 from app.modules.jobs.infrastructure.repository import job_repository
-from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
@@ -41,7 +40,6 @@ from app.modules.papers.application.ingestion import (
     RetrySource,
 )
 from app.modules.papers.domain import content_sha256
-from app.bootstrap.adapters.document_reflow import ensure_document_reflow_job
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from sqlalchemy import delete, select
@@ -296,7 +294,6 @@ class SqlPaperIngestionGateway:
         )
         reservation = reserved.reservation
         accepted_terminal = reservation.job.status == JobStatus.COMPLETED.value
-        additional_job_ids: list[UUID] = []
         if reserved.created:
             finalization = finalize_reserved_document(
                 pdf_bytes=content,
@@ -305,21 +302,6 @@ class SqlPaperIngestionGateway:
                 db=self._db,
             )
             accepted_terminal = finalization.job_completed
-            if accepted_terminal:
-                with optional_savepoint(
-                    self._db,
-                    operation="schedule_document_reflow",
-                    context={"document_id": str(finalization.document_id)},
-                ):
-                    reflow, reflow_created = ensure_document_reflow_job(
-                        self._db,
-                        actor=actor,
-                        correlation_id=correlation_id,
-                        origin_operation_id=origin_operation_id,
-                        document_id=finalization.document_id,
-                    )
-                    if reflow_created:
-                        additional_job_ids.append(reflow.job_id)
             if original_reservation is not None:
                 original_reservation.superseded_by_id = reservation.id
         elif reservation.job.dispatch is None or reservation.job.document_id is None:
@@ -336,7 +318,6 @@ class SqlPaperIngestionGateway:
                 reservation.job.status
                 not in {JobStatus.COMPLETED.value, JobStatus.CANCELLED.value}
             ),
-            additional_job_ids=tuple(additional_job_ids),
         )
 
     def fail(self, *, actor: Actor, job_id: UUID, error_code: str) -> bool:

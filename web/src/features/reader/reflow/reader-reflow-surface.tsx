@@ -5,8 +5,11 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
-import { useToast } from "@/components/ui";
-import { reflowKeys, reflowQueries, retryDocumentReflow } from "./api";
+import { Button, LinkButton, useToast } from "@/components/ui";
+import { integrationQueries } from "@/features/integrations";
+import { useSettingsNavigation } from "@/features/settings";
+import { ApiError } from "@/lib/api/errors";
+import { reflowKeys, reflowQueries, requestDocumentReflowAttempt } from "./api";
 import {
   isTranslatableReflowBlock,
   ReaderReflowView,
@@ -42,7 +45,16 @@ export function ReaderReflowSurface({
   const queryClient = useQueryClient();
   const t = useTranslations("Reader.reflow");
   const toast = useToast();
+  const { setSection: setSettingsSection } = useSettingsNavigation();
+  const [mineruRequired, setMineruRequired] = React.useState(false);
+  const [requesting, setRequesting] = React.useState(false);
+  const attemptKey = React.useRef<string | undefined>(undefined);
+  const resumedConnection = React.useRef<string | undefined>(undefined);
   const reflowQuery = useQuery(reflowQueries.document(documentId, true));
+  const integrations = useQuery({
+    ...integrationQueries.current(),
+    enabled: mineruRequired,
+  });
   const translations = useReflowTranslations({
     cacheVersion: translationCacheVersion,
     documentId,
@@ -94,17 +106,64 @@ export function ReaderReflowSurface({
     [onTranslationStatusChange, translationStatus],
   );
 
-  const retry = React.useCallback(async () => {
+  const requestAttempt = React.useCallback(async () => {
+    if (requesting) return;
+    setRequesting(true);
+    attemptKey.current ??= crypto.randomUUID();
     try {
-      const result = await retryDocumentReflow(documentId);
+      const result = await requestDocumentReflowAttempt(
+        documentId,
+        attemptKey.current,
+      );
       queryClient.setQueryData(reflowKeys.document(documentId), result);
-    } catch {
+      attemptKey.current = undefined;
+      setMineruRequired(false);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        ["mineru_credential_required", "mineru_credential_invalid"].includes(
+          error.code ?? "",
+        )
+      ) {
+        setMineruRequired(true);
+        setSettingsSection("connections");
+        toast.notify({
+          description: t("mineruRequiredDescription"),
+          title: t("mineruRequiredTitle"),
+        });
+        return;
+      }
       toast.notify({
         description: t("retryFailedDescription"),
         title: t("retryFailedTitle"),
       });
+    } finally {
+      setRequesting(false);
     }
-  }, [documentId, queryClient, t, toast]);
+  }, [documentId, queryClient, requesting, setSettingsSection, t, toast]);
+
+  const mineru = integrations.data?.items.find(
+    (integration) => integration.provider === "mineru",
+  );
+  React.useEffect(() => {
+    const connectionVersion = mineru?.updated_at ?? undefined;
+    if (
+      mineruRequired &&
+      mineru?.enabled &&
+      ["connected", "connected_unverified"].includes(mineru.state) &&
+      connectionVersion &&
+      resumedConnection.current !== connectionVersion
+    ) {
+      resumedConnection.current = connectionVersion;
+      void requestAttempt();
+    }
+  }, [
+    mineru?.enabled,
+    mineru?.state,
+    mineru?.updated_at,
+    mineruRequired,
+    requestAttempt,
+  ]);
 
   if (reflowQuery.isPending) {
     return (
@@ -127,14 +186,81 @@ export function ReaderReflowSurface({
       </div>
     );
   }
+  const credentialFailure =
+    mineruRequired ||
+    reflowQuery.data?.failure?.required_integration === "mineru";
+  if (credentialFailure) {
+    return (
+      <section className="m-auto grid w-full max-w-md justify-items-center gap-4 p-6 text-center">
+        <div>
+          <h2 className="text-base font-semibold">
+            {t("mineruRequiredTitle")}
+          </h2>
+          <p className="text-secondary mt-2 text-sm leading-6">
+            {t("mineruRequiredDescription")}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button
+            onClick={() => setSettingsSection("connections")}
+            variant="primary"
+          >
+            {t("connectMineru")}
+          </Button>
+          <LinkButton
+            href="https://mineru.net/apiManage/token"
+            rel="noreferrer"
+            target="_blank"
+            variant="secondary"
+          >
+            {t("getMineruToken")}
+          </LinkButton>
+        </div>
+      </section>
+    );
+  }
+  const failureCode = reflowQuery.data?.failure?.code;
+  let failureDescription = t("failedDescription");
+  switch (failureCode) {
+    case "mineru_rate_limited":
+      failureDescription = t("failureMineruRateLimited");
+      break;
+    case "mineru_unavailable":
+      failureDescription = t("failureMineruUnavailable");
+      break;
+    case "mineru_content_insufficient":
+      failureDescription = t("failureMineruContentInsufficient");
+      break;
+    case "mineru_response_unsafe":
+      failureDescription = t("failureMineruResponseUnsafe");
+      break;
+  }
   if (reflowQuery.isError || reflowQuery.data?.status === "failed") {
+    const canRetry =
+      reflowQuery.isError || reflowQuery.data?.failure?.retryable !== false;
     return (
       <div className="m-auto w-full max-w-md p-6">
         <AsyncFeedback
-          action={{ label: t("retry"), onClick: () => void retry() }}
-          description={t("failedDescription")}
+          action={
+            canRetry
+              ? { label: t("retry"), onClick: () => void requestAttempt() }
+              : undefined
+          }
+          description={failureDescription}
           state="error"
           title={t("failedTitle")}
+        />
+      </div>
+    );
+  }
+  if (reflowQuery.data?.status === "not_requested") {
+    return (
+      <div className="m-auto w-full max-w-md p-6">
+        <AsyncFeedback
+          action={{ label: t("start"), onClick: () => void requestAttempt() }}
+          description={t("notRequestedDescription")}
+          state="empty"
+          title={t("notRequestedTitle")}
         />
       </div>
     );

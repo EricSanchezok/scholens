@@ -22,7 +22,7 @@ from app.bootstrap.workflows.citation import CitationWorkflow
 from app.bootstrap.workflows.discovery import PaperDiscoveryWorkflow
 from app.bootstrap.workflows.research_generation import ResearchGenerationWorkflow
 from app.bootstrap.workflows.translation import TranslationWorkflow
-from app.bootstrap.workflows.connectors import ConnectorWorkflow
+from app.bootstrap.workflows.integrations import IntegrationWorkflow
 from app.bootstrap.workflows.zotero import (
     ZoteroPostprocessWorkflow,
     ZoteroWorkflow,
@@ -66,25 +66,25 @@ def create_connector_tool_resolver(
 
     return ConnectorToolResolver(
         credential_loader=lambda actor: executor.query(
-            lambda capabilities: capabilities.connectors.enabled_credentials(
-                actor=actor
+            lambda capabilities: (
+                capabilities.integrations.enabled_connector_credentials(actor=actor)
             )
         ),
         settings=settings,
     )
 
 
-def create_connector_workflow(
+def create_integration_workflow(
     *,
     executor: ApplicationExecutor[ApplicationCapabilities],
     resolver: object,
-) -> ConnectorWorkflow:
+) -> IntegrationWorkflow:
     from app.modules.integrations.connectors.infrastructure.mcp import (
         ConnectorToolResolver,
     )
 
     assert isinstance(resolver, ConnectorToolResolver)
-    return ConnectorWorkflow(executor=executor, resolver=resolver)
+    return IntegrationWorkflow(executor=executor, resolver=resolver)
 
 
 def create_conversation_chat(
@@ -388,8 +388,8 @@ def get_application_executor(
     )
 
 
-def get_connector_workflow(request: Request) -> ConnectorWorkflow:
-    return cast(ConnectorWorkflow, request.app.state.connector_workflow)
+def get_integration_workflow(request: Request) -> IntegrationWorkflow:
+    return cast(IntegrationWorkflow, request.app.state.integration_workflow)
 
 
 def get_operation_context_factory(request: Request) -> OperationContextFactory:

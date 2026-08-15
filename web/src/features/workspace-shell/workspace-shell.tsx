@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  AccountIcon,
   CollapseRailIcon,
   ExpandRailIcon,
   SignOutIcon,
   MenuIcon,
   SettingsIcon,
+  UsageIcon,
 } from "@/design-system/icons/semantic-icons";
 import Link from "next/link";
 import type { Route } from "next";
@@ -36,6 +38,13 @@ import {
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import { useTheme } from "@/design-system/theme/theme-provider";
 import type { Actor } from "@/features/authentication";
+import {
+  formatDateOnly,
+  SettingsDialog,
+  useCurrentBillingUsage,
+  useSettingsNavigation,
+  type CurrentBillingUsageSummary,
+} from "@/features/settings";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import {
@@ -187,18 +196,25 @@ function ConversationGroup({
 
 function AccountMenu({
   actor,
+  billingUsage,
   collapsed,
   settingsTrigger = false,
   signingOut,
+  onOpenAccount,
+  onOpenUsage,
   onSignOut,
 }: {
   actor: Actor;
+  billingUsage: CurrentBillingUsageSummary;
   collapsed: boolean;
   settingsTrigger?: boolean;
   signingOut: boolean;
+  onOpenAccount: () => void;
+  onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
 }) {
   const t = useTranslations("WorkspaceShell");
+  const format = useFormatter();
   const { preference, setColorSchemePreference } = useTheme();
   const name = actorName(actor);
   const initial = name.slice(0, 1).toUpperCase();
@@ -274,10 +290,58 @@ function AccountMenu({
             </span>
           </span>
         </DropdownMenuLabel>
+        {billingUsage.status === "success" ? (
+          <DropdownMenuLabel className="bg-subtle mx-1 mb-1 grid gap-1 rounded-[var(--radius-md)] px-2.5 py-2">
+            <span className="sr-only">{t("account.usageSummary")}</span>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-secondary">{t("account.plan")}</span>
+              <span className="font-medium">
+                {billingUsage.plan === "researcher"
+                  ? t("account.planResearcher")
+                  : billingUsage.plan === "basic"
+                    ? t("account.planBasic")
+                    : billingUsage.plan}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-secondary">
+                {t("account.tokenCredits")}
+              </span>
+              <span className="tabular-nums">
+                {format.number(billingUsage.tokenCreditsUsed, "compact")}
+                {" / "}
+                {format.number(billingUsage.tokenCreditsLimit, "compact")}
+              </span>
+            </div>
+            <p className="text-caption text-secondary leading-4">
+              {t("account.creditsReset", {
+                date: formatDateOnly(billingUsage.resetDate, format.dateTime),
+              })}
+            </p>
+          </DropdownMenuLabel>
+        ) : billingUsage.status === "loading" ? (
+          <DropdownMenuLabel className="text-secondary mx-1 mb-1 px-2.5 py-2 text-xs">
+            {t("account.usageLoading")}
+          </DropdownMenuLabel>
+        ) : (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              billingUsage.retry();
+            }}
+          >
+            <Icon glyph={UsageIcon} size={16} tone="secondary" />
+            {t("account.usageUnavailable")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
-          <Icon glyph={SettingsIcon} size={16} tone="secondary" />
-          {t("account.settings")}
+        <DropdownMenuItem onSelect={onOpenAccount}>
+          <Icon glyph={AccountIcon} size={16} tone="secondary" />
+          {t("account.accountSettings")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onOpenUsage}>
+          <Icon glyph={UsageIcon} size={16} tone="secondary" />
+          {t("account.usageSettings")}
         </DropdownMenuItem>
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t("account.appearance")}</DropdownMenuLabel>
@@ -384,17 +448,23 @@ function MobileConversationGroup({
 
 function MobileNavigation({
   actor,
+  billingUsage,
   conversations,
   activeConversationId,
   signingOut,
+  onOpenAccount,
+  onOpenUsage,
   onSignOut,
   onSelect,
   conversationHref,
 }: {
   actor: Actor;
+  billingUsage: CurrentBillingUsageSummary;
   conversations: ConversationSummary[];
   activeConversationId?: string;
   signingOut: boolean;
+  onOpenAccount: () => void;
+  onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
   onSelect: () => void;
   conversationHref?: (conversationId: string) => string;
@@ -455,7 +525,10 @@ function MobileNavigation({
           </div>
           <AccountMenu
             actor={actor}
+            billingUsage={billingUsage}
             collapsed={false}
+            onOpenAccount={onOpenAccount}
+            onOpenUsage={onOpenUsage}
             onSignOut={onSignOut}
             settingsTrigger
             signingOut={signingOut}
@@ -637,23 +710,29 @@ export function WorkspaceNewChatAction() {
 
 function Sidebar({
   actor,
+  billingUsage,
   conversations,
   activeConversationId,
   activeDestination,
   collapsed,
   signingOut,
   onCollapsedChange,
+  onOpenAccount,
+  onOpenUsage,
   onSignOut,
   onSelect,
   conversationHref,
 }: {
   actor: Actor;
+  billingUsage: CurrentBillingUsageSummary;
   conversations: ConversationSummary[];
   activeConversationId?: string;
   activeDestination: WorkspaceDestination;
   collapsed: boolean;
   signingOut: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onOpenAccount: () => void;
+  onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
   onSelect?: () => void;
   conversationHref?: (conversationId: string) => string;
@@ -756,7 +835,10 @@ function Sidebar({
         {collapsed && <div className="flex-1" />}
         <AccountMenu
           actor={actor}
+          billingUsage={billingUsage}
           collapsed={collapsed}
+          onOpenAccount={onOpenAccount}
+          onOpenUsage={onOpenUsage}
           onSignOut={onSignOut}
           signingOut={signingOut}
         />
@@ -804,6 +886,8 @@ export function WorkspaceShell({
 }) {
   const t = useTranslations("WorkspaceShell");
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const billingUsage = useCurrentBillingUsage();
+  const { setSection: setSettingsSection } = useSettingsNavigation();
   const mobileSheetRef = React.useRef<HTMLDivElement>(null);
   const localMobileDockRef = React.useRef<HTMLDivElement>(null);
   const effectiveMobileViewport = mobileViewport ?? { open: false };
@@ -825,9 +909,12 @@ export function WorkspaceShell({
           activeConversationId={activeConversationId}
           activeDestination={activeDestination}
           actor={actor}
+          billingUsage={billingUsage}
           collapsed={collapsed}
           conversations={conversations}
           onCollapsedChange={onCollapsedChange}
+          onOpenAccount={() => setSettingsSection("account")}
+          onOpenUsage={() => setSettingsSection("usage")}
           onSignOut={onSignOut}
           signingOut={signingOut}
           conversationHref={conversationHref}
@@ -851,7 +938,16 @@ export function WorkspaceShell({
           <MobileNavigation
             activeConversationId={activeConversationId}
             actor={actor}
+            billingUsage={billingUsage}
             conversations={conversations}
+            onOpenAccount={() => {
+              setMobileOpen(false);
+              setSettingsSection("account");
+            }}
+            onOpenUsage={() => {
+              setMobileOpen(false);
+              setSettingsSection("usage");
+            }}
             onSelect={() => setMobileOpen(false)}
             onSignOut={onSignOut}
             signingOut={signingOut}
@@ -892,6 +988,7 @@ export function WorkspaceShell({
           />
         )}
       </div>
+      <SettingsDialog />
     </div>
   );
 }

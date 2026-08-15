@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.modules.billing.infrastructure.usage_repository import (
     resource_usage_repository,
@@ -21,6 +21,7 @@ from app.modules.billing.domain import (
     require_account_document_capacity,
     require_project_paper_capacity,
 )
+from app.modules.billing.application.contracts import UsagePeriod
 from app.database.models import (
     AuthUser,
     Document,
@@ -28,6 +29,7 @@ from app.database.models import (
     ProjectPaper,
     SubscriptionPlan,
     SubscriptionStatus,
+    TokenWeeklyUsage,
 )
 from app.database.product_analytics import track_event
 from app.shared.domain import AppError, FailureKind
@@ -255,9 +257,13 @@ def can_user_auto_sync_zotero(db: Session, user: Actor) -> bool:
     return entitlements_for(get_user_subscription_plan(db, user)).zotero_auto_sync
 
 
-def get_user_usage_info(db: Session, user: Actor) -> dict[str, object]:
-    """Return resource limits plus the current Monday-based Token Credit window."""
-    from app.llm.token_credits import token_quota_status
+def get_user_usage_info(
+    db: Session,
+    user: Actor,
+    period: UsagePeriod,
+) -> dict[str, object]:
+    """Return current resources plus a Monday-aligned Token Credit window."""
+    from app.llm.token_credits import utc_week_start
 
     plan = get_user_subscription_plan(db, user)
     limits = entitlements_for(plan)
@@ -272,12 +278,28 @@ def get_user_usage_info(db: Session, user: Actor) -> dict[str, object]:
         or 0
     )
     project_limit = limits.projects
-    token_limit, token_used, token_remaining, token_overage = token_quota_status(
-        db, user=user
+    assert isinstance(period, UsagePeriod)
+    period_end = utc_week_start() + timedelta(days=6)
+    period_start = utc_week_start() - timedelta(weeks=period.weeks - 1)
+    token_limit = limits.token_credits_weekly * period.weeks
+    token_used = int(
+        db.scalar(
+            select(func.sum(TokenWeeklyUsage.used_tokens)).where(
+                TokenWeeklyUsage.user_id == user.id,
+                TokenWeeklyUsage.week_start >= period_start,
+                TokenWeeklyUsage.week_start <= period_end,
+            )
+        )
+        or 0
     )
+    token_remaining = max(0, token_limit - token_used)
+    token_overage = max(0, token_used - token_limit)
 
     return {
         "plan": plan.value,
+        "period": period.value,
+        "period_start": period_start,
+        "period_end": period_end,
         "limits": limits.as_limits(),
         "usage": {
             "paper_uploads": current_paper_count,
@@ -285,12 +307,12 @@ def get_user_usage_info(db: Session, user: Actor) -> dict[str, object]:
                 paper_limit,
                 current_paper_count,
             ),
-            "knowledge_base_size": total_size,
-            "knowledge_base_size_remaining": remaining(
+            "knowledge_base_size_kb": total_size,
+            "knowledge_base_size_remaining_kb": remaining(
                 total_size_allowed,
                 total_size,
             ),
-            "token_credits_weekly": token_limit,
+            "token_credits_limit": token_limit,
             "token_credits_used": token_used,
             "token_credits_remaining": token_remaining,
             "token_credits_overage": token_overage,

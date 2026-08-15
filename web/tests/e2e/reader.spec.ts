@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { mockBillingUsage } from "./billing-fixture";
 import path from "node:path";
 
 import { libraryPapers } from "../../src/features/library/api/fixtures";
@@ -216,6 +217,7 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
 }
 
 async function mockReader(page: Page) {
+  await mockBillingUsage(page);
   const annotations: Array<Record<string, unknown>> = [];
   const project = {
     id: "50000000-0000-4000-8000-000000000001",

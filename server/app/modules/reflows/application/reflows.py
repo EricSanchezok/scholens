@@ -23,7 +23,7 @@ DOCUMENT_REFLOW_FAILED = OperationAction("document.reflow_failed")
 
 
 class DocumentReflowGateway(Protocol):
-    def get(self, *, document_id: UUID) -> DocumentReflowResponse | None: ...
+    def get(self, *, document_id: UUID) -> DocumentReflowResponse: ...
 
     def get_block(
         self, *, document_id: UUID, block_id: str
@@ -39,12 +39,12 @@ class DocumentReflowGateway(Protocol):
         actor: Actor,
         operation: OperationContext,
         document_id: UUID,
-        retry_failed: bool,
+        idempotency_key: str | None,
     ) -> tuple[DocumentReflowResponse, bool]: ...
 
 
-class ReflowEntitlements(Protocol):
-    def has_token_credits(self, *, actor: Actor) -> bool: ...
+class ReflowIntegrationAccess(Protocol):
+    def __call__(self, actor: Actor) -> None: ...
 
 
 class DocumentReflows:
@@ -53,25 +53,17 @@ class DocumentReflows:
         *,
         access: GetPaperDetails,
         gateway: DocumentReflowGateway,
-        entitlements: ReflowEntitlements,
+        require_mineru: ReflowIntegrationAccess,
         journal: OperationJournal,
     ) -> None:
         self._access = access
         self._gateway = gateway
-        self._entitlements = entitlements
+        self._require_mineru = require_mineru
         self._journal = journal
 
     def get(self, *, actor: Actor, document_id: UUID) -> DocumentReflowResponse:
         self._access(actor=actor, document_id=document_id)
-        result = self._gateway.get(document_id=document_id)
-        if result is not None:
-            return result
-        raise AppError(
-            code="document_reflow_not_scheduled",
-            message="Document reflow has not been scheduled",
-            kind=FailureKind.CONFLICT,
-            retryable=True,
-        )
+        return self._gateway.get(document_id=document_id)
 
     def translation_source(
         self,
@@ -113,25 +105,24 @@ class DocumentReflows:
             )
         return result
 
-    def retry(
+    def request_attempt(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
         document_id: UUID,
+        idempotency_key: str | None,
     ) -> DocumentReflowResponse:
         self._access(actor=actor, document_id=document_id)
-        if not self._entitlements.has_token_credits(actor=actor):
-            raise AppError(
-                code="token_quota_exceeded",
-                message="Token Credits are exhausted",
-                kind=FailureKind.RATE_LIMITED,
-            )
+        current = self._gateway.get(document_id=document_id)
+        if current.status in {"pending", "processing", "completed"}:
+            return current
+        self._require_mineru(actor)
         result, created = self._gateway.ensure(
             actor=actor,
             operation=operation,
             document_id=document_id,
-            retry_failed=True,
+            idempotency_key=idempotency_key,
         )
         if created:
             self._journal.append(

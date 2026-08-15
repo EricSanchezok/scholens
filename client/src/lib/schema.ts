@@ -252,26 +252,6 @@ export interface AccessKeyUpdateRequest {
     permissions?: WorkspacePermission[];
 }
 
-export type ConnectorProvider =
-    | 'scholight'
-    | 'anysearch'
-    | 'tavily'
-    | 'exa'
-    | 'firecrawl';
-
-export interface ConnectorResponse {
-    provider: ConnectorProvider;
-    display_name: string;
-    built_in: boolean;
-    connected: boolean;
-    enabled: boolean;
-    verified_at: string | null;
-}
-
-export interface ConnectorListResponse {
-    items: ConnectorResponse[];
-}
-
 export interface ResearchItemListResponse {
     items: ResearchItem[];
     next_cursor: string | null;
@@ -774,7 +754,7 @@ export interface ProjectInvitation {
 
 export interface SubscriptionLimits {
     paper_uploads: number;
-    knowledge_base_size: number;
+    knowledge_base_size_kb: number;
     token_credits_weekly: number;
     projects: number;
     project_papers: number;
@@ -783,8 +763,8 @@ export interface SubscriptionLimits {
 export interface SubscriptionUsage {
     paper_uploads: number;
     paper_uploads_remaining: number;
-    knowledge_base_size: number;
-    knowledge_base_size_remaining: number;
+    knowledge_base_size_kb: number;
+    knowledge_base_size_remaining_kb: number;
     token_credits_weekly: number;
     token_credits_used: number;
     token_credits_remaining: number;

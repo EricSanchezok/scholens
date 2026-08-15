@@ -64,6 +64,16 @@ class SqlAlchemyJobsGateway:
                     "claim_url": (
                         f"{base_url}/internal/v1/jobs/{command.job_id}/claim"
                     ),
+                    **(
+                        {
+                            "credential_url": (
+                                f"{base_url}/internal/v1/jobs/{command.job_id}"
+                                "/integration-credentials/mineru"
+                            )
+                        }
+                        if command.operation is JobOperation.DOCUMENT_REFLOW
+                        else {}
+                    ),
                 },
                 job_id=command.job_id,
             ),

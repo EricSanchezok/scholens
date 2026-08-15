@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from io import BytesIO
 
 import pymupdf
+import pytest
 from PIL import Image
 
-from src.pdf.models import MinerUArchive
-from src.reflow import REFLOW_PIPELINE_REVISION, build_document_reflow
+import src.reflow as reflow_module
+from src.pdf.models import (
+    MinerUArchive,
+    MinerUCredential,
+    ParsedDocument,
+    ParserBackend,
+    ParserQuality,
+    ParserSecurityError,
+)
+from src.reflow import (
+    REFLOW_PIPELINE_REVISION,
+    build_document_reflow,
+    generate_document_reflow,
+)
 
 
 def _png_bytes() -> bytes:
@@ -32,6 +46,110 @@ def _build(archive: MinerUArchive, *, writer=None, pdf_bytes=b"canonical-pdf"):
         parser_revision="mineru-cloud-v1",
         write_asset=writer,
     )
+
+
+def test_generate_reflow_reuses_valid_ingestion_archive_without_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _archive(
+        {"type": "text", "text": "Paper title", "text_level": 1, "page_idx": 0},
+        {"type": "text", "text": "Abstract", "text_level": 2, "page_idx": 0},
+        {"type": "text", "text": "Evidence-bound content.", "page_idx": 0},
+    )
+
+    class _Client:
+        def __init__(self, _config: object) -> None:
+            self.closed = False
+
+        def read_structured_archive(self, archive_bytes: bytes) -> MinerUArchive:
+            assert archive_bytes == b"stored-mineru-archive"
+            return archive
+
+        async def parse_file(self, _pdf: bytes, *, data_id: str) -> ParsedDocument:
+            raise AssertionError("valid stored archive must skip provider submission")
+
+        async def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(reflow_module, "MinerUClient", _Client)
+
+    result = asyncio.run(
+        generate_document_reflow(
+            document_id="document-id",
+            title="Ignored",
+            pdf_bytes=b"canonical-pdf",
+            credential=MinerUCredential(token="secret-token", revision="revision-1"),
+            archive_bytes=b"stored-mineru-archive",
+            archive_parser_revision="mineru-ingestion-v1",
+        )
+    )
+
+    assert result.parser_revision == "mineru-ingestion-v1"
+    assert result.blocks[0].render_markdown == "# Paper title"
+
+
+def test_generate_reflow_falls_back_to_provider_when_stored_archive_is_unsafe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _archive(
+        {"type": "text", "text": "Paper title", "text_level": 1, "page_idx": 0},
+        {"type": "text", "text": "Abstract", "text_level": 2, "page_idx": 0},
+        {"type": "text", "text": "Fresh provider content.", "page_idx": 0},
+    )
+    outcome: list[tuple[str, str, str | None]] = []
+
+    class _StateStore:
+        def __init__(self) -> None:
+            self.cleared: list[str] = []
+
+        async def clear(self, scope: str) -> None:
+            self.cleared.append(scope)
+
+    class _Client:
+        def __init__(self, _config: object) -> None:
+            self.read_count = 0
+            self.state_store = _StateStore()
+
+        def read_structured_archive(self, archive_bytes: bytes) -> MinerUArchive:
+            self.read_count += 1
+            if archive_bytes == b"unsafe-stored-archive":
+                raise ParserSecurityError("unsafe archive")
+            assert archive_bytes == b"fresh-provider-archive"
+            return archive
+
+        async def parse_file(self, pdf: bytes, *, data_id: str) -> ParsedDocument:
+            assert pdf == b"canonical-pdf"
+            assert data_id
+            return ParsedDocument(
+                markdown="# Paper title",
+                page_offset_map={1: [0, 13]},
+                backend=ParserBackend.MINERU,
+                quality=ParserQuality.FULL,
+                parser_version="mineru-provider-v2",
+                archive_bytes=b"fresh-provider-archive",
+            )
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(reflow_module, "MinerUClient", _Client)
+
+    result = asyncio.run(
+        generate_document_reflow(
+            document_id="document-id",
+            title="Ignored",
+            pdf_bytes=b"canonical-pdf",
+            credential=MinerUCredential(token="secret-token", revision="revision-2"),
+            archive_bytes=b"unsafe-stored-archive",
+            archive_parser_revision="mineru-old",
+            outcome_callback=lambda revision, status, code: outcome.append(
+                (revision, status, code)
+            ),
+        )
+    )
+
+    assert result.parser_revision == "mineru-provider-v2"
+    assert outcome == [("revision-2", "verified", None)]
 
 
 def test_builds_continuous_academic_ast_from_mineru_reading_order() -> None:
