@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
 import { Providers } from "@/app/providers";
+import { motionInitializationScript } from "@/design-system/motion/motion-script";
 import { themeInitializationScript } from "@/design-system/theme/theme-script";
 import { localeDirection, type AppLocale } from "@/i18n/config";
 import { formats } from "@/i18n/formats";
@@ -31,6 +32,8 @@ export default async function RootLayout({
   return (
     <html
       data-color-scheme="light"
+      data-motion="full"
+      data-motion-preference="system"
       data-theme="default"
       dir={localeDirection(locale)}
       lang={locale}
@@ -39,6 +42,9 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{ __html: themeInitializationScript }}
+        />
+        <script
+          dangerouslySetInnerHTML={{ __html: motionInitializationScript }}
         />
       </head>
       <body className={geist.variable}>

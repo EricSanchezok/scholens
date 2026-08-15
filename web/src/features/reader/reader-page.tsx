@@ -23,6 +23,13 @@ import {
   useToast,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
+import {
+  AnimatePresence,
+  m,
+  motionTransitions,
+  motionVariants,
+  useMotionPreference,
+} from "@/design-system/motion";
 import { ApiError } from "@/lib/api";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
@@ -107,6 +114,7 @@ function ReaderDocumentWorkspace({
     new URLSearchParams(searchParams.toString()),
   );
   const t = useTranslations("Reader");
+  const { resolved: resolvedMotion } = useMotionPreference();
   const toast = useToast();
   const { signOut } = useAuthSession();
   const [collapsed, setCollapsed] = React.useState(true);
@@ -498,12 +506,18 @@ function ReaderDocumentWorkspace({
     [adapter, updateLocation],
   );
 
-  const scrollToReflowOutlineItem = React.useCallback((id: string) => {
-    const target = Array.from(
-      window.document.querySelectorAll<HTMLElement>("[data-reflow-block]"),
-    ).find((element) => element.dataset.reflowBlock === id);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+  const scrollToReflowOutlineItem = React.useCallback(
+    (id: string) => {
+      const target = Array.from(
+        window.document.querySelectorAll<HTMLElement>("[data-reflow-block]"),
+      ).find((element) => element.dataset.reflowBlock === id);
+      target?.scrollIntoView({
+        behavior: resolvedMotion === "reduced" ? "auto" : "smooth",
+        block: "start",
+      });
+    },
+    [resolvedMotion],
+  );
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -1031,18 +1045,29 @@ function ReaderDocumentWorkspace({
                       zoom={zoom}
                     />
                   ) : null}
-                  {readerView === "reflow" &&
-                  showDocumentNavigation &&
-                  reflowOutlineOpen &&
-                  reflowOutline.length > 0 ? (
-                    <aside className="border-line bg-canvas w-64 shrink-0 overflow-y-auto border-r">
-                      <ReaderReflowOutline
-                        entries={reflowOutline}
-                        label={t("outline.title")}
-                        onSelect={scrollToReflowOutlineItem}
-                      />
-                    </aside>
-                  ) : null}
+                  <AnimatePresence initial={false}>
+                    {readerView === "reflow" &&
+                    showDocumentNavigation &&
+                    reflowOutlineOpen &&
+                    reflowOutline.length > 0 ? (
+                      <m.aside
+                        animate="animate"
+                        className="border-line bg-canvas w-64 shrink-0 overflow-y-auto border-r"
+                        exit="exit"
+                        initial="initial"
+                        key="reflow-outline"
+                        layout="position"
+                        transition={motionTransitions.layout}
+                        variants={motionVariants.panel}
+                      >
+                        <ReaderReflowOutline
+                          entries={reflowOutline}
+                          label={t("outline.title")}
+                          onSelect={scrollToReflowOutlineItem}
+                        />
+                      </m.aside>
+                    ) : null}
+                  </AnimatePresence>
                   {readerView === "reflow" ? (
                     <ReaderReflowSurface
                       documentId={documentId}
@@ -1066,9 +1091,25 @@ function ReaderDocumentWorkspace({
                   ) : null}
                 </div>
               </section>
-              {useDesktopPanel && desktopPanelOpen && (
-                <ReaderContextPanel {...contextPanelProps} className="flex" />
-              )}
+              <AnimatePresence initial={false}>
+                {useDesktopPanel && desktopPanelOpen && (
+                  <m.div
+                    animate="animate"
+                    className="h-full shrink-0"
+                    exit="exit"
+                    initial="initial"
+                    key="reader-context-panel"
+                    layout="position"
+                    transition={motionTransitions.layout}
+                    variants={motionVariants.panel}
+                  >
+                    <ReaderContextPanel
+                      {...contextPanelProps}
+                      className="flex"
+                    />
+                  </m.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
       </div>

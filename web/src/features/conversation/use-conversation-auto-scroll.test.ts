@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   conversationBottomGap,
+  conversationScrollTopForMotion,
   nextConversationFollowingState,
   nextConversationScrollTop,
 } from "./use-conversation-auto-scroll";
@@ -106,5 +107,29 @@ describe("nextConversationScrollTop", () => {
         target: 100,
       }),
     );
+  });
+});
+
+describe("conversationScrollTopForMotion", () => {
+  it("moves directly to the target for the resolved reduced policy", () => {
+    expect(
+      conversationScrollTopForMotion({
+        current: 100,
+        elapsedMs: 16,
+        resolvedMotion: "reduced",
+        target: 800,
+      }),
+    ).toBe(800);
+  });
+
+  it("keeps retargetable interpolation for the resolved full policy", () => {
+    const next = conversationScrollTopForMotion({
+      current: 100,
+      elapsedMs: 16,
+      resolvedMotion: "full",
+      target: 800,
+    });
+    expect(next).toBeGreaterThan(100);
+    expect(next).toBeLessThan(800);
   });
 });

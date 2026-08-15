@@ -2,6 +2,11 @@
 
 import * as React from "react";
 
+import {
+  type ResolvedMotion,
+  useMotionPreference,
+} from "@/design-system/motion";
+
 const BOTTOM_PROXIMITY_PX = 120;
 const MIN_SCROLL_DELTA_PX = 0.5;
 const SCROLL_TIME_CONSTANT_MS = 52;
@@ -37,6 +42,22 @@ export function nextConversationScrollTop({
   return next;
 }
 
+export function conversationScrollTopForMotion({
+  current,
+  elapsedMs,
+  resolvedMotion,
+  target,
+}: {
+  current: number;
+  elapsedMs: number;
+  resolvedMotion: ResolvedMotion;
+  target: number;
+}) {
+  return resolvedMotion === "reduced"
+    ? target
+    : nextConversationScrollTop({ current, elapsedMs, target });
+}
+
 export function nextConversationFollowingState({
   current,
   gap,
@@ -57,6 +78,7 @@ export function useConversationAutoScroll({
 }: {
   getScroller: () => ConversationScroller | null;
 }) {
+  const { resolved: resolvedMotion } = useMotionPreference();
   const contentRef = React.useRef<HTMLDivElement>(null);
   const followingRef = React.useRef(true);
   const frameRef = React.useRef<number | undefined>(undefined);
@@ -100,20 +122,16 @@ export function useConversationAutoScroll({
       }
 
       const target = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const reducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
       const elapsedMs =
         previousFrameTimeRef.current === undefined
           ? 16
           : frameTime - previousFrameTimeRef.current;
-      const next = reducedMotion
-        ? target
-        : nextConversationScrollTop({
-            current: scroller.scrollTop,
-            elapsedMs,
-            target,
-          });
+      const next = conversationScrollTopForMotion({
+        current: scroller.scrollTop,
+        elapsedMs,
+        resolvedMotion,
+        target,
+      });
 
       previousFrameTimeRef.current = frameTime;
       lastProgrammaticWriteRef.current = window.performance.now();
@@ -130,7 +148,7 @@ export function useConversationAutoScroll({
         previousFrameTimeRef.current = undefined;
       }
     },
-    [getScroller],
+    [getScroller, resolvedMotion],
   );
 
   React.useEffect(() => {

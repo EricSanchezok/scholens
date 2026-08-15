@@ -16,7 +16,7 @@ export const TooltipContent = React.forwardRef<
   <TooltipPrimitive.Portal>
     <TooltipPrimitive.Content
       className={cn(
-        "bg-primary text-primary-foreground z-50 rounded-[var(--radius-sm)] px-2 py-1 text-xs shadow-lg",
+        "motion-popup bg-primary text-primary-foreground z-50 rounded-[var(--radius-sm)] px-2 py-1 text-xs shadow-lg",
         className,
       )}
       ref={ref}
@@ -38,7 +38,7 @@ export const PopoverContent = React.forwardRef<
     <PopoverPrimitive.Content
       align={align}
       className={cn(
-        "border-line bg-elevated text-foreground shadow-overlay z-50 w-72 rounded-[var(--radius-lg)] border p-3",
+        "motion-popup border-line bg-elevated text-foreground shadow-overlay z-50 w-72 rounded-[var(--radius-lg)] border p-3",
         className,
       )}
       ref={ref}

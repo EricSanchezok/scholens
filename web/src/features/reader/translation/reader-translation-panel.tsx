@@ -207,7 +207,7 @@ function TranslationResult({
             {state.status === "streaming" ? (
               <span
                 aria-hidden
-                className="bg-primary ml-1 inline-block h-4 w-0.5 animate-pulse align-middle"
+                className="motion-skeleton bg-primary ml-1 inline-block h-4 w-0.5 align-middle"
               />
             ) : null}
           </p>

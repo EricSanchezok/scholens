@@ -8,7 +8,7 @@ import { cn } from "@/lib/utilities/cn";
 import { keyboardFocusRing } from "./focus";
 
 export const buttonVariants = cva(
-  `inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] border text-sm font-medium transition-colors ${keyboardFocusRing} disabled:pointer-events-none disabled:border-transparent disabled:text-disabled disabled:[&_svg]:text-ui-icon-disabled aria-busy:cursor-wait`,
+  `motion-control inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[var(--radius-md)] border text-sm font-medium ${keyboardFocusRing} disabled:pointer-events-none disabled:border-transparent disabled:text-disabled disabled:[&_svg]:text-ui-icon-disabled aria-busy:cursor-wait`,
   {
     variants: {
       variant: {
@@ -93,7 +93,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {loading && (
           <span
             aria-hidden
-            className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+            className="motion-spinner size-4 rounded-full border-2 border-current border-r-transparent"
           />
         )}
         {children}

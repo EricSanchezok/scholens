@@ -139,7 +139,7 @@ export function ConversationSwitcher({
           <button
             aria-expanded={open}
             className={cn(
-              "hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-2.5 text-left text-sm transition-colors",
+              "motion-control hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-2.5 text-left text-sm",
               keyboardFocusRing,
             )}
             type="button"

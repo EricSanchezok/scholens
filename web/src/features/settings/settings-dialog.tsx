@@ -16,6 +16,11 @@ import {
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import {
+  AnimatePresence,
+  MotionPresence,
+  motionVariants,
+} from "@/design-system/motion";
+import {
   AccountIcon,
   AppearanceIcon,
   IntegrationIcon,
@@ -63,19 +68,22 @@ function Panel({
   return <GeneralPanel />;
 }
 
-export function SettingsDialog({
+export function SettingsDialogSurface({
   accountCenterUrl = clientEnvironment.NEXT_PUBLIC_ACCOUNT_CENTER_URL,
+  onSectionChange,
+  section,
 }: {
   accountCenterUrl?: string;
+  onSectionChange: (section: SettingsSection | undefined) => void;
+  section: SettingsSection | undefined;
 }) {
   const t = useTranslations("Settings");
-  const { section, setSection } = useSettingsNavigation();
   const active = section ?? "general";
 
   return (
     <Dialog
       onOpenChange={(open) => {
-        if (!open) setSection(undefined);
+        if (!open) onSectionChange(undefined);
       }}
       open={Boolean(section)}
     >
@@ -95,7 +103,9 @@ export function SettingsDialog({
             </h1>
             <div className="lg:hidden">
               <Select
-                onValueChange={(value) => setSection(value as SettingsSection)}
+                onValueChange={(value) =>
+                  onSectionChange(value as SettingsSection)
+                }
                 value={active}
               >
                 <SelectTrigger aria-label={t("sectionPicker")}>
@@ -118,12 +128,12 @@ export function SettingsDialog({
                 <button
                   aria-current={active === item ? "page" : undefined}
                   className={cn(
-                    "hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 text-left text-sm font-medium transition-colors motion-reduce:transition-none",
+                    "motion-control hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 text-left text-sm font-medium",
                     keyboardFocusRing,
                     active === item && "bg-hover",
                   )}
                   key={item}
-                  onClick={() => setSection(item)}
+                  onClick={() => onSectionChange(item)}
                   type="button"
                 >
                   <span className="grid size-6 shrink-0 place-items-center">
@@ -139,10 +149,36 @@ export function SettingsDialog({
             </nav>
           </aside>
           <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-10 lg:py-9">
-            <Panel accountCenterUrl={accountCenterUrl} section={active} />
+            <AnimatePresence initial={false} mode="popLayout">
+              <MotionPresence
+                animate="animate"
+                exit="exit"
+                initial="initial"
+                key={active}
+                variants={motionVariants.swap}
+              >
+                <Panel accountCenterUrl={accountCenterUrl} section={active} />
+              </MotionPresence>
+            </AnimatePresence>
           </main>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function SettingsDialog({
+  accountCenterUrl = clientEnvironment.NEXT_PUBLIC_ACCOUNT_CENTER_URL,
+}: {
+  accountCenterUrl?: string;
+}) {
+  const { section, setSection } = useSettingsNavigation();
+
+  return (
+    <SettingsDialogSurface
+      accountCenterUrl={accountCenterUrl}
+      onSectionChange={setSection}
+      section={section}
+    />
   );
 }

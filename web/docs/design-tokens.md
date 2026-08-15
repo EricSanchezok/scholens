@@ -22,7 +22,8 @@ src/design-system/tokens/
 ├── semantic/light.json
 ├── semantic/dark.json
 ├── effects.json
-└── dimensions.json
+├── dimensions.json
+└── motion.json
 
 src/design-system/adapters/
 └── tailwind.json
@@ -168,6 +169,13 @@ the original glyphs.
 Theme and Appearance remain independent. Adding Ocean must not create combined
 `Ocean Light` and `Ocean Dark` mode names.
 
+Motion is an independent generated foundation. `motion.json` owns the shared
+duration and easing scale; `tokens:build` emits `generated/motion.css` for CSS
+recipes and `generated/motion-metadata.ts` for the runtime adapter. Springs are
+semantic runtime configuration because DTCG has no portable spring type. Do not
+copy a duration, Bézier curve, or spring into a feature. The complete authoring,
+preference, and reduced-motion contract is in [Motion system](./motion.md).
+
 ## Adding a theme
 
 1. Add `tokens/themes/<theme>.json` using the same palette slots as Default.
@@ -190,6 +198,11 @@ For a design-led change:
 4. Update Figma from the agreed token data rather than independently tweaking
    copies of screens.
 5. Validate canonical Figma frames against Storybook/implementation.
+
+Motion uses the same workflow through the canonical
+[Foundations / Motion](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=1120-19)
+section and the `Scholens / Motion` variable collection. The generated code
+tokens remain authoritative for runtime values.
 
 Code may use a robust Radix or Scholens component instead of copying a Figma
 layer tree exactly. Layout hierarchy, density, state meaning, and visual intent

@@ -68,7 +68,7 @@ export function AuthenticationResult({
   const glyph =
     tone === "mail" ? EmailIcon : tone === "danger" ? WarningIcon : SuccessIcon;
   return (
-    <div className="grid gap-5">
+    <div className="settled-content-enter grid gap-5">
       <div className="border-line bg-subtle grid gap-3 rounded-[var(--radius-lg)] border p-4">
         <Icon
           glyph={glyph}

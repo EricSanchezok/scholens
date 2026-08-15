@@ -222,7 +222,7 @@ export const ConversationActions: Story = {
     const restoredTrigger = canvas.getByRole("button", {
       name: `Open actions for ${conversations[0]!.title}`,
     });
-    await expect(restoredTrigger).toHaveFocus();
+    await waitFor(() => expect(restoredTrigger).toHaveFocus());
     await userEvent.click(restoredTrigger);
     await userEvent.click(await body.findByRole("menuitem", { name: "Pin" }));
   },

@@ -38,6 +38,11 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
+  AnimatePresence,
+  MotionPresence,
+  motionVariants,
+} from "@/design-system/motion";
+import {
   ConversationSwitcher,
   ConversationView,
   useConversationSession,
@@ -379,7 +384,7 @@ export function ReaderAnnotationPanel({
           return (
             <article
               className={cn(
-                "group/thread group/interactive-row border-line bg-surface hover:bg-hover focus-within:bg-hover active:bg-pressed max-w-full min-w-0 rounded-[var(--radius-lg)] border transition-colors duration-150 motion-reduce:transition-none",
+                "motion-control group/thread group/interactive-row border-line bg-surface hover:bg-hover focus-within:bg-hover active:bg-pressed max-w-full min-w-0 rounded-[var(--radius-lg)] border",
                 active && "bg-subtle",
               )}
               data-reader-annotation-card={annotation.id}
@@ -596,7 +601,7 @@ export function ReaderAnnotationPanel({
                   <div className="border-line-subtle mt-2 border-t pt-1">
                     {annotation.comments.map((item) => (
                       <div
-                        className="group/comment group/interactive-row hover:bg-hover focus-within:bg-hover relative mt-2.5 grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 rounded-[var(--radius-md)] transition-colors duration-150 motion-reduce:transition-none"
+                        className="motion-control group/comment group/interactive-row hover:bg-hover focus-within:bg-hover relative mt-2.5 grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 rounded-[var(--radius-md)]"
                         key={item.id}
                       >
                         {editingCommentId === item.id ? (
@@ -1011,6 +1016,7 @@ export function ReaderContextPanel({
           ),
         )}
         <IconButton
+          autoFocus
           className="ml-auto"
           label={t("toolbar.closePanel")}
           onClick={onClose}
@@ -1020,124 +1026,136 @@ export function ReaderContextPanel({
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {activePanel === "translation" ? (
-          translationPanel
-        ) : activePanel === "details" ? (
-          <div className="h-full overflow-y-auto" tabIndex={0}>
-            <ReaderDetailsPanel document={document} title={title} />
-          </div>
-        ) : activePanel === "annotations" ? (
-          <div
-            className="h-full min-w-0 overflow-x-hidden overflow-y-auto"
-            data-reader-annotations-scroll
-            tabIndex={0}
+        <AnimatePresence initial={false} mode="popLayout">
+          <MotionPresence
+            animate="animate"
+            className="h-full min-h-0"
+            data-reader-panel-content={activePanel}
+            exit="exit"
+            initial="initial"
+            key={activePanel}
+            variants={motionVariants.swap}
           >
-            <ReaderAnnotationPanel
-              key={`${projectContext?.id ?? "personal"}:${annotationSelection?.page_number ?? "none"}:${annotationSelection?.selected_text ?? ""}:${annotationInitialComment ?? ""}`}
-              audienceFilter={annotationAudienceFilter}
-              modeFilter={annotationModeFilter}
-              annotations={annotations}
-              error={annotationsError}
-              onActionError={onActionError}
-              onCommentCreate={onCommentCreate}
-              onCommentDelete={onCommentDelete}
-              onCommentUpdate={onCommentUpdate}
-              onCreate={onHighlightCreate}
-              onDelete={onAnnotationDelete}
-              onAudienceFilterChange={onAnnotationAudienceFilterChange}
-              onModeFilterChange={onAnnotationModeFilterChange}
-              onPreviewChange={onAnnotationPreviewChange}
-              onSelect={onAnnotationSelect}
-              onStatusChange={onAnnotationStatusChange}
-              onStatusFilterChange={onAnnotationStatusFilterChange}
-              onUpdateColor={onHighlightUpdate}
-              projectContext={projectContext}
-              selectedAnnotationId={selectedAnnotationId}
-              annotationSelection={annotationSelection}
-              annotationInitialComment={annotationInitialComment}
-              statusFilter={annotationStatusFilter}
-            />
-          </div>
-        ) : (
-          <div className="flex h-full min-h-0 flex-col">
-            <ConversationSwitcher
-              activeId={conversationId}
-              conversations={conversations}
-              labels={{
-                empty: t("conversations.empty"),
-                loading: t("conversations.loading"),
-                new: t("conversations.new"),
-                newDraft: t("conversations.newDraft"),
-                pin: t("conversations.pin"),
-                pinned: t("conversations.pinned"),
-                recent: t("conversations.recent"),
-                search: t("conversations.search"),
-                switcher: t("conversations.switcher"),
-                unpin: t("conversations.unpin"),
-              }}
-              loading={conversationsLoading}
-              onChange={onConversationChange}
-              onNew={onConversationNew}
-              onPin={onConversationPin}
-              onPinError={onActionError}
-            />
-            <ConversationView
-              layout="side-panel"
-              canSend={conversationSession.canSend}
-              composerForm={conversationSession.composerForm}
-              context={conversationSession.context}
-              contextLabel={title}
-              contextLocked
-              error={conversationSession.turnsQuery.isError}
-              emptyState={{
-                description: t("conversations.emptyDescription"),
-                title: t("conversations.emptyTitle"),
-              }}
-              liveTurn={conversationSession.liveTurn}
-              loading={
-                conversationSession.turnsQuery.isPending &&
-                Boolean(conversationId)
-              }
-              onContextChange={() => undefined}
-              onDocumentSourceOpen={onSourceOpen}
-              onReasoningLevelChange={setReasoningLevel}
-              onRetry={() => void conversationSession.turnsQuery.refetch()}
-              onRetryResponse={(turn) =>
-                void conversationSession.retryResponse(turn)
-              }
-              onEditMessage={(turn, message) =>
-                conversationSession.editMessage(turn, message)
-              }
-              onSelectBranch={(turnId) =>
-                void conversationSession.selectBranch(turnId)
-              }
-              onSelectResponse={(turnId, responseId) =>
-                void conversationSession.selectResponse(turnId, responseId)
-              }
-              onStop={conversationSession.stop}
-              onSubmit={conversationSession.sendMessage}
-              onUseSuggestion={conversationSession.useSuggestion}
-              onTurnContextClear={onTurnContextClear}
-              papers={[]}
-              projects={[]}
-              reasoningLevel={reasoningLevel}
-              readOnlyReason={
-                conversationSession.conversationQuery.data?.read_only_reason
-              }
-              submissionPending={conversationSession.submissionPending}
-              turnContextLabel={
-                pendingTurnContext
-                  ? t("selection.context", {
-                      page: pendingTurnContext.page_number,
-                    })
-                  : selectedAnnotationId
-                    ? t("annotations.context")
-                    : undefined
-              }
-              turns={conversationSession.turnsQuery.data?.items ?? []}
-            />
-          </div>
-        )}
+            {activePanel === "translation" ? (
+              translationPanel
+            ) : activePanel === "details" ? (
+              <div className="h-full overflow-y-auto" tabIndex={0}>
+                <ReaderDetailsPanel document={document} title={title} />
+              </div>
+            ) : activePanel === "annotations" ? (
+              <div
+                className="h-full min-w-0 overflow-x-hidden overflow-y-auto"
+                data-reader-annotations-scroll
+                tabIndex={0}
+              >
+                <ReaderAnnotationPanel
+                  key={`${projectContext?.id ?? "personal"}:${annotationSelection?.page_number ?? "none"}:${annotationSelection?.selected_text ?? ""}:${annotationInitialComment ?? ""}`}
+                  audienceFilter={annotationAudienceFilter}
+                  modeFilter={annotationModeFilter}
+                  annotations={annotations}
+                  error={annotationsError}
+                  onActionError={onActionError}
+                  onCommentCreate={onCommentCreate}
+                  onCommentDelete={onCommentDelete}
+                  onCommentUpdate={onCommentUpdate}
+                  onCreate={onHighlightCreate}
+                  onDelete={onAnnotationDelete}
+                  onAudienceFilterChange={onAnnotationAudienceFilterChange}
+                  onModeFilterChange={onAnnotationModeFilterChange}
+                  onPreviewChange={onAnnotationPreviewChange}
+                  onSelect={onAnnotationSelect}
+                  onStatusChange={onAnnotationStatusChange}
+                  onStatusFilterChange={onAnnotationStatusFilterChange}
+                  onUpdateColor={onHighlightUpdate}
+                  projectContext={projectContext}
+                  selectedAnnotationId={selectedAnnotationId}
+                  annotationSelection={annotationSelection}
+                  annotationInitialComment={annotationInitialComment}
+                  statusFilter={annotationStatusFilter}
+                />
+              </div>
+            ) : (
+              <div className="flex h-full min-h-0 flex-col">
+                <ConversationSwitcher
+                  activeId={conversationId}
+                  conversations={conversations}
+                  labels={{
+                    empty: t("conversations.empty"),
+                    loading: t("conversations.loading"),
+                    new: t("conversations.new"),
+                    newDraft: t("conversations.newDraft"),
+                    pin: t("conversations.pin"),
+                    pinned: t("conversations.pinned"),
+                    recent: t("conversations.recent"),
+                    search: t("conversations.search"),
+                    switcher: t("conversations.switcher"),
+                    unpin: t("conversations.unpin"),
+                  }}
+                  loading={conversationsLoading}
+                  onChange={onConversationChange}
+                  onNew={onConversationNew}
+                  onPin={onConversationPin}
+                  onPinError={onActionError}
+                />
+                <ConversationView
+                  layout="side-panel"
+                  canSend={conversationSession.canSend}
+                  composerForm={conversationSession.composerForm}
+                  context={conversationSession.context}
+                  contextLabel={title}
+                  contextLocked
+                  error={conversationSession.turnsQuery.isError}
+                  emptyState={{
+                    description: t("conversations.emptyDescription"),
+                    title: t("conversations.emptyTitle"),
+                  }}
+                  liveTurn={conversationSession.liveTurn}
+                  loading={
+                    conversationSession.turnsQuery.isPending &&
+                    Boolean(conversationId)
+                  }
+                  onContextChange={() => undefined}
+                  onDocumentSourceOpen={onSourceOpen}
+                  onReasoningLevelChange={setReasoningLevel}
+                  onRetry={() => void conversationSession.turnsQuery.refetch()}
+                  onRetryResponse={(turn) =>
+                    void conversationSession.retryResponse(turn)
+                  }
+                  onEditMessage={(turn, message) =>
+                    conversationSession.editMessage(turn, message)
+                  }
+                  onSelectBranch={(turnId) =>
+                    void conversationSession.selectBranch(turnId)
+                  }
+                  onSelectResponse={(turnId, responseId) =>
+                    void conversationSession.selectResponse(turnId, responseId)
+                  }
+                  onStop={conversationSession.stop}
+                  onSubmit={conversationSession.sendMessage}
+                  onUseSuggestion={conversationSession.useSuggestion}
+                  onTurnContextClear={onTurnContextClear}
+                  papers={[]}
+                  projects={[]}
+                  reasoningLevel={reasoningLevel}
+                  readOnlyReason={
+                    conversationSession.conversationQuery.data?.read_only_reason
+                  }
+                  submissionPending={conversationSession.submissionPending}
+                  turnContextLabel={
+                    pendingTurnContext
+                      ? t("selection.context", {
+                          page: pendingTurnContext.page_number,
+                        })
+                      : selectedAnnotationId
+                        ? t("annotations.context")
+                        : undefined
+                  }
+                  turns={conversationSession.turnsQuery.data?.items ?? []}
+                />
+              </div>
+            )}
+          </MotionPresence>
+        </AnimatePresence>
       </div>
     </aside>
   );

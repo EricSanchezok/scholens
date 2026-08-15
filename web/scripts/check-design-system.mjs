@@ -115,6 +115,9 @@ const dimensions = flattenTokens(
 const effects = flattenTokens(
   await readJson(path.join(tokenRoot, "effects.json")),
 );
+const motion = flattenTokens(
+  await readJson(path.join(tokenRoot, "motion.json")),
+);
 const light = flattenTokens(
   await readJson(path.join(tokenRoot, "semantic", "light.json")),
 );
@@ -194,10 +197,53 @@ for (const [tokenPath, token] of effects) {
   }
 }
 
+const requiredMotionTokens = [
+  "motion.duration.instant",
+  "motion.duration.feedback",
+  "motion.duration.fast",
+  "motion.duration.standard",
+  "motion.duration.slow",
+  "motion.duration.deliberate",
+  "motion.easing.enter",
+  "motion.easing.standard",
+  "motion.easing.exit",
+  "motion.easing.in-out",
+];
+for (const tokenPath of requiredMotionTokens) {
+  if (!motion.has(tokenPath))
+    report(`${tokenPath}: required motion token missing`);
+}
+for (const [tokenPath, token] of motion) {
+  const expectedType = tokenPath.startsWith("motion.duration.")
+    ? "duration"
+    : "cubicBezier";
+  if (token.$type !== expectedType) {
+    report(`${tokenPath}: expected ${expectedType}, found ${token.$type}`);
+  }
+  if (
+    expectedType === "duration" &&
+    (token.$value?.unit !== "ms" || token.$value?.value < 0)
+  ) {
+    report(`${tokenPath}: duration must be a non-negative millisecond value`);
+  }
+  if (
+    expectedType === "cubicBezier" &&
+    (!Array.isArray(token.$value) ||
+      token.$value.length !== 4 ||
+      token.$value.some((part) => typeof part !== "number"))
+  ) {
+    report(`${tokenPath}: cubicBezier must contain four numeric coordinates`);
+  }
+}
+
 const globalsPath = path.join(sourceRoot, "styles", "globals.css");
 const globals = await readFile(globalsPath, "utf8");
 const generatedFoundation = await readFile(
   path.join(generatedRoot, "dimensions.css"),
+  "utf8",
+);
+const generatedMotion = await readFile(
+  path.join(generatedRoot, "motion.css"),
   "utf8",
 );
 const tailwindImportIndex = globals.indexOf('@import "tailwindcss";');
@@ -217,6 +263,12 @@ if (!generatedFoundation.includes("@theme inline")) {
   report(
     "src/design-system/generated/dimensions.css: Tailwind adapter was not generated",
   );
+}
+for (const tokenPath of requiredMotionTokens) {
+  const variable = `--${tokenPath.replaceAll(".", "-")}:`;
+  if (!generatedMotion.includes(variable)) {
+    report(`src/design-system/generated/motion.css: missing ${variable}`);
+  }
 }
 for (const [name, target] of Object.entries(adapter.fontSizes)) {
   const targetVariable = target.replaceAll(".", "-");
@@ -247,6 +299,7 @@ const scannedFiles = (
   await Promise.all(scanRoots.map((root) => collectFiles(root)))
 ).flat();
 const excludedRoots = [generatedRoot, tokenRoot];
+const motionRoot = path.join(sourceRoot, "design-system", "motion");
 const checks = [
   {
     pattern:
@@ -288,6 +341,41 @@ for (const filePath of scannedFiles) {
   const contents = await readFile(filePath, "utf8");
   const relativePath = path.relative(webRoot, filePath);
   if (
+    !filePath.startsWith(`${motionRoot}${path.sep}`) &&
+    /from\s+["']motion\//.test(contents)
+  ) {
+    report(
+      `${relativePath}: import Motion through src/design-system/motion only`,
+    );
+  }
+  if (!filePath.startsWith(`${motionRoot}${path.sep}`)) {
+    const motionChecks = [
+      {
+        pattern: /\btransition-all\b/g,
+        message: "transition-all is forbidden; use a semantic motion recipe",
+      },
+      {
+        pattern: /\b(?:duration|ease|animate|transition)-(?!none\b)[^\s"'`]+/g,
+        message: "raw motion utility found; use a semantic motion recipe",
+      },
+      {
+        pattern: /@keyframes\s+/g,
+        message: "keyframes belong to src/design-system/motion",
+      },
+      {
+        pattern: /\bcubic-bezier\s*\(|\b\d+(?:\.\d+)?ms\b/g,
+        message: "raw timing value found outside the motion foundation",
+      },
+    ];
+    for (const { pattern, message } of motionChecks) {
+      for (const match of contents.matchAll(pattern)) {
+        report(
+          `${relativePath}:${lineNumber(contents, match.index)}: ${message}`,
+        );
+      }
+    }
+  }
+  if (
     relativePath.startsWith(`src${path.sep}features${path.sep}`) ||
     relativePath.startsWith(`src${path.sep}app${path.sep}`)
   ) {
@@ -317,7 +405,14 @@ const preview = await readFile(
   path.join(webRoot, ".storybook", "preview.tsx"),
   "utf8",
 );
-for (const globalName of ["theme", "appearance", "locale", "network", "data"]) {
+for (const globalName of [
+  "theme",
+  "appearance",
+  "motion",
+  "locale",
+  "network",
+  "data",
+]) {
   if (!preview.includes(`${globalName}: {`)) {
     report(`.storybook/preview.tsx: missing ${globalName} global control`);
   }

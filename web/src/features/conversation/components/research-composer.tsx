@@ -32,6 +32,7 @@ import {
   useTextControlFocus,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
+import { m, motionTransitions } from "@/design-system/motion";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { composerSchema, type ComposerValues } from "../schemas";
@@ -521,16 +522,18 @@ export function ResearchComposer({
 
   if (surface === "context-panel") {
     return (
-      <form
+      <m.form
         className={cn(
-          "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 border p-2 transition-[border-radius] duration-[140ms] motion-reduce:transition-none",
+          "motion-shape border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1 border p-2",
           contextPanelExpanded
             ? "rounded-[var(--radius-2xl)]"
             : "rounded-[var(--radius-full)]",
         )}
         data-expanded={contextPanelExpanded}
         data-focus-surface
+        layout="size"
         onSubmit={composerForm.handleSubmit(submit)}
+        transition={motionTransitions.gentle}
       >
         <textarea
           aria-label={placeholder}
@@ -620,7 +623,7 @@ export function ResearchComposer({
             </IconButton>
           )}
         </div>
-      </form>
+      </m.form>
     );
   }
 

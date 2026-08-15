@@ -35,7 +35,7 @@ export function ProjectRow({
   const format = useFormatter();
 
   return (
-    <article className="group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-w-0 items-start gap-1 rounded-[var(--radius-xl)] p-1 transition-colors duration-150 motion-reduce:transition-none">
+    <article className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-w-0 items-start gap-1 rounded-[var(--radius-xl)] p-1">
       <Link
         aria-label={project.title}
         className={cn(

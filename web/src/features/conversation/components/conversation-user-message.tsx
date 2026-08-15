@@ -169,7 +169,7 @@ export function ConversationUserMessage({
         role="group"
       >
         <div
-          className="flex transition-opacity motion-reduce:transition-none [@media(hover:hover)]:lg:opacity-0 [@media(hover:hover)]:lg:group-focus-within/user-message:opacity-100 [@media(hover:hover)]:lg:group-hover/user-message:opacity-100"
+          className="motion-control flex [@media(hover:hover)]:lg:opacity-0 [@media(hover:hover)]:lg:group-focus-within/user-message:opacity-100 [@media(hover:hover)]:lg:group-hover/user-message:opacity-100"
           data-user-message-controls
         >
           {canEdit ? (

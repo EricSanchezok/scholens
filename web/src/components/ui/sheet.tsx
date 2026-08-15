@@ -33,12 +33,12 @@ export const SheetContent = React.forwardRef<
   ) => (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay
-        className="fixed inset-0 z-40 bg-[var(--color-overlay-backdrop)]"
+        className="motion-overlay fixed inset-0 z-40 bg-[var(--color-overlay-backdrop)]"
         data-slot="sheet-overlay"
       />
       <DialogPrimitive.Content
         className={cn(
-          "border-line bg-elevated shadow-panel fixed inset-y-0 right-0 z-50 w-[min(90vw,30rem)] border-l p-6",
+          "motion-side-sheet border-line bg-elevated shadow-panel fixed inset-y-0 right-0 z-50 w-[min(90vw,30rem)] border-l p-6",
           className,
         )}
         data-slot="sheet-content"

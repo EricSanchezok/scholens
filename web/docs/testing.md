@@ -34,6 +34,12 @@ pnpm test:e2e
 
 CI runs these in Node.js 22 with a frozen pnpm lockfile.
 
+Playwright starts the production server from the build created by the preceding
+`pnpm build` step. When running the browser lane on its own, build first; this
+keeps route and chunk behavior aligned with the release artifact. The runner
+never reuses a process already listening on port 7300: a conflict fails clearly
+instead of silently testing another checkout or build.
+
 ## Storybook coverage
 
 Use global toolbar controls instead of duplicating entire story files:
@@ -46,6 +52,8 @@ Use global toolbar controls instead of duplicating entire story files:
   Small Mobile (320). Authentication surfaces require 320, 390, 768, and 1440.
 - Network: Instant, Slow, Offline.
 - Data: Populated, Empty, Error.
+- Motion: System, Reduced, Full. Motion Lab is the executable token, recipe,
+  layout, and overlay calibration surface.
 
 Each interactive component or product pattern covers relevant states, long
 content, narrow width, keyboard interaction, and accessibility. `play`
@@ -57,6 +65,14 @@ to story IDs. A visual change is reviewed in both appearances before its
 baseline is accepted. Hosted screenshot regression may be added only with an
 owned service token and baseline-review policy; it does not replace semantic,
 interaction, axe, or Figma review.
+
+The Storybook Vitest browser runs with the OS reduced-motion media feature and
+Motion's test-only `skipAnimations` configuration so ordinary interaction and
+axe assertions observe settled UI instead of an animation's first frame. The
+normal Storybook dev/build output does not skip runtime animation. Stories that
+validate CSS motion set the Motion toolbar to explicit `full` or `reduced` and
+assert the corresponding recipe directly; runtime interpolation is covered by
+the real-browser motion smoke.
 
 ## MSW rules
 
@@ -96,6 +112,23 @@ component permutations. Tests should use stable roles and accessible names,
 avoid implementation selectors, and create their own state. Network responses
 must be deterministic unless a test is explicitly marked as an integration
 test with the backend.
+
+The full product suite runs in Chromium. `motion-smoke.spec.ts` additionally
+runs in Firefox and WebKit, proving that the inline pre-hydration preference,
+system media query, explicit override, Radix CSS recipe, and a representative
+layout animation behave consistently in all three engines. CI therefore
+installs `chromium firefox webkit`; do not expand the entire product suite to
+three engines without evidence that its additional runtime catches a distinct
+class of regressions.
+
+Reduced-motion tests set the media query before navigation and assert root
+policy plus the user-visible or computed animation outcome. They must not only
+mock a React hook after hydration. Full-mode tests also exercise an explicit
+preference while the OS requests reduction so precedence remains intentional.
+The three-engine motion smoke also exercises the inverse precedence: explicit
+`reduced` with an OS `no-preference` policy, asserting that conversation
+auto-follow performs one direct write to the latest target rather than a
+smooth requestAnimationFrame sequence.
 
 ## Flake policy
 

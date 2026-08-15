@@ -80,8 +80,9 @@ actually shared.
   translated fragments or hardcode fallback English inside product components.
 - UI primitives remain language-agnostic. Callers provide labels and content;
   a primitive translates only a universal default that it explicitly owns.
-- Motion must explain state or spatial continuity and respect reduced-motion;
-  decorative motion requires a product reason.
+- Motion must explain state or spatial continuity and respect reduced-motion.
+  Use the recipes and runtime boundary in [Motion system](./motion.md); product
+  code must not add raw timing, easing, keyframes, or another animation runtime.
 
 ### Collection rows and nested actions
 
@@ -90,8 +91,8 @@ domain-appropriate element); do not route them through a generic row component.
 They share this interaction contract instead:
 
 - The row uses `bg-hover` for hover and `focus-within`, and `bg-pressed` for
-  touch/pressed feedback. The transition is 150 ms and becomes immediate under
-  reduced motion.
+  touch/pressed feedback. It consumes `motion-control`; reduced mode removes
+  spatial press feedback while retaining the short semantic state change.
 - One real Link owns the primary content region. Nested checkboxes, overflow
   menus, and other controls are siblings of that Link and must not trigger its
   navigation. A semantic table keeps the title as its only keyboard Link;
@@ -131,9 +132,25 @@ silently catch them.
 
 Do not use transient feedback when the resulting content is already visible,
 and do not create a global action-state Context. The state belongs to the
-control that initiated the action. Motion is limited to a quiet 150–200 ms
-state transition without bounce or layout movement; reduced-motion retains the
-state change without the transition.
+control that initiated the action. Motion is limited to the `feedback` or
+`standard` semantic duration without bounce or unrelated layout movement;
+reduced motion retains the state change.
+
+## Motion ownership
+
+Shared primitives own their own CSS-first motion recipe. A feature must not add
+enter/exit classes to Dialog, Sheet, Popover, Tooltip, Select, Dropdown, Toast,
+Button, Input, Checkbox, Switch, Progress, Spinner, or Skeleton call sites.
+Product components may use the runtime only for a bounded list, panel,
+state-replacement, or container-layout change. Import `m`, `AnimatePresence`,
+`LayoutGroup`, variants, and transitions from `@/design-system/motion`; direct
+`motion/*` imports are an architecture violation.
+
+An animated wrapper preserves the semantic element it replaces. Lists remain
+lists, table rows remain rows, panels remain complementary regions, and motion
+never creates the click target. Exit choreography cannot delay focus return,
+mutation state, URL state, or navigation. Review every new choreography in
+Storybook Full and Reduced modes before adding it to a feature.
 
 Expected creation and navigation flows follow the same rule. Creating a
 conversation, opening it, and rendering its first turn are one visible state

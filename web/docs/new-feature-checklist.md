@@ -18,6 +18,8 @@ Use this checklist for every new route or substantial product capability.
       components or tokens that will change and their consumers.
 - [ ] Identify user-visible copy, named formats, and every locale-sensitive
       behavior; keep Reader translation separate from interface locale.
+- [ ] Inventory meaningful state changes and assign each one a motion purpose
+      or an explicit static outcome. Define Full, Reduced, and System behavior.
 
 ## Structure
 
@@ -47,6 +49,8 @@ Use this checklist for every new route or substantial product capability.
 - [ ] Verify Light and Dark. Do not patch appearance with call-site raw colors.
 - [ ] Add namespaced messages for English and Simplified Chinese; verify long
       translations and do not concatenate fragments.
+- [ ] Reuse the semantic motion foundation. Do not add raw durations, easing,
+      keyframes, another runtime, route transitions, or scroll decoration.
 
 ## Data
 
@@ -64,6 +68,8 @@ Use this checklist for every new route or substantial product capability.
 - [ ] Add interaction tests for real behavior, not only rendering.
 - [ ] Add MSW success/slow/empty/error/offline/401 scenarios where relevant.
 - [ ] Run Storybook axe checks and perform a keyboard pass.
+- [ ] Review affected motion in Full and Reduced Storybook modes; verify that
+      reduced mode preserves state, focus, feedback, and task completion.
 - [ ] Add Playwright coverage only for route integration or a critical journey.
 - [ ] Review the primary phone composition at 390 x 844 and 430 x 932; use
       320 x 568 as an overflow/minimum-usability check and verify one real iOS

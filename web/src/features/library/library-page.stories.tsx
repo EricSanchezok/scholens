@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 
 import { authHandlers, actor } from "../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
@@ -147,10 +147,12 @@ export const MultiSelect: Story = {
     const second = canvas.getByRole("checkbox", {
       name: /Select Retrieval-Augmented Generation/,
     });
-    await userEvent.click(second);
-    const toolbar = canvas.getByRole("toolbar", {
-      name: "Paper selection actions",
-    });
+    await fireEvent.click(second);
+    const toolbar = canvas
+      .getAllByRole("toolbar", { name: "Paper selection actions" })
+      .find((candidate) => candidate.getClientRects().length > 0);
+    await expect(toolbar).toBeDefined();
+    if (!toolbar) return;
     await expect(within(toolbar).getByText("2 papers selected")).toBeVisible();
     await expect(
       within(toolbar).getByRole("button", { name: "Remove from library" }),
@@ -345,9 +347,14 @@ export const Mobile320MultiSelect: Story = {
         name: "Select paper",
       }),
     );
-    const toolbar = canvas.getByRole("toolbar", {
-      name: "Paper selection actions",
+    let toolbar: HTMLElement | undefined;
+    await waitFor(() => {
+      toolbar = canvas
+        .getAllByRole("toolbar", { name: "Paper selection actions" })
+        .find((candidate) => candidate.getClientRects().length > 0);
+      expect(toolbar).toBeDefined();
     });
+    if (!toolbar) return;
     await expect(within(toolbar).getByText("1 paper selected")).toBeVisible();
     await expect(
       within(toolbar).getByRole("button", { name: "Actions" }),

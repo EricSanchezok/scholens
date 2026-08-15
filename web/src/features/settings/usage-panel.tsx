@@ -46,8 +46,8 @@ function UsageMeter({
         role="progressbar"
       >
         <div
-          className="bg-primary h-full rounded-full transition-[width] motion-reduce:transition-none"
-          style={{ width: `${percent}%` }}
+          className="motion-progress bg-primary h-full w-full rounded-full"
+          style={{ transform: `scaleX(${percent / 100})` }}
         />
       </div>
     </div>

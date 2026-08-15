@@ -182,6 +182,14 @@ URL normalization, missing-token behavior, safe `returnTo`, wire-payload and
 browser-storage boundaries, 320px overflow, locale selection, and the route
 axe scan.
 
+## Motion acceptance
+
+Authentication retains one responsive surface. Validation and terminal results
+settle inside that surface; switching modes remains navigation and does not
+animate the page or expose an intermediate layer. Focus moves according to form
+semantics, never animation completion. Reduced mode removes the result movement
+while keeping the same message, live feedback, and next action.
+
 ## Change gate
 
 Authentication changes must preserve the single route, single responsive DOM,

@@ -504,3 +504,15 @@ Reader remains a vertical feature rather than a second application shell:
 Reader-specific components may adapt document, page, selection, and annotation
 context, but they must not fork the shared conversation reducer or final-answer
 UI. Likewise, Home and Library must not import Reader internals.
+
+## Motion acceptance
+
+Reader motion is contained around the document. The context panel and desktop
+AI reflow outline disclose directionally, and the active Ask/Annotations/
+Translate/Details content performs a bounded replacement. The selection
+toolbar, translation preview, and palette share one positioned surface and do
+not animate independently across the PDF. PDF pages, continuous document
+scroll, zoom, search traversal, text selection, and streamed translations are
+not decorative motion targets. Smooth programmatic outline navigation becomes
+direct in Reduced mode; spatial panel/layout animation and perpetual loading
+also stop while page, selection, draft, annotation, and URL state remain intact.

@@ -33,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
+import { AnimatePresence, m, motionVariants } from "@/design-system/motion";
 import type { Actor } from "@/features/authentication";
 import {
   formatDateOnly,
@@ -99,7 +100,7 @@ function SidebarControl({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? accessibleLabel : undefined}
       className={cn(
-        "hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium transition-colors",
+        "motion-control hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active && "bg-hover",
@@ -110,16 +111,27 @@ function SidebarControl({
       <span className="grid size-6 shrink-0 place-items-center">
         <Icon glyph={glyph} size={20} tone="primary" />
       </span>
-      {!collapsed && (
-        <span className="text-sidebar-label truncate">{label}</span>
-      )}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <m.span
+            animate="animate"
+            className="text-sidebar-label truncate"
+            exit="exit"
+            initial="initial"
+            key="label"
+            variants={motionVariants.swap}
+          >
+            {label}
+          </m.span>
+        )}
+      </AnimatePresence>
     </Link>
   ) : (
     <button
       aria-disabled={disabled || undefined}
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
-        "flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
+        "motion-control flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
@@ -130,9 +142,20 @@ function SidebarControl({
       <span className="grid size-6 shrink-0 place-items-center">
         <Icon glyph={glyph} size={20} tone="secondary" />
       </span>
-      {!collapsed && (
-        <span className="text-sidebar-label truncate">{label}</span>
-      )}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <m.span
+            animate="animate"
+            className="text-sidebar-label truncate"
+            exit="exit"
+            initial="initial"
+            key="label"
+            variants={motionVariants.swap}
+          >
+            {label}
+          </m.span>
+        )}
+      </AnimatePresence>
     </button>
   );
 
@@ -806,7 +829,7 @@ function Sidebar({
       <aside
         aria-label={t("navigation.sidebar")}
         className={cn(
-          "border-line bg-canvas flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))] transition-[width] duration-200 ease-out motion-reduce:transition-none",
+          "motion-rail border-line bg-canvas flex h-full shrink-0 flex-col overflow-hidden border-r px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))]",
           collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
         )}
       >
@@ -814,7 +837,7 @@ function Sidebar({
           <Link
             aria-hidden={collapsed || undefined}
             className={cn(
-              "text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap transition-opacity duration-150 motion-reduce:transition-none",
+              "motion-control text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap",
               collapsed && "pointer-events-none opacity-0",
             )}
             href="/"

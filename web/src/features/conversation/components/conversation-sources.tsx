@@ -88,7 +88,7 @@ function SourceRow({
     </>
   );
   const className = cn(
-    "border-line hover:bg-hover flex min-h-20 w-full items-start gap-3 border-b px-5 py-4 text-left transition-colors last:border-b-0 lg:px-6",
+    "motion-control border-line hover:bg-hover flex min-h-20 w-full items-start gap-3 border-b px-5 py-4 text-left last:border-b-0 lg:px-6",
     source.kind === "external" && keyboardFocusRing,
     selected && "bg-subtle",
   );
@@ -148,7 +148,7 @@ export function ConversationSources({
       <DialogTrigger asChild>
         <button
           className={cn(
-            "bg-subtle hover:bg-hover active:bg-pressed ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors lg:min-h-8",
+            "motion-control bg-subtle hover:bg-hover active:bg-pressed ml-auto flex min-h-11 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:min-h-8",
             keyboardFocusRing,
           )}
           type="button"

@@ -16,6 +16,7 @@ layer that owns it:
 | Repeated control behavior or state              | `components/ui` or `components/feedback` | Primitive stories + consumers                  |
 | Product behavior shared by real features        | Narrow shared product pattern            | Two concrete consumers + ADR when foundational |
 | Color, type, radius, spacing, or elevation role | DTCG token graph                         | Light/Dark token output + foundation stories   |
+| Duration, easing, or shared motion behavior     | Motion token/recipe foundation           | Motion Lab + Full/Reduced browser evidence     |
 | Server resource or mutation                     | Feature API layer + generated contract   | OpenAPI snapshot, MSW, Query tests             |
 | Shareable navigation state                      | URL                                      | Route/Playwright evidence                      |
 
@@ -113,6 +114,29 @@ Raw colors, primitive palette references, `dark:` appearance patches,
 `!important`, repeated 11/13px literals, and manual Tailwind theme aliases are
 blocked by `design:check`.
 
+## Adding or changing motion
+
+1. Describe the information change: feedback, hierarchy, continuity, progress,
+   or focal arrival. If motion communicates none of these, keep the change
+   static.
+2. Use CSS-first behavior for a primitive and the runtime only for bounded
+   presence or measured layout continuity. Do not animate a route, long list,
+   PDF scroll, or streaming text.
+3. Reuse duration/easing tokens and semantic recipes from
+   [Motion system](./motion.md). A new role belongs in the foundation only when
+   at least two concrete product states share its meaning.
+4. Define the full and reduced outcomes before implementation. Reduced motion
+   keeps state, focus, and feedback while removing spatial and perpetual
+   movement.
+5. Add or update Motion Lab, primitive stories, and feature acceptance. Review
+   the focused policy smoke in Chromium, Firefox, and WebKit when the provider,
+   initialization, or shared recipes change.
+6. Synchronize named intent to Figma; numeric values remain generated from the
+   repository token source.
+
+`design:check` blocks direct Motion imports outside the design-system boundary,
+raw animation utilities, arbitrary timing, and page-local keyframes.
+
 ## Modifying an existing page
 
 Start from a concrete before/after acceptance statement. Determine whether the
@@ -172,6 +196,7 @@ Every frontend handoff states:
 - Figma frames/states reviewed and intentional differences;
 - Storybook stories added or changed;
 - Light, Dark, English, Simplified Chinese, keyboard, and narrow-width evidence;
+- Full, Reduced, and System motion evidence for an affected animated surface;
 - generated files and documentation changed;
 - exact checks run;
 - remaining visual debt or deferred integration.

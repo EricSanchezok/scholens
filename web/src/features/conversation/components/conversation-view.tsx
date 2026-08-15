@@ -13,6 +13,13 @@ import * as React from "react";
 import { Button, IconButton, keyboardFocusRing } from "@/components/ui";
 import { CopyActionButton } from "@/components/feedback";
 import { Icon } from "@/design-system/icons/icon";
+import {
+  AnimatePresence,
+  m,
+  MotionPresence,
+  motionTransitions,
+  motionVariants,
+} from "@/design-system/motion";
 import type { components } from "@/lib/api/generated/schema";
 import type {
   ConversationFailure,
@@ -71,7 +78,7 @@ function FollowUpSuggestions({
     >
       {suggestions.map((suggestion) => (
         <button
-          className={`bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 transition-colors motion-reduce:transition-none lg:-mx-3 lg:min-h-10 lg:w-auto lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
+          className={`motion-control bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 lg:-mx-3 lg:min-h-10 lg:w-auto lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
           key={suggestion}
           onClick={() => onUseSuggestion(suggestion)}
           type="button"
@@ -322,7 +329,7 @@ function MessageHistory({
 }) {
   const latestTurnId = turns.at(-1)?.id;
   return (
-    <>
+    <AnimatePresence initial={false}>
       {turns.map((turn) => {
         const response = selectedResponse(turn);
         const isLive = liveTurn?.turnId === turn.id;
@@ -335,7 +342,16 @@ function MessageHistory({
         const latestControlsVisible =
           turn.id === latestTurnId && !suppressLatestControls;
         return (
-          <React.Fragment key={turn.id}>
+          <MotionPresence
+            animate="animate"
+            className="grid gap-9 lg:gap-8"
+            exit="exit"
+            initial="initial"
+            key={turn.id}
+            layout="position"
+            transition={motionTransitions.layout}
+            variants={motionVariants.listItem}
+          >
             <ConversationUserMessage
               branch={turn.branch}
               canEdit={canSend}
@@ -417,10 +433,10 @@ function MessageHistory({
                 durationMs={response.duration_ms}
               />
             ) : null}
-          </React.Fragment>
+          </MotionPresence>
         );
       })}
-    </>
+    </AnimatePresence>
   );
 }
 
@@ -612,7 +628,15 @@ export function ConversationView({
               {liveTurn &&
                 liveTurn.generationKind !== "retry" &&
                 !liveTurnRenderedInHistory && (
-                  <>
+                  <m.div
+                    animate="animate"
+                    className="grid gap-9 lg:gap-8"
+                    initial="initial"
+                    key={liveTurn.turnId}
+                    layout="position"
+                    transition={motionTransitions.gentle}
+                    variants={motionVariants.focal}
+                  >
                     <ConversationUserMessage
                       branch={{ count: 1, index: 1 }}
                       canEdit={false}
@@ -672,7 +696,7 @@ export function ConversationView({
                       durationMs={liveTurn.durationMs}
                       startedAtMs={liveTurn.startedAtMs}
                     />
-                  </>
+                  </m.div>
                 )}
             </div>
           )}

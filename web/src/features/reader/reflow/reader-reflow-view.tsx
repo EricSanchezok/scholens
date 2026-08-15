@@ -184,7 +184,7 @@ function ReflowFigure({
     return (
       <div
         aria-label={label}
-        className="bg-subtle aspect-[4/3] w-full animate-pulse rounded-[var(--radius-lg)]"
+        className="motion-skeleton bg-subtle aspect-[4/3] w-full rounded-[var(--radius-lg)]"
       />
     );
   }
@@ -379,7 +379,7 @@ function ReflowBlock({
           )}
 
           {metadataVisible && block.presentation_status !== "degraded" ? (
-            <div className="bg-canvas border-line text-muted pointer-events-none absolute top-full right-0 z-10 mt-1 flex items-center gap-2 rounded-[var(--radius-sm)] border px-2 py-1 font-sans text-xs opacity-0 shadow-sm transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+            <div className="motion-control bg-canvas border-line text-muted pointer-events-none absolute top-full right-0 z-10 mt-1 flex items-center gap-2 rounded-[var(--radius-sm)] border px-2 py-1 font-sans text-xs opacity-0 shadow-sm group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
               {block.presentation_status === "repaired" ? (
                 <span>{labels.repaired}</span>
               ) : null}
@@ -441,8 +441,8 @@ function ReflowBlock({
             />
           ) : (
             <div aria-hidden className="grid gap-2 py-1">
-              <span className="bg-subtle h-3 w-[92%] animate-pulse rounded-full" />
-              <span className="bg-subtle h-3 w-[74%] animate-pulse rounded-full" />
+              <span className="motion-skeleton bg-subtle h-3 w-[92%] rounded-full" />
+              <span className="motion-skeleton bg-subtle h-3 w-[74%] rounded-full" />
             </div>
           )}
         </div>

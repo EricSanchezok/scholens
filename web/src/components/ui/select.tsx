@@ -28,7 +28,7 @@ export const SelectValue = React.forwardRef<
 SelectValue.displayName = SelectPrimitive.Value.displayName;
 
 export const selectTriggerVariants = cva(
-  `group/select border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border px-3 text-sm transition-colors motion-reduce:transition-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-subtle aria-invalid:border-[var(--color-danger-border)] ${keyboardFocusRing}`,
+  `motion-control group/select border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border px-3 text-sm disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-subtle aria-invalid:border-[var(--color-danger-border)] ${keyboardFocusRing}`,
   {
     variants: {
       variant: {
@@ -55,7 +55,7 @@ export const SelectTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon className="shrink-0 transition-transform group-data-[state=open]/select:rotate-180 motion-reduce:transition-none">
+    <SelectPrimitive.Icon className="motion-icon shrink-0 group-data-[state=open]/select:rotate-180">
       <Icon glyph={NavArrowDown} size={16} tone="secondary" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
@@ -72,7 +72,7 @@ export const SelectContent = React.forwardRef<
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         className={cn(
-          "bg-elevated shadow-raised z-[90] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-lg)] p-1.5",
+          "motion-popup bg-elevated shadow-raised z-[90] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-lg)] p-1.5",
           className,
         )}
         position={position}

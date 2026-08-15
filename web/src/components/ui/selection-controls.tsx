@@ -16,14 +16,14 @@ export const Checkbox = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <CheckboxPrimitive.Root
     className={cn(
-      "border-control bg-surface text-primary-foreground hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:bg-primary grid size-5 place-items-center rounded-[var(--radius-xs)] border transition-colors disabled:opacity-[var(--opacity-disabled)]",
+      "motion-control border-control bg-surface text-primary-foreground hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:bg-primary grid size-5 place-items-center rounded-[var(--radius-xs)] border disabled:opacity-[var(--opacity-disabled)]",
       keyboardFocusRing,
       className,
     )}
     ref={ref}
     {...props}
   >
-    <CheckboxPrimitive.Indicator>
+    <CheckboxPrimitive.Indicator className="settled-content-enter">
       <Icon glyph={Check} size={16} tone="inverse" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
@@ -55,14 +55,14 @@ export const Switch = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SwitchPrimitive.Root
     className={cn(
-      "bg-secondary-action data-[state=checked]:bg-primary h-6 w-11 rounded-full p-0.5 transition-colors disabled:opacity-[var(--opacity-disabled)]",
+      "motion-control bg-secondary-action data-[state=checked]:bg-primary h-6 w-11 rounded-full p-0.5 disabled:opacity-[var(--opacity-disabled)]",
       keyboardFocusRing,
       className,
     )}
     ref={ref}
     {...props}
   >
-    <SwitchPrimitive.Thumb className="bg-surface block size-5 rounded-full shadow-sm transition-transform data-[state=checked]:translate-x-5" />
+    <SwitchPrimitive.Thumb className="motion-icon bg-surface block size-5 rounded-full shadow-sm data-[state=checked]:translate-x-5" />
   </SwitchPrimitive.Root>
 ));
 Switch.displayName = SwitchPrimitive.Root.displayName;

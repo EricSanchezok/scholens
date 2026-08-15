@@ -10,11 +10,23 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:7300",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "firefox-motion",
+      testMatch: /motion-smoke\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      name: "webkit-motion",
+      testMatch: /motion-smoke\.spec\.ts/,
+      use: { ...devices["Desktop Safari"] },
+    },
+  ],
   webServer: {
-    command: "pnpm dev",
+    command: "pnpm start",
     url: "http://127.0.0.1:7300",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

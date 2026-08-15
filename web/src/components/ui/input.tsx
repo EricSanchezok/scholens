@@ -9,7 +9,7 @@ import { keyboardFocusRing } from "./focus";
 import { useTextControlFocus } from "./text-control-focus";
 
 const controlClass =
-  "w-full rounded-[var(--radius-md)] border border-control bg-surface px-3 text-sm text-foreground placeholder:text-muted transition-colors hover:border-line-strong aria-invalid:border-[var(--color-danger-border)] disabled:cursor-not-allowed disabled:border-line disabled:bg-subtle disabled:text-disabled";
+  "motion-control w-full rounded-[var(--radius-md)] border border-control bg-surface px-3 text-sm text-foreground placeholder:text-muted hover:border-line-strong aria-invalid:border-[var(--color-danger-border)] disabled:cursor-not-allowed disabled:border-line disabled:bg-subtle disabled:text-disabled";
 
 export const Input = React.forwardRef<
   HTMLInputElement,
@@ -115,11 +115,11 @@ export const PasswordInput = React.forwardRef<
         >
           <span
             aria-hidden
-            className="group-hover:bg-hover group-active:bg-pressed absolute size-8 rounded-[var(--radius-md)] transition-colors duration-150 group-disabled:bg-transparent motion-reduce:transition-none"
+            className="motion-control group-hover:bg-hover group-active:bg-pressed absolute size-8 rounded-[var(--radius-md)] group-disabled:bg-transparent"
             data-slot="password-visibility-affordance"
           />
           <Icon
-            className="relative"
+            className="motion-icon relative"
             glyph={visible ? EyeClosed : Eye}
             size={20}
             tone={props.disabled ? "disabled" : "secondary"}

@@ -214,7 +214,7 @@ export function ConversationListItem({
   return (
     <div
       className={cn(
-        "group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)] transition-colors duration-150 motion-reduce:transition-none",
+        "motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)]",
         mobile ? "min-h-16 px-1 py-1" : "min-h-9 px-1",
         current && (mobile ? "bg-surface" : "bg-hover"),
       )}
