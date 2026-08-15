@@ -75,7 +75,10 @@ const meta = {
   },
   decorators: [
     (Story) => (
-      <div className="bg-canvas relative mx-auto h-[36rem] w-[28rem] max-w-[100vw] border">
+      <div
+        className="bg-canvas relative mx-auto h-[36rem] w-[28rem] max-w-[100vw] border"
+        data-reader-selection-story-boundary
+      >
         <span
           aria-hidden="true"
           className="bg-elevated pointer-events-none absolute size-px"
@@ -131,7 +134,65 @@ export const LongSelectionNearPageTop: Story = {
         ],
       },
     },
+    translationPreview: {
+      status: "completed",
+      text: "这是一个跨越多行的长选区，翻译预览必须留在可见的阅读区域内。",
+    },
   },
+  play: async ({ canvasElement }) => {
+    const floating = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-floating]",
+    );
+    const boundary = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-story-boundary]",
+    );
+    await expect(floating).not.toBeNull();
+    await expect(boundary).not.toBeNull();
+    await waitFor(() => {
+      const floatingRect = floating!.getBoundingClientRect();
+      const boundaryRect = boundary!.getBoundingClientRect();
+      expect(floatingRect.top).toBeGreaterThanOrEqual(boundaryRect.top);
+      expect(floatingRect.left).toBeGreaterThanOrEqual(boundaryRect.left);
+      expect(floatingRect.right).toBeLessThanOrEqual(boundaryRect.right);
+      expect(floatingRect.bottom).toBeLessThanOrEqual(boundaryRect.bottom);
+    });
+  },
+};
+
+export const TranslationNearVisibleTop: Story = {
+  args: {
+    selection: {
+      ...selection,
+      anchor: {
+        kind: "pdf_text",
+        page_number: 4,
+        rects: [{ x: 0.2, y: 0.03, width: 0.6, height: 0.04 }],
+      },
+    },
+    translationPreview: {
+      status: "completed",
+      text: "靠近顶部时，翻译预览会自动翻转到选区下方。",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const floating = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-floating]",
+    );
+    await waitFor(() => {
+      expect(floating?.dataset.readerSelectionPlacement).toBe("bottom");
+    });
+  },
+};
+
+export const TranslationNearVisibleTopDark: Story = {
+  ...TranslationNearVisibleTop,
+  globals: { appearance: "dark" },
+};
+
+export const SelectionToolbarSmallMobile: Story = {
+  args: TranslationNearVisibleTop.args,
+  globals: { viewport: { value: "smallMobile" } },
+  play: LongSelectionNearPageTop.play,
 };
 
 export const HighlightPalette: Story = {

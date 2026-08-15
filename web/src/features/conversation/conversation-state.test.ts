@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createLiveTurn, reduceLiveTurn } from "./conversation-state";
+import {
+  createLiveTurn,
+  reduceLiveTurn,
+  reduceLiveTurnEvents,
+} from "./conversation-state";
 
 const running = {
   kind: "activity" as const,
@@ -323,5 +327,30 @@ describe("Home live conversation state", () => {
     });
 
     expect(next).toEqual(turn);
+  });
+
+  it("reduces animation-frame delta batches in their original order", () => {
+    const started = reduceLiveTurn(
+      createLiveTurn("turn-1", responseId, "Question"),
+      event({
+        type: "assistant_item_start",
+        item_id: "assistant:turn-1:1",
+        sequence: 1,
+      }),
+    );
+    const next = reduceLiveTurnEvents(started, [
+      event({
+        type: "assistant_item_delta",
+        item_id: "assistant:turn-1:1",
+        delta: "流式",
+      }),
+      event({
+        type: "assistant_item_delta",
+        item_id: "assistant:turn-1:1",
+        delta: "内容",
+      }),
+    ]);
+
+    expect(next?.provisionalItems[0]?.content).toBe("流式内容");
   });
 });

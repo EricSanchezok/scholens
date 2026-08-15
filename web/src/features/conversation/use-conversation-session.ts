@@ -26,9 +26,14 @@ import {
   conversationFailureFromError,
   createLiveTurn,
   reduceLiveTurn,
+  reduceLiveTurnEvents,
   type LiveTurn,
 } from "./conversation-state";
 import type { ConversationTurn } from "./components/conversation-view";
+import {
+  ConversationDeltaBuffer,
+  type ConversationDeltaEvent,
+} from "./conversation-delta-buffer";
 import {
   useResearchComposerForm,
   type ReasoningLevel,
@@ -38,7 +43,6 @@ import {
 type ConversationTurnsResponse =
   components["schemas"]["ConversationTurnsResponse"];
 type ConversationScopeType = components["schemas"]["ConversationScopeType"];
-
 type StreamSession = {
   conversationId: string;
   turnId: string;
@@ -51,6 +55,7 @@ type StreamSession = {
   resolveAccepted?: () => void;
   rejectAccepted?: (error: unknown) => void;
   pendingLiveTurn?: LiveTurn;
+  deltaBuffer?: ConversationDeltaBuffer;
 };
 
 function sameContext(left: ResearchContext, right: ResearchContext) {
@@ -126,6 +131,7 @@ export function useConversationSession({
     const session = streamSession.current;
     if (session) {
       session.superseded = true;
+      discardStreamDeltas(session);
       streamSession.current = null;
       session.controller.abort();
     }
@@ -136,6 +142,7 @@ export function useConversationSession({
       const session = streamSession.current;
       if (session) {
         session.superseded = true;
+        discardStreamDeltas(session);
         session.controller.abort();
       }
     },
@@ -146,6 +153,7 @@ export function useConversationSession({
     const session = streamSession.current;
     if (!session?.ready) return;
     session.superseded = true;
+    discardStreamDeltas(session);
     streamSession.current = null;
     session.controller.abort();
     setLiveTurn((current) =>
@@ -159,11 +167,37 @@ export function useConversationSession({
     setSubmissionPending(false);
   }
 
+  function discardStreamDeltas(session: StreamSession) {
+    session.deltaBuffer?.discard();
+    session.deltaBuffer = undefined;
+  }
+
+  function flushStreamDeltas(session: StreamSession) {
+    session.deltaBuffer?.flush();
+  }
+
+  function queueStreamDelta(
+    session: StreamSession,
+    event: ConversationDeltaEvent,
+  ) {
+    session.deltaBuffer ??= new ConversationDeltaBuffer((events) => {
+      if (streamSession.current !== session || session.superseded) return;
+      setLiveTurn((current) => reduceLiveTurnEvents(current, events));
+    });
+    session.deltaBuffer.push(event);
+  }
+
   function applyStreamEvent(
     session: StreamSession,
     event: ConversationStreamEvent,
   ) {
     if (streamSession.current !== session || session.superseded) return;
+    if (event.type === "assistant_item_delta") {
+      if (event.response_id !== session.responseId) return;
+      queueStreamDelta(session, event);
+      return;
+    }
+    flushStreamDeltas(session);
     if (event.type === "start") {
       if (
         event.turn_id !== session.turnId ||
@@ -249,6 +283,7 @@ export function useConversationSession({
         queryKey: conversationKeys.detail(session.conversationId),
       });
       if (streamSession.current === session) streamSession.current = null;
+      discardStreamDeltas(session);
       setLiveTurn((current) =>
         current?.turnId === session.turnId &&
         current.responseId === session.responseId
@@ -339,6 +374,7 @@ export function useConversationSession({
         onEvent: (event) => applyStreamEvent(session!, event),
       });
     } catch (error) {
+      if (session) flushStreamDeltas(session);
       if (error instanceof DOMException && error.name === "AbortError") {
         if (session && !session.superseded && !session.ready) {
           const responseId = session.responseId;
@@ -392,6 +428,7 @@ export function useConversationSession({
         }
       }
     } finally {
+      if (session) discardStreamDeltas(session);
       if (!session || streamSession.current === session) {
         if (streamSession.current === session) streamSession.current = null;
         submissionInFlight.current = false;
@@ -456,6 +493,7 @@ export function useConversationSession({
       try {
         await stream(session);
       } catch (error) {
+        flushStreamDeltas(session);
         if (error instanceof DOMException && error.name === "AbortError") {
           if (!session.started) {
             session.rejectAccepted?.(error);
@@ -504,6 +542,7 @@ export function useConversationSession({
           }),
         ]);
       } finally {
+        discardStreamDeltas(session);
         if (!session.started) {
           session.rejectAccepted?.(
             new Error("Generation ended before the request was accepted"),

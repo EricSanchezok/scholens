@@ -98,6 +98,16 @@ exhaustion. The interface preserves the failed user message, explains that it
 was saved, and retains the public diagnostic ID without exposing provider or
 Redis details.
 
+Visible assistant deltas are coalesced to at most one browser animation-frame
+commit, so a fast provider cannot force repeated Markdown layout between
+paints. Conversation auto-follow observes real transcript size changes and
+drives one retargetable animation toward the latest content; it never starts a
+new native smooth-scroll operation for each token. Wheel, touch, keyboard, or
+scrollbar movement away from the bottom cancels following immediately and
+reveals Jump to latest. Returning near the bottom or activating that control
+re-engages following. Reduced-motion users move to the current target without
+animation.
+
 Every writable user message exposes Edit followed by Copy; when alternate
 prompt branches exist, their pager follows those actions in the same row.
 Editing saves a durable

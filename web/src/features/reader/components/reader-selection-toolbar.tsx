@@ -29,6 +29,7 @@ import {
 } from "../reader-highlight-colors";
 import type { ReaderSelection } from "./pdf-page";
 import type { ReaderAnnotationAudience } from "../reader-types";
+import { useReaderFloatingPosition } from "./use-reader-floating-position";
 
 export type ReaderSelectionLabels = {
   ask: string;
@@ -92,6 +93,7 @@ export function ReaderSelectionToolbar({
   onHighlight,
   onOpenTranslation,
   onTranslate,
+  boundaryRef,
   projectContext,
   selection,
   translationPreview,
@@ -106,6 +108,7 @@ export function ReaderSelectionToolbar({
   ) => void;
   onOpenTranslation: () => void;
   onTranslate: () => void;
+  boundaryRef?: React.RefObject<HTMLElement | null>;
   projectContext?: boolean;
   selection: ReaderSelection;
   translationPreview?: ReaderSelectionTranslationPreview;
@@ -133,10 +136,10 @@ export function ReaderSelectionToolbar({
     }),
     { left: 1, right: 0, top: 1, bottom: 0 },
   );
-  const spaceAbove = bounds.top;
-  const spaceBelow = 1 - bounds.bottom;
-  const showBelow = spaceAbove < 0.08 || spaceBelow > spaceAbove;
-  const left = Math.min(0.88, Math.max(0.12, (bounds.left + bounds.right) / 2));
+  const { floatingRef, position } = useReaderFloatingPosition({
+    boundaryRef,
+    bounds,
+  });
 
   async function copySelection() {
     await copyFeedback.copy().catch(() => undefined);
@@ -153,16 +156,21 @@ export function ReaderSelectionToolbar({
   return (
     <TooltipProvider delayDuration={350}>
       <div
-        className="pointer-events-auto absolute isolate z-40 flex flex-col items-center gap-1"
+        className="pointer-events-auto absolute isolate z-40 flex flex-col items-center gap-1 overflow-y-auto overscroll-contain"
+        data-reader-selection-floating
+        data-reader-selection-placement={position?.placement}
         onPointerDown={(event) => {
           event.preventDefault();
           event.stopPropagation();
         }}
         onPointerUp={(event) => event.stopPropagation()}
+        ref={floatingRef}
         style={{
-          left: `${left * 100}%`,
-          top: `${(showBelow ? bounds.bottom : bounds.top) * 100}%`,
-          transform: `${showBelow ? "translateY(0.5rem)" : "translateY(calc(-100% - 0.5rem))"} translateX(-50%)`,
+          left: position?.left ?? 0,
+          maxHeight: position?.maxHeight,
+          maxWidth: position?.maxWidth,
+          top: position?.top ?? 0,
+          visibility: position ? "visible" : "hidden",
         }}
       >
         <div

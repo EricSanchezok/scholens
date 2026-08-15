@@ -203,10 +203,16 @@ Selection has three deliberately separate lifetimes:
   annotation thread.
 
 The text-selection toolbar is absent until a real non-collapsed PDF text
-selection exists. It chooses the side with usable space, remains above the PDF
-page stack when it crosses a page gap, and stays horizontally clamped to the
-rendered page. Its actions and color palette always sit on an isolated, fully
-opaque elevated surface so document text cannot show through the controls. It
+selection exists. It measures its complete action, translation-preview, and
+palette surface against the intersection of the PDF viewport and the visual
+viewport. Placement applies an offset, flips above or below the selection when
+the preferred side cannot fit, then shifts and size-limits the result so it
+cannot cross a visible edge. It remains above the PDF page stack when it crosses
+a page gap and stays horizontally clamped to the rendered page. Resize, zoom,
+scroll, visual-viewport, streamed-preview, and palette-size changes all
+recompute the same position without a second placement path. Its actions and
+color palette always sit on an isolated, fully opaque elevated surface so
+document text cannot show through the controls. It
 contains only the semantic icons for Ask, Translate, Highlight, Add annotation,
 and Copy;
 Ask uses `AskIcon` (`ChatBubbleQuestion`) while Add annotation uses

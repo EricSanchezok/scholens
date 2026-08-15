@@ -235,6 +235,10 @@ export function ConversationWorklog({
       ]),
     [entries, provisionalItems],
   );
+  const provisionalItemIds = React.useMemo(
+    () => new Set(provisionalItems.map((item) => item.id)),
+    [provisionalItems],
+  );
   const hasDetails = rows.length > 0;
   const open =
     manualOpen ?? (!historical && state === "streaming" && hasDetails);
@@ -325,7 +329,12 @@ export function ConversationWorklog({
                 <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 place-items-center rounded-full border lg:hidden">
                   <Icon glyph={InsightIcon} size={16} tone="secondary" />
                 </span>
-                <MessageContent content={row.content} />
+                <MessageContent
+                  content={row.content}
+                  streaming={
+                    state === "streaming" && provisionalItemIds.has(row.id)
+                  }
+                />
               </li>
             ) : (
               <ActivityBatchRow batch={row} key={row.id} />
