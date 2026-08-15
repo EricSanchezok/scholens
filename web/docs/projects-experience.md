@@ -50,9 +50,10 @@ placement and icons as Reader. Papers and rows become one-column compositions
 below the desktop breakpoints, and all controls remain usable at 320px.
 
 Project detail inherits the Library collection language: underlined tabs,
-pill-shaped search and sorting controls, quiet separators, local row hover, and
-unboxed empty states. Paper, conversation, and output counts live with the
-project title metadata instead of in a separate metric card.
+pill-shaped search, the shared light-line Select surface for sorting and kind,
+quiet separators, local row hover, and unboxed empty states. Paper,
+conversation, and output counts live with the project title metadata instead
+of in a separate metric card.
 
 Desktop Projects uses the same compact workbench density as Library. The list
 title and New project action share a 44 px row, followed by search and sorting

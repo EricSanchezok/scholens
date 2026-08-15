@@ -15,12 +15,19 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  type SelectTriggerProps,
 } from "./select";
 
-function LanguageSelect({ disabled = false }: { disabled?: boolean }) {
+function LanguageSelect({
+  disabled = false,
+  variant = "field",
+}: {
+  disabled?: boolean;
+  variant?: SelectTriggerProps["variant"];
+}) {
   return (
     <Select defaultValue="en" disabled={disabled}>
-      <SelectTrigger aria-label="Language">
+      <SelectTrigger aria-label="Language" variant={variant}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -53,7 +60,7 @@ function LongValueSelect() {
   return (
     <div className="w-40">
       <Select defaultValue="long">
-        <SelectTrigger aria-label="Reader context">
+        <SelectTrigger aria-label="Reader context" variant="compact">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -93,6 +100,20 @@ export const AllStates: Story = {
     </div>
   ),
 };
+export const VisualVariants: Story = {
+  render: () => (
+    <div className="grid gap-5">
+      <div className="grid gap-2">
+        <span className="text-caption text-secondary">Default density</span>
+        <LanguageSelect variant="field" />
+      </div>
+      <div className="grid gap-2">
+        <span className="text-caption text-secondary">Compact density</span>
+        <LanguageSelect variant="compact" />
+      </div>
+    </div>
+  ),
+};
 export const KeyboardInteraction: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -106,7 +127,9 @@ export const DialogLayering: Story = {
   render: () => <SelectInDialog />,
   play: async () => {
     const body = within(document.body);
+    const dialog = await body.findByRole("dialog");
     const trigger = await body.findByRole("combobox", { name: "Language" });
+    await expect(window.getComputedStyle(dialog).outlineStyle).toBe("none");
     await userEvent.click(trigger);
     await userEvent.click(
       await body.findByRole("option", { name: "简体中文" }),

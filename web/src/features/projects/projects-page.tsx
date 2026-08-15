@@ -240,10 +240,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
             }
             value={state.sort}
           >
-            <SelectTrigger
-              aria-label={t("sort.label")}
-              className="bg-subtle hover:border-line rounded-full border-transparent"
-            >
+            <SelectTrigger aria-label={t("sort.label")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

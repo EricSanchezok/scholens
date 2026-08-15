@@ -107,8 +107,8 @@ function SidebarControl({
       href={href as Route}
       onClick={onSelect}
     >
-      <span className="grid size-5 shrink-0 place-items-center">
-        <Icon glyph={glyph} size={16} tone="primary" />
+      <span className="grid size-6 shrink-0 place-items-center">
+        <Icon glyph={glyph} size={20} tone="primary" />
       </span>
       {!collapsed && (
         <span className="text-sidebar-label truncate">{label}</span>
@@ -127,8 +127,8 @@ function SidebarControl({
       onClick={disabled ? undefined : onSelect}
       type="button"
     >
-      <span className="grid size-5 shrink-0 place-items-center">
-        <Icon glyph={glyph} size={16} tone="secondary" />
+      <span className="grid size-6 shrink-0 place-items-center">
+        <Icon glyph={glyph} size={20} tone="secondary" />
       </span>
       {!collapsed && (
         <span className="text-sidebar-label truncate">{label}</span>
@@ -287,7 +287,7 @@ function AccountMenu({
       <DropdownMenuContent
         align={collapsed || settingsTrigger ? "end" : "start"}
         className={cn(
-          "border-line-subtle shadow-overlay rounded-[var(--radius-xl)] p-1.5",
+          "rounded-[var(--radius-xl)]",
           collapsed || settingsTrigger
             ? "w-72"
             : "w-[max(var(--radix-dropdown-menu-trigger-width),18rem)]",

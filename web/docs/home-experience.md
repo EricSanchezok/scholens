@@ -38,7 +38,7 @@ the deliberately deferred boundaries.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary
-  navigation uses 40 px rows with 16 px glyphs in fixed slots, conversation
+  navigation uses 40 px rows with 20 px semantic glyphs in 24 px fixed slots, conversation
   history uses 36 px rows so its contextual action retains a full desktop hit
   target, and the account trigger uses a 48 px row. Expanded
   sidebar navigation, conversation titles, and the actor name share the 13 px

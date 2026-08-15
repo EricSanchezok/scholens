@@ -1,6 +1,7 @@
 "use client";
 
 import * as SelectPrimitive from "@radix-ui/react-select";
+import { cva, type VariantProps } from "class-variance-authority";
 import { Check, NavArrowDown } from "iconoir-react";
 import * as React from "react";
 
@@ -25,21 +26,36 @@ export const SelectValue = React.forwardRef<
   </span>
 ));
 SelectValue.displayName = SelectPrimitive.Value.displayName;
+
+export const selectTriggerVariants = cva(
+  `group/select border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border px-3 text-sm transition-colors motion-reduce:transition-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-subtle aria-invalid:border-[var(--color-danger-border)] ${keyboardFocusRing}`,
+  {
+    variants: {
+      variant: {
+        field: "h-11",
+        compact: "h-11 sm:h-9",
+      },
+    },
+    defaultVariants: { variant: "field" },
+  },
+);
+
+export type SelectTriggerProps = React.ComponentPropsWithoutRef<
+  typeof SelectPrimitive.Trigger
+> &
+  VariantProps<typeof selectTriggerVariants>;
+
 export const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ children, className, ...props }, ref) => (
+  SelectTriggerProps
+>(({ children, className, variant, ...props }, ref) => (
   <SelectPrimitive.Trigger
-    className={cn(
-      "border-control bg-surface hover:border-line-strong disabled:text-disabled flex h-11 w-full items-center justify-between gap-2 rounded-[var(--radius-md)] border px-3 text-sm aria-invalid:border-[var(--color-danger-border)]",
-      keyboardFocusRing,
-      className,
-    )}
+    className={cn(selectTriggerVariants({ variant }), className)}
     ref={ref}
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon className="shrink-0">
+    <SelectPrimitive.Icon className="shrink-0 transition-transform group-data-[state=open]/select:rotate-180 motion-reduce:transition-none">
       <Icon glyph={NavArrowDown} size={16} tone="secondary" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
@@ -48,21 +64,27 @@ SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 export const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ children, className, position = "popper", ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      className={cn(
-        "border-line bg-elevated shadow-overlay z-[90] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-lg)] border p-1",
-        className,
-      )}
-      position={position}
-      ref={ref}
-      {...props}
-    >
-      <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-));
+>(
+  (
+    { children, className, position = "popper", sideOffset = 6, ...props },
+    ref,
+  ) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        className={cn(
+          "bg-elevated shadow-raised z-[90] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-lg)] p-1.5",
+          className,
+        )}
+        position={position}
+        ref={ref}
+        sideOffset={sideOffset}
+        {...props}
+      >
+        <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  ),
+);
 SelectContent.displayName = SelectPrimitive.Content.displayName;
 export const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
@@ -70,7 +92,7 @@ export const SelectItem = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <SelectPrimitive.Item
     className={cn(
-      "data-[highlighted]:bg-hover relative flex min-h-10 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-9 pl-3 text-sm outline-none select-none",
+      "data-[highlighted]:bg-hover data-[state=checked]:bg-subtle data-[disabled]:text-disabled relative flex min-h-11 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-9 pl-3 text-sm outline-none select-none data-[disabled]:pointer-events-none sm:min-h-9",
       className,
     )}
     ref={ref}

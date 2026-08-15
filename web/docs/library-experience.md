@@ -61,12 +61,13 @@ titles and uninterrupted identifiers must not create horizontal page
 scrolling; desktop table titles remain a single line.
 
 The Library collection uses one flat editorial surface rather than placing a
-table inside a rounded card. Search, filter, and sort are compact pill controls;
-the collection owns only its top and bottom boundary, while rows are separated
-by quiet dividers and reveal a local hover surface. Mobile keeps the same
-border ownership with one divided list instead of a stack of repeated cards.
-This visual contract also applies to Outputs so switching tabs does not change
-the page's interface dialect.
+table inside a rounded card. Search and non-select filters remain compact pills;
+sorting uses the same light-line Select surface as forms and Reader. The
+collection owns only its top and bottom boundary, while rows are separated by
+quiet dividers and reveal a local hover surface. Mobile keeps the same border
+ownership with one divided list instead of a stack of repeated cards. This
+visual contract also applies to Outputs so switching tabs does not change the
+page's interface dialect.
 
 Paper and tag rows follow the shared collection-row and nested-action contract
 in [Component Development](./component-development.md). A paper title is the

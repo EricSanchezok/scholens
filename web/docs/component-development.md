@@ -62,6 +62,17 @@ actually shared.
   focus ring. Composite controls delegate that keyboard cue to their outer
   interaction surface instead of drawing a second rectangle around the native
   input.
+- Every `SelectTrigger` uses one light-line, large-radius surface. Hover, pressed,
+  and open state change only its quiet background; they never strengthen the
+  border. The default density is 44 px, while `compact` preserves that touch
+  size and reduces to 36 px in dense desktop toolbars. Call sites may own width
+  but must not reconstruct the surface, radius, or state treatment. Select and
+  Dropdown menus use one elevated surface with a restrained raised shadow,
+  local hover/selected rows, and 44 px touch rows that compact to 36 px on
+  desktop.
+- Dialog containers suppress the browser's native focus outline; keyboard focus
+  remains visible on the first real interactive control through the shared
+  focus primitive.
 - Icon-only controls require an accessible label and usually a Tooltip.
 - Narrow containers and long English or Simplified Chinese content must not
   break layout.

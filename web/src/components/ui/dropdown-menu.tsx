@@ -20,7 +20,7 @@ export const DropdownMenuContent = React.forwardRef<
   <DropdownPrimitive.Portal>
     <DropdownPrimitive.Content
       className={cn(
-        "border-line bg-elevated shadow-overlay z-50 min-w-48 rounded-[var(--radius-lg)] border p-1",
+        "bg-elevated shadow-raised z-50 min-w-48 rounded-[var(--radius-lg)] p-1.5",
         className,
       )}
       ref={ref}
@@ -39,7 +39,7 @@ export const DropdownMenuItem = React.forwardRef<
 >(({ className, destructive, ...props }, ref) => (
   <DropdownPrimitive.Item
     className={cn(
-      "data-[highlighted]:bg-hover data-[disabled]:text-disabled flex min-h-9 cursor-default items-center gap-2 rounded-[var(--radius-md)] px-2 text-sm outline-none select-none",
+      "data-[highlighted]:bg-hover data-[disabled]:text-disabled flex min-h-11 cursor-default items-center gap-2 rounded-[var(--radius-md)] px-2.5 text-sm outline-none select-none data-[disabled]:pointer-events-none sm:min-h-9",
       destructive && "text-danger",
       className,
     )}
@@ -55,7 +55,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <DropdownPrimitive.CheckboxItem
     className={cn(
-      "data-[highlighted]:bg-hover relative flex min-h-9 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-2 pl-8 text-sm outline-none",
+      "data-[highlighted]:bg-hover data-[state=checked]:bg-subtle data-[disabled]:text-disabled relative flex min-h-11 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-2 pl-8 text-sm outline-none data-[disabled]:pointer-events-none sm:min-h-9",
       className,
     )}
     ref={ref}
@@ -78,7 +78,7 @@ export const DropdownMenuRadioItem = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <DropdownPrimitive.RadioItem
     className={cn(
-      "data-[highlighted]:bg-hover relative flex min-h-9 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-2 pl-8 text-sm outline-none",
+      "data-[highlighted]:bg-hover data-[state=checked]:bg-subtle data-[disabled]:text-disabled relative flex min-h-11 cursor-default items-center rounded-[var(--radius-md)] py-2 pr-2 pl-8 text-sm outline-none data-[disabled]:pointer-events-none sm:min-h-9",
       className,
     )}
     ref={ref}
@@ -100,7 +100,7 @@ export const DropdownMenuSubTrigger = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <DropdownPrimitive.SubTrigger
     className={cn(
-      "data-[highlighted]:bg-hover flex min-h-9 items-center rounded-[var(--radius-md)] px-2 text-sm outline-none",
+      "data-[highlighted]:bg-hover flex min-h-11 items-center rounded-[var(--radius-md)] px-2.5 text-sm outline-none sm:min-h-9",
       className,
     )}
     ref={ref}
