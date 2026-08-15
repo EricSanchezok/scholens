@@ -154,14 +154,9 @@ def get_token_usage(db: Session, *, user_id: int) -> int:
 
 def token_quota_status(db: Session, *, user: Actor) -> tuple[int, int, int, int]:
     """Return (limit, used, remaining, overage) for the user's current plan."""
-    from app.modules.billing.domain import TOKEN_CREDITS_KEY
-    from app.modules.billing.infrastructure.quotas import (
-        get_plan_limits,
-        get_user_subscription_plan,
-    )
+    from app.modules.billing.infrastructure.quotas import get_user_entitlements
 
-    plan = get_user_subscription_plan(db, user)
-    limit = int(get_plan_limits(plan)[TOKEN_CREDITS_KEY])
+    limit = int(get_user_entitlements(db, user).limits.token_credits_weekly)
     used = get_token_usage(db, user_id=user.id)
     return limit, used, max(0, limit - used), max(0, used - limit)
 

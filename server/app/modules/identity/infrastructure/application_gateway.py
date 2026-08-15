@@ -1,6 +1,8 @@
 """SQLAlchemy adapter for Scholens identity/profile use cases."""
 
 from app.modules.identity.application.identity import (
+    AdminStatusResolution,
+    AuthenticatedIdentity,
     BlockedStatusResolution,
     IdentityProfile,
     IdentityProfileResolution,
@@ -45,6 +47,25 @@ class SqlAlchemyIdentityGateway:
             ),
         )
 
+    def authenticated_identity(
+        self,
+        *,
+        user_id: int,
+    ) -> AuthenticatedIdentity | None:
+        user = user_repository.get(self._db, id=user_id)
+        if user is None:
+            return None
+        return AuthenticatedIdentity(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            status=str(user.status),
+            email_verified=user.email_verified_at is not None,
+        )
+
+    def available_admin_count(self) -> int:
+        return user_repository.available_admin_count(self._db)
+
     def set_blocked(
         self,
         *,
@@ -64,6 +85,29 @@ class SqlAlchemyIdentityGateway:
             blocked=blocked,
         )
         return BlockedStatusResolution(
+            profile_created=profile_created,
+            changed=changed,
+        )
+
+    def set_admin(
+        self,
+        *,
+        user_id: int,
+        enabled: bool,
+    ) -> AdminStatusResolution | None:
+        user = user_repository.get(self._db, id=user_id)
+        if user is None:
+            return None
+        profile, profile_created = user_repository.resolve_profile(
+            self._db,
+            user_id=user_id,
+        )
+        changed = user_repository.set_admin(
+            self._db,
+            profile=profile,
+            enabled=enabled,
+        )
+        return AdminStatusResolution(
             profile_created=profile_created,
             changed=changed,
         )

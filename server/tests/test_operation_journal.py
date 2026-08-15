@@ -17,6 +17,7 @@ from app.modules.operation_journal.infrastructure import (
 )
 from app.shared.application import (
     Actor,
+    CliOrigin,
     ConversationOrigin,
     CredentialKind,
     CredentialRef,
@@ -166,6 +167,12 @@ def test_entry_normalizes_resources_and_batch_reads_clock_once() -> None:
             None,
             ("document_gc", "run", None),
         ),
+        (
+            CliOrigin("entitlements.quota-set", uuid4()),
+            OperationInitiator.USER,
+            None,
+            ("entitlements.quota-set", "invocation", None),
+        ),
     ],
 )
 def test_typed_origins_have_fixed_safe_projection(
@@ -193,6 +200,8 @@ def test_typed_origins_have_fixed_safe_projection(
     assert entry.origin_name == expected[0]
     if expected[1] == "run":
         assert entry.origin_reference == str(operation.origin.run_id)  # type: ignore[union-attr]
+    elif expected[1] == "invocation":
+        assert entry.origin_reference == str(operation.origin.invocation_id)  # type: ignore[union-attr]
     else:
         assert entry.origin_reference == expected[1]
     if expected[2] == "job":

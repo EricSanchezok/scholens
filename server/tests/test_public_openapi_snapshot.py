@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.scripts.export_public_openapi import OUTPUT, public_openapi_schema
+from app.transport.http.contract_artifacts import OUTPUT, public_openapi_schema
 
 
 def test_public_openapi_contains_only_public_v1_routes() -> None:

@@ -6,6 +6,7 @@ from .cursors import SignedCursorCodec
 from .executor import ApplicationExecutor
 from .error_envelope import ErrorEnvelope
 from .operation_context import (
+    CliOrigin,
     ConversationOrigin,
     CredentialKind,
     CredentialRef,
@@ -28,6 +29,7 @@ __all__ = [
     "ApplicationExecutor",
     "ErrorEnvelope",
     "Clock",
+    "CliOrigin",
     "ConversationOrigin",
     "CredentialKind",
     "CredentialRef",

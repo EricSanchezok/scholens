@@ -51,6 +51,19 @@ def test_release_images_are_required_and_runtime_containers_are_non_root() -> No
         )
 
 
+def test_production_uses_the_unified_migration_cli_and_gunicorn_runtime() -> None:
+    compose = load_compose()
+    dockerfile = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert compose["services"]["migrate"]["command"] == [
+        "scholens",
+        "db",
+        "upgrade",
+        "--yes",
+    ]
+    assert 'CMD ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]' in dockerfile
+
+
 def test_python_images_copy_shared_packages_before_locked_sync() -> None:
     for dockerfile_path in (
         ROOT / "server" / "Dockerfile",
@@ -321,6 +334,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
 
     assert [path.name for path in versions] == [
         "2026_07_28_1030_scholens_initial.py",
+        "2026_08_16_1200_entitlement_grants_and_cli_origin.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline
@@ -422,7 +436,11 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     assert "tags: scholens-api:ci" in workflow
     assert "for _ in 1 2; do" in workflow
     assert "sanchezcloud-identity migrate" in workflow
-    assert "python -m app.scripts.migrate_product" in workflow
+    assert "scholens db upgrade --yes" in workflow
+    assert "scholens dev reset-product" in workflow
+    assert "RESET-SCHOLENS-LOCAL" in workflow
+    assert "account_plan_grants" in workflow
+    assert "account_quota_overrides" in workflow
     assert "scholens-api:ci alembic check" in workflow
     assert "CREATE TABLE auth.product_migrator_must_not_create" in workflow
     assert "CREATE TABLE scholens.auth_migrator_must_not_create" in workflow

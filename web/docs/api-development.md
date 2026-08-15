@@ -25,7 +25,7 @@ When a public request or response changes:
 2. From `server/`, run:
 
    ```bash
-   uv run python -m app.scripts.export_public_openapi
+   uv run scholens contract export
    uv run pytest tests/test_public_openapi_snapshot.py
    ```
 

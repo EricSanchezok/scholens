@@ -62,13 +62,27 @@ uv run --frozen --no-sync start
 2. Start the API server:
 
 ```bash
-uv run --frozen --no-sync start
+uv run --frozen --no-sync scholens serve
 ```
 
 The command binds to `127.0.0.1:7301`, rejects any `DATABASE_URL` other than
 the shared local PostgreSQL at `127.0.0.1:55432/sanchezcloud`, and does not run
 migrations. Apply product migrations explicitly with the `scholens_migrator`
 role as documented in [`../DEVELOPMENT.md`](../DEVELOPMENT.md).
+
+## Operator CLI
+
+`scholens` is the only Server command-line entry point. Its command families
+are `doctor`, `users`, `entitlements`, `usage`, `jobs`, `db`, `contract`,
+`verify`, `maintenance`, and `dev`. Every concrete command accepts `--json`.
+Run `uv run scholens <group> --help` for the authoritative option set.
+
+Business mutations execute through `ApplicationExecutor` and the owning
+application service, and write CLI provenance to the append-only Operation
+Journal. Except for `users bootstrap-admin` and the local-only guarded reset,
+mutations require an active verified administrator via `--actor-email`, an
+explicit `--reason`, and confirmation or `--yes`. SQLAdmin is a read-only
+diagnostic surface.
 
 The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
 enabled.
@@ -220,7 +234,7 @@ uv run alembic revision --autogenerate -m "migration message"
 To apply the migration, run:
 
 ```bash
-uv run alembic upgrade head
+uv run scholens db upgrade
 ```
 
 To downgrade the migration, run:
@@ -229,7 +243,8 @@ To downgrade the migration, run:
 uv run alembic downgrade -1
 ```
 
-Before committing a migration, run `uv run alembic check`. Alembic compares
+Before committing a migration, run `uv run alembic check` and
+`uv run scholens db status`. Alembic compares
 only the `scholens` schema; `auth` belongs to sanchezcloud-identity and other product
 schemas are deliberately outside this migration environment. The local
 product-only reset procedure is documented in

@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_scholens_uses_registered_shared_local_ports() -> None:
     environment = (ROOT / ".env.example").read_text(encoding="utf-8")
     server_cli = (ROOT / "server/app/cli.py").read_text(encoding="utf-8")
+    server_package = (ROOT / "server/pyproject.toml").read_text(encoding="utf-8")
     web_package = (ROOT / "web/package.json").read_text(encoding="utf-8")
     legacy_package = (ROOT / "client/package.json").read_text(encoding="utf-8")
     jobs_api = (ROOT / "jobs/scripts/start_api.sh").read_text(encoding="utf-8")
@@ -24,6 +25,8 @@ def test_scholens_uses_registered_shared_local_ports() -> None:
     assert "127.0.0.1:55672" in environment
     assert "127.0.0.1:56379" in environment
     assert "migrate_product()" not in server_cli
+    assert 'scholens = "app.cli:cli"' in server_package
+    assert 'start = "app.cli:' not in server_package
     assert 'os.getenv("AUTH_DATABASE_URL", database_url)' in server_cli
     assert '"127.0.0.1"' in server_cli
     assert '"7301"' in server_cli

@@ -74,7 +74,12 @@ from app.modules.research.infrastructure.models import (
     ResearchDataTable,
     ResearchItem,
 )
-from app.modules.billing.infrastructure.models import StripeWebhookEvent, Subscription
+from app.modules.billing.infrastructure.models import (
+    AccountPlanGrant,
+    AccountQuotaOverride,
+    StripeWebhookEvent,
+    Subscription,
+)
 from app.database.models.tool_invocation import ToolInvocation
 from app.modules.translations.infrastructure.models import (
     TranslationPreference,
@@ -90,6 +95,8 @@ __all__ = [
     "AccessKey",
     "AnnotationColor",
     "AnnotationThreadStatus",
+    "AccountPlanGrant",
+    "AccountQuotaOverride",
     "Base",
     "ConversationScopeType",
     "IntegrationConnection",

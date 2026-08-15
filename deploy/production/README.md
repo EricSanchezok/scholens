@@ -59,17 +59,23 @@ psql "$DATABASE_ADMIN_URL" \
 Run this bootstrap before sanchezcloud-identity migration, after sanchezcloud-identity migration, and
 after Scholens migration. The sanchezcloud-identity repository independently migrates
 `auth.*`; the Scholens migration container checks the auth ledger and applies
-only `scholens.*`. Both runners use PostgreSQL advisory locks.
+only `scholens.*` with `scholens db upgrade --yes`. Daily API startup remains
+Gunicorn-owned and never applies migrations. Both runners use PostgreSQL
+advisory locks.
 
 The `/admin` login uses an ordinary verified sanchezcloud-identity account and then checks
 `scholens.user_profiles.is_admin`. Bootstrap the first administrator out of band
 after that account registers:
 
-```sql
-INSERT INTO scholens.user_profiles (user_id, is_admin)
-SELECT id, true FROM auth.users WHERE lower(email) = lower('operator@example.com')
-ON CONFLICT (user_id) DO UPDATE SET is_admin = true;
+```bash
+scholens users bootstrap-admin --email operator@example.com
 ```
+
+The command is available only while no usable administrator exists and records
+CLI provenance. Subsequent administrator, block, Researcher-grant, and quota
+changes must use the audited `scholens users ...` and
+`scholens entitlements ...` application commands with `--actor-email`,
+`--reason`, and confirmation. `/admin` business views are read-only.
 
 `SCHOLENS_ADMIN_SESSION_SECRET` only signs the admin browser session; it is not
 an administrator password.

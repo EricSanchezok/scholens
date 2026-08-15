@@ -159,6 +159,17 @@ class SchedulerOrigin:
         _require_uuid(self.run_id, field_name="run_id")
 
 
+@dataclass(frozen=True, slots=True)
+class CliOrigin:
+    command_name: str
+    invocation_id: UUID
+    kind: Literal["cli"] = field(init=False, default="cli")
+
+    def __post_init__(self) -> None:
+        _require_named_origin(self.command_name, field_name="command_name")
+        _require_uuid(self.invocation_id, field_name="invocation_id")
+
+
 type OperationOrigin = (
     HttpOrigin
     | ConversationOrigin
@@ -167,6 +178,7 @@ type OperationOrigin = (
     | WebhookOrigin
     | OAuthCallbackOrigin
     | SchedulerOrigin
+    | CliOrigin
 )
 
 
@@ -229,6 +241,7 @@ class OperationContext:
                 WebhookOrigin,
                 OAuthCallbackOrigin,
                 SchedulerOrigin,
+                CliOrigin,
             ),
         ):
             raise ValueError("operation origin is invalid")
@@ -333,6 +346,9 @@ def _validate_credential(
         allows_none = True
     elif isinstance(origin, WebhookOrigin):
         expected = CredentialKind.PROVIDER_SIGNATURE
+    elif isinstance(origin, CliOrigin):
+        expected = None
+        allows_none = True
     else:
         expected = None
         allows_none = True
@@ -371,6 +387,8 @@ def _validate_initiator(
             if is_root
             else {OperationInitiator.AGENT, OperationInitiator.SYSTEM}
         )
+    elif isinstance(origin, CliOrigin):
+        allowed = {OperationInitiator.USER, OperationInitiator.SYSTEM}
     else:
         allowed = {OperationInitiator.SYSTEM}
     if initiated_by not in allowed:
@@ -381,6 +399,7 @@ def _validate_initiator(
 
 
 __all__ = [
+    "CliOrigin",
     "ConversationOrigin",
     "CredentialKind",
     "CredentialRef",

@@ -51,6 +51,7 @@ from app.modules.identity.infrastructure.onboarding_adapters import (
     SqlAlchemyOnboardingWriter,
 )
 from app.modules.billing.application.billing import Billing
+from app.modules.billing.application.entitlement_admin import EntitlementAdmin
 from app.modules.billing.infrastructure.application_gateway import (
     SqlAlchemySubscriptionStore,
     SqlAlchemyUsageReader,
@@ -80,6 +81,8 @@ from app.modules.papers.infrastructure.details import SqlAlchemyPaperDetails
 from app.modules.papers.infrastructure.library_gateway import (
     SqlAlchemyPaperLibraryGateway,
 )
+from app.modules.papers.application.maintenance import PassageMaintenance
+from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
 from app.bootstrap.adapters.library_outputs import SqlAlchemyLibraryOutputsGateway
 from app.bootstrap.adapters.library_removal import (
     delete_personal_document_annotations,
@@ -218,6 +221,12 @@ def build_paper_ingestion(*, db: Session, journal: OperationJournal) -> IngestPa
     )
 
 
+def build_passage_maintenance(
+    *, db: Session, journal: OperationJournal
+) -> PassageMaintenance:
+    return PassageMaintenance(SqlPassageBackfill(db), journal=journal)
+
+
 def build_pdf_url_source() -> SafePdfUrlSource:
     return SafePdfUrlSource()
 
@@ -263,6 +272,22 @@ def build_billing(*, db: Session, journal: OperationJournal) -> Billing:
         journal=journal,
         monthly_price_id=MONTHLY_PRICE_ID,
         yearly_price_id=YEARLY_PRICE_ID,
+    )
+
+
+def build_entitlement_admin(
+    *,
+    db: Session,
+    journal: OperationJournal,
+) -> EntitlementAdmin:
+    from app.modules.billing.infrastructure.entitlement_admin_gateway import (
+        SqlAlchemyEntitlementAdminGateway,
+    )
+
+    return EntitlementAdmin(
+        SqlAlchemyEntitlementAdminGateway(db),
+        journal=journal,
+        clock=SystemClock(),
     )
 
 

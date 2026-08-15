@@ -25,7 +25,7 @@ class OperationJournalEntryModel(Base):
         CheckConstraint(
             "origin_kind IN ("
             "'http', 'conversation', 'mcp', 'job', 'webhook', "
-            "'oauth_callback', 'scheduler'"
+            "'oauth_callback', 'scheduler', 'cli'"
             ")",
             name="ck_operation_journal_origin",
         ),

@@ -9,7 +9,7 @@ This document defines the Scholens-specific database and deployment contract.
 | Owner                   | Responsibilities                                                                                                                                                                                | PostgreSQL ownership                                                                                                            | Explicitly excluded                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `sanchezcloud-identity` | Email identity, passwords, verification, global account status, lockout, public Account ID, shared avatar references, connected clients, security events, audience tokens, and refresh families | `auth.users`, `auth.refresh_tokens`, `auth.user_clients`, `auth.user_avatars`, `auth.security_events`, `auth.schema_migrations` | Product roles, blocks, subscriptions, quotas, usage, documents, projects |
-| Scholens                | Documents, projects, collaboration, product profile/admin/block state, subscriptions, integration connections, and usage                                                                        | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
+| Scholens                | Documents, projects, collaboration, product profile/admin/block state, paid subscriptions, product plan grants, quota overrides, integration connections, and usage                              | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
 
 Both schemas share the `sanchezcloud` database but have independent owners and migration
 ledgers. `public` contains no application tables. Scholens rows may reference the internal
@@ -26,6 +26,9 @@ product schema.
   or mutate `auth.refresh_tokens` directly.
 - Product profiles, roles, administrators, blocks, subscriptions, quota, and usage remain in
   `scholens.*`.
+- `subscriptions` records payment state only. Internal Researcher access lives
+  in `account_plan_grants`, and temporary numerical test limits live in
+  `account_quota_overrides`; neither table mutates or impersonates Stripe.
 
 ## Database roles and migration order
 

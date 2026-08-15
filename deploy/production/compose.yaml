@@ -308,7 +308,7 @@ services:
   migrate:
     <<: *api-image
     profiles: ["migrate"]
-    command: ["python", "-m", "app.scripts.migrate_product"]
+    command: ["scholens", "db", "upgrade", "--yes"]
     environment:
       DATABASE_URL: ${SCHOLENS_MIGRATION_DATABASE_URL:?SCHOLENS_MIGRATION_DATABASE_URL is required}
     volumes:

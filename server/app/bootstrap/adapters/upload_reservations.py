@@ -27,9 +27,8 @@ from app.modules.billing.domain import (
     PROJECT_PAPERS_KEY,
 )
 from app.modules.billing.infrastructure.quotas import (
-    get_plan_limits,
     get_quota_user,
-    get_user_subscription_plan,
+    get_user_entitlements,
     lock_account_resource_quota,
 )
 from app.modules.projects.infrastructure.access import require_project_permission
@@ -67,11 +66,11 @@ def _unattached_project_reservations(
     *,
     project_id: UUID,
 ) -> int:
+    # Every pending association consumes one Project slot even when the account
+    # already owns the same canonical document elsewhere.
     return int(
         db.scalar(
-            select(
-                func.coalesce(func.sum(UploadReservation.reserved_reference_count), 0)
-            )
+            select(func.count(UploadReservation.id))
             .join(DurableJob, DurableJob.id == UploadReservation.id)
             .where(
                 DurableJob.project_id == project_id,
@@ -121,14 +120,13 @@ def reassign_project_quota_owner(
 ) -> None:
     """Validate a transfer and move every active reservation to the new owner.
 
-    The caller must hold a row lock on ``project``. Every logical ProjectPaper
-    reference is billed even when the same Document also exists in the new
-    owner's Library or another owned Project. In-progress uploads are
-    represented by their durable reservations.
+    The caller must hold a row lock on ``project``. Completed account usage is
+    the unique document union; Project membership and pending associations are
+    still counted independently for the per-Project limit.
     """
     lock_account_resource_quota(db, user_id=new_owner_id)
     owner = get_quota_user(db, user_id=new_owner_id)
-    limits = get_plan_limits(get_user_subscription_plan(db, owner))
+    limits = get_user_entitlements(db, owner).limits.as_limits()
 
     owned_project_count = int(
         db.scalar(
@@ -188,13 +186,21 @@ def reassign_project_quota_owner(
         ).all()
     )
 
+    existing_document_ids = resource_usage_repository.owned_document_ids(
+        db, user_id=owner.id
+    )
+    incremental_documents = [
+        document
+        for document in project_documents
+        if document.id not in existing_document_ids
+    ]
     completed_count = resource_usage_repository.completed_reference_count(
         db, user_id=owner.id
     )
     if (
         completed_count
         + existing_active_count
-        + project_document_count
+        + len(incremental_documents)
         + project_active_count
         > limits[PAPER_UPLOAD_KEY]
     ):
@@ -208,7 +214,7 @@ def reassign_project_quota_owner(
         db, user_id=owner.id
     )
     incremental_size_kb = sum(
-        (document.size_bytes + 1023) // 1024 for document in project_documents
+        (document.size_bytes + 1023) // 1024 for document in incremental_documents
     )
     if (
         completed_size_kb
@@ -363,10 +369,32 @@ def reserve_upload(
             kind=FailureKind.CONFLICT,
         )
     owner = get_quota_user(db, user_id=owner_id)
-    limits = get_plan_limits(get_user_subscription_plan(db, owner))
-    reserved_reference_count = 0 if reference_already_exists else 1
+    limits = get_user_entitlements(db, owner).limits.as_limits()
+    account_already_owns_document = (
+        existing_document_id is not None
+        and resource_usage_repository.contains_document(
+            db,
+            user_id=owner_id,
+            document_id=existing_document_id,
+        )
+    )
+    active_account_reservation = bool(
+        db.scalar(
+            select(func.count(UploadReservation.id))
+            .join(DurableJob, DurableJob.id == UploadReservation.id)
+            .where(
+                UploadReservation.quota_owner_id == owner_id,
+                UploadReservation.content_sha256 == content_sha256,
+                DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
+            )
+        )
+    )
+    adds_account_document = not (
+        account_already_owns_document or active_account_reservation
+    )
+    reserved_reference_count = 1 if adds_account_document else 0
     reserved_size_kb = (
-        0 if reference_already_exists else math.ceil(input_size_bytes / 1024)
+        math.ceil(input_size_bytes / 1024) if adds_account_document else 0
     )
     reserved_count, active_size_kb = _active_account_reservations(
         db,
@@ -416,10 +444,7 @@ def reserve_upload(
             db,
             project_id=project.id,
         )
-        if (
-            linked_count + waiting_count + reserved_reference_count
-            > limits[PROJECT_PAPERS_KEY]
-        ):
+        if linked_count + waiting_count + 1 > limits[PROJECT_PAPERS_KEY]:
             raise AppError(
                 code="project_paper_quota_exceeded",
                 message="The Project's paper limit has been reached",

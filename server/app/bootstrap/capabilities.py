@@ -8,6 +8,7 @@ from app.bootstrap.container import (
     build_access_keys,
     build_integrations,
     build_billing,
+    build_entitlement_admin,
     build_citation_metadata,
     build_conversation_chat_data,
     build_conversations,
@@ -23,6 +24,7 @@ from app.bootstrap.container import (
     build_paper_download,
     build_paper_ingestion,
     build_paper_library,
+    build_passage_maintenance,
     build_paper_search,
     build_paper_search_access,
     build_paper_topics,
@@ -37,6 +39,7 @@ from app.bootstrap.container import (
 from app.bootstrap.settings import AppSettings
 from app.bootstrap.adapters.tool_invocations import SqlAlchemyToolInvocationGateway
 from app.modules.billing.application.billing import Billing
+from app.modules.billing.application.entitlement_admin import EntitlementAdmin
 from app.modules.access_keys.application.access_keys import AccessKeys
 from app.modules.integrations.connections.application import Integrations
 from app.modules.conversations.application.chat import ConversationChatData
@@ -58,6 +61,7 @@ from app.modules.papers.application.discovery import DiscoverPapers
 from app.modules.papers.application.downloads import GetPaperDownload
 from app.modules.papers.application.ingestion import IngestPaper
 from app.modules.papers.application.library import PaperLibrary
+from app.modules.papers.application.maintenance import PassageMaintenance
 from app.modules.papers.application.search import (
     GetPaperSearchStats,
     SearchCursorCodec,
@@ -157,6 +161,10 @@ class ApplicationCapabilities:
         return build_paper_ingestion(db=self._session, journal=self._journal)
 
     @cached_property
+    def passage_maintenance(self) -> PassageMaintenance:
+        return build_passage_maintenance(db=self._session, journal=self._journal)
+
+    @cached_property
     def research_search(self) -> SearchResearch:
         return build_research_search(
             db=self._session,
@@ -170,6 +178,10 @@ class ApplicationCapabilities:
     @cached_property
     def billing(self) -> Billing:
         return build_billing(db=self._session, journal=self._journal)
+
+    @cached_property
+    def entitlement_admin(self) -> EntitlementAdmin:
+        return build_entitlement_admin(db=self._session, journal=self._journal)
 
     @cached_property
     def library_tags(self) -> LibraryTags:

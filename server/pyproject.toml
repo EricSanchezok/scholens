@@ -38,6 +38,7 @@ dependencies = [
     "posthog>=4.2.0",
     "resend>=2.10.0",
     "celery>=5.5.3",
+    "click>=8.2,<9",
     "stripe>=12.3.0",
     "pypdf>=6.13.3",
     "PyJWT>=2.10",
@@ -58,7 +59,7 @@ scholens-observability = { path = "../packages/scholens_observability" }
 scholens-ai = { path = "../packages/scholens_ai" }
 
 [project.scripts]
-start = "app.cli:start"
+scholens = "app.cli:cli"
 
 [tool.uv]
 constraint-dependencies = [
