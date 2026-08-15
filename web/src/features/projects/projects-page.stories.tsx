@@ -40,7 +40,20 @@ export const Populated: Story = {
     const canvas = within(canvasElement);
     const heading = await canvas.findByRole("heading", { name: "Projects" });
     await expect(heading).toBeVisible();
-    await expect(heading).toHaveClass("text-3xl");
+    await expect(heading).toHaveClass("text-2xl");
+    const workbenchHeader = heading.closest("header");
+    await expect(workbenchHeader).not.toBeNull();
+    const search = await canvas.findByRole("searchbox", {
+      name: "Search projects",
+    });
+    if (workbenchHeader) {
+      await expect(
+        Math.round(
+          search.getBoundingClientRect().top -
+            workbenchHeader.getBoundingClientRect().bottom,
+        ),
+      ).toBe(16);
+    }
     const createButton = canvas.getByRole("button", { name: "New project" });
     await expect(createButton.querySelector("svg")).toHaveClass(
       "text-ui-icon-inverse",

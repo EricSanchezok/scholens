@@ -26,6 +26,19 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Playground: Story = {};
+export const CompactHoverAffordance: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const button = canvas.getByRole("button", { name: "Show password" });
+    const affordance = canvasElement.querySelector<HTMLElement>(
+      '[data-slot="password-visibility-affordance"]',
+    );
+    await expect(affordance).not.toBeNull();
+    if (!affordance) return;
+    await expect(button.getBoundingClientRect().width).toBe(44);
+    await expect(affordance.getBoundingClientRect().width).toBe(32);
+  },
+};
 export const AllStates: Story = {
   render: (args) => (
     <div className="grid gap-3">
