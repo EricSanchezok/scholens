@@ -1,0 +1,147 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  keyboardFocusRing,
+} from "@/components/ui";
+import { Icon, type IconGlyph } from "@/design-system/icons/icon";
+import {
+  AccountIcon,
+  IntegrationIcon,
+  KeyIcon,
+  SettingsIcon,
+  TranslationIcon,
+  UsageIcon,
+} from "@/design-system/icons/semantic-icons";
+import { clientEnvironment } from "@/lib/env/client";
+import { cn } from "@/lib/utilities/cn";
+import { AccessKeysPanel } from "./access-keys-panel";
+import { AccountPanel } from "./account-panel";
+import { ConnectionsPanel } from "./connections-panel";
+import { GeneralPanel } from "./general-panel";
+import {
+  settingsSections,
+  useSettingsNavigation,
+  type SettingsSection,
+} from "./settings-navigation";
+import { TranslationPanel } from "./translation-panel";
+import { UsagePanel } from "./usage-panel";
+
+const sectionIcons: Record<SettingsSection, IconGlyph> = {
+  general: SettingsIcon,
+  account: AccountIcon,
+  usage: UsageIcon,
+  "access-keys": KeyIcon,
+  connections: IntegrationIcon,
+  translation: TranslationIcon,
+};
+
+function Panel({
+  accountCenterUrl,
+  section,
+}: {
+  accountCenterUrl?: string;
+  section: SettingsSection;
+}) {
+  if (section === "account") {
+    return <AccountPanel accountCenterUrl={accountCenterUrl} />;
+  }
+  if (section === "usage") return <UsagePanel />;
+  if (section === "access-keys") return <AccessKeysPanel />;
+  if (section === "connections") return <ConnectionsPanel />;
+  if (section === "translation") return <TranslationPanel />;
+  return <GeneralPanel />;
+}
+
+export function SettingsDialog({
+  accountCenterUrl = clientEnvironment.NEXT_PUBLIC_ACCOUNT_CENTER_URL,
+}: {
+  accountCenterUrl?: string;
+}) {
+  const t = useTranslations("Settings");
+  const { section, setSection } = useSettingsNavigation();
+  const active = section ?? "general";
+
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) setSection(undefined);
+      }}
+      open={Boolean(section)}
+    >
+      <DialogContent
+        closeLabel={t("actions.close")}
+        placement="responsive-full"
+      >
+        <DialogTitle className="sr-only">{t("title")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("description")}
+        </DialogDescription>
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <aside className="border-line bg-subtle shrink-0 border-b px-4 py-4 lg:w-64 lg:border-r lg:border-b-0 lg:px-4 lg:py-6">
+            <h1 className="mb-4 px-2 text-xl font-semibold tracking-[-0.01em]">
+              {t("title")}
+            </h1>
+            <div className="lg:hidden">
+              <Select
+                onValueChange={(value) => setSection(value as SettingsSection)}
+                value={active}
+              >
+                <SelectTrigger aria-label={t("sectionPicker")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {settingsSections.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {t(`navigation.${item}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <nav
+              aria-label={t("navigationLabel")}
+              className="hidden gap-1 lg:grid"
+            >
+              {settingsSections.map((item) => (
+                <button
+                  aria-current={active === item ? "page" : undefined}
+                  className={cn(
+                    "hover:bg-hover flex h-10 w-full items-center gap-3 rounded-[var(--radius-md)] px-3 text-left text-sm font-medium",
+                    keyboardFocusRing,
+                    active === item && "bg-surface shadow-sm",
+                  )}
+                  key={item}
+                  onClick={() => setSection(item)}
+                  type="button"
+                >
+                  <span className="grid size-5 shrink-0 place-items-center">
+                    <Icon
+                      glyph={sectionIcons[item]}
+                      size={20}
+                      tone="secondary"
+                    />
+                  </span>
+                  {t(`navigation.${item}`)}
+                </button>
+              ))}
+            </nav>
+          </aside>
+          <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-10 lg:py-8">
+            <Panel accountCenterUrl={accountCenterUrl} section={active} />
+          </main>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

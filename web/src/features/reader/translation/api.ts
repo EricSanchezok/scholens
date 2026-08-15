@@ -1,19 +1,17 @@
-import { queryOptions } from "@tanstack/react-query";
-
 import {
-  apiClient,
   authenticatedFetch,
   consumeServerSentEvents,
   toApiError,
   type ServerSentEvent,
 } from "@/lib/api";
-import type { components } from "@/lib/api/generated/schema";
 import { clientEnvironment } from "@/lib/env/client";
-
-export type TranslationPreferences =
-  components["schemas"]["TranslationPreferencesResponse"];
-export type TranslationPreferencesUpdate =
-  components["schemas"]["TranslationPreferencesUpdateRequest"];
+export {
+  translationPreferenceKeys as translationKeys,
+  translationPreferenceQuery,
+  updateTranslationPreferences,
+  type TranslationPreferences,
+  type TranslationPreferencesUpdate,
+} from "@/features/translation-preferences";
 
 export type SelectionTranslationEvent =
   | {
@@ -29,38 +27,6 @@ export type SelectionTranslationEvent =
       message: string;
       retryable: boolean;
     };
-
-export const translationKeys = {
-  all: ["reader", "translation"] as const,
-  preferences: () => ["reader", "translation", "preferences"] as const,
-};
-
-export const translationQueries = {
-  preferences: () =>
-    queryOptions({
-      queryKey: translationKeys.preferences(),
-      queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET(
-          "/api/v1/me/translation-preferences",
-          { signal },
-        );
-        if (!data)
-          throw new Error("Translation preferences response was empty");
-        return data;
-      },
-      staleTime: 60_000,
-    }),
-};
-
-export async function updateTranslationPreferences(
-  body: TranslationPreferencesUpdate,
-) {
-  const { data } = await apiClient.PUT("/api/v1/me/translation-preferences", {
-    body,
-  });
-  if (!data) throw new Error("Translation preferences response was empty");
-  return data;
-}
 
 function readRecord(data: string) {
   const value: unknown = JSON.parse(data);

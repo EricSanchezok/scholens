@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.modules.jobs.application.callbacks import (
+    JobCredentialScope,
     JobCallbacks,
     JobHandlerResult,
     RegisteredJobCallback,
@@ -28,6 +29,7 @@ from app.shared.application import (
     SchedulerOrigin,
 )
 from app.shared.domain.enums import JobOperation, JobStatus
+from app.shared.domain import AppError
 from app.transport.http.internal_v1.references import job_delivery_reference
 from pydantic import BaseModel
 
@@ -46,11 +48,17 @@ class _Store:
 
 
 class _Lifecycle:
-    def __init__(self, *, status: JobStatus) -> None:
+    def __init__(
+        self,
+        *,
+        status: JobStatus,
+        operation: JobOperation = JobOperation.PDF_POSTPROCESS,
+    ) -> None:
         self.status_value = status
+        self.operation_value = operation
 
     def operation(self, *, job_id: UUID) -> JobOperation:
-        return JobOperation.PDF_POSTPROCESS
+        return self.operation_value
 
     def status(self, *, job_id: UUID) -> JobStatus:
         return self.status_value
@@ -67,6 +75,13 @@ class _Lifecycle:
     def fail(self, *, job_id: UUID, error_code: str) -> bool:
         self.status_value = JobStatus.FAILED
         return True
+
+    def credential_scope(self, *, job_id: UUID) -> JobCredentialScope:
+        return JobCredentialScope(
+            requested_by_id=7,
+            operation=self.operation_value,
+            status=self.status_value,
+        )
 
 
 class _Handler:
@@ -135,6 +150,62 @@ def test_job_delivery_reference_is_canonical_and_non_sensitive() -> None:
     assert len(reference) == 64
     assert reference == job_delivery_reference("worker-delivery-nonce")
     assert "worker-delivery-nonce" not in reference
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [JobOperation.PDF_PROCESS, JobOperation.DOCUMENT_REFLOW],
+)
+def test_integration_credential_scope_allows_only_running_mineru_jobs(
+    operation: JobOperation,
+) -> None:
+    lifecycle = _Lifecycle(status=JobStatus.RUNNING, operation=operation)
+    callbacks = JobCallbacks(
+        lifecycle=lifecycle,
+        handlers={},
+        schedules=_Schedules(),
+        journal=OperationJournal(store=_Store(), clock=_Clock()),
+    )
+
+    scope = callbacks.integration_credential_scope(job_id=uuid4())
+
+    assert scope.requested_by_id == 7
+    assert scope.operation is operation
+    assert scope.status is JobStatus.RUNNING
+
+
+def test_integration_credential_scope_rejects_unrelated_operation() -> None:
+    callbacks = JobCallbacks(
+        lifecycle=_Lifecycle(
+            status=JobStatus.RUNNING,
+            operation=JobOperation.PDF_POSTPROCESS,
+        ),
+        handlers={},
+        schedules=_Schedules(),
+        journal=OperationJournal(store=_Store(), clock=_Clock()),
+    )
+
+    with pytest.raises(AppError) as raised:
+        callbacks.integration_credential_scope(job_id=uuid4())
+
+    assert raised.value.code == "job_integration_credential_forbidden"
+
+
+def test_integration_credential_scope_rejects_job_before_or_after_claim() -> None:
+    callbacks = JobCallbacks(
+        lifecycle=_Lifecycle(
+            status=JobStatus.PENDING,
+            operation=JobOperation.PDF_PROCESS,
+        ),
+        handlers={},
+        schedules=_Schedules(),
+        journal=OperationJournal(store=_Store(), clock=_Clock()),
+    )
+
+    with pytest.raises(AppError) as raised:
+        callbacks.integration_credential_scope(job_id=uuid4())
+
+    assert raised.value.code == "job_not_running"
 
 
 @pytest.mark.asyncio

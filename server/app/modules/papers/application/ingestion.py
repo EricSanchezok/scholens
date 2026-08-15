@@ -33,7 +33,6 @@ class AcceptedIngestion:
     ingestion: LibraryPaperIngestionResponse
     replayed: bool
     processing_required: bool
-    additional_job_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,10 +218,7 @@ class IngestPaper:
                         action=JOB_CREATED,
                         resources=(ResourceRef("job", str(job_id)),),
                     )
-                    for job_id in (
-                        accepted.ingestion.id,
-                        *accepted.additional_job_ids,
-                    )
+                    for job_id in (accepted.ingestion.id,)
                 ),
             )
         return accepted

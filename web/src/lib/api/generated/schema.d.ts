@@ -957,15 +957,15 @@ export interface paths {
         patch: operations["update_access_key_api_v1_me_access_keys__access_key_id__patch"];
         trace?: never;
     };
-    "/api/v1/me/connectors": {
+    "/api/v1/me/integrations": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Connectors */
-        get: operations["list_connectors_api_v1_me_connectors_get"];
+        /** List Integrations */
+        get: operations["list_integrations_api_v1_me_integrations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -974,7 +974,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/me/connectors/{provider}": {
+    "/api/v1/me/integrations/{provider}": {
         parameters: {
             query?: never;
             header?: never;
@@ -982,15 +982,15 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Connect Connector */
-        put: operations["connect_connector_api_v1_me_connectors__provider__put"];
+        /** Connect Integration */
+        put: operations["connect_integration_api_v1_me_integrations__provider__put"];
         post?: never;
-        /** Disconnect Connector */
-        delete: operations["disconnect_connector_api_v1_me_connectors__provider__delete"];
+        /** Disconnect Integration */
+        delete: operations["disconnect_integration_api_v1_me_integrations__provider__delete"];
         options?: never;
         head?: never;
-        /** Update Connector */
-        patch: operations["update_connector_api_v1_me_connectors__provider__patch"];
+        /** Update Integration */
+        patch: operations["update_integration_api_v1_me_integrations__provider__patch"];
         trace?: never;
     };
     "/api/v1/me/onboarding": {
@@ -1269,6 +1269,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/papers/{document_id}/reflow/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Document Reflow Attempt */
+        post: operations["create_document_reflow_attempt_api_v1_papers__document_id__reflow_attempts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": {
         parameters: {
             query?: never;
@@ -1280,23 +1297,6 @@ export interface paths {
         put?: never;
         /** Stream Reflow Block Translation */
         post: operations["stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/papers/{document_id}/reflow/retries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Retry Document Reflow */
-        post: operations["retry_document_reflow_api_v1_papers__document_id__reflow_retries_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1850,6 +1850,15 @@ export interface components {
              */
             token_type: string;
         };
+        /** ActionableJobFailure */
+        ActionableJobFailure: {
+            /** Code */
+            code: string;
+            /** Required Integration */
+            required_integration?: "mineru" | null;
+            /** Retryable */
+            retryable: boolean;
+        };
         /**
          * Actor
          * @description The product identity required to authorize a business operation.
@@ -2298,43 +2307,6 @@ export interface components {
              * Format: uuid
              */
             library_entry_id: string;
-        };
-        /** ConnectorConnectRequest */
-        ConnectorConnectRequest: {
-            /**
-             * Api Key
-             * Format: password
-             */
-            api_key: string;
-        };
-        /** ConnectorListResponse */
-        ConnectorListResponse: {
-            /** Items */
-            items: components["schemas"]["ConnectorResponse"][];
-        };
-        /**
-         * ConnectorProvider
-         * @enum {string}
-         */
-        ConnectorProvider: "scholight" | "anysearch" | "tavily" | "exa" | "firecrawl";
-        /** ConnectorResponse */
-        ConnectorResponse: {
-            /** Built In */
-            built_in: boolean;
-            /** Connected */
-            connected: boolean;
-            /** Display Name */
-            display_name: string;
-            /** Enabled */
-            enabled: boolean;
-            provider: components["schemas"]["ConnectorProvider"];
-            /** Verified At */
-            verified_at?: string | null;
-        };
-        /** ConnectorUpdateRequest */
-        ConnectorUpdateRequest: {
-            /** Enabled */
-            enabled: boolean;
         };
         /**
          * ConversationActivity
@@ -3132,6 +3104,8 @@ export interface components {
         DocumentReflowResponse: {
             /** Assets */
             assets: components["schemas"]["DocumentReflowAssetResponse"][];
+            /** Attempt Count */
+            attempt_count: number;
             /** Blocks */
             blocks: components["schemas"]["DocumentReflowBlockResponse"][];
             /**
@@ -3139,13 +3113,9 @@ export interface components {
              * Format: uuid
              */
             document_id: string;
-            /** Error Code */
-            error_code: string | null;
-            /**
-             * Job Id
-             * Format: uuid
-             */
-            job_id: string;
+            failure: components["schemas"]["ActionableJobFailure"] | null;
+            /** Job Id */
+            job_id: string | null;
             /** Parser Revision */
             parser_revision: string | null;
             /** Pipeline Revision */
@@ -3154,12 +3124,9 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending" | "processing" | "completed" | "failed";
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
+            status: "not_requested" | "pending" | "processing" | "completed" | "failed";
+            /** Updated At */
+            updated_at: string | null;
             /** Warnings */
             warnings: string[];
         };
@@ -3292,6 +3259,55 @@ export interface components {
             ror?: string | null;
             /** Type */
             type?: string | null;
+        };
+        /** IntegrationConnectRequest */
+        IntegrationConnectRequest: {
+            /**
+             * Credential
+             * Format: password
+             */
+            credential: string;
+        };
+        /** IntegrationConnectionResponse */
+        IntegrationConnectionResponse: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "built_in" | "parsing" | "search";
+            /** Enabled */
+            enabled: boolean;
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Managed */
+            managed: boolean;
+            provider: components["schemas"]["IntegrationProvider"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "disconnected" | "connected_unverified" | "connected" | "disabled" | "invalid";
+            /** Updated At */
+            updated_at?: string | null;
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** IntegrationListResponse */
+        IntegrationListResponse: {
+            /** Items */
+            items: components["schemas"]["IntegrationConnectionResponse"][];
+        };
+        /**
+         * IntegrationProvider
+         * @enum {string}
+         */
+        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl";
+        /** IntegrationUpdateRequest */
+        IntegrationUpdateRequest: {
+            /** Enabled */
+            enabled: boolean;
         };
         /** IntervalChangeResponse */
         IntervalChangeResponse: {
@@ -3427,8 +3443,7 @@ export interface components {
             display_name: string;
             /** Document Id */
             document_id: string | null;
-            /** Error Code */
-            error_code: string | null;
+            failure?: components["schemas"]["ActionableJobFailure"] | null;
             /**
              * Id
              * Format: uuid
@@ -4610,8 +4625,8 @@ export interface components {
         SubscriptionInterval: "month" | "year";
         /** SubscriptionLimits */
         SubscriptionLimits: {
-            /** Knowledge Base Size */
-            knowledge_base_size: number;
+            /** Knowledge Base Size Kb */
+            knowledge_base_size_kb: number;
             /** Paper Uploads */
             paper_uploads: number;
             /** Project Papers */
@@ -4652,10 +4667,10 @@ export interface components {
         };
         /** SubscriptionUsage */
         SubscriptionUsage: {
-            /** Knowledge Base Size */
-            knowledge_base_size: number;
-            /** Knowledge Base Size Remaining */
-            knowledge_base_size_remaining: number;
+            /** Knowledge Base Size Kb */
+            knowledge_base_size_kb: number;
+            /** Knowledge Base Size Remaining Kb */
+            knowledge_base_size_remaining_kb: number;
             /** Paper Uploads */
             paper_uploads: number;
             /** Paper Uploads Remaining */
@@ -4664,14 +4679,14 @@ export interface components {
             projects: number;
             /** Projects Remaining */
             projects_remaining: number;
+            /** Token Credits Limit */
+            token_credits_limit: number;
             /** Token Credits Overage */
             token_credits_overage: number;
             /** Token Credits Remaining */
             token_credits_remaining: number;
             /** Token Credits Used */
             token_credits_used: number;
-            /** Token Credits Weekly */
-            token_credits_weekly: number;
         };
         /** Topic */
         Topic: {
@@ -4772,9 +4787,25 @@ export interface components {
             /** Value */
             value: string;
         };
+        /**
+         * UsagePeriod
+         * @enum {string}
+         */
+        UsagePeriod: "current_week" | "four_weeks" | "twelve_weeks";
         /** UsageResponse */
         UsageResponse: {
             limits: components["schemas"]["SubscriptionLimits"];
+            period: components["schemas"]["UsagePeriod"];
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
             /** Plan */
             plan: string;
             usage: components["schemas"]["SubscriptionUsage"];
@@ -5842,7 +5873,9 @@ export interface operations {
     };
     get_user_usage_api_v1_billing_usage_get: {
         parameters: {
-            query?: never;
+            query?: {
+                period?: components["schemas"]["UsagePeriod"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5856,6 +5889,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -7366,7 +7408,7 @@ export interface operations {
             };
         };
     };
-    list_connectors_api_v1_me_connectors_get: {
+    list_integrations_api_v1_me_integrations_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -7381,12 +7423,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConnectorListResponse"];
+                    "application/json": components["schemas"]["IntegrationListResponse"];
                 };
             };
         };
     };
-    connect_connector_api_v1_me_connectors__provider__put: {
+    connect_integration_api_v1_me_integrations__provider__put: {
         parameters: {
             query?: never;
             header?: never;
@@ -7397,7 +7439,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ConnectorConnectRequest"];
+                "application/json": components["schemas"]["IntegrationConnectRequest"];
             };
         };
         responses: {
@@ -7407,7 +7449,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConnectorResponse"];
+                    "application/json": components["schemas"]["IntegrationConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7421,7 +7463,7 @@ export interface operations {
             };
         };
     };
-    disconnect_connector_api_v1_me_connectors__provider__delete: {
+    disconnect_integration_api_v1_me_integrations__provider__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -7450,7 +7492,7 @@ export interface operations {
             };
         };
     };
-    update_connector_api_v1_me_connectors__provider__patch: {
+    update_integration_api_v1_me_integrations__provider__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -7461,7 +7503,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ConnectorUpdateRequest"];
+                "application/json": components["schemas"]["IntegrationUpdateRequest"];
             };
         };
         responses: {
@@ -7471,7 +7513,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConnectorResponse"];
+                    "application/json": components["schemas"]["IntegrationConnectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8126,6 +8168,39 @@ export interface operations {
             };
         };
     };
+    create_document_reflow_attempt_api_v1_papers__document_id__reflow_attempts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stream_reflow_block_translation_api_v1_papers__document_id__reflow_blocks__block_id__translations_post: {
         parameters: {
             query?: never;
@@ -8145,37 +8220,6 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    retry_document_reflow_api_v1_papers__document_id__reflow_retries_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocumentReflowResponse"];
                 };
             };
             /** @description Validation Error */

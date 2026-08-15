@@ -4,18 +4,26 @@ from __future__ import annotations
 
 import hashlib
 import html
+import logging
 import mimetypes
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 import pymupdf
 
 from src.pdf.mineru import MinerUClient
-from src.pdf.models import MinerUArchive
+from src.pdf.mineru import MinerUConfig
+from src.pdf.models import (
+    MinerUArchive,
+    MinerUCredential,
+    ParserConfigurationError,
+    ParserError,
+    ParserTransientError,
+)
 from src.schemas import (
     DocumentReflowAsset,
     DocumentReflowBlock,
@@ -26,6 +34,12 @@ from src.schemas import (
     ReflowSourceRect,
     ReflowSourceSpan,
 )
+
+logger = logging.getLogger(__name__)
+
+type MinerUOutcome = Callable[
+    [str, Literal["verified", "invalid", "failed"], str | None], None
+]
 
 REFLOW_PIPELINE_REVISION = "mineru-continuous-ast-v1"
 _AUXILIARY_TYPES = {
@@ -568,20 +582,85 @@ async def generate_document_reflow(
     document_id: str,
     title: str,
     pdf_bytes: bytes,
+    credential: MinerUCredential,
+    archive_bytes: bytes | None = None,
+    archive_parser_revision: str | None = None,
+    outcome_callback: MinerUOutcome | None = None,
     write_asset: AssetWriter | None = None,
 ) -> DocumentReflowResult:
-    client = MinerUClient()
-    parsed = await client.parse_file(pdf_bytes, data_id=f"reflow-{document_id}")
-    if parsed.archive_bytes is None:
-        raise ValueError("mineru_reflow_archive_missing")
-    archive = client.read_structured_archive(parsed.archive_bytes)
+    config = MinerUConfig.from_runtime(token=credential.token)
+    client = MinerUClient(config)
+    archive: MinerUArchive | None = None
+    parser_revision: str | None = None
+    if archive_bytes is not None:
+        try:
+            archive = client.read_structured_archive(archive_bytes)
+            parser_revision = archive_parser_revision or (
+                f"mineru-v4/{config.model_version}"
+            )
+        except ParserError:
+            logger.warning(
+                "job.document_reflow.archive_reuse_failed",
+                exc_info=True,
+                extra={"document_id": document_id},
+            )
+
+    if archive is None:
+        source_hash = hashlib.sha256(pdf_bytes).hexdigest()
+        checkpoint_scope = hashlib.sha256(
+            f"document-reflow:{source_hash}:{credential.revision}".encode()
+        ).hexdigest()
+        try:
+            parsed = await client.parse_file(pdf_bytes, data_id=checkpoint_scope)
+            if parsed.archive_bytes is None:
+                raise ParserTransientError(
+                    "MinerU reflow result has no structured archive",
+                    error_code="mineru_content_insufficient",
+                    phase="archive",
+                )
+            archive = client.read_structured_archive(parsed.archive_bytes)
+            parser_revision = parsed.parser_version
+            if outcome_callback is not None:
+                outcome_callback(credential.revision, "verified", None)
+            try:
+                await client.state_store.clear(checkpoint_scope)
+            except ParserTransientError:
+                logger.warning(
+                    "job.document_reflow.checkpoint_clear_failed",
+                    exc_info=True,
+                )
+        except ParserConfigurationError as exc:
+            if outcome_callback is not None:
+                outcome_callback(credential.revision, "invalid", exc.error_code)
+            raise
+        except ParserError as exc:
+            if exc.error_code == "pdf_content_insufficient":
+                exc.error_code = "mineru_content_insufficient"
+            if outcome_callback is not None:
+                outcome_callback(credential.revision, "failed", exc.error_code)
+            if not isinstance(exc, ParserTransientError):
+                try:
+                    await client.state_store.clear(checkpoint_scope)
+                except ParserTransientError:
+                    logger.warning(
+                        "job.document_reflow.checkpoint_clear_failed",
+                        exc_info=True,
+                    )
+            raise
+        finally:
+            await client.close()
+    else:
+        await client.close()
+
+    if parser_revision is None:
+        raise RuntimeError("document_reflow_parser_revision_missing")
 
     return build_document_reflow(
         document_id=document_id,
         title=title,
         pdf_bytes=pdf_bytes,
         archive=archive,
-        parser_revision=parsed.parser_version,
+        parser_revision=parser_revision,
         write_asset=write_asset,
     )
 

@@ -181,6 +181,16 @@ and retries one failed block without resetting the document. Disabling it aborts
 in-flight browser work. The server's revisioned durable cache keys the repaired
 display content while the browser still sends block identity, never source text.
 
+Opening AI reflow does not implicitly schedule provider work. When no artifact
+exists, the surface presents an explicit Start AI reflow action. A new or failed
+attempt requires the user's enabled MinerU connection; active and completed
+artifacts remain readable without another credential check. If the connection
+is missing or invalid, Reader keeps the pending intent, explains why MinerU is
+required, links to `https://mineru.net/apiManage/token`, and opens Settings →
+Connections. Saving a new token resumes the intent once. Failed attempts retain
+their safe failure class and expose Retry; retry creates an idempotent new
+attempt without changing PDF availability.
+
 ## Selection and annotation threads
 
 Selection has three deliberately separate lifetimes:

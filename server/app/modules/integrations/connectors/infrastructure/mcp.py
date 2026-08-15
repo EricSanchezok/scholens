@@ -6,6 +6,7 @@ import asyncio
 import json
 import re
 import time
+from builtins import BaseExceptionGroup
 from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -16,12 +17,12 @@ from uuid import uuid4
 
 import httpx
 import jwt
-from app.modules.integrations.connectors.application.ports import (
-    ConnectorCredential,
-    ConnectorCredentialState,
-    UnreadableConnectorCredential,
+from app.modules.integrations.connections.application import (
+    IntegrationCredential,
+    IntegrationCredentialState,
+    UnreadableIntegrationCredential,
 )
-from app.modules.integrations.connectors.domain import ConnectorProvider
+from app.modules.integrations.connections.domain import IntegrationProvider
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind, JsonValue, WorkspacePermission
 from mcp import ClientSession
@@ -44,7 +45,7 @@ _TOOL_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 
 @dataclass(frozen=True, slots=True)
 class ConnectorDefinition:
-    provider: ConnectorProvider
+    provider: IntegrationProvider
     display_name: str
     url_template: str
     auth_header: str | None
@@ -57,12 +58,12 @@ class ConnectorRuntimeSettings(Protocol):
 
 
 class EnabledCredentialLoader(Protocol):
-    def __call__(self, actor: Actor) -> tuple[ConnectorCredentialState, ...]: ...
+    def __call__(self, actor: Actor) -> tuple[IntegrationCredentialState, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
 class RemoteMCPConnection:
-    provider: ConnectorProvider
+    provider: IntegrationProvider
     display_name: str
     url: str = field(repr=False)
     headers: Mapping[str, str] = field(repr=False)
@@ -81,7 +82,7 @@ class RemoteMCPConnection:
 
 @dataclass(frozen=True, slots=True)
 class ConnectorToolIssue:
-    provider: ConnectorProvider
+    provider: IntegrationProvider
     code: str
     message: str
 
@@ -108,7 +109,7 @@ class ResolvedConnectorToolSet:
     def has_tool(self, name: str) -> bool:
         return name in self._routes
 
-    def provider_for(self, name: str) -> ConnectorProvider | None:
+    def provider_for(self, name: str) -> IntegrationProvider | None:
         bound = self._routes.get(name)
         return bound.connection.provider if bound is not None else None
 
@@ -176,39 +177,39 @@ class ResolvedConnectorToolSet:
 
 
 _PROVIDER_DEFINITIONS = {
-    ConnectorProvider.ANYSEARCH: ConnectorDefinition(
-        ConnectorProvider.ANYSEARCH,
+    IntegrationProvider.ANYSEARCH: ConnectorDefinition(
+        IntegrationProvider.ANYSEARCH,
         "AnySearch",
         "https://api.anysearch.com/mcp",
         "Authorization",
         "Bearer ",
     ),
-    ConnectorProvider.TAVILY: ConnectorDefinition(
-        ConnectorProvider.TAVILY,
+    IntegrationProvider.TAVILY: ConnectorDefinition(
+        IntegrationProvider.TAVILY,
         "Tavily",
         "https://mcp.tavily.com/mcp/",
         "Authorization",
         "Bearer ",
     ),
-    ConnectorProvider.EXA: ConnectorDefinition(
-        ConnectorProvider.EXA,
+    IntegrationProvider.EXA: ConnectorDefinition(
+        IntegrationProvider.EXA,
         "Exa",
         "https://mcp.exa.ai/mcp",
         "x-api-key",
     ),
-    ConnectorProvider.FIRECRAWL: ConnectorDefinition(
-        ConnectorProvider.FIRECRAWL,
+    IntegrationProvider.FIRECRAWL: ConnectorDefinition(
+        IntegrationProvider.FIRECRAWL,
         "Firecrawl",
         "https://mcp.firecrawl.dev/{api_key}/v2/mcp",
         None,
     ),
 }
 _PROVIDER_PRIORITY = (
-    ConnectorProvider.SCHOLIGHT,
-    ConnectorProvider.ANYSEARCH,
-    ConnectorProvider.TAVILY,
-    ConnectorProvider.EXA,
-    ConnectorProvider.FIRECRAWL,
+    IntegrationProvider.SCHOLIGHT,
+    IntegrationProvider.ANYSEARCH,
+    IntegrationProvider.TAVILY,
+    IntegrationProvider.EXA,
+    IntegrationProvider.FIRECRAWL,
 )
 
 
@@ -222,14 +223,14 @@ class ConnectorToolResolver:
         self._credential_loader = credential_loader
         self._settings = settings
         self._schema_cache: dict[
-            tuple[int, ConnectorProvider, str],
+            tuple[int, IntegrationProvider, str],
             tuple[float, tuple[dict[str, Any], ...]],
         ] = {}
 
     async def probe(
         self,
         *,
-        provider: ConnectorProvider,
+        provider: IntegrationProvider,
         api_key: str,
     ) -> None:
         definition = _PROVIDER_DEFINITIONS.get(provider)
@@ -237,7 +238,7 @@ class ConnectorToolResolver:
             raise AppError(
                 code=(
                     "connector_managed_by_system"
-                    if provider is ConnectorProvider.SCHOLIGHT
+                    if provider is IntegrationProvider.SCHOLIGHT
                     else "connector_not_supported"
                 ),
                 message="Connector cannot be configured by the user",
@@ -309,7 +310,7 @@ class ConnectorToolResolver:
         credentials = tuple(
             state
             for state in credential_states
-            if isinstance(state, ConnectorCredential)
+            if isinstance(state, IntegrationCredential)
         )
         credential_issues = tuple(
             ConnectorToolIssue(
@@ -318,7 +319,7 @@ class ConnectorToolResolver:
                 f"{state.provider.value.title()} credentials could not be read; reconnect the connector",
             )
             for state in credential_states
-            if isinstance(state, UnreadableConnectorCredential)
+            if isinstance(state, UnreadableIntegrationCredential)
         )
         connections = self._connections(actor=actor, credentials=credentials)
         discovered = await asyncio.gather(
@@ -345,7 +346,8 @@ class ConnectorToolResolver:
                     issue_code = "connector_tools_invalid"
                     issue_message = f"{connection.display_name} exposed invalid tools"
                 elif (
-                    credentials_invalid and provider is not ConnectorProvider.SCHOLIGHT
+                    credentials_invalid
+                    and provider is not IntegrationProvider.SCHOLIGHT
                 ):
                     issue_code = "connector_credentials_invalid"
                     issue_message = (
@@ -402,14 +404,14 @@ class ConnectorToolResolver:
         self,
         *,
         actor: Actor,
-        credentials: tuple[ConnectorCredential, ...],
+        credentials: tuple[IntegrationCredential, ...],
     ) -> tuple[RemoteMCPConnection, ...]:
         connections: list[RemoteMCPConnection] = []
         secret = self._settings.scholight_mcp_delegation_jwt_secret
         if secret and len(secret.encode()) >= 32:
             connections.append(
                 RemoteMCPConnection(
-                    provider=ConnectorProvider.SCHOLIGHT,
+                    provider=IntegrationProvider.SCHOLIGHT,
                     display_name="Scholight",
                     url=self._settings.scholight_mcp_url,
                     headers=MappingProxyType({}),
@@ -425,8 +427,8 @@ class ConnectorToolResolver:
             connections.append(
                 _external_connection(
                     definition,
-                    api_key=credential.api_key,
-                    revision=credential.updated_at.isoformat(),
+                    api_key=credential.secret,
+                    revision=str(credential.revision),
                 )
             )
         return tuple(connections)

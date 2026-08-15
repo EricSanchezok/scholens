@@ -1,18 +1,21 @@
-"""External validation followed by short Connector persistence commands."""
+"""External validation followed by short integration persistence commands."""
 
 from __future__ import annotations
 
 from app.bootstrap.capabilities import ApplicationCapabilities
-from app.modules.integrations.connectors.application.contracts import (
-    ConnectorListResponse,
-    ConnectorResponse,
+from app.modules.integrations.connections.application import (
+    IntegrationConnectionResponse,
+    IntegrationListResponse,
 )
-from app.modules.integrations.connectors.domain import ConnectorProvider
+from app.modules.integrations.connections.domain import (
+    SEARCH_CONNECTOR_PROVIDERS,
+    IntegrationProvider,
+)
 from app.modules.integrations.connectors.infrastructure.mcp import ConnectorToolResolver
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
 
 
-class ConnectorWorkflow:
+class IntegrationWorkflow:
     def __init__(
         self,
         *,
@@ -22,9 +25,9 @@ class ConnectorWorkflow:
         self._executor = executor
         self._resolver = resolver
 
-    def list(self, *, actor: Actor) -> ConnectorListResponse:
+    def list(self, *, actor: Actor) -> IntegrationListResponse:
         return self._executor.query(
-            lambda capabilities: capabilities.connectors.list(actor=actor)
+            lambda capabilities: capabilities.integrations.list(actor=actor)
         )
 
     async def connect(
@@ -32,16 +35,19 @@ class ConnectorWorkflow:
         *,
         actor: Actor,
         operation: OperationContext,
-        provider: ConnectorProvider,
-        api_key: str,
-    ) -> ConnectorResponse:
-        await self._resolver.probe(provider=provider, api_key=api_key)
+        provider: IntegrationProvider,
+        credential: str,
+    ) -> IntegrationConnectionResponse:
+        verified = provider in SEARCH_CONNECTOR_PROVIDERS
+        if verified:
+            await self._resolver.probe(provider=provider, api_key=credential)
         return self._executor.command(
-            lambda capabilities: capabilities.connectors.connect(
+            lambda capabilities: capabilities.integrations.connect(
                 actor=actor,
                 operation=operation,
                 provider=provider,
-                api_key=api_key,
+                credential=credential,
+                verified=verified,
             )
         )
 
@@ -50,12 +56,13 @@ class ConnectorWorkflow:
         *,
         actor: Actor,
         operation: OperationContext,
-        provider: ConnectorProvider,
+        provider: IntegrationProvider,
         enabled: bool,
-    ) -> ConnectorResponse:
-        if enabled:
+    ) -> IntegrationConnectionResponse:
+        verified = False
+        if enabled and provider in SEARCH_CONNECTOR_PROVIDERS:
             credential = self._executor.query(
-                lambda capabilities: capabilities.connectors.credential(
+                lambda capabilities: capabilities.integrations.credential(
                     actor=actor,
                     provider=provider,
                     require_enabled=False,
@@ -63,14 +70,16 @@ class ConnectorWorkflow:
             )
             await self._resolver.probe(
                 provider=provider,
-                api_key=credential.api_key,
+                api_key=credential.secret,
             )
+            verified = True
         return self._executor.command(
-            lambda capabilities: capabilities.connectors.set_enabled(
+            lambda capabilities: capabilities.integrations.set_enabled(
                 actor=actor,
                 operation=operation,
                 provider=provider,
                 enabled=enabled,
+                verified=verified,
             )
         )
 
@@ -79,10 +88,10 @@ class ConnectorWorkflow:
         *,
         actor: Actor,
         operation: OperationContext,
-        provider: ConnectorProvider,
+        provider: IntegrationProvider,
     ) -> None:
         self._executor.command(
-            lambda capabilities: capabilities.connectors.disconnect(
+            lambda capabilities: capabilities.integrations.disconnect(
                 actor=actor,
                 operation=operation,
                 provider=provider,

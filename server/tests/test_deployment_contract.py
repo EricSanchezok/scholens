@@ -199,14 +199,13 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "AUTH_ALIYUN_DM_ACCOUNT_NAME",
         "AUTH_ALIYUN_DM_FROM_ALIAS",
         "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS",
-        "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY",
+        "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_URL",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
         "SCHOLENS_AI_DEEPSEEK_API_KEY",
         "SCHOLENS_AI_OPENAI_API_KEY",
         "SCHOLENS_AI_STANDARD_MODEL",
         "SCHOLENS_AI_TRANSLATION_MODEL",
-        "MINERU_API_TOKEN",
         "MOSS_API_KEY",
         "MOSS_MAX_AUDIO_BYTES",
         "JOBS_WEBHOOK_SIGNING_SECRET",
@@ -220,15 +219,17 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
     assert "SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS=" in runtime
     assert "AUTH_ACCOUNT_LOCKOUT_THRESHOLD:" in compose
     assert "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS:" in compose
-    assert "SCHOLENS_CONNECTOR_CREDENTIAL_ENCRYPTION_KEY=" in runtime
+    assert "SCHOLENS_INTEGRATION_CREDENTIAL_ENCRYPTION_KEY=" in runtime
     assert "SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET=" in runtime
     assert "SCHOLENS_AI_DEEPSEEK_API_KEY=" in runtime
-    assert "SCHOLENS_MINERU_API_TOKEN=" in runtime
+    assert "SCHOLENS_MINERU_API_TOKEN=" not in runtime
     assert "SCHOLENS_MOSS_API_KEY=" in runtime
     assert "SCHOLENS_MOSS_MAX_AUDIO_BYTES=" in runtime
     assert "SCHOLENS_JOBS_WEBHOOK_SIGNING_SECRET=" in runtime
     assert "SCHOLENS_PAPER_SEARCH_CURSOR_SECRET=" in runtime
-    assert "CONNECTOR_CREDENTIAL_ENCRYPTION_KEY:" in compose
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL=" not in runtime
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL:" not in compose
+    assert "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:" in compose
     assert "SCHOLIGHT_MCP_URL:" in compose
     assert "MOSS_MAX_AUDIO_BYTES:" in compose
     assert "SCHOLENS_AI_STRUCTURED_RETRIES:" in compose
@@ -253,6 +254,18 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         )
     assert "EXA_API_KEY" not in catalog + runtime + compose
     assert "FIRECRAWL_API_KEY" not in catalog + runtime + compose
+
+
+def test_account_center_url_is_a_web_build_value_not_runtime_configuration() -> None:
+    readme = (PRODUCTION / "README.md").read_text(encoding="utf-8")
+    runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
+    compose = (PRODUCTION / "compose.yaml").read_text(encoding="utf-8")
+
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" in readme
+    assert "build-time public value" in readme
+    assert re.search(r"future\s+canonical Web cutover", readme)
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" not in runtime
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" not in compose
 
 
 def test_local_development_uses_the_scholens_migrator_name() -> None:
@@ -323,7 +336,8 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         assert f"NEW.{field}" in baseline
     assert "paper_passages" not in baseline
     assert "discover_searches" not in baseline
-    assert '"connector_connections"' in baseline
+    assert '"integration_connections"' in baseline
+    assert "'mineru'" in baseline
 
 
 def test_global_discovery_surfaces_are_absent_from_client_sources() -> None:

@@ -49,17 +49,22 @@ local extraction failed; its results are persisted as `full` quality. A
 `text_only` result (local fallback or rescue timeout) is persisted so the
 client can warn that layout-dependent content may be incomplete.
 
-MinerU task IDs are checkpointed in Redis under the job ID. Four consecutive
-network failures switch polling or downloading to a slower bounded backoff;
-they do not end the task before its deadline. A redelivered Celery task resumes
-the same provider task instead of submitting another one. The checkpoint is
-cleared after Server acknowledges the result.
+MinerU task IDs are checkpointed in Redis under a digest of the job purpose,
+Document content hash, and credential revision. Four consecutive network
+failures switch polling or downloading to a slower bounded backoff; they do not
+end the task before its deadline. Redelivery and later retry attempts with the
+same source and credential resume the same provider task instead of submitting
+another one. A retryable failure retains the checkpoint; successful and
+non-retryable provider outcomes clear it once the provider result no longer
+needs to be resumed.
 
 ## AI reading reflow
 
-After Server accepts a successful PDF callback, it dispatches a separate
-`generate_document_reflow` task to the `reflow` queue. The worker downloads the
-original PDF and submits it to MinerU. Reflow consumes the stable
+AI reflow starts only when the user explicitly requests an attempt and has an
+enabled MinerU connection. Server dispatches `generate_document_reflow` to the
+`reflow` queue with an internal, job-scoped credential URL—not the token. After
+claiming the job, the worker fetches the current revision-scoped credential,
+downloads the original PDF, and submits it to MinerU. Reflow consumes the stable
 `content_list.json` from the returned archive instead of flattening Markdown and
 asking a language model to rediscover structure. MinerU's reading order, block
 types, page indices, normalized rectangles, tables, equations, lists, and image
@@ -105,13 +110,15 @@ Production requires:
 - RabbitMQ through `CELERY_BROKER_URL`
 - Redis through `CELERY_RESULT_BACKEND` and optionally `PDF_PARSE_REDIS_URL`
 - S3 credentials and bucket names
-- `MINERU_API_TOKEN`
+- non-secret MinerU runtime policy (`MINERU_API_BASE_URL`, timeouts, and limits)
 - the `SCHOLENS_AI_*` profile variables and the selected provider credential
 - `JOBS_WEBHOOK_SIGNING_SECRET`
 
-Development may omit `MINERU_API_TOKEN`; PDF ingestion then runs explicitly in
-local `text_only` mode. Production fails fast when the token or parser Redis
-configuration is absent.
+MinerU tokens are user-owned connections stored by Server, never Jobs process
+environment. Jobs fetches a token only after claiming an eligible PDF or
+document-reflow job through the signed, job-scoped internal callback surface.
+Production fails fast when parser Redis or non-secret runtime configuration is
+invalid.
 
 ## Local commands
 

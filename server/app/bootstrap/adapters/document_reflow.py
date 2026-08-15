@@ -15,6 +15,7 @@ from app.modules.jobs.application.contracts import (
     ReflowSourceSpanPayload,
 )
 from app.modules.jobs.application.jobs import EnqueueJobCommand
+from app.modules.jobs.application.failures import actionable_job_failure
 from app.modules.jobs.infrastructure.application_gateway import SqlAlchemyJobsGateway
 from app.modules.papers.infrastructure.models import Document
 from app.modules.reflows.application.contracts import (
@@ -32,7 +33,7 @@ from app.modules.reflows.infrastructure.models import (
 from app.helpers.s3 import s3_service
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind, JsonValue
-from app.shared.domain.enums import JobOperation, JobStatus
+from app.shared.domain.enums import DocumentProcessingStatus, JobOperation, JobStatus
 from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -59,6 +60,11 @@ class SqlDocumentReflowGateway:
             statement = statement.with_for_update()
         return self._db.scalar(statement)
 
+    def _lock_source(self, document_id: UUID) -> Document | None:
+        return self._db.scalar(
+            select(Document).where(Document.id == document_id).with_for_update()
+        )
+
     @staticmethod
     def _response(artifact: DocumentReflow) -> DocumentReflowResponse:
         status: DocumentReflowStatus
@@ -77,7 +83,10 @@ class SqlDocumentReflowGateway:
             document_id=artifact.document_id,
             status=status,
             job_id=artifact.job_id,
-            error_code=artifact.error_code or artifact.job.error_code,
+            attempt_count=artifact.attempt_count,
+            failure=actionable_job_failure(
+                artifact.error_code or artifact.job.error_code
+            ),
             pipeline_revision=artifact.pipeline_revision,
             parser_revision=artifact.parser_revision,
             warnings=list(artifact.warnings or []),
@@ -122,9 +131,23 @@ class SqlDocumentReflowGateway:
             updated_at=artifact.updated_at,
         )
 
-    def get(self, *, document_id: UUID) -> DocumentReflowResponse | None:
+    def get(self, *, document_id: UUID) -> DocumentReflowResponse:
         artifact = self._load(document_id)
-        return self._response(artifact) if artifact is not None else None
+        if artifact is not None:
+            return self._response(artifact)
+        return DocumentReflowResponse(
+            document_id=document_id,
+            status="not_requested",
+            job_id=None,
+            attempt_count=0,
+            failure=None,
+            pipeline_revision=None,
+            parser_revision=None,
+            warnings=[],
+            blocks=[],
+            assets=[],
+            updated_at=None,
+        )
 
     def get_block(
         self,
@@ -187,14 +210,14 @@ class SqlDocumentReflowGateway:
         actor: Actor,
         operation: OperationContext,
         document_id: UUID,
-        retry_failed: bool,
+        idempotency_key: str | None,
     ) -> tuple[DocumentReflowResponse, bool]:
         return self.ensure_causality(
             actor=actor,
             correlation_id=operation.trace.correlation_id,
             origin_operation_id=operation.trace.operation_id,
             document_id=document_id,
-            retry_failed=retry_failed,
+            idempotency_key=idempotency_key,
         )
 
     def ensure_causality(
@@ -204,29 +227,60 @@ class SqlDocumentReflowGateway:
         correlation_id: UUID,
         origin_operation_id: UUID,
         document_id: UUID,
-        retry_failed: bool,
+        idempotency_key: str | None,
     ) -> tuple[DocumentReflowResponse, bool]:
-        artifact = self._load(document_id, lock=True)
-        if artifact is not None and (
-            artifact.status == "completed"
-            or artifact.job.status in {JobStatus.PENDING.value, JobStatus.RUNNING.value}
-            or not retry_failed
+        # The Document row exists before the first reflow attempt, so it is the
+        # stable serialization point for both first creation and retries. A
+        # missing DocumentReflow row cannot itself be locked.
+        document = self._lock_source(document_id)
+        if (
+            document is None
+            or document.processing_status != DocumentProcessingStatus.COMPLETED.value
+            or not document.s3_object_key
         ):
-            return self._response(artifact), False
-
-        document = self._db.get(Document, document_id)
-        if document is None or not document.s3_object_key:
             raise AppError(
                 code="document_reflow_source_not_ready",
                 message="The parsed paper is not ready for reflow",
                 kind=FailureKind.CONFLICT,
             )
+
+        # Re-read only after the stable source lock is held. Concurrent callers
+        # then observe the attempt committed by the lock winner and reuse it.
+        artifact = self._load(document_id)
+        if artifact is not None and (
+            artifact.status == "completed"
+            or artifact.job.status in {JobStatus.PENDING.value, JobStatus.RUNNING.value}
+        ):
+            return self._response(artifact), False
+
         attempt = (artifact.attempt_count + 1) if artifact is not None else 1
+        durable_idempotency_key = (
+            f"document-reflow:{document.id}:request:{idempotency_key}"
+            if idempotency_key
+            else f"document-reflow:{document.id}:{attempt}"
+        )
+        existing = self._jobs.find_by_idempotency_key(key=durable_idempotency_key)
+        if existing is not None:
+            if artifact is not None and existing.id == artifact.job_id:
+                return self._response(artifact), False
+            raise AppError(
+                code="idempotency_key_reused",
+                message="The idempotency key was already used for another reflow attempt",
+                kind=FailureKind.CONFLICT,
+            )
         job_id = uuid4()
         payload_model = DocumentReflowTaskPayload(
             document_id=document.id,
             title=document.title or document.original_filename,
             pdf_s3_key=document.s3_object_key,
+            mineru_archive_s3_key=(
+                document.parser_archive_s3_key
+                if document.parser_backend == "mineru"
+                else None
+            ),
+            mineru_archive_parser_revision=(
+                document.parser_version if document.parser_backend == "mineru" else None
+            ),
         )
         payload = _JSON_OBJECT.validate_python(payload_model.model_dump(mode="json"))
         enqueued = self._jobs.enqueue(
@@ -236,7 +290,7 @@ class SqlDocumentReflowGateway:
                 requested_by_id=actor.id,
                 correlation_id=correlation_id,
                 origin_operation_id=origin_operation_id,
-                idempotency_key=f"document-reflow:{document.id}:{attempt}",
+                idempotency_key=durable_idempotency_key,
                 payload=payload,
                 task_name="generate_document_reflow",
                 queue="reflow",
@@ -266,22 +320,3 @@ class SqlDocumentReflowGateway:
         if refreshed is None:
             raise RuntimeError("document_reflow_insert_failed")
         return self._response(refreshed), enqueued.created
-
-
-def ensure_document_reflow_job(
-    db: Session,
-    *,
-    actor: Actor,
-    correlation_id: UUID,
-    origin_operation_id: UUID,
-    document_id: UUID,
-) -> tuple[DocumentReflowResponse, bool]:
-    """Schedule the automatic artifact in the caller's existing transaction."""
-
-    return SqlDocumentReflowGateway(db).ensure_causality(
-        actor=actor,
-        correlation_id=correlation_id,
-        origin_operation_id=origin_operation_id,
-        document_id=document_id,
-        retry_failed=False,
-    )

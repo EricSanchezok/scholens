@@ -4,7 +4,23 @@ Pydantic schemas for PDF processing.
 
 from enum import Enum
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+
+
+class JobIntegrationCredentialResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    credential: SecretStr
+    credential_revision: str = Field(min_length=1, max_length=128)
+
+
+class IntegrationUseEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["mineru"] = "mineru"
+    credential_revision: str = Field(min_length=1, max_length=128)
+    outcome: Literal["verified", "invalid", "failed"]
+    error_code: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ResponseCitation(BaseModel):
@@ -378,6 +394,8 @@ class DocumentReflowRequest(BaseModel):
     document_id: str
     title: str = Field(min_length=1, max_length=1_000)
     pdf_s3_key: str = Field(min_length=1, max_length=1_024)
+    mineru_archive_s3_key: str | None = Field(default=None, max_length=1_024)
+    mineru_archive_parser_revision: str | None = Field(default=None, max_length=160)
 
 
 class ReflowSourceSpan(BaseModel):

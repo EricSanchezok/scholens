@@ -6,9 +6,10 @@ import asyncio
 import logging
 import os
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
-from typing import Any
+from typing import Any, Literal
 
 import psutil
 import requests
@@ -18,17 +19,20 @@ from src.schemas import (
     DataTableSchema,
     DataTableTaskRequest,
     DocumentReflowRequest,
+    IntegrationUseEvent,
+    JobIntegrationCredentialResponse,
     ResearchDataTableResult,
 )
 from src.audio import generate_audio
 from src.reflow import generate_document_reflow
 from src.data_table_processor import construct_data_table
 from src.pdf.models import (
+    MinerUCredential,
+    ParserConfigurationError,
     ParserError,
     ParserTransientError,
 )
 from src.pdf.pipeline import process_pdf_file
-from src.pdf.state import ParserStateStore
 from src.celery_app import celery_app, ZOTERO_SYNC_INTERVAL_SECONDS
 from src.s3_service import s3_service
 from src.token_usage import collect_token_usage
@@ -190,6 +194,89 @@ def _claim_job(claim_url: str | None, *, task_id: str) -> bool:
         raise
 
 
+def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
+    try:
+        response = post_signed_json(credential_url, {}, timeout=30)
+    except requests.RequestException as exc:
+        raise ParserTransientError(
+            "Could not obtain the job-scoped MinerU credential",
+            error_code="mineru_unavailable",
+            phase="credential",
+            exception_type=type(exc).__name__,
+        ) from exc
+    if response.status_code >= 400:
+        try:
+            code = str(response.json().get("code") or "")
+        except (TypeError, ValueError):
+            code = ""
+        if code in {"mineru_credential_required", "integration_not_connected"}:
+            raise ParserConfigurationError(
+                "A MinerU credential is required",
+                error_code="mineru_credential_required",
+                phase="credential",
+                http_status=response.status_code,
+            )
+        if code in {
+            "mineru_credential_invalid",
+            "integration_credentials_unreadable",
+        }:
+            raise ParserConfigurationError(
+                "The MinerU credential is invalid",
+                error_code="mineru_credential_invalid",
+                phase="credential",
+                http_status=response.status_code,
+            )
+        raise ParserTransientError(
+            "Could not obtain the job-scoped MinerU credential",
+            error_code="mineru_unavailable",
+            phase="credential",
+            http_status=response.status_code,
+        )
+    try:
+        payload = JobIntegrationCredentialResponse.model_validate(response.json())
+    except (TypeError, ValueError) as exc:
+        raise ParserTransientError(
+            "The job-scoped MinerU credential response is invalid",
+            error_code="mineru_unavailable",
+            phase="credential",
+            exception_type=type(exc).__name__,
+        ) from exc
+    return MinerUCredential(
+        token=payload.credential.get_secret_value(),
+        revision=payload.credential_revision,
+    )
+
+
+@dataclass
+class _MinerUCredentialSession:
+    credential_url: str
+    credential: MinerUCredential | None = None
+    event: IntegrationUseEvent | None = None
+
+    async def load(self) -> MinerUCredential:
+        if self.credential is None:
+            self.credential = await asyncio.to_thread(
+                _fetch_mineru_credential,
+                self.credential_url,
+            )
+        return self.credential
+
+    def record(
+        self,
+        revision: str,
+        outcome: Literal["verified", "invalid", "failed"],
+        error_code: str | None,
+    ) -> None:
+        self.event = IntegrationUseEvent(
+            credential_revision=revision,
+            outcome=outcome,
+            error_code=error_code,
+        )
+
+    def events(self) -> list[dict[str, Any]]:
+        return [self.event.model_dump(mode="json")] if self.event is not None else []
+
+
 @celery_app.task(
     bind=True,
     name="upload_and_process_file",
@@ -202,6 +289,7 @@ def upload_and_process_file(
     webhook_url: str,
     progress_url: str,
     claim_url: str,
+    credential_url: str,
     skip_metadata_extraction: bool = False,
 ) -> dict[str, Any]:
     """
@@ -216,6 +304,7 @@ def upload_and_process_file(
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
     progress: ProgressReporter | None = None
+    mineru = _MinerUCredentialSession(credential_url)
 
     try:
         with ProgressReporter(
@@ -244,6 +333,8 @@ def upload_and_process_file(
                         task_id,
                         status_callback=progress.update,
                         skip_metadata_extraction=skip_metadata_extraction,
+                        mineru_credential_loader=mineru.load,
+                        mineru_outcome_callback=mineru.record,
                     )
                 )
 
@@ -256,6 +347,7 @@ def upload_and_process_file(
                 "result": result.model_dump(),
                 "error": result.error if not result.success else None,
                 "usage_events": usage_events,
+                "integration_events": mineru.events(),
             }
 
             webhook_delivered = _deliver_webhook(
@@ -265,27 +357,12 @@ def upload_and_process_file(
             )
             if not webhook_delivered:
                 webhook_payload["webhook_error"] = "webhook_delivery_failed"
-            else:
-                try:
-                    asyncio.run(_clear_parser_checkpoint(task_id))
-                except ParserTransientError as exc:
-                    logger.warning(
-                        "job.pdf_checkpoint.clear_failed",
-                        extra={"job_id": task_id, **exc.diagnostic_fields()},
-                    )
 
             logger.info("job.pdf_processing.completed", extra={"job_id": task_id})
             return webhook_payload
 
     except JobCancelled:
         logger.info("job.pdf_processing.cancelled", extra={"job_id": task_id})
-        try:
-            asyncio.run(_clear_parser_checkpoint(task_id))
-        except ParserTransientError as cleanup_exc:
-            logger.warning(
-                "job.pdf_checkpoint.clear_failed",
-                extra={"job_id": task_id, **cleanup_exc.diagnostic_fields()},
-            )
         return {"task_id": task_id, "status": "cancelled"}
 
     except SoftTimeLimitExceeded:
@@ -300,13 +377,24 @@ def upload_and_process_file(
             },
             "error": "pdf_processing_timeout",
             "usage_events": usage_events,
+            "integration_events": mineru.events(),
         }
         _deliver_webhook(webhook_url, timeout_payload, task_id=task_id)
         raise
 
     except Exception as exc:
         failure_stage = progress.stage if progress is not None else "downloading"
-        failure_code = _pdf_failure_code(failure_stage)
+        failure_code = (
+            exc.error_code
+            if isinstance(exc, ParserError)
+            else _pdf_failure_code(failure_stage)
+        )
+        if mineru.credential is not None and mineru.event is None:
+            mineru.record(
+                mineru.credential.revision,
+                "failed",
+                failure_code,
+            )
         diagnostics = (
             exc.diagnostic_fields()
             if isinstance(exc, ParserError)
@@ -326,27 +414,10 @@ def upload_and_process_file(
             },
             "error": failure_code,
             "usage_events": usage_events,
+            "integration_events": mineru.events(),
         }
-        if _deliver_webhook(webhook_url, failure_payload, task_id=task_id):
-            try:
-                asyncio.run(_clear_parser_checkpoint(task_id))
-            except ParserTransientError as cleanup_exc:
-                logger.warning(
-                    "job.pdf_checkpoint.clear_failed",
-                    extra={
-                        "job_id": task_id,
-                        **cleanup_exc.diagnostic_fields(),
-                    },
-                )
+        _deliver_webhook(webhook_url, failure_payload, task_id=task_id)
         raise
-
-
-async def _clear_parser_checkpoint(job_id: str) -> None:
-    state_store = ParserStateStore()
-    try:
-        await state_store.clear(job_id)
-    finally:
-        await state_store.close()
 
 
 @celery_app.task(
@@ -474,16 +545,33 @@ def generate_document_reflow_task(
     request: dict[str, Any],
     webhook_url: str,
     claim_url: str | None = None,
+    credential_url: str | None = None,
 ) -> dict[str, Any]:
     """Generate one lossless, idempotently addressed reading layout."""
 
     task_id = self.request.id
     if not _claim_job(claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
+    if credential_url is None:
+        raise RuntimeError("document_reflow_credential_url_missing")
     usage_events: list[dict[str, Any]] = []
+    mineru = _MinerUCredentialSession(credential_url)
     try:
         parsed = DocumentReflowRequest.model_validate(request)
         pdf_bytes = s3_service.download_file_to_bytes(parsed.pdf_s3_key)
+        archive_bytes: bytes | None = None
+        if parsed.mineru_archive_s3_key is not None:
+            try:
+                archive_bytes = s3_service.download_file_to_bytes(
+                    parsed.mineru_archive_s3_key
+                )
+            except Exception:
+                logger.warning(
+                    "job.document_reflow.archive_download_failed",
+                    exc_info=True,
+                    extra={"job_id": task_id},
+                )
+        credential = asyncio.run(mineru.load())
         with collect_token_usage(task_id) as usage:
             usage_events = usage.events
             result = asyncio.run(
@@ -491,6 +579,10 @@ def generate_document_reflow_task(
                     document_id=parsed.document_id,
                     title=parsed.title,
                     pdf_bytes=pdf_bytes,
+                    credential=credential,
+                    archive_bytes=archive_bytes,
+                    archive_parser_revision=parsed.mineru_archive_parser_revision,
+                    outcome_callback=mineru.record,
                     write_asset=lambda data, key, content_type: (
                         s3_service.upload_bytes_to_key(data, key, content_type)
                     ),
@@ -501,18 +593,25 @@ def generate_document_reflow_task(
             "status": "completed",
             "result": result.model_dump(mode="json"),
             "usage_events": usage_events,
+            "integration_events": mineru.events(),
         }
         if not _deliver_webhook(webhook_url, payload, task_id=task_id):
             payload["webhook_error"] = "webhook_delivery_failed"
         return payload
-    except Exception:
+    except Exception as exc:
         logger.exception("job.document_reflow.failed", extra={"job_id": task_id})
+        error_code = (
+            exc.error_code if isinstance(exc, ParserError) else "document_reflow_failed"
+        )
+        if mineru.credential is not None and mineru.event is None:
+            mineru.record(mineru.credential.revision, "failed", error_code)
         payload = {
             "task_id": task_id,
             "status": "failed",
             "result": None,
-            "error": "document_reflow_failed",
+            "error": error_code,
             "usage_events": usage_events,
+            "integration_events": mineru.events(),
         }
         _deliver_webhook(webhook_url, payload, task_id=task_id)
         raise

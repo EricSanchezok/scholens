@@ -19,6 +19,7 @@ from app.modules.billing.application.contracts import (
     SubscriptionInterval,
     SubscriptionResponse,
     UsageResponse,
+    UsagePeriod,
 )
 from app.modules.billing.application.ports import (
     BillingEvent,
@@ -178,9 +179,9 @@ class BillingWorkflow:
             lambda capabilities: capabilities.billing.get_subscription(actor)
         )
 
-    def get_usage(self, actor: Actor) -> UsageResponse:
+    def get_usage(self, actor: Actor, period: UsagePeriod) -> UsageResponse:
         return self._executor.query(
-            lambda capabilities: capabilities.billing.get_usage(actor)
+            lambda capabilities: capabilities.billing.get_usage(actor, period)
         )
 
     def create_portal(self, actor: Actor) -> PortalSessionResponse:

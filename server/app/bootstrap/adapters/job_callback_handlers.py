@@ -6,6 +6,7 @@ from typing import cast
 from uuid import UUID
 
 from app.modules.jobs.application.callbacks import (
+    JobCredentialScope,
     JobCompletionHandler,
     JobHandlerResult,
     PdfPostprocessResolution,
@@ -59,6 +60,16 @@ class SqlAlchemyJobLifecycle:
             self._db, job_id=job_id, error_code=error_code
         )
         return changed
+
+    def credential_scope(self, *, job_id: UUID) -> JobCredentialScope:
+        job = job_repository.require(self._db, job_id=job_id)
+        if job.requested_by_id is None:
+            raise RuntimeError("job_credential_owner_missing")
+        return JobCredentialScope(
+            requested_by_id=job.requested_by_id,
+            operation=JobOperation(job.operation),
+            status=JobStatus(job.status),
+        )
 
 
 class PdfProcessCompletion(JobCompletionHandler):

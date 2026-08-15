@@ -187,10 +187,10 @@
       "delete",
       "patch"
     ],
-    "/api/v1/me/connectors": [
+    "/api/v1/me/integrations": [
       "get"
     ],
-    "/api/v1/me/connectors/{provider}": [
+    "/api/v1/me/integrations/{provider}": [
       "delete",
       "patch",
       "put"
@@ -247,10 +247,10 @@
     "/api/v1/papers/{document_id}/reflow/assets/{asset_id}/url": [
       "get"
     ],
-    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": [
+    "/api/v1/papers/{document_id}/reflow/attempts": [
       "post"
     ],
-    "/api/v1/papers/{document_id}/reflow/retries": [
+    "/api/v1/papers/{document_id}/reflow/blocks/{block_id}/translations": [
       "post"
     ],
     "/api/v1/papers/{document_id}/research-items": [

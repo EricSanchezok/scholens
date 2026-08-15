@@ -47,8 +47,9 @@ const completed = {
     },
   ],
   assets: [],
+  attempt_count: 1,
   document_id: "completed-document",
-  error_code: null,
+  failure: null,
   job_id: "10000000-0000-4000-8000-000000000001",
   parser_revision: "mineru-content-list-v1",
   pipeline_revision: "mineru-continuous-ast-v1",
@@ -65,11 +66,24 @@ const handlers = [
     if (documentId === "slow-document") {
       await delay("infinite");
     }
-    if (documentId === "error-document") {
-      return HttpResponse.json(
-        { code: "document_reflow_not_scheduled", message: "not scheduled" },
-        { status: 409 },
-      );
+    if (
+      [
+        "error-document",
+        "credential-document",
+        "invalid-credential-document",
+      ].includes(documentId)
+    ) {
+      return HttpResponse.json({
+        ...completed,
+        attempt_count: 0,
+        blocks: [],
+        document_id: documentId,
+        job_id: null,
+        parser_revision: null,
+        pipeline_revision: null,
+        status: "not_requested",
+        updated_at: null,
+      });
     }
     if (documentId === "failed-document") {
       if (retriedDocuments.has(documentId)) {
@@ -86,7 +100,37 @@ const handlers = [
         ...completed,
         blocks: [],
         document_id: documentId,
-        error_code: "document_reflow_failed",
+        failure: {
+          code: "document_reflow_failed",
+          required_integration: null,
+          retryable: true,
+        },
+        status: "failed",
+      });
+    }
+    if (documentId === "rate-limited-document") {
+      return HttpResponse.json({
+        ...completed,
+        blocks: [],
+        document_id: documentId,
+        failure: {
+          code: "mineru_rate_limited",
+          required_integration: null,
+          retryable: true,
+        },
+        status: "failed",
+      });
+    }
+    if (documentId === "unsafe-document") {
+      return HttpResponse.json({
+        ...completed,
+        blocks: [],
+        document_id: documentId,
+        failure: {
+          code: "mineru_response_unsafe",
+          required_integration: null,
+          retryable: false,
+        },
         status: "failed",
       });
     }
@@ -102,8 +146,26 @@ const handlers = [
     }
     return HttpResponse.json({ ...completed, document_id: documentId });
   }),
-  http.post(`${endpoint}/retries`, ({ params }) => {
+  http.post(`${endpoint}/attempts`, ({ params }) => {
     const documentId = String(params.documentId);
+    if (
+      ["credential-document", "invalid-credential-document"].includes(
+        documentId,
+      )
+    ) {
+      return HttpResponse.json(
+        {
+          code:
+            documentId === "credential-document"
+              ? "mineru_credential_required"
+              : "mineru_credential_invalid",
+          kind: "unprocessable",
+          message: "Connect MinerU",
+          retryable: true,
+        },
+        { status: 422 },
+      );
+    }
     retriedDocuments.add(documentId);
     return HttpResponse.json(
       {
@@ -117,6 +179,21 @@ const handlers = [
       { status: 202 },
     );
   }),
+  http.get("http://127.0.0.1:7301/api/v1/me/integrations", () =>
+    HttpResponse.json({
+      items: [
+        {
+          category: "parsing",
+          enabled: false,
+          managed: false,
+          provider: "mineru",
+          state: "disconnected",
+          updated_at: null,
+          verified_at: null,
+        },
+      ],
+    }),
+  ),
 ];
 
 const meta = {
@@ -147,7 +224,11 @@ const meta = {
       </ToastProvider>
     ),
   ],
-  parameters: { layout: "fullscreen", msw: { handlers } },
+  parameters: {
+    layout: "fullscreen",
+    msw: { handlers },
+    nextjs: { appDirectory: true },
+  },
 } satisfies Meta<typeof ReaderReflowSurface>;
 
 export default meta;
@@ -163,8 +244,70 @@ export const Loading: Story = {
   args: { documentId: "slow-document" },
 };
 
-export const Unscheduled: Story = {
+export const NotRequested: Story = {
   args: { documentId: "error-document" },
+};
+
+export const MinerURequired: Story = {
+  args: { documentId: "credential-document" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Start AI reflow" }),
+    );
+    await expect(
+      await canvas.findByRole("heading", {
+        name: "Connect MinerU to use AI reflow",
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "Get a MinerU token" }),
+    ).toHaveAttribute("href", "https://mineru.net/apiManage/token");
+  },
+};
+
+export const MinerUInvalid: Story = {
+  args: { documentId: "invalid-credential-document" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Start AI reflow" }),
+    );
+    await expect(
+      await canvas.findByRole("heading", {
+        name: "Connect MinerU to use AI reflow",
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Open Connections" }),
+    ).toBeVisible();
+  },
+};
+
+export const RateLimitedFailure: Story = {
+  args: { documentId: "rate-limited-document" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByText(/rate limiting requests/i),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Retry AI reflow" }),
+    ).toBeVisible();
+  },
+};
+
+export const UnsafeFailure: Story = {
+  args: { documentId: "unsafe-document" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByText(/unsafe or invalid archive/i),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByRole("button", { name: "Retry AI reflow" }),
+    ).not.toBeInTheDocument();
+  },
 };
 
 export const FailedAndRetry: Story = {

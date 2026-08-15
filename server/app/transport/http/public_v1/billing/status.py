@@ -1,6 +1,7 @@
 from app.bootstrap.workflows.billing import BillingWorkflow
 from app.modules.billing.application.contracts import (
     SubscriptionResponse,
+    UsagePeriod,
     UsageResponse,
 )
 from app.shared.application import Actor, OperationContext
@@ -28,7 +29,8 @@ def get_user_subscription(
 
 @router.get("/usage", response_model=UsageResponse)
 def get_user_usage(
+    period: UsagePeriod = UsagePeriod.CURRENT_WEEK,
     workflow: BillingWorkflow = Depends(get_billing_workflow),
     current_user: Actor = Depends(get_required_user),
 ) -> UsageResponse:
-    return workflow.get_usage(current_user)
+    return workflow.get_usage(current_user, period)

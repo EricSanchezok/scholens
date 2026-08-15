@@ -310,6 +310,24 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
       case "pdf_processing_timeout":
         description = t("errors.pdf_processing_timeout");
         break;
+      case "mineru_credential_required":
+        description = t("errors.mineru_credential_required");
+        break;
+      case "mineru_credential_invalid":
+        description = t("errors.mineru_credential_invalid");
+        break;
+      case "mineru_rate_limited":
+        description = t("errors.mineru_rate_limited");
+        break;
+      case "mineru_unavailable":
+        description = t("errors.mineru_unavailable");
+        break;
+      case "mineru_content_insufficient":
+        description = t("errors.mineru_content_insufficient");
+        break;
+      case "mineru_response_unsafe":
+        description = t("errors.mineru_response_unsafe");
+        break;
       case "paper_ingestion_downloading_failed":
         description = t("errors.paper_ingestion_downloading_failed");
         break;
@@ -396,9 +414,13 @@ function IngestionActions({
   if (ingestion.state === "failed") {
     return (
       <div className="flex items-center justify-end gap-1">
-        <Button onClick={onRetry} size="sm" variant="ghost">
-          {t("retry")}
-        </Button>
+        {ingestion.retryable ? (
+          <Button onClick={onRetry} size="sm" variant="ghost">
+            {ingestion.requiredIntegration === "mineru"
+              ? t("connectMineru")
+              : t("retry")}
+          </Button>
+        ) : null}
         <IconButton label={t("remove")} onClick={onCancel} variant="ghost">
           <Icon glyph={DeleteIcon} size={16} tone="secondary" />
         </IconButton>

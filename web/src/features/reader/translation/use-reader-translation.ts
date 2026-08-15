@@ -8,7 +8,7 @@ import type { ReaderSelection } from "../components/pdf-page";
 import {
   streamSelectionTranslation,
   translationKeys,
-  translationQueries,
+  translationPreferenceQuery,
   updateTranslationPreferences,
   type TranslationPreferences,
 } from "./api";
@@ -52,11 +52,11 @@ export function useReaderTranslation({
   selection?: ReaderSelection;
 }) {
   const queryClient = useQueryClient();
-  const preferencesQuery = useQuery(translationQueries.preferences());
+  const preferencesQuery = useQuery(translationPreferenceQuery());
   const preferencesMutation = useMutation({
     mutationFn: updateTranslationPreferences,
     onSuccess: (preferences) =>
-      queryClient.setQueryData(translationKeys.preferences(), preferences),
+      queryClient.setQueryData(translationKeys.current(), preferences),
   });
   const [state, setState] =
     React.useState<SelectionTranslationState>(initialState);

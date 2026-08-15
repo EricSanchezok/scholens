@@ -9,7 +9,7 @@ This document defines the Scholens-specific database and deployment contract.
 | Owner                   | Responsibilities                                                                                                                                                                                | PostgreSQL ownership                                                                                                            | Explicitly excluded                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `sanchezcloud-identity` | Email identity, passwords, verification, global account status, lockout, public Account ID, shared avatar references, connected clients, security events, audience tokens, and refresh families | `auth.users`, `auth.refresh_tokens`, `auth.user_clients`, `auth.user_avatars`, `auth.security_events`, `auth.schema_migrations` | Product roles, blocks, subscriptions, quotas, usage, documents, projects |
-| Scholens                | Documents, projects, collaboration, product profile/admin/block state, subscriptions, connectors, and usage                                                                                     | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
+| Scholens                | Documents, projects, collaboration, product profile/admin/block state, subscriptions, integration connections, and usage                                                                        | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
 
 Both schemas share the `sanchezcloud` database but have independent owners and migration
 ledgers. `public` contains no application tables. Scholens rows may reference the internal
@@ -137,6 +137,29 @@ and AI-profile revisions. They never own or duplicate raw selection source
 text. Deleting the source Document cascades its derived translation results.
 Redis does not own completed translations; it owns only short-lived capacity
 and single-flight coordination.
+
+## Integration credentials
+
+`IntegrationConnection` is user-owned Scholens data. It records one provider,
+enabled state, encrypted credential payload, non-secret display metadata,
+credential revision, verification outcome, and lifecycle timestamps. The
+Server is the sole persistence and decryption authority. Public projections
+never return a stored secret, and Jobs has no process-level MinerU token.
+
+A DurableJob stores the owning user, but neither the plaintext credential nor a
+credential revision. After the worker has claimed that eligible job, it may
+fetch the user's currently enabled MinerU token through the signed internal
+API. That response is scoped to the exact job, owner, operation, provider, and
+current connection revision; the plaintext exists only at the provider-call
+boundary and must not enter logs, exceptions, callbacks, task payloads, or
+operation provenance. Provider outcomes sent back to Server carry the fetched
+revision, so a delayed failure is ignored after the user replaces the
+connection.
+
+Disconnecting or replacing a connection does not rewrite immutable job
+history. A retry creates or resumes a new eligible attempt against the current
+credential revision. Pre-release schema evolution is reset-first: the removed
+connector tables and routes have no compatibility facade or dual-write path.
 
 `DocumentReflow`, its ordered `DocumentReflowBlock` rows, and
 `DocumentReflowAsset` rows are derived from the Document's canonical parser

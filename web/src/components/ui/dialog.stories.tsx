@@ -39,6 +39,30 @@ function DialogDemo() {
   );
 }
 
+function ResponsiveFullDialogDemo() {
+  return (
+    <Dialog defaultOpen>
+      <DialogContent closeLabel="Close settings" placement="responsive-full">
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogDescription className="sr-only">
+          Responsive full-screen dialog placement
+        </DialogDescription>
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <aside className="border-line bg-subtle shrink-0 border-b p-6 lg:w-64 lg:border-r lg:border-b-0">
+            <h1 className="text-xl font-semibold">Settings</h1>
+          </aside>
+          <main className="min-h-0 flex-1 overflow-y-auto p-8">
+            <h2 className="text-2xl font-semibold">General</h2>
+            <p className="text-secondary mt-2 text-sm">
+              Full-screen on mobile and centered at 1120 × 760 on desktop.
+            </p>
+          </main>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const meta = {
   title: "Overlays/Dialog",
   component: DialogDemo,
@@ -50,6 +74,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Playground: Story = {};
+export const ResponsiveFull: StoryObj<typeof ResponsiveFullDialogDemo> = {
+  render: () => <ResponsiveFullDialogDemo />,
+};
 export const KeyboardInteraction: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal, Mapping, Protocol
 from uuid import UUID
 
-from app.modules.billing.application.contracts import UsageResponse
+from app.modules.billing.application.contracts import UsagePeriod, UsageResponse
 from app.shared.application import Actor
 
 
@@ -132,7 +132,7 @@ class PaymentProvider(Protocol):
 
 
 class UsageReader(Protocol):
-    def read(self, actor: Actor) -> UsageResponse: ...
+    def read(self, actor: Actor, period: UsagePeriod) -> UsageResponse: ...
 
 
 @dataclass(frozen=True, slots=True)

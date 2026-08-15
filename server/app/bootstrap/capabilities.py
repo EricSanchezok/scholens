@@ -6,7 +6,7 @@ from functools import cached_property
 
 from app.bootstrap.container import (
     build_access_keys,
-    build_connectors,
+    build_integrations,
     build_billing,
     build_citation_metadata,
     build_conversation_chat_data,
@@ -38,7 +38,7 @@ from app.bootstrap.settings import AppSettings
 from app.bootstrap.adapters.tool_invocations import SqlAlchemyToolInvocationGateway
 from app.modules.billing.application.billing import Billing
 from app.modules.access_keys.application.access_keys import AccessKeys
-from app.modules.integrations.connectors.application import Connectors
+from app.modules.integrations.connections.application import Integrations
 from app.modules.conversations.application.chat import ConversationChatData
 from app.modules.conversations.application.conversations import Conversations
 from app.modules.identity.application.identity import Identity
@@ -46,6 +46,10 @@ from app.modules.identity.application.onboarding import SaveOnboarding
 from app.modules.integrations.zotero.application.zotero import Zotero
 from app.modules.jobs.application.callbacks import JobCallbacks
 from app.modules.jobs.application.jobs import Jobs
+from app.modules.jobs.application.contracts import JobIntegrationCredentialResponse
+from app.modules.integrations.connections.domain import IntegrationProvider
+from pydantic import SecretStr
+from uuid import UUID
 from app.modules.papers.application.citations import CitationMetadata
 from app.modules.papers.application.content import PaperContentCapabilities
 from app.modules.papers.application.collection_access import RequirePaperInCollection
@@ -100,11 +104,11 @@ class ApplicationCapabilities:
         )
 
     @cached_property
-    def connectors(self) -> Connectors:
-        return build_connectors(
+    def integrations(self) -> Integrations:
+        return build_integrations(
             db=self._session,
             credential_encryption_key=(
-                self._settings.connector_credential_encryption_key
+                self._settings.integration_credential_encryption_key
             ),
             scholight_configured=bool(
                 self._settings.scholight_mcp_delegation_jwt_secret
@@ -192,7 +196,14 @@ class ApplicationCapabilities:
 
     @cached_property
     def document_reflows(self) -> DocumentReflows:
-        return build_document_reflows(db=self._session, journal=self._journal)
+        return build_document_reflows(
+            db=self._session,
+            journal=self._journal,
+            require_mineru=lambda actor: self.integrations.require_ready(
+                actor=actor,
+                provider=IntegrationProvider.MINERU,
+            ),
+        )
 
     @cached_property
     def citations(self) -> CitationMetadata:
@@ -216,7 +227,26 @@ class ApplicationCapabilities:
 
     @cached_property
     def job_callbacks(self) -> JobCallbacks:
-        return build_job_callbacks(db=self._session, journal=self._journal)
+        return build_job_callbacks(
+            db=self._session,
+            journal=self._journal,
+            integrations=self.integrations,
+        )
+
+    def job_mineru_credential(
+        self,
+        *,
+        job_id: UUID,
+    ) -> JobIntegrationCredentialResponse:
+        scope = self.job_callbacks.integration_credential_scope(job_id=job_id)
+        credential = self.integrations.credential_for_user(
+            user_id=scope.requested_by_id,
+            provider=IntegrationProvider.MINERU,
+        )
+        return JobIntegrationCredentialResponse(
+            credential=SecretStr(credential.secret),
+            credential_revision=credential.revision,
+        )
 
     @cached_property
     def research_generation(self) -> ResearchGeneration:

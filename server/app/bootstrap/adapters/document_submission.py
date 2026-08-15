@@ -155,6 +155,10 @@ def finalize_reserved_document(
                     f"{base_url}/internal/v1/jobs/{upload_job.id}/complete"
                 ),
                 "claim_url": f"{base_url}/internal/v1/jobs/{upload_job.id}/claim",
+                "credential_url": (
+                    f"{base_url}/internal/v1/jobs/{upload_job.id}"
+                    "/integration-credentials/mineru"
+                ),
                 "progress_url": (
                     f"{base_url}/internal/v1/jobs/{upload_job.id}/progress"
                 ),

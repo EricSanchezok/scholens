@@ -94,20 +94,46 @@ command: complete
 failure -> command: fail/release
 ```
 
-Document reflow follows the durable form of this rule. PDF or Zotero completion
-commits the canonical Document update, reflow artifact, DurableJob, and dispatch
-outbox together, then a dedicated worker submits the original PDF to MinerU and
-maps its stable ordered `content_list.json` to continuous semantic Markdown
-blocks outside the transaction. The signed callback resumes a short SYSTEM
-operation, validates source fingerprint, block order, source spans, and asset
-references, then atomically replaces the artifact's ordered blocks and assets.
-Reflow failure, including an isolated missing-asset degradation, remains
-independent from PDF ingestion success.
+Document reflow follows the durable form of this rule. It begins only when the
+user explicitly creates an attempt. Server preflights the user's enabled MinerU
+connection, commits the reflow artifact, DurableJob, and dispatch outbox
+together, and gives the worker only an internal credential URL. After claiming
+the job, the worker fetches the current revision-scoped token, submits the
+original PDF to MinerU, and maps its stable ordered `content_list.json` to
+continuous semantic Markdown blocks outside the transaction. The signed
+callback resumes a short SYSTEM operation, applies the provider outcome only
+when its revision still matches the current connection, validates the source
+fingerprint, block order, source spans, and asset references, then atomically
+replaces the artifact's ordered blocks and assets. Reflow failure, including
+an isolated missing-asset degradation, remains independent from PDF ingestion
+success.
 
 Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and
 Zotero import/sync follow this shape. Agent and MCP paper tools obtain a fresh
 short operation for every tool call rather than retaining a session for the
 life of a conversation.
+
+## User-owned integrations
+
+`GET|PUT|DELETE /api/v1/me/integrations/{provider}` is the one public
+connection contract for MinerU and optional MCP providers. Responses expose
+status, revision, verification information, and a masked secret hint, never the
+credential. Scholight remains built in. The superseded connector CRUD surface
+and shared MinerU environment credential do not exist.
+
+Server encrypts integration credentials at rest with the deployment-owned
+`INTEGRATION_CREDENTIAL_ENCRYPTION_KEY`. A worker can decrypt nothing itself:
+only a signed request for a currently running, owner-scoped PDF or reflow job
+can retrieve the exact MinerU revision. The secret is not part of Celery
+payloads, callbacks, operation journals, logs, or telemetry. Callback outcomes
+are revision-bound, preventing an old attempt from marking a replacement token
+invalid.
+
+Provider failures preserve stable product meaning. Missing credentials request
+the MinerU integration; authentication failures mark only the matching revision
+invalid; rate limits and provider unavailability remain retryable; insufficient
+content and unsafe archives are distinct non-generic terminal results. Public
+projections retain only bounded safe codes and messages.
 
 ## Authentication, permission, and operation provenance
 
@@ -356,6 +382,16 @@ citations on the canonical `Document`. It does not synthesize a paper-scoped
 conversation or a fake user turn. Starting a conversation about a paper is an
 explicit user operation and the conversation references that existing
 Document-owned context.
+
+## Billing usage projection
+
+`GET /api/v1/billing/usage` returns the selected inclusive date-only period,
+the effective plan, current resource usage, and plan limits. Storage accounting
+is persisted and returned in KiB; public fields therefore use the explicit
+`knowledge_base_size_kb` and `knowledge_base_size_remaining_kb` names. Clients
+must convert those quantities from KiB rather than treating them as bytes.
+`period_end` is the inclusive final day of the selected window, not a timestamp
+or the next reset instant.
 
 ## Adding a capability or adapter
 

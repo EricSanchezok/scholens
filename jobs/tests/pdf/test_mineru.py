@@ -11,7 +11,9 @@ import pytest
 
 from src.pdf.mineru import MinerUClient, MinerUConfig, canonical_markdown
 from src.pdf.models import (
+    MinerUCredential,
     ParserConfigurationError,
+    ParserContentError,
     ParserSecurityError,
     ParserTransientError,
 )
@@ -82,6 +84,15 @@ def _config() -> MinerUConfig:
     )
 
 
+def test_mineru_secrets_are_redacted_from_dataclass_representations() -> None:
+    config = _config()
+    credential = MinerUCredential(token="credential-secret", revision="revision-1")
+
+    assert "test-token" not in repr(config)
+    assert "credential-secret" not in repr(credential)
+    assert "revision-1" in repr(credential)
+
+
 def _archive() -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
@@ -141,8 +152,9 @@ def test_archive_requires_safe_canonical_artifacts() -> None:
     with zipfile.ZipFile(output, "w") as archive:
         archive.writestr("../full.md", "# Escape")
         archive.writestr("content_list.json", "[]")
-    with pytest.raises(ParserSecurityError, match="Unsafe path"):
+    with pytest.raises(ParserSecurityError, match="Unsafe path") as captured:
         client.read_archive(output.getvalue())
+    assert captured.value.error_code == "mineru_response_unsafe"
 
 
 def test_structured_archive_preserves_ordered_blocks_and_assets() -> None:
@@ -468,6 +480,37 @@ def test_authorization_failure_is_configuration_error() -> None:
                 data_id="job-1",
             )
         )
+
+
+@pytest.mark.parametrize(
+    ("status", "error_type", "error_code"),
+    [
+        (401, ParserConfigurationError, "mineru_credential_invalid"),
+        (429, ParserTransientError, "mineru_rate_limited"),
+        (503, ParserTransientError, "mineru_unavailable"),
+        (422, ParserContentError, "pdf_content_insufficient"),
+    ],
+)
+def test_http_failures_keep_stable_actionable_classifications(
+    status: int,
+    error_type: type[Exception],
+    error_code: str,
+) -> None:
+    request = httpx.Request("POST", "https://mineru.example/api/v4/file-urls/batch")
+    response = httpx.Response(status, request=request)
+
+    with pytest.raises(error_type) as captured:
+        MinerUClient._classify_response(
+            response,
+            "submit",
+            task_id="task-safe",
+        )
+
+    assert isinstance(
+        captured.value,
+        (ParserConfigurationError, ParserTransientError, ParserContentError),
+    )
+    assert captured.value.error_code == error_code
 
 
 def test_poll_survives_more_than_four_consecutive_network_failures(

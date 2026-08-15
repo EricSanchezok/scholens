@@ -10,6 +10,8 @@ from src.tasks import (
     JOB_PROGRESS_TIMEOUT_SECONDS,
     JobCancelled,
     ProgressReporter,
+    _MinerUCredentialSession,
+    _fetch_mineru_credential,
     _pdf_failure_code,
 )
 
@@ -18,6 +20,39 @@ def _response(*, claimed: bool = True) -> MagicMock:
     response = MagicMock()
     response.json.return_value = {"claimed": claimed}
     return response
+
+
+def test_job_scoped_credential_never_enters_repr_or_callback_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "credential": "private-mineru-token",
+        "credential_revision": "revision-1",
+    }
+    monkeypatch.setattr(
+        "src.tasks.post_signed_json",
+        MagicMock(return_value=response),
+    )
+
+    credential = _fetch_mineru_credential(
+        "https://server.example/internal/jobs/job-1/credential"
+    )
+    session = _MinerUCredentialSession("https://server.example/credential")
+    session.credential = credential
+    session.record(credential.revision, "verified", None)
+
+    assert "private-mineru-token" not in repr(credential)
+    assert "private-mineru-token" not in repr(session)
+    assert "private-mineru-token" not in str(session.events())
+    assert session.events() == [
+        {
+            "provider": "mineru",
+            "credential_revision": "revision-1",
+            "outcome": "verified",
+            "error_code": None,
+        }
+    ]
 
 
 @pytest.mark.parametrize(

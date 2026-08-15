@@ -7,6 +7,7 @@ import pytest
 
 from src.pdf.mineru import MinerUConfig
 from src.pdf.models import (
+    MinerUCredential,
     ParsedDocument,
     ParserBackend,
     ParserConfigurationError,
@@ -117,6 +118,10 @@ def _mineru_config() -> MinerUConfig:
     )
 
 
+async def _credential() -> MinerUCredential:
+    return MinerUCredential(token="test-token", revision="credential-revision-1")
+
+
 def _full_mineru_document() -> ParsedDocument:
     return ParsedDocument(
         markdown="mineru markdown " * 50,
@@ -141,7 +146,10 @@ def _markitdown_document() -> ParsedDocument:
 
 class _FakeMinerUClient:
     def __init__(self, _config: MinerUConfig) -> None:
-        pass
+        self.state_store = self
+
+    async def clear(self, _data_id: str) -> None:
+        return None
 
     async def parse_file(
         self,
@@ -179,6 +187,24 @@ class _FailingMinerUClient:
         return None
 
 
+class _InsufficientMinerUClient(_FailingMinerUClient):
+    def __init__(self, _config: MinerUConfig) -> None:
+        self.state_store = self
+
+    async def clear(self, _data_id: str) -> None:
+        return None
+
+    async def parse_file(
+        self,
+        _pdf_bytes: bytes,
+        *,
+        data_id: str,
+        deadline: float | None = None,
+    ) -> ParsedDocument:
+        del data_id, deadline
+        raise ParserContentError("MinerU returned no reliable content")
+
+
 def _patch_s3(monkeypatch: pytest.MonkeyPatch, uploaded: list[str]) -> None:
     def upload(_payload: bytes, key: str, _content_type: str) -> str:
         uploaded.append(key)
@@ -214,11 +240,6 @@ def test_digital_pdf_uses_pymupdf4llm_full(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     uploaded: list[str] = []
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: None),
-    )
     _patch_s3(monkeypatch, uploaded)
     _patch_metadata(monkeypatch, "Digital paper")
 
@@ -256,11 +277,6 @@ def test_pymupdf4llm_failure_falls_back_to_markitdown(
         "src.pdf.pipeline.extract_markdown_markitdown",
         lambda _path, **_: _markitdown_document(),
     )
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: None),
-    )
     _patch_s3(monkeypatch, [])
     _patch_metadata(monkeypatch, "Markitdown paper")
 
@@ -293,11 +309,6 @@ def test_local_failure_rescues_via_mineru_with_archive(
         "src.pdf.pipeline.extract_markdown_markitdown",
         failing_local,
     )
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: _mineru_config()),
-    )
     monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _FakeMinerUClient)
     uploaded: list[str] = []
     _patch_s3(monkeypatch, uploaded)
@@ -309,6 +320,7 @@ def test_local_failure_rescues_via_mineru_with_archive(
             f"documents/{'c' * 64}/source.pdf",
             "job-1",
             status_callback=lambda _status: None,
+            mineru_credential_loader=_credential,
         )
     )
 
@@ -333,11 +345,6 @@ def test_mineru_rescue_timeout_uses_text_last_resort(
         "src.pdf.pipeline.extract_markdown_markitdown",
         failing_local,
     )
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: _mineru_config()),
-    )
     monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _FailingMinerUClient)
     _patch_s3(monkeypatch, [])
     _patch_metadata(monkeypatch, "Last resort paper")
@@ -348,6 +355,7 @@ def test_mineru_rescue_timeout_uses_text_last_resort(
             f"documents/{'d' * 64}/source.pdf",
             "job-1",
             status_callback=lambda _status: None,
+            mineru_credential_loader=_credential,
         )
     )
 
@@ -362,11 +370,6 @@ def test_mineru_rescue_timeout_uses_text_last_resort(
 def test_scanned_pdf_goes_directly_to_mineru(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: _mineru_config()),
-    )
     monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _FakeMinerUClient)
     uploaded: list[str] = []
     _patch_s3(monkeypatch, uploaded)
@@ -378,6 +381,7 @@ def test_scanned_pdf_goes_directly_to_mineru(
             f"documents/{'e' * 64}/source.pdf",
             "job-1",
             status_callback=lambda _status: None,
+            mineru_credential_loader=_credential,
         )
     )
 
@@ -387,40 +391,30 @@ def test_scanned_pdf_goes_directly_to_mineru(
     assert result.parser_archive_s3_key == f"documents/{'e' * 64}/mineru-result.zip"
 
 
-def test_scanned_pdf_with_mineru_failure_returns_content_error(
+def test_scanned_pdf_with_mineru_failure_preserves_transient_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: _mineru_config()),
-    )
     monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _FailingMinerUClient)
     _patch_s3(monkeypatch, [])
 
-    result = asyncio.run(
-        process_pdf_file(
-            _scanned_pdf(),
-            f"documents/{'f' * 64}/source.pdf",
-            "job-1",
-            status_callback=lambda _status: None,
+    with pytest.raises(ParserTransientError) as raised:
+        asyncio.run(
+            process_pdf_file(
+                _scanned_pdf(),
+                f"documents/{'f' * 64}/source.pdf",
+                "job-1",
+                status_callback=lambda _status: None,
+                mineru_credential_loader=_credential,
+            )
         )
-    )
 
-    assert not result.success
-    assert result.error == "pdf_content_insufficient"
+    assert raised.value.error_code == "mineru_unavailable"
 
 
-def test_scanned_pdf_without_mineru_config_raises_configuration_error(
+def test_scanned_pdf_without_mineru_credential_has_actionable_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: None),
-    )
-
-    with pytest.raises(ParserConfigurationError):
+    with pytest.raises(ParserConfigurationError) as raised:
         asyncio.run(
             process_pdf_file(
                 _scanned_pdf(),
@@ -430,15 +424,32 @@ def test_scanned_pdf_without_mineru_config_raises_configuration_error(
             )
         )
 
+    assert raised.value.error_code == "mineru_credential_required"
+
+
+def test_scanned_pdf_preserves_mineru_content_classification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _InsufficientMinerUClient)
+    _patch_s3(monkeypatch, [])
+
+    result = asyncio.run(
+        process_pdf_file(
+            _scanned_pdf(),
+            f"documents/{'3' * 64}/source.pdf",
+            "job-1",
+            status_callback=lambda _status: None,
+            mineru_credential_loader=_credential,
+        )
+    )
+
+    assert result.success is False
+    assert result.error == "mineru_content_insufficient"
+
 
 def test_skip_metadata_extraction_skips_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        MinerUConfig,
-        "from_env",
-        classmethod(lambda _cls: None),
-    )
     _patch_s3(monkeypatch, [])
 
     def unexpected_llm_call(*_args: object, **_: object) -> None:

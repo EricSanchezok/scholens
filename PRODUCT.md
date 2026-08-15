@@ -84,6 +84,15 @@ PDFs difficult to read on narrow screens. MinerU's structured content list is
 the evidence boundary; rendered blocks retain source spans so navigation and
 auditing always return to the PDF.
 
+AI reflow is an explicit user action and requires that user to connect a MinerU
+token in Settings. Scholens does not provide a shared MinerU credential and does
+not start reflow automatically after PDF ingestion. Missing or rejected
+credentials lead to a clear connection action rather than a generic processing
+failure; failed attempts remain retryable without weakening the PDF reading
+path. The same user-owned connection may rescue a scanned or locally
+unparseable PDF, while a digital PDF retains its deterministic local fallback
+when the remote rescue is unavailable.
+
 Interface locale and paper-content language are independent preferences. A
 reader may use an English interface while translating a paper into Chinese, or
 the reverse. Selection translation starts only from an explicit selection and

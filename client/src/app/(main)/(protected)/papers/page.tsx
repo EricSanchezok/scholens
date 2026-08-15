@@ -260,8 +260,8 @@ function PapersPageContent() {
                     {(nearStorageLimit || atStorageLimit) && (
                         <div>
                             <div className="flex justify-between text-sm text-muted-foreground">
-                                <span>Storage: {formatFileSize(subscription.usage.knowledge_base_size)} used</span>
-                                <span>{formatFileSize(subscription.limits.knowledge_base_size)} total</span>
+                                <span>Storage: {formatFileSize(subscription.usage.knowledge_base_size_kb)} used</span>
+                                <span>{formatFileSize(subscription.limits.knowledge_base_size_kb)} total</span>
                             </div>
                             <Progress value={storageUsagePercentage} className="h-2 mt-1" />
                         </div>

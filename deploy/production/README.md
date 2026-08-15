@@ -29,6 +29,14 @@ Compose contract, source-map upload, CI image validation, activation, and
 rollback path together. Until that change lands and is verified, production
 continues to serve the legacy client.
 
+The canonical Web build also requires `NEXT_PUBLIC_ACCOUNT_CENTER_URL` so
+Settings can link to the shared Account Center without embedding a SanchezCloud
+domain in application code. It is a build-time public value: it must be injected
+while the future canonical Web image is built and cannot be supplied through
+`/etc/scholens/runtime.env` after the bundle exists. If it is omitted, Web
+deliberately shows Account Center as unavailable; the current legacy-client
+production boundary is unchanged.
+
 ## Database boundary
 
 - Use the shared `sanchezcloud` database. Cross-database foreign keys are not possible.
@@ -120,8 +128,9 @@ release workflow are:
 - `ECR_API_REPOSITORY`, `ECR_CLIENT_REPOSITORY`, `ECR_JOBS_REPOSITORY`
 - `PRODUCTION_PLATFORM` (`linux/amd64` or `linux/arm64`)
 - `PRODUCTION_INSTANCE_ID`
-- public build values `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_POSTHOG_KEY`, and
-  `NEXT_PUBLIC_POSTHOG_HOST`
+- public build values `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`,
+  `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, and, for the future
+  canonical Web cutover, `NEXT_PUBLIC_ACCOUNT_CENTER_URL`
 - `NEXT_PUBLIC_RUM_APPLICATION_ID`, `NEXT_PUBLIC_RUM_GUEST_ROLE_ARN`,
   `NEXT_PUBLIC_RUM_IDENTITY_POOL_ID`, and `RUM_SOURCE_MAP_BUCKET` from the
   observability stack outputs
@@ -130,7 +139,7 @@ Add `CLOUD_AUTH_READ_TOKEN` as a read-only repository secret. Protect the GitHub
 environment with required reviewers. The publish role may push only to the three ECR repositories;
 the deploy role may send and inspect SSM commands only for the production instance.
 
-Configure `SCHOLENS_CONNECTOR_CREDENTIAL_ENCRYPTION_KEY` and
+Configure `SCHOLENS_INTEGRATION_CREDENTIAL_ENCRYPTION_KEY` and
 `SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET` in
 `/etc/scholens/runtime.env`. The encryption key is URL-safe base64 for exactly
 32 random bytes. The delegation secret must match Scholight's

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import base64
+from builtins import ExceptionGroup
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import httpx
 import jwt
 import pytest
-from app.modules.integrations.connectors.application.ports import ConnectorCredential
-from app.modules.integrations.connectors.domain import ConnectorProvider
+from app.modules.integrations.connections.application import IntegrationCredential
+from app.modules.integrations.connections.domain import IntegrationProvider
+from app.modules.integrations.connections.infrastructure.secrets import (
+    AesGcmIntegrationCredentialCipher,
+)
 from app.modules.integrations.connectors.infrastructure.mcp import (
     ConnectorToolResolver,
     _PROVIDER_DEFINITIONS,
@@ -19,9 +24,6 @@ from app.modules.integrations.connectors.infrastructure.mcp import (
     _normalize_json_schema,
     _normalize_result,
     _scholight_delegation_headers,
-)
-from app.modules.integrations.connectors.infrastructure.secrets import (
-    AesGcmConnectorCredentialCipher,
 )
 from app.shared.application import Actor
 from app.shared.domain import WorkspacePermission
@@ -46,23 +48,23 @@ def _actor(user_id: int = 42) -> Actor:
     )
 
 
-def _cipher() -> AesGcmConnectorCredentialCipher:
+def _cipher() -> AesGcmIntegrationCredentialCipher:
     encoded = base64.urlsafe_b64encode(b"k" * 32).decode()
-    return AesGcmConnectorCredentialCipher(encoded)
+    return AesGcmIntegrationCredentialCipher(encoded)
 
 
 def test_connector_credentials_are_bound_to_user_and_provider() -> None:
     cipher = _cipher()
     encrypted = cipher.encrypt(
         user_id=42,
-        provider=ConnectorProvider.EXA,
+        provider=IntegrationProvider.EXA,
         plaintext="secret-api-key",
     )
 
     assert (
         cipher.decrypt(
             user_id=42,
-            provider=ConnectorProvider.EXA,
+            provider=IntegrationProvider.EXA,
             ciphertext=encrypted,
         )
         == "secret-api-key"
@@ -70,13 +72,13 @@ def test_connector_credentials_are_bound_to_user_and_provider() -> None:
     with pytest.raises(ValueError, match="credential decryption failed"):
         cipher.decrypt(
             user_id=43,
-            provider=ConnectorProvider.EXA,
+            provider=IntegrationProvider.EXA,
             ciphertext=encrypted,
         )
     with pytest.raises(ValueError, match="credential decryption failed"):
         cipher.decrypt(
             user_id=42,
-            provider=ConnectorProvider.TAVILY,
+            provider=IntegrationProvider.TAVILY,
             ciphertext=encrypted,
         )
 
@@ -85,29 +87,29 @@ def test_connector_credentials_are_bound_to_user_and_provider() -> None:
     ("provider", "url", "headers"),
     [
         (
-            ConnectorProvider.ANYSEARCH,
+            IntegrationProvider.ANYSEARCH,
             "https://api.anysearch.com/mcp",
             {"Authorization": "Bearer api-key"},
         ),
         (
-            ConnectorProvider.TAVILY,
+            IntegrationProvider.TAVILY,
             "https://mcp.tavily.com/mcp/",
             {"Authorization": "Bearer api-key"},
         ),
         (
-            ConnectorProvider.EXA,
+            IntegrationProvider.EXA,
             "https://mcp.exa.ai/mcp",
             {"x-api-key": "api-key"},
         ),
         (
-            ConnectorProvider.FIRECRAWL,
+            IntegrationProvider.FIRECRAWL,
             "https://mcp.firecrawl.dev/api-key/v2/mcp",
             {},
         ),
     ],
 )
 def test_external_provider_auth_is_data_driven(
-    provider: ConnectorProvider,
+    provider: IntegrationProvider,
     url: str,
     headers: dict[str, str],
 ) -> None:
@@ -123,7 +125,7 @@ def test_external_provider_auth_is_data_driven(
 
 def test_firecrawl_key_is_safely_encoded_in_fixed_endpoint() -> None:
     connection = _external_connection(
-        _PROVIDER_DEFINITIONS[ConnectorProvider.FIRECRAWL],
+        _PROVIDER_DEFINITIONS[IntegrationProvider.FIRECRAWL],
         api_key="key/with?delimiters",
         revision="test",
     )
@@ -216,7 +218,7 @@ def test_large_connector_result_is_safely_truncated() -> None:
 async def test_resolver_is_read_gated_before_loading_credentials() -> None:
     loaded = False
 
-    def load(_actor: Actor) -> tuple[ConnectorCredential, ...]:
+    def load(_actor: Actor) -> tuple[IntegrationCredential, ...]:
         nonlocal loaded
         loaded = True
         return ()
@@ -241,9 +243,9 @@ async def test_resolver_isolates_failures_and_routes_by_bound_provider(
 ) -> None:
     now = datetime.now(timezone.utc)
     credentials = (
-        ConnectorCredential(ConnectorProvider.ANYSEARCH, "a-key", now),
-        ConnectorCredential(ConnectorProvider.TAVILY, "t-key", now),
-        ConnectorCredential(ConnectorProvider.EXA, "e-key", now),
+        IntegrationCredential(IntegrationProvider.ANYSEARCH, "a-key", uuid4(), now),
+        IntegrationCredential(IntegrationProvider.TAVILY, "t-key", uuid4(), now),
+        IntegrationCredential(IntegrationProvider.EXA, "e-key", uuid4(), now),
     )
     resolver = ConnectorToolResolver(
         credential_loader=lambda _actor: credentials,
@@ -252,9 +254,9 @@ async def test_resolver_isolates_failures_and_routes_by_bound_provider(
 
     async def discover(connection: object) -> list[dict[str, object]]:
         provider = connection.provider  # type: ignore[attr-defined]
-        if provider is ConnectorProvider.TAVILY:
+        if provider is IntegrationProvider.TAVILY:
             raise RuntimeError("provider unavailable")
-        if provider is ConnectorProvider.ANYSEARCH:
+        if provider is IntegrationProvider.ANYSEARCH:
             return [
                 {
                     "name": "shared_search",
@@ -289,8 +291,8 @@ async def test_resolver_isolates_failures_and_routes_by_bound_provider(
         "shared_search",
         "exa_search",
     ]
-    assert resolved.provider_for("shared_search") is ConnectorProvider.ANYSEARCH
-    assert resolved.provider_for("exa_search") is ConnectorProvider.EXA
+    assert resolved.provider_for("shared_search") is IntegrationProvider.ANYSEARCH
+    assert resolved.provider_for("exa_search") is IntegrationProvider.EXA
     assert {issue.code for issue in resolved.issues} == {
         "connector_unavailable",
         "connector_tool_name_conflict",
@@ -323,5 +325,5 @@ async def test_system_connector_auth_failure_is_not_reported_as_user_credentials
     )
 
     assert [(issue.provider, issue.code) for issue in resolved.issues] == [
-        (ConnectorProvider.SCHOLIGHT, "connector_unavailable")
+        (IntegrationProvider.SCHOLIGHT, "connector_unavailable")
     ]

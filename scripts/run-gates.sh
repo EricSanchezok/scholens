@@ -187,12 +187,11 @@ run_deployment() {
     export SCHOLENS_S3_BUCKET_NAME=fixture-bucket
     export SCHOLENS_CLOUDFLARE_BUCKET_NAME=fixture-bucket.s3.us-east-1.amazonaws.com
     export SCHOLENS_AI_DEEPSEEK_API_KEY=fixture
-    export SCHOLENS_MINERU_API_TOKEN=fixture
     export SCHOLENS_MOSS_API_KEY=fixture
     export SCHOLENS_MOSS_VOICE_ID=fixture
     export SCHOLENS_JOBS_WEBHOOK_SIGNING_SECRET=fixture-signing-secret-at-least-thirty-two-bytes
     export SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET=fixture-delegation-secret-at-least-thirty-two-bytes
-    export SCHOLENS_CONNECTOR_CREDENTIAL_ENCRYPTION_KEY=Zml4dHVyZS1jb25uZWN0b3Ita2V5LTMyLWJ5dGVzISE=
+    export SCHOLENS_INTEGRATION_CREDENTIAL_ENCRYPTION_KEY=ZGV2ZWxvcG1lbnQtaW50ZWdyYXRpb24ta2V5LTMyISE=
     export SCHOLENS_STRIPE_API_KEY=fixture
     export SCHOLENS_STRIPE_WEBHOOK_SECRET=fixture
     export SCHOLENS_STRIPE_MONTHLY_PRICE_ID=fixture

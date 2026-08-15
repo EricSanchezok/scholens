@@ -6,6 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from app.modules.jobs.application.contracts import (
+    ActionableJobFailure,
     ReflowAssetKind,
     ReflowBlockKind,
     ReflowPresentationStatus,
@@ -14,7 +15,13 @@ from app.modules.jobs.application.contracts import (
 )
 from pydantic import BaseModel
 
-DocumentReflowStatus = Literal["pending", "processing", "completed", "failed"]
+DocumentReflowStatus = Literal[
+    "not_requested",
+    "pending",
+    "processing",
+    "completed",
+    "failed",
+]
 
 
 class DocumentReflowBlockResponse(BaseModel):
@@ -49,14 +56,15 @@ class DocumentReflowAssetUrlResponse(BaseModel):
 class DocumentReflowResponse(BaseModel):
     document_id: UUID
     status: DocumentReflowStatus
-    job_id: UUID
-    error_code: str | None
+    job_id: UUID | None
+    attempt_count: int
+    failure: ActionableJobFailure | None
     pipeline_revision: str | None
     parser_revision: str | None
     warnings: list[str]
     blocks: list[DocumentReflowBlockResponse]
     assets: list[DocumentReflowAssetResponse]
-    updated_at: datetime
+    updated_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)

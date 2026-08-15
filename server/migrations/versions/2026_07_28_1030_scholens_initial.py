@@ -159,17 +159,26 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_table(
-        "connector_connections",
+        "integration_connections",
         sa.Column("user_id", sa.BigInteger(), nullable=False),
         sa.Column("provider", sa.Text(), nullable=False),
         sa.Column("credential_ciphertext", sa.Text(), nullable=False),
+        sa.Column(
+            "configuration",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("credential_revision", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "enabled",
             sa.Boolean(),
             server_default=sa.text("true"),
             nullable=False,
         ),
-        sa.Column("verified_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_error_code", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -183,8 +192,8 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "provider IN ('anysearch', 'tavily', 'exa', 'firecrawl')",
-            name="ck_connector_connections_provider",
+            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl')",
+            name="ck_integration_connections_provider",
         ),
         sa.ForeignKeyConstraint(
             ["user_id"],
@@ -2512,7 +2521,7 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("tool_invocations", schema="scholens")
-    op.drop_table("connector_connections", schema="scholens")
+    op.drop_table("integration_connections", schema="scholens")
     op.drop_index(
         "ix_access_keys_user_revoked",
         table_name="access_keys",

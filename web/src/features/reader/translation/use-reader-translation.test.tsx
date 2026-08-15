@@ -28,7 +28,7 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  queryClient.setQueryData(translationApi.translationKeys.preferences(), {
+  queryClient.setQueryData(translationApi.translationKeys.current(), {
     auto_translate_selection: true,
     custom_instructions: null,
     source_language: "auto",

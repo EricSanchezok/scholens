@@ -8,6 +8,7 @@ import {
   libraryTags,
   processingIngestion,
 } from "../../src/features/library/api/fixtures";
+import { mockBillingUsage } from "./billing-fixture";
 
 const apiPattern = "**/api/v1";
 const actor = {
@@ -23,6 +24,7 @@ const actor = {
 };
 
 async function mockLibrary(page: Page) {
+  await mockBillingUsage(page);
   let tags = [...libraryTags];
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({

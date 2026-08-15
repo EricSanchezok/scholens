@@ -7,6 +7,7 @@ import {
   homeProjects,
   homeTurns,
 } from "../../src/features/home/api/fixtures";
+import { mockBillingUsage } from "./billing-fixture";
 
 const apiPattern = "**/api/v1";
 type ConversationTurn = (typeof homeTurns)[number];
@@ -23,6 +24,7 @@ const actor = {
 };
 
 async function mockHome(page: Page) {
+  await mockBillingUsage(page);
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -60,6 +62,26 @@ async function mockHome(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await mockHome(page);
+});
+
+test("account menu exposes live usage and direct Settings destinations", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const accountMenu = page.getByRole("button", { name: "Open account menu" });
+  await accountMenu.click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByText("Researcher")).toBeVisible();
+  await expect(menu.getByText("24M / 100M")).toBeVisible();
+  await expect(menu.getByText("Credits reset on Aug 17, 2026")).toBeVisible();
+
+  await menu.getByRole("menuitem", { name: "Account" }).click();
+  await expect(page).toHaveURL(/\?settings=account$/);
+
+  await page.goto("/");
+  await accountMenu.click();
+  await page.getByRole("menuitem", { name: "Usage" }).click();
+  await expect(page).toHaveURL(/\?settings=usage$/);
 });
 
 test("renders the authenticated Home shell and primary data", async ({

@@ -85,8 +85,8 @@ export const UsageLimitCard = ({
 
                 <UsageItem
                     label="Storage"
-                    used={subscription.usage.knowledge_base_size}
-                    total={subscription.limits.knowledge_base_size}
+                    used={subscription.usage.knowledge_base_size_kb}
+                    total={subscription.limits.knowledge_base_size_kb}
                     percentage={getStorageUsagePercentage(subscription)}
                     formatValue={formatFileSize}
                 />

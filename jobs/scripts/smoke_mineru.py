@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import time
 import uuid
 from pathlib import Path
 
-from src.pdf.mineru import MinerUClient
+from src.pdf.mineru import MinerUClient, MinerUConfig
 from src.pdf.models import ParserError
 
 
-async def run(source_file: Path) -> None:
+async def run(source_file: Path, *, token: str) -> None:
     job_id = f"smoke-{uuid.uuid4().hex}"
-    client = MinerUClient()
+    client = MinerUClient(MinerUConfig.from_runtime(token=token))
     pdf_bytes = source_file.read_bytes()
     started_at = time.monotonic()
     last_phase_at = started_at
@@ -70,7 +71,8 @@ def main() -> None:
     )
     parser.add_argument("source_file", type=Path, help="Path to a local PDF")
     args = parser.parse_args()
-    asyncio.run(run(args.source_file))
+    token = getpass.getpass("MinerU access token: ").strip()
+    asyncio.run(run(args.source_file, token=token))
 
 
 if __name__ == "__main__":

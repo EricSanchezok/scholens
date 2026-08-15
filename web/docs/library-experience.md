@@ -84,6 +84,16 @@ remove/cancel actions. The header separates successful Paper count from active
 or failed import count and calls out failures that require attention; processing
 rows are never counted as successful Papers.
 
+PDF parsing is local-first. A scanned document, or a digital document whose
+local engines fail, may require the user's MinerU connection. A missing or
+invalid credential is represented as a required integration, not a generic
+failure: the row offers Connect MinerU, opens Settings → Connections, and
+resumes that one pending retry after a new token is saved. Rate limits and
+provider unavailability remain retryable. Insufficient content and unsafe
+archives are terminal and do not display a misleading Retry action. A digital
+PDF retains the deterministic text-only local fallback when remote rescue is
+unavailable.
+
 The client polls only while a visible ingestion is active and stops after a
 terminal state. Progress heartbeats and Server-owned deadlines prevent an
 indefinite processing row. Cancellation is optimistic in the interface and
