@@ -13,13 +13,6 @@ import * as React from "react";
 import { Button, IconButton, keyboardFocusRing } from "@/components/ui";
 import { CopyActionButton } from "@/components/feedback";
 import { Icon } from "@/design-system/icons/icon";
-import {
-  AnimatePresence,
-  m,
-  MotionPresence,
-  motionTransitions,
-  motionVariants,
-} from "@/design-system/motion";
 import type { components } from "@/lib/api/generated/schema";
 import type {
   ConversationFailure,
@@ -329,7 +322,7 @@ function MessageHistory({
 }) {
   const latestTurnId = turns.at(-1)?.id;
   return (
-    <AnimatePresence initial={false}>
+    <>
       {turns.map((turn) => {
         const response = selectedResponse(turn);
         const isLive = liveTurn?.turnId === turn.id;
@@ -342,15 +335,9 @@ function MessageHistory({
         const latestControlsVisible =
           turn.id === latestTurnId && !suppressLatestControls;
         return (
-          <MotionPresence
-            animate="animate"
-            className="grid gap-9 lg:gap-8"
-            exit="exit"
-            initial="initial"
+          <div
+            className="settled-content-enter grid gap-9 lg:gap-8"
             key={turn.id}
-            layout="position"
-            transition={motionTransitions.layout}
-            variants={motionVariants.listItem}
           >
             <ConversationUserMessage
               branch={turn.branch}
@@ -433,10 +420,10 @@ function MessageHistory({
                 durationMs={response.duration_ms}
               />
             ) : null}
-          </MotionPresence>
+          </div>
         );
       })}
-    </AnimatePresence>
+    </>
   );
 }
 
@@ -628,14 +615,9 @@ export function ConversationView({
               {liveTurn &&
                 liveTurn.generationKind !== "retry" &&
                 !liveTurnRenderedInHistory && (
-                  <m.div
-                    animate="animate"
-                    className="grid gap-9 lg:gap-8"
-                    initial="initial"
+                  <div
+                    className="settled-content-enter grid gap-9 lg:gap-8"
                     key={liveTurn.turnId}
-                    layout="position"
-                    transition={motionTransitions.gentle}
-                    variants={motionVariants.focal}
                   >
                     <ConversationUserMessage
                       branch={{ count: 1, index: 1 }}
@@ -696,7 +678,7 @@ export function ConversationView({
                       durationMs={liveTurn.durationMs}
                       startedAtMs={liveTurn.startedAtMs}
                     />
-                  </m.div>
+                  </div>
                 )}
             </div>
           )}

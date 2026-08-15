@@ -1,4 +1,5 @@
 import { ReaderPage } from "@/features/reader";
+import { MotionRuntimeProvider } from "@/design-system/motion/motion-runtime-provider";
 
 export default async function ReaderRoute({
   params,
@@ -6,5 +7,9 @@ export default async function ReaderRoute({
   params: Promise<{ documentId: string }>;
 }) {
   const { documentId } = await params;
-  return <ReaderPage documentId={documentId} />;
+  return (
+    <MotionRuntimeProvider>
+      <ReaderPage documentId={documentId} />
+    </MotionRuntimeProvider>
+  );
 }

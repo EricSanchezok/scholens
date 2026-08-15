@@ -142,9 +142,12 @@ Shared primitives own their own CSS-first motion recipe. A feature must not add
 enter/exit classes to Dialog, Sheet, Popover, Tooltip, Select, Dropdown, Toast,
 Button, Input, Checkbox, Switch, Progress, Spinner, or Skeleton call sites.
 Product components may use the runtime only for a bounded list, panel,
-state-replacement, or container-layout change. Import `m`, `AnimatePresence`,
-`LayoutGroup`, variants, and transitions from `@/design-system/motion`; direct
-`motion/*` imports are an architecture violation.
+state-replacement, or container-layout change and only below a route-local
+`MotionRuntimeProvider`. Import `m`, `AnimatePresence`, variants, and
+transitions from `@/design-system/motion`; direct `motion/*` imports are an
+architecture violation. The global Provider, Home, Conversation, Settings,
+Authentication, and Workspace Shell remain CSS-first so the release entry does
+not inherit the runtime bundle.
 
 An animated wrapper preserves the semantic element it replaces. Lists remain
 lists, table rows remain rows, panels remain complementary regions, and motion

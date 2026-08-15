@@ -33,7 +33,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
-import { AnimatePresence, m, motionVariants } from "@/design-system/motion";
 import type { Actor } from "@/features/authentication";
 import {
   formatDateOnly,
@@ -111,20 +110,11 @@ function SidebarControl({
       <span className="grid size-6 shrink-0 place-items-center">
         <Icon glyph={glyph} size={20} tone="primary" />
       </span>
-      <AnimatePresence initial={false}>
-        {!collapsed && (
-          <m.span
-            animate="animate"
-            className="text-sidebar-label truncate"
-            exit="exit"
-            initial="initial"
-            key="label"
-            variants={motionVariants.swap}
-          >
-            {label}
-          </m.span>
-        )}
-      </AnimatePresence>
+      {!collapsed && (
+        <span className="settled-content-enter text-sidebar-label truncate">
+          {label}
+        </span>
+      )}
     </Link>
   ) : (
     <button
@@ -142,20 +132,11 @@ function SidebarControl({
       <span className="grid size-6 shrink-0 place-items-center">
         <Icon glyph={glyph} size={20} tone="secondary" />
       </span>
-      <AnimatePresence initial={false}>
-        {!collapsed && (
-          <m.span
-            animate="animate"
-            className="text-sidebar-label truncate"
-            exit="exit"
-            initial="initial"
-            key="label"
-            variants={motionVariants.swap}
-          >
-            {label}
-          </m.span>
-        )}
-      </AnimatePresence>
+      {!collapsed && (
+        <span className="settled-content-enter text-sidebar-label truncate">
+          {label}
+        </span>
+      )}
     </button>
   );
 

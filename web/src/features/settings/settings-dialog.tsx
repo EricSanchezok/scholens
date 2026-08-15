@@ -16,11 +16,6 @@ import {
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import {
-  AnimatePresence,
-  MotionPresence,
-  motionVariants,
-} from "@/design-system/motion";
-import {
   AccountIcon,
   AppearanceIcon,
   IntegrationIcon,
@@ -149,17 +144,9 @@ export function SettingsDialogSurface({
             </nav>
           </aside>
           <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-10 lg:py-9">
-            <AnimatePresence initial={false} mode="popLayout">
-              <MotionPresence
-                animate="animate"
-                exit="exit"
-                initial="initial"
-                key={active}
-                variants={motionVariants.swap}
-              >
-                <Panel accountCenterUrl={accountCenterUrl} section={active} />
-              </MotionPresence>
-            </AnimatePresence>
+            <div className="settled-content-enter" key={active}>
+              <Panel accountCenterUrl={accountCenterUrl} section={active} />
+            </div>
           </main>
         </div>
       </DialogContent>

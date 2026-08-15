@@ -14,7 +14,10 @@ import {
   keyboardFocusRing,
 } from "@/components/ui";
 import { useTheme } from "@/design-system/theme/theme-provider";
-import { motionPreferences, useMotionPreference } from "@/design-system/motion";
+import {
+  motionPreferences,
+  useMotionPreference,
+} from "@/design-system/motion/motion-provider";
 import { useLocalePreference } from "@/i18n/use-locale-preference";
 import { cn } from "@/lib/utilities/cn";
 import { SettingsPanelHeader } from "./settings-layout";

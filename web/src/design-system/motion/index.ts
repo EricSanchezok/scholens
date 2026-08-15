@@ -60,4 +60,5 @@ export {
   type MotionPreference,
   type ResolvedMotion,
 } from "./motion-provider";
+export { MotionRuntimeProvider } from "./motion-runtime-provider";
 export { MotionPresence } from "./motion-presence";

@@ -9,7 +9,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { LazyMotion, MotionConfig } from "motion/react";
 
 export const motionPreferences = ["system", "reduced", "full"] as const;
 export type MotionPreference = (typeof motionPreferences)[number];
@@ -20,11 +19,10 @@ type MotionContextValue = {
   preference: MotionPreference;
   resolved: ResolvedMotion;
   setPreference: (preference: MotionPreference) => void;
+  skipAnimations: boolean;
 };
 
 const MotionContext = createContext<MotionContextValue | null>(null);
-const loadMotionFeatures = () =>
-  import("./motion-features").then((module) => module.default);
 const subscribeToHydration = () => () => {};
 
 export function parseMotionPreference(
@@ -124,27 +122,12 @@ function MotionProviderRoot({
   }, []);
 
   const value = useMemo(
-    () => ({ ready, preference, resolved, setPreference }),
-    [ready, preference, resolved, setPreference],
+    () => ({ ready, preference, resolved, setPreference, skipAnimations }),
+    [ready, preference, resolved, setPreference, skipAnimations],
   );
 
   return (
-    <MotionContext.Provider value={value}>
-      <MotionConfig
-        reducedMotion={
-          preference === "system"
-            ? "user"
-            : resolved === "reduced"
-              ? "always"
-              : "never"
-        }
-        skipAnimations={skipAnimations}
-      >
-        <LazyMotion features={loadMotionFeatures} strict>
-          {children}
-        </LazyMotion>
-      </MotionConfig>
-    </MotionContext.Provider>
+    <MotionContext.Provider value={value}>{children}</MotionContext.Provider>
   );
 }
 

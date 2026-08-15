@@ -13,16 +13,25 @@ tokens/motion.json
   -> generated/motion.css + generated/motion-metadata.ts
   -> motion-recipes.css                 (CSS-first primitive behavior)
   -> motion-config.ts                   (shared runtime transitions/variants)
-  -> MotionProvider                     (preference + reduced-motion policy)
+  -> MotionProvider                     (global preference + root CSS policy)
+  -> MotionRuntimeProvider              (route-scoped MotionConfig + LazyMotion)
   -> shared primitives and feature choreography
 ```
 
 The repository owns one motion language and one optional runtime. Product code
-imports `m`, `AnimatePresence`, `LayoutGroup`, variants, and transitions only
-from `@/design-system/motion`. Direct `motion/*` imports, raw Tailwind
-`duration-*`/`ease-*`/`animate-*` utilities, arbitrary millisecond values, and
-page-local keyframes are rejected by `pnpm design:check` outside the motion
-foundation.
+inside a runtime-enabled route imports `m`, `AnimatePresence`, variants, and
+transitions only from `@/design-system/motion`. Direct `motion/*` imports, raw
+Tailwind `duration-*`/`ease-*`/`animate-*` utilities, arbitrary millisecond
+values, and page-local keyframes are rejected by `pnpm design:check` outside
+the motion foundation.
+
+The root `Providers` tree imports the lightweight `MotionProvider` module
+directly. It must not import `motion/react`, the design-system motion barrel,
+or `MotionRuntimeProvider`: doing so places the runtime in every route's
+initial graph. Library, Projects, Project Detail, and Reader opt in through a
+route-local `MotionRuntimeProvider`; Home, Conversation, Settings,
+Authentication, and the Workspace Shell remain CSS-first. The design checker
+enforces this initial-route boundary.
 
 Use CSS for controls, Radix overlays, progress, spinners, skeletons, and other
 single-node state changes. Radix keeps content mounted while CSS exit keyframes
@@ -66,7 +75,8 @@ reduced mode.
 
 | Recipe                     | Owner and behavior                                              |
 | -------------------------- | --------------------------------------------------------------- |
-| `motion-control`           | Shared color/border/opacity feedback and restrained press scale |
+| `motion-control`           | Shared color/border/opacity feedback                            |
+| `motion-pressable`         | Restrained press scale for an atomic semantic button or link    |
 | `motion-icon`              | A glyph changing direction or state                             |
 | `motion-shape`             | Border-radius changes in expanding controls                     |
 | `motion-rail`              | Width-only navigation rail resizing without scaling descendants |
@@ -102,13 +112,13 @@ from assistive technology so only the newly committed state remains actionable.
 
 | Surface           | Motion responsibility                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
-| Workspace shell   | Sidebar width and label disclosure preserve navigation anchors          |
-| Home/conversation | Dashboard-to-conversation swap, accepted turn arrival, bounded Worklog  |
+| Workspace shell   | CSS width and label disclosure preserve navigation anchors              |
+| Home/conversation | CSS state arrival for dashboard swap, accepted turn, and Worklog        |
 | Library           | Utility-to-selection toolbar and at most six transient ingestion rows   |
 | Projects          | List continuity and Project Chat side-panel expansion                   |
 | Reader            | Context/outline panel disclosure, bounded active-panel and toolbar swap |
-| Settings          | Active panel replacement and preference preview                         |
-| Authentication    | Validation/result state settles inside one persistent auth surface      |
+| Settings          | CSS active-panel replacement and preference preview                     |
+| Authentication    | CSS result state settles inside one persistent auth surface             |
 
 Streaming text itself is not animated character by character. PDF canvases and
 Reader pages never animate during scroll. Search and selection move directly
@@ -156,8 +166,18 @@ sensitive users.
   icons; descendants must remain untransformed throughout the resize.
 - Keep one moving region at a time. Parent and child must not both animate the
   same geometry unless a documented choreography requires it.
-- Use `LazyMotion` with async `domMax`, the minimal `m` component, and strict
-  mode. The provider is the sole runtime feature loader.
+- Keep the global provider runtime-free. A runtime-enabled route uses one
+  `MotionRuntimeProvider` with async `domMax`, the minimal `m` component, and
+  strict mode; feature code never creates another feature loader.
+- The Home release-entry route may add less than 6 KiB gzip of initial
+  JavaScript against a clean `main` production build made with the same
+  Node/pnpm versions. The async `domMax` feature chunk may remain below 30 KiB
+  gzip. Measure the unique script URLs emitted in each route's production HTML,
+  gzip the exact `.next/static/chunks` files at level 9, and compare totals;
+  never pin hashed chunk names in a gate.
+- CSS/WAAPI owns frequent or first-screen presence. Runtime presence and layout
+  belong behind a route or interaction boundary that genuinely needs React
+  exit retention, interruption, or measured geometry.
 - Never wait for an animation before committing state, changing focus, or
   enabling a valid action.
 - Preserve DOM semantics. Motion wrappers replace the same semantic element;
@@ -165,11 +185,12 @@ sensitive users.
 - Delete obsolete variants, recipes, stories, and docs with their last
   consumer. Do not keep aliases for speculative reuse.
 
-Motion's own bundle guide documents why `m` plus `LazyMotion` keeps the initial
-runtime small, while `MotionConfig` supplies the application-wide reduced
-motion policy. Motion is MIT-licensed. Radix's animation contract supports the
-CSS-first half of this architecture without changing its accessible primitive
-behavior.
+Motion's own bundle guide documents why `m` plus `LazyMotion` minimizes an
+opted-in runtime route. Scholens does not interpret that guidance as permission
+to load `LazyMotion` globally: the persistent preference provider and CSS root
+policy are independent from `MotionConfig`. Motion is MIT-licensed. Radix's
+animation contract supports the CSS-first half of this architecture without
+changing its accessible primitive behavior.
 
 ## Design and verification workflow
 

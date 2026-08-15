@@ -130,6 +130,15 @@ The three-engine motion smoke also exercises the inverse precedence: explicit
 auto-follow performs one direct write to the latest target rather than a
 smooth requestAnimationFrame sequence.
 
+Motion bundle acceptance uses production output rather than development or
+Storybook chunks. Build clean `main` and the candidate with the same Node 22
+and pnpm 10.11.0 toolchain, request each route from `next start`, deduplicate
+its HTML script URLs, and gzip the corresponding `.next/static/chunks` files at
+level 9. Home's candidate-minus-main initial total must stay below 6 KiB; the
+route-scoped async `domMax` chunk must stay below 30 KiB. Report exact bytes and
+route ownership in the PR, but do not make a permanent check depend on hashed
+chunk filenames.
+
 ## Flake policy
 
 - Never fix a race by adding an unconditional sleep.

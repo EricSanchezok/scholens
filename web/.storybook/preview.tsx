@@ -6,6 +6,7 @@ import { useLayoutEffect } from "react";
 import { localeDirection, type AppLocale } from "../src/i18n/config";
 import {
   MotionProvider,
+  MotionRuntimeProvider,
   type MotionPreference,
 } from "../src/design-system/motion";
 import { formats } from "../src/i18n/formats";
@@ -57,15 +58,17 @@ const preview: Preview = {
             key={motion}
             skipAnimations={isStorybookTest}
           >
-            <QueryProvider>
-              <div
-                className={`bg-canvas text-foreground min-h-screen ${
-                  context.parameters.layout === "fullscreen" ? "" : "p-6"
-                }`}
-              >
-                <Story />
-              </div>
-            </QueryProvider>
+            <MotionRuntimeProvider>
+              <QueryProvider>
+                <div
+                  className={`bg-canvas text-foreground min-h-screen ${
+                    context.parameters.layout === "fullscreen" ? "" : "p-6"
+                  }`}
+                >
+                  <Story />
+                </div>
+              </QueryProvider>
+            </MotionRuntimeProvider>
           </MotionProvider>
         </NextIntlClientProvider>
       );

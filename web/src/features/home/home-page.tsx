@@ -7,12 +7,6 @@ import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { useToast } from "@/components/ui/toast";
-import {
-  AnimatePresence,
-  MotionPresence,
-  motionTransitions,
-  motionVariants,
-} from "@/design-system/motion";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
   ConversationView,
@@ -154,95 +148,77 @@ export function HomeWorkspace({
       mobileHeaderTrailing={<WorkspaceNewChatAction />}
       mobileViewport={mobileViewport}
     >
-      <AnimatePresence initial={false} mode="popLayout">
-        {conversation.activeConversationId ? (
-          <MotionPresence
-            animate="animate"
-            className="h-full min-h-0"
-            data-home-surface="conversation"
-            exit="exit"
-            initial="initial"
-            key="conversation"
-            layout="position"
-            transition={motionTransitions.gentle}
-            variants={motionVariants.focal}
-          >
-            <ConversationView
-              layout="workspace"
-              canSend={conversation.canSend}
-              composerForm={conversation.composerForm}
-              context={context}
-              error={
-                conversation.conversationQuery.isError ||
-                conversation.turnsQuery.isError
-              }
-              liveTurn={conversation.liveTurn}
-              loading={
-                conversation.conversationQuery.isPending ||
-                conversation.turnsQuery.isPending
-              }
-              submissionPending={conversation.submissionPending}
-              turns={conversation.turnsQuery.data?.items ?? []}
-              onContextChange={handleContextChange}
-              onReasoningLevelChange={setReasoningLevel}
-              onRetry={() => {
-                void conversation.conversationQuery.refetch();
-                void conversation.turnsQuery.refetch();
-              }}
-              onRetryResponse={(turn) => void conversation.retryResponse(turn)}
-              onEditMessage={(turn, message) =>
-                conversation.editMessage(turn, message)
-              }
-              onSelectBranch={(turnId) =>
-                void conversation.selectBranch(turnId)
-              }
-              onSelectResponse={(turnId, responseId) =>
-                void conversation.selectResponse(turnId, responseId)
-              }
-              onStop={conversation.stop}
-              onSubmit={conversation.sendMessage}
-              onUseSuggestion={conversation.useSuggestion}
-              papers={papers}
-              projects={projects}
-              reasoningLevel={reasoningLevel}
-              readOnlyReason={
-                conversation.conversationQuery.data?.read_only_reason
-              }
-              showComposer={isDesktop}
-            />
-          </MotionPresence>
-        ) : (
-          <MotionPresence
-            animate="animate"
-            className="h-full min-h-0"
-            data-home-surface="dashboard"
-            exit="exit"
-            initial="initial"
-            key="dashboard"
-            layout="position"
-            transition={motionTransitions.gentle}
-            variants={motionVariants.swap}
-          >
-            <HomeDashboard
-              composerForm={conversation.composerForm}
-              context={context}
-              onContextChange={handleContextChange}
-              onReasoningLevelChange={setReasoningLevel}
-              onRetryPapers={() => void papersQuery.refetch()}
-              onRetryProjects={() => void projectsQuery.refetch()}
-              onSubmit={conversation.sendMessage}
-              papers={papers}
-              papersError={papersQuery.isError}
-              papersLoading={papersQuery.isPending}
-              projects={projects}
-              projectsError={projectsQuery.isError}
-              projectsLoading={projectsQuery.isPending}
-              reasoningLevel={reasoningLevel}
-              showComposer={isDesktop}
-            />
-          </MotionPresence>
-        )}
-      </AnimatePresence>
+      {conversation.activeConversationId ? (
+        <div
+          className="settled-content-enter h-full min-h-0"
+          data-home-surface="conversation"
+        >
+          <ConversationView
+            layout="workspace"
+            canSend={conversation.canSend}
+            composerForm={conversation.composerForm}
+            context={context}
+            error={
+              conversation.conversationQuery.isError ||
+              conversation.turnsQuery.isError
+            }
+            liveTurn={conversation.liveTurn}
+            loading={
+              conversation.conversationQuery.isPending ||
+              conversation.turnsQuery.isPending
+            }
+            submissionPending={conversation.submissionPending}
+            turns={conversation.turnsQuery.data?.items ?? []}
+            onContextChange={handleContextChange}
+            onReasoningLevelChange={setReasoningLevel}
+            onRetry={() => {
+              void conversation.conversationQuery.refetch();
+              void conversation.turnsQuery.refetch();
+            }}
+            onRetryResponse={(turn) => void conversation.retryResponse(turn)}
+            onEditMessage={(turn, message) =>
+              conversation.editMessage(turn, message)
+            }
+            onSelectBranch={(turnId) => void conversation.selectBranch(turnId)}
+            onSelectResponse={(turnId, responseId) =>
+              void conversation.selectResponse(turnId, responseId)
+            }
+            onStop={conversation.stop}
+            onSubmit={conversation.sendMessage}
+            onUseSuggestion={conversation.useSuggestion}
+            papers={papers}
+            projects={projects}
+            reasoningLevel={reasoningLevel}
+            readOnlyReason={
+              conversation.conversationQuery.data?.read_only_reason
+            }
+            showComposer={isDesktop}
+          />
+        </div>
+      ) : (
+        <div
+          className="settled-content-enter h-full min-h-0"
+          data-home-surface="dashboard"
+        >
+          <HomeDashboard
+            composerForm={conversation.composerForm}
+            context={context}
+            onContextChange={handleContextChange}
+            onReasoningLevelChange={setReasoningLevel}
+            onRetryPapers={() => void papersQuery.refetch()}
+            onRetryProjects={() => void projectsQuery.refetch()}
+            onSubmit={conversation.sendMessage}
+            papers={papers}
+            papersError={papersQuery.isError}
+            papersLoading={papersQuery.isPending}
+            projects={projects}
+            projectsError={projectsQuery.isError}
+            projectsLoading={projectsQuery.isPending}
+            reasoningLevel={reasoningLevel}
+            showComposer={isDesktop}
+          />
+        </div>
+      )}
     </WorkspaceShell>
   );
 }

@@ -14,12 +14,6 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
-import {
-  AnimatePresence,
-  m,
-  motionTransitions,
-  motionVariants,
-} from "@/design-system/motion";
 import { keyboardFocusRing } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import type {
@@ -279,11 +273,9 @@ export function ConversationWorklog({
   }
 
   return (
-    <m.section
+    <section
       className="text-secondary min-w-0 text-[0.9375rem] leading-6 lg:text-sm lg:leading-normal"
       data-state={state}
-      layout
-      transition={motionTransitions.layout}
     >
       {hasDetails ? (
         <button
@@ -323,44 +315,35 @@ export function ConversationWorklog({
           {finalDurationAnnouncement}
         </span>
       ) : null}
-      <AnimatePresence initial={false}>
-        {open && hasDetails && (
-          <m.ol
-            animate="animate"
-            className="border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0"
-            exit="exit"
-            initial="initial"
-            key="worklog-details"
-            variants={motionVariants.swap}
-          >
-            {rows.map((row) =>
-              row.kind === "progress" ? (
-                <li
-                  className="text-foreground relative py-1 [overflow-wrap:anywhere] lg:static"
-                  key={row.id}
-                >
-                  <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 place-items-center rounded-full border lg:hidden">
-                    <Icon glyph={InsightIcon} size={16} tone="secondary" />
-                  </span>
-                  <MessageContent
-                    content={row.content}
-                    streaming={
-                      state === "streaming" && provisionalItemIds.has(row.id)
-                    }
-                  />
-                </li>
-              ) : (
-                <ActivityBatchRow batch={row} key={row.id} />
-              ),
-            )}
-          </m.ol>
-        )}
-      </AnimatePresence>
+      {open && hasDetails && (
+        <ol className="settled-content-enter border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
+          {rows.map((row) =>
+            row.kind === "progress" ? (
+              <li
+                className="text-foreground relative py-1 [overflow-wrap:anywhere] lg:static"
+                key={row.id}
+              >
+                <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 place-items-center rounded-full border lg:hidden">
+                  <Icon glyph={InsightIcon} size={16} tone="secondary" />
+                </span>
+                <MessageContent
+                  content={row.content}
+                  streaming={
+                    state === "streaming" && provisionalItemIds.has(row.id)
+                  }
+                />
+              </li>
+            ) : (
+              <ActivityBatchRow batch={row} key={row.id} />
+            ),
+          )}
+        </ol>
+      )}
       {state === "error" && failure?.diagnosticId && (
         <p className="text-muted mt-1 text-xs">
           {t("failure.diagnostic", { id: failure.diagnosticId })}
         </p>
       )}
-    </m.section>
+    </section>
   );
 }

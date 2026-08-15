@@ -5,7 +5,7 @@ import * as React from "react";
 import {
   type ResolvedMotion,
   useMotionPreference,
-} from "@/design-system/motion";
+} from "@/design-system/motion/motion-provider";
 
 const BOTTOM_PROXIMITY_PX = 120;
 const MIN_SCROLL_DELTA_PX = 0.5;

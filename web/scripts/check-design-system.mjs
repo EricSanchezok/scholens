@@ -300,6 +300,61 @@ const scannedFiles = (
 ).flat();
 const excludedRoots = [generatedRoot, tokenRoot];
 const motionRoot = path.join(sourceRoot, "design-system", "motion");
+const runtimeFreeFeatureRoots = [
+  "conversation",
+  "home",
+  "settings",
+  "workspace-shell",
+].map((feature) => path.join(sourceRoot, "features", feature));
+const lightweightMotionImport = "@/design-system/motion/motion-provider";
+
+function forbiddenMotionImports(contents) {
+  const matches = contents.matchAll(
+    /(?:from\s+|import\s*\(\s*|import\s+)["'](@\/design-system\/motion(?:\/[^"']*)?)["']/g,
+  );
+  return [...matches]
+    .map((match) => match[1])
+    .filter((specifier) => specifier !== lightweightMotionImport);
+}
+
+const motionBoundaryFixtures = [
+  {
+    source:
+      'import { useMotionPreference } from "@/design-system/motion/motion-provider";',
+    forbidden: [],
+  },
+  {
+    source:
+      'import type { ResolvedMotion } from "@/design-system/motion/motion-provider";',
+    forbidden: [],
+  },
+  {
+    source: 'import { m } from "@/design-system/motion";',
+    forbidden: ["@/design-system/motion"],
+  },
+  {
+    source:
+      'import { MotionPresence } from "@/design-system/motion/motion-presence";',
+    forbidden: ["@/design-system/motion/motion-presence"],
+  },
+  {
+    source: 'import "@/design-system/motion/index";',
+    forbidden: ["@/design-system/motion/index"],
+  },
+  {
+    source:
+      'const runtime = import("@/design-system/motion/motion-runtime-provider");',
+    forbidden: ["@/design-system/motion/motion-runtime-provider"],
+  },
+];
+for (const fixture of motionBoundaryFixtures) {
+  const actual = forbiddenMotionImports(fixture.source);
+  if (JSON.stringify(actual) !== JSON.stringify(fixture.forbidden)) {
+    report(
+      `scripts/check-design-system.mjs: runtime-free motion import self-test failed for ${fixture.source}`,
+    );
+  }
+}
 const checks = [
   {
     pattern:
@@ -347,6 +402,18 @@ for (const filePath of scannedFiles) {
     report(
       `${relativePath}: import Motion through src/design-system/motion only`,
     );
+  }
+  const runtimeFreeBoundary =
+    filePath === path.join(sourceRoot, "app", "providers.tsx") ||
+    runtimeFreeFeatureRoots.some(
+      (root) => filePath === root || filePath.startsWith(`${root}${path.sep}`),
+    );
+  if (runtimeFreeBoundary) {
+    for (const specifier of forbiddenMotionImports(contents)) {
+      report(
+        `${relativePath}: this initial-route boundary may import only ${lightweightMotionImport}; forbidden ${specifier}`,
+      );
+    }
   }
   if (!filePath.startsWith(`${motionRoot}${path.sep}`)) {
     const motionChecks = [
