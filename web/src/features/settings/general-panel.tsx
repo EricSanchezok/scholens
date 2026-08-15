@@ -11,15 +11,49 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  keyboardFocusRing,
 } from "@/components/ui";
 import { useTheme } from "@/design-system/theme/theme-provider";
 import { useLocalePreference } from "@/i18n/use-locale-preference";
-import {
-  SettingsCard,
-  SettingsCardBody,
-  SettingsCardHeader,
-  SettingsPanelHeader,
-} from "./settings-layout";
+import { cn } from "@/lib/utilities/cn";
+import { SettingsPanelHeader } from "./settings-layout";
+
+const appearanceOptions = ["light", "dark", "system"] as const;
+
+function PreviewPane({ scheme }: { scheme: "light" | "dark" }) {
+  return (
+    <span
+      className="bg-canvas flex h-full min-w-0 flex-1 gap-1.5 rounded-[var(--radius-md)] p-2"
+      data-color-scheme={scheme}
+      data-theme="default"
+    >
+      <span className="bg-subtle h-full w-1/4 rounded-[var(--radius-sm)]" />
+      <span className="flex flex-1 flex-col justify-end gap-1.5 py-1">
+        <span className="bg-pressed h-1.5 w-3/4 rounded-full" />
+        <span className="bg-subtle h-3 w-full rounded-full" />
+      </span>
+    </span>
+  );
+}
+
+function AppearancePreview({
+  option,
+}: {
+  option: (typeof appearanceOptions)[number];
+}) {
+  return (
+    <span className="border-line-subtle bg-surface flex h-20 overflow-hidden rounded-[var(--radius-lg)] border p-1.5">
+      {option === "system" ? (
+        <>
+          <PreviewPane scheme="light" />
+          <PreviewPane scheme="dark" />
+        </>
+      ) : (
+        <PreviewPane scheme={option} />
+      )}
+    </span>
+  );
+}
 
 export function GeneralPanel() {
   const t = useTranslations("Settings");
@@ -32,56 +66,54 @@ export function GeneralPanel() {
         description={t("general.description")}
         title={t("general.title")}
       />
-      <SettingsCard>
-        <SettingsCardHeader
-          description={t("general.preferencesDescription")}
-          title={t("general.preferences")}
-        />
-        <SettingsCardBody>
-          <div className="grid max-w-xl gap-5 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>{t("general.interfaceLanguage")}</FieldLabel>
-              <Select
-                disabled={localePending}
-                onValueChange={(value) => setLocale(value as "en" | "zh-CN")}
-                value={locale}
+      <div className="max-w-2xl">
+        <section aria-labelledby="appearance-title">
+          <h3 className="text-sm font-semibold" id="appearance-title">
+            {t("general.appearance")}
+          </h3>
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+            {appearanceOptions.map((option) => (
+              <button
+                aria-pressed={preference === option}
+                className={cn(
+                  "hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left transition-colors motion-reduce:transition-none sm:p-2",
+                  keyboardFocusRing,
+                  preference === option && "bg-pressed",
+                )}
+                key={option}
+                onClick={() => setColorSchemePreference(option)}
+                type="button"
               >
-                <FieldControl>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                </FieldControl>
-                <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="zh-CN">简体中文</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field>
-              <FieldLabel>{t("general.appearance")}</FieldLabel>
-              <Select
-                onValueChange={(value) =>
-                  setColorSchemePreference(value as "light" | "dark" | "system")
-                }
-                value={preference}
-              >
-                <FieldControl>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                </FieldControl>
-                <SelectContent>
-                  <SelectItem value="light">{t("appearance.light")}</SelectItem>
-                  <SelectItem value="dark">{t("appearance.dark")}</SelectItem>
-                  <SelectItem value="system">
-                    {t("appearance.system")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
+                <AppearancePreview option={option} />
+                <span className="mt-2 block text-center text-xs font-medium sm:text-sm">
+                  {t(`appearance.${option}`)}
+                </span>
+              </button>
+            ))}
           </div>
-        </SettingsCardBody>
-      </SettingsCard>
+        </section>
+
+        <section className="border-line-subtle mt-8 border-t pt-7">
+          <Field className="max-w-sm">
+            <FieldLabel>{t("general.interfaceLanguage")}</FieldLabel>
+            <Select
+              disabled={localePending}
+              onValueChange={(value) => setLocale(value as "en" | "zh-CN")}
+              value={locale}
+            >
+              <FieldControl>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+              </FieldControl>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="zh-CN">简体中文</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        </section>
+      </div>
     </div>
   );
 }

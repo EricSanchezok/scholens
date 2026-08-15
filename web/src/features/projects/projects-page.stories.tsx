@@ -67,6 +67,25 @@ export const Empty: Story = {
   },
 };
 
+export const FilteredEmpty: Story = {
+  parameters: {
+    msw: { handlers: [...authHandlers.success, ...projectHandlers.empty] },
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: "/projects?q=missing",
+        pathname: "/projects",
+        query: { q: "missing" },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByText("No matching projects"),
+    ).toBeVisible();
+  },
+};
+
 export const Loading: Story = {
   parameters: {
     msw: { handlers: [...authHandlers.success, ...projectHandlers.loading] },
@@ -125,6 +144,11 @@ export const LargeMobile430: Story = {
 
 export const SmallMobile320: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
+      canvasElement.clientWidth,
+    );
+  },
 };
 
 export const DarkChinese: Story = {

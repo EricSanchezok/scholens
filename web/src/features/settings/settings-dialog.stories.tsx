@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { http, HttpResponse } from "msw";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
-import { actor, authHandlers } from "../../../.storybook/msw/auth-handlers";
+import { authHandlers } from "../../../.storybook/msw/auth-handlers";
 import { billingHandlers } from "../../../.storybook/msw/billing-handlers";
 import { Providers } from "@/app/providers";
 import { resetRefreshForTests } from "@/lib/api";
@@ -41,7 +41,6 @@ const integrations = [
 ];
 
 const settingsHandlers = [
-  http.get(`${api}/me/profile`, () => HttpResponse.json(actor)),
   ...billingHandlers.success,
   http.get(`${api}/me/access-keys`, () =>
     HttpResponse.json({
@@ -125,11 +124,26 @@ export const General: Story = {
   play: async () => {
     const body = within(document.body);
     await expect(
-      await body.findByRole("heading", { name: "General" }),
+      await body.findByRole("heading", { name: "Appearance & language" }),
     ).toBeVisible();
+    await expect(body.getByRole("button", { name: "Light" })).toBeVisible();
+    await expect(body.getByRole("button", { name: "Dark" })).toBeVisible();
+    await expect(body.getByRole("button", { name: "System" })).toBeVisible();
     await expect(
       await body.findByRole("combobox", { name: "Interface language" }),
     ).toBeVisible();
+    await userEvent.click(body.getByRole("button", { name: "Dark" }));
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute(
+        "data-color-scheme",
+        "dark",
+      ),
+    );
+    await expect(body.getByRole("button", { name: "Dark" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(localStorage.getItem("scholens-color-scheme")).toBe("dark");
   },
 };
 
@@ -140,12 +154,31 @@ export const Account: Story = {
     await expect(
       await body.findByRole("heading", { name: "Account" }),
     ).toBeVisible();
-    await expect(await body.findByDisplayValue("Eric")).toBeVisible();
-    await expect(await body.findByText("Researcher")).toBeVisible();
+    await expect(await body.findByText("Eric")).toBeVisible();
+    await expect(await body.findByText("eric@scholens.ai")).toBeVisible();
+    const accountCenterLink = await body.findByRole("link", {
+      name: "Manage SanchezCloud account",
+    });
+    await expect(accountCenterLink).toHaveAttribute(
+      "href",
+      "https://account-center.example.test/",
+    );
+    await expect(accountCenterLink).toHaveAttribute("target", "_blank");
+    await expect(accountCenterLink).toHaveAttribute(
+      "rel",
+      expect.stringContaining("noopener"),
+    );
+    await expect(accountCenterLink).toHaveAttribute(
+      "rel",
+      expect.stringContaining("noreferrer"),
+    );
+    await expect(body.queryByLabelText("Display name")).not.toBeInTheDocument();
     await expect(
-      body.getByRole("link", { name: "Open Account Center" }),
-    ).toHaveAttribute("href", "https://account-center.example.test/");
-    await expect(body.getByRole("button", { name: "Sign out" })).toBeVisible();
+      body.queryByLabelText("Current password"),
+    ).not.toBeInTheDocument();
+    await expect(
+      await body.findByRole("button", { name: "Sign out" }),
+    ).toBeVisible();
   },
 };
 
@@ -160,21 +193,14 @@ export const AccountSignOut: Story = {
   },
 };
 
-export const AccountCenterUnavailable: Story = {
-  args: { accountCenterUrl: "" },
+export const AccountCenterDefault: Story = {
+  args: { accountCenterUrl: undefined },
   parameters: { nextjs: navigation("account") },
   play: async () => {
     const body = within(document.body);
     await expect(
-      await body.findByText(
-        "Account Center is not configured for this environment.",
-      ),
-    ).toBeVisible();
-    await expect(
-      body.getByRole("button", {
-        name: /Open Account Center.*not configured/i,
-      }),
-    ).toBeDisabled();
+      await body.findByRole("link", { name: "Manage SanchezCloud account" }),
+    ).toHaveAttribute("href", "https://myaccount.sanchezcloud.net");
   },
 };
 
@@ -190,11 +216,11 @@ export const Usage: Story = {
     await expect(await body.findByText("Up to 120")).toBeVisible();
     await expect(await body.findByText("768 MiB / 3 GiB")).toBeVisible();
     await expect(
-      body.getByRole("button", { name: /Upgrade.*not available/i }),
-    ).toBeDisabled();
+      body.queryByRole("button", { name: "Upgrade" }),
+    ).not.toBeInTheDocument();
     await expect(
-      body.getByRole("button", { name: /Manage billing.*not available/i }),
-    ).toBeDisabled();
+      body.queryByRole("button", { name: "Manage billing" }),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -297,7 +323,9 @@ export const MobileAccount390: Story = {
     await expect(
       await body.findByRole("heading", { name: "Account" }),
     ).toBeVisible();
-    await expect(body.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(
+      await body.findByRole("button", { name: "Sign out" }),
+    ).toBeVisible();
   },
 };
 
@@ -320,7 +348,7 @@ export const AccountDarkChinese: Story = {
       await body.findByRole("heading", { name: "账户" }),
     ).toBeVisible();
     await expect(
-      body.getByRole("link", { name: "打开账户中心" }),
+      await body.findByRole("link", { name: "管理 SanchezCloud 账户" }),
     ).toBeVisible();
   },
 };

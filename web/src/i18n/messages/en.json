@@ -53,12 +53,9 @@
       "creditsReset": "Credits reset on {date}",
       "usageLoading": "Loading plan and Token Credits…",
       "usageUnavailable": "Usage unavailable · Retry",
+      "settings": "Settings",
       "accountSettings": "Account",
       "usageSettings": "Usage",
-      "appearance": "Appearance",
-      "light": "Light",
-      "dark": "Dark",
-      "system": "System",
       "signOut": "Sign out",
       "signingOut": "Signing out…"
     }
@@ -938,9 +935,10 @@
       "conversations": "Conversations",
       "outputs": "Outputs"
     },
-    "card": {
+    "row": {
       "noDescription": "No description",
       "openMenu": "Open project actions",
+      "open": "Open {title}",
       "updated": "Updated {date}"
     },
     "empty": {
@@ -1079,8 +1077,8 @@
     "sectionPicker": "Settings section",
     "navigationLabel": "Settings navigation",
     "navigation": {
-      "general": "General",
       "account": "Account",
+      "general": "Appearance & language",
       "usage": "Usage",
       "access-keys": "Access keys",
       "connections": "Connections",
@@ -1093,8 +1091,7 @@
       "edit": "Edit"
     },
     "errors": {
-      "save": "Your changes could not be saved. Try again.",
-      "password": "Your password could not be updated. Check your current password and try again."
+      "save": "Your changes could not be saved. Try again."
     },
     "appearance": {
       "light": "Light",
@@ -1106,39 +1103,17 @@
       "researcher": "Researcher"
     },
     "general": {
-      "title": "General",
-      "description": "Choose the language and appearance of the Scholens application.",
-      "preferences": "Preferences",
-      "preferencesDescription": "Choose how Scholens looks and speaks to you.",
+      "title": "Appearance & language",
+      "description": "Choose how Scholens looks and which language its interface uses.",
       "interfaceLanguage": "Interface language",
       "appearance": "Appearance"
     },
     "account": {
       "title": "Account",
-      "description": "Manage your identity, plan, workspace access, password, and current session.",
+      "description": "View the identity connected to Scholens and manage it through SanchezCloud.",
       "profile": "Profile",
-      "profileDescription": "The name and email supplied by your shared SanchezCloud identity.",
-      "displayName": "Display name",
-      "displayNameError": "Enter a display name.",
-      "email": "Email",
-      "plan": "Current plan",
-      "planDescription": "This plan comes from your live Scholens billing status.",
-      "workspace": "Personal workspace",
-      "workspaceDescription": "Workspace ownership details are not exposed by the current identity contract. Open Account Center to manage shared account data.",
-      "unavailable": "Unavailable here",
-      "openAccountCenter": "Open Account Center",
-      "accountCenterUnavailable": "Account Center is not configured for this environment.",
-      "password": "Password",
-      "passwordDescription": "Use at least 12 characters for your new password.",
-      "currentPassword": "Current password",
-      "newPassword": "New password",
-      "confirmPassword": "Confirm new password",
-      "showPassword": "Show password",
-      "hidePassword": "Hide password",
-      "passwordMismatch": "The new passwords do not match.",
-      "passwordError": "Complete this password field.",
-      "passwordUpdated": "Password updated.",
-      "updatePassword": "Update password",
+      "profileDescription": "Profile, email, and password changes are managed in SanchezCloud Account.",
+      "openAccountCenter": "Manage SanchezCloud account",
       "session": "Current session",
       "sessionDescription": "Sign out of this browser without affecting your other SanchezCloud sessions.",
       "signOut": "Sign out",
@@ -1162,10 +1137,7 @@
       "projectPapers": "Papers per project",
       "projectPapersLimit": "Up to {value, number}",
       "projectPapersDescription": "Maximum papers allowed in each individual project.",
-      "storage": "Storage",
-      "upgrade": "Upgrade",
-      "manageBilling": "Manage billing",
-      "billingUnavailable": "Billing actions are not available in this version. Your displayed plan and limits are live and remain authoritative."
+      "storage": "Storage"
     },
     "accessKeys": {
       "title": "Access keys",

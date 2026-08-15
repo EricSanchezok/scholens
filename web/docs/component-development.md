@@ -11,7 +11,7 @@ Place a component according to the language and dependencies it owns:
 | Product component         | `src/features/<feature>/components` | Yes                             | Prefer data passed in     |
 | Route composition         | `src/app` or feature `routes`       | Yes                             | Through feature API layer |
 
-Sidebar, Composer, ConversationMessage, PaperRow, ProjectCard, and Reader tools
+Sidebar, Composer, ConversationMessage, PaperRow, ProjectRow, and Reader tools
 are product components, not UI primitives. A component is not promoted merely
 because two mockups look similar; promote it when its semantics and behavior are
 actually shared.

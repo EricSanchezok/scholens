@@ -4,11 +4,11 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { authHandlers } from "../../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
 import { projectFixtures } from "../api/fixtures";
-import { ProjectCard } from "./project-card";
+import { ProjectRow } from "./project-row";
 
 const meta = {
-  title: "Features/Projects/Project Card",
-  component: ProjectCard,
+  title: "Features/Projects/Project Row",
+  component: ProjectRow,
   args: {
     onDelete: fn(),
     onEdit: fn(),
@@ -18,7 +18,7 @@ const meta = {
   decorators: [
     (Story) => (
       <Providers>
-        <div className="max-w-xl p-6">
+        <div className="max-w-4xl p-4">
           <Story />
         </div>
       </Providers>
@@ -28,7 +28,7 @@ const meta = {
     msw: { handlers: authHandlers.success },
     nextjs: { appDirectory: true },
   },
-} satisfies Meta<typeof ProjectCard>;
+} satisfies Meta<typeof ProjectRow>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -37,6 +37,7 @@ export const Owner: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("link", { name: "Truthward" })).toBeVisible();
+    await expect(canvas.getByText("18")).toBeVisible();
     await userEvent.click(
       canvas.getByRole("button", { name: "Open project actions" }),
     );
@@ -66,7 +67,7 @@ export const Collaborator: Story = {
 export const Narrow: Story = {
   decorators: [
     (Story) => (
-      <div className="w-72 p-3">
+      <div className="w-72 p-2">
         <Story />
       </div>
     ),

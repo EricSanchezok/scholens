@@ -90,27 +90,28 @@ the superseded names.
 
 ### Required for a minimal local stack
 
-| Variable                                                                                          | Where                                                     |
-| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `DATABASE_URL`                                                                                    | server                                                    |
-| `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)           |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                     |
-| `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`                                                      | server + jobs                                             |
-| `CELERY_API_URL`                                                                                  | server                                                    |
-| `WEBHOOK_BASE_URL`                                                                                | jobs                                                      |
-| `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                    |
-| `AUTH_ALIYUN_DM_ACCESS_KEY_ID`, `AUTH_ALIYUN_DM_ACCESS_KEY_SECRET`, `AUTH_ALIYUN_DM_ACCOUNT_NAME` | server; verification/reset mail                           |
-| `CLIENT_DOMAIN`                                                                                   | server canonical URL (`http://127.0.0.1:7300`)            |
-| `CLIENT_ALLOWED_ORIGINS`                                                                          | server (`http://127.0.0.1:7300,http://127.0.0.1:7303`)    |
-| `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                       |
-| `NEXT_PUBLIC_ACCOUNT_CENTER_URL`                                                                  | web; shared Account Center link (`http://127.0.0.1:7100`) |
+| Variable                                                                                          | Where                                                           |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `DATABASE_URL`                                                                                    | server                                                          |
+| `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)                 |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                           |
+| `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`                                                      | server + jobs                                                   |
+| `CELERY_API_URL`                                                                                  | server                                                          |
+| `WEBHOOK_BASE_URL`                                                                                | jobs                                                            |
+| `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                          |
+| `AUTH_ALIYUN_DM_ACCESS_KEY_ID`, `AUTH_ALIYUN_DM_ACCESS_KEY_SECRET`, `AUTH_ALIYUN_DM_ACCOUNT_NAME` | server; verification/reset mail                                 |
+| `CLIENT_DOMAIN`                                                                                   | server canonical URL (`http://127.0.0.1:7300`)                  |
+| `CLIENT_ALLOWED_ORIGINS`                                                                          | server (`http://127.0.0.1:7300,http://127.0.0.1:7303`)          |
+| `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                             |
+| `NEXT_PUBLIC_ACCOUNT_CENTER_URL`                                                                  | web; optional Account Center override (`http://127.0.0.1:7100`) |
 
 MOSS Voice is required only for audio overviews. Zotero, Stripe, email, PostHog,
 and admin variables are grouped in the root `.env.example`.
 
-`NEXT_PUBLIC_ACCOUNT_CENTER_URL` is optional at runtime but must be set for the
-Settings → Account link to be actionable. When it is absent, Web renders an
-explicit unavailable state; it never guesses an Account Center host.
+Settings → Account defaults to the canonical
+`https://myaccount.sanchezcloud.net` destination. Set
+`NEXT_PUBLIC_ACCOUNT_CENTER_URL` only when the environment intentionally uses a
+different Account Center host, such as local Account Center on port `7100`.
 
 Scholens discovers remote model tools through MCP. Scholight is the built-in
 provider: `SCHOLIGHT_MCP_URL` selects its fixed endpoint and

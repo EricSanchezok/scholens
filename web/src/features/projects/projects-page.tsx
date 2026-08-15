@@ -38,8 +38,8 @@ import {
   projectQueries,
   updateProject,
 } from "./api";
-import { ProjectCard } from "./components/project-card";
 import { ProjectFormDialog } from "./components/project-form-dialog";
+import { ProjectRow } from "./components/project-row";
 import {
   parseProjectsSearch,
   serializeProjectsSearch,
@@ -48,6 +48,29 @@ import {
 } from "./project-search";
 
 type Project = components["schemas"]["ProjectResponse"];
+
+function ProjectsEmptyState({
+  description,
+  title,
+}: {
+  description: string;
+  title: string;
+}) {
+  return (
+    <section
+      className="grid min-h-64 place-items-center px-4 py-12 text-center"
+      role="status"
+    >
+      <div className="grid max-w-md justify-items-center">
+        <span className="bg-subtle grid size-11 place-items-center rounded-full">
+          <Icon glyph={ProjectIcon} size={20} tone="secondary" />
+        </span>
+        <h2 className="mt-4 text-base font-semibold">{title}</h2>
+        <p className="text-secondary mt-1.5 text-sm leading-6">{description}</p>
+      </div>
+    </section>
+  );
+}
 
 function SearchControl({
   label,
@@ -68,6 +91,7 @@ function SearchControl({
   return (
     <SearchField
       aria-label={label}
+      className="bg-subtle hover:border-line rounded-full border-transparent"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
       value={input}
@@ -205,7 +229,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
           </Button>
         </header>
 
-        <div className="mt-0 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem] lg:mt-8">
+        <div className="mt-0 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] lg:mt-8">
           <SearchControl
             key={state.query}
             label={t("search")}
@@ -218,7 +242,10 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
             }
             value={state.sort}
           >
-            <SelectTrigger aria-label={t("sort.label")}>
+            <SelectTrigger
+              aria-label={t("sort.label")}
+              className="bg-subtle hover:border-line rounded-full border-transparent"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -229,10 +256,9 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
           </Select>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-5">
           {projectsQuery.isPending ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <LoadingState label={t("feedback.loading")} />
+            <div className="grid gap-6 px-3 py-4">
               <LoadingState label={t("feedback.loading")} />
             </div>
           ) : projectsQuery.isError ? (
@@ -242,25 +268,24 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
                 onClick: () => void projectsQuery.refetch(),
               }}
               description={t("feedback.errorDescription")}
+              presentation="inline"
               state="error"
               title={t("feedback.errorTitle")}
             />
           ) : projectsQuery.data.items.length === 0 ? (
-            <AsyncFeedback
+            <ProjectsEmptyState
               description={
                 state.query
                   ? t("empty.searchDescription")
                   : t("empty.description")
               }
-              icon={ProjectIcon}
-              state="empty"
               title={state.query ? t("empty.searchTitle") : t("empty.title")}
             />
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="divide-line-subtle divide-y">
                 {projectsQuery.data.items.map((project) => (
-                  <ProjectCard
+                  <ProjectRow
                     key={project.id}
                     onDelete={(value) =>
                       setDestructive({ action: "delete", project: value })
