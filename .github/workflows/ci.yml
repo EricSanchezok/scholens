@@ -12,6 +12,9 @@ on:
         description: Git revision to verify
         required: false
         type: string
+    secrets:
+      IDENTITY_READER_PRIVATE_KEY:
+        required: true
 
 permissions:
   contents: read
@@ -187,6 +190,9 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+      - name: Resolve checked-out image revision
+        id: image-revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Mint read-only SanchezCloud Identity token
         id: identity-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
@@ -218,8 +224,6 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Install deployment validators
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends shellcheck
           uv tool install cfn-lint
           uv tool dir --bin >> "$GITHUB_PATH"
       - name: Run deployment static gate
@@ -240,12 +244,17 @@ jobs:
           context: .
           file: jobs/Dockerfile
           push: false
-      - name: Build client image
+      - name: Build canonical Web image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: .
-          file: client/Dockerfile
+          context: web
+          file: web/Dockerfile
+          target: runtime
           push: false
+          build-args: |
+            RELEASE_SHA=${{ steps.image-revision.outputs.sha }}
+            NEXT_PUBLIC_API_URL=https://scholens.example.invalid
+            NEXT_PUBLIC_ACCOUNT_CENTER_URL=https://account.example.invalid
       - name: Verify independent migrations with least-privilege roles
         env:
           PGPASSWORD: migration-test-password
@@ -263,7 +272,7 @@ jobs:
               -v app_role=scholens_app \
               -v auth_migrator_role=auth_migrator \
               -v product_migrator_role=scholens_migrator \
-              -f deploy/production/bootstrap-db.sql
+              -f deploy/ecs/database-bootstrap.sql
 
             if [[ $phase == before ]]; then
               AUTH_DATABASE_URL="postgresql://auth_migrator:${AUTH_MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
@@ -272,13 +281,13 @@ jobs:
                 server/.venv/bin/sanchezcloud-identity check-schema
             elif [[ $phase == after-auth ]]; then
               for _ in 1 2; do
-                docker run --rm --network host \
+                docker run --rm --network host --entrypoint scholens \
                   -e DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
-                  scholens-api:ci scholens db upgrade --yes
+                  scholens-api:ci db upgrade --yes --json
               done
-              docker run --rm --network host \
+              docker run --rm --network host --entrypoint alembic \
                 -e DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
-                scholens-api:ci alembic check
+                scholens-api:ci check
             fi
           done
 

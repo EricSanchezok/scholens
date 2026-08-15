@@ -1,77 +1,99 @@
-"""
-Celery application configuration and setup.
-"""
+"""Celery worker configuration for local RabbitMQ and production SQS."""
+
+from __future__ import annotations
 
 import os
-from datetime import timedelta
 
-from dotenv import load_dotenv
 from celery import Celery
-from src.pdf import validate_pdf_runtime_configuration
-from src.observability import configure_jobs_observability
+from dotenv import load_dotenv
+from scholens_job_contracts import JobQueue
 
-load_dotenv()  # Load environment variables from .env file
+from src.observability import configure_jobs_observability
+from src.pdf import validate_pdf_runtime_configuration
+from src.task_protection import register_task_protection_signals
+
+load_dotenv()
 configure_jobs_observability()
 validate_pdf_runtime_configuration()
 
-BROKER_URL = os.getenv("CELERY_BROKER_URL", "pyamqp://guest@127.0.0.1:55672//")
-BACKEND_URL = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:56379/0")
+LOCAL_BROKER_URL = "pyamqp://guest@127.0.0.1:55672//"
+QUEUE_ENVIRONMENT = {
+    JobQueue.DOCUMENT: "SQS_DOCUMENT_QUEUE_URL",
+    JobQueue.RESEARCH: "SQS_RESEARCH_QUEUE_URL",
+    JobQueue.MAINTENANCE: "SQS_MAINTENANCE_QUEUE_URL",
+}
 
-# Create Celery instance
-celery_app = Celery(
-    "scholens_tasks", broker=BROKER_URL, backend=BACKEND_URL, include=["src.tasks"]
-)
 
-# Celery configuration
+def _broker_url() -> str:
+    configured = os.getenv("CELERY_BROKER_URL")
+    if configured:
+        return configured
+    if os.getenv("ENVIRONMENT", "development").casefold() == "production":
+        raise RuntimeError("CELERY_BROKER_URL is required in production")
+    return LOCAL_BROKER_URL
+
+
+def _transport_options(broker_url: str) -> dict[str, object]:
+    if not broker_url.startswith("sqs://"):
+        return {}
+    missing = [name for name in QUEUE_ENVIRONMENT.values() if not os.getenv(name)]
+    if missing:
+        raise RuntimeError(f"missing predefined SQS queues: {', '.join(missing)}")
+    return {
+        "region": os.getenv("AWS_REGION", "ap-southeast-1"),
+        "visibility_timeout": 45 * 60,
+        "wait_time_seconds": 20,
+        "polling_interval": 1,
+        "predefined_queues": {
+            queue: {"url": os.environ[environment]}
+            for queue, environment in QUEUE_ENVIRONMENT.items()
+        },
+    }
+
+
+BROKER_URL = _broker_url()
+celery_app = Celery("scholens_tasks", broker=BROKER_URL, include=["src.tasks"])
+
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
-    result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    result_expires=3600,  # Results expire after 1 hour
+    result_backend=None,
+    task_ignore_result=True,
+    task_store_errors_even_if_ignored=False,
+    task_default_queue=JobQueue.MAINTENANCE,
     task_routes={
-        "upload_and_process_file": {"queue": "pdf_processing"},
-        "postprocess_pdf": {"queue": "pdf_processing"},
-        "collect_document": {"queue": "storage_gc"},
-        "delete_storage_objects": {"queue": "storage_gc"},
-        "generate_audio_overview": {"queue": "audio"},
-        "process_data_table": {"queue": "data_table"},
-        "generate_document_reflow": {"queue": "reflow"},
-        "periodic_zotero_sync": {"queue": "zotero_sync"},
-        "postprocess_zotero": {"queue": "zotero_sync"},
+        "upload_and_process_file": {"queue": JobQueue.DOCUMENT},
+        "postprocess_pdf": {"queue": JobQueue.DOCUMENT},
+        "generate_document_reflow": {"queue": JobQueue.DOCUMENT},
+        "generate_audio_overview": {"queue": JobQueue.RESEARCH},
+        "process_data_table": {"queue": JobQueue.RESEARCH},
+        "collect_document": {"queue": JobQueue.MAINTENANCE},
+        "delete_storage_objects": {"queue": JobQueue.MAINTENANCE},
+        "postprocess_zotero": {"queue": JobQueue.MAINTENANCE},
     },
-    worker_prefetch_multiplier=1,  # Process one task at a time
+    broker_connection_retry_on_startup=True,
+    broker_connection_retry=True,
+    broker_transport_options=_transport_options(BROKER_URL),
+    worker_prefetch_multiplier=1,
     task_acks_late=True,
     reject_on_worker_lost=True,
     task_acks_on_failure_or_timeout=True,
+    worker_cancel_long_running_tasks_on_connection_loss=True,
+    worker_soft_shutdown_timeout=120.0,
+    worker_enable_soft_shutdown_on_idle=True,
     worker_max_tasks_per_child=1000,
-    # Health monitoring settings
-    worker_send_task_events=True,
-    task_send_sent_event=True,
+    worker_send_task_events=False,
+    task_send_sent_event=False,
     worker_hijack_root_logger=False,
     worker_log_color=False,
-    # Worker heartbeat and timeout settings
-    broker_heartbeat=30,
-    broker_heartbeat_checkrate=2.0,
     worker_disable_rate_limits=True,
-    # Memory and resource limits
-    worker_max_memory_per_child=500000,  # 500MB in KB
+    worker_max_memory_per_child=500000,
 )
 
+register_task_protection_signals()
 celery_app.autodiscover_tasks()
-
-ZOTERO_SYNC_INTERVAL_SECONDS = int(
-    os.getenv("ZOTERO_SYNC_INTERVAL_SECONDS", str(24 * 60 * 60))
-)
-
-celery_app.conf.beat_schedule = {
-    "periodic-zotero-sync": {
-        "task": "periodic_zotero_sync",
-        "schedule": timedelta(seconds=ZOTERO_SYNC_INTERVAL_SECONDS),
-        "options": {"queue": "zotero_sync"},
-    },
-}
 
 if __name__ == "__main__":
     celery_app.start()

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from scholens_job_contracts import JobQueue
+
 from app.modules.jobs.application.contracts import (
     JobListResponse,
     JobResponse,
@@ -25,7 +27,7 @@ class EnqueueJobCommand:
     idempotency_key: str
     payload: dict[str, JsonValue]
     task_name: str
-    queue: str
+    queue: JobQueue
     project_id: UUID | None = None
     document_id: UUID | None = None
 

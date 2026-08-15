@@ -2,66 +2,419 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 import yaml
 
 ROOT = Path(__file__).parents[2]
-PRODUCTION = ROOT / "deploy" / "production"
+ECS = ROOT / "deploy" / "ecs"
+FOUNDATION_INLINE_LIMIT = 48 * 1024
 
 
-def load_compose() -> dict[str, object]:
-    return yaml.safe_load((PRODUCTION / "compose.yaml").read_text(encoding="utf-8"))
+class _CloudFormationLoader(yaml.SafeLoader):
+    pass
 
 
-def test_only_public_application_edges_join_shared_network() -> None:
-    compose = load_compose()
-    services = compose["services"]
+def _cloudformation_tag(loader, suffix: str, node):
+    if isinstance(node, yaml.ScalarNode):
+        value = loader.construct_scalar(node)
+    elif isinstance(node, yaml.SequenceNode):
+        value = loader.construct_sequence(node, deep=True)
+    else:
+        value = loader.construct_mapping(node, deep=True)
+    if suffix == "GetAtt" and isinstance(value, str):
+        value = value.split(".", 1)
+    key = suffix if suffix in {"Ref", "Condition"} else f"Fn::{suffix}"
+    return {key: value}
 
-    assert services["client"]["networks"] == {"edge": {"aliases": ["scholens-client"]}}
-    assert services["api"]["networks"]["edge"] == {"aliases": ["scholens-api"]}
-    for service in ("jobs-api", "worker", "beat", "rabbitmq", "redis", "migrate"):
-        assert "edge" not in services[service]["networks"]
-    assert compose["networks"]["internal"]["internal"] is True
-    assert compose["networks"]["edge"]["external"] is True
-    assert all("ports" not in service for service in services.values())
+
+_CloudFormationLoader.add_multi_constructor("!", _cloudformation_tag)
 
 
-def test_release_images_are_required_and_runtime_containers_are_non_root() -> None:
-    compose_text = (PRODUCTION / "compose.yaml").read_text(encoding="utf-8")
-    compose = load_compose()
-    for variable in (
-        "SCHOLENS_API_IMAGE",
-        "SCHOLENS_CLIENT_IMAGE",
-        "SCHOLENS_JOBS_IMAGE",
+def load_template(name: str) -> dict[str, object]:
+    template = yaml.load(
+        (ECS / name).read_text(encoding="utf-8"),
+        Loader=_CloudFormationLoader,
+    )
+    assert isinstance(template, dict)
+    return template
+
+
+def test_foundation_fits_cloudformation_inline_bootstrap_limit() -> None:
+    template = ECS / "scholens-foundation.yml"
+    assert len(template.read_bytes()) < FOUNDATION_INLINE_LIMIT
+
+
+def test_foundation_inline_role_policies_fit_iam_aggregate_quota() -> None:
+    resources = load_template("scholens-foundation.yml")["Resources"]
+    for name, resource in resources.items():
+        if resource["Type"] != "AWS::IAM::Role":
+            continue
+        policies = resource.get("Properties", {}).get("Policies", [])
+        aggregate = sum(
+            len(json.dumps(policy["PolicyDocument"], separators=(",", ":")))
+            for policy in policies
+        )
+        assert aggregate <= 10_240, f"{name} inline policies use {aggregate} bytes"
+
+
+def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
+    template = load_template("scholens-foundation.yml")
+    resources = template["Resources"]
+    assert isinstance(resources, dict)
+
+    retained_types = {
+        "AWS::ECR::Repository",
+        "AWS::ElastiCache::ServerlessCache",
+        "AWS::KMS::Key",
+        "AWS::S3::Bucket",
+        "AWS::SecretsManager::Secret",
+        "AWS::SQS::Queue",
+    }
+    for resource in resources.values():
+        if resource["Type"] in retained_types:
+            assert resource["DeletionPolicy"] == "Retain"
+            assert resource["UpdateReplacePolicy"] == "Retain"
+
+    repositories = [
+        resource
+        for resource in resources.values()
+        if resource["Type"] == "AWS::ECR::Repository"
+    ]
+    assert len(repositories) == 3
+    assert all(
+        repo["Properties"]["ImageTagMutability"] == "IMMUTABLE" for repo in repositories
+    )
+
+    for name in ("DocumentQueue", "ResearchQueue", "MaintenanceQueue"):
+        queue = resources[name]["Properties"]
+        assert queue["VisibilityTimeout"] == 2700
+        assert queue["MessageRetentionPeriod"] == 1209600
+        assert queue["RedrivePolicy"]["maxReceiveCount"] == 5
+
+    cache = resources["Cache"]["Properties"]
+    assert cache["Engine"] == "valkey"
+    assert cache["UserGroupId"] == {"Ref": "CacheUserGroup"}
+
+    release = resources["ReleaseBucket"]["Properties"]
+    assert release["ObjectLockEnabled"] is True
+    assert release["ObjectLockConfiguration"] == {
+        "ObjectLockEnabled": "Enabled",
+        "Rule": {"DefaultRetention": {"Mode": "COMPLIANCE", "Days": 365}},
+    }
+
+
+def test_bucket_policies_reject_only_explicit_wrong_encryption_headers() -> None:
+    resources = load_template("scholens-foundation.yml")["Resources"]
+    contracts = (
+        ("ReleaseBucketPolicy", "ReleaseBucket", "ConfigurationKey"),
+        ("ContentBucketPolicy", "ContentBucket", "ContentKey"),
+        ("DiagnosticBucketPolicy", "DiagnosticBucket", "DiagnosticKey"),
+    )
+    for policy_name, bucket_name, key_name in contracts:
+        statements = resources[policy_name]["Properties"]["PolicyDocument"]["Statement"]
+        by_sid = {statement["Sid"]: statement for statement in statements}
+        algorithm = by_sid["DenyExplicitNonKmsEncryption"]
+        assert algorithm["Action"] == "s3:PutObject"
+        assert algorithm["Resource"] == {"Fn::Sub": f"${{{bucket_name}.Arn}}/*"}
+        assert algorithm["Condition"] == {
+            "Null": {"s3:x-amz-server-side-encryption": "false"},
+            "StringNotEquals": {"s3:x-amz-server-side-encryption": "aws:kms"},
+        }
+        wrong_key = by_sid["DenyExplicitWrongKmsKey"]
+        assert wrong_key["Condition"]["Null"] == {
+            "s3:x-amz-server-side-encryption-aws-kms-key-id": "false"
+        }
+        assert wrong_key["Condition"]["StringNotEquals"] == {
+            "s3:x-amz-server-side-encryption-aws-kms-key-id": {
+                "Fn::GetAtt": [key_name, "Arn"]
+            }
+        }
+
+
+def _policy_statements(resource: dict[str, object]) -> list[dict[str, object]]:
+    policies = resource["Properties"]["Policies"]
+    return [
+        statement
+        for policy in policies
+        for statement in policy["PolicyDocument"]["Statement"]
+    ]
+
+
+def _actions(statement: dict[str, object]) -> set[str]:
+    value = statement["Action"]
+    return {value} if isinstance(value, str) else set(value)
+
+
+def test_foundation_roles_enforce_immutable_release_and_scoped_secrets() -> None:
+    resources = load_template("scholens-foundation.yml")["Resources"]
+    publish = _policy_statements(resources["PublishRole"])
+    production = _policy_statements(resources["ProductionDeployRole"])
+    execution = _policy_statements(resources["TaskExecutionRole"])
+
+    assert all("s3:BypassGovernanceRetention" not in _actions(item) for item in publish)
+    publish_put = next(item for item in publish if "s3:PutObject" in _actions(item))
+    assert publish_put["Resource"] == [
+        {"Fn::Sub": "${ReleaseBucket.Arn}/releases/*"},
+        {"Fn::Sub": "${ReleaseBucket.Arn}/source-maps/*"},
+    ]
+    production_put = next(
+        item for item in production if "s3:PutObject" in _actions(item)
+    )
+    assert production_put["Resource"] == {
+        "Fn::Sub": "${ReleaseBucket.Arn}/cloudformation/*"
+    }
+    assert not any(
+        "secretsmanager:GetSecretValue" in _actions(item)
+        and item["Resource"] == {"Ref": "EdgeSecret"}
+        for item in production
+    )
+    execution_secret = next(
+        item for item in execution if "secretsmanager:GetSecretValue" in _actions(item)
+    )
+    assert {"Ref": "ScholightMcpDelegationSecretArn"} in execution_secret["Resource"]
+    assert "sanchezcloud-scholight-core-secret-arn" not in str(execution)
+
+
+def test_cloudformation_role_has_current_scoped_waf_association_permissions() -> None:
+    resources = load_template("scholens-foundation.yml")["Resources"]
+    statements = _policy_statements(resources["CloudFormationServiceRole"])
+    association_actions = {
+        "elasticloadbalancing:CreateWebACLAssociation",
+        "elasticloadbalancing:DeleteWebACLAssociation",
+        "elasticloadbalancing:GetLoadBalancerWebACL",
+    }
+    association = next(
+        item for item in statements if association_actions <= _actions(item)
+    )
+    assert association["Resource"] == {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:"
+            "${AWS::AccountId}:loadbalancer/app/sanchezcloud-scholens/*"
+        )
+    }
+    describe = next(
+        item
+        for item in statements
+        if "elasticloadbalancing:DescribeWebACLAssociation" in _actions(item)
+    )
+    assert describe["Resource"] == "*"
+    web_acl_actions = {
+        "wafv2:AssociateWebACL",
+        "wafv2:GetWebACL",
+        "wafv2:GetWebACLForResource",
+        "wafv2:ListResourcesForWebACL",
+    }
+    web_acl = next(item for item in statements if web_acl_actions <= _actions(item))
+    assert web_acl["Resource"] == {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:"
+            "regional/webacl/sanchezcloud-scholens/*"
+        )
+    }
+    iam_actions = {
+        action
+        for statement in statements
+        for action in _actions(statement)
+        if action.startswith("iam:")
+    }
+    assert "iam:*" not in iam_actions
+
+    iam_statements = [
+        item
+        for item in statements
+        if any(action.startswith("iam:") for action in _actions(item))
+    ]
+    for item in iam_statements:
+        assert item["Resource"] != "*"
+        if "iam:CreateServiceLinkedRole" in _actions(item):
+            assert "role/aws-service-role/*" in str(item["Resource"])
+            assert "iam:AWSServiceName" in str(item["Condition"])
+        else:
+            assert "role/SanchezCloudScholens" in str(item["Resource"])
+
+    for service in ("ecr:", "secretsmanager:"):
+        scoped = [
+            item
+            for item in statements
+            if any(action.startswith(service) for action in _actions(item))
+        ]
+        assert scoped
+        for item in scoped:
+            if _actions(item) == {"secretsmanager:GetRandomPassword"}:
+                assert item["Resource"] == "*"
+            else:
+                assert item["Resource"] != "*"
+
+    broad_actions = {
+        action
+        for item in statements
+        if item["Resource"] == "*"
+        for action in _actions(item)
+    }
+    assert not any(
+        action.startswith(("iam:", "ecr:", "s3:")) for action in broad_actions
+    )
+    assert {
+        action for action in broad_actions if action.startswith("secretsmanager:")
+    } <= {"secretsmanager:GetRandomPassword"}
+
+
+def test_disabled_application_cannot_be_resurrected_by_autoscaling() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    targets = {
+        name: resource
+        for name, resource in resources.items()
+        if resource["Type"] == "AWS::ApplicationAutoScaling::ScalableTarget"
+    }
+    assert set(targets) == {
+        "WebScalableTarget",
+        "ApiScalableTarget",
+        "DocumentWorkerScalableTarget",
+        "ResearchWorkerScalableTarget",
+        "MaintenanceWorkerScalableTarget",
+    }
+    for target in targets.values():
+        minimum = target["Properties"]["MinCapacity"]["Fn::If"]
+        maximum = target["Properties"]["MaxCapacity"]["Fn::If"]
+        assert minimum[0] == maximum[0] == "RunApplication"
+        assert minimum[2] == maximum[2] == 0
+
+
+def test_unhealthy_target_alarms_use_load_balancer_and_target_group() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    for name, target_group in (
+        ("WebUnhealthyTargetsAlarm", "WebTargetGroup"),
+        ("ApiUnhealthyTargetsAlarm", "ApiTargetGroup"),
     ):
-        assert f"${{{variable}:?" in compose_text
+        alarm = resources[name]["Properties"]
+        assert alarm["MetricName"] == "UnHealthyHostCount"
+        assert alarm["Statistic"] == "Minimum"
+        assert alarm["EvaluationPeriods"] == alarm["DatapointsToAlarm"] == 2
+        assert alarm["Dimensions"] == [
+            {
+                "Name": "LoadBalancer",
+                "Value": {"Fn::GetAtt": ["LoadBalancer", "LoadBalancerFullName"]},
+            },
+            {
+                "Name": "TargetGroup",
+                "Value": {"Fn::GetAtt": [target_group, "TargetGroupFullName"]},
+            },
+        ]
+    dashboard = str(resources["Dashboard"])
+    assert "WebTargetGroupName" in dashboard
+    assert "ApiTargetGroupName" in dashboard
 
-    for dockerfile in ("server/Dockerfile", "client/Dockerfile", "jobs/Dockerfile"):
+
+def test_scheduler_and_worker_task_protection_are_cluster_scoped() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    scheduler = _policy_statements(resources["SchedulerInvocationRole"])
+    pass_role = next(item for item in scheduler if "iam:PassRole" in _actions(item))
+    assert pass_role["Condition"] == {
+        "StringEquals": {"iam:PassedToService": "ecs-tasks.amazonaws.com"}
+    }
+    for name in (
+        "DocumentWorkerTaskRole",
+        "ResearchWorkerTaskRole",
+        "MaintenanceWorkerTaskRole",
+    ):
+        statements = _policy_statements(resources[name])
+        protection = next(
+            item for item in statements if "ecs:UpdateTaskProtection" in _actions(item)
+        )
+        assert protection["Resource"] == "*"
+        assert protection["Condition"] == {
+            "ArnEquals": {
+                "ecs:cluster": {
+                    "Fn::ImportValue": "sanchezcloud-production-cluster-arn"
+                }
+            }
+        }
+
+
+def test_runtime_uses_private_fargate_services_and_digest_images() -> None:
+    template = load_template("scholens-production.yml")
+    parameters = template["Parameters"]
+    resources = template["Resources"]
+    assert isinstance(parameters, dict)
+    assert isinstance(resources, dict)
+
+    for parameter in ("WebImage", "ApiImage", "JobsImage"):
+        assert "@sha256:" in parameters[parameter]["AllowedPattern"]
+
+    services = {
+        name: resource
+        for name, resource in resources.items()
+        if resource["Type"] == "AWS::ECS::Service"
+    }
+    assert set(services) == {
+        "WebService",
+        "ApiService",
+        "DocumentWorkerService",
+        "ResearchWorkerService",
+        "MaintenanceWorkerService",
+    }
+    for service in services.values():
+        network = service["Properties"]["NetworkConfiguration"]["AwsvpcConfiguration"]
+        assert network["AssignPublicIp"] == "DISABLED"
+        assert len(network["Subnets"]) == 2
+        assert service["Properties"]["DeploymentConfiguration"][
+            "DeploymentCircuitBreaker"
+        ] == {"Enable": True, "Rollback": True}
+
+    for name in (
+        "DocumentWorkerService",
+        "ResearchWorkerService",
+        "MaintenanceWorkerService",
+    ):
+        providers = services[name]["Properties"]["CapacityProviderStrategy"]
+        assert {entry["CapacityProvider"] for entry in providers} == {
+            "FARGATE",
+            "FARGATE_SPOT",
+        }
+
+    assert resources["ApiDiscoveryService"]["Type"] == "AWS::ServiceDiscovery::Service"
+    assert resources["WebAclAssociation"]["Type"] == "AWS::WAFv2::WebACLAssociation"
+    runtime_text = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
+    assert "/internal/v1" not in runtime_text
+
+    for dockerfile in ("server/Dockerfile", "web/Dockerfile", "jobs/Dockerfile"):
         content = (ROOT / dockerfile).read_text(encoding="utf-8")
         assert re.search(r"^USER (?!root$).+", content, re.MULTILINE)
+        assert "@sha256:" in content
 
-    assert "HEALTHCHECK" in (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
-    assert "HEALTHCHECK" in (ROOT / "client" / "Dockerfile").read_text(encoding="utf-8")
-    assert "healthcheck:" in compose_text
-    for service in ("rabbitmq", "redis"):
-        assert re.fullmatch(
-            r"[^\s]+@sha256:[0-9a-f]{64}", compose["services"][service]["image"]
-        )
+
+def test_workers_use_sqs_without_a_result_backend_or_beat() -> None:
+    jobs = (ROOT / "jobs" / "src" / "celery_app.py").read_text(encoding="utf-8")
+    runtime = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
+
+    assert "result_backend=None" in jobs
+    assert "task_ignore_result=True" in jobs
+    assert '"predefined_queues"' in jobs
+    for queue in ("document", "research", "maintenance"):
+        assert f"--queues={queue}" in runtime
+    assert "celery beat" not in runtime
+    assert "AWS::Scheduler::Schedule" in runtime
 
 
 def test_production_uses_the_unified_migration_cli_and_gunicorn_runtime() -> None:
-    compose = load_compose()
+    template = load_template("scholens-production.yml")
     dockerfile = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
+    command = template["Resources"]["MigrationTaskDefinition"]["Properties"][
+        "ContainerDefinitions"
+    ][0]["Command"]
 
-    assert compose["services"]["migrate"]["command"] == [
-        "scholens",
-        "db",
-        "upgrade",
-        "--yes",
-    ]
-    assert 'CMD ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]' in dockerfile
+    assert command == ["migrate"]
+    assert 'ENTRYPOINT ["python", "-m", "app.bootstrap.runtime_entrypoint"]' in (
+        dockerfile
+    )
+    entrypoint = (ROOT / "server/app/bootstrap/runtime_entrypoint.py").read_text(
+        encoding="utf-8"
+    )
+    assert '["scholens", "db", "upgrade", "--yes", "--json"]' in entrypoint
+    assert '["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]' in entrypoint
 
 
 def test_python_images_copy_shared_packages_before_locked_sync() -> None:
@@ -126,12 +479,9 @@ def test_runtime_passage_backfill_never_requires_trigger_ddl() -> None:
 
 
 def test_database_contract_shares_auth_and_isolates_scholens() -> None:
-    runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
-    bootstrap = (PRODUCTION / "bootstrap-db.sql").read_text(encoding="utf-8")
+    bootstrap = (ECS / "database-bootstrap.sql").read_text(encoding="utf-8")
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert runtime.count("/sanchezcloud?") == 2
-    assert "search_path" not in runtime
     assert "CREATE SCHEMA IF NOT EXISTS auth" in bootstrap
     assert "CREATE SCHEMA IF NOT EXISTS scholens" in bootstrap
     assert "GRANT CREATE ON DATABASE" not in bootstrap
@@ -190,7 +540,7 @@ def test_identity_revision_is_consistent_across_runtime_and_ci() -> None:
 def test_workflows_use_the_scoped_dependency_reader_app() -> None:
     workflows = "\n".join(
         (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
-        for name in ("ci.yml", "release.yml")
+        for name in ("ci.yml", "publish.yml")
     )
 
     assert "actions/create-github-app-token@" in workflows
@@ -200,6 +550,97 @@ def test_workflows_use_the_scoped_dependency_reader_app() -> None:
     assert "CLOUD_AUTH_READ_TOKEN" not in workflows
     assert "origin/master" not in workflows
     assert "default: master" not in workflows
+
+
+def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
+    workflows = {
+        name: (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        for name in ("publish.yml", "database-production.yml", "release.yml")
+    }
+
+    assert "workflow_run:" in workflows["publish.yml"]
+    assert "release_manifest.py create" in workflows["publish.yml"]
+    assert "scholens-web@$WEB_DIGEST" in workflows["publish.yml"]
+    assert "scholens-api@$API_DIGEST" in workflows["publish.yml"]
+    assert "scholens-jobs@$JOBS_DIGEST" in workflows["publish.yml"]
+    assert "environment: database-production" in workflows["database-production.yml"]
+    assert "aws ecs run-task" in workflows["database-production.yml"]
+    assert "environment: production" in workflows["release.yml"]
+    assert "aws cloudformation deploy" in workflows["release.yml"]
+    assert "--s3-bucket" in workflows["release.yml"]
+    combined = "\n".join(workflows.values())
+    assert "deploy/production" not in combined
+    assert "aws ssm send-command" not in combined
+
+
+def test_web_image_and_source_maps_share_one_buildkit_graph() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+        encoding="utf-8"
+    )
+    dockerfile = (ROOT / "web" / "Dockerfile").read_text(encoding="utf-8")
+    bake = (ROOT / "web" / "docker-bake.hcl").read_text(encoding="utf-8")
+
+    assert workflow.count("docker buildx bake") == 1
+    assert "Build Web and export source maps from one build graph" in workflow
+    assert 'targets = ["web-runtime", "web-source-maps"]' in bake
+    assert bake.count('context    = "./web"') == 2
+    assert bake.count("RELEASE_SHA                   = RELEASE_SHA") == 2
+    build_stage = dockerfile.split("FROM dependencies AS build", maxsplit=1)[1].split(
+        "FROM ${NODE_IMAGE} AS runtime", maxsplit=1
+    )[0]
+    assert "pnpm build" in build_stage
+    assert "node scripts/package-source-maps.mjs" in build_stage
+    assert "COPY --from=build" in dockerfile.split("AS runtime", maxsplit=1)[1]
+    assert "COPY --from=build /tmp/scholens-source-maps/ /" in dockerfile
+
+
+def test_release_objects_are_conditionally_created_and_byte_compared() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "aws s3 cp --recursive" not in workflow
+    assert "--if-none-match '*'" in workflow
+    assert workflow.count("cmp --silent") >= 2
+    assert '"source-maps/${RELEASE_SHA}/index.json"' in workflow
+    assert "--source-maps-index web-source-maps/index.json" in workflow
+
+
+def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "database-production.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "aws ecs wait tasks-stopped" not in workflow
+    assert "deadline=$((SECONDS + 3600))" in workflow
+    assert "migration-workflow-timeout" in workflow
+    assert "stoppedReason:stoppedReason" in workflow
+    assert "reason:reason" in workflow
+    assert "logStreamName:logStreamName" in workflow
+
+
+def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -> None:
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+    workflow = (
+        ROOT / ".github" / "workflows" / "infrastructure-production.yml"
+    ).read_text(encoding="utf-8")
+
+    for contract in (
+        "sanchezcloud-scholight-mcp-delegation-secret-arn",
+        "sanchezcloud-scholight-configuration-key-arn",
+        "ScholightMcpDelegationSecretArn",
+        "ScholightMcpDelegationKmsKeyArn",
+    ):
+        assert contract in readme
+        assert contract in workflow
+    for tag in (
+        "System=SanchezCloud",
+        "Product=Scholens",
+        "Environment=production",
+        "ManagedBy=CloudFormation",
+    ):
+        assert tag in readme
+        assert tag in workflow
 
 
 def test_candidate_identity_compatibility_workflow_is_standardized() -> None:
@@ -228,8 +669,7 @@ def test_candidate_identity_compatibility_workflow_is_standardized() -> None:
 
 def test_environment_catalog_matches_shared_identity_conventions() -> None:
     catalog = (ROOT / ".env.example").read_text(encoding="utf-8")
-    compose = (PRODUCTION / "compose.yaml").read_text(encoding="utf-8")
-    runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
+    runtime = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     for variable in (
@@ -259,25 +699,21 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         assert f"{variable}=" in catalog
 
     assert not (ROOT / "server" / ".env.example").exists()
-    assert "SCHOLENS_AUTH_ACCOUNT_LOCKOUT_THRESHOLD=" in runtime
-    assert "SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS=" in runtime
-    assert "AUTH_ACCOUNT_LOCKOUT_THRESHOLD:" in compose
-    assert "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS:" in compose
-    assert "SCHOLENS_INTEGRATION_CREDENTIAL_ENCRYPTION_KEY=" in runtime
-    assert "SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET=" in runtime
-    assert "SCHOLENS_AI_DEEPSEEK_API_KEY=" in runtime
-    assert "SCHOLENS_MINERU_API_TOKEN=" not in runtime
-    assert "SCHOLENS_MOSS_API_KEY=" in runtime
-    assert "SCHOLENS_MOSS_MAX_AUDIO_BYTES=" in runtime
-    assert "SCHOLENS_JOBS_WEBHOOK_SIGNING_SECRET=" in runtime
-    assert "SCHOLENS_PAPER_SEARCH_CURSOR_SECRET=" in runtime
-    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL=" not in runtime
-    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL:" not in compose
-    assert "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:" in compose
-    assert "SCHOLIGHT_MCP_URL:" in compose
-    assert "MOSS_MAX_AUDIO_BYTES:" in compose
-    assert "SCHOLENS_AI_STRUCTURED_RETRIES:" in compose
-    assert "PAPER_SEARCH_CURSOR_SECRET:" in compose
+    for variable in (
+        "AUTH_ACCOUNT_LOCKOUT_THRESHOLD",
+        "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS",
+        "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY",
+        "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
+        "SCHOLENS_AI_DEEPSEEK_API_KEY",
+        "MOSS_API_KEY",
+        "MOSS_MAX_AUDIO_BYTES",
+        "JOBS_WEBHOOK_SIGNING_SECRET",
+        "PAPER_SEARCH_CURSOR_SECRET",
+    ):
+        assert f"Name: {variable}" in runtime
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" not in runtime
+    assert "CELERY_RESULT_BACKEND" not in runtime
+    assert "PDF_PARSE_REDIS_URL" not in runtime
     for legacy_variable in (
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
@@ -292,24 +728,28 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         assert (
             re.search(
                 rf"(?m)^\s*{re.escape(legacy_variable)}\s*[=:]",
-                catalog + runtime + compose + ci,
+                catalog + runtime + ci,
             )
             is None
         )
-    assert "EXA_API_KEY" not in catalog + runtime + compose
-    assert "FIRECRAWL_API_KEY" not in catalog + runtime + compose
+    assert "EXA_API_KEY" not in catalog + runtime
+    assert "FIRECRAWL_API_KEY" not in catalog + runtime
 
 
 def test_account_center_url_is_a_web_build_value_not_runtime_configuration() -> None:
-    readme = (PRODUCTION / "README.md").read_text(encoding="utf-8")
-    runtime = (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
-    compose = (PRODUCTION / "compose.yaml").read_text(encoding="utf-8")
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+    runtime = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
+    publish = (ROOT / ".github" / "workflows" / "publish.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" in readme
-    assert "build-time public value" in readme
-    assert re.search(r"future\s+canonical Web cutover", readme)
+    assert "Web build-time" in readme
     assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" not in runtime
-    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" not in compose
+    assert "ACCOUNT_CENTER_URL: ${{ vars.ACCOUNT_CENTER_URL }}" in publish
+    assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" in (
+        ROOT / "web" / "docker-bake.hcl"
+    ).read_text(encoding="utf-8")
 
 
 def test_local_development_uses_the_scholens_migrator_name() -> None:
@@ -319,15 +759,10 @@ def test_local_development_uses_the_scholens_migrator_name() -> None:
     assert "openpaper_local" not in development
 
 
-def test_environment_catalog_covers_code_and_compose_references() -> None:
+def test_environment_catalog_covers_code_references() -> None:
     assignment = re.compile(r"^([A-Z][A-Z0-9_]*)=", re.MULTILINE)
     catalog_variables = set(
         assignment.findall((ROOT / ".env.example").read_text(encoding="utf-8"))
-    )
-    runtime_variables = set(
-        assignment.findall(
-            (PRODUCTION / "runtime.env.example").read_text(encoding="utf-8")
-        )
     )
 
     code_patterns = (
@@ -339,6 +774,7 @@ def test_environment_catalog_covers_code_and_compose_references() -> None:
     for source_root in (
         ROOT / "server" / "app",
         ROOT / "jobs" / "src",
+        ROOT / "web" / "src",
         ROOT / "client" / "src",
     ):
         for path in source_root.rglob("*"):
@@ -348,16 +784,14 @@ def test_environment_catalog_covers_code_and_compose_references() -> None:
             for pattern in code_patterns:
                 code_variables.update(pattern.findall(source))
 
-    assert code_variables - {"NODE_ENV"} <= catalog_variables
-
-    compose = (PRODUCTION / "compose.yaml").read_text(encoding="utf-8")
-    compose_variables = set(re.findall(r"\$\{(SCHOLENS_[A-Z0-9_]+)", compose))
-    generated_release_variables = {
-        "SCHOLENS_API_IMAGE",
-        "SCHOLENS_CLIENT_IMAGE",
-        "SCHOLENS_JOBS_IMAGE",
+    platform_injected_variables = {
+        "AWS_DEFAULT_REGION",
+        "AWS_EXECUTION_ENV",
+        "AWS_LAMBDA_FUNCTION_NAME",
+        "ECS_AGENT_URI",
+        "NODE_ENV",
     }
-    assert compose_variables - generated_release_variables <= runtime_variables
+    assert code_variables - platform_injected_variables <= catalog_variables
 
 
 def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
@@ -448,16 +882,19 @@ def test_pdf_viewer_has_one_browser_only_loading_boundary() -> None:
     assert "client/public/pdf.worker.mjs" in ignore
 
 
-def test_caddy_contract_hides_internal_health_and_routes_same_origin_api() -> None:
-    caddy = (PRODUCTION / "Caddyfile.snippet").read_text(encoding="utf-8")
+def test_alb_routes_only_reviewed_public_api_prefixes() -> None:
+    template = load_template("scholens-production.yml")
+    resources = template["Resources"]
+    values = resources["ApiListenerRule"]["Properties"]["Conditions"][0][
+        "PathPatternConfig"
+    ]["Values"]
 
-    assert "{$SCHOLENS_DOMAIN}" in caddy
-    assert "respond @internal_health 404" in caddy
-    assert "handle /api/v1/*" in caddy
-    assert "handle /webhooks/v1/*" in caddy
-    assert "/internal/v1" not in caddy
-    assert "reverse_proxy scholens-api:8000" in caddy
-    assert "reverse_proxy scholens-client:3000" in caddy
+    assert values == ["/api/v1*", "/webhooks/v1*", "/mcp*", "/admin*"]
+    assert all("internal" not in value for value in values)
+    assert resources["LoadBalancer"]["Properties"]["Scheme"] == "internet-facing"
+    assert resources["WebAcl"]["Properties"]["Rules"][0]["Name"] == (
+        "RequireCloudflareOriginToken"
+    )
 
 
 def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
@@ -467,7 +904,8 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     assert "tags: scholens-api:ci" in workflow
     assert "for _ in 1 2; do" in workflow
     assert "sanchezcloud-identity migrate" in workflow
-    assert "scholens db upgrade --yes" in workflow
+    assert "--entrypoint scholens" in workflow
+    assert "db upgrade --yes --json" in workflow
     assert "scholens dev reset-product" in workflow
     assert "RESET-SCHOLENS-LOCAL" in workflow
     assert "account_plan_grants" in workflow
@@ -475,7 +913,7 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     assert "alembic downgrade b12d7d620e91" in workflow
     assert "WHERE origin_kind = 'cli'" in workflow
     assert "test_postgres_quota_invariants.py" in workflow
-    assert "scholens-api:ci alembic check" in workflow
+    assert "--entrypoint alembic" in workflow
     assert "CREATE TABLE auth.product_migrator_must_not_create" in workflow
     assert "CREATE TABLE scholens.auth_migrator_must_not_create" in workflow
 
@@ -533,7 +971,14 @@ def test_root_gate_runner_has_no_provisioning_or_runtime_side_effects() -> None:
 
 def test_external_actions_are_pinned_to_full_commit_shas() -> None:
     action_reference = re.compile(r"^\s*uses:\s*([^\s]+)@([^\s#]+)", re.MULTILINE)
-    for name in ("ci.yml", "release.yml"):
+    for name in (
+        "ci.yml",
+        "database-production.yml",
+        "infrastructure-production.yml",
+        "publish.yml",
+        "release.yml",
+        "sanchezcloud-identity-compat.yml",
+    ):
         workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
         for action, revision in action_reference.findall(workflow):
             if action.startswith("./"):

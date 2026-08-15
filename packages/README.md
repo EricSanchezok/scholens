@@ -26,7 +26,9 @@ stable primitives; each application owns its product composition.
 | Package                                                        | Public import            | Current consumers | Responsibility                                                |
 | -------------------------------------------------------------- | ------------------------ | ----------------- | ------------------------------------------------------------- |
 | [`scholens-ai`](./scholens_ai/README.md)                       | `scholens_ai`            | Server, Jobs      | Provider-neutral AI workload profiles and model construction  |
+| [`scholens-job-contracts`](./scholens_job_contracts/README.md) | `scholens_job_contracts` | Server, Jobs      | Closed background-job queue-name transport contract           |
 | [`scholens-observability`](./scholens_observability/README.md) | `scholens_observability` | Server, Jobs      | Business-agnostic logs, metrics, traces, and safe diagnostics |
+| [`scholens-runtime-contracts`](./scholens_runtime_contracts/README.md) | `scholens_runtime_contracts` | Server, Jobs | Managed cache and database endpoint validation          |
 
 ## Development
 
@@ -50,13 +52,18 @@ uv lock --check --directory server
 uv lock --check --directory jobs
 packages/.venv/bin/ruff format --check \
   packages/scholens_ai/src packages/scholens_ai/tests \
-  packages/scholens_observability/src packages/scholens_observability/tests
+  packages/scholens_job_contracts/src packages/scholens_job_contracts/tests \
+  packages/scholens_observability/src packages/scholens_observability/tests \
+  packages/scholens_runtime_contracts/src packages/scholens_runtime_contracts/tests
 packages/.venv/bin/ruff check \
   packages/scholens_ai/src packages/scholens_ai/tests \
-  packages/scholens_observability/src packages/scholens_observability/tests
+  packages/scholens_job_contracts/src packages/scholens_job_contracts/tests \
+  packages/scholens_observability/src packages/scholens_observability/tests \
+  packages/scholens_runtime_contracts/src packages/scholens_runtime_contracts/tests
 packages/.venv/bin/mypy --config-file packages/pyproject.toml \
-  packages/scholens_ai/src packages/scholens_observability/src
-PYTHONPATH=packages/scholens_ai/src:packages/scholens_observability/src \
+  packages/scholens_ai/src packages/scholens_job_contracts/src \
+  packages/scholens_observability/src packages/scholens_runtime_contracts/src
+PYTHONPATH=packages/scholens_ai/src:packages/scholens_job_contracts/src:packages/scholens_observability/src:packages/scholens_runtime_contracts/src \
   packages/.venv/bin/pytest -q \
   packages/scholens_ai/tests packages/scholens_observability/tests
 ```

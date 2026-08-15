@@ -70,7 +70,7 @@ the private file in its own working directory:
 | ------------------- | ------------------------------------------------------- |
 | `server/.env`       | Database, sanchezcloud-identity, MOSS, API integrations |
 | `jobs/.env`         | MinerU, background processing, webhook delivery         |
-| Both Python files   | S3, AI profiles, broker URLs, webhook signing secret    |
+| Both Python files   | S3, AI profiles, broker/cache URLs, webhook signing secret |
 | `web/.env.local`    | canonical `NEXT_PUBLIC_*` browser configuration         |
 | `client/.env.local` | legacy comparison client configuration                  |
 
@@ -78,9 +78,8 @@ Do not copy Python-service credentials into `client/.env.local`. Next.js only
 exposes `NEXT_PUBLIC_*` values to browser code, but keeping secrets out of the
 client build context is the safer operational boundary.
 
-**Must match across server and jobs:** `CELERY_BROKER_URL`, S3/AWS bucket vars,
-`SCHOLENS_AI_*`, and `JOBS_WEBHOOK_SIGNING_SECRET`. Server needs
-`CELERY_API_URL=http://127.0.0.1:7302`; jobs needs
+**Must match across server and jobs:** `CELERY_BROKER_URL`, `CACHE_URL`, S3/AWS
+bucket vars, `SCHOLENS_AI_*`, and `JOBS_WEBHOOK_SIGNING_SECRET`. Jobs needs
 `WEBHOOK_BASE_URL=http://127.0.0.1:7301`.
 
 AI configuration has one canonical namespace: `SCHOLENS_AI_*`. Remove obsolete
@@ -95,8 +94,7 @@ the superseded names.
 | `DATABASE_URL`                                                                                    | server                                                          |
 | `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)                 |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                           |
-| `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`                                                      | server + jobs                                                   |
-| `CELERY_API_URL`                                                                                  | server                                                          |
+| `CELERY_BROKER_URL`, `CACHE_URL`                                                                  | server + jobs                                                   |
 | `WEBHOOK_BASE_URL`                                                                                | jobs                                                            |
 | `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                          |
 | `AUTH_ALIYUN_DM_ACCESS_KEY_ID`, `AUTH_ALIYUN_DM_ACCESS_KEY_SECRET`, `AUTH_ALIYUN_DM_ACCOUNT_NAME` | server; verification/reset mail                                 |
@@ -142,8 +140,8 @@ Unless `AUTH_DATABASE_URL` is explicitly set, both sanchezcloud-identity and Sch
 - Local development always uses the shared `sanchezcloud` database at
   `127.0.0.1:55432`. The Server start command rejects every other database endpoint,
   including RDS and the ordinary local port `5432`.
-- RDS settings belong only in deployment-managed production environments; see
-  [`deploy/production/runtime.env.example`](./deploy/production/runtime.env.example).
+- RDS split fields belong only in the ECS production environment; see
+  [`deploy/ecs/README.md`](./deploy/ecs/README.md).
 - Scholens and Scholight deliberately use different JWT secrets and
   `client_id` values even though they share `auth.users`.
 - Products may use the same Aliyun DirectMail account, while keeping sender
@@ -243,9 +241,9 @@ Check: [127.0.0.1:7301/docs](http://127.0.0.1:7301/docs),
 [127.0.0.1:7306](http://127.0.0.1:7306). Confirm the worker log shows
 `celery@... ready` when using the Jobs profile.
 
-Redis is required whenever `AI_LIMIT_REDIS_URL` is configured, including Home
-conversation testing. The local value is
-`redis://127.0.0.1:56379/1`; port 6379 is the container-only port. The Compose
+Redis is required whenever `CACHE_URL` is configured, including Home
+conversation testing and resumable PDF processing. The local value is
+`redis://127.0.0.1:56379/0`; port 6379 is the container-only port. The Compose
 services use `restart: unless-stopped`, so they return with Docker after a host
 restart unless they were explicitly stopped.
 

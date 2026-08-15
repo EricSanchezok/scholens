@@ -17,7 +17,7 @@ will change:
 - [`server/README.md`](./server/README.md) and [`jobs/README.md`](./jobs/README.md)
   for the Python services;
 - [`docs/architecture/`](./docs/architecture/) for service and data ownership;
-- [`deploy/production/README.md`](./deploy/production/README.md) for the current
+- [`deploy/ecs/README.md`](./deploy/ecs/README.md) for the current
   production boundary.
 
 Do not begin by copying behavior from legacy `client/`. `web/` is the canonical
@@ -140,10 +140,10 @@ compatibility layers solely to preserve disposable pre-release product data.
 Never drop, reset, or assume ownership of the independently managed `auth`
 schema.
 
-Canonical `web/` is not yet the frontend used by the production Release and
-Compose package. Production still builds and serves legacy `client/`. A merge to
-`main` does not itself create a release, authorize deployment, or complete the
-Web production cutover.
+Canonical `web/` is the only frontend built by the ECS production release.
+Legacy `client/` remains a local comparison surface and is never packaged into
+production. A merge to `main` does not itself publish images or authorize either
+the protected database or production deployment workflow.
 
 Never commit credentials, generated provider responses containing sensitive
 content, private PDFs, ignored runtime environment files, or production

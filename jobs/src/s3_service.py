@@ -13,9 +13,6 @@ from mypy_boto3_s3 import S3Client
 
 logger = logging.getLogger(__name__)
 
-# Load AWS configuration from environment variables
-AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 
@@ -42,11 +39,8 @@ class S3Service:
     def __init__(self) -> None:
         """Initialize S3 client"""
         self.bucket_name = _required_env("S3_BUCKET_NAME")
-        self.cloudflare_bucket_name = _required_env("CLOUDFLARE_BUCKET_NAME")
         self.s3_client: S3Client = boto3.client(
             "s3",
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_REGION,
             config=Config(
                 signature_version="s3v4",

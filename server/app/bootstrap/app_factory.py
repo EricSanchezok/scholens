@@ -311,6 +311,10 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     def livez() -> dict[str, str]:
         return {"status": "ok"}
 
+    @application.get(f"{PUBLIC_API_PREFIX}/healthz", include_in_schema=False)
+    def public_healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
     @application.get("/readyz", include_in_schema=False)
     def readyz() -> dict[str, str]:
         with SessionLocal() as session:

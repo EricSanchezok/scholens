@@ -1,0 +1,3072 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Scholens canonical Web, API, workers, and schedules on ECS Fargate
+Parameters:
+  DomainName:
+    Type: String
+    Default: scholens.sanchezcloud.net
+    AllowedPattern: ^[A-Za-z0-9.-]+$
+  CertificateArn:
+    Type: String
+    AllowedPattern: ^arn:[^:]+:acm:[^:]+:[0-9]{12}:certificate/[0-9a-f-]+$
+  RdsSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+  WebImage:
+    Type: String
+    AllowedPattern: 
+      ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/sanchezcloud-scholens-web@sha256:[0-9a-f]{64}$
+  ApiImage:
+    Type: String
+    AllowedPattern: 
+      ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/sanchezcloud-scholens-api@sha256:[0-9a-f]{64}$
+  JobsImage:
+    Type: String
+    AllowedPattern: 
+      ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/sanchezcloud-scholens-jobs@sha256:[0-9a-f]{64}$
+  ReleaseSha:
+    Type: String
+    AllowedPattern: ^[0-9a-f]{40}$
+  ApplicationEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'false'
+    - 'true'
+  SchedulerState:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+    - DISABLED
+    - ENABLED
+  StripeMonthlyPriceId:
+    Type: String
+    Default: ''
+  StripeYearlyPriceId:
+    Type: String
+    Default: ''
+  PostHogApiKey:
+    Type: String
+    Default: ''
+  WebRequestsPerTarget:
+    Type: Number
+    Default: 600
+    MinValue: 1
+  ApiRequestsPerTarget:
+    Type: Number
+    Default: 300
+    MinValue: 1
+  AdotImage:
+    Type: String
+    Default: 
+      public.ecr.aws/aws-observability/aws-otel-collector@sha256:89f97137f225aa96e055fee127de0ce0650e71ecc860bf862bf6aa55c49ba698
+    AllowedPattern: 
+      ^public\.ecr\.aws/aws-observability/aws-otel-collector@sha256:[0-9a-f]{64}$
+Rules:
+  SchedulesRequireApplication:
+    Assertions:
+    - Assert:
+        Fn::Or:
+        - Fn::Equals:
+          - Ref: SchedulerState
+          - DISABLED
+        - Fn::Equals:
+          - Ref: ApplicationEnabled
+          - 'true'
+      AssertDescription: Schedules require the Scholens application to be 
+        enabled
+Conditions:
+  RunApplication:
+    Fn::Equals:
+    - Ref: ApplicationEnabled
+    - 'true'
+Resources:
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Scholens public ALB
+      VpcId:
+        Fn::ImportValue: sanchezcloud-production-vpc-id
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: -1
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  WebIngressFromLoadBalancer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+      IpProtocol: tcp
+      FromPort: 3000
+      ToPort: 3000
+      SourceSecurityGroupId:
+        Ref: LoadBalancerSecurityGroup
+      Description: Canonical Web traffic from the ALB
+  ApiIngressFromLoadBalancer:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId:
+        Ref: LoadBalancerSecurityGroup
+      Description: Public API traffic from the ALB
+  ApiIngressFromTasks:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+      IpProtocol: tcp
+      FromPort: 8000
+      ToPort: 8000
+      SourceSecurityGroupId:
+        Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+      Description: Private callbacks from Scholens workers and schedules
+  DatabaseIngressFromTasks:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:
+        Ref: RdsSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId:
+        Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+      Description: Scholens application and migration traffic
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: sanchezcloud-scholens
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: dualstack
+      SecurityGroups:
+      - Ref: LoadBalancerSecurityGroup
+      Subnets:
+      - Fn::ImportValue: sanchezcloud-production-public-subnet-1
+      - Fn::ImportValue: sanchezcloud-production-public-subnet-2
+      LoadBalancerAttributes:
+      - Key: deletion_protection.enabled
+        Value: 'true'
+      - Key: idle_timeout.timeout_seconds
+        Value: '300'
+      - Key: routing.http.drop_invalid_header_fields.enabled
+        Value: 'true'
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: scholens-web
+      VpcId:
+        Fn::ImportValue: sanchezcloud-production-vpc-id
+      Port: 3000
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /healthz
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '60'
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ApiTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: scholens-api
+      VpcId:
+        Fn::ImportValue: sanchezcloud-production-vpc-id
+      Port: 8000
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /readyz
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '60'
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn:
+        Ref: LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+      - Type: redirect
+        RedirectConfig:
+          Protocol: HTTPS
+          Port: '443'
+          StatusCode: HTTP_301
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn:
+        Ref: LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+      - CertificateArn:
+          Ref: CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebTargetGroup
+  ApiListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn:
+        Ref: HttpsListener
+      Priority: 10
+      Conditions:
+      - Field: path-pattern
+        PathPatternConfig:
+          Values:
+          - /api/v1*
+          - /webhooks/v1*
+          - /mcp*
+          - /admin*
+      Actions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: ApiTargetGroup
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: sanchezcloud-scholens
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: sanchezcloud-scholens
+        SampledRequestsEnabled: true
+      Rules:
+      - Name: RequireCloudflareOriginToken
+        Priority: 0
+        Action:
+          Block: {}
+        Statement:
+          NotStatement:
+            Statement:
+              ByteMatchStatement:
+                FieldToMatch:
+                  SingleHeader:
+                    Name: x-scholens-origin
+                PositionalConstraint: EXACTLY
+                SearchString:
+                  Fn::Sub:
+                  - '{{resolve:secretsmanager:${Secret}:SecretString:origin_token}}'
+                  - Secret:
+                      Fn::ImportValue: sanchezcloud-scholens-edge-secret-arn
+                TextTransformations:
+                - Priority: 0
+                  Type: NONE
+        VisibilityConfig:
+          CloudWatchMetricsEnabled: true
+          MetricName: scholens-origin-token
+          SampledRequestsEnabled: false
+      - Name: CommonThreats
+        Priority: 10
+        OverrideAction:
+          None: {}
+        Statement:
+          ManagedRuleGroupStatement:
+            VendorName: AWS
+            Name: AWSManagedRulesCommonRuleSet
+            ExcludedRules:
+            - Name: SizeRestrictions_BODY
+        VisibilityConfig:
+          CloudWatchMetricsEnabled: true
+          MetricName: scholens-common-threats
+          SampledRequestsEnabled: true
+      - Name: IpReputation
+        Priority: 20
+        OverrideAction:
+          None: {}
+        Statement:
+          ManagedRuleGroupStatement:
+            VendorName: AWS
+            Name: AWSManagedRulesAmazonIpReputationList
+        VisibilityConfig:
+          CloudWatchMetricsEnabled: true
+          MetricName: scholens-ip-reputation
+          SampledRequestsEnabled: true
+      - Name: CloudflareClientRateLimit
+        Priority: 30
+        Action:
+          Block: {}
+        Statement:
+          RateBasedStatement:
+            Limit: 2000
+            AggregateKeyType: FORWARDED_IP
+            ForwardedIPConfig:
+              HeaderName: CF-Connecting-IP
+              FallbackBehavior: MATCH
+        VisibilityConfig:
+          CloudWatchMetricsEnabled: true
+          MetricName: scholens-client-rate
+          SampledRequestsEnabled: true
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  WebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn:
+        Ref: LoadBalancer
+      WebACLArn:
+        Fn::GetAtt:
+        - WebAcl
+        - Arn
+  ApiDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: scholens-api
+      NamespaceId:
+        Fn::ImportValue: sanchezcloud-production-namespace-id
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+        - Type: A
+          TTL: 10
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  TelemetryPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: SanchezCloudScholensTelemetry
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+          Resource: '*'
+        - Effect: Allow
+          Action: cloudwatch:PutMetricData
+          Resource: '*'
+          Condition:
+            StringEquals:
+              cloudwatch:namespace: Scholens/Production
+        - Effect: Allow
+          Action:
+          - logs:CreateLogStream
+          - logs:DescribeLogStreams
+          - logs:PutLogEvents
+          Resource:
+            Fn::Sub: 
+              arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*
+      Roles:
+      - Ref: ApiTaskRole
+      - Ref: DocumentWorkerTaskRole
+      - Ref: ResearchWorkerTaskRole
+      - Ref: MaintenanceWorkerTaskRole
+  ApiTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensApiTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: ScholensApiDataPlane
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:AbortMultipartUpload
+            - s3:DeleteObject
+            - s3:GetObject
+            - s3:ListBucket
+            - s3:PutObject
+            Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+            - Fn::Sub:
+              - ${BucketArn}/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-content-key-arn
+          - Effect: Allow
+            Action: sqs:SendMessage
+            Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-document-queue-arn
+            - Fn::ImportValue: sanchezcloud-scholens-research-queue-arn
+            - Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-arn
+          - Effect: Allow
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub:
+              - ${BucketArn}/api/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  DocumentWorkerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensDocumentWorkerTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: DocumentWorkerDataPlane
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - sqs:ChangeMessageVisibility
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            - sqs:GetQueueUrl
+            - sqs:ReceiveMessage
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-document-queue-arn
+          - Effect: Allow
+            Action:
+            - s3:DeleteObject
+            - s3:GetObject
+            - s3:ListBucket
+            - s3:PutObject
+            Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+            - Fn::Sub:
+              - ${BucketArn}/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-content-key-arn
+          - Effect: Allow
+            Action: ecs:UpdateTaskProtection
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::ImportValue: sanchezcloud-production-cluster-arn
+          - Effect: Allow
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub:
+              - ${BucketArn}/workers/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ResearchWorkerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensResearchWorkerTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: ResearchWorkerDataPlane
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - sqs:ChangeMessageVisibility
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            - sqs:GetQueueUrl
+            - sqs:ReceiveMessage
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-research-queue-arn
+          - Effect: Allow
+            Action:
+            - s3:DeleteObject
+            - s3:GetObject
+            - s3:ListBucket
+            - s3:PutObject
+            Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+            - Fn::Sub:
+              - ${BucketArn}/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-content-key-arn
+          - Effect: Allow
+            Action: ecs:UpdateTaskProtection
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::ImportValue: sanchezcloud-production-cluster-arn
+          - Effect: Allow
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub:
+              - ${BucketArn}/workers/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  MaintenanceWorkerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensMaintenanceWorkerTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: MaintenanceWorkerDataPlane
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - sqs:ChangeMessageVisibility
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            - sqs:GetQueueUrl
+            - sqs:ReceiveMessage
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-arn
+          - Effect: Allow
+            Action:
+            - s3:DeleteObject
+            - s3:GetObject
+            - s3:ListBucket
+            - s3:PutObject
+            Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+            - Fn::Sub:
+              - ${BucketArn}/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Decrypt
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-content-key-arn
+          - Effect: Allow
+            Action: ecs:UpdateTaskProtection
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::ImportValue: sanchezcloud-production-cluster-arn
+          - Effect: Allow
+            Action: s3:PutObject
+            Resource:
+              Fn::Sub:
+              - ${BucketArn}/workers/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-arn
+          - Effect: Allow
+            Action:
+            - kms:Encrypt
+            - kms:GenerateDataKey
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  MigrationTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensMigrationTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  SchedulerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensSchedulerTaskRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  SchedulerInvocationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SanchezCloudScholensSchedulerInvocationRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: scheduler.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: RunScholensSchedule
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: ecs:RunTask
+            Resource:
+              Ref: SchedulerTaskDefinition
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::ImportValue: sanchezcloud-production-cluster-arn
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+            - Fn::GetAtt:
+              - SchedulerTaskRole
+              - Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
+          - Effect: Allow
+            Action: sqs:SendMessage
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-scheduler-dlq-arn
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  WebLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/web
+      RetentionInDays: 30
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/api
+      RetentionInDays: 30
+  DocumentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/document-worker
+      RetentionInDays: 30
+  ResearchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/research-worker
+      RetentionInDays: 30
+  MaintenanceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/maintenance-worker
+      RetentionInDays: 30
+  SchedulerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/scheduler
+      RetentionInDays: 30
+  MigrationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/migration
+      RetentionInDays: 30
+  MetricsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/metrics
+      RetentionInDays: 30
+  WebTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-web
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+      - Name: web
+        Image:
+          Ref: WebImage
+        Essential: true
+        PortMappings:
+        - Name: web
+          ContainerPort: 3000
+          Protocol: tcp
+          AppProtocol: http
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        StopTimeout: 120
+        HealthCheck:
+          Command:
+          - CMD-SHELL
+          - wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1
+          Interval: 30
+          Timeout: 5
+          Retries: 3
+          StartPeriod: 20
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: WebLogGroup
+            awslogs-stream-prefix: web
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ApiTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-api
+      Cpu: '1024'
+      Memory: '2048'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - ApiTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: api
+        Image:
+          Ref: ApiImage
+        Essential: true
+        Cpu: 768
+        MemoryReservation: 1408
+        PortMappings:
+        - Name: api
+          ContainerPort: 8000
+          Protocol: tcp
+          AppProtocol: http
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        StopTimeout: 120
+        DependsOn:
+        - ContainerName: adot
+          Condition: START
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: RELEASE_SHA
+          Value:
+            Ref: ReleaseSha
+        - Name: PORT
+          Value: '8000'
+        - Name: WEB_CONCURRENCY
+          Value: '2'
+        - Name: HOME
+          Value: /tmp
+        - Name: CLIENT_DOMAIN
+          Value:
+            Fn::Sub: https://${DomainName}
+        - Name: AUTH_PUBLIC_WEB_URL
+          Value:
+            Fn::Sub: https://${DomainName}
+        - Name: AUTH_PG_SSL_ROOT_CERT
+          Value: /etc/ssl/certs/global-bundle.pem
+        - Name: AUTH_PG_POOL_MIN_SIZE
+          Value: '2'
+        - Name: AUTH_PG_POOL_MAX_SIZE
+          Value: '10'
+        - Name: AUTH_JWT_ACCESS_TOKEN_TTL_MINUTES
+          Value: '15'
+        - Name: AUTH_JWT_REFRESH_TOKEN_TTL_DAYS
+          Value: '7'
+        - Name: AUTH_ACCOUNT_LOCKOUT_THRESHOLD
+          Value: '5'
+        - Name: AUTH_ACCOUNT_LOCKOUT_DURATION_MINUTES
+          Value: '15'
+        - Name: AUTH_ALIYUN_DM_FROM_ALIAS
+          Value: Scholens
+        - Name: AUTH_ALIYUN_DM_REPLY_TO_ADDRESS
+          Value: 'true'
+        - Name: FORWARDED_ALLOW_IPS
+          Value:
+            Fn::ImportValue: sanchezcloud-production-vpc-cidr
+        - Name: PAPER_SEARCH_BACKEND
+          Value: postgres_fts
+        - Name: CELERY_BROKER_URL
+          Value: sqs://
+        - Name: SQS_DOCUMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_RESEARCH_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-research-queue-url
+        - Name: SQS_MAINTENANCE_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-url
+        - Name: AWS_REGION
+          Value:
+            Ref: AWS::Region
+        - Name: S3_BUCKET_NAME
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-bucket-name
+        - Name: CACHE_HOST
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-endpoint
+        - Name: CACHE_PORT
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-port
+        - Name: CACHE_TLS
+          Value: 'true'
+        - Name: WEBHOOK_BASE_URL
+          Value: http://scholens-api.production.svc.sanchezcloud:8000
+        - Name: JOB_DISPATCH_INTERVAL_SECONDS
+          Value: '1'
+        - Name: JOB_DISPATCH_PUBLISH_LEASE_SECONDS
+          Value: '30'
+        - Name: AI_MAX_INTERACTIVE_PER_USER
+          Value: '8'
+        - Name: AI_MAX_BACKGROUND_PER_USER
+          Value: '4'
+        - Name: AI_MAX_AUDIO_PER_USER
+          Value: '2'
+        - Name: AI_RATE_WINDOW_SECONDS
+          Value: '60'
+        - Name: AI_RATE_PER_USER
+          Value: '60'
+        - Name: AI_RATE_PER_IP
+          Value: '120'
+        - Name: AI_CONCURRENCY_TTL_SECONDS
+          Value: '7200'
+        - Name: SCHOLENS_AI_DEEPSEEK_BASE_URL
+          Value: https://api.deepseek.com
+        - Name: SCHOLENS_AI_STANDARD_MODEL
+          Value: deepseek:deepseek-v4-flash
+        - Name: SCHOLENS_AI_STANDARD_THINKING
+          Value: disabled
+        - Name: SCHOLENS_AI_STANDARD_THINKING_EFFORT
+          Value: none
+        - Name: SCHOLENS_AI_DEEP_MODEL
+          Value: deepseek:deepseek-v4-pro
+        - Name: SCHOLENS_AI_DEEP_THINKING
+          Value: enabled
+        - Name: SCHOLENS_AI_DEEP_THINKING_EFFORT
+          Value: max
+        - Name: SCHOLENS_AI_TRANSLATION_MODEL
+          Value: deepseek:deepseek-v4-flash
+        - Name: SCHOLENS_AI_TRANSLATION_THINKING
+          Value: disabled
+        - Name: SCHOLENS_AI_TRANSLATION_THINKING_EFFORT
+          Value: none
+        - Name: SCHOLENS_AI_REQUEST_TIMEOUT_SECONDS
+          Value: '120'
+        - Name: SCHOLENS_AI_MAX_OUTPUT_TOKENS
+          Value: '393216'
+        - Name: SCHOLENS_AI_MAX_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_STRUCTURED_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_MAX_INPUT_CHARS
+          Value: '300000'
+        - Name: SCHOLIGHT_MCP_URL
+          Value: https://scholight.sanchezcloud.net/api/mcp
+        - Name: STRIPE_MONTHLY_PRICE_ID
+          Value:
+            Ref: StripeMonthlyPriceId
+        - Name: STRIPE_YEARLY_PRICE_ID
+          Value:
+            Ref: StripeYearlyPriceId
+        - Name: ZOTERO_REDIRECT_URI
+          Value:
+            Fn::Sub: 
+              https://${DomainName}/api/v1/integrations/zotero/oauth/callback
+        - Name: SOURCE_REPOSITORY_URL
+          Value: https://github.com/EricSanchezok/scholens
+        - Name: POSTHOG_API_KEY
+          Value:
+            Ref: PostHogApiKey
+        - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+          Value: http://127.0.0.1:4317
+        - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
+        - Name: DIAGNOSTIC_SNAPSHOT_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+        - Name: DIAGNOSTIC_SUCCESS_SAMPLE_RATE
+          Value: '0.01'
+        - Name: DEBUG
+          Value: 'false'
+        Secrets:
+        - Name: DATABASE_HOST
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:host::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_PORT
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:port::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_NAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:dbname::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: AUTH_JWT_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:auth_jwt_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: ADMIN_SESSION_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:admin_session_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: PAPER_SEARCH_CURSOR_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:paper_search_cursor_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: JOBS_WEBHOOK_SIGNING_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:jobs_webhook_signing_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: INTEGRATION_CREDENTIAL_ENCRYPTION_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:integration_credential_encryption_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: CACHE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-api-cache-secret-arn
+        - Name: CACHE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-api-cache-secret-arn
+        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:deepseek_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: SCHOLENS_AI_OPENAI_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:openai_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: OPENALEX_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:openalex_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: AUTH_ALIYUN_DM_ACCESS_KEY_ID
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:aliyun_access_key_id::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: AUTH_ALIYUN_DM_ACCESS_KEY_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:aliyun_access_key_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: AUTH_ALIYUN_DM_ACCOUNT_NAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:aliyun_account_name::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: RESEND_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:resend_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: RESEND_FROM_ADDRESS
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:resend_from_address::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: RESEND_REPLY_TO_ADDRESS
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:resend_reply_to_address::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: PROFILE_NOTIFICATION_EMAIL
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:profile_notification_email::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
+        - Name: STRIPE_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:stripe_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-billing-secret-arn
+        - Name: STRIPE_WEBHOOK_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:stripe_webhook_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-billing-secret-arn
+        - Name: ZOTERO_CLIENT_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:zotero_client_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-integrations-secret-arn
+        - Name: ZOTERO_CLIENT_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:zotero_client_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-integrations-secret-arn
+        - Name: SCHOLIGHT_MCP_DELEGATION_JWT_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:mcp_delegation_jwt_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-scholight-mcp-delegation-secret-arn
+        HealthCheck:
+          Command:
+          - CMD
+          - python
+          - -c
+          - import urllib.request; 
+            urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=3)
+          Interval: 30
+          Timeout: 5
+          Retries: 3
+          StartPeriod: 20
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: ApiLogGroup
+            awslogs-stream-prefix: api
+      - Name: adot
+        Image:
+          Ref: AdotImage
+        Essential: false
+        Cpu: 256
+        MemoryReservation: 512
+        Environment:
+        - Name: AOT_CONFIG_CONTENT
+          Value: "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint:
+            0.0.0.0:4317\nprocessors:\n  memory_limiter:\n    check_interval: 1s\n\
+            \    limit_mib: 384\n  batch: {}\nexporters:\n  awsxray: {}\n  awsemf:\n\
+            \    namespace: Scholens/Production\n    log_group_name: /sanchezcloud/scholens/metrics\n\
+            service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors:
+            [memory_limiter, batch]\n      exporters: [awsxray]\n    metrics:\n  \
+            \    receivers: [otlp]\n      processors: [memory_limiter, batch]\n  \
+            \    exporters: [awsemf]\n"
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MetricsLogGroup
+            awslogs-stream-prefix: adot
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  MigrationTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-migration
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - MigrationTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: migration
+        Image:
+          Ref: ApiImage
+        Essential: true
+        Command:
+        - migrate
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: AUTH_PG_SSL_ROOT_CERT
+          Value: /etc/ssl/certs/global-bundle.pem
+        - Name: HOME
+          Value: /tmp
+        Secrets:
+        - Name: DATABASE_HOST
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:host::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-migrator-secret-arn
+        - Name: DATABASE_PORT
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:port::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-migrator-secret-arn
+        - Name: DATABASE_NAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:dbname::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-migrator-secret-arn
+        - Name: DATABASE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-migrator-secret-arn
+        - Name: DATABASE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: 
+                  sanchezcloud-scholens-database-migrator-secret-arn
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MigrationLogGroup
+            awslogs-stream-prefix: migration
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  DocumentWorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-document-worker
+      Cpu: '2048'
+      Memory: '4096'
+      EphemeralStorage:
+        SizeInGiB: 50
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - DocumentWorkerTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: document-worker
+        Image:
+          Ref: JobsImage
+        Essential: true
+        Cpu: 1792
+        MemoryReservation: 3328
+        Command:
+        - celery
+        - --app
+        - src.celery_app
+        - worker
+        - --loglevel=info
+        - --concurrency=1
+        - --queues=document
+        - --without-gossip
+        - --without-mingle
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        StopTimeout: 120
+        DependsOn:
+        - ContainerName: adot
+          Condition: START
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: RELEASE_SHA
+          Value:
+            Ref: ReleaseSha
+        - Name: HOME
+          Value: /tmp
+        - Name: CELERY_BROKER_URL
+          Value: sqs://
+        - Name: SQS_DOCUMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_RESEARCH_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-research-queue-url
+        - Name: SQS_MAINTENANCE_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-url
+        - Name: AWS_REGION
+          Value:
+            Ref: AWS::Region
+        - Name: S3_BUCKET_NAME
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-bucket-name
+        - Name: CACHE_HOST
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-endpoint
+        - Name: CACHE_PORT
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-port
+        - Name: CACHE_TLS
+          Value: 'true'
+        - Name: WEBHOOK_BASE_URL
+          Value: http://scholens-api.production.svc.sanchezcloud:8000
+        - Name: MINERU_API_BASE_URL
+          Value: https://mineru.net/api/v4
+        - Name: MINERU_MODEL_VERSION
+          Value: vlm
+        - Name: MINERU_POLL_INTERVAL_SECONDS
+          Value: '3'
+        - Name: MINERU_TASK_TIMEOUT_SECONDS
+          Value: '600'
+        - Name: MINERU_REQUEST_TIMEOUT_SECONDS
+          Value: '60'
+        - Name: MINERU_MAX_ARCHIVE_BYTES
+          Value: '268435456'
+        - Name: MOSS_API_BASE_URL
+          Value: https://api.mosi.cn/v1
+        - Name: MOSS_TTS_MODEL
+          Value: moss-tts
+        - Name: MOSS_POLL_INTERVAL_SECONDS
+          Value: '3'
+        - Name: MOSS_TASK_TIMEOUT_SECONDS
+          Value: '600'
+        - Name: MOSS_MAX_AUDIO_BYTES
+          Value: '104857600'
+        - Name: SCHOLENS_AI_DEEPSEEK_BASE_URL
+          Value: https://api.deepseek.com
+        - Name: SCHOLENS_AI_STANDARD_MODEL
+          Value: deepseek:deepseek-v4-flash
+        - Name: SCHOLENS_AI_STANDARD_THINKING
+          Value: disabled
+        - Name: SCHOLENS_AI_STANDARD_THINKING_EFFORT
+          Value: none
+        - Name: SCHOLENS_AI_REQUEST_TIMEOUT_SECONDS
+          Value: '120'
+        - Name: SCHOLENS_AI_MAX_OUTPUT_TOKENS
+          Value: '393216'
+        - Name: SCHOLENS_AI_MAX_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_STRUCTURED_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_MAX_INPUT_CHARS
+          Value: '300000'
+        - Name: POSTHOG_API_KEY
+          Value:
+            Ref: PostHogApiKey
+        - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+          Value: http://127.0.0.1:4317
+        - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
+        - Name: DIAGNOSTIC_SNAPSHOT_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+        - Name: DIAGNOSTIC_SUCCESS_SAMPLE_RATE
+          Value: '0.01'
+        - Name: DEBUG
+          Value: 'false'
+        Secrets:
+        - Name: JOBS_WEBHOOK_SIGNING_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:jobs_webhook_signing_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: CACHE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
+        - Name: CACHE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
+        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:deepseek_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: SCHOLENS_AI_OPENAI_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:openai_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: MOSS_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:moss_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: MOSS_VOICE_ID
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:moss_voice_id::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: DocumentLogGroup
+            awslogs-stream-prefix: document
+      - Name: adot
+        Image:
+          Ref: AdotImage
+        Essential: false
+        Cpu: 256
+        MemoryReservation: 512
+        Environment:
+        - Name: AOT_CONFIG_CONTENT
+          Value: "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint:
+            0.0.0.0:4317\nprocessors:\n  memory_limiter:\n    check_interval: 1s\n\
+            \    limit_mib: 384\n  batch: {}\nexporters:\n  awsxray: {}\n  awsemf:\n\
+            \    namespace: Scholens/Production\n    log_group_name: /sanchezcloud/scholens/metrics\n\
+            service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors:
+            [memory_limiter, batch]\n      exporters: [awsxray]\n    metrics:\n  \
+            \    receivers: [otlp]\n      processors: [memory_limiter, batch]\n  \
+            \    exporters: [awsemf]\n"
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MetricsLogGroup
+            awslogs-stream-prefix: adot
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ResearchWorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-research-worker
+      Cpu: '1024'
+      Memory: '2048'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - ResearchWorkerTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: research-worker
+        Image:
+          Ref: JobsImage
+        Essential: true
+        Cpu: 768
+        MemoryReservation: 1408
+        Command:
+        - celery
+        - --app
+        - src.celery_app
+        - worker
+        - --loglevel=info
+        - --concurrency=1
+        - --queues=research
+        - --without-gossip
+        - --without-mingle
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        StopTimeout: 120
+        DependsOn:
+        - ContainerName: adot
+          Condition: START
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: RELEASE_SHA
+          Value:
+            Ref: ReleaseSha
+        - Name: HOME
+          Value: /tmp
+        - Name: CELERY_BROKER_URL
+          Value: sqs://
+        - Name: SQS_DOCUMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_RESEARCH_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-research-queue-url
+        - Name: SQS_MAINTENANCE_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-url
+        - Name: AWS_REGION
+          Value:
+            Ref: AWS::Region
+        - Name: S3_BUCKET_NAME
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-bucket-name
+        - Name: CACHE_HOST
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-endpoint
+        - Name: CACHE_PORT
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-port
+        - Name: CACHE_TLS
+          Value: 'true'
+        - Name: WEBHOOK_BASE_URL
+          Value: http://scholens-api.production.svc.sanchezcloud:8000
+        - Name: MINERU_API_BASE_URL
+          Value: https://mineru.net/api/v4
+        - Name: MINERU_MODEL_VERSION
+          Value: vlm
+        - Name: MINERU_POLL_INTERVAL_SECONDS
+          Value: '3'
+        - Name: MINERU_TASK_TIMEOUT_SECONDS
+          Value: '600'
+        - Name: MINERU_REQUEST_TIMEOUT_SECONDS
+          Value: '60'
+        - Name: MINERU_MAX_ARCHIVE_BYTES
+          Value: '268435456'
+        - Name: MOSS_API_BASE_URL
+          Value: https://api.mosi.cn/v1
+        - Name: MOSS_TTS_MODEL
+          Value: moss-tts
+        - Name: MOSS_POLL_INTERVAL_SECONDS
+          Value: '3'
+        - Name: MOSS_TASK_TIMEOUT_SECONDS
+          Value: '600'
+        - Name: MOSS_MAX_AUDIO_BYTES
+          Value: '104857600'
+        - Name: SCHOLENS_AI_DEEPSEEK_BASE_URL
+          Value: https://api.deepseek.com
+        - Name: SCHOLENS_AI_STANDARD_MODEL
+          Value: deepseek:deepseek-v4-flash
+        - Name: SCHOLENS_AI_STANDARD_THINKING
+          Value: disabled
+        - Name: SCHOLENS_AI_STANDARD_THINKING_EFFORT
+          Value: none
+        - Name: SCHOLENS_AI_REQUEST_TIMEOUT_SECONDS
+          Value: '120'
+        - Name: SCHOLENS_AI_MAX_OUTPUT_TOKENS
+          Value: '393216'
+        - Name: SCHOLENS_AI_MAX_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_STRUCTURED_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_MAX_INPUT_CHARS
+          Value: '300000'
+        - Name: POSTHOG_API_KEY
+          Value:
+            Ref: PostHogApiKey
+        - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+          Value: http://127.0.0.1:4317
+        - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
+        - Name: DIAGNOSTIC_SNAPSHOT_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+        - Name: DIAGNOSTIC_SUCCESS_SAMPLE_RATE
+          Value: '0.01'
+        - Name: DEBUG
+          Value: 'false'
+        Secrets:
+        - Name: JOBS_WEBHOOK_SIGNING_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:jobs_webhook_signing_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: CACHE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
+        - Name: CACHE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
+        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:deepseek_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: SCHOLENS_AI_OPENAI_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:openai_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: MOSS_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:moss_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: MOSS_VOICE_ID
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:moss_voice_id::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: ResearchLogGroup
+            awslogs-stream-prefix: research
+      - Name: adot
+        Image:
+          Ref: AdotImage
+        Essential: false
+        Cpu: 256
+        MemoryReservation: 512
+        Environment:
+        - Name: AOT_CONFIG_CONTENT
+          Value: "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint:
+            0.0.0.0:4317\nprocessors:\n  memory_limiter:\n    check_interval: 1s\n\
+            \    limit_mib: 384\n  batch: {}\nexporters:\n  awsxray: {}\n  awsemf:\n\
+            \    namespace: Scholens/Production\n    log_group_name: /sanchezcloud/scholens/metrics\n\
+            service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors:
+            [memory_limiter, batch]\n      exporters: [awsxray]\n    metrics:\n  \
+            \    receivers: [otlp]\n      processors: [memory_limiter, batch]\n  \
+            \    exporters: [awsemf]\n"
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MetricsLogGroup
+            awslogs-stream-prefix: adot
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  MaintenanceWorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-maintenance-worker
+      Cpu: '512'
+      Memory: '1024'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - MaintenanceWorkerTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: maintenance-worker
+        Image:
+          Ref: JobsImage
+        Essential: true
+        Cpu: 256
+        MemoryReservation: 512
+        Command:
+        - celery
+        - --app
+        - src.celery_app
+        - worker
+        - --loglevel=info
+        - --concurrency=1
+        - --queues=maintenance
+        - --without-gossip
+        - --without-mingle
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        StopTimeout: 120
+        DependsOn:
+        - ContainerName: adot
+          Condition: START
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: RELEASE_SHA
+          Value:
+            Ref: ReleaseSha
+        - Name: HOME
+          Value: /tmp
+        - Name: CELERY_BROKER_URL
+          Value: sqs://
+        - Name: SQS_DOCUMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_RESEARCH_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-research-queue-url
+        - Name: SQS_MAINTENANCE_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-url
+        - Name: AWS_REGION
+          Value:
+            Ref: AWS::Region
+        - Name: S3_BUCKET_NAME
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-bucket-name
+        - Name: CACHE_HOST
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-endpoint
+        - Name: CACHE_PORT
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-port
+        - Name: CACHE_TLS
+          Value: 'true'
+        - Name: WEBHOOK_BASE_URL
+          Value: http://scholens-api.production.svc.sanchezcloud:8000
+        - Name: MINERU_API_BASE_URL
+          Value: https://mineru.net/api/v4
+        - Name: MINERU_MODEL_VERSION
+          Value: vlm
+        - Name: MINERU_POLL_INTERVAL_SECONDS
+          Value: '3'
+        - Name: MINERU_TASK_TIMEOUT_SECONDS
+          Value: '600'
+        - Name: MINERU_REQUEST_TIMEOUT_SECONDS
+          Value: '60'
+        - Name: MINERU_MAX_ARCHIVE_BYTES
+          Value: '268435456'
+        - Name: MOSS_API_BASE_URL
+          Value: https://api.mosi.cn/v1
+        - Name: MOSS_TTS_MODEL
+          Value: moss-tts
+        - Name: MOSS_POLL_INTERVAL_SECONDS
+          Value: '3'
+        - Name: MOSS_TASK_TIMEOUT_SECONDS
+          Value: '600'
+        - Name: MOSS_MAX_AUDIO_BYTES
+          Value: '104857600'
+        - Name: SCHOLENS_AI_DEEPSEEK_BASE_URL
+          Value: https://api.deepseek.com
+        - Name: SCHOLENS_AI_STANDARD_MODEL
+          Value: deepseek:deepseek-v4-flash
+        - Name: SCHOLENS_AI_STANDARD_THINKING
+          Value: disabled
+        - Name: SCHOLENS_AI_STANDARD_THINKING_EFFORT
+          Value: none
+        - Name: SCHOLENS_AI_REQUEST_TIMEOUT_SECONDS
+          Value: '120'
+        - Name: SCHOLENS_AI_MAX_OUTPUT_TOKENS
+          Value: '393216'
+        - Name: SCHOLENS_AI_MAX_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_STRUCTURED_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_MAX_INPUT_CHARS
+          Value: '300000'
+        - Name: POSTHOG_API_KEY
+          Value:
+            Ref: PostHogApiKey
+        - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+          Value: http://127.0.0.1:4317
+        - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
+        - Name: DIAGNOSTIC_SNAPSHOT_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+        - Name: DIAGNOSTIC_SUCCESS_SAMPLE_RATE
+          Value: '0.01'
+        - Name: DEBUG
+          Value: 'false'
+        Secrets:
+        - Name: JOBS_WEBHOOK_SIGNING_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:jobs_webhook_signing_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: CACHE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
+        - Name: CACHE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-jobs-cache-secret-arn
+        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:deepseek_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: SCHOLENS_AI_OPENAI_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:openai_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: MOSS_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:moss_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: MOSS_VOICE_ID
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:moss_voice_id::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MaintenanceLogGroup
+            awslogs-stream-prefix: maintenance
+      - Name: adot
+        Image:
+          Ref: AdotImage
+        Essential: false
+        Cpu: 256
+        MemoryReservation: 512
+        Environment:
+        - Name: AOT_CONFIG_CONTENT
+          Value: "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint:
+            0.0.0.0:4317\nprocessors:\n  memory_limiter:\n    check_interval: 1s\n\
+            \    limit_mib: 384\n  batch: {}\nexporters:\n  awsxray: {}\n  awsemf:\n\
+            \    namespace: Scholens/Production\n    log_group_name: /sanchezcloud/scholens/metrics\n\
+            service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors:
+            [memory_limiter, batch]\n      exporters: [awsxray]\n    metrics:\n  \
+            \    receivers: [otlp]\n      processors: [memory_limiter, batch]\n  \
+            \    exporters: [awsemf]\n"
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MetricsLogGroup
+            awslogs-stream-prefix: adot
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  SchedulerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-scheduler
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - SchedulerTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: scheduler
+        Image:
+          Ref: JobsImage
+        Essential: true
+        Command:
+        - python
+        - -m
+        - src.schedule_zotero
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: WEBHOOK_BASE_URL
+          Value: http://scholens-api.production.svc.sanchezcloud:8000
+        - Name: ZOTERO_SYNC_INTERVAL_SECONDS
+          Value: '86400'
+        Secrets:
+        - Name: JOBS_WEBHOOK_SIGNING_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:jobs_webhook_signing_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: SchedulerLogGroup
+            awslogs-stream-prefix: scheduler
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  WebService:
+    Type: AWS::ECS::Service
+    DependsOn: HttpsListener
+    Properties:
+      ServiceName: scholens-web
+      Cluster:
+        Fn::ImportValue: sanchezcloud-production-cluster-arn
+      TaskDefinition:
+        Ref: WebTaskDefinition
+      DesiredCount:
+        Fn::If:
+        - RunApplication
+        - 2
+        - 0
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      HealthCheckGracePeriodSeconds: 60
+      PropagateTags: SERVICE
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Weight: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+          - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+          Subnets:
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+      LoadBalancers:
+      - ContainerName: web
+        ContainerPort: 3000
+        TargetGroupArn:
+          Ref: WebTargetGroup
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ApiService:
+    Type: AWS::ECS::Service
+    DependsOn: ApiListenerRule
+    Properties:
+      ServiceName: scholens-api
+      Cluster:
+        Fn::ImportValue: sanchezcloud-production-cluster-arn
+      TaskDefinition:
+        Ref: ApiTaskDefinition
+      DesiredCount:
+        Fn::If:
+        - RunApplication
+        - 2
+        - 0
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      HealthCheckGracePeriodSeconds: 90
+      PropagateTags: SERVICE
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Weight: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+          - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+          Subnets:
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+      LoadBalancers:
+      - ContainerName: api
+        ContainerPort: 8000
+        TargetGroupArn:
+          Ref: ApiTargetGroup
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - ApiDiscoveryService
+          - Arn
+        ContainerName: api
+        ContainerPort: 8000
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  DocumentWorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: scholens-document-worker
+      Cluster:
+        Fn::ImportValue: sanchezcloud-production-cluster-arn
+      TaskDefinition:
+        Ref: DocumentWorkerTaskDefinition
+      DesiredCount:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      PropagateTags: SERVICE
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Base: 1
+        Weight: 1
+      - CapacityProvider: FARGATE_SPOT
+        Weight: 3
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+          - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+          Subnets:
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ResearchWorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: scholens-research-worker
+      Cluster:
+        Fn::ImportValue: sanchezcloud-production-cluster-arn
+      TaskDefinition:
+        Ref: ResearchWorkerTaskDefinition
+      DesiredCount:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      PropagateTags: SERVICE
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Base: 1
+        Weight: 1
+      - CapacityProvider: FARGATE_SPOT
+        Weight: 3
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+          - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+          Subnets:
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  MaintenanceWorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: scholens-maintenance-worker
+      Cluster:
+        Fn::ImportValue: sanchezcloud-production-cluster-arn
+      TaskDefinition:
+        Ref: MaintenanceWorkerTaskDefinition
+      DesiredCount:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      PropagateTags: SERVICE
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Base: 1
+        Weight: 1
+      - CapacityProvider: FARGATE_SPOT
+        Weight: 3
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+          - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+          Subnets:
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  WebScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId:
+        Fn::Join:
+        - /
+        - - service
+          - Fn::ImportValue: sanchezcloud-production-cluster-name
+          - Fn::GetAtt:
+            - WebService
+            - Name
+      MinCapacity:
+        Fn::If:
+        - RunApplication
+        - 2
+        - 0
+      MaxCapacity:
+        Fn::If:
+        - RunApplication
+        - 6
+        - 0
+      RoleARN:
+        Fn::Sub: 
+          arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+  ApiScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId:
+        Fn::Join:
+        - /
+        - - service
+          - Fn::ImportValue: sanchezcloud-production-cluster-name
+          - Fn::GetAtt:
+            - ApiService
+            - Name
+      MinCapacity:
+        Fn::If:
+        - RunApplication
+        - 2
+        - 0
+      MaxCapacity:
+        Fn::If:
+        - RunApplication
+        - 8
+        - 0
+      RoleARN:
+        Fn::Sub: 
+          arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+  WebCpuScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-web-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: WebScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 55
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+  WebRequestScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-web-requests
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: WebScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue:
+          Ref: WebRequestsPerTarget
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel:
+            Fn::Join:
+            - /
+            - - Fn::GetAtt:
+                - LoadBalancer
+                - LoadBalancerFullName
+              - Fn::GetAtt:
+                - WebTargetGroup
+                - TargetGroupFullName
+  WebMemoryScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-web-memory
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: WebScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+  ApiCpuScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-api-cpu
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: ApiScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 60
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+  ApiRequestScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-api-requests
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: ApiScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue:
+          Ref: ApiRequestsPerTarget
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel:
+            Fn::Join:
+            - /
+            - - Fn::GetAtt:
+                - LoadBalancer
+                - LoadBalancerFullName
+              - Fn::GetAtt:
+                - ApiTargetGroup
+                - TargetGroupFullName
+  ApiMemoryScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-api-memory
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: ApiScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 70
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+  DocumentWorkerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId:
+        Fn::Join:
+        - /
+        - - service
+          - Fn::ImportValue: sanchezcloud-production-cluster-name
+          - Fn::GetAtt:
+            - DocumentWorkerService
+            - Name
+      MinCapacity:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      MaxCapacity:
+        Fn::If:
+        - RunApplication
+        - 8
+        - 0
+      RoleARN:
+        Fn::Sub: 
+          arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+  ResearchWorkerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId:
+        Fn::Join:
+        - /
+        - - service
+          - Fn::ImportValue: sanchezcloud-production-cluster-name
+          - Fn::GetAtt:
+            - ResearchWorkerService
+            - Name
+      MinCapacity:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      MaxCapacity:
+        Fn::If:
+        - RunApplication
+        - 6
+        - 0
+      RoleARN:
+        Fn::Sub: 
+          arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+  MaintenanceWorkerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId:
+        Fn::Join:
+        - /
+        - - service
+          - Fn::ImportValue: sanchezcloud-production-cluster-name
+          - Fn::GetAtt:
+            - MaintenanceWorkerService
+            - Name
+      MinCapacity:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      MaxCapacity:
+        Fn::If:
+        - RunApplication
+        - 2
+        - 0
+      RoleARN:
+        Fn::Sub: 
+          arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+  DocumentBacklogScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-document-backlog-per-task
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: DocumentWorkerScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 1
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 900
+        CustomizedMetricSpecification:
+          Metrics:
+          - Id: backlog
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: AWS/SQS
+                MetricName: ApproximateNumberOfMessagesVisible
+                Dimensions:
+                - Name: QueueName
+                  Value: scholens-production-document
+            ReturnData: false
+          - Id: running
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: ECS/ContainerInsights
+                MetricName: RunningTaskCount
+                Dimensions:
+                - Name: ClusterName
+                  Value:
+                    Fn::ImportValue: sanchezcloud-production-cluster-name
+                - Name: ServiceName
+                  Value:
+                    Fn::GetAtt:
+                    - DocumentWorkerService
+                    - Name
+            ReturnData: false
+          - Id: backlogpertask
+            Expression: backlog/IF(running<1,1,running)
+            Label: BacklogPerTask
+            ReturnData: true
+  ResearchBacklogScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-research-backlog-per-task
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: ResearchWorkerScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 1
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 900
+        CustomizedMetricSpecification:
+          Metrics:
+          - Id: backlog
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: AWS/SQS
+                MetricName: ApproximateNumberOfMessagesVisible
+                Dimensions:
+                - Name: QueueName
+                  Value: scholens-production-research
+            ReturnData: false
+          - Id: running
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: ECS/ContainerInsights
+                MetricName: RunningTaskCount
+                Dimensions:
+                - Name: ClusterName
+                  Value:
+                    Fn::ImportValue: sanchezcloud-production-cluster-name
+                - Name: ServiceName
+                  Value:
+                    Fn::GetAtt:
+                    - ResearchWorkerService
+                    - Name
+            ReturnData: false
+          - Id: backlogpertask
+            Expression: backlog/IF(running<1,1,running)
+            Label: BacklogPerTask
+            ReturnData: true
+  MaintenanceBacklogScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-maintenance-backlog-per-task
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: MaintenanceWorkerScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 1
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 900
+        CustomizedMetricSpecification:
+          Metrics:
+          - Id: backlog
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: AWS/SQS
+                MetricName: ApproximateNumberOfMessagesVisible
+                Dimensions:
+                - Name: QueueName
+                  Value: scholens-production-maintenance
+            ReturnData: false
+          - Id: running
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: ECS/ContainerInsights
+                MetricName: RunningTaskCount
+                Dimensions:
+                - Name: ClusterName
+                  Value:
+                    Fn::ImportValue: sanchezcloud-production-cluster-name
+                - Name: ServiceName
+                  Value:
+                    Fn::GetAtt:
+                    - MaintenanceWorkerService
+                    - Name
+            ReturnData: false
+          - Id: backlogpertask
+            Expression: backlog/IF(running<1,1,running)
+            Label: BacklogPerTask
+            ReturnData: true
+  ZoteroSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: sanchezcloud-scholens-zotero-sync
+      Description: Persist due per-user Zotero synchronization jobs once per day
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      ScheduleExpression: rate(1 day)
+      State:
+        Ref: SchedulerState
+      Target:
+        Arn:
+          Fn::ImportValue: sanchezcloud-production-cluster-arn
+        RoleArn:
+          Fn::GetAtt:
+          - SchedulerInvocationRole
+          - Arn
+        DeadLetterConfig:
+          Arn:
+            Fn::ImportValue: sanchezcloud-scholens-scheduler-dlq-arn
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        EcsParameters:
+          TaskDefinitionArn:
+            Ref: SchedulerTaskDefinition
+          LaunchType: FARGATE
+          TaskCount: 1
+          EnableECSManagedTags: true
+          EnableExecuteCommand: false
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              AssignPublicIp: DISABLED
+              SecurityGroups:
+              - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+              Subnets:
+              - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+              - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+  LoadBalancer5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-alb-5xx
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_ELB_5XX_Count
+      Dimensions:
+      - Name: LoadBalancer
+        Value:
+          Fn::GetAtt:
+          - LoadBalancer
+          - LoadBalancerFullName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  WebUnhealthyTargetsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-web-unhealthy-targets
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+      - Name: LoadBalancer
+        Value:
+          Fn::GetAtt:
+          - LoadBalancer
+          - LoadBalancerFullName
+      - Name: TargetGroup
+        Value:
+          Fn::GetAtt:
+          - WebTargetGroup
+          - TargetGroupFullName
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  ApiUnhealthyTargetsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-api-unhealthy-targets
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+      - Name: LoadBalancer
+        Value:
+          Fn::GetAtt:
+          - LoadBalancer
+          - LoadBalancerFullName
+      - Name: TargetGroup
+        Value:
+          Fn::GetAtt:
+          - ApiTargetGroup
+          - TargetGroupFullName
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  DocumentDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-document-dlq
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-document-dlq
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  ResearchDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-research-dlq
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-research-dlq
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  MaintenanceDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-maintenance-dlq
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-maintenance-dlq
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  DocumentAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-document-oldest-message
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-document
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1800
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  ResearchAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-research-oldest-message
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-research
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1800
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  MaintenanceAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-maintenance-oldest-message
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-maintenance
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1800
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: SanchezCloud-Scholens
+      DashboardBody:
+        Fn::Sub:
+        - "{\n  \"widgets\": [\n    {\"type\":\"metric\",\"x\":0,\"y\":0,\"width\"\
+          :12,\"height\":6,\"properties\":{\"title\":\"Web and API capacity\",\"region\"\
+          :\"${AWS::Region}\",\"metrics\":[[\"AWS/ECS\",\"CPUUtilization\",\"ServiceName\"\
+          ,\"${WebServiceName}\",\"ClusterName\",\"${ClusterName}\"],[\".\",\"MemoryUtilization\"\
+          ,\".\",\".\",\".\",\".\"],[\"AWS/ECS\",\"CPUUtilization\",\"ServiceName\"\
+          ,\"${ApiServiceName}\",\"ClusterName\",\"${ClusterName}\"],[\".\",\"MemoryUtilization\"\
+          ,\".\",\".\",\".\",\".\"]]}},\n    {\"type\":\"metric\",\"x\":12,\"y\":0,\"\
+          width\":12,\"height\":6,\"properties\":{\"title\":\"SQS backlog\",\"region\"\
+          :\"${AWS::Region}\",\"metrics\":[[\"AWS/SQS\",\"ApproximateNumberOfMessagesVisible\"\
+          ,\"QueueName\",\"scholens-production-document\"],[\".\",\".\",\".\",\"scholens-production-research\"\
+          ],[\".\",\".\",\".\",\"scholens-production-maintenance\"]]}},\n    {\"type\"\
+          :\"metric\",\"x\":0,\"y\":6,\"width\":12,\"height\":6,\"properties\":{\"\
+          title\":\"ALB responses\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"\
+          AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerName}\"\
+          ],[\"AWS/ApplicationELB\",\"UnHealthyHostCount\",\"LoadBalancer\",\"${LoadBalancerName}\"\
+          ,\"TargetGroup\",\"${WebTargetGroupName}\"],[\"AWS/ApplicationELB\",\"UnHealthyHostCount\"\
+          ,\"LoadBalancer\",\"${LoadBalancerName}\",\"TargetGroup\",\"${ApiTargetGroupName}\"\
+          ]]}},\n    {\"type\":\"\
+          metric\",\"x\":12,\"y\":6,\"width\":12,\"height\":6,\"properties\":{\"title\"\
+          :\"Worker tasks\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"ECS/ContainerInsights\"\
+          ,\"RunningTaskCount\",\"ServiceName\",\"${DocumentServiceName}\",\"ClusterName\"\
+          ,\"${ClusterName}\"],[\".\",\".\",\"ServiceName\",\"${ResearchServiceName}\"\
+          ,\"ClusterName\",\"${ClusterName}\"],[\".\",\".\",\"ServiceName\",\"${MaintenanceServiceName}\"\
+          ,\"ClusterName\",\"${ClusterName}\"]]}}\n  ]\n}\n"
+        - ClusterName:
+            Fn::ImportValue: sanchezcloud-production-cluster-name
+          WebServiceName:
+            Fn::GetAtt:
+            - WebService
+            - Name
+          ApiServiceName:
+            Fn::GetAtt:
+            - ApiService
+            - Name
+          DocumentServiceName:
+            Fn::GetAtt:
+            - DocumentWorkerService
+            - Name
+          ResearchServiceName:
+            Fn::GetAtt:
+            - ResearchWorkerService
+            - Name
+          MaintenanceServiceName:
+            Fn::GetAtt:
+            - MaintenanceWorkerService
+            - Name
+          LoadBalancerName:
+            Fn::GetAtt:
+            - LoadBalancer
+            - LoadBalancerFullName
+          WebTargetGroupName:
+            Fn::GetAtt:
+            - WebTargetGroup
+            - TargetGroupFullName
+          ApiTargetGroupName:
+            Fn::GetAtt:
+            - ApiTargetGroup
+            - TargetGroupFullName
+Outputs:
+  LoadBalancerDnsName:
+    Value:
+      Fn::GetAtt:
+      - LoadBalancer
+      - DNSName
+  LoadBalancerHostedZoneId:
+    Value:
+      Fn::GetAtt:
+      - LoadBalancer
+      - CanonicalHostedZoneID
+  TaskSecurityGroupId:
+    Value:
+      Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+  MigrationTaskDefinitionArn:
+    Value:
+      Ref: MigrationTaskDefinition
+  WebServiceName:
+    Value:
+      Fn::GetAtt:
+      - WebService
+      - Name
+  ApiServiceName:
+    Value:
+      Fn::GetAtt:
+      - ApiService
+      - Name
+  DocumentWorkerServiceName:
+    Value:
+      Fn::GetAtt:
+      - DocumentWorkerService
+      - Name
+  ResearchWorkerServiceName:
+    Value:
+      Fn::GetAtt:
+      - ResearchWorkerService
+      - Name
+  MaintenanceWorkerServiceName:
+    Value:
+      Fn::GetAtt:
+      - MaintenanceWorkerService
+      - Name
+  ReleaseSha:
+    Value:
+      Ref: ReleaseSha

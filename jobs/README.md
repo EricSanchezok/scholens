@@ -1,8 +1,10 @@
 # Scholens Jobs
 
 The Jobs service runs long-lived Scholens workflows outside the API process.
-Celery workers consume RabbitMQ queues, use Redis for task results and resumable
-parser state, and return signed results to the Server webhook API.
+Celery workers consume local RabbitMQ or production SQS queues, use Redis only
+for shared limits and resumable parser state, and return signed results to the
+Server webhook API. Celery has no result backend; PostgreSQL-owned jobs and
+signed callbacks are the durable state contract.
 
 ## PDF ingestion
 
@@ -62,7 +64,7 @@ needs to be resumed.
 
 AI reflow starts only when the user explicitly requests an attempt and has an
 enabled MinerU connection. Server dispatches `generate_document_reflow` to the
-`reflow` queue with an internal, job-scoped credential URL—not the token. After
+`document` queue with an internal, job-scoped credential URL—not the token. After
 claiming the job, the worker fetches the current revision-scoped credential,
 downloads the original PDF, and submits it to MinerU. Reflow consumes the stable
 `content_list.json` from the returned archive instead of flattening Markdown and
@@ -107,8 +109,11 @@ that file.
 
 Production requires:
 
-- RabbitMQ through `CELERY_BROKER_URL`
-- Redis through `CELERY_RESULT_BACKEND` and optionally `PDF_PARSE_REDIS_URL`
+- SQS through `CELERY_BROKER_URL=sqs://` and the three predefined
+  `SQS_DOCUMENT_QUEUE_URL`, `SQS_RESEARCH_QUEUE_URL`, and
+  `SQS_MAINTENANCE_QUEUE_URL` values
+- the shared cache through strict `CACHE_HOST`, `CACHE_PORT`, `CACHE_USERNAME`,
+  `CACHE_PASSWORD`, and `CACHE_TLS=true` fields
 - S3 credentials and bucket names
 - non-secret MinerU runtime policy (`MINERU_API_BASE_URL`, timeouts, and limits)
 - the `SCHOLENS_AI_*` profile variables and the selected provider credential
@@ -117,8 +122,9 @@ Production requires:
 MinerU tokens are user-owned connections stored by Server, never Jobs process
 environment. Jobs fetches a token only after claiming an eligible PDF or
 document-reflow job through the signed, job-scoped internal callback surface.
-Production fails fast when parser Redis or non-secret runtime configuration is
-invalid.
+Production fails fast unless the composed cache endpoint is authenticated
+`rediss://` on an ElastiCache hostname and all non-secret runtime configuration
+is valid. Local development may instead set one `CACHE_URL`.
 
 ## Local commands
 

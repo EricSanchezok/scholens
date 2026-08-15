@@ -6,8 +6,8 @@
 --   product_migrator_role    owns only scholens.*
 --   app_role                 runs the Scholens API
 --
--- Run as the database owner before sanchezcloud-identity migration, after sanchezcloud-identity
--- migration, and after Scholens migration. Re-running is safe.
+-- Run as the database owner before sanchezcloud-identity migration, after
+-- sanchezcloud-identity migration, and after Scholens migration. Re-running is safe.
 
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'app_role') \gexec
 SELECT format(
@@ -44,7 +44,7 @@ GRANT USAGE ON SCHEMA scholens TO :"app_role";
 GRANT USAGE, CREATE ON SCHEMA auth TO :"auth_migrator_role";
 GRANT USAGE, CREATE ON SCHEMA scholens TO :"product_migrator_role";
 
--- These grants become available after the independent sanchezcloud-identity baseline.
+-- These grants become available after the independent Identity baseline.
 SELECT format(
   'GRANT SELECT, INSERT, UPDATE ON TABLE auth.users, '
   'auth.refresh_tokens TO %I',

@@ -20,7 +20,7 @@ Always read the documents relevant to the task before editing:
 | Current backend capabilities                    | [`docs/architecture/backend-capabilities.md`](./docs/architecture/backend-capabilities.md) |
 | Shared Python packages                          | [`packages/README.md`](./packages/README.md)                                               |
 | Architecture decision rationale                 | [`docs/decisions/README.md`](./docs/decisions/README.md)                                   |
-| Production deployment                           | [`deploy/production/README.md`](./deploy/production/README.md)                             |
+| Production deployment                           | [`deploy/ecs/README.md`](./deploy/ecs/README.md)                                           |
 
 For new `web/` product work, also complete
 [`web/docs/new-feature-checklist.md`](./web/docs/new-feature-checklist.md).

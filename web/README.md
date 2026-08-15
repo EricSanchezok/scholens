@@ -6,12 +6,11 @@ includes the authentication lifecycle at `/login`, authenticated Home at `/`,
 Library at `/library`, Projects at `/projects` and `/projects/[projectId]`, and
 Reader at `/reader/[documentId]`.
 
-Canonical source ownership does not yet mean production cutover. The current
-production Release and Compose path still builds and serves `client/`; see
-[`deploy/production/README.md`](../deploy/production/README.md). Do not remove
-the legacy application or claim that `web/` is production-deployable until a
-separate reviewed cutover changes the image, proxy, health-check, rollback, and
-release contracts together.
+The ECS production release builds only this application as the canonical Web
+image; see [`deploy/ecs/README.md`](../deploy/ecs/README.md). The legacy client
+remains available solely for local comparison and is not a release artifact.
+Public `NEXT_PUBLIC_*` values are fixed during the immutable Web build and are
+recorded in the release manifest.
 
 ## Local commands
 

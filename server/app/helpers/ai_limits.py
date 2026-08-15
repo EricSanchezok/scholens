@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from scholens_observability import add_counter
 
+from app.bootstrap.cache_endpoint import cache_url_from_environment
 from app.shared.domain import AppError, FailureKind
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def ai_limit_app_error(
 
 
 def _redis_client(redis_url: str | None = None) -> Redis | None:
-    url = redis_url or os.getenv("AI_LIMIT_REDIS_URL")
+    url = cache_url_from_environment(explicit_url=redis_url)
     if not url:
         return None
     client = _redis_clients.get(url)
@@ -86,7 +87,7 @@ async def enforce_rate_limit(
     client = _redis_client(redis_url)
     if client is None:
         if (environment or os.getenv("ENVIRONMENT")) == "production":
-            raise RuntimeError("AI_LIMIT_REDIS_URL is required in production")
+            raise RuntimeError("CACHE configuration is required in production")
         return
 
     window_seconds = int(os.getenv("AI_RATE_WINDOW_SECONDS", "60"))
@@ -135,7 +136,7 @@ async def acquire_concurrency(
     key = f"scholens:concurrency:{category}:{user_id}"
     if client is None:
         if (environment or os.getenv("ENVIRONMENT")) == "production":
-            raise RuntimeError("AI_LIMIT_REDIS_URL is required in production")
+            raise RuntimeError("CACHE configuration is required in production")
         return AIConcurrencyLease(key="", member=member)
 
     limits = {

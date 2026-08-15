@@ -214,10 +214,6 @@ def _patch_s3(monkeypatch: pytest.MonkeyPatch, uploaded: list[str]) -> None:
         "src.pdf.pipeline.s3_service.upload_bytes_to_key",
         upload,
     )
-    monkeypatch.setattr(
-        "src.pdf.pipeline.s3_service.cloudflare_bucket_name",
-        "assets.example",
-    )
 
 
 def _patch_metadata(monkeypatch: pytest.MonkeyPatch, title: str) -> None:

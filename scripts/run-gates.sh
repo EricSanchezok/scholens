@@ -96,11 +96,17 @@ run_shared_packages() {
     cd "$REPOSITORY_ROOT/packages"
     "$environment/ruff" format --check \
       scholens_ai/src scholens_ai/tests \
-      scholens_observability/src scholens_observability/tests
+      scholens_job_contracts/src scholens_job_contracts/tests \
+      scholens_observability/src scholens_observability/tests \
+      scholens_runtime_contracts/src scholens_runtime_contracts/tests
     "$environment/ruff" check \
       scholens_ai/src scholens_ai/tests \
-      scholens_observability/src scholens_observability/tests
-    "$environment/mypy" scholens_ai/src scholens_observability/src
+      scholens_job_contracts/src scholens_job_contracts/tests \
+      scholens_observability/src scholens_observability/tests \
+      scholens_runtime_contracts/src scholens_runtime_contracts/tests
+    "$environment/mypy" \
+      scholens_ai/src scholens_job_contracts/src \
+      scholens_observability/src scholens_runtime_contracts/src
     "$environment/pytest" -q
   )
 }
@@ -150,56 +156,27 @@ run_client() {
 }
 
 run_deployment() {
-  require_command shellcheck
   require_command cfn-lint
-  require_command docker
+  local server_environment="$REPOSITORY_ROOT/server/.venv/bin"
+  require_executable "$server_environment/python"
+  require_executable "$server_environment/pytest"
 
   (
     cd "$REPOSITORY_ROOT"
-    readonly deployment_scripts=(
-      deploy/production/release.sh
-      deploy/production/smoke.sh
-      deploy/production/wait-ssm.sh
-      deploy/production/install-observability.sh
-      deploy/production/upload-source-maps.sh
-    )
-
-    bash -n "${deployment_scripts[@]}"
-    shellcheck "${deployment_scripts[@]}"
-    cfn-lint deploy/production/observability.yaml
-
-    export SCHOLENS_API_IMAGE=registry.example/scholens/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    export SCHOLENS_CLIENT_IMAGE=registry.example/scholens/client@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    export SCHOLENS_JOBS_IMAGE=registry.example/scholens/jobs@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-    export SCHOLENS_RELEASE_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-    export SCHOLENS_DOMAIN=scholens.example.invalid
-    export SCHOLENS_AWS_REGION=us-east-1
-    export SCHOLENS_APP_DATABASE_URL=postgresql://app:password@postgres.example.invalid/sanchezcloud
-    export SCHOLENS_MIGRATION_DATABASE_URL=postgresql://migrator:password@postgres.example.invalid/sanchezcloud
-    export SCHOLENS_AUTH_JWT_SECRET=fixture-secret-at-least-thirty-two-bytes
-    export SCHOLENS_ADMIN_SESSION_SECRET=fixture-admin-session-secret-at-least-thirty-two-bytes
-    export SCHOLENS_PAPER_SEARCH_CURSOR_SECRET=fixture-search-cursor-secret-at-least-thirty-two-bytes
-    export SCHOLENS_RABBITMQ_PASSWORD=fixture-rabbit-password
-    export SCHOLENS_REDIS_PASSWORD=fixture-redis-password
-    export SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID=fixture
-    export SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET=fixture
-    export SCHOLENS_ALIYUN_DM_ACCOUNT_NAME=sender@example.invalid
-    export SCHOLENS_S3_BUCKET_NAME=fixture-bucket
-    export SCHOLENS_CLOUDFLARE_BUCKET_NAME=fixture-bucket.s3.us-east-1.amazonaws.com
-    export SCHOLENS_AI_DEEPSEEK_API_KEY=fixture
-    export SCHOLENS_MOSS_API_KEY=fixture
-    export SCHOLENS_MOSS_VOICE_ID=fixture
-    export SCHOLENS_JOBS_WEBHOOK_SIGNING_SECRET=fixture-signing-secret-at-least-thirty-two-bytes
-    export SCHOLENS_SCHOLIGHT_MCP_DELEGATION_JWT_SECRET=fixture-delegation-secret-at-least-thirty-two-bytes
-    export SCHOLENS_INTEGRATION_CREDENTIAL_ENCRYPTION_KEY=ZGV2ZWxvcG1lbnQtaW50ZWdyYXRpb24ta2V5LTMyISE=
-    export SCHOLENS_STRIPE_API_KEY=fixture
-    export SCHOLENS_STRIPE_WEBHOOK_SECRET=fixture
-    export SCHOLENS_STRIPE_MONTHLY_PRICE_ID=fixture
-    export SCHOLENS_STRIPE_YEARLY_PRICE_ID=fixture
-    export SCHOLENS_ZOTERO_CLIENT_KEY=fixture
-    export SCHOLENS_ZOTERO_CLIENT_SECRET=fixture
-
-    docker compose -f deploy/production/compose.yaml config --quiet
+    cfn-lint --non-zero-exit-code error \
+      deploy/ecs/scholens-foundation.yml \
+      deploy/ecs/scholens-production.yml
+    if grep -En '(^|[[:space:]])(&[[:alnum:]_-]+|\*[[:alnum:]_-]+|<<:)' \
+      deploy/ecs/scholens-foundation.yml \
+      deploy/ecs/scholens-production.yml; then
+      printf 'CloudFormation templates must not contain YAML aliases or merges\n' >&2
+      exit 1
+    fi
+    "$server_environment/python" scripts/release_manifest.py --help >/dev/null
+    "$server_environment/pytest" -q \
+      server/tests/test_deployment_contract.py \
+      server/tests/test_release_manifest.py \
+      server/tests/test_runtime_entrypoint.py
   )
 }
 

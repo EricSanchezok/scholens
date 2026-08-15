@@ -28,7 +28,7 @@ def test_jobs_client_reuses_one_configured_celery_producer() -> None:
         assert (
             client.publish_task(
                 task_name="upload_and_process_file",
-                queue="pdf_processing",
+                queue="document",
                 job_id="job-pdf",
                 kwargs={"s3_object_key": "documents/hash/source.pdf"},
                 headers={"scholens-correlation-id": "correlation-id"},
@@ -44,18 +44,23 @@ def test_jobs_client_reuses_one_configured_celery_producer() -> None:
     }
 
 
-def test_jobs_client_revoke_never_terminates_a_worker_process() -> None:
+def test_jobs_client_uses_predefined_iam_sqs_queues(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AWS_REGION", "ap-southeast-1")
+    monkeypatch.setenv("SQS_DOCUMENT_QUEUE_URL", "https://sqs.example/document")
+    monkeypatch.setenv("SQS_RESEARCH_QUEUE_URL", "https://sqs.example/research")
+    monkeypatch.setenv("SQS_MAINTENANCE_QUEUE_URL", "https://sqs.example/maintenance")
     celery_app = MagicMock()
     with patch(
         "app.modules.jobs.infrastructure.client.Celery", return_value=celery_app
     ):
-        client = JobsClient(
-            celery_broker_url="amqp://user:password@rabbitmq:5672//",
-        )
+        JobsClient(celery_broker_url="sqs://")
 
-    client.revoke(job_id="paper-job")
-
-    celery_app.control.revoke.assert_called_once_with(
-        "paper-job",
-        terminate=False,
-    )
+    options = celery_app.conf.update.call_args.kwargs["broker_transport_options"]
+    assert options["visibility_timeout"] == 45 * 60
+    assert options["predefined_queues"] == {
+        "document": {"url": "https://sqs.example/document"},
+        "research": {"url": "https://sqs.example/research"},
+        "maintenance": {"url": "https://sqs.example/maintenance"},
+    }

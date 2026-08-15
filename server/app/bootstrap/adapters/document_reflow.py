@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID, uuid4
 
+from scholens_job_contracts import JobQueue
+
 from app.modules.jobs.application.contracts import (
     DocumentReflowTaskPayload,
     ReflowAssetKind,
@@ -293,7 +295,7 @@ class SqlDocumentReflowGateway:
                 idempotency_key=durable_idempotency_key,
                 payload=payload,
                 task_name="generate_document_reflow",
-                queue="reflow",
+                queue=JobQueue.DOCUMENT,
                 document_id=document.id,
             )
         )

@@ -19,9 +19,49 @@ def test_production_accepts_a_dedicated_search_cursor_secret() -> None:
             "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
         ),
         scholight_mcp_delegation_jwt_secret="s" * 32,
+        cache_url=(
+            "rediss://api:secret@scholens.abc.0001.apse1.cache.amazonaws.com:6379/0"
+        ),
     )
 
     assert settings.environment == "production"
+
+
+def test_production_cache_endpoint_is_composed_without_exposing_credentials() -> None:
+    settings = AppSettings(
+        cache_host="cache.example.invalid",
+        cache_username="api user",
+        cache_password="secret/value",
+        cache_tls=True,
+    )
+
+    assert settings.resolved_cache_url == (
+        "rediss://api%20user:secret%2Fvalue@cache.example.invalid:6379/0"
+    )
+
+
+def test_production_cache_rejects_missing_credentials_and_unmanaged_host() -> None:
+    common = {
+        "environment": "production",
+        "paper_search_cursor_secret": "production-search-cursor-secret-value",
+        "integration_credential_encryption_key": (
+            "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+        ),
+        "scholight_mcp_delegation_jwt_secret": "s" * 32,
+        "cache_tls": True,
+    }
+    with pytest.raises(ValidationError, match="CACHE_USERNAME is required"):
+        AppSettings(
+            **common,
+            cache_host="scholens.abc.0001.apse1.cache.amazonaws.com",
+        )
+    with pytest.raises(ValidationError, match="managed-service hostname"):
+        AppSettings(
+            **common,
+            cache_host="cache.example.invalid",
+            cache_username="api",
+            cache_password="secret",
+        )
 
 
 def test_cors_allowed_origins_supports_parallel_frontends() -> None:
