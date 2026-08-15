@@ -142,7 +142,7 @@ function BackToSignIn({ returnTo }: { returnTo?: string }) {
 function AuthenticationSkeleton() {
   const t = useTranslations("Authentication.session");
   return (
-    <AuthenticationShell stateLabel={t("bootstrapping")}>
+    <AuthenticationShell>
       <AuthenticationPanel>
         <div
           aria-label={t("bootstrapping")}
@@ -774,7 +774,6 @@ export function AuthenticationPage({
 }) {
   const session = useAuthSession();
   const router = useRouter();
-  const t = useTranslations("Authentication");
   const actionMode = mode === "verify" || mode === "reset";
   React.useEffect(() => {
     if (!actionMode && session.status === "authenticated") {
@@ -789,19 +788,8 @@ export function AuthenticationPage({
     return <AuthenticationSkeleton />;
   }
 
-  const stateLabel =
-    mode === "sign-in"
-      ? t("signIn.state")
-      : mode === "register"
-        ? t("register.state")
-        : mode === "forgot"
-          ? t("forgot.state")
-          : mode === "verify"
-            ? t("verify.state")
-            : t("reset.state");
-
   return (
-    <AuthenticationShell stateLabel={stateLabel}>
+    <AuthenticationShell>
       {mode === "sign-in" ? <SignInForm returnTo={returnTo} /> : null}
       {mode === "register" ? <RegisterFlow returnTo={returnTo} /> : null}
       {mode === "forgot" ? <ForgotFlow returnTo={returnTo} /> : null}

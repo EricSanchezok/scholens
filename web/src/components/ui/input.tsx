@@ -106,14 +106,20 @@ export const PasswordInput = React.forwardRef<
           aria-label={label}
           aria-pressed={visible}
           className={cn(
-            "text-ui-icon-secondary hover:bg-hover absolute top-1/2 right-0 grid size-11 -translate-y-1/2 place-items-center rounded-[var(--radius-md)]",
+            "group text-ui-icon-secondary absolute top-1/2 right-0 grid size-11 -translate-y-1/2 place-items-center rounded-[var(--radius-md)]",
             keyboardFocusRing,
           )}
           disabled={props.disabled}
           onClick={() => setVisible((value) => !value)}
           type="button"
         >
+          <span
+            aria-hidden
+            className="group-hover:bg-hover group-active:bg-pressed absolute size-8 rounded-[var(--radius-md)] transition-colors duration-150 group-disabled:bg-transparent motion-reduce:transition-none"
+            data-slot="password-visibility-affordance"
+          />
           <Icon
+            className="relative"
             glyph={visible ? EyeClosed : Eye}
             size={20}
             tone={props.disabled ? "disabled" : "secondary"}

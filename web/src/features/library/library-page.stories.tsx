@@ -52,6 +52,20 @@ export const Populated: Story = {
     await expect(
       await canvas.findByRole("heading", { name: "Library" }),
     ).toBeVisible();
+    const heading = canvas.getByRole("heading", { name: "Library" });
+    const workbenchHeader = heading.closest("header");
+    await expect(workbenchHeader).not.toBeNull();
+    const search = await canvas.findByRole("searchbox", {
+      name: "Search papers",
+    });
+    if (workbenchHeader) {
+      await expect(
+        Math.round(
+          search.getBoundingClientRect().top -
+            workbenchHeader.getBoundingClientRect().bottom,
+        ),
+      ).toBe(16);
+    }
     const titles = await canvas.findAllByText("Attention Is All You Need");
     await expect(
       titles.some((element) => element.getClientRects().length > 0),
@@ -65,8 +79,7 @@ export const Populated: Story = {
       await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
     }
     const searchRadius = Number.parseFloat(
-      getComputedStyle(canvas.getByRole("searchbox", { name: "Search papers" }))
-        .borderRadius,
+      getComputedStyle(search).borderRadius,
     );
     await expect(searchRadius).toBeGreaterThan(1_000);
     await expect(

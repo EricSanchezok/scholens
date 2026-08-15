@@ -54,6 +54,13 @@ pill-shaped search and sorting controls, quiet separators, local row hover, and
 unboxed empty states. Paper, conversation, and output counts live with the
 project title metadata instead of in a separate metric card.
 
+Desktop Projects uses the same compact workbench density as Library. The list
+title and New project action share a 44 px row, followed by search and sorting
+after 16 px; introductory copy belongs to empty states. Project detail keeps
+Back, title, counts, and management actions in one compact header, renders only
+a real description on one line, and places tabs 16 px below it. Mobile retains
+the Workspace app bar and existing full-width composition.
+
 Project rows and Project-detail paper rows follow the shared collection-row
 and overflow contract in [Component Development](./component-development.md).
 Each row has one primary Link for its content region; its menu remains an
@@ -103,3 +110,6 @@ behavior uses the real public contract and accessible responsive composition.
 The canonical detail matrix is the Figma section `1085:1370`. The former
 56px collapsed-chat rail at `539:7324` is retained only as an explicitly named
 Archive frame; it is not an active acceptance state.
+The compact desktop list and detail headers are intentional runtime refinements
+pending canonical-frame synchronization after local visual acceptance; the
+documented responsive and interaction state inventory is unchanged.

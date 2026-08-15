@@ -47,9 +47,19 @@ type Story = StoryObj<typeof meta>;
 export const OverviewCollapsed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      await canvas.findByRole("heading", { name: "Truthward" }),
-    ).toBeVisible();
+    const heading = await canvas.findByRole("heading", { name: "Truthward" });
+    await expect(heading).toBeVisible();
+    const workbenchHeader = heading.closest("header");
+    await expect(workbenchHeader).not.toBeNull();
+    const tabs = canvas.getByRole("tablist");
+    if (workbenchHeader) {
+      await expect(
+        Math.round(
+          tabs.getBoundingClientRect().top -
+            workbenchHeader.getBoundingClientRect().bottom,
+        ),
+      ).toBe(16);
+    }
     await expect(
       canvas.queryByRole("region", { name: "Project chat" }),
     ).not.toBeInTheDocument();

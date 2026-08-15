@@ -225,7 +225,6 @@
   },
   "Library": {
     "title": "Library",
-    "description": "Organize papers and the research outputs created from them.",
     "tabs": {
       "papers": "Papers {count}",
       "outputs": "Outputs {count}"
@@ -836,14 +835,12 @@
       "confirmPassword": "Confirm password"
     },
     "signIn": {
-      "state": "Sign in",
       "title": "Welcome back",
       "description": "Where papers become working knowledge.",
       "submit": "Sign in",
       "submitting": "Signing in…"
     },
     "register": {
-      "state": "Create account",
       "title": "Create your account",
       "description": "Where papers become working knowledge.",
       "submit": "Create account",
@@ -857,7 +854,6 @@
       "mismatch": "Passwords do not match"
     },
     "checkInbox": {
-      "state": "Check inbox",
       "title": "Check your inbox",
       "registerDescription": "We sent a secure verification link to {email}.",
       "forgotDescription": "If an account matches {email}, we sent a reset link.",
@@ -868,7 +864,6 @@
       "resent": "Verification email sent"
     },
     "verify": {
-      "state": "Verify email",
       "loadingTitle": "Verifying your email",
       "loadingDescription": "This usually takes a moment.",
       "successTitle": "Email verified",
@@ -878,14 +873,12 @@
       "invalidDescription": "Request a new verification email to continue."
     },
     "forgot": {
-      "state": "Forgot password",
       "title": "Reset your password",
       "description": "We will email you a secure password reset link.",
       "submit": "Send reset link",
       "submitting": "Sending link…"
     },
     "reset": {
-      "state": "Reset password",
       "title": "Choose a new password",
       "description": "Use at least 12 characters to secure your account.",
       "submit": "Reset password",
@@ -931,7 +924,6 @@
   },
   "Projects": {
     "title": "Projects",
-    "description": "Keep papers, conversations, and research outputs together around a shared question.",
     "search": "Search projects",
     "actions": {
       "create": "New project",

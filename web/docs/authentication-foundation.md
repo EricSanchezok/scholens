@@ -63,6 +63,11 @@ prefer container queries so they remain portable. `AuthViewport` supplies
 The browser must be allowed to scroll when a virtual keyboard reduces the
 visual viewport.
 
+Desktop authentication chrome exposes only the Scholens brand and the active
+surface heading. The heading is the mode label; the shell does not repeat
+sign-in, registration, verification, or recovery state in a detached corner
+badge.
+
 Required review widths are 320, 390, 768, and 1440 pixels. At 320px there must
 be no horizontal page scroll. At 200% text zoom the form order, current field,
 error, and submit action must remain usable.
@@ -143,6 +148,9 @@ visibility; the caller provides localized accessible labels and autocomplete.
 Pointer and touch focus do not alter a text field's resting border. Keyboard
 navigation retains the shared semantic focus indicator, so removing the noisy
 pointer ring does not remove accessible focus visibility.
+The password-visibility control retains a 44 px interaction and focus target,
+while hover and pressed feedback use a centered 32 px visual surface so the
+control does not appear to divide the input into a second field.
 
 ## Figma ↔ Code mapping
 

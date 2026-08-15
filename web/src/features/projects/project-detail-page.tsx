@@ -668,8 +668,8 @@ export function ProjectDetailWorkspace({
     >
       <div className="flex h-full min-h-0">
         <div className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-9">
-            <header className="hidden min-w-0 items-start gap-4 lg:flex">
+          <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
+            <header className="hidden min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 lg:grid">
               <Link
                 aria-label={t("detail.back")}
                 className="hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]"
@@ -677,36 +677,40 @@ export function ProjectDetailWorkspace({
               >
                 <Icon glyph={BackIcon} size={20} />
               </Link>
-              <div className="min-w-0 flex-1">
-                <h1
-                  className="max-w-3xl text-2xl font-semibold tracking-[-0.02em] break-words"
-                  data-project-title
-                >
-                  {project.title}
-                </h1>
-                <p className="text-secondary mt-2 line-clamp-2 max-w-3xl text-sm">
-                  {project.description || t("row.noDescription")}
-                </p>
-                <dl className="text-muted mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <dt>{t("metrics.papers")}</dt>
-                    <dd className="text-secondary tabular-nums">
-                      {project.num_papers}
-                    </dd>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <dt>{t("metrics.conversations")}</dt>
-                    <dd className="text-secondary tabular-nums">
-                      {project.num_conversations}
-                    </dd>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <dt>{t("metrics.outputs")}</dt>
-                    <dd className="text-secondary tabular-nums">
-                      {project.num_outputs}
-                    </dd>
-                  </div>
-                </dl>
+              <div className="min-w-0 pt-0.5">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1">
+                  <h1
+                    className="max-w-3xl min-w-0 text-2xl font-semibold tracking-[-0.02em] break-words"
+                    data-project-title
+                  >
+                    {project.title}
+                  </h1>
+                  <dl className="text-muted flex shrink-0 flex-wrap gap-x-4 gap-y-1 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <dt>{t("metrics.papers")}</dt>
+                      <dd className="text-secondary tabular-nums">
+                        {project.num_papers}
+                      </dd>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <dt>{t("metrics.conversations")}</dt>
+                      <dd className="text-secondary tabular-nums">
+                        {project.num_conversations}
+                      </dd>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <dt>{t("metrics.outputs")}</dt>
+                      <dd className="text-secondary tabular-nums">
+                        {project.num_outputs}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                {project.description ? (
+                  <p className="text-secondary mt-1 line-clamp-1 max-w-4xl text-sm">
+                    {project.description}
+                  </p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <ProjectManageMenu
@@ -740,11 +744,13 @@ export function ProjectDetailWorkspace({
               </div>
             </header>
 
-            <section className="lg:hidden">
-              <p className="text-secondary line-clamp-3 text-sm leading-6">
-                {project.description || t("row.noDescription")}
-              </p>
-              <dl className="text-muted mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <section className="grid gap-3 lg:hidden">
+              {project.description ? (
+                <p className="text-secondary line-clamp-3 text-sm leading-6">
+                  {project.description}
+                </p>
+              ) : null}
+              <dl className="text-muted flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 <div className="flex items-center gap-1.5">
                   <dt>{t("metrics.papers")}</dt>
                   <dd className="text-secondary tabular-nums">
@@ -767,7 +773,7 @@ export function ProjectDetailWorkspace({
             </section>
 
             <Tabs
-              className="mt-6 lg:mt-8"
+              className="mt-6 lg:mt-4"
               onValueChange={(view: string) =>
                 replaceSearch({ view: view as ProjectView })
               }
@@ -794,7 +800,7 @@ export function ProjectDetailWorkspace({
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent className="mt-7 grid gap-10" value="overview">
+              <TabsContent className="mt-5 grid gap-10" value="overview">
                 <section>
                   <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-base font-semibold">
@@ -866,7 +872,7 @@ export function ProjectDetailWorkspace({
                 </section>
               </TabsContent>
 
-              <TabsContent className="mt-6" value="papers">
+              <TabsContent className="mt-5" value="papers">
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]">
                   <ProjectSearchField
                     key={state.paperQuery}
@@ -961,7 +967,7 @@ export function ProjectDetailWorkspace({
                   )}
               </TabsContent>
 
-              <TabsContent className="mt-6" value="outputs">
+              <TabsContent className="mt-5" value="outputs">
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_13rem]">
                   <ProjectSearchField
                     key={state.outputQuery}

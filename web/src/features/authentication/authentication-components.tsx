@@ -10,19 +10,14 @@ import { AuthViewport } from "./auth-surface";
 
 export function AuthenticationShell({
   children,
-  stateLabel,
 }: {
   children: React.ReactNode;
-  stateLabel: string;
 }) {
   return (
     <AuthViewport className="relative lg:items-center">
       <div className="pointer-events-none fixed top-[max(1.5rem,env(safe-area-inset-top))] left-4 text-lg font-semibold sm:left-8 lg:left-12">
         Scholens
       </div>
-      <p className="text-muted pointer-events-none fixed top-[max(1.75rem,env(safe-area-inset-top))] right-4 hidden font-mono text-[10px] tracking-[0.12em] uppercase sm:right-8 sm:block lg:right-12">
-        {stateLabel}
-      </p>
       <div className="w-full pt-20 sm:pt-12">{children}</div>
     </AuthViewport>
   );

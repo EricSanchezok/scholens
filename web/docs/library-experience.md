@@ -30,6 +30,13 @@ Search is debounced by 250 ms and query requests receive an abort signal. A
 filter, sort, tab, or page transition clears row selection. Cursor navigation is
 Previous/Next only; cursors are opaque and never decoded by the Web.
 
+Desktop Library chrome is a compact 44 px workbench header: the page title,
+Papers/Outputs tabs with counts, and Add papers action share one row. Search,
+filters, sorting, and result count follow after 16 px so research content enters
+the first viewport without a repeated explanatory hero. Explanatory copy
+belongs to empty and unavailable states. Mobile keeps the Workspace app bar as
+the only page-title and primary-action surface.
+
 ## Papers
 
 Desktop uses a semantic table. Its search, user-tag filter, sort, and result
@@ -181,6 +188,9 @@ Papers acceptance lives in section `974:1831` and maps to
 Figma owns visual intent; Storybook owns executable runtime states. Differences
 required for responsive composition and accessibility are implemented in code,
 not as duplicated Figma-layer mechanics.
+The compact desktop workbench header is an intentional runtime refinement
+pending canonical-frame synchronization after local visual acceptance; it does
+not change the Library state or interaction inventory.
 
 Outputs acceptance lives in section `984:1831` and maps to
 `Features/Library/Outputs` stories:

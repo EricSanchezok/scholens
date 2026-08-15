@@ -299,44 +299,45 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-9">
-        <header className="hidden items-start justify-between gap-6 lg:flex">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-[-0.02em]">
-              {t("title")}
-            </h1>
-            <p className="text-secondary mt-2 text-sm">{t("description")}</p>
-          </div>
-          <Button onClick={() => setAddOpen(true)}>
-            <Icon glyph={AddIcon} size={20} tone="inverse" />
-            {t("addPapers.open")}
-          </Button>
-        </header>
-
+      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
         <Tabs
-          className="mt-0 min-w-0 lg:mt-8"
+          className="min-w-0"
           onValueChange={handleTabChange}
           value={parsed.tab}
         >
-          <TabsList className="bg-transparent p-0">
-            <TabsTrigger
-              className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-              value="papers"
+          <header className="flex min-h-11 items-center justify-between gap-6">
+            <div className="flex min-w-0 items-center gap-6">
+              <h1 className="hidden shrink-0 text-2xl font-semibold tracking-[-0.02em] lg:block">
+                {t("title")}
+              </h1>
+              <TabsList className="bg-transparent p-0">
+                <TabsTrigger
+                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  value="papers"
+                >
+                  {t("tabs.papers", {
+                    count: countLabel(summaryQuery.data?.paper_count),
+                  })}
+                </TabsTrigger>
+                <TabsTrigger
+                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  value="outputs"
+                >
+                  {t("tabs.outputs", {
+                    count: countLabel(summaryQuery.data?.output_count),
+                  })}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <Button
+              className="hidden lg:inline-flex"
+              onClick={() => setAddOpen(true)}
             >
-              {t("tabs.papers", {
-                count: countLabel(summaryQuery.data?.paper_count),
-              })}
-            </TabsTrigger>
-            <TabsTrigger
-              className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-              value="outputs"
-            >
-              {t("tabs.outputs", {
-                count: countLabel(summaryQuery.data?.output_count),
-              })}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent className="mt-5 grid min-w-0 gap-4" value="papers">
+              <Icon glyph={AddIcon} size={20} tone="inverse" />
+              {t("addPapers.open")}
+            </Button>
+          </header>
+          <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
             <PapersView
               attentionCount={summaryQuery.data?.attention_count ?? 0}
               key={`${parsed.query}:${parsed.sort}:${parsed.cursor ?? ""}:${parsed.tagIds.join(",")}`}
@@ -401,7 +402,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               tags={tagsQuery.data?.items ?? []}
             />
           </TabsContent>
-          <TabsContent className="mt-5 grid min-w-0 gap-4" value="outputs">
+          <TabsContent className="mt-4 grid min-w-0 gap-4" value="outputs">
             <OutputsView
               data={outputsQuery.data}
               error={outputsQuery.error}

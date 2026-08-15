@@ -225,7 +225,6 @@
   },
   "Library": {
     "title": "资料库",
-    "description": "集中管理论文，以及从论文中生成的研究产物。",
     "tabs": {
       "papers": "论文 {count}",
       "outputs": "产物 {count}"
@@ -836,14 +835,12 @@
       "confirmPassword": "确认密码"
     },
     "signIn": {
-      "state": "登录",
       "title": "欢迎回来",
       "description": "让论文沉淀为可用的研究知识。",
       "submit": "登录",
       "submitting": "正在登录…"
     },
     "register": {
-      "state": "创建账号",
       "title": "创建你的账号",
       "description": "让论文沉淀为可用的研究知识。",
       "submit": "创建账号",
@@ -857,7 +854,6 @@
       "mismatch": "两次输入的密码不一致"
     },
     "checkInbox": {
-      "state": "检查邮箱",
       "title": "检查你的邮箱",
       "registerDescription": "我们已向 {email} 发送安全验证链接。",
       "forgotDescription": "如果存在与 {email} 匹配的账号，我们已发送重置链接。",
@@ -868,7 +864,6 @@
       "resent": "验证邮件已发送"
     },
     "verify": {
-      "state": "验证邮箱",
       "loadingTitle": "正在验证邮箱",
       "loadingDescription": "通常只需要一点时间。",
       "successTitle": "邮箱已验证",
@@ -878,14 +873,12 @@
       "invalidDescription": "请重新申请验证邮件后继续。"
     },
     "forgot": {
-      "state": "忘记密码",
       "title": "重置你的密码",
       "description": "我们会向你发送安全的密码重置链接。",
       "submit": "发送重置链接",
       "submitting": "正在发送链接…"
     },
     "reset": {
-      "state": "重置密码",
       "title": "设置新密码",
       "description": "请使用至少 12 个字符来保护账号。",
       "submit": "重置密码",
@@ -931,7 +924,6 @@
   },
   "Projects": {
     "title": "项目",
-    "description": "围绕同一个研究问题，集中管理论文、对话与研究产物。",
     "search": "搜索项目",
     "actions": {
       "create": "新建项目",
