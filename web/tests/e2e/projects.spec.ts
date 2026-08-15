@@ -42,15 +42,48 @@ async function mockProjects(page: Page) {
       body: JSON.stringify(actor),
     }),
   );
-  await page.route(`${apiPattern}/conversations**`, (route) =>
-    route.fulfill({
+  await page.route(`${apiPattern}/conversations**`, (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const turnsMatch = path.match(/\/conversations\/([^/]+)\/turns$/);
+    if (turnsMatch) {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [],
+          next_cursor: null,
+          path_revision: 1,
+        }),
+      });
+    }
+    const conversationMatch = path.match(/\/conversations\/([^/]+)$/);
+    if (conversationMatch) {
+      const conversation =
+        projectConversationFixtures.find(
+          (item) => item.id === conversationMatch[1],
+        ) ?? projectConversationFixtures[0]!;
+      const update =
+        request.method() === "PATCH"
+          ? (request.postDataJSON() as { is_pinned?: boolean })
+          : {};
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...conversation,
+          ...update,
+          paper_context: { kind: "library" },
+          tool_permissions: [],
+        }),
+      });
+    }
+    return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         items: projectConversationFixtures,
         next_cursor: null,
       }),
-    }),
-  );
+    });
+  });
   await page.route(`${apiPattern}/library/papers**`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -209,8 +242,8 @@ test("supports the Projects critical journey", async ({ page }) => {
     page.getByRole("heading", { name: "Evidence synthesis" }),
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "Papers" }).click();
-  await page.getByRole("button", { name: "Add papers" }).click();
+  await page.getByRole("button", { name: "Manage project" }).click();
+  await page.getByRole("menuitem", { name: "Add papers" }).click();
   const chooser = page.getByRole("dialog");
   await chooser
     .getByRole("checkbox", { name: /Attention Is All You Need/ })
@@ -223,6 +256,8 @@ test("supports the Projects critical journey", async ({ page }) => {
   expect((await addRequest).postDataJSON()).toEqual({
     document_ids: [projectPaperFixtures[0]!.document_id],
   });
+  await expect(page).toHaveURL(/view=papers/);
+  await expect(page).not.toHaveURL(/paper_q=|paper_cursor=|paper_sort=/);
   await expect(
     page.getByRole("link", { name: /Attention Is All You Need/ }),
   ).toHaveAttribute(
@@ -271,6 +306,7 @@ const activeProjectId = "20000000-0000-4000-8000-000000000099";
 test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/projects/${projectFixtures[0]!.id}`);
+  await expect(page.locator("[data-project-chat]")).toBeHidden();
   await page.getByRole("button", { name: "Chat" }).click();
 
   await expect(page).toHaveURL(/panel=chat/);
@@ -278,11 +314,96 @@ test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
     page.getByRole("region", { name: "Project chat" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Return to project" }),
+    page.getByRole("button", { name: "Close project chat" }),
   ).toBeVisible();
+  const history = page
+    .getByRole("button", { name: "New conversation" })
+    .first();
+  const create = page.getByRole("button", { name: "New conversation" }).last();
+  expect((await history.boundingBox())!.x).toBeLessThan(
+    (await create.boundingBox())!.x,
+  );
+  const composer = page.getByPlaceholder("Ask a follow-up");
+  const composerBox = await composer.boundingBox();
+  expect(composerBox).not.toBeNull();
+  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(844);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await page.getByRole("button", { name: "Close project chat" }).click();
+  await expect(page).not.toHaveURL(/panel=chat/);
+  await expect(page.getByRole("button", { name: "Chat" })).toBeFocused();
 });
+
+test("keeps the selected conversation when Project Chat closes", async ({
+  page,
+}) => {
+  const conversationId = projectConversationFixtures[0]!.id;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(
+    `/projects/${projectFixtures[0]!.id}?panel=chat&conversation=${conversationId}`,
+  );
+  await expect(
+    page.getByRole("button", { name: "Compare retrieval baselines" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close project chat" }).click();
+  await expect(page).toHaveURL(new RegExp(`conversation=${conversationId}`));
+  await expect(page).not.toHaveURL(/panel=chat/);
+});
+
+test("does not expose Add papers without paper-management permission", async ({
+  page,
+}) => {
+  const project = projectFixtures[0]!;
+  await page.route(`${apiPattern}/projects/${project.id}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...project,
+        capabilities: { ...project.capabilities, manage_papers: false },
+        membership: {
+          ...project.membership,
+          permissions: {
+            ...project.membership.permissions,
+            manage_papers: false,
+          },
+        },
+      }),
+    }),
+  );
+  await page.goto(`/projects/${project.id}`);
+  await page.getByRole("button", { name: "Manage project" }).click();
+  await expect(page.getByRole("menuitem", { name: "Add papers" })).toHaveCount(
+    0,
+  );
+});
+
+for (const width of [1440, 768, 430, 390, 320]) {
+  test(`keeps Project detail within a ${width}px viewport`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(`/projects/${projectFixtures[0]!.id}`);
+    await expect(page.locator("[data-project-title]:visible")).toHaveCount(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await page.locator("[data-project-title]").evaluateAll(
+        (items) =>
+          items.filter((item) => {
+            const style = window.getComputedStyle(item);
+            return (
+              style.display !== "none" &&
+              style.visibility !== "hidden" &&
+              item.getClientRects().length > 0
+            );
+          }).length,
+      ),
+    ).toBe(1);
+  });
+}

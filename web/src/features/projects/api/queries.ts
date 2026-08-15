@@ -87,25 +87,6 @@ export const projectQueries = {
         return data;
       },
     }),
-  conversations: (projectId?: string) =>
-    queryOptions({
-      queryKey: ["conversations", "project", projectId] as const,
-      queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET("/api/v1/conversations", {
-          params: {
-            query: {
-              archived: false,
-              limit: 50,
-              scope_id: projectId,
-              scope_type: projectId ? "project" : undefined,
-            },
-          },
-          signal,
-        });
-        if (!data) throw new Error("Conversation list response was empty");
-        return data;
-      },
-    }),
   libraryPapers: () =>
     queryOptions({
       queryKey: projectKeys.libraryPapers(),
