@@ -9,6 +9,9 @@ from uuid import UUID, uuid4
 from app.modules.billing.infrastructure.usage_repository import (
     resource_usage_repository,
 )
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
 from app.database.models import (
     Document,
     DurableJob,
@@ -29,7 +32,6 @@ from app.modules.billing.domain import (
 from app.modules.billing.infrastructure.quotas import (
     get_quota_user,
     get_user_entitlements,
-    lock_account_resource_quota,
 )
 from app.modules.projects.infrastructure.access import require_project_permission
 from app.shared.application import Actor

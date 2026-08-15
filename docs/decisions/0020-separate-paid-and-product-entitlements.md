@@ -39,9 +39,15 @@ the private `scholens` CLI. A `CliOrigin` stores the normalized command name and
 an invocation UUID in the append-only Operation Journal. No public
 administrator API is introduced, and SQLAdmin business views are read-only.
 Entitlement reasons remain on the entitlement records. Identity admin/block
-commands require operator rationale as an acknowledgement, but do not persist
-that arbitrary prose in the Journal's safe projection. Their action, actor,
+commands do not collect arbitrary reason prose that the Journal contract would
+discard; explicit confirmation provides acknowledgement, while action, actor,
 resource, command name, and invocation UUID remain durable.
+
+Account capacity and entitlement writes share a billing-owned two-int advisory
+lock (`BILL`, user ID). Batch targets are locked in stable user-ID order and
+their AuthUser/UserProfile facts are re-read before mutation. Privileged CLI
+authorization similarly holds the administrator-roster lock followed by the
+actor rows for the whole Unit of Work; revoke/block follows that same order.
 
 Because Journal rows cannot be rewritten or deleted, the migration's `cli`
 origin vocabulary is a one-way compatibility extension: downgrading the
@@ -68,9 +74,10 @@ so historical audit rows remain valid.
 ## Consequences
 
 Paid and internal access can overlap safely, and both automatically fall back
-when their own validity ends. Operators must supply an exact actor, reason, and
-confirmation for business writes; automation uses explicit `--yes` and stable
-JSON/exit codes. Grant and override tables need migrations, constraints,
+when their own validity ends. Operators must supply an exact actor and
+confirmation for business writes; entitlement and quota mutations also require
+a persisted reason. Automation uses explicit `--yes` and stable JSON/exit codes.
+Grant and override tables need migrations, constraints,
 expiry-aware queries, idempotent commands, and concurrency serialization.
 
 The CLI deliberately cannot reset Token usage, rewrite Stripe subscriptions,

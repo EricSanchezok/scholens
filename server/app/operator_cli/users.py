@@ -211,13 +211,8 @@ def _set_admin(
     actor_email: str,
     email: str,
     enabled: bool,
-    reason: str,
     yes: bool,
 ) -> None:
-    # Required as an explicit operator acknowledgement. Entitlement reasons
-    # are durable business data; identity Journal entries intentionally keep
-    # only their safe action/resource projection.
-    del reason
     actor_user = load_user(actor_email)
     target = load_user(email)
     verb = "grant" if enabled else "revoke"
@@ -242,11 +237,6 @@ def _admin_options(function: Any) -> Any:
     function = click.option("--yes", is_flag=True, help="Skip confirmation prompt.")(
         function
     )
-    function = click.option(
-        "--reason",
-        required=True,
-        help="Required operator rationale; not persisted.",
-    )(function)
     function = click.option("--email", required=True, callback=email_callback)(function)
     function = click.option("--actor-email", required=True, callback=email_callback)(
         function
@@ -262,7 +252,6 @@ def grant_admin(
     state: CliState,
     actor_email: str,
     email: str,
-    reason: str,
     yes: bool,
 ) -> None:
     _set_admin(
@@ -270,7 +259,6 @@ def grant_admin(
         actor_email=actor_email,
         email=email,
         enabled=True,
-        reason=reason,
         yes=yes,
     )
 
@@ -283,7 +271,6 @@ def revoke_admin(
     state: CliState,
     actor_email: str,
     email: str,
-    reason: str,
     yes: bool,
 ) -> None:
     _set_admin(
@@ -291,7 +278,6 @@ def revoke_admin(
         actor_email=actor_email,
         email=email,
         enabled=False,
-        reason=reason,
         yes=yes,
     )
 
@@ -302,13 +288,10 @@ def _set_blocked(
     actor_email: str,
     email: str,
     blocked: bool,
-    reason: str,
     yes: bool,
 ) -> None:
     from app.modules.identity.application.contracts import SetUserBlockedRequest
 
-    # See _set_admin: the private Journal does not persist arbitrary prose.
-    del reason
     actor_user = load_user(actor_email)
     target = load_user(email)
     verb = "block" if blocked else "unblock"
@@ -336,7 +319,6 @@ def block_user(
     state: CliState,
     actor_email: str,
     email: str,
-    reason: str,
     yes: bool,
 ) -> None:
     _set_blocked(
@@ -344,7 +326,6 @@ def block_user(
         actor_email=actor_email,
         email=email,
         blocked=True,
-        reason=reason,
         yes=yes,
     )
 
@@ -357,7 +338,6 @@ def unblock_user(
     state: CliState,
     actor_email: str,
     email: str,
-    reason: str,
     yes: bool,
 ) -> None:
     _set_blocked(
@@ -365,7 +345,6 @@ def unblock_user(
         actor_email=actor_email,
         email=email,
         blocked=False,
-        reason=reason,
         yes=yes,
     )
 

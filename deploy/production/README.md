@@ -61,7 +61,10 @@ after Scholens migration. The sanchezcloud-identity repository independently mig
 `auth.*`; the Scholens migration container checks the auth ledger and applies
 only `scholens.*` with `scholens db upgrade --yes`. Daily API startup remains
 Gunicorn-owned and never applies migrations. Both runners use PostgreSQL
-advisory locks.
+advisory locks. The image sets an explicit `SCHOLENS_SERVER_ROOT=/app`
+contract, so the CLI
+loads the copied `/app/alembic.ini` and `/app/migrations` bundle even though the
+Python package itself is installed under `.venv/site-packages`.
 
 The `/admin` login uses an ordinary verified sanchezcloud-identity account and then checks
 `scholens.user_profiles.is_admin`. Bootstrap the first administrator out of band

@@ -80,11 +80,17 @@ Run `uv run scholens <group> --help` for the authoritative option set.
 Business mutations execute through `ApplicationExecutor` and the owning
 application service, and write CLI provenance to the append-only Operation
 Journal. Except for `users bootstrap-admin` and the local-only guarded reset,
-mutations require an active verified administrator via `--actor-email`, an
-explicit `--reason`, and confirmation or `--yes`. SQLAdmin is a read-only
-diagnostic surface. Entitlement reasons are durable product data. Identity
-admin/block reasons are required operator rationale but are not persisted;
-the Journal stores their bounded safe action/resource projection instead.
+mutations require an active verified administrator via `--actor-email` and
+confirmation or `--yes`. Entitlement, quota, development, and maintenance
+commands also require `--reason`; entitlement reasons are durable product data.
+Identity admin/block commands do not collect arbitrary prose, and the Journal
+stores their structured action/resource projection. SQLAdmin is a read-only
+diagnostic surface.
+
+Privileged commands authorize inside their application transaction by locking
+the administrator roster, then the actor identity/profile rows, and re-reading
+the live status. Admin revoke/block follows the same lock order, so a stale CLI
+Actor snapshot cannot outlive a committed privilege reduction.
 
 Passage backfill is a bounded, repeatable runtime operation: `--batch-size`
 caps the documents handled by one invocation and transaction. It relies on

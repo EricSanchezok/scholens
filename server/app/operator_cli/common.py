@@ -22,7 +22,7 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
 )
-from app.shared.domain import AppError, FailureKind
+from app.shared.domain import AppError
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -211,19 +211,7 @@ def cli_operation(command_name: str, *, system: bool = False) -> OperationContex
 
 
 def current_admin(capabilities: Any, actor_id: int) -> Actor:
-    actor = capabilities.identity.resolve_actor_by_user_id(actor_id)
-    if (
-        not actor.is_admin
-        or not actor.is_active
-        or actor.is_blocked
-        or not actor.email_verified
-    ):
-        raise AppError(
-            code="admin_required",
-            message="Administrator access is required",
-            kind=FailureKind.PERMISSION_DENIED,
-        )
-    return cast(Actor, actor)
+    return cast(Actor, capabilities.identity.lock_current_admin(actor_id))
 
 
 def confirm(message: str, *, yes: bool) -> None:

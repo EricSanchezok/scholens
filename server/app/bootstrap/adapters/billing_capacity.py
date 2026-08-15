@@ -2,10 +2,12 @@
 
 from uuid import UUID
 
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
 from app.modules.billing.infrastructure.quotas import (
     can_user_create_project,
     can_user_upload_paper,
-    lock_account_resource_quota,
     require_library_document_capacity,
 )
 from app.modules.papers.infrastructure.models import Document

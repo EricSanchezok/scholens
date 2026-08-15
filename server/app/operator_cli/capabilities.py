@@ -42,8 +42,12 @@ class OperatorCapabilities:
 
     @cached_property
     def entitlement_admin(self) -> EntitlementAdmin:
+        identity_gateway = SqlAlchemyIdentityGateway(self._session)
         return EntitlementAdmin(
-            SqlAlchemyEntitlementAdminGateway(self._session),
+            SqlAlchemyEntitlementAdminGateway(
+                self._session,
+                lock_target_identity=identity_gateway.lock_actor_identity,
+            ),
             journal=self._journal,
             clock=self._clock,
         )

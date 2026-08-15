@@ -412,6 +412,9 @@ ownership transfer. Transfer locks both account quota namespaces in stable
 user-ID order and recomputes both owners' completed and active unique-document
 views before committing; an already-owned Document may reserve zero account
 units while still reserving one Project slot.
+Entitlement and capacity writes share one billing-owned two-int PostgreSQL
+advisory-lock namespace (`BILL`, int32 user ID), distinct from unrelated locks
+and from the administrator-roster namespace.
 
 Effective entitlements combine paid `subscriptions`, product-owned
 `account_plan_grants`, and active `account_quota_overrides`. A paid Researcher
@@ -427,9 +430,13 @@ read-only; no public administrator API exists for grants, quota overrides,
 subscription mutation, token resets, or arbitrary job state changes.
 Administrator bootstrap and reductions serialize through a dedicated
 transaction advisory lock before re-reading the available-admin roster.
+Every privileged operator command takes that same roster lock, then locks and
+re-reads its actor's AuthUser and UserProfile rows before authorization. This
+keeps the lock order consistent with revoke/block and holds the live admin fact
+through the mutation transaction.
 Free-text entitlement reasons live on entitlement records; identity
-admin/block rationale is required at the CLI but deliberately not copied into
-the Journal safe projection.
+admin/block commands do not accept free-text rationale, and retain only their
+structured Journal safe projection plus explicit confirmation.
 
 ## Adding a capability or adapter
 

@@ -479,6 +479,10 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     assert "CREATE TABLE auth.product_migrator_must_not_create" in workflow
     assert "CREATE TABLE scholens.auth_migrator_must_not_create" in workflow
 
+    server_dockerfile = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY --from=builder /app/migrations/ /app/migrations/" in server_dockerfile
+    assert "SCHOLENS_SERVER_ROOT=/app" in server_dockerfile
+
     for lane in (
         "server",
         "jobs",

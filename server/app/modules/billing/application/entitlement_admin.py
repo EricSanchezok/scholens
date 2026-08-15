@@ -60,6 +60,8 @@ class MutationResult:
 class EntitlementAdminGateway(Protocol):
     def lock_account(self, *, user_id: int) -> None: ...
 
+    def lock_target_identity(self, *, user_id: int) -> Actor | None: ...
+
     def current_grant(self, *, user_id: int) -> GrantRecord | None: ...
 
     def create_grant(
@@ -140,6 +142,36 @@ class EntitlementAdmin:
                 kind=FailureKind.CONFLICT,
             )
 
+    def _lock_targets(
+        self,
+        targets: tuple[Actor, ...],
+        *,
+        require_eligible: bool,
+    ) -> tuple[Actor, ...]:
+        """Lock and reload target identity facts inside the mutation UoW."""
+        user_ids = sorted({target.id for target in targets})
+        if not user_ids:
+            raise AppError(
+                code="entitlement_target_required",
+                message="At least one target account is required",
+                kind=FailureKind.INVALID_ARGUMENT,
+            )
+
+        locked_targets: list[Actor] = []
+        for user_id in user_ids:
+            self._gateway.lock_account(user_id=user_id)
+            target = self._gateway.lock_target_identity(user_id=user_id)
+            if target is None:
+                raise AppError(
+                    code="entitlement_target_ineligible",
+                    message="Entitlements require an active verified account",
+                    kind=FailureKind.CONFLICT,
+                )
+            if require_eligible:
+                self._require_target(target)
+            locked_targets.append(target)
+        return tuple(locked_targets)
+
     def grant_researcher(
         self,
         *,
@@ -163,20 +195,11 @@ class EntitlementAdmin:
                 message="A reason of at most 500 characters is required",
                 kind=FailureKind.INVALID_ARGUMENT,
             )
-        unique_targets = tuple({target.id: target for target in targets}.values())
-        if not unique_targets:
-            raise AppError(
-                code="entitlement_target_required",
-                message="At least one target account is required",
-                kind=FailureKind.INVALID_ARGUMENT,
-            )
-        for target in unique_targets:
-            self._require_target(target)
+        locked_targets = self._lock_targets(targets, require_eligible=True)
         now = self._clock.now()
         expires_at = now + timedelta(days=days)
         results: list[MutationResult] = []
-        for target in sorted(unique_targets, key=lambda item: item.id):
-            self._gateway.lock_account(user_id=target.id)
+        for target in locked_targets:
             existing = self._gateway.current_grant(user_id=target.id)
             # Re-running a duration-based operator command must not churn the
             # grant merely because its wall clock moved by a few seconds.
@@ -250,17 +273,10 @@ class EntitlementAdmin:
                 message="A reason of at most 500 characters is required",
                 kind=FailureKind.INVALID_ARGUMENT,
             )
-        unique_targets = tuple({target.id: target for target in targets}.values())
-        if not unique_targets:
-            raise AppError(
-                code="entitlement_target_required",
-                message="At least one target account is required",
-                kind=FailureKind.INVALID_ARGUMENT,
-            )
+        locked_targets = self._lock_targets(targets, require_eligible=False)
         now = self._clock.now()
         results: list[MutationResult] = []
-        for target in sorted(unique_targets, key=lambda item: item.id):
-            self._gateway.lock_account(user_id=target.id)
+        for target in locked_targets:
             existing = self._gateway.current_grant(user_id=target.id)
             if existing is None:
                 results.append(
@@ -307,7 +323,6 @@ class EntitlementAdmin:
         reason: str,
     ) -> MutationResult:
         self._require_admin(actor)
-        self._require_target(target)
         if resource_key not in QUOTA_KEYS or limit_value < 0:
             raise AppError(
                 code="quota_override_invalid",
@@ -327,11 +342,11 @@ class EntitlementAdmin:
                 message="A reason of at most 500 characters is required",
                 kind=FailureKind.INVALID_ARGUMENT,
             )
+        locked_target = self._lock_targets((target,), require_eligible=True)[0]
         now = self._clock.now()
         expires_at = now + timedelta(days=days)
-        self._gateway.lock_account(user_id=target.id)
         existing = self._gateway.current_override(
-            user_id=target.id,
+            user_id=locked_target.id,
             resource_key=resource_key,
         )
         if (
@@ -340,7 +355,7 @@ class EntitlementAdmin:
             and existing.expires_at >= expires_at - timedelta(days=1)
         ):
             return MutationResult(
-                user_id=target.id,
+                user_id=locked_target.id,
                 resource_id=existing.id,
                 changed=False,
             )
@@ -352,7 +367,7 @@ class EntitlementAdmin:
                 reason=normalized_reason,
             )
         created = self._gateway.create_override(
-            user_id=target.id,
+            user_id=locked_target.id,
             resource_key=resource_key,
             limit_value=limit_value,
             set_by_user_id=actor.id,
@@ -365,11 +380,15 @@ class EntitlementAdmin:
             operation=operation,
             action=ENTITLEMENT_QUOTA_SET,
             resources=(
-                ResourceRef("user", str(target.id)),
+                ResourceRef("user", str(locked_target.id)),
                 ResourceRef("quota_override", str(created.id)),
             ),
         )
-        return MutationResult(user_id=target.id, resource_id=created.id, changed=True)
+        return MutationResult(
+            user_id=locked_target.id,
+            resource_id=created.id,
+            changed=True,
+        )
 
     def clear_quota(
         self,
@@ -394,13 +413,17 @@ class EntitlementAdmin:
                 message="A reason of at most 500 characters is required",
                 kind=FailureKind.INVALID_ARGUMENT,
             )
-        self._gateway.lock_account(user_id=target.id)
+        locked_target = self._lock_targets((target,), require_eligible=False)[0]
         existing = self._gateway.current_override(
-            user_id=target.id,
+            user_id=locked_target.id,
             resource_key=resource_key,
         )
         if existing is None:
-            return MutationResult(user_id=target.id, resource_id=None, changed=False)
+            return MutationResult(
+                user_id=locked_target.id,
+                resource_id=None,
+                changed=False,
+            )
         self._gateway.revoke_override(
             override_id=existing.id,
             revoked_by_user_id=actor.id,
@@ -412,11 +435,15 @@ class EntitlementAdmin:
             operation=operation,
             action=ENTITLEMENT_QUOTA_CLEARED,
             resources=(
-                ResourceRef("user", str(target.id)),
+                ResourceRef("user", str(locked_target.id)),
                 ResourceRef("quota_override", str(existing.id)),
             ),
         )
-        return MutationResult(user_id=target.id, resource_id=existing.id, changed=True)
+        return MutationResult(
+            user_id=locked_target.id,
+            resource_id=existing.id,
+            changed=True,
+        )
 
 
 __all__ = [

@@ -15,6 +15,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.bootstrap.adapters.billing_capacity import BillingProjectCapacity
 from app.bootstrap.adapters.project_repository import project_repository
 from app.bootstrap.adapters.upload_reservations import reserve_upload
+from app.modules.billing.application.entitlement_admin import EntitlementAdmin
+from app.modules.billing.infrastructure.entitlement_admin_gateway import (
+    SqlAlchemyEntitlementAdminGateway,
+)
 from app.modules.billing.infrastructure.usage_repository import (
     resource_usage_repository,
 )
@@ -31,6 +35,7 @@ from app.shared.application import (
     OperationInitiator,
 )
 from app.shared.domain import AppError
+from app.shared.infrastructure import SystemClock
 
 APP_DATABASE_URL = os.getenv("SCHOLENS_POSTGRES_TEST_URL")
 ADMIN_DATABASE_URL = os.getenv("SCHOLENS_POSTGRES_TEST_ADMIN_URL")
@@ -87,6 +92,22 @@ def _create_users(admin_engine, prefix: str, count: int) -> list[tuple[int, str]
 
 def _delete_users(admin_engine, user_ids: list[int]) -> None:
     with admin_engine.begin() as connection:
+        connection.execute(
+            text(
+                "DELETE FROM scholens.account_quota_overrides "
+                "WHERE user_id = ANY(:user_ids) OR set_by_user_id = ANY(:user_ids) "
+                "OR revoked_by_user_id = ANY(:user_ids)"
+            ),
+            {"user_ids": user_ids},
+        )
+        connection.execute(
+            text(
+                "DELETE FROM scholens.account_plan_grants "
+                "WHERE user_id = ANY(:user_ids) OR granted_by_user_id = ANY(:user_ids) "
+                "OR revoked_by_user_id = ANY(:user_ids)"
+            ),
+            {"user_ids": user_ids},
+        )
         connection.execute(
             text("DELETE FROM scholens.jobs WHERE requested_by_id = ANY(:user_ids)"),
             {"user_ids": user_ids},
@@ -520,6 +541,280 @@ def test_concurrent_admin_reduction_preserves_one_available_admin(change: str) -
             )
         assert available == 1
     finally:
+        _delete_users(admin_engine, [user_id for user_id, _ in users])
+        app_engine.dispose()
+        admin_engine.dispose()
+
+
+def test_researcher_grant_reloads_target_after_concurrent_block() -> None:
+    assert APP_DATABASE_URL is not None and ADMIN_DATABASE_URL is not None
+    app_engine = create_engine(APP_DATABASE_URL)
+    admin_engine = create_engine(ADMIN_DATABASE_URL)
+    session_factory = sessionmaker(bind=app_engine, expire_on_commit=False)
+    users = _create_users(admin_engine, "pg-grant-race", 2)
+    (admin_id, _admin_email), (target_id, target_email) = users
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE scholens.user_profiles SET is_admin = true "
+                "WHERE user_id = :user_id"
+            ),
+            {"user_id": admin_id},
+        )
+
+    profile_locked = threading.Event()
+    grant_read_started = threading.Event()
+    allow_block_commit = threading.Event()
+
+    class _SignalingGateway(SqlAlchemyEntitlementAdminGateway):
+        def lock_target_identity(self, *, user_id: int) -> Actor | None:
+            grant_read_started.set()
+            return super().lock_target_identity(user_id=user_id)
+
+    def block_target() -> None:
+        with app_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE scholens.user_profiles SET is_blocked = true "
+                    "WHERE user_id = :user_id"
+                ),
+                {"user_id": target_id},
+            )
+            profile_locked.set()
+            assert allow_block_commit.wait(timeout=5)
+
+    def grant_target() -> str:
+        assert profile_locked.wait(timeout=5)
+        try:
+            with session_factory.begin() as db:
+                identity = Identity(SqlAlchemyIdentityGateway(db), journal=MagicMock())
+                actor = identity.lock_current_admin(admin_id)
+                EntitlementAdmin(
+                    _SignalingGateway(
+                        db,
+                        lock_target_identity=SqlAlchemyIdentityGateway(
+                            db
+                        ).lock_actor_identity,
+                    ),
+                    journal=MagicMock(),
+                    clock=SystemClock(),
+                ).grant_researcher(
+                    actor=actor,
+                    operation=_operation("entitlements.grant-researcher"),
+                    targets=(_actor(target_id, target_email),),
+                    days=365,
+                    reason="concurrent eligibility proof",
+                )
+            return "granted"
+        except AppError as error:
+            return error.code
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            block_future = executor.submit(block_target)
+            assert profile_locked.wait(timeout=5)
+            grant_future = executor.submit(grant_target)
+            assert grant_read_started.wait(timeout=5)
+            assert not grant_future.done()
+            allow_block_commit.set()
+            block_future.result(timeout=5)
+            assert grant_future.result(timeout=5) == "entitlement_target_ineligible"
+
+        with admin_engine.connect() as connection:
+            assert (
+                int(
+                    connection.scalar(
+                        text(
+                            "SELECT COUNT(*) FROM scholens.account_plan_grants "
+                            "WHERE user_id = :user_id"
+                        ),
+                        {"user_id": target_id},
+                    )
+                )
+                == 0
+            )
+    finally:
+        allow_block_commit.set()
+        _delete_users(admin_engine, [user_id for user_id, _ in users])
+        app_engine.dispose()
+        admin_engine.dispose()
+
+
+def test_researcher_batch_rolls_back_when_one_live_target_is_ineligible() -> None:
+    assert APP_DATABASE_URL is not None and ADMIN_DATABASE_URL is not None
+    app_engine = create_engine(APP_DATABASE_URL)
+    admin_engine = create_engine(ADMIN_DATABASE_URL)
+    session_factory = sessionmaker(bind=app_engine, expire_on_commit=False)
+    users = _create_users(admin_engine, "pg-grant-batch", 3)
+    (admin_id, _admin_email), first_target, second_target = users
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE scholens.user_profiles SET is_admin = true "
+                "WHERE user_id = :admin_id"
+            ),
+            {"admin_id": admin_id},
+        )
+        connection.execute(
+            text(
+                "UPDATE scholens.user_profiles SET is_blocked = true "
+                "WHERE user_id = :target_id"
+            ),
+            {"target_id": second_target[0]},
+        )
+
+    try:
+        with pytest.raises(AppError) as error:
+            with session_factory.begin() as db:
+                identity = Identity(SqlAlchemyIdentityGateway(db), journal=MagicMock())
+                actor = identity.lock_current_admin(admin_id)
+                EntitlementAdmin(
+                    SqlAlchemyEntitlementAdminGateway(
+                        db,
+                        lock_target_identity=SqlAlchemyIdentityGateway(
+                            db
+                        ).lock_actor_identity,
+                    ),
+                    journal=MagicMock(),
+                    clock=SystemClock(),
+                ).grant_researcher(
+                    actor=actor,
+                    operation=_operation("entitlements.grant-researcher"),
+                    targets=(
+                        _actor(first_target[0], first_target[1]),
+                        _actor(second_target[0], second_target[1]),
+                    ),
+                    days=365,
+                    reason="batch eligibility proof",
+                )
+        assert error.value.code == "entitlement_target_ineligible"
+        with admin_engine.connect() as connection:
+            assert (
+                int(
+                    connection.scalar(
+                        text(
+                            "SELECT COUNT(*) FROM scholens.account_plan_grants "
+                            "WHERE user_id = ANY(:user_ids)"
+                        ),
+                        {"user_ids": [first_target[0], second_target[0]]},
+                    )
+                )
+                == 0
+            )
+    finally:
+        _delete_users(admin_engine, [user_id for user_id, _ in users])
+        app_engine.dispose()
+        admin_engine.dispose()
+
+
+@pytest.mark.parametrize("change", ["revoke", "block"])
+def test_admin_reduction_waits_for_locked_operator_authorization(change: str) -> None:
+    assert APP_DATABASE_URL is not None and ADMIN_DATABASE_URL is not None
+    app_engine = create_engine(APP_DATABASE_URL)
+    admin_engine = create_engine(ADMIN_DATABASE_URL)
+    session_factory = sessionmaker(bind=app_engine, expire_on_commit=False)
+    users = _create_users(admin_engine, f"pg-operator-{change}", 3)
+    (operator_id, operator_email), (reducer_id, reducer_email), target = users
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE scholens.user_profiles SET is_admin = true "
+                "WHERE user_id = ANY(:user_ids)"
+            ),
+            {"user_ids": [operator_id, reducer_id]},
+        )
+
+    operator_authorized = threading.Event()
+    reduction_started = threading.Event()
+    allow_operator_commit = threading.Event()
+
+    class _ReductionGateway(SqlAlchemyIdentityGateway):
+        def lock_admin_roster(self) -> None:
+            reduction_started.set()
+            super().lock_admin_roster()
+
+    def privileged_grant() -> str:
+        with session_factory.begin() as db:
+            identity = Identity(SqlAlchemyIdentityGateway(db), journal=MagicMock())
+            actor = identity.lock_current_admin(operator_id)
+            operator_authorized.set()
+            assert allow_operator_commit.wait(timeout=5)
+            EntitlementAdmin(
+                SqlAlchemyEntitlementAdminGateway(
+                    db,
+                    lock_target_identity=SqlAlchemyIdentityGateway(
+                        db
+                    ).lock_actor_identity,
+                ),
+                journal=MagicMock(),
+                clock=SystemClock(),
+            ).grant_researcher(
+                actor=actor,
+                operation=_operation("entitlements.grant-researcher"),
+                targets=(_actor(target[0], target[1]),),
+                days=365,
+                reason="operator authorization serialization",
+            )
+        return "granted"
+
+    def reduce_operator() -> str:
+        assert operator_authorized.wait(timeout=5)
+        with session_factory.begin() as db:
+            identity = Identity(_ReductionGateway(db), journal=MagicMock())
+            reducer = _actor(reducer_id, reducer_email, admin=True)
+            if change == "revoke":
+                identity.set_admin(
+                    actor=reducer,
+                    operation=_operation("users.revoke-admin"),
+                    user_id=operator_id,
+                    enabled=False,
+                )
+            else:
+                identity.set_blocked(
+                    actor=reducer,
+                    operation=_operation("users.block"),
+                    user_id=operator_id,
+                    request=SetUserBlockedRequest(blocked=True),
+                )
+        return "reduced"
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            grant_future = executor.submit(privileged_grant)
+            assert operator_authorized.wait(timeout=5)
+            reduction_future = executor.submit(reduce_operator)
+            assert reduction_started.wait(timeout=5)
+            assert not reduction_future.done()
+            allow_operator_commit.set()
+            assert grant_future.result(timeout=5) == "granted"
+            assert reduction_future.result(timeout=5) == "reduced"
+
+        with admin_engine.connect() as connection:
+            assert (
+                int(
+                    connection.scalar(
+                        text(
+                            "SELECT COUNT(*) FROM scholens.account_plan_grants "
+                            "WHERE user_id = :user_id AND revoked_at IS NULL"
+                        ),
+                        {"user_id": target[0]},
+                    )
+                )
+                == 1
+            )
+            operator_state = connection.execute(
+                text(
+                    "SELECT is_admin, is_blocked FROM scholens.user_profiles "
+                    "WHERE user_id = :user_id"
+                ),
+                {"user_id": operator_id},
+            ).one()
+        assert operator_state == (
+            change != "revoke",
+            change == "block",
+        )
+    finally:
+        allow_operator_commit.set()
         _delete_users(admin_engine, [user_id for user_id, _ in users])
         app_engine.dispose()
         admin_engine.dispose()

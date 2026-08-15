@@ -7,6 +7,9 @@ from datetime import datetime, timedelta, timezone
 from app.modules.billing.infrastructure.usage_repository import (
     resource_usage_repository,
 )
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
 from app.modules.billing.infrastructure.subscription_repository import (
     subscription_repository,
 )
@@ -100,11 +103,6 @@ def get_user_subscription_plan(db: Session, user: Actor) -> SubscriptionPlan:
 def get_plan_limits(plan: SubscriptionPlan) -> dict[str, int]:
     """Get the limits for a specific subscription plan."""
     return entitlements_for(plan).as_limits()
-
-
-def lock_account_resource_quota(db: Session, *, user_id: int) -> None:
-    """Serialize resource grants for one account within the current transaction."""
-    db.execute(select(func.pg_advisory_xact_lock(user_id)))
 
 
 def get_quota_user(db: Session, *, user_id: int) -> Actor:

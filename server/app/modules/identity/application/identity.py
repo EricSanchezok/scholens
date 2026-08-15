@@ -60,6 +60,16 @@ class LocalIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class LockedIdentity:
+    id: int
+    email: str
+    display_name: str | None
+    status: str
+    email_verified: bool
+    profile: IdentityProfile | None
+
+
+@dataclass(frozen=True, slots=True)
 class BlockedStatusResolution:
     profile_created: bool
     changed: bool
@@ -85,6 +95,8 @@ class IdentityGateway(Protocol):
     def available_admin_count(self) -> int: ...
 
     def lock_admin_roster(self) -> None: ...
+
+    def lock_identity(self, *, user_id: int) -> LockedIdentity | None: ...
 
     def set_blocked(
         self,
@@ -190,6 +202,32 @@ class Identity:
             profile=identity.profile,
         )
 
+    def lock_current_admin(self, user_id: int) -> Actor:
+        """Serialize privileged authorization with admin roster reductions."""
+        self._gateway.lock_admin_roster()
+        identity = self._gateway.lock_identity(user_id=user_id)
+        if (
+            identity is None
+            or identity.profile is None
+            or identity.status != "active"
+            or not identity.email_verified
+            or identity.profile.is_blocked
+            or not identity.profile.is_admin
+        ):
+            raise AppError(
+                code="admin_required",
+                message="Administrator access is required",
+                kind=FailureKind.PERMISSION_DENIED,
+            )
+        return self._actor(
+            user_id=identity.id,
+            email=identity.email,
+            display_name=identity.display_name,
+            status=identity.status,
+            email_verified=identity.email_verified,
+            profile=identity.profile,
+        )
+
     @staticmethod
     def _actor(
         *,
@@ -241,10 +279,11 @@ class Identity:
             )
         if request.blocked:
             self._gateway.lock_admin_roster()
-        target_identity = self._gateway.local_identity(user_id=user_id)
+        target_identity = self._gateway.lock_identity(user_id=user_id)
         if (
             request.blocked
             and target_identity is not None
+            and target_identity.profile is not None
             and target_identity.profile.is_admin
             and target_identity.email_verified
             and self._gateway.available_admin_count() <= 1
@@ -304,7 +343,7 @@ class Identity:
                 message="Administrator bootstrap is available only before the first admin",
                 kind=FailureKind.CONFLICT,
             )
-        identity = self._gateway.authenticated_identity(user_id=user_id)
+        identity = self._gateway.lock_identity(user_id=user_id)
         if (
             identity is None
             or identity.status != "active"
@@ -360,7 +399,7 @@ class Identity:
         )
         if not enabled:
             self._gateway.lock_admin_roster()
-        identity = self._gateway.authenticated_identity(user_id=user_id)
+        identity = self._gateway.lock_identity(user_id=user_id)
         if identity is None:
             raise AppError(
                 code="user_not_found",
@@ -373,14 +412,13 @@ class Identity:
                 message="Administrators must be active and email verified",
                 kind=FailureKind.CONFLICT,
             )
-        current = self._gateway.local_identity(user_id=user_id)
         if (
             not enabled
-            and current is not None
-            and current.profile.is_admin
-            and not current.profile.is_blocked
-            and current.status == "active"
-            and current.email_verified
+            and identity.profile is not None
+            and identity.profile.is_admin
+            and not identity.profile.is_blocked
+            and identity.status == "active"
+            and identity.email_verified
             and self._gateway.available_admin_count() <= 1
         ):
             raise AppError(

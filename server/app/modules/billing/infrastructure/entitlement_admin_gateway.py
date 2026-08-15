@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Protocol
 from uuid import UUID
 
 from app.modules.billing.application.entitlement_admin import (
@@ -12,20 +13,36 @@ from app.modules.billing.application.entitlement_admin import (
 from app.modules.billing.infrastructure.entitlement_repository import (
     entitlement_repository,
 )
+from app.modules.billing.infrastructure.account_locks import (
+    lock_account_resource_quota,
+)
 from app.modules.billing.infrastructure.models import (
     AccountPlanGrant,
     AccountQuotaOverride,
 )
-from sqlalchemy import func, select
+from app.shared.application import Actor
 from sqlalchemy.orm import Session
 
 
+class TargetIdentityLocker(Protocol):
+    def __call__(self, *, user_id: int) -> Actor | None: ...
+
+
 class SqlAlchemyEntitlementAdminGateway:
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        lock_target_identity: TargetIdentityLocker,
+    ) -> None:
         self._db = db
+        self._lock_target_identity = lock_target_identity
 
     def lock_account(self, *, user_id: int) -> None:
-        self._db.execute(select(func.pg_advisory_xact_lock(user_id)))
+        lock_account_resource_quota(self._db, user_id=user_id)
+
+    def lock_target_identity(self, *, user_id: int) -> Actor | None:
+        return self._lock_target_identity(user_id=user_id)
 
     @staticmethod
     def _grant(model: AccountPlanGrant) -> GrantRecord:

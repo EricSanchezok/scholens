@@ -33,10 +33,14 @@ class _Gateway:
         self.grants: dict[int, GrantRecord] = {}
         self.overrides: dict[tuple[int, str], OverrideRecord] = {}
         self.locked: list[int] = []
+        self.live_targets: dict[int, Actor] = {}
         self.reasons: list[str] = []
 
     def lock_account(self, *, user_id: int) -> None:
         self.locked.append(user_id)
+
+    def lock_target_identity(self, *, user_id: int) -> Actor | None:
+        return self.live_targets.get(user_id, _actor(user_id))
 
     def current_grant(self, *, user_id: int) -> GrantRecord | None:
         return self.grants.get(user_id)
@@ -170,6 +174,7 @@ def test_researcher_grant_is_365_days_and_repeated_call_is_unchanged() -> None:
 
 def test_batch_targets_are_all_validated_before_any_mutation() -> None:
     gateway = _Gateway()
+    gateway.live_targets[3] = _actor(3, verified=False)
     service = EntitlementAdmin(
         gateway,
         journal=_Journal(),  # type: ignore[arg-type]
@@ -187,7 +192,7 @@ def test_batch_targets_are_all_validated_before_any_mutation() -> None:
 
     assert error.value.code == "entitlement_target_ineligible"
     assert gateway.grants == {}
-    assert gateway.locked == []
+    assert gateway.locked == [2, 3]
 
 
 def test_zero_quota_override_is_valid_and_can_be_cleared() -> None:

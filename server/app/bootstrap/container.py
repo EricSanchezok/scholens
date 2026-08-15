@@ -283,9 +283,15 @@ def build_entitlement_admin(
     from app.modules.billing.infrastructure.entitlement_admin_gateway import (
         SqlAlchemyEntitlementAdminGateway,
     )
+    from app.modules.identity.infrastructure.application_gateway import (
+        SqlAlchemyIdentityGateway,
+    )
 
     return EntitlementAdmin(
-        SqlAlchemyEntitlementAdminGateway(db),
+        SqlAlchemyEntitlementAdminGateway(
+            db,
+            lock_target_identity=SqlAlchemyIdentityGateway(db).lock_actor_identity,
+        ),
         journal=journal,
         clock=SystemClock(),
     )

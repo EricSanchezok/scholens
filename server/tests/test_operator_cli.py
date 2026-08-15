@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -153,6 +154,47 @@ def test_database_upgrade_rejects_non_owner_before_confirmation(
     upgrade.assert_not_called()
 
 
+def test_alembic_config_uses_explicit_deployed_server_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    deployed_root = tmp_path / "app"
+    migrations = deployed_root / "migrations"
+    migrations.mkdir(parents=True)
+    (deployed_root / "alembic.ini").write_text(
+        "[alembic]\nscript_location = migrations\n",
+        encoding="utf-8",
+    )
+    (migrations / "env.py").write_text("", encoding="utf-8")
+    fake_installed_module = (
+        tmp_path
+        / ".venv"
+        / "lib"
+        / "python3.12"
+        / "site-packages"
+        / "app"
+        / "operator_cli"
+        / "database.py"
+    )
+    monkeypatch.setattr(database, "__file__", str(fake_installed_module))
+    monkeypatch.setenv("SCHOLENS_SERVER_ROOT", str(deployed_root))
+
+    config = database.alembic_config(database_url="postgresql://fixture")
+
+    assert config.config_file_name == str(deployed_root / "alembic.ini")
+    assert config.get_main_option("script_location") == str(migrations)
+
+
+def test_alembic_config_fails_cleanly_when_deployed_bundle_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SCHOLENS_SERVER_ROOT", str(tmp_path / "missing"))
+
+    with pytest.raises(ValueError, match="SCHOLENS_SERVER_ROOT"):
+        database.alembic_config()
+
+
 def test_database_dependency_error_is_stable_redacted_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -177,13 +219,30 @@ def test_database_dependency_error_is_stable_redacted_json(
     assert "operator:***@database.example" in result.output
 
 
-def test_identity_reason_help_states_that_rationale_is_not_persisted() -> None:
+def test_identity_commands_do_not_collect_an_unpersisted_reason() -> None:
     runner = CliRunner()
     for command in ("grant-admin", "revoke-admin", "block", "unblock"):
         result = runner.invoke(cli, ["users", command, "--help"])
 
         assert result.exit_code == 0
-        assert "Required operator rationale; not persisted." in result.output
+        assert "--reason" not in result.output
+
+        rejected = runner.invoke(
+            cli,
+            [
+                "users",
+                command,
+                "--actor-email",
+                "admin@example.com",
+                "--email",
+                "target@example.com",
+                "--reason",
+                "discarded prose",
+                "--yes",
+            ],
+        )
+        assert rejected.exit_code == 2
+        assert "No such option '--reason'" in rejected.output
 
 
 def test_users_plan_filter_scans_beyond_first_five_hundred(

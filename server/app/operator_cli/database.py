@@ -14,6 +14,8 @@ from sqlalchemy import create_engine, text
 
 from app.operator_cli.common import CliState, OutputGroup, confirm, emit, guarded
 
+SERVER_ROOT_ENV = "SCHOLENS_SERVER_ROOT"
+
 
 def migration_database_url() -> str:
     value = os.getenv("SCHOLENS_MIGRATION_DATABASE_URL") or os.getenv("DATABASE_URL")
@@ -24,8 +26,28 @@ def migration_database_url() -> str:
     return value
 
 
+def server_root() -> Path:
+    """Locate the deployed migration bundle, not the installed Python package."""
+    configured = os.getenv(SERVER_ROOT_ENV)
+    candidates = (
+        (Path(configured).expanduser(),)
+        if configured
+        else (Path(__file__).resolve().parents[2], Path.cwd())
+    )
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if (resolved / "alembic.ini").is_file() and (
+            resolved / "migrations" / "env.py"
+        ).is_file():
+            return resolved
+    raise ValueError(
+        f"{SERVER_ROOT_ENV} must identify a directory containing "
+        "alembic.ini and migrations/env.py"
+    )
+
+
 def alembic_config(*, database_url: str | None = None) -> Config:
-    root = Path(__file__).resolve().parents[2]
+    root = server_root()
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "migrations"))
     if database_url is not None:
