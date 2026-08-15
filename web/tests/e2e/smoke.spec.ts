@@ -187,6 +187,38 @@ test("lets the Server generate the initial conversation title", async ({
   });
 });
 
+test("keeps an IME candidate-confirmation Enter in the Composer", async ({
+  page,
+}) => {
+  const creations: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().endsWith("/api/v1/conversations")
+    ) {
+      creations.push(request.url());
+    }
+  });
+
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "Ask anything" });
+  await composer.fill("你好");
+  await composer.dispatchEvent("compositionstart", { data: "你" });
+  await composer.dispatchEvent("keydown", {
+    code: "Enter",
+    isComposing: true,
+    key: "Enter",
+    keyCode: 229,
+  });
+  await composer.dispatchEvent("compositionend", { data: "你好" });
+
+  await expect(composer).toHaveValue("你好");
+  expect(creations).toHaveLength(0);
+
+  await composer.press("Enter");
+  await expect.poll(() => creations).toHaveLength(1);
+});
+
 test("opens the context picker and changes its searchable selection", async ({
   page,
 }) => {

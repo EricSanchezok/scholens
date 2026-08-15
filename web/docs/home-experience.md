@@ -98,7 +98,9 @@ exhaustion. The interface preserves the failed user message, explains that it
 was saved, and retains the public diagnostic ID without exposing provider or
 Redis details.
 
-Every writable user message exposes Copy and Edit. Editing saves a durable
+Every writable user message exposes Edit followed by Copy; when alternate
+prompt branches exist, their pager follows those actions in the same row.
+Editing saves a durable
 sibling prompt branch at the original depth, selects that branch, and generates
 its first response from the shared prefix. The selected branch replaces the
 entire visible suffix rather than splicing turns client-side. Save remains in
@@ -107,8 +109,16 @@ network, abort, or malformed-stream failure keeps the exact draft, error state,
 and editor focus for correction or retry. Once accepted, the editor closes and
 the standard live-turn recovery contract takes over. A branch pager beside the
 user message selects adjacent sibling branches and persists that selection so
-refresh restores the same path. On fine-pointer desktop, Copy and Edit appear
+refresh restores the same path. On fine-pointer desktop, Edit and Copy appear
 on message hover or keyboard focus-within; touch layouts keep them visible.
+The editor reuses the Composer's quiet rounded surface and surface-level focus
+treatment instead of nesting a native textarea frame inside the message.
+
+Enter submits from the workspace and context-panel Composers only when no IME
+composition is active. The Enter key that confirms a Chinese, Japanese, Korean,
+or other composed candidate updates the draft without sending it; the user's
+next explicit Enter submits. The same guard applies to message-edit shortcuts
+and Reader text controls that bind Enter to an action.
 
 At `response_ready`, the turn snapshot is upserted directly into the TanStack
 Query cache; only conversation detail and list are invalidated in the background

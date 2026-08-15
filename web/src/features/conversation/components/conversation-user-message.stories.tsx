@@ -31,9 +31,14 @@ export const Editing: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Edit message" }));
+    const editor = canvas.getByRole("textbox", { name: "Message text" });
+    const form = canvas.getByRole("form", { name: "Edit message" });
+    await expect(form).toBeVisible();
+    await expect(getComputedStyle(editor).borderTopWidth).toBe("0px");
+    await expect(getComputedStyle(editor).resize).toBe("none");
     await expect(
-      canvas.getByRole("form", { name: "Edit message" }),
-    ).toBeVisible();
+      Number.parseFloat(getComputedStyle(form).borderRadius),
+    ).toBeGreaterThanOrEqual(16);
     await expect(canvas.getByRole("button", { name: "Save" })).toBeDisabled();
   },
 };
@@ -72,6 +77,17 @@ export const Branched: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const actions = canvas.getByRole("group", { name: "Message actions" });
+    await expect(
+      within(actions)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
+      "Edit message",
+      "Copy message",
+      "Previous version of this message",
+      "Next version of this message",
+    ]);
     await expect(canvas.getByLabelText("Message 2 of 3")).toBeVisible();
   },
 };
@@ -93,5 +109,25 @@ export const SimplifiedChineseDark: Story = {
     },
     message: "它与论文中的基线方法相比有什么优势？",
   },
-  globals: { appearance: "dark", locale: "zh-CN" },
+  globals: {
+    appearance: "dark",
+    locale: "zh-CN",
+    viewport: { value: "smallMobile", isRotated: false },
+  },
+};
+
+export const EditingNarrowDark: Story = {
+  args: {
+    message: "比较这篇论文的方法、实验设计和主要局限。",
+  },
+  globals: {
+    appearance: "dark",
+    locale: "zh-CN",
+    viewport: { value: "smallMobile", isRotated: false },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "编辑消息" }));
+    await expect(canvas.getByRole("form", { name: "编辑消息" })).toBeVisible();
+  },
 };

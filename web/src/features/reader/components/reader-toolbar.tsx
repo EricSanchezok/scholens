@@ -23,6 +23,7 @@ import {
   IconButton,
   Button,
   Input,
+  isImeComposing,
   Select,
   SelectContent,
   SelectItem,
@@ -227,7 +228,7 @@ export function ReaderToolbar({
               }
               onKeyDown={(event) => {
                 if (event.key === "Escape") search.onClose();
-                if (event.key === "Enter") {
+                if (event.key === "Enter" && !isImeComposing(event)) {
                   event.preventDefault();
                   search.onMove(event.shiftKey ? -1 : 1);
                 }

@@ -1,5 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import {
+  expect,
+  fireEvent,
+  fn,
+  userEvent,
+  waitFor,
+  within,
+} from "storybook/test";
 
 import { ResearchComposer } from "@/features/conversation";
 import { homePapers, homeProjects } from "../api/fixtures";
@@ -163,6 +170,34 @@ export const MultilineInput: Story = {
     await expect(composer).toHaveValue(
       "比较论文方法\n说明推理成本\n列出关键差异",
     );
+  },
+};
+
+export const ImeCandidateConfirmation: Story = {
+  args: { onSubmit: fn(async () => undefined) },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByRole("textbox", { name: "问任何问题" });
+    await fireEvent.compositionStart(composer);
+    await fireEvent.change(composer, { target: { value: "你好" } });
+    await waitFor(() =>
+      expect(
+        canvas.getByRole("button", { name: "询问 Scholens" }),
+      ).toBeEnabled(),
+    );
+
+    await fireEvent.keyDown(composer, {
+      code: "Enter",
+      isComposing: true,
+      key: "Enter",
+      keyCode: 229,
+    });
+    await expect(args.onSubmit).not.toHaveBeenCalled();
+    await expect(composer).toHaveValue("你好");
+
+    await fireEvent.compositionEnd(composer, { data: "你好" });
+    await fireEvent.keyDown(composer, { code: "Enter", key: "Enter" });
+    await waitFor(() => expect(args.onSubmit).toHaveBeenCalledWith("你好"));
   },
 };
 

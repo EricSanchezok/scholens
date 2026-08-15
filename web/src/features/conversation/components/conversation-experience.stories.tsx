@@ -1,5 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import {
+  expect,
+  fireEvent,
+  fn,
+  userEvent,
+  waitFor,
+  within,
+} from "storybook/test";
 
 import { ResearchComposer } from "./research-composer";
 
@@ -104,6 +111,46 @@ export const ContextPanelCompact: Story = {
     await expect(
       Number.parseFloat(getComputedStyle(composer).borderRadius),
     ).toBeGreaterThanOrEqual(999);
+  },
+};
+
+export const ContextPanelImeCandidateConfirmation: Story = {
+  args: {
+    contextLabel: "Entire library",
+    onSubmit: fn(async () => undefined),
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByRole("textbox");
+    await fireEvent.compositionStart(composer);
+    await fireEvent.change(composer, { target: { value: "继续研究" } });
+    await waitFor(() =>
+      expect(
+        canvas.getByRole("button", { name: "Ask Scholens" }),
+      ).toBeEnabled(),
+    );
+
+    await fireEvent.keyDown(composer, {
+      code: "Enter",
+      isComposing: true,
+      key: "Enter",
+      keyCode: 229,
+    });
+    await expect(args.onSubmit).not.toHaveBeenCalled();
+
+    await fireEvent.compositionEnd(composer, { data: "继续研究" });
+    await fireEvent.keyDown(composer, { code: "Enter", key: "Enter" });
+    await waitFor(() => expect(args.onSubmit).toHaveBeenCalledWith("继续研究"));
   },
 };
 
