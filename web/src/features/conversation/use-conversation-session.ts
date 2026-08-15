@@ -11,7 +11,9 @@ import {
 } from "./api/conversation-cache";
 import {
   createConversation,
+  selectConversationBranch,
   selectConversationResponse,
+  streamConversationBranch,
   streamConversationRetry,
   streamConversationTurn,
   updateConversationContext,
@@ -46,6 +48,9 @@ type StreamSession = {
   startNotified: boolean;
   ready: boolean;
   superseded: boolean;
+  resolveAccepted?: () => void;
+  rejectAccepted?: (error: unknown) => void;
+  pendingLiveTurn?: LiveTurn;
 };
 
 function sameContext(left: ResearchContext, right: ResearchContext) {
@@ -143,6 +148,9 @@ export function useConversationSession({
     session.superseded = true;
     streamSession.current = null;
     session.controller.abort();
+    setLiveTurn((current) =>
+      current?.responseId === session.responseId ? null : current,
+    );
   }
 
   function releaseSubmission(session: StreamSession) {
@@ -164,9 +172,21 @@ export function useConversationSession({
         return;
       }
       session.started = true;
+      session.resolveAccepted?.();
+      session.resolveAccepted = undefined;
+      session.rejectAccepted = undefined;
       if (!session.startNotified) {
         session.startNotified = true;
         onTurnStarted?.();
+      }
+      if (session.pendingLiveTurn) {
+        setLiveTurn({
+          ...session.pendingLiveTurn,
+          startedAtMs: Date.now(),
+          variantIndex: event.variant_index,
+        });
+        session.pendingLiveTurn = undefined;
+        return;
       }
     } else if (event.type === "response_ready") {
       if (
@@ -211,8 +231,17 @@ export function useConversationSession({
 
     setLiveTurn((current) => reduceLiveTurn(current, event));
 
-    if (event.type === "error") releaseSubmission(session);
+    if (event.type === "error") {
+      releaseSubmission(session);
+      void queryClient.invalidateQueries({
+        queryKey: conversationKeys.turns(session.conversationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(session.conversationId),
+      });
+    }
     if (event.type === "complete") {
+      releaseSubmission(session);
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.lists(),
       });
@@ -234,7 +263,10 @@ export function useConversationSession({
     submissionInFlight.current = true;
     setSubmissionPending(true);
     supersedeReadyStream();
-    const previousLiveTurn = liveTurn;
+    const previousLiveTurn =
+      liveTurn?.state === "ready" || liveTurn?.state === "complete"
+        ? null
+        : liveTurn;
     const creatingConversation = !activeConversationId;
     let nextConversationId = activeConversationId;
     let session: StreamSession | null = null;
@@ -253,7 +285,7 @@ export function useConversationSession({
         );
         queryClient.setQueryData<ConversationTurnsResponse>(
           conversationKeys.turns(conversation.id),
-          { items: [], next_cursor: null },
+          { items: [], next_cursor: null, path_revision: 0 },
         );
         void queryClient.invalidateQueries({
           queryKey: conversationKeys.lists(),
@@ -282,7 +314,15 @@ export function useConversationSession({
       };
       streamSession.current = session;
       setLiveTurnConversationId(nextConversationId);
-      setLiveTurn(createLiveTurn(turnId, responseId, message));
+      setLiveTurn(
+        createLiveTurn(
+          turnId,
+          responseId,
+          message,
+          "initial",
+          (turnsQuery.data?.items.at(-1)?.depth ?? 0) + 1,
+        ),
+      );
       composerForm.reset();
       await streamConversationTurn({
         conversationId: nextConversationId,
@@ -304,7 +344,11 @@ export function useConversationSession({
           const responseId = session.responseId;
           setLiveTurn((current) =>
             current?.responseId === responseId
-              ? { ...current, state: "cancelled" }
+              ? {
+                  ...current,
+                  durationMs: Math.max(0, Date.now() - current.startedAtMs),
+                  state: "cancelled",
+                }
               : current,
           );
         }
@@ -356,17 +400,36 @@ export function useConversationSession({
     }
   }
 
-  async function retryResponse(turn: ConversationTurn) {
-    if (!activeConversationId || submissionInFlight.current) return;
+  function runExistingGeneration({
+    turnId,
+    responseId,
+    userMessage,
+    generationKind,
+    depth,
+    stream,
+  }: {
+    turnId: string;
+    responseId: string;
+    userMessage: string;
+    generationKind: "retry" | "branch";
+    depth: number;
+    stream: (session: StreamSession) => Promise<void>;
+  }): Promise<void> {
+    if (!activeConversationId || submissionInFlight.current) {
+      return Promise.reject(new Error("Conversation is unavailable or busy"));
+    }
+    const sessionConversationId = activeConversationId;
     submissionInFlight.current = true;
     setSubmissionPending(true);
     supersedeReadyStream();
-    const previousLiveTurn = liveTurn;
-    const responseId = crypto.randomUUID();
+    const previousLiveTurn =
+      liveTurn?.state === "ready" || liveTurn?.state === "complete"
+        ? null
+        : liveTurn;
     const controller = new AbortController();
     const session: StreamSession = {
-      conversationId: activeConversationId,
-      turnId: turn.id,
+      conversationId: sessionConversationId,
+      turnId,
       responseId,
       controller,
       started: false,
@@ -374,59 +437,144 @@ export function useConversationSession({
       ready: false,
       superseded: false,
     };
+    const accepted = new Promise<void>((resolve, reject) => {
+      session.resolveAccepted = resolve;
+      session.rejectAccepted = reject;
+    });
     streamSession.current = session;
-    setLiveTurnConversationId(activeConversationId);
-    setLiveTurn(createLiveTurn(turn.id, responseId, turn.user_query, "retry"));
-    try {
-      await streamConversationRetry({
-        conversationId: activeConversationId,
-        turnId: turn.id,
-        request: { response_id: responseId },
-        signal: controller.signal,
-        onEvent: (event) => applyStreamEvent(session, event),
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        if (!session.superseded && !session.ready) {
+    setLiveTurnConversationId(sessionConversationId);
+    const nextLiveTurn = createLiveTurn(
+      turnId,
+      responseId,
+      userMessage,
+      generationKind,
+      depth,
+    );
+    if (generationKind === "branch") session.pendingLiveTurn = nextLiveTurn;
+    else setLiveTurn(nextLiveTurn);
+    async function runStream() {
+      try {
+        await stream(session);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          if (!session.started) {
+            session.rejectAccepted?.(error);
+            session.resolveAccepted = undefined;
+            session.rejectAccepted = undefined;
+            setLiveTurn(previousLiveTurn);
+          } else if (!session.superseded && !session.ready) {
+            setLiveTurn((current) =>
+              current?.responseId === session.responseId
+                ? {
+                    ...current,
+                    durationMs: Math.max(0, Date.now() - current.startedAtMs),
+                    state: "cancelled",
+                  }
+                : current,
+            );
+          }
+        } else if (session.ready) {
           setLiveTurn((current) =>
             current?.responseId === session.responseId
-              ? { ...current, state: "cancelled" }
+              ? { ...current, state: "complete" }
+              : current,
+          );
+        } else if (!session.started) {
+          session.rejectAccepted?.(error);
+          session.resolveAccepted = undefined;
+          session.rejectAccepted = undefined;
+          setLiveTurn(previousLiveTurn);
+        } else {
+          setLiveTurn((current) =>
+            current?.responseId === session.responseId
+              ? {
+                  ...current,
+                  failure: conversationFailureFromError(error),
+                  state: "error",
+                }
               : current,
           );
         }
-      } else if (session.ready) {
-        setLiveTurn((current) =>
-          current?.responseId === session.responseId
-            ? { ...current, state: "complete" }
-            : current,
-        );
-      } else if (!session.started) {
-        setLiveTurn(previousLiveTurn);
-      } else {
-        setLiveTurn((current) =>
-          current?.responseId === session.responseId
-            ? {
-                ...current,
-                failure: conversationFailureFromError(error),
-                state: "error",
-              }
-            : current,
-        );
-      }
-      await queryClient.invalidateQueries({
-        queryKey: conversationKeys.turns(activeConversationId),
-      });
-    } finally {
-      if (streamSession.current === session) {
-        streamSession.current = null;
-        submissionInFlight.current = false;
-        setSubmissionPending(false);
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: conversationKeys.turns(sessionConversationId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: conversationKeys.detail(sessionConversationId),
+          }),
+        ]);
+      } finally {
+        if (!session.started) {
+          session.rejectAccepted?.(
+            new Error("Generation ended before the request was accepted"),
+          );
+          session.resolveAccepted = undefined;
+          session.rejectAccepted = undefined;
+          setLiveTurn(previousLiveTurn);
+        }
+        if (streamSession.current === session) {
+          streamSession.current = null;
+          submissionInFlight.current = false;
+          setSubmissionPending(false);
+        }
       }
     }
+    void runStream();
+    return accepted;
+  }
+
+  async function retryResponse(
+    turn: Pick<ConversationTurn, "id" | "user_query" | "depth">,
+  ) {
+    const responseId = crypto.randomUUID();
+    try {
+      await runExistingGeneration({
+        turnId: turn.id,
+        responseId,
+        userMessage: turn.user_query,
+        generationKind: "retry",
+        depth: turn.depth,
+        stream: (session) =>
+          streamConversationRetry({
+            conversationId: session.conversationId,
+            turnId: turn.id,
+            request: { response_id: responseId },
+            signal: session.controller.signal,
+            onEvent: (event) => applyStreamEvent(session, event),
+          }),
+      });
+    } catch {
+      // The existing transcript remains the retry recovery surface.
+    }
+  }
+
+  async function editMessage(turn: ConversationTurn, message: string) {
+    const turnId = crypto.randomUUID();
+    const responseId = crypto.randomUUID();
+    await runExistingGeneration({
+      turnId,
+      responseId,
+      userMessage: message,
+      generationKind: "branch",
+      depth: turn.depth,
+      stream: (session) =>
+        streamConversationBranch({
+          conversationId: session.conversationId,
+          turnId: turn.id,
+          request: {
+            turn_id: turnId,
+            response_id: responseId,
+            user_query: message,
+          },
+          signal: session.controller.signal,
+          onEvent: (event) => applyStreamEvent(session, event),
+        }),
+    });
   }
 
   async function selectResponse(turnId: string, responseId: string) {
     if (!activeConversationId || submissionInFlight.current) return;
+    supersedeReadyStream();
     await selectConversationResponse({
       conversationId: activeConversationId,
       turnId,
@@ -434,6 +582,22 @@ export function useConversationSession({
     });
     await queryClient.invalidateQueries({
       queryKey: conversationKeys.turns(activeConversationId),
+    });
+  }
+
+  async function selectBranch(turnId: string) {
+    if (!activeConversationId || submissionInFlight.current) return;
+    supersedeReadyStream();
+    const selected = await selectConversationBranch({
+      conversationId: activeConversationId,
+      turnId,
+    });
+    queryClient.setQueryData<ConversationTurnsResponse>(
+      conversationKeys.turns(activeConversationId),
+      selected,
+    );
+    await queryClient.invalidateQueries({
+      queryKey: conversationKeys.detail(activeConversationId),
     });
   }
 
@@ -467,8 +631,10 @@ export function useConversationSession({
     conversationBusy,
     conversationQuery,
     conversationUnavailable,
+    editMessage,
     liveTurn: liveTurnConversationId === activeConversationId ? liveTurn : null,
     retryResponse,
+    selectBranch,
     selectResponse,
     sendMessage,
     stop,

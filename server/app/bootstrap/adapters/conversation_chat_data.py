@@ -15,6 +15,7 @@ from app.modules.conversations.application.chat import (
     ChatHistoryMessage,
     ChatPaperSnapshot,
     ChatProjectSnapshot,
+    ConversationBranchPreparation,
     ConversationContextSnapshot,
     ConversationChatDataGateway,
     ConversationChatScope,
@@ -38,6 +39,7 @@ from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.papers.infrastructure.access import accessible_document_condition
 from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
+    PaperCollection,
     SelectedPaperCollection,
 )
 from app.shared.application import Actor
@@ -61,6 +63,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         *,
         actor: Actor,
         conversation_id: uuid.UUID,
+        paper_context_snapshot: PaperCollection | None = None,
     ) -> ConversationChatScope:
         if not has_token_credits(self._session, user=actor):
             raise AppError(
@@ -73,17 +76,11 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             self._session,
             conversation=conversation,
         )
-        paper_context = conversation_repository.paper_context(
-            self._session,
-            conversation=conversation,
-            user_id=actor.id,
-        )
-        search_collection = (
-            LibraryPaperCollection()
-            if paper_context.kind == "library"
-            else SelectedPaperCollection(
-                project_ids=paper_context.project_ids,
-                document_ids=paper_context.document_ids,
+        search_collection = paper_context_snapshot or self._paper_collection(
+            conversation_repository.paper_context(
+                self._session,
+                conversation=conversation,
+                user_id=actor.id,
             )
         )
         return ConversationChatScope(
@@ -95,6 +92,15 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                 conversation.tool_permissions
             ),
             title_is_default=conversation.title == DEFAULT_CONVERSATION_TITLE,
+        )
+
+    @staticmethod
+    def _paper_collection(paper_context: PaperContext) -> PaperCollection:
+        if paper_context.kind == "library":
+            return LibraryPaperCollection()
+        return SelectedPaperCollection(
+            project_ids=paper_context.project_ids,
+            document_ids=paper_context.document_ids,
         )
 
     def context(
@@ -312,6 +318,13 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         created_operation_id: uuid.UUID,
         correlation_id: uuid.UUID,
     ) -> ConversationTurnStart:
+        if generation_kind == "branch":
+            conversation_repository.update_paper_context(
+                self._session,
+                conversation_id=conversation_id,
+                user_id=actor.id,
+                request=_PAPER_CONTEXT.validate_python(paper_context),
+            )
         turn, turn_created = turn_repository.create_turn(
             self._session,
             conversation_id=conversation_id,
@@ -491,7 +504,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         conversation_id: uuid.UUID,
         source_turn_id: uuid.UUID,
         request: ConversationTurnBranchCreateRequest,
-    ) -> ConversationTurnCreateRequest:
+    ) -> ConversationBranchPreparation:
         conversation = self._conversation(
             actor=actor,
             conversation_id=conversation_id,
@@ -516,22 +529,25 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                 kind=FailureKind.CONFLICT,
             )
         paper_context = _PAPER_CONTEXT.validate_python(source.paper_context)
-        conversation_repository.update_paper_context(
+        conversation_repository.validate_paper_context(
             self._session,
-            conversation_id=conversation_id,
+            conversation=conversation,
             user_id=actor.id,
             request=paper_context,
         )
-        return ConversationTurnCreateRequest.model_validate(
-            {
-                "turn_id": request.turn_id,
-                "response_id": request.response_id,
-                "user_query": request.user_query,
-                "locale": source.locale,
-                "time_zone": source.time_zone,
-                "contexts": source.contexts or [],
-                "reasoning_level": source.reasoning_level,
-            }
+        return ConversationBranchPreparation(
+            request=ConversationTurnCreateRequest.model_validate(
+                {
+                    "turn_id": request.turn_id,
+                    "response_id": request.response_id,
+                    "user_query": request.user_query,
+                    "locale": source.locale,
+                    "time_zone": source.time_zone,
+                    "contexts": source.contexts or [],
+                    "reasoning_level": source.reasoning_level,
+                }
+            ),
+            paper_context=self._paper_collection(paper_context),
         )
 
     def _conversation(

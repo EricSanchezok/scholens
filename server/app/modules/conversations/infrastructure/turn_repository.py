@@ -214,8 +214,48 @@ class TurnRepository:
             )
         )
         normalized_query = sanitize_for_postgres(user_query)
+        normalized_contexts = sanitize_for_postgres(contexts)
+        normalized_paper_context = sanitize_for_postgres(paper_context)
         if existing is not None:
-            if existing.user_query != normalized_query:
+            _, active_path = self.active_path(
+                db,
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+            if branch_from_turn_id is not None:
+                replay_source = self.require_turn(
+                    db,
+                    conversation_id=conversation_id,
+                    turn_id=branch_from_turn_id,
+                    user_id=user_id,
+                    lock=True,
+                )
+                expected_parent_turn_id = replay_source.parent_turn_id
+                expected_depth = replay_source.depth
+                position_matches = (
+                    existing.id != replay_source.id
+                    and existing.parent_turn_id == expected_parent_turn_id
+                    and existing.depth == expected_depth
+                    and bool(active_path and active_path[-1].id == existing.id)
+                )
+            else:
+                expected_parent_turn_id = existing.parent_turn_id
+                expected_depth = existing.depth
+                position_matches = bool(
+                    active_path and active_path[-1].id == existing.id
+                )
+
+            immutable_inputs_match = (
+                existing.user_query == normalized_query
+                and existing.contexts == normalized_contexts
+                and existing.paper_context == normalized_paper_context
+                and existing.reasoning_level == reasoning_level
+                and existing.locale == locale
+                and existing.time_zone == time_zone
+                and existing.parent_turn_id == expected_parent_turn_id
+                and existing.depth == expected_depth
+            )
+            if not immutable_inputs_match or not position_matches:
                 raise AppError(
                     code="conversation_turn_conflict",
                     message="This conversation turn was already used differently",
@@ -275,8 +315,8 @@ class TurnRepository:
             created_operation_id=created_operation_id,
             correlation_id=correlation_id,
             user_query=normalized_query,
-            contexts=sanitize_for_postgres(contexts),
-            paper_context=sanitize_for_postgres(paper_context),
+            contexts=normalized_contexts,
+            paper_context=normalized_paper_context,
             reasoning_level=reasoning_level,
             locale=locale,
             time_zone=time_zone,
@@ -447,6 +487,7 @@ class TurnRepository:
         if response is not None and response.status == "running":
             response.status = status
             response.duration_ms = max(0, duration_ms)
+            response.turn.selected_response_id = response.id
             db.flush()
 
     def select_response(
@@ -503,7 +544,7 @@ class TurnRepository:
         conversation_id: UUID,
         turn_id: UUID,
         user_id: int,
-    ) -> tuple[Conversation, list[ConversationTurn]]:
+    ) -> tuple[Conversation, list[ConversationTurn], bool]:
         conversation = self.lock_conversation(
             db, conversation_id=conversation_id, user_id=user_id
         )
@@ -549,12 +590,13 @@ class TurnRepository:
             conversation.path_revision += 1
             conversation.updated_at = datetime.now(timezone.utc)
         db.flush()
-        return self.active_path(
+        selected_conversation, selected_path = self.active_path(
             db,
             conversation_id=conversation_id,
             user_id=user_id,
             include_research_items=True,
         )
+        return selected_conversation, selected_path, changed
 
     def require_response(
         self,

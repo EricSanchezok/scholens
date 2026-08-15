@@ -172,6 +172,10 @@ export function HomeWorkspace({
             void conversation.turnsQuery.refetch();
           }}
           onRetryResponse={(turn) => void conversation.retryResponse(turn)}
+          onEditMessage={(turn, message) =>
+            conversation.editMessage(turn, message)
+          }
+          onSelectBranch={(turnId) => void conversation.selectBranch(turnId)}
           onSelectResponse={(turnId, responseId) =>
             void conversation.selectResponse(turnId, responseId)
           }

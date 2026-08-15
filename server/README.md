@@ -129,8 +129,16 @@ Editing any turn on the active path creates an immutable sibling through
 `PUT /api/v1/conversations/{conversation_id}/selected-branch` selects a prompt
 version, restores its previously selected descendant suffix and authorized
 paper context, and returns the authoritative active path. All generation
-endpoints stream standard Server-Sent Events. Consumers must handle
-the typed `start`, `assistant_item_start`, `assistant_item_delta`,
+endpoints complete quota, authorization, context, rate-limit, and concurrency
+preflight before product mutation. Branch acceptance uses one short transaction
+to restore the source paper-context snapshot, create the Turn and Response,
+switch the selected path, and increment its revision. Preflight rejection has no
+Conversation mutation; after acceptance, `start` is necessarily the first SSE
+event and any later failure is a persisted terminal response. Reusing a Turn ID
+is idempotent only when every immutable input and its tree position match;
+otherwise the whole acceptance command returns `conversation_turn_conflict`.
+Selecting the already-active branch is a storage and journal no-op. Consumers
+must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
 `assistant_item_complete`, `activity`, `references`, `response_ready`,
 `suggestions`, `complete`, and `error` events and treat `complete` or `error`
 as terminal. `response_ready` carries the complete persisted turn snapshot and
@@ -168,8 +176,10 @@ newer turn clears the preceding suggestions, and a late result cannot restore
 them. Suggestions and first-title generation never block `response_ready`; the
 stream retains a bounded two-second sidecar tail before `complete`.
 Completed, failed, and cancelled responses persist their total `duration_ms`;
-the ordered trace remains separate inspectable progress rather than a timing
-store.
+the latest terminal attempt remains selected, and the active leaf serializes
+all terminal attempts so failure/cancellation and retry survive refresh. Raw
+exception text remains private diagnostics. The ordered trace remains separate
+inspectable progress rather than a timing store.
 There is no private delimiter. Clients may abort the request, but must not
 automatically retry this non-idempotent operation.
 

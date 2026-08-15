@@ -10,6 +10,7 @@
   --icon-md: 20px;
   --icon-sm: 16px;
   --icon-stroke: 1.5;
+  --layout-conversation-lane: 880px;
   --layout-reading-column: 720px;
   --layout-sidebar: 240px;
   --opacity-disabled: 0.38;
@@ -20,6 +21,8 @@
   --radius-sm: 6px;
   --radius-xl: 16px;
   --radius-xs: 4px;
+  --scrollbar-box: 10px;
+  --scrollbar-thumb: 6px;
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;

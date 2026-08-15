@@ -29,7 +29,8 @@ export type LiveTurn = {
   turnId: string;
   responseId: string;
   variantIndex: number | null;
-  generationKind: "initial" | "retry";
+  generationKind: "initial" | "retry" | "branch";
+  depth: number;
   userMessage: string;
   content: string;
   entries: ConversationTraceEntry[];
@@ -40,6 +41,8 @@ export type LiveTurn = {
   suggestions: string[] | null;
   readyTurn: ConversationTurn | null;
   failure: ConversationFailure | null;
+  durationMs: number | null;
+  startedAtMs: number;
   state: "streaming" | "ready" | "complete" | "cancelled" | "error";
 };
 
@@ -47,13 +50,16 @@ export function createLiveTurn(
   turnId: string,
   responseId: string,
   userMessage: string,
-  generationKind: "initial" | "retry" = "initial",
+  generationKind: "initial" | "retry" | "branch" = "initial",
+  depth = 1,
+  startedAtMs = Date.now(),
 ): LiveTurn {
   return {
     turnId,
     responseId,
     variantIndex: null,
     generationKind,
+    depth,
     userMessage,
     content: "",
     entries: [],
@@ -64,6 +70,8 @@ export function createLiveTurn(
     suggestions: null,
     readyTurn: null,
     failure: null,
+    durationMs: null,
+    startedAtMs,
     state: "streaming",
   };
 }
@@ -171,6 +179,7 @@ export function reduceLiveTurn(
       references: response.references as Record<string, unknown> | null,
       suggestions: event.turn.suggestions,
       readyTurn: event.turn,
+      durationMs: response.duration_ms ?? current.durationMs,
       provisionalItems: [],
       state: "ready",
     };
@@ -204,6 +213,7 @@ export function reduceLiveTurn(
     return {
       ...current,
       failure: conversationFailureFromValue(event.error),
+      durationMs: Math.max(0, Date.now() - current.startedAtMs),
       state: "error",
     };
   }

@@ -91,6 +91,7 @@ await build({
     "type",
     "font",
     "opacity",
+    "scrollbar",
   ],
 });
 

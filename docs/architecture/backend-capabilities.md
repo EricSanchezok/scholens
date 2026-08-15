@@ -194,7 +194,9 @@ descendant suffixes remain durable. Agent history contains selected ancestors
 only. Branch creation and selection restore the turn-owned paper context after
 current authorization, and one response may run across the whole Conversation.
 Completed, failed, and cancelled responses persist total duration separately
-from their ordered worklog trace.
+from their ordered worklog trace. The latest terminal attempt remains selected,
+and the active leaf exposes terminal attempts so safe failure/cancellation state
+and retry survive refresh without publishing raw exceptions.
 
 Reader selections and annotation threads enter that same aggregate through
 typed turn contexts. Personal Reader conversations are paper-scoped. Reader
@@ -247,6 +249,14 @@ authorized scope titles; the current answer, ordered worklog, provider output,
 tool payloads, and document bodies are not suggestion context. The typed output
 requires exactly three unique questions covering deeper inquiry, comparison or
 verification, and practical use. A retry reuses the turn-owned result.
+
+Conversation generation has one externally observable acceptance boundary.
+Quota, access, immutable context resolution, rate limiting, and concurrency
+acquisition run before product writes. The following short command atomically
+creates the Turn/Response and selected path; for prompt branches it also restores
+the source turn's paper-context snapshot. A command conflict releases the lease.
+After commit, the first streamed event is `start`, so every later error belongs
+to the persisted active leaf and remains safely retryable after refresh.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Command tools commit

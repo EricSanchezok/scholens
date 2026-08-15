@@ -110,12 +110,19 @@ class ConversationTurnCompletion:
     citation_ids: tuple[UUID, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationBranchPreparation:
+    request: ConversationTurnCreateRequest
+    paper_context: PaperCollection
+
+
 class ConversationChatDataGateway(Protocol):
     def prepare(
         self,
         *,
         actor: Actor,
         conversation_id: UUID,
+        paper_context_snapshot: PaperCollection | None = None,
     ) -> ConversationChatScope: ...
 
     def history(
@@ -210,7 +217,7 @@ class ConversationChatDataGateway(Protocol):
         conversation_id: UUID,
         source_turn_id: UUID,
         request: ConversationTurnBranchCreateRequest,
-    ) -> ConversationTurnCreateRequest: ...
+    ) -> ConversationBranchPreparation: ...
 
 
 class ConversationChatData:
@@ -230,8 +237,13 @@ class ConversationChatData:
         *,
         actor: Actor,
         conversation_id: UUID,
+        paper_context_snapshot: PaperCollection | None = None,
     ) -> ConversationChatScope:
-        return self._gateway.prepare(actor=actor, conversation_id=conversation_id)
+        return self._gateway.prepare(
+            actor=actor,
+            conversation_id=conversation_id,
+            paper_context_snapshot=paper_context_snapshot,
+        )
 
     def history(
         self,
@@ -432,7 +444,7 @@ class ConversationChatData:
         conversation_id: UUID,
         source_turn_id: UUID,
         request: ConversationTurnBranchCreateRequest,
-    ) -> ConversationTurnCreateRequest:
+    ) -> ConversationBranchPreparation:
         return self._gateway.branch_request(
             actor=actor,
             conversation_id=conversation_id,

@@ -28,7 +28,15 @@
     "reading-column": {
       "$type": "dimension",
       "$value": { "value": 720, "unit": "px" }
+    },
+    "conversation-lane": {
+      "$type": "dimension",
+      "$value": { "value": 880, "unit": "px" }
     }
+  },
+  "scrollbar": {
+    "box": { "$type": "dimension", "$value": { "value": 10, "unit": "px" } },
+    "thumb": { "$type": "dimension", "$value": { "value": 6, "unit": "px" } }
   },
   "control": {
     "sm": { "$type": "dimension", "$value": { "value": 36, "unit": "px" } },

@@ -45,13 +45,15 @@ function turn(
 ): ConversationTurn {
   const responses = overrides.responses ?? [response()];
   return {
+    branch: { count: 1, index: 1 },
+    depth: 1,
     id: turnId,
     user_query: "What day is it today?",
     locale: "en",
     time_zone: "Asia/Shanghai",
     reasoning_level: "standard",
-    scope: null,
-    sequence: 1,
+    paper_context: { kind: "library" },
+    parent_turn_id: null,
     contexts: [],
     selected_response_id: responses.at(-1)?.id ?? null,
     suggestions: [
@@ -169,6 +171,9 @@ function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
     suggestions: null,
     readyTurn: null,
     failure: null,
+    depth: 1,
+    durationMs: null,
+    startedAtMs: Date.now() - 4_000,
     state: "streaming",
     ...overrides,
   };
@@ -212,6 +217,8 @@ const meta = {
     onStop: fn(),
     onRetry: fn(),
     onRetryResponse: fn(),
+    onEditMessage: fn(async () => undefined),
+    onSelectBranch: fn(),
     onSelectResponse: fn(),
     onUseSuggestion: fn(),
     canSend: true,
@@ -247,6 +254,119 @@ export const LatestAnswerActions: Story = {
     const canvas = within(canvasElement);
     await waitFor(() =>
       expect(canvas.getByRole("button", { name: "Copy answer" })).toBeVisible(),
+    );
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Try another response" }),
+    );
+    await expect(args.onRetryResponse).toHaveBeenCalledTimes(1);
+  },
+};
+
+export const EditableHistoricalPrompt: Story = {
+  args: {
+    turns: [turn()],
+    onEditMessage: fn(async () => undefined),
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Edit message" }));
+    const editor = canvas.getByRole("textbox", { name: "Message text" });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "What date is it today?");
+    await userEvent.click(canvas.getByRole("button", { name: "Save" }));
+    await expect(args.onEditMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: turnId }),
+      "What date is it today?",
+    );
+  },
+};
+
+export const EditRequestRejectedPreservesDraft: Story = {
+  args: {
+    turns: [turn()],
+    onEditMessage: fn(async () => {
+      throw new globalThis.Error("request rejected before start");
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Edit message" }));
+    const editor = canvas.getByRole("textbox", { name: "Message text" });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "Keep this edited draft");
+    await userEvent.click(canvas.getByRole("button", { name: "Save" }));
+    await expect(canvas.getByText(/Your edit is still here/)).toBeVisible();
+    await expect(editor).toHaveValue("Keep this edited draft");
+    await expect(editor).toHaveFocus();
+  },
+};
+
+export const PromptBranchPager: Story = {
+  args: {
+    turns: [
+      turn({
+        branch: {
+          count: 2,
+          index: 2,
+          previous_turn_id: "51000000-0000-4000-8000-000000000099",
+        },
+        user_query: "What date is it today?",
+      }),
+    ],
+    onSelectBranch: fn(),
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByLabelText("Message 2 of 2")).toBeVisible();
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: "Previous version of this message",
+      }),
+    );
+    await expect(args.onSelectBranch).toHaveBeenCalledWith(
+      "51000000-0000-4000-8000-000000000099",
+    );
+  },
+};
+
+export const TimedDirectAnswer: Story = {
+  args: {
+    turns: [
+      turn({
+        responses: [response({ duration_ms: 21_400 })],
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("status")).toHaveTextContent("21s");
+    await expect(canvas.getByText("Completed in 21s")).toHaveClass("sr-only");
+  },
+};
+
+export const FailedLeafAfterRefresh: Story = {
+  args: {
+    turns: [
+      turn({
+        responses: [
+          response({
+            content: null,
+            duration_ms: 4_800,
+            status: "failed",
+          }),
+        ],
+        suggestions: null,
+      }),
+    ],
+    onRetryResponse: fn(),
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() =>
+      expect(canvas.getByText("Could not complete")).toBeVisible(),
+    );
+    await waitFor(() =>
+      expect(canvas.getByRole("status")).toHaveTextContent("4s"),
     );
     await userEvent.click(
       canvas.getByRole("button", { name: "Try another response" }),
@@ -309,7 +429,8 @@ export const HistoricalAnswerHasNoRetry: Story = {
       turn(),
       turn({
         id: "51000000-0000-4000-8000-000000000002",
-        sequence: 2,
+        depth: 2,
+        parent_turn_id: turnId,
         user_query: "And tomorrow?",
         selected_response_id: "41000000-0000-4000-8000-000000000003",
         suggestions: null,
@@ -856,7 +977,8 @@ export const SidePanelJumpToLatest: Story = {
     turns: Array.from({ length: 4 }, (_, index) =>
       researchTurn({
         id: `51000000-0000-4000-8000-${String(index + 21).padStart(12, "0")}`,
-        sequence: index + 1,
+        depth: index + 1,
+        parent_turn_id: index === 0 ? null : turnId,
         user_query: `Research question ${index + 1}`,
       }),
     ),

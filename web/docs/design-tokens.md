@@ -123,6 +123,16 @@ Allowed raw-color exceptions are limited to source images, PDF content, and
 third-party brand marks that must preserve their identity. The surrounding UI
 still uses semantic tokens.
 
+Scrollbars are a shared shell primitive, not a page-local decoration. Both
+axes use `dimension.scrollbar.box` for a 10 px interactive track and
+`dimension.scrollbar.thumb` for the 6 px visible thumb. The thumb and hover
+states resolve through `color.scrollbar.*` in Light and Dark; forced-colors
+mode yields to system `Canvas` and `CanvasText`. Native document and element
+scrollbars and Radix `ScrollArea` use the same contract. Stable gutters belong
+only to persistent scrolling regions, and horizontal scrolling is opt-in for
+content such as code blocks, tables, or a ScrollArea with an explicit
+horizontal bar; ordinary layouts must wrap or clip rather than widen the page.
+
 Reader annotation colors are document-content roles rather than status roles.
 Define the curated hue set under `document-highlight`, expose every hue through
 the semantic graph in both appearances, and apply opacity at the PDF overlay.

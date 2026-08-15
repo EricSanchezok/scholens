@@ -21,6 +21,7 @@ from app.bootstrap.adapters.conversation_chat_data import (
 )
 from app.modules.conversations.application.chat import ConversationChatScope
 from app.modules.conversations.application.contracts.conversations import (
+    ConversationBranchSelectionRequest,
     ConversationCreateRequest,
     ConversationListRequest,
     LibraryPaperContext,
@@ -29,6 +30,7 @@ from app.modules.conversations.application.contracts.conversations import (
     ConversationUpdateRequest,
 )
 from app.modules.conversations.application.conversations import (
+    ConversationChange,
     ConversationListPosition,
     ConversationPage,
     ConversationTurnsPage,
@@ -169,6 +171,63 @@ def test_active_path_follows_persisted_root_and_child_selectors() -> None:
     assert [turn.id for turn in path] == [root_two.id, child.id]
 
 
+def test_selecting_current_branch_is_a_storage_no_op(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    selected_at = datetime.now(timezone.utc)
+    conversation = Conversation(
+        id=uuid.uuid4(),
+        user_id=1,
+        paper_context_kind="library",
+        path_revision=5,
+        updated_at=selected_at,
+    )
+    target = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        parent_turn_id=None,
+        paper_context={"kind": "library"},
+        depth=1,
+        branch_index=1,
+    )
+    conversation.selected_root_turn_id = target.id
+    db = MagicMock(spec=Session)
+    monkeypatch.setattr(
+        turn_repository,
+        "lock_conversation",
+        lambda *_args, **_kwargs: conversation,
+    )
+    monkeypatch.setattr(
+        turn_repository,
+        "_running_response_id",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        turn_repository,
+        "require_turn",
+        lambda *_args, **_kwargs: target,
+    )
+    monkeypatch.setattr(
+        turn_repository,
+        "active_path",
+        lambda *_args, **_kwargs: (conversation, [target]),
+    )
+
+    selected_conversation, path, changed = turn_repository.select_branch(
+        db,
+        conversation_id=conversation.id,
+        turn_id=target.id,
+        user_id=1,
+    )
+
+    assert selected_conversation is conversation
+    assert path == [target]
+    assert changed is False
+    assert conversation.path_revision == 5
+    assert conversation.updated_at == selected_at
+    assert conversation.paper_context_kind == "library"
+
+
 def test_turn_serialization_exposes_non_wrapping_prompt_branch_navigation() -> None:
     conversation_id = uuid.uuid4()
     parent_id = uuid.uuid4()
@@ -200,6 +259,80 @@ def test_turn_serialization_exposes_non_wrapping_prompt_branch_navigation() -> N
     assert serialized[0].branch.count == 3
     assert serialized[0].branch.previous_turn_id == turn_ids[0]
     assert serialized[0].branch.next_turn_id == turn_ids[2]
+
+
+@pytest.mark.parametrize("status", ["failed", "cancelled"])
+def test_active_leaf_serializes_terminal_response_for_refresh_retry(
+    status: str,
+) -> None:
+    turn = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        user_query="Edited question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=1,
+    )
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        variant_index=1,
+        status=status,
+        content=None,
+        references=None,
+        trace=None,
+        duration_ms=2_450,
+    )
+    response.research_items = []
+    turn.responses = [response]
+    turn.selected_response_id = response.id
+
+    serialized = serialize_turns(
+        [turn],
+        active_leaf_id=turn.id,
+        branch_groups={None: [turn.id]},
+    )
+
+    assert serialized[0].selected_response_id == response.id
+    assert [item.status for item in serialized[0].responses] == [status]
+    assert serialized[0].responses[0].duration_ms == 2_450
+    assert serialized[0].responses[0].content is None
+
+
+@pytest.mark.parametrize("status", ["failed", "cancelled"])
+def test_terminal_response_becomes_the_selected_leaf_attempt(status: str) -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=1)
+    turn = ConversationTurn(id=uuid.uuid4(), conversation_id=conversation.id)
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        status="running",
+    )
+    response.turn = turn
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [conversation, response]
+
+    turn_repository.finish_response(
+        db,
+        conversation_id=conversation.id,
+        response_id=response.id,
+        user_id=1,
+        status=status,
+        duration_ms=875,
+    )
+
+    assert response.status == status
+    assert response.duration_ms == 875
+    assert turn.selected_response_id == response.id
+    db.flush.assert_called_once()
 
 
 def test_conversation_scope_contract_is_private_and_unified() -> None:
@@ -344,6 +477,37 @@ def test_turn_cursor_rejects_a_changed_branch_revision() -> None:
     assert exc_info.value.code == "conversation_path_changed"
 
 
+def test_branch_selection_journals_only_a_real_change() -> None:
+    conversation_id = uuid.uuid4()
+    turn_id = uuid.uuid4()
+    gateway = MagicMock()
+    page = ConversationTurnsPage(items=[], path_revision=8)
+    gateway.select_branch.side_effect = [
+        ConversationChange(value=page, changed=False),
+        ConversationChange(value=page, changed=True),
+        ConversationChange(value=page, changed=False),
+    ]
+    journal = MagicMock(spec=OperationJournal)
+    service = Conversations(
+        gateway=gateway,
+        list_cursors=MagicMock(),
+        turn_cursors=MagicMock(),
+        journal=journal,
+    )
+    request = ConversationBranchSelectionRequest(turn_id=turn_id)
+
+    for _ in range(3):
+        result = service.select_branch(
+            actor=_current_user(),
+            operation=MagicMock(),
+            conversation_id=conversation_id,
+            request=request,
+        )
+        assert result.path_revision == 8
+
+    journal.append.assert_called_once()
+
+
 def test_running_response_blocks_another_turn_in_the_same_conversation() -> None:
     conversation = Conversation(
         id=uuid.uuid4(),
@@ -373,7 +537,209 @@ def test_running_response_blocks_another_turn_in_the_same_conversation() -> None
     db.add.assert_not_called()
 
 
-def test_branch_request_inherits_source_snapshot_and_reauthorizes_context(
+@pytest.mark.parametrize(
+    ("overrides"),
+    [
+        {"paper_context": {"kind": "selection", "document_ids": [str(uuid.uuid4())]}},
+        {"contexts": [{"kind": "annotation_thread", "thread_id": str(uuid.uuid4())}]},
+        {"reasoning_level": "deep"},
+    ],
+    ids=["paper-context", "turn-context", "reasoning-level"],
+)
+def test_existing_turn_rejects_changed_immutable_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+    overrides: dict[str, object],
+) -> None:
+    conversation = Conversation(
+        id=uuid.uuid4(),
+        user_id=1,
+        selected_root_turn_id=None,
+        path_revision=7,
+        paper_context_kind="library",
+    )
+    existing = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        parent_turn_id=None,
+        user_query="Same question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=1,
+    )
+    conversation.selected_root_turn_id = existing.id
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [conversation, existing]
+    monkeypatch.setattr(
+        turn_repository,
+        "active_path",
+        lambda *_args, **_kwargs: (conversation, [existing]),
+    )
+    request: dict[str, object] = {
+        "contexts": [],
+        "paper_context": {"kind": "library"},
+        "reasoning_level": "standard",
+    }
+    request.update(overrides)
+    original_state = (
+        conversation.selected_root_turn_id,
+        conversation.path_revision,
+        conversation.paper_context_kind,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        turn_repository.create_turn(
+            db,
+            conversation_id=conversation.id,
+            turn_id=existing.id,
+            user_id=1,
+            created_operation_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+            user_query="Same question",
+            contexts=request["contexts"],  # type: ignore[arg-type]
+            paper_context=request["paper_context"],  # type: ignore[arg-type]
+            reasoning_level=str(request["reasoning_level"]),
+            locale="en",
+            time_zone="UTC",
+        )
+
+    assert exc_info.value.code == "conversation_turn_conflict"
+    assert (
+        conversation.selected_root_turn_id,
+        conversation.path_revision,
+        conversation.paper_context_kind,
+    ) == original_state
+    db.add.assert_not_called()
+
+
+def test_existing_branch_turn_rejects_a_different_tree_position(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=1, path_revision=4)
+    existing = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        parent_turn_id=None,
+        user_query="Same question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=2,
+    )
+    different_parent_id = uuid.uuid4()
+    source = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        parent_turn_id=different_parent_id,
+        depth=2,
+        branch_index=1,
+    )
+    conversation.selected_root_turn_id = existing.id
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [conversation, existing]
+    monkeypatch.setattr(
+        turn_repository,
+        "active_path",
+        lambda *_args, **_kwargs: (conversation, [existing]),
+    )
+    monkeypatch.setattr(
+        turn_repository,
+        "require_turn",
+        lambda *_args, **_kwargs: source,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        turn_repository.create_turn(
+            db,
+            conversation_id=conversation.id,
+            turn_id=existing.id,
+            user_id=1,
+            created_operation_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+            user_query="Same question",
+            contexts=[],
+            paper_context={"kind": "library"},
+            reasoning_level="standard",
+            locale="en",
+            time_zone="UTC",
+            branch_from_turn_id=source.id,
+        )
+
+    assert exc_info.value.code == "conversation_turn_conflict"
+    assert conversation.selected_root_turn_id == existing.id
+    assert conversation.path_revision == 4
+    db.add.assert_not_called()
+
+
+def test_existing_branch_turn_rejects_a_different_source_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=1, path_revision=6)
+    existing = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        parent_turn_id=None,
+        user_query="Same question",
+        contexts=[],
+        paper_context={"kind": "selection", "document_ids": [str(uuid.uuid4())]},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=2,
+    )
+    source = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=conversation.id,
+        parent_turn_id=None,
+        paper_context={"kind": "library"},
+        depth=1,
+        branch_index=1,
+    )
+    conversation.selected_root_turn_id = existing.id
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [conversation, existing]
+    monkeypatch.setattr(
+        turn_repository,
+        "active_path",
+        lambda *_args, **_kwargs: (conversation, [existing]),
+    )
+    monkeypatch.setattr(
+        turn_repository,
+        "require_turn",
+        lambda *_args, **_kwargs: source,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        turn_repository.create_turn(
+            db,
+            conversation_id=conversation.id,
+            turn_id=existing.id,
+            user_id=1,
+            created_operation_id=uuid.uuid4(),
+            correlation_id=uuid.uuid4(),
+            user_query="Same question",
+            contexts=[],
+            paper_context=source.paper_context,
+            reasoning_level="standard",
+            locale="en",
+            time_zone="UTC",
+            branch_from_turn_id=source.id,
+        )
+
+    assert exc_info.value.code == "conversation_turn_conflict"
+    assert conversation.selected_root_turn_id == existing.id
+    assert conversation.path_revision == 6
+    db.add.assert_not_called()
+
+
+def test_branch_request_reads_source_snapshot_without_mutating_conversation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conversation_id = uuid.uuid4()
@@ -407,11 +773,11 @@ def test_branch_request_inherits_source_snapshot_and_reauthorizes_context(
         "active_path",
         lambda *_args, **_kwargs: (conversation, [source]),
     )
-    replace_context = MagicMock()
+    validate_context = MagicMock()
     monkeypatch.setattr(
         conversation_repository,
-        "update_paper_context",
-        replace_context,
+        "validate_paper_context",
+        validate_context,
     )
     branch = ConversationTurnBranchCreateRequest(
         turn_id=uuid.uuid4(),
@@ -426,16 +792,93 @@ def test_branch_request_inherits_source_snapshot_and_reauthorizes_context(
         request=branch,
     )
 
-    assert inherited.turn_id == branch.turn_id
-    assert inherited.response_id == branch.response_id
-    assert inherited.user_query == branch.user_query
-    assert [context.model_dump(mode="json") for context in inherited.contexts] == (
-        source.contexts
+    assert inherited.request.turn_id == branch.turn_id
+    assert inherited.request.response_id == branch.response_id
+    assert inherited.request.user_query == branch.user_query
+    assert [
+        context.model_dump(mode="json") for context in inherited.request.contexts
+    ] == source.contexts
+    assert inherited.request.reasoning_level.value == "deep"
+    assert inherited.request.locale == "zh-CN"
+    assert inherited.request.time_zone == "Asia/Shanghai"
+    assert inherited.paper_context.kind == "library"
+    assert validate_context.call_args.kwargs["request"].kind == "library"
+
+
+def test_branch_start_restores_context_inside_turn_acceptance_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation_id = uuid.uuid4()
+    turn_id = uuid.uuid4()
+    response_id = uuid.uuid4()
+    operation_id = uuid.uuid4()
+    correlation_id = uuid.uuid4()
+    turn = ConversationTurn(
+        id=turn_id,
+        conversation_id=conversation_id,
+        created_operation_id=operation_id,
+        correlation_id=correlation_id,
+        user_query="Edited question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=2,
     )
-    assert inherited.reasoning_level.value == "deep"
-    assert inherited.locale == "zh-CN"
-    assert inherited.time_zone == "Asia/Shanghai"
-    assert replace_context.call_args.kwargs["request"].kind == "library"
+    response = ConversationResponse(
+        id=response_id,
+        turn_id=turn_id,
+        created_operation_id=operation_id,
+        correlation_id=correlation_id,
+        variant_index=1,
+        status="running",
+    )
+    calls: list[str] = []
+
+    def restore_context(*_args: object, **_kwargs: object) -> MagicMock:
+        calls.append("paper_context")
+        return MagicMock()
+
+    def create_turn(*_args: object, **_kwargs: object) -> tuple[ConversationTurn, bool]:
+        calls.append("turn")
+        return turn, True
+
+    def create_response(
+        *_args: object, **_kwargs: object
+    ) -> tuple[ConversationResponse, bool]:
+        calls.append("response")
+        return response, True
+
+    monkeypatch.setattr(
+        conversation_repository,
+        "update_paper_context",
+        restore_context,
+    )
+    monkeypatch.setattr(turn_repository, "create_turn", create_turn)
+    monkeypatch.setattr(turn_repository, "create_response", create_response)
+
+    result = SqlAlchemyConversationChatData(MagicMock(spec=Session)).start_turn(
+        actor=_current_user(),
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        response_id=response_id,
+        generation_kind="branch",
+        user_content="Edited question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        branch_from_turn_id=uuid.uuid4(),
+        created_operation_id=operation_id,
+        correlation_id=correlation_id,
+    )
+
+    assert calls == ["paper_context", "turn", "response"]
+    assert result.turn_created is True
+    assert result.response_created is True
 
 
 def test_conversation_list_cursor_is_bound_to_paper_scope() -> None:

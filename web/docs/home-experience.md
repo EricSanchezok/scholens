@@ -30,6 +30,11 @@ the deliberately deferred boundaries.
   Sidebar and mobile Dock remain outside that scroll ownership. Message content
   keeps only the padding needed for its in-flow Composer, so scrolling to the
   latest turn cannot expose an artificial blank page below the answer.
+- The desktop conversation lane has one 880 px maximum measure shared by the
+  transcript and Composer. User messages align to its right edge; assistant
+  messages and Worklogs align to its left edge. The Reader side-panel adapter
+  keeps the same relationship with 20 px horizontal insets rather than adding
+  a second, narrower message measure.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary
@@ -92,6 +97,19 @@ Capacity dependency outages are returned as `unavailable`, not as a user quota
 exhaustion. The interface preserves the failed user message, explains that it
 was saved, and retains the public diagnostic ID without exposing provider or
 Redis details.
+
+Every writable user message exposes Copy and Edit. Editing saves a durable
+sibling prompt branch at the original depth, selects that branch, and generates
+its first response from the shared prefix. The selected branch replaces the
+entire visible suffix rather than splicing turns client-side. Save remains in
+the editor until a valid SSE `start` event accepts the request; an early HTTP,
+network, abort, or malformed-stream failure keeps the exact draft, error state,
+and editor focus for correction or retry. Once accepted, the editor closes and
+the standard live-turn recovery contract takes over. A branch pager beside the
+user message selects adjacent sibling branches and persists that selection so
+refresh restores the same path. On fine-pointer desktop, Copy and Edit appear
+on message hover or keyboard focus-within; touch layouts keep them visible.
+
 At `response_ready`, the turn snapshot is upserted directly into the TanStack
 Query cache; only conversation detail and list are invalidated in the background
 to synchronize a possible first-turn title. A turn owns the submitted prompt,
@@ -104,9 +122,12 @@ It uses the shared transient-action contract: the control keeps its position
 and focus, changes to a success or error glyph with a short anchored label,
 announces the outcome politely, and returns to its idle state without shifting
 the action row. Clipboard failure is never silent.
-Retry creates a new response variant under the same latest turn, selects it at
-`response_ready`, reuses the turn suggestions, and never duplicates the user
-prompt. Version navigation is shown only while that turn remains latest.
+Retry creates a new response variant under the same active leaf turn, selects
+it at `response_ready`, reuses the turn suggestions, and never duplicates the
+user prompt. A failed or cancelled active-leaf response remains serialized as
+safe status plus duration, without raw exception text, and is retryable at the
+same leaf after refresh. Version navigation includes completed variants only
+and is shown only while that turn remains latest.
 Selecting a suggestion only fills and focuses the Composer so the user can edit
 it before sending. Suggestion generation is a non-critical sidecar that starts
 alongside answer generation. If it finishes later, its typed SSE event updates
@@ -125,41 +146,45 @@ never overwritten by title generation.
 
 ## State coverage
 
-| Surface      | Deterministic coverage                                                                          |
-| ------------ | ----------------------------------------------------------------------------------------------- |
-| Home data    | populated, loading/slow, empty, and recoverable error                                           |
-| Navigation   | expanded, collapsed, mobile bottom bar and full-screen history hub, search, active conversation |
-| Context      | entire library and selected project/paper sources, including search                             |
-| Conversation | direct answer, tool activity, partial failure, references, complete, cancelled, error           |
-| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check            |
+| Surface      | Deterministic coverage                                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Home data    | populated, loading/slow, empty, and recoverable error                                                                                       |
+| Navigation   | expanded, collapsed, mobile bottom bar and full-screen history hub, search, active conversation                                             |
+| Context      | entire library and selected project/paper sources, including search                                                                         |
+| Conversation | direct answer, tool activity, timed result, prompt edit/branch, partial failure, refresh-safe retry, references, complete, cancelled, error |
+| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check                                                        |
 
 The Figma conversation-state frames and Storybook stories map one-to-one:
 
-| Figma `20 — Home` state | Storybook acceptance state                           |
-| ----------------------- | ---------------------------------------------------- |
-| Provisional response    | `Conversation View / Provisional Response`           |
-| Progress before tools   | `Conversation View / Progress Before Tools`          |
-| Consecutive tool batch  | `Conversation View / Consecutive Tool Batch`         |
-| Strategy change         | `Conversation View / Strategy Change`                |
-| Completed collapsed     | `Conversation View / Completed Collapsed`            |
-| Completed expanded      | `Conversation View / Multiple Tools Expanded`        |
-| Partial failure         | `Conversation View / Partial Failure`                |
-| Cancelled               | `Conversation View / Cancelled`                      |
-| Direct answer           | `Conversation View / Direct Answer`                  |
-| Error                   | `Conversation View / Error`                          |
-| Latest answer actions   | `Conversation View / Latest Answer Actions`          |
-| Retried variants        | `Conversation View / Retried Response Versions`      |
-| Historical answer       | `Conversation View / Historical Answer Has No Retry` |
-| Suggested follow-ups    | `Conversation View / Suggested Follow Ups`           |
-| Answer sources          | `Conversation View / Answer Sources`                 |
+| Figma `20 — Home` state   | Storybook acceptance state                           |
+| ------------------------- | ---------------------------------------------------- |
+| Provisional response      | `Conversation View / Provisional Response`           |
+| Progress before tools     | `Conversation View / Progress Before Tools`          |
+| Consecutive tool batch    | `Conversation View / Consecutive Tool Batch`         |
+| Strategy change           | `Conversation View / Strategy Change`                |
+| Completed collapsed       | `Conversation View / Completed Collapsed`            |
+| Completed expanded        | `Conversation View / Multiple Tools Expanded`        |
+| Partial failure           | `Conversation View / Partial Failure`                |
+| Cancelled                 | `Conversation View / Cancelled`                      |
+| Direct answer             | `Conversation View / Direct Answer`                  |
+| Timed direct answer       | `Conversation View / Timed Direct Answer`            |
+| Error                     | `Conversation View / Error`                          |
+| Failed leaf after refresh | `Conversation View / Failed Leaf After Refresh`      |
+| Latest answer actions     | `Conversation View / Latest Answer Actions`          |
+| Retried variants          | `Conversation View / Retried Response Versions`      |
+| Prompt branch pager       | `Conversation View / Prompt Branch Pager`            |
+| Historical answer         | `Conversation View / Historical Answer Has No Retry` |
+| Suggested follow-ups      | `Conversation View / Suggested Follow Ups`           |
+| Answer sources            | `Conversation View / Answer Sources`                 |
 
-The canonical ordered-harness matrix is Figma node `893:3415`, with Desktop
-Light/Dark and Mobile Light/Dark groups. The superseded per-tool activity
+The canonical ordered-harness matrix is Figma node `893:3415`,
+`Matrix / Ordered conversation harness v3`, with Desktop Light/Dark and Mobile
+Light/Dark groups. The superseded per-tool activity
 checklist is archived under `99 — Archive / Interaction States`.
 
 The final-answer action and evidence contract is the authoritative Figma matrix
 [`906:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=906-2628),
-`Matrix / Final answer actions and sources v2`:
+`Matrix / Conversation actions, branches and sources v3`:
 
 | Figma `20 — Home / Final answer actions and sources` | Storybook acceptance state                              |
 | ---------------------------------------------------- | ------------------------------------------------------- |
@@ -187,6 +212,13 @@ phone reading surface at node `898:2628` is archived under
 `99 — Archive / Interaction States`; it is historical reference, not a current
 implementation contract.
 
+Each Worklog summary ends with an elapsed duration. While generation is active
+the visual value updates without turning every tick into a live-region
+announcement; the settled value is announced once. Durations under one minute
+use seconds and longer work uses minutes plus seconds. The disclosure chevron
+sits immediately after the summary text instead of occupying the row's far
+edge, so the control reads as one compact phrase.
+
 The answer-action row uses one Iconoir source with optical sizing rather than
 equal glyph sizes: Copy renders at 20 px and Refresh at 16 px so their visible
 bounds match. Version navigation, Copy, and Refresh form one gapless tool group
@@ -210,7 +242,7 @@ glyphs and surfaces read as a compact continuation of the answer.
 
 Reader consumes the same message contract instead of defining a second
 conversation renderer. Its authoritative Figma matrix is
-[`50 — Reader / Matrix / Reader conversation contract v2`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=910-2):
+[`50 — Reader / Matrix / Reader conversation contract v3`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=910-2):
 Reader contributes only the current paper, passage, and selection as default
 scope; the ordered worklog, final-answer actions, suggestions, citations, and
 source panel remain the Home semantics described above. The former Reader

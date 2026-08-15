@@ -109,7 +109,7 @@ class ConversationGateway(Protocol):
         user_id: int,
         conversation_id: UUID,
         request: ConversationBranchSelectionRequest,
-    ) -> ConversationTurnsPage: ...
+    ) -> ConversationChange[ConversationTurnsPage]: ...
 
     def select_response(
         self,
@@ -336,20 +336,22 @@ class Conversations:
         conversation_id: UUID,
         request: ConversationBranchSelectionRequest,
     ) -> ConversationTurnsResponse:
-        page = self._gateway.select_branch(
+        result = self._gateway.select_branch(
             user_id=actor.id,
             conversation_id=conversation_id,
             request=request,
         )
-        self._journal.append(
-            actor=actor,
-            operation=operation,
-            action=CONVERSATION_BRANCH_SELECTED,
-            resources=(
-                ResourceRef("conversation", str(conversation_id)),
-                ResourceRef("conversation_turn", str(request.turn_id)),
-            ),
-        )
+        if result.changed:
+            self._journal.append(
+                actor=actor,
+                operation=operation,
+                action=CONVERSATION_BRANCH_SELECTED,
+                resources=(
+                    ResourceRef("conversation", str(conversation_id)),
+                    ResourceRef("conversation_turn", str(request.turn_id)),
+                ),
+            )
+        page = result.value
         return ConversationTurnsResponse(
             items=page.items,
             path_revision=page.path_revision,

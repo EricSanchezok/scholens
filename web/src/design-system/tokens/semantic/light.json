@@ -32,6 +32,10 @@
       "control": { "$type": "color", "$value": "{palette.neutral.550}" },
       "focus": { "$type": "color", "$value": "{palette.neutral.950}" }
     },
+    "scrollbar": {
+      "thumb": { "$type": "color", "$value": "{palette.neutral.400}" },
+      "thumb-hover": { "$type": "color", "$value": "{palette.neutral.600}" }
+    },
     "action": {
       "primary": { "$type": "color", "$value": "{palette.neutral.950}" },
       "primary-hover": { "$type": "color", "$value": "{palette.neutral.800}" },

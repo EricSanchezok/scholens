@@ -43,7 +43,11 @@ def serialize_turns(
     result: list[ConversationTurnResponse] = []
     for turn in turns:
         visible = (
-            [response for response in turn.responses if response.status == "completed"]
+            [
+                response
+                for response in turn.responses
+                if response.status in {"completed", "failed", "cancelled"}
+            ]
             if turn.id == active_leaf_id
             else [
                 response

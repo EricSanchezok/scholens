@@ -160,30 +160,34 @@ class SqlAlchemyConversationGateway:
         user_id: int,
         conversation_id: UUID,
         request: ConversationBranchSelectionRequest,
-    ) -> ConversationTurnsPage:
-        conversation, path = turn_repository.select_branch(
+    ) -> ConversationChange[ConversationTurnsPage]:
+        conversation, path, path_changed = turn_repository.select_branch(
             self._db,
             conversation_id=conversation_id,
             turn_id=request.turn_id,
             user_id=user_id,
         )
+        context_changed = False
         if path:
-            conversation_repository.update_paper_context(
+            context_changed = conversation_repository.update_paper_context(
                 self._db,
                 conversation_id=conversation_id,
                 user_id=user_id,
                 request=_PAPER_CONTEXT.validate_python(path[-1].paper_context),
-            )
-        return ConversationTurnsPage(
-            items=serialize_turns(
-                path,
-                active_leaf_id=path[-1].id if path else None,
-                branch_groups=turn_repository.branch_groups(
-                    self._db,
-                    conversation_id=conversation_id,
+            ).changed
+        return ConversationChange(
+            value=ConversationTurnsPage(
+                items=serialize_turns(
+                    path,
+                    active_leaf_id=path[-1].id if path else None,
+                    branch_groups=turn_repository.branch_groups(
+                        self._db,
+                        conversation_id=conversation_id,
+                    ),
                 ),
+                path_revision=conversation.path_revision,
             ),
-            path_revision=conversation.path_revision,
+            changed=path_changed or context_changed,
         )
 
     def select_response(

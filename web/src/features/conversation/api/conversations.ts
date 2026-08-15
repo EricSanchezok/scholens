@@ -12,6 +12,8 @@ export type ConversationStreamEvent =
   components["schemas"]["ConversationStreamEventSchema"];
 export type ConversationTurnCreateRequest =
   components["schemas"]["ConversationTurnCreateRequest"];
+export type ConversationTurnBranchCreateRequest =
+  components["schemas"]["ConversationTurnBranchCreateRequest"];
 export type ConversationResponseCreateRequest =
   components["schemas"]["ConversationResponseCreateRequest"];
 export type ConversationCreateRequest =
@@ -82,7 +84,10 @@ async function streamConversation({
   onEvent,
 }: {
   path: string;
-  body: ConversationTurnCreateRequest | ConversationResponseCreateRequest;
+  body:
+    | ConversationTurnCreateRequest
+    | ConversationTurnBranchCreateRequest
+    | ConversationResponseCreateRequest;
   signal: AbortSignal;
   onEvent: (event: ConversationStreamEvent) => void;
 }) {
@@ -157,6 +162,27 @@ export function streamConversationRetry({
   });
 }
 
+export function streamConversationBranch({
+  conversationId,
+  turnId,
+  request,
+  signal,
+  onEvent,
+}: {
+  conversationId: string;
+  turnId: string;
+  request: ConversationTurnBranchCreateRequest;
+  signal: AbortSignal;
+  onEvent: (event: ConversationStreamEvent) => void;
+}) {
+  return streamConversation({
+    path: `/api/v1/conversations/${conversationId}/turns/${turnId}/branches`,
+    body: request,
+    signal,
+    onEvent,
+  });
+}
+
 export async function selectConversationResponse({
   conversationId,
   turnId,
@@ -174,5 +200,23 @@ export async function selectConversationResponse({
     },
   );
   if (!data) throw new Error("Selected response was empty");
+  return data;
+}
+
+export async function selectConversationBranch({
+  conversationId,
+  turnId,
+}: {
+  conversationId: string;
+  turnId: string;
+}) {
+  const { data } = await apiClient.PUT(
+    "/api/v1/conversations/{conversation_id}/selected-branch",
+    {
+      params: { path: { conversation_id: conversationId } },
+      body: { turn_id: turnId },
+    },
+  );
+  if (!data) throw new Error("Selected conversation branch was empty");
   return data;
 }

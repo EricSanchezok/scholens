@@ -1269,6 +1269,12 @@ export function ReaderContextPanel({
               onRetryResponse={(turn) =>
                 void conversationSession.retryResponse(turn)
               }
+              onEditMessage={(turn, message) =>
+                conversationSession.editMessage(turn, message)
+              }
+              onSelectBranch={(turnId) =>
+                void conversationSession.selectBranch(turnId)
+              }
               onSelectResponse={(turnId, responseId) =>
                 void conversationSession.selectResponse(turnId, responseId)
               }
