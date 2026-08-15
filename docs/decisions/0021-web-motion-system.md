@@ -36,12 +36,17 @@ owns `MotionConfig` and asynchronously loads `domMax` through strict
 `LazyMotion`. Reduced mode retains state and short color/opacity feedback while
 removing spatial, layout, smooth-scroll, and perpetual animation.
 
-Home, Conversation, Settings, Authentication, and the Workspace Shell use CSS
-recipes for presence and feedback. Library, Projects, Project Detail, and
-Reader are route-scoped runtime consumers because their bounded list or panel
-geometry needs retained exit state, interruption, or layout measurement. This
-split keeps `AnimatePresence` and the Motion component core out of the Home
-initial graph while preserving one semantic token and reduced-motion policy.
+Home, Conversation, Settings, Authentication, and the Workspace Shell use
+CSS/WAAPI recipes for presence and feedback. The rail is one bounded native
+FLIP: its final width commits immediately, then a translated content region
+and clipped fixed-width chrome settle from captured visual geometry. It does
+not scale descendants, transition width, or retain `will-change`; rapid
+reversals and reduced-policy changes cancel the active animations and cleanup
+releases their references. Library, Projects, Project Detail, and Reader are
+route-scoped runtime consumers because their bounded list or panel geometry
+needs retained exit state, interruption, or layout measurement. This split
+keeps `AnimatePresence` and the Motion component core out of the Home initial
+graph while preserving one semantic token and reduced-motion policy.
 
 Preference storage is best-effort rather than a rendering dependency. When
 storage is unavailable, pre-paint resolution continues through the cookie and
@@ -67,25 +72,27 @@ the sum of unique script URLs in production HTML, compressed from the exact
 not a durable gate contract.
 
 The 2026-08-16 controlled Home benchmark added one layer at a time to the same
-strict CSS-first build. The CSS-first branch measured 725 B above `main`.
-Adding global `MotionConfig` added 279 B; `LazyMotion` added 12,341 B; one raw
-`m.div` added 4,855 B; `AnimatePresence` added 1,987 B; and the Scholens
-semantic wrapper/barrel added 685 B. The reconstructed global-runtime total was
-20,872 B above `main`. This evidence is why the runtime boundary is route-local
-rather than global.
+strict CSS-first build before the bounded rail FLIP. That base measured 725 B
+above `main`. Adding global `MotionConfig` added 279 B; `LazyMotion` added
+12,341 B; one raw `m.div` added 4,855 B; `AnimatePresence` added 1,987 B; and
+the Scholens semantic wrapper/barrel added 685 B. The reconstructed
+global-runtime total was 20,872 B above `main`. The final CSS/WAAPI candidate,
+including the rail FLIP and generated CSS easing metadata, measures 1,353 B
+above `main`. This evidence is why the runtime boundary is route-local rather
+than global.
 
 The final route-owned measurement was:
 
 | Production route     | `main` gzip | Candidate gzip | Delta     | Motion ownership                         |
 | -------------------- | ----------- | -------------- | --------- | ---------------------------------------- |
-| Home `/`             | 458,460 B   | 459,185 B      | +725 B    | CSS-first; no Motion React initial chunk |
-| Login `/login`       | 322,580 B   | 323,165 B      | +585 B    | CSS-first; no Motion React initial chunk |
-| Library `/library`   | 469,216 B   | 489,837 B      | +20,621 B | route-local runtime                      |
-| Projects `/projects` | 465,246 B   | 485,742 B      | +20,496 B | route-local runtime                      |
-| Reader `/reader/:id` | 569,321 B   | 590,004 B      | +20,683 B | route-local runtime                      |
+| Home `/`             | 458,460 B   | 459,813 B      | +1,353 B  | CSS/WAAPI; no Motion React initial chunk |
+| Login `/login`       | 322,580 B   | 323,231 B      | +651 B    | CSS-first; no Motion React initial chunk |
+| Library `/library`   | 469,216 B   | 490,447 B      | +21,231 B | route-local runtime                      |
+| Projects `/projects` | 465,246 B   | 486,372 B      | +21,126 B | route-local runtime                      |
+| Reader `/reader/:id` | 569,321 B   | 590,632 B      | +21,311 B | route-local runtime                      |
 
 The two shared initial runtime chunks total 19,581 B gzip on opted-in routes;
-the remaining 915–1,102 B is route integration and feature wrapper code. The
+the remaining 1,545–1,730 B is route integration and feature wrapper code. The
 async `domMax` chunk is 86,956 B raw and 28,067 B gzip and is absent from route
 HTML script lists. Measurements used Node 22.23.2, pnpm 10.11.0, Next production
 builds, and Node zlib level 9.
@@ -106,9 +113,10 @@ builds, and Node zlib level 9.
 - AutoAnimate. Rejected because automatic DOM observation offers too little
   semantic control over which product changes animate and how reduced motion
   degrades.
-- Web Animations API wrappers maintained in-house. Rejected because layout
-  measurement, exit presence, interruption, and cross-browser cleanup would
-  become an internal animation framework with a larger maintenance burden.
+- General Web Animations API wrappers maintained in-house. Rejected because
+  exit presence and arbitrary layout measurement would become an internal
+  animation framework. The Workspace Shell's isolated two-element rail FLIP
+  remains feature-owned and uses the shared generated timing metadata.
 - No application preference beyond the OS media query. Rejected because users
   need a discoverable persistent choice and designers/developers need explicit
   full/reduced modes for review.
@@ -134,9 +142,12 @@ source and regenerated rather than tuned independently in frames.
 ## Validation
 
 `tokens:check` verifies generated CSS and TypeScript metadata. `design:check`
-enforces the import and authoring boundary. Unit tests cover preference parsing,
-system changes, persistence, and root policy. Storybook interaction tests cover
-Motion Lab and Settings preference changes. The motion Playwright smoke proves
-pre-hydration `system` reduction and explicit `full` override in Chromium,
-Firefox, and WebKit. The complete Web gate verifies existing feature journeys,
-builds, accessibility, localization, and documentation.
+enforces the import and authoring boundary, including the ban on layout-size
+transitions and persistent `will-change` in motion recipes. Unit tests cover
+preference parsing, system changes, persistence, and root policy. Storybook
+interaction tests cover Motion Lab, Settings preference changes, and the rail's
+instant final layout in deterministic mode. The motion Playwright smoke proves
+pre-hydration `system` reduction, explicit `full` override, interruption-safe
+rail FLIP, and immediate cancellation when system motion becomes reduced in
+Chromium, Firefox, and WebKit. The complete Web gate verifies existing feature
+journeys, builds, accessibility, localization, and documentation.

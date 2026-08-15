@@ -13,6 +13,12 @@ export const motionEasings = {
   exit: [0.4, 0, 1, 1],
   in_out: [0.65, 0, 0.35, 1],
 } as const;
+export const motionCssEasings = {
+  enter: "cubic-bezier(0.16, 1, 0.3, 1)",
+  standard: "cubic-bezier(0.2, 0, 0, 1)",
+  exit: "cubic-bezier(0.4, 0, 1, 1)",
+  in_out: "cubic-bezier(0.65, 0, 0.35, 1)",
+} as const;
 
 export type MotionDurationName = keyof typeof motionDurations;
 export type MotionEasingName = keyof typeof motionEasings;

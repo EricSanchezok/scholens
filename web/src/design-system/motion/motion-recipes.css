@@ -154,8 +154,12 @@
     var(--motion-easing-standard);
 }
 
-.motion-rail {
-  transition: width var(--motion-duration-slow) var(--motion-easing-enter);
+.motion-rail-chrome {
+  clip-path: inset(0);
+}
+
+.motion-rail-chrome[data-collapsed="true"] {
+  clip-path: inset(0 calc(var(--layout-sidebar) - 4rem) 0 0);
 }
 
 .motion-popup {
@@ -346,10 +350,6 @@ html[data-motion="reduced"] :is(.motion-icon, .motion-progress, .motion-shape) {
   transition-duration: var(--motion-duration-instant);
 }
 
-html[data-motion="reduced"] .motion-rail {
-  transition-duration: var(--motion-duration-instant);
-}
-
 html[data-motion="reduced"]
   .motion-control:active:not(:disabled, [aria-disabled="true"]) {
   transform: none;
@@ -388,11 +388,6 @@ html[data-motion="reduced"]
       .settled-content-enter
     ) {
     animation: none;
-  }
-
-  html:not([data-motion-preference]) .motion-rail,
-  html[data-motion-preference="system"] .motion-rail {
-    transition-duration: var(--motion-duration-instant);
   }
 
   :is(html:not([data-motion-preference]), html[data-motion-preference="system"])

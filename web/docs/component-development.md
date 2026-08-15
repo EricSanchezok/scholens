@@ -146,8 +146,11 @@ state-replacement, or container-layout change and only below a route-local
 `MotionRuntimeProvider`. Import `m`, `AnimatePresence`, variants, and
 transitions from `@/design-system/motion`; direct `motion/*` imports are an
 architecture violation. The global Provider, Home, Conversation, Settings,
-Authentication, and Workspace Shell remain CSS-first so the release entry does
-not inherit the runtime bundle.
+Authentication, and Workspace Shell remain CSS/WAAPI-first so the release
+entry does not inherit the runtime bundle. Workspace Shell's bounded rail FLIP
+must commit layout immediately, use only the generated motion timing metadata,
+avoid descendant scale and layout-property interpolation, and cancel when the
+resolved policy becomes reduced.
 
 An animated wrapper preserves the semantic element it replaces. Lists remain
 lists, table rows remain rows, panels remain complementary regions, and motion

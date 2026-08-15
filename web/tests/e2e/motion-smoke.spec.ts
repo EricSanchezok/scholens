@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import {
   homeConversations,
@@ -21,6 +21,28 @@ const actor = {
   display_name: "Motion Researcher",
   locale: "en",
 };
+
+async function railTransform(locator: Locator) {
+  return locator.evaluate((element) => {
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+    return {
+      scaleX: matrix.a,
+      scaleY: matrix.d,
+      skewX: matrix.c,
+      skewY: matrix.b,
+      translateX: matrix.e,
+    };
+  });
+}
+
+async function railClipRight(locator: Locator) {
+  return locator.evaluate((element) => {
+    const values = (getComputedStyle(element).clipPath.match(/[\d.]+/g) ?? [])
+      .map(Number)
+      .filter(Number.isFinite);
+    return values.length > 1 ? values[1]! : (values[0] ?? 0);
+  });
+}
 
 async function mockWorkspace(page: Page) {
   await mockBillingUsage(page);
@@ -377,26 +399,133 @@ test("lets an explicit full-motion preference override the OS setting", async ({
       .not.toBe("none");
   }
   await page.mouse.up();
-  await page.waitForTimeout(60);
   const sidebar = page.locator('aside[aria-label="Workspace sidebar"]');
-  const intermediateWidth = await sidebar.evaluate(
-    (element) => element.getBoundingClientRect().width,
-  );
-  expect(intermediateWidth).toBeGreaterThan(64);
-  expect(intermediateWidth).toBeLessThan(264);
+  const railContent = page.locator("[data-motion-rail-content]");
+  const railChrome = page.locator(".motion-rail-chrome");
+  const workspace = page.locator("[data-workspace-shell]");
+  await expect(sidebar).toHaveCSS("width", "64px");
+  await expect
+    .poll(async () => {
+      const [transform, clipRight] = await Promise.all([
+        railTransform(railContent),
+        railClipRight(railChrome),
+      ]);
+      return (
+        transform.translateX > 0 &&
+        transform.translateX < 200 &&
+        clipRight > 0 &&
+        clipRight < 200
+      );
+    })
+    .toBe(true);
+  const collapseFrame = await railTransform(railContent);
+  expect(collapseFrame.scaleX).toBeCloseTo(1, 4);
+  expect(collapseFrame.scaleY).toBeCloseTo(1, 4);
+  expect(collapseFrame.skewX).toBeCloseTo(0, 4);
+  expect(collapseFrame.skewY).toBeCloseTo(0, 4);
+  expect(collapseFrame.translateX).toBeGreaterThan(0);
+  expect(collapseFrame.translateX).toBeLessThan(200);
   await expect(sidebar.getByText("Scholens", { exact: true })).toHaveCSS(
     "transform",
     "none",
   );
+  await expect(
+    page.getByRole("heading", { name: "What are you working on?" }),
+  ).toHaveCSS("transform", "none");
   const expandSidebar = page.getByRole("button", { name: "Expand sidebar" });
   await expect(expandSidebar).toBeVisible();
+  await expandSidebar.click();
+  await expect(sidebar).toHaveCSS("width", "264px");
+  await expect
+    .poll(async () => {
+      const [transform, clipRight] = await Promise.all([
+        railTransform(railContent),
+        railClipRight(railChrome),
+      ]);
+      return (
+        transform.translateX < 0 &&
+        transform.translateX > -200 &&
+        clipRight > 0 &&
+        clipRight < 200
+      );
+    })
+    .toBe(true);
+  const interruptionFrame = await railTransform(railContent);
+  expect(interruptionFrame.scaleX).toBeCloseTo(1, 4);
+  expect(interruptionFrame.scaleY).toBeCloseTo(1, 4);
+  expect(interruptionFrame.skewX).toBeCloseTo(0, 4);
+  expect(interruptionFrame.skewY).toBeCloseTo(0, 4);
+  expect(interruptionFrame.translateX).toBeLessThan(0);
+  expect(interruptionFrame.translateX).toBeGreaterThan(-200);
+  await expect(railContent).toHaveCSS("transform", "none");
+  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(0, 4);
+  expect(
+    await railContent.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
+  expect(
+    await railChrome.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
+  await expect(workspace).toHaveCSS("overflow", "hidden");
+  expect(
+    await workspace.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
   await expect(sidebar).toHaveCSS("width", "64px");
+  await expect(railContent).toHaveCSS("transform", "none");
+  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(200, 4);
+  expect(
+    await railContent.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
+  expect(
+    await railChrome.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
 
   const newChat = page.getByRole("link", { name: "New chat" });
   await newChat.hover();
   const tooltip = page.getByRole("tooltip", { name: "New chat" });
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toHaveCSS("animation-name", "motion-popup-in");
+});
+
+test("cancels an active rail FLIP when system motion becomes reduced", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.addInitScript(() => {
+    localStorage.setItem("scholens-motion", "system");
+  });
+  await page.goto("/");
+
+  const root = page.locator("html");
+  const sidebar = page.locator('aside[aria-label="Workspace sidebar"]');
+  const railContent = page.locator("[data-motion-rail-content]");
+  const railChrome = page.locator(".motion-rail-chrome");
+  await expect(root).toHaveAttribute("data-motion", "full");
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(sidebar).toHaveCSS("width", "64px");
+  await expect
+    .poll(async () => {
+      const [contentAnimations, chromeAnimations] = await Promise.all([
+        railContent.evaluate((element) => element.getAnimations().length),
+        railChrome.evaluate((element) => element.getAnimations().length),
+      ]);
+      return contentAnimations + chromeAnimations;
+    })
+    .toBeGreaterThan(0);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(root).toHaveAttribute("data-motion", "reduced");
+  await expect(railContent).toHaveCSS("transform", "none");
+  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(200, 4);
+  expect(
+    await railContent.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
+  expect(
+    await railChrome.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
 });
 
 test("commits the Home-to-conversation swap without reduced spatial interpolation", async ({
@@ -408,6 +537,25 @@ test("commits the Home-to-conversation swap without reduced spatial interpolatio
   });
   await mockConversationSubmission(page);
   await page.goto("/");
+
+  const reducedRailContent = page.locator("[data-motion-rail-content]");
+  const reducedRailChrome = page.locator(".motion-rail-chrome");
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await expect(
+    page.getByRole("button", { name: "Expand sidebar" }),
+  ).toBeVisible();
+  await expect(page.locator('aside[aria-label="Workspace sidebar"]')).toHaveCSS(
+    "width",
+    "64px",
+  );
+  await expect(reducedRailContent).toHaveCSS("transform", "none");
+  await expect.poll(() => railClipRight(reducedRailChrome)).toBeCloseTo(200, 4);
+  expect(
+    await reducedRailContent.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
+  expect(
+    await reducedRailChrome.evaluate((element) => element.getAnimations()),
+  ).toHaveLength(0);
 
   await expect(
     page.getByRole("heading", { name: "What are you working on?" }),

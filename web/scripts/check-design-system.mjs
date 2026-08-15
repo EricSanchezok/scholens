@@ -246,6 +246,13 @@ const generatedMotion = await readFile(
   path.join(generatedRoot, "motion.css"),
   "utf8",
 );
+const motionRecipesPath = path.join(
+  sourceRoot,
+  "design-system",
+  "motion",
+  "motion-recipes.css",
+);
+const motionRecipes = await readFile(motionRecipesPath, "utf8");
 const tailwindImportIndex = globals.indexOf('@import "tailwindcss";');
 const foundationImportIndex = globals.indexOf(
   '@import "../design-system/generated/dimensions.css";',
@@ -269,6 +276,18 @@ for (const tokenPath of requiredMotionTokens) {
   if (!generatedMotion.includes(variable)) {
     report(`src/design-system/generated/motion.css: missing ${variable}`);
   }
+}
+for (const match of motionRecipes.matchAll(
+  /transition(?:-property)?\s*:[^;}]*\b(?:width|height)\b/g,
+)) {
+  report(
+    `src/design-system/motion/motion-recipes.css:${lineNumber(motionRecipes, match.index)}: layout dimensions must commit immediately; use bounded FLIP choreography`,
+  );
+}
+for (const match of motionRecipes.matchAll(/\bwill-change\s*:/g)) {
+  report(
+    `src/design-system/motion/motion-recipes.css:${lineNumber(motionRecipes, match.index)}: persistent will-change is forbidden`,
+  );
 }
 for (const [name, target] of Object.entries(adapter.fontSizes)) {
   const targetVariable = target.replaceAll(".", "-");

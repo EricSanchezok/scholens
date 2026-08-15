@@ -30,8 +30,8 @@ directly. It must not import `motion/react`, the design-system motion barrel,
 or `MotionRuntimeProvider`: doing so places the runtime in every route's
 initial graph. Library, Projects, Project Detail, and Reader opt in through a
 route-local `MotionRuntimeProvider`; Home, Conversation, Settings,
-Authentication, and the Workspace Shell remain CSS-first. The design checker
-enforces this initial-route boundary.
+Authentication, and the Workspace Shell remain CSS/WAAPI-first. The design
+checker enforces this initial-route boundary.
 
 Use CSS for controls, Radix overlays, progress, spinners, skeletons, and other
 single-node state changes. Radix keeps content mounted while CSS exit keyframes
@@ -73,24 +73,24 @@ reduced mode.
 
 ## Semantic recipes
 
-| Recipe                     | Owner and behavior                                              |
-| -------------------------- | --------------------------------------------------------------- |
-| `motion-control`           | Shared color/border/opacity feedback                            |
-| `motion-pressable`         | Restrained press scale for an atomic semantic button or link    |
-| `motion-icon`              | A glyph changing direction or state                             |
-| `motion-shape`             | Border-radius changes in expanding controls                     |
-| `motion-rail`              | Width-only navigation rail resizing without scaling descendants |
-| `motion-popup`             | Tooltip, popover, menu, and Select from collision-aware origin  |
-| `motion-overlay`           | Dialog or Sheet scrim fade                                      |
-| `motion-dialog`            | Centered modal entrance/exit                                    |
-| `motion-responsive-bottom` | Bottom sheet on narrow screens, centered dialog on desktop      |
-| `motion-responsive-full`   | Full-screen mobile dialog, centered desktop dialog              |
-| `motion-side-sheet`        | Directional side panel                                          |
-| `motion-toast`             | Brief status surface without changing document layout           |
-| `motion-progress`          | GPU-friendly `scaleX` progress                                  |
-| `motion-spinner`           | Indeterminate activity; stopped under reduced motion            |
-| `motion-skeleton`          | Quiet loading pulse; stopped under reduced motion               |
-| `settled-content-enter`    | One-time result or terminal-state arrival                       |
+| Recipe                     | Owner and behavior                                                 |
+| -------------------------- | ------------------------------------------------------------------ |
+| `motion-control`           | Shared color/border/opacity feedback                               |
+| `motion-pressable`         | Restrained press scale for an atomic semantic button or link       |
+| `motion-icon`              | A glyph changing direction or state                                |
+| `motion-shape`             | Border-radius changes in expanding controls                        |
+| `motion-rail-chrome`       | Clipped rail chrome paired with a bounded content-translation FLIP |
+| `motion-popup`             | Tooltip, popover, menu, and Select from collision-aware origin     |
+| `motion-overlay`           | Dialog or Sheet scrim fade                                         |
+| `motion-dialog`            | Centered modal entrance/exit                                       |
+| `motion-responsive-bottom` | Bottom sheet on narrow screens, centered dialog on desktop         |
+| `motion-responsive-full`   | Full-screen mobile dialog, centered desktop dialog                 |
+| `motion-side-sheet`        | Directional side panel                                             |
+| `motion-toast`             | Brief status surface without changing document layout              |
+| `motion-progress`          | GPU-friendly `scaleX` progress                                     |
+| `motion-spinner`           | Indeterminate activity; stopped under reduced motion               |
+| `motion-skeleton`          | Quiet loading pulse; stopped under reduced motion                  |
+| `settled-content-enter`    | One-time result or terminal-state arrival                          |
 
 The runtime exports four variants: `swap`, `listItem`, `panel`, and `focal`.
 Choose the semantic result, not the closest-looking transform. `AnimatePresence`
@@ -112,7 +112,7 @@ from assistive technology so only the newly committed state remains actionable.
 
 | Surface           | Motion responsibility                                                   |
 | ----------------- | ----------------------------------------------------------------------- |
-| Workspace shell   | CSS width and label disclosure preserve navigation anchors              |
+| Workspace shell   | WAAPI FLIP preserves rail continuity without interpolating layout width |
 | Home/conversation | CSS state arrival for dashboard swap, accepted turn, and Worklog        |
 | Library           | Utility-to-selection toolbar and at most six transient ingestion rows   |
 | Projects          | List continuity and Project Chat side-panel expansion                   |
@@ -160,10 +160,14 @@ sensitive users.
 
 ## Performance and maintenance
 
-- Prefer `transform` and `opacity`; do not animate height, top, left,
-  box-shadow, filter, blur, or the document scroll position. A bounded
-  navigation rail may transition width when that avoids scaling its text and
-  icons; descendants must remain untransformed throughout the resize.
+- Prefer `transform` and `opacity`; do not animate width, height, top, left,
+  box-shadow, filter, blur, or the document scroll position. Workspace Shell
+  commits the rail's final width in the interaction state update, then applies
+  a bounded WAAPI FLIP: the content region translates from its captured visual
+  position while a fixed-width chrome layer interpolates `clip-path`. It never
+  scales descendants, never retains a persistent `will-change`, cancels on a
+  rapid reversal or a switch to reduced/skip policy, and releases completed or
+  cancelled `Animation` references.
 - Keep one moving region at a time. Parent and child must not both animate the
   same geometry unless a documented choreography requires it.
 - Keep the global provider runtime-free. A runtime-enabled route uses one
