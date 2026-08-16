@@ -285,8 +285,9 @@ Resources:
           Version: '2012-10-17'
           Statement:
           - {Action: ['cloudformation:DescribeStacks', 'cloudformation:ListExports'], Effect: Allow, Resource: '*'}
+          - {Action: 'ecs:DescribeTaskDefinition', Effect: Allow, Resource: '*'}
           - {Action: 'ecs:RegisterTaskDefinition', Effect: Allow, Resource: '*'}
-          - {Action: ['ecs:DeregisterTaskDefinition', 'ecs:DescribeTaskDefinition'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/sanchezcloud-scholens-migration:*'}
+          - {Action: 'ecs:DeregisterTaskDefinition', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/sanchezcloud-scholens-migration:*'}
           - {Action: ['ecs:DescribeTasks', 'ecs:StopTask'], Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/sanchezcloud-production/*'}
           - {Action: 'ecs:RunTask', Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/sanchezcloud-scholens-migration:*'}
           - {Action: 'iam:PassRole', Condition: {StringEquals: {'iam:PassedToService': ecs-tasks.amazonaws.com}}, Effect: Allow, Resource: [!GetAtt TaskExecutionRole.Arn, !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensMigrationTaskRole']}
