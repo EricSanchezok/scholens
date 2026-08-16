@@ -250,7 +250,7 @@ async def test_aliyun_sender_classifies_provider_failures(
     assert exc_info.value.transient is transient
 
 
-def test_delivery_claim_uses_skip_locked() -> None:
+def test_delivery_claim_uses_skip_locked_without_locking_eager_load_joins() -> None:
     db = MagicMock(spec=Session)
     rows = MagicMock()
     rows.all.return_value = []
@@ -266,6 +266,7 @@ def test_delivery_claim_uses_skip_locked() -> None:
     statement = db.scalars.call_args.args[0]
     sql = str(statement.compile(dialect=postgresql.dialect()))
     assert "FOR UPDATE SKIP LOCKED" in sql
+    assert " JOIN " not in sql
 
 
 def test_expired_lease_recovery_marks_exhausted_delivery_failed() -> None:

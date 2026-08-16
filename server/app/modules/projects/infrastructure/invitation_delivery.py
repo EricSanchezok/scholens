@@ -11,7 +11,7 @@ from time import monotonic
 from uuid import UUID
 
 from sqlalchemy import or_, select, update
-from sqlalchemy.orm import Session, joinedload, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from app.modules.notifications.application import (
     EmailDeliveryError,
@@ -109,8 +109,11 @@ class ProjectInvitationDeliveryRepository:
                     ),
                 )
                 .options(
-                    joinedload(ProjectInvitation.project),
-                    joinedload(ProjectInvitation.invited_by),
+                    # Keep the locked statement scoped to invitation rows. A joined
+                    # eager load introduces outer joins, which PostgreSQL refuses to
+                    # combine with FOR UPDATE on the nullable side of the join.
+                    selectinload(ProjectInvitation.project),
+                    selectinload(ProjectInvitation.invited_by),
                 )
                 .order_by(
                     ProjectInvitation.delivery_next_attempt_at,
