@@ -483,6 +483,49 @@ def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() ->
     }
     assert not (bootstrap_iam_actions & forbidden_iam_mutations)
 
+    create_security_group = next(
+        item
+        for item in bootstrap_statements
+        if "ec2:CreateSecurityGroup" in _actions(item)
+    )
+    assert "Condition" not in create_security_group
+    assert create_security_group["Resource"] == [
+        {
+            "Fn::Sub": [
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}",
+                {"VpcId": {"Fn::ImportValue": "sanchezcloud-production-vpc-id"}},
+            ]
+        },
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:"
+                "${AWS::AccountId}:security-group/*"
+            )
+        },
+    ]
+    schedule_key_deletion = next(
+        item
+        for item in bootstrap_statements
+        if "kms:ScheduleKeyDeletion" in _actions(item)
+    )
+    assert schedule_key_deletion["Condition"] == {
+        "StringEquals": {
+            "aws:ResourceTag/ManagedBy": "CloudFormation",
+            "aws:ResourceTag/Product": "Scholens",
+        }
+    }
+
+    runtime_compute = bootstrap_resources["RuntimeComputePolicy"]
+    runtime_create_security_group = next(
+        item
+        for item in runtime_compute["Properties"]["PolicyDocument"]["Statement"]
+        if "ec2:CreateSecurityGroup" in _actions(item)
+    )
+    assert "Condition" not in runtime_create_security_group
+    assert (
+        runtime_create_security_group["Resource"] == create_security_group["Resource"]
+    )
+
     admin_owned_roles = {
         "FoundationCloudFormationServiceRole",
         "RuntimeCloudFormationServiceRole",

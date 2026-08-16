@@ -37,6 +37,13 @@ Retained resources use `DeletionPolicy: RetainExceptOnCreate` and
 while deleting or replacing a successfully created stack retains them. Stack deletion is
 never an incident rollback or cleanup method.
 
+The restricted foundation role may create security groups only in the imported production
+VPC. AWS CloudFormation cannot satisfy request-tag conditions on
+`ec2:CreateSecurityGroup`, so creation is VPC-scoped and all later security-group mutations
+remain restricted to resources tagged `Product=Scholens`. The role may schedule deletion
+only for CloudFormation-managed Scholens KMS keys so `RetainExceptOnCreate` can complete a
+failed initial-creation rollback; successfully created keys remain retained.
+
 ### `sanchezcloud-scholens-production`
 
 Every release updates the runtime stack with digest-qualified images. It owns:
