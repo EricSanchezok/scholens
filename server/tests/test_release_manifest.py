@@ -132,6 +132,57 @@ def test_release_manifest_rejects_scan_for_another_digest(tmp_path: Path) -> Non
         release_manifest.create_manifest(arguments)
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    (
+        ("https://scholens.sanchezcloud.net", "https://scholens.sanchezcloud.net"),
+        (
+            "https://myaccount.sanchezcloud.net/settings/",
+            "https://myaccount.sanchezcloud.net/settings",
+        ),
+        (
+            "https://scholens.sanchezcloud.net:443/api",
+            "https://scholens.sanchezcloud.net:443/api",
+        ),
+    ),
+)
+def test_public_build_url_accepts_credential_free_https_paths(
+    value: str,
+    expected: str,
+) -> None:
+    assert release_manifest._validate_https_url(value, name="public-url") == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "http://scholens.sanchezcloud.net",
+        "//scholens.sanchezcloud.net",
+        "https:///missing-host",
+        "https://user@scholens.sanchezcloud.net",
+        "https://:password@scholens.sanchezcloud.net",
+        "https://user:password@scholens.sanchezcloud.net",
+        "https://scholens.sanchezcloud.net/path?mode=preview",
+        "https://scholens.sanchezcloud.net/path?",
+        "https://scholens.sanchezcloud.net/path#section",
+        "https://scholens.sanchezcloud.net/path#",
+        "https://bad host.example/path",
+        "https://-bad-host.example/path",
+        "https://bad-host-.example/path",
+        "https://scholens.sanchezcloud.net:",
+        "https://scholens.sanchezcloud.net:0/path",
+        "https://scholens.sanchezcloud.net:not-a-port",
+        "https://scholens.sanchezcloud.net:70000",
+        "https://[2001:db8::1",
+    ),
+)
+def test_public_build_url_rejects_ambiguous_or_credentialed_values(
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match="credential-free HTTPS URL"):
+        release_manifest._validate_https_url(value, name="public-url")
+
+
 def test_identity_reference_must_match_lock_resolution(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

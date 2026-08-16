@@ -608,9 +608,9 @@ jobs:
                   WHERE email = 'ci-search-owner@example.com')
                );"
 
-          docker run --rm --network host \
+          docker run --rm --network host --entrypoint scholens \
             -e DATABASE_URL="postgresql+psycopg2://scholens_app:${APP_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
-            scholens-api:ci scholens verify paper-search
+            scholens-api:ci verify paper-search
 
           PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app -d sanchezcloud \
             -v ON_ERROR_STOP=1 -c \

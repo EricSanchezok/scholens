@@ -194,6 +194,9 @@ def test_bootstrap_roles_enforce_immutable_release_and_scoped_secrets() -> None:
     database = _policy_statements(resources["DatabaseDeployRole"])
     execution = _policy_statements(resources["TaskExecutionRole"])
 
+    assert all(
+        "cloudformation:DeleteStack" not in _actions(item) for item in production
+    )
     assert all("s3:BypassGovernanceRetention" not in _actions(item) for item in publish)
     publish_put = next(item for item in publish if "s3:PutObject" in _actions(item))
     assert publish_put["Resource"] == [
@@ -925,6 +928,29 @@ def test_release_uses_current_control_plane_for_candidate_and_rollback_data() ->
     )
 
 
+def test_release_rejects_an_incomplete_first_runtime_stack() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+
+    assert "Stacks[0].{Parameters:Parameters,StackStatus:StackStatus}" in workflow
+    for status in (
+        "CREATE_IN_PROGRESS",
+        "CREATE_FAILED",
+        "ROLLBACK_IN_PROGRESS",
+        "ROLLBACK_FAILED",
+        "ROLLBACK_COMPLETE",
+        "REVIEW_IN_PROGRESS",
+    ):
+        assert status in workflow
+    assert "delete this never-enabled failed runtime stack" in workflow
+    assert "The GitHub role cannot delete stacks" in workflow
+    assert "aws cloudformation delete-stack" not in workflow
+    assert "another incomplete-create status" in readme
+    assert "no `DeleteStack` permission" in readme
+
+
 def test_release_recovers_after_stabilization_or_smoke_failure() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
@@ -1452,6 +1478,22 @@ def test_operator_managed_secret_containers_have_no_cloudformation_value() -> No
         assert "GenerateSecretString" not in properties
 
 
+def test_edge_rotation_version_lookup_never_reads_the_secret_value() -> None:
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+    start = readme.index(
+        "The deploy workflow takes the current and previous edge-secret"
+    )
+    end = readme.index("The cross-product migration order is strict", start)
+    rotation = readme[start:end]
+
+    assert rotation.count("aws secretsmanager list-secret-version-ids") == 2
+    assert "AWSCURRENT" in rotation
+    assert "AWSPREVIOUS" in rotation
+    assert "get-secret-value" not in rotation
+    assert "EDGE_PREVIOUS_VERSION_ID=$EDGE_CURRENT_VERSION_ID" in rotation
+    assert "An absent `AWSPREVIOUS` is normal" in rotation
+
+
 def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     gate_runner = (ROOT / "scripts" / "run-gates.sh").read_text(encoding="utf-8")
@@ -1459,8 +1501,10 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     assert "tags: scholens-api:ci" in workflow
     assert "for _ in 1 2; do" in workflow
     assert "sanchezcloud-identity migrate" in workflow
-    assert "--entrypoint scholens" in workflow
+    assert workflow.count("--entrypoint scholens") == 2
     assert "db upgrade --yes --json" in workflow
+    assert "scholens-api:ci verify paper-search" in workflow
+    assert "scholens-api:ci scholens verify paper-search" not in workflow
     assert "scholens dev reset-product" in workflow
     assert "RESET-SCHOLENS-LOCAL" in workflow
     assert "account_plan_grants" in workflow

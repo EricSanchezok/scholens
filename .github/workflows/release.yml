@@ -118,9 +118,27 @@ jobs:
       - name: Capture previous immutable deployment
         id: previous
         run: |
-          if parameters=$(aws cloudformation describe-stacks \
+          if stack=$(aws cloudformation describe-stacks \
             --stack-name sanchezcloud-scholens-production \
-            --query 'Stacks[0].Parameters' --output json 2>describe-stack-error.txt); then
+            --query 'Stacks[0].{Parameters:Parameters,StackStatus:StackStatus}' \
+            --output json 2>describe-stack-error.txt); then
+            stack_status=$(jq -er .StackStatus <<<"$stack")
+            case "$stack_status" in
+              CREATE_COMPLETE|UPDATE_COMPLETE|UPDATE_ROLLBACK_COMPLETE|IMPORT_COMPLETE|IMPORT_ROLLBACK_COMPLETE)
+                ;;
+              CREATE_IN_PROGRESS|CREATE_FAILED|ROLLBACK_IN_PROGRESS|ROLLBACK_FAILED|ROLLBACK_COMPLETE|REVIEW_IN_PROGRESS)
+                printf '%s\n' \
+                  "Runtime stack creation is incomplete ($stack_status)." \
+                  'An administrator must inspect CloudFormation stack events, delete this never-enabled failed runtime stack (termination protection was not enabled), and retry the disabled bootstrap. The GitHub role cannot delete stacks.' >&2
+                exit 1
+                ;;
+              *)
+                printf 'Runtime stack is not in a stable deployable state: %s. Inspect CloudFormation events and retry only after administrator review.\n' \
+                  "$stack_status" >&2
+                exit 1
+                ;;
+            esac
+            parameters=$(jq -cer .Parameters <<<"$stack")
             parameter() {
               jq -er --arg key "$1" \
                 '.[] | select(.ParameterKey == $key) | .ParameterValue' \

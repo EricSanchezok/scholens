@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import ipaddress
 import json
 import re
 import sys
@@ -24,6 +25,7 @@ IMAGE_PATTERN = re.compile(
 )
 CHECKSUM_PATTERN = re.compile(r"[0-9a-f]{64}")
 SCAN_SEVERITIES = ("CRITICAL", "HIGH")
+DNS_LABEL_PATTERN = re.compile(r"(?!-)[A-Za-z0-9-]{1,63}(?<!-)")
 
 
 def _source_root(path: Path) -> Path:
@@ -315,8 +317,47 @@ def _validate_image_scans(value: object, *, images: dict[str, str]) -> dict[str,
 
 
 def _validate_https_url(value: str, *, name: str) -> str:
-    parsed = urlparse(value)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.username:
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        port = parsed.port
+        if hostname is None:
+            ascii_hostname = ""
+        else:
+            try:
+                ipaddress.ip_address(hostname)
+                ascii_hostname = hostname
+            except ValueError:
+                ascii_hostname = hostname.encode("idna").decode("ascii")
+    except (UnicodeError, ValueError) as exc:
+        raise ValueError(
+            f"{name} must be an absolute credential-free HTTPS URL"
+        ) from exc
+    dns_hostname = ascii_hostname.removesuffix(".")
+    hostname_is_valid = bool(ascii_hostname) and (
+        ":" in ascii_hostname
+        or (
+            len(dns_hostname) <= 253
+            and all(
+                DNS_LABEL_PATTERN.fullmatch(label) is not None
+                for label in dns_hostname.split(".")
+            )
+        )
+    )
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or not hostname_is_valid
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or "?" in value
+        or "#" in value
+        or parsed.netloc.endswith(":")
+        or port == 0
+        or any(character.isspace() or ord(character) < 32 for character in value)
+    ):
         raise ValueError(f"{name} must be an absolute credential-free HTTPS URL")
     return value.rstrip("/")
 

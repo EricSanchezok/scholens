@@ -94,6 +94,8 @@ S3, Secrets Manager, and ECR administration from returning.
 
 `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_ACCOUNT_CENTER_URL` are immutable Web build-time
 values recorded in the release manifest; neither is mutable ECS runtime configuration.
+Set each to an absolute, credential-free HTTPS URL with no query string or fragment. A
+stable path is allowed when the product endpoint requires one.
 
 ## Release contract
 
@@ -272,10 +274,28 @@ Scholight delegation secret is imported read-only from Scholight's foundation an
 copied into a Scholens secret.
 
 The deploy workflow takes the current and previous edge-secret version IDs explicitly.
-Outside a rotation, pass the current version ID twice. During rotation, first create the new
-secret version, configure Cloudflare to send the new token, and deploy with the new and old
-version IDs. After propagation is verified, deploy again with the new ID in both inputs;
-only then retire the old version. The workflow role never reads the origin token.
+Resolve them without reading or printing the secret value:
+
+```bash
+EDGE_SECRET_ID=/sanchezcloud/scholens/production/edge
+EDGE_CURRENT_VERSION_ID=$(aws secretsmanager list-secret-version-ids \
+  --secret-id "$EDGE_SECRET_ID" \
+  --query 'Versions[?contains(VersionStages, `AWSCURRENT`)].VersionId | [0]' \
+  --output text)
+EDGE_PREVIOUS_VERSION_ID=$(aws secretsmanager list-secret-version-ids \
+  --secret-id "$EDGE_SECRET_ID" \
+  --query 'Versions[?contains(VersionStages, `AWSPREVIOUS`)].VersionId | [0]' \
+  --output text)
+if [[ -z "$EDGE_PREVIOUS_VERSION_ID" || "$EDGE_PREVIOUS_VERSION_ID" == None ]]; then
+  EDGE_PREVIOUS_VERSION_ID=$EDGE_CURRENT_VERSION_ID
+fi
+```
+
+An absent `AWSPREVIOUS` is normal when no rotation is active; pass the current ID for both
+workflow inputs. During rotation, first create the new secret version, configure Cloudflare
+to send the new token, and deploy with the new and old version IDs. After propagation is
+verified, deploy again with the new ID in both inputs; only then retire the old version.
+The workflow role never reads the origin token.
 
 The cross-product migration order is strict: deploy the Scholight foundation to create
 and export the retained delegation secret and its exact configuration-key ARN; deploy
@@ -383,6 +403,11 @@ public hostname succeeds through Cloudflare.
 - ECS services use deployment circuit-breaker rollback. A failed database task does not
   change application services. A candidate that fails ECS stabilization or an external
   smoke check enters automatic recovery and remains a failed release after recovery.
+- If the first disabled runtime create leaves `CREATE_FAILED`, `ROLLBACK_COMPLETE`, or
+  another incomplete-create status, the release workflow refuses to treat it as a prior
+  deployment. An administrator must inspect the stack events and manually delete that
+  never-enabled stack, whose termination protection was not enabled, before retrying the
+  disabled bootstrap. The GitHub role intentionally has no `DeleteStack` permission.
 - Never delete a retained resource, release manifest, or digest during incident response.
 
 Local verification is side-effect free:
