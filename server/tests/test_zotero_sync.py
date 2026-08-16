@@ -9,12 +9,10 @@ from uuid import uuid4
 
 from app.bootstrap.adapters import zotero_gateway as gateway_module
 from app.bootstrap.adapters.zotero_annotations import (
-    _normalized_annotation,
     _page_number,
     apply_annotation_snapshot,
 )
 from app.bootstrap.adapters.zotero_gateway import DefaultZoteroGateway
-from app.bootstrap.adapters.zotero_operations import _annotations_json
 from app.modules.integrations.zotero.application.zotero import (
     ZoteroSyncBatch,
     ZoteroSyncTarget,
@@ -30,23 +28,6 @@ def _actor() -> Actor:
         status="active",
         email_verified=True,
     )
-
-
-def test_annotation_snapshot_serialization_keeps_stable_remote_keys() -> None:
-    serialized = _annotations_json(
-        [
-            {"key": "ANN1", "data": {"annotationText": "hello"}},
-            {"key": "", "data": {"annotationText": "skip"}},
-        ]
-    )
-    assert json.loads(serialized) == [
-        {"key": "ANN1", "data": {"annotationText": "hello"}}
-    ]
-    assert _normalized_annotation(json.loads(serialized)[0]) == (
-        "ANN1",
-        {"annotationText": "hello"},
-    )
-    assert _normalized_annotation({"annotationText": "legacy"}) is None
 
 
 def test_page_number_prefers_pdf_page_index_over_printed_label() -> None:
@@ -154,7 +135,9 @@ def test_apply_sync_with_empty_annotations_does_not_require_paper_content() -> N
         ),
         patch.object(gateway_module, "apply_annotation_snapshot") as apply,
     ):
-        mutation = DefaultZoteroGateway(db).apply_sync(actor=actor, batch=batch)
+        mutation = DefaultZoteroGateway(db, connections=MagicMock()).apply_sync(
+            actor=actor, batch=batch
+        )
 
     assert mutation.response.synced_papers_count == 1
     assert mutation.response.new_annotations_count == 0

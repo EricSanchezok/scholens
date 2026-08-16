@@ -1,5 +1,6 @@
 import logging
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import requests
@@ -9,6 +10,13 @@ logger = logging.getLogger(__name__)
 ZOTERO_API_BASE = "https://api.zotero.org"
 MAX_RETRIES = 3
 IMPORTABLE_ITEM_TYPES = ("journalArticle", "conferencePaper", "preprint")
+
+
+@dataclass(frozen=True, slots=True)
+class ZoteroApiPage:
+    items: tuple[dict[str, Any], ...]
+    total_count: int
+    library_version: int | None
 
 
 class ZoteroApiClient:
@@ -85,6 +93,8 @@ class ZoteroApiClient:
                         "exception_type": type(exc).__name__,
                     },
                 )
+                if isinstance(status, int) and 400 <= status < 500 and status != 429:
+                    raise
                 if attempt < MAX_RETRIES - 1:
                     time.sleep(2**attempt)
         logger.error(
@@ -96,23 +106,76 @@ class ZoteroApiClient:
     def get_top_importable_items(
         self, *, limit: int = 25, start: int = 0
     ) -> list[dict[str, Any]]:
-        url = f"{self._user_base}/items/top"
+        return list(self.get_top_importable_items_page(limit=limit, start=start).items)
+
+    def get_top_importable_items_page(
+        self,
+        *,
+        limit: int = 25,
+        start: int = 0,
+        query: str | None = None,
+        collection_key: str | None = None,
+        item_type: str | None = None,
+        sort: str = "dateModified",
+        direction: str = "desc",
+    ) -> ZoteroApiPage:
+        url = (
+            f"{self._user_base}/collections/{collection_key}/items/top"
+            if collection_key
+            else f"{self._user_base}/items/top"
+        )
         params = {
             "limit": min(limit, 100),
             "start": start,
-            "sort": "dateModified",
-            "direction": "desc",
-            "itemType": " || ".join(IMPORTABLE_ITEM_TYPES),
+            "sort": sort,
+            "direction": direction,
+            "itemType": item_type or " || ".join(IMPORTABLE_ITEM_TYPES),
         }
+        if query:
+            params["q"] = query
+            params["qmode"] = "titleCreatorYear"
         response = self._request("GET", url, params=params)
         items = response.json()
         if not isinstance(items, list):
-            return []
-        return [
+            items = []
+        filtered = tuple(
             item
             for item in items
             if item.get("data", {}).get("itemType") in IMPORTABLE_ITEM_TYPES
-        ]
+        )
+        return ZoteroApiPage(
+            items=filtered,
+            total_count=_header_int(response, "Total-Results") or len(filtered),
+            library_version=_header_int(response, "Last-Modified-Version"),
+        )
+
+    def get_collections_page(
+        self,
+        *,
+        limit: int = 100,
+        start: int = 0,
+    ) -> ZoteroApiPage:
+        response = self._request(
+            "GET",
+            f"{self._user_base}/collections",
+            params={"limit": min(limit, 100), "start": start, "sort": "title"},
+        )
+        items = response.json()
+        if not isinstance(items, list):
+            items = []
+        return ZoteroApiPage(
+            items=tuple(items),
+            total_count=_header_int(response, "Total-Results") or len(items),
+            library_version=_header_int(response, "Last-Modified-Version"),
+        )
+
+    def current_library_version(self) -> int | None:
+        response = self._request(
+            "GET",
+            f"{self._user_base}/items/top",
+            params={"limit": 1},
+        )
+        return _header_int(response, "Last-Modified-Version")
 
     def get_items_by_keys(self, item_keys: list[str]) -> list[dict[str, Any]]:
         """Fetch specific Zotero items by their item keys.
@@ -172,6 +235,11 @@ class ZoteroApiClient:
                 break
             start += page_size
         return result
+
+    def key_info(self) -> dict[str, Any]:
+        response = self._request("GET", f"{ZOTERO_API_BASE}/keys/current")
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
     def get_pdf_parent_item_keys(self, *, max_items: int = 3000) -> set[str]:
         """Return the set of top-level item keys that have a stored PDF attachment.
@@ -299,3 +367,11 @@ class ZoteroApiClient:
             else:
                 urls.append(f"https://doi.org/{doi}")
         return urls
+
+
+def _header_int(response: requests.Response, name: str) -> int | None:
+    value = response.headers.get(name)
+    try:
+        return int(value) if value is not None else None
+    except ValueError:
+        return None

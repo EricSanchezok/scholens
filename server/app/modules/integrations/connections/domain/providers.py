@@ -13,6 +13,7 @@ class IntegrationProvider(StrEnum):
     EXA = "exa"
     FIRECRAWL = "firecrawl"
     OPENALEX = "openalex"
+    ZOTERO = "zotero"
 
 
 BUILT_IN_INTEGRATION = IntegrationProvider.SCHOLIGHT
@@ -26,4 +27,12 @@ USER_MANAGED_INTEGRATION_PROVIDERS = (
     IntegrationProvider.MINERU,
     *MCP_CONNECTOR_PROVIDERS,
     IntegrationProvider.OPENALEX,
+    IntegrationProvider.ZOTERO,
 )
+
+CREDENTIAL_INTEGRATION_PROVIDERS = (
+    IntegrationProvider.MINERU,
+    *MCP_CONNECTOR_PROVIDERS,
+    IntegrationProvider.OPENALEX,
+)
+OAUTH_INTEGRATION_PROVIDERS = (IntegrationProvider.ZOTERO,)

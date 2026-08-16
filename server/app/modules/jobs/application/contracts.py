@@ -36,6 +36,10 @@ class JobIntegrationCredentialResponse(BaseModel):
         return credential.get_secret_value()
 
 
+class ZoteroJobCredentialResponse(JobIntegrationCredentialResponse):
+    zotero_user_id: str = Field(min_length=1, max_length=64)
+
+
 class ActionableJobFailure(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +57,9 @@ class JobProgressRequest(BaseModel):
         "extracting_metadata",
         "indexing",
         "finalizing",
+        "fetching_library",
+        "syncing_annotations",
+        "importing_papers",
     ]
 
 
@@ -93,10 +100,105 @@ class TokenUsageEventPayload(BaseModel):
 class IntegrationUseEventPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["mineru"]
+    provider: Literal["mineru", "zotero"]
     credential_revision: UUID
     outcome: Literal["verified", "invalid", "failed"]
     error_code: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class ZoteroWorkerMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: str
+    title: str
+    authors: list[str] = Field(default_factory=list)
+    abstract: str | None = None
+    publish_date: str | None = None
+    doi: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    date_added: str | None = None
+    item_type: Literal["journalArticle", "conferencePaper", "preprint"]
+    venue: str | None = None
+    collection_keys: list[str] = Field(default_factory=list)
+    has_pdf_attachment: bool = False
+    has_resolvable_source: bool = False
+    has_metadata: bool = True
+    version: int | None = None
+
+
+class ZoteroWorkerAttachment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: str
+    import_source: Literal["pdf_attachment", "url"]
+    attachment_key: str | None = None
+    source_url: str | None = None
+    annotations_json: str
+    version: int | None = None
+
+
+class ZoteroWorkerImportItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: str
+    status: Literal["ready", "failed"]
+    title: str | None = None
+    error_code: str | None = None
+    s3_object_key: str | None = None
+    metadata: ZoteroWorkerMetadata | None = None
+    attachment: ZoteroWorkerAttachment | None = None
+    page_dimensions: list[tuple[int, float, float]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "ZoteroWorkerImportItem":
+        if self.status == "ready" and (
+            not self.s3_object_key or self.metadata is None or self.attachment is None
+        ):
+            raise ValueError("ready Zotero import item is incomplete")
+        if self.status == "failed" and not self.error_code:
+            raise ValueError("failed Zotero import item requires an error code")
+        return self
+
+
+class ZoteroWorkerSyncUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: str
+    attachment_key: str
+    annotations_json: str
+
+
+class ZoteroWorkerFailure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: str
+    error_code: str
+
+
+class ZoteroImportWebhookData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    operation: Literal["import"]
+    credential_revision: UUID
+    credential_outcome: Literal["verified", "invalid", "failed"]
+    error_code: str | None = None
+    items: list[ZoteroWorkerImportItem] = Field(max_length=50)
+    library_version: int | None = None
+
+
+class ZoteroSyncWebhookData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    operation: Literal["sync"]
+    credential_revision: UUID
+    credential_outcome: Literal["verified", "invalid", "failed"]
+    error_code: str | None = None
+    updates: list[ZoteroWorkerSyncUpdate] = Field(default_factory=list, max_length=500)
+    failures: list[ZoteroWorkerFailure] = Field(default_factory=list, max_length=500)
+    auto_imports: list[ZoteroWorkerImportItem] = Field(default_factory=list)
+    library_version: int | None = None
 
 
 class PDFProcessingResult(BaseModel):

@@ -373,6 +373,36 @@ class JobRepository:
         return job, True
 
     @staticmethod
+    def cancel(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        requested_by_id: int,
+    ) -> tuple[DurableJob, bool]:
+        job = db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == requested_by_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if JobStatus(job.status) not in {JobStatus.PENDING, JobStatus.RUNNING}:
+            return job, False
+        job.status = JobStatus.CANCELLED.value
+        job.completed_at = datetime.now(UTC)
+        job.lease_expires_at = None
+        job.progress_code = None
+        db.flush()
+        return job, True
+
+    @staticmethod
     def reserve_dispatches(
         db: Session,
         *,

@@ -1,18 +1,20 @@
 """HTTP adapters for the Zotero integration."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor, get_zotero_workflow
 from app.bootstrap.settings import AppSettings
 from app.modules.integrations.zotero.application.contracts import (
     ZoteroConnectResponse,
+    ZoteroCollectionPage,
+    ZoteroConnectionStatus,
     ZoteroImportRequest,
-    ZoteroImportResponse,
-    ZoteroImportStatusListResponse,
-    ZoteroLibraryResponse,
-    ZoteroStatusResponse,
-    ZoteroSyncResponse,
+    ZoteroLibraryPage,
+    ZoteroOAuthAuthorizationRequest,
+    ZoteroOperation,
+    ZoteroSyncPreferencesRequest,
 )
 from app.shared.application import (
     Actor,
@@ -32,16 +34,25 @@ zotero_router = APIRouter()
 zotero_oauth_router = APIRouter()
 
 
-@zotero_oauth_router.get("/connect", response_model=ZoteroConnectResponse)
+@zotero_oauth_router.post(
+    "/authorizations",
+    response_model=ZoteroConnectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def zotero_connect(
+    request: ZoteroOAuthAuthorizationRequest,
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
     workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
 ) -> ZoteroConnectResponse:
-    return workflow.connect(actor=current_user, operation=operation)
+    return workflow.connect(actor=current_user, operation=operation, request=request)
 
 
-@zotero_oauth_router.get("/callback", response_class=RedirectResponse)
+@zotero_oauth_router.get(
+    "/callback",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+)
 def zotero_callback(
     request: Request,
     oauth_token: str = Query(...),
@@ -49,28 +60,39 @@ def zotero_callback(
     workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
 ) -> RedirectResponse:
     settings: AppSettings = request.app.state.settings
-    success = workflow.callback(
+    result = workflow.callback(
         oauth_token=oauth_token,
         oauth_verifier=oauth_verifier,
         request=RequestReference(uuid4()),
     )
-    state = "connected" if success else "error"
+    parsed = urlsplit(result.return_path)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.update({"zotero": result.state, "zotero_intent": result.intent})
+    return_path = urlunsplit(("", "", parsed.path, urlencode(query), ""))
     return RedirectResponse(
-        url=f"{settings.client_domain.rstrip('/')}/settings?zotero={state}",
+        url=f"{settings.client_domain.rstrip('/')}{return_path}",
         status_code=status.HTTP_302_FOUND,
     )
 
 
-@zotero_router.get("/connection", response_model=ZoteroStatusResponse)
+@zotero_router.get("/status", response_model=ZoteroConnectionStatus)
 def zotero_status(
     current_user: Actor = Depends(get_required_user),
-    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
-        get_application_executor
-    ),
-) -> ZoteroStatusResponse:
-    return executor.query(
-        lambda capabilities: capabilities.zotero.status(actor=current_user)
-    )
+    workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
+) -> ZoteroConnectionStatus:
+    return workflow.status(actor=current_user)
+
+
+@zotero_router.put(
+    "/sync-preferences",
+    response_model=ZoteroConnectionStatus,
+)
+def zotero_sync_preferences(
+    request: ZoteroSyncPreferencesRequest,
+    current_user: Actor = Depends(get_required_user),
+    workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
+) -> ZoteroConnectionStatus:
+    return workflow.set_sync_preferences(actor=current_user, request=request)
 
 
 @zotero_router.delete(
@@ -93,58 +115,139 @@ def zotero_disconnect(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@zotero_router.get("/library-items", response_model=ZoteroLibraryResponse)
-def zotero_library(
+@zotero_router.get("/collections", response_model=ZoteroCollectionPage)
+def zotero_collections(
+    cursor: str | None = Query(default=None, max_length=2_048),
+    limit: int = Query(default=100, ge=1, le=100),
     current_user: Actor = Depends(get_required_user),
     workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
-) -> ZoteroLibraryResponse:
-    return workflow.library(actor=current_user)
+) -> ZoteroCollectionPage:
+    return workflow.collections(actor=current_user, cursor=cursor, limit=limit)
+
+
+@zotero_router.get("/library-items", response_model=ZoteroLibraryPage)
+def zotero_library(
+    cursor: str | None = Query(default=None, max_length=2_048),
+    query: str | None = Query(default=None, max_length=240),
+    collection_key: str | None = Query(default=None, max_length=64),
+    item_type: str | None = Query(
+        default=None, pattern="^(journalArticle|conferencePaper|preprint)$"
+    ),
+    sort: str = Query(
+        default="modified_desc",
+        pattern="^(modified_desc|added_desc|published_desc|title_asc|creator_asc)$",
+    ),
+    limit: int = Query(default=25, ge=1, le=100),
+    current_user: Actor = Depends(get_required_user),
+    workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
+) -> ZoteroLibraryPage:
+    return workflow.library(
+        actor=current_user,
+        cursor=cursor,
+        query=query,
+        collection_key=collection_key,
+        item_type=item_type,
+        sort=sort,
+        limit=limit,
+    )
 
 
 @zotero_router.post(
     "/imports",
-    response_model=ZoteroImportResponse,
+    response_model=ZoteroOperation,
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def zotero_import(
     request: ZoteroImportRequest,
-    idempotency_key: str | None = Header(default=None, max_length=128),
+    idempotency_key: str = Header(
+        alias="Idempotency-Key", min_length=1, max_length=128
+    ),
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
-    workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
-) -> ZoteroImportResponse:
-    return await workflow.import_items(
-        actor=current_user,
-        operation=operation,
-        request=request,
-        idempotency_key=idempotency_key,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> ZoteroOperation:
+    return executor.command(
+        lambda capabilities: capabilities.zotero.enqueue_import(
+            actor=current_user,
+            operation=operation,
+            request=request,
+            idempotency_key=idempotency_key,
+        )
+    )
+
+
+@zotero_router.get("/imports/{operation_id}", response_model=ZoteroOperation)
+def zotero_import_operation(
+    operation_id: UUID,
+    current_user: Actor = Depends(get_required_user),
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> ZoteroOperation:
+    return executor.query(
+        lambda capabilities: capabilities.zotero.operation(
+            actor=current_user,
+            operation_id=operation_id,
+            kind="import",
+        )
+    )
+
+
+@zotero_router.delete("/imports/{operation_id}", response_model=ZoteroOperation)
+def zotero_cancel_import(
+    operation_id: UUID,
+    current_user: Actor = Depends(get_required_user),
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> ZoteroOperation:
+    return executor.command(
+        lambda capabilities: capabilities.zotero.cancel_operation(
+            actor=current_user,
+            operation_id=operation_id,
+            kind="import",
+        )
     )
 
 
 @zotero_router.post(
     "/sync-runs",
-    response_model=ZoteroSyncResponse,
+    response_model=ZoteroOperation,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def zotero_sync(
+def zotero_sync(
+    idempotency_key: str = Header(
+        alias="Idempotency-Key", min_length=1, max_length=128
+    ),
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
-    workflow: ZoteroWorkflow = Depends(get_zotero_workflow),
-) -> ZoteroSyncResponse:
-    return await workflow.sync(actor=current_user, operation=operation)
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> ZoteroOperation:
+    return executor.command(
+        lambda capabilities: capabilities.zotero.enqueue_sync(
+            actor=current_user,
+            operation=operation,
+            idempotency_key=idempotency_key,
+        )
+    )
 
 
-@zotero_router.get("/imports", response_model=ZoteroImportStatusListResponse)
-def zotero_import_status_list(
-    item_keys: list[str] | None = Query(None),
+@zotero_router.get("/sync-runs/{operation_id}", response_model=ZoteroOperation)
+def zotero_sync_operation(
+    operation_id: UUID,
     current_user: Actor = Depends(get_required_user),
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
-) -> ZoteroImportStatusListResponse:
+) -> ZoteroOperation:
     return executor.query(
-        lambda capabilities: capabilities.zotero.imports(
+        lambda capabilities: capabilities.zotero.operation(
             actor=current_user,
-            item_keys=item_keys,
+            operation_id=operation_id,
+            kind="sync",
         )
     )

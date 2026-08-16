@@ -3,42 +3,47 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
+import requests
+
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.modules.integrations.zotero.application.contracts import (
+    ZoteroCollection,
+    ZoteroCollectionPage,
     ZoteroConnectResponse,
+    ZoteroConnectionStatus,
     ZoteroImportError,
     ZoteroImportItemResult,
-    ZoteroImportRequest,
     ZoteroImportResponse,
-    ZoteroLibraryResponse,
-    ZoteroSyncResponse,
+    ZoteroLibraryPage,
+    ZoteroOAuthAuthorizationRequest,
+    ZoteroSyncPreferencesRequest,
 )
 from app.modules.integrations.zotero.application.zotero import (
     PageDimensions,
     PreparedZoteroCallback,
-    PreparedZoteroImport,
-    PreparedZoteroPostprocess,
-    PreparedZoteroSync,
     ZoteroAccessToken,
     ZoteroAttachmentSnapshot,
     ZoteroCredentials,
+    ZoteroCollectionSnapshotPage,
     ZoteroImportContent,
     ZoteroImportPlan,
     ZoteroItemSnapshot,
     ZoteroLibrarySnapshot,
-    ZoteroPostprocessResult,
     ZoteroRequestToken,
     ZoteroSyncBatch,
-    ZoteroSyncTarget,
+    ZoteroSyncUpdate,
 )
 from app.modules.jobs.application.contracts import (
-    JobCallbackIdentity,
-    JobClaimResponse,
+    ZoteroImportWebhookData,
+    ZoteroSyncWebhookData,
+    ZoteroWorkerImportItem,
 )
+from app.modules.integrations.connections.domain import IntegrationProvider
 from app.modules.papers.application.ingestion import (
     AcceptedIngestion,
     IngestPaper,
@@ -52,10 +57,47 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
     RequestReference,
+    SignedCursorCodec,
 )
-from app.shared.domain import AppError, FailureKind
+from app.shared.domain import AppError, FailureKind, JsonValue
 
 logger = logging.getLogger(__name__)
+
+
+def _json_count(value: JsonValue | None) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _provider_error(exc: Exception) -> AppError:
+    response = exc.response if isinstance(exc, requests.HTTPError) else None
+    status = response.status_code if response is not None else None
+    if status in {401, 403}:
+        return AppError(
+            code="zotero_permissions_insufficient",
+            message="The Zotero connection no longer has the required permissions",
+            kind=FailureKind.PERMISSION_DENIED,
+            retryable=True,
+        )
+    if status == 429:
+        return AppError(
+            code="zotero_rate_limited",
+            message="Zotero is temporarily rate limiting requests",
+            kind=FailureKind.DEPENDENCY_FAILURE,
+            retryable=True,
+        )
+    return AppError(
+        code="zotero_unavailable",
+        message="Zotero is temporarily unavailable",
+        kind=FailureKind.DEPENDENCY_FAILURE,
+        retryable=True,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ZoteroOAuthCallbackResult:
+    return_path: str
+    intent: str
+    state: str
 
 
 class ZoteroOperations(Protocol):
@@ -70,33 +112,32 @@ class ZoteroOperations(Protocol):
         verifier: str,
     ) -> ZoteroAccessToken | None: ...
 
+    def verify_access_token(self, *, access_token: ZoteroAccessToken) -> bool: ...
+
     def fetch_library(
         self,
         *,
         credentials: ZoteroCredentials,
-        limit: int = 100,
+        limit: int = 25,
+        start: int = 0,
+        query: str | None = None,
+        collection_key: str | None = None,
+        item_type: str | None = None,
+        sort: str = "dateModified",
+        direction: str = "desc",
     ) -> ZoteroLibrarySnapshot: ...
 
-    def fetch_items(
+    def fetch_collections(
         self,
         *,
         credentials: ZoteroCredentials,
-        item_keys: tuple[str, ...],
-    ) -> tuple[ZoteroItemSnapshot, ...]: ...
+        limit: int,
+        start: int,
+    ) -> ZoteroCollectionSnapshotPage: ...
 
-    async def fetch_import_content(
-        self,
-        *,
-        credentials: ZoteroCredentials,
-        item: ZoteroItemSnapshot,
-    ) -> ZoteroImportContent: ...
-
-    async def fetch_attachment(
-        self,
-        *,
-        credentials: ZoteroCredentials,
-        item: ZoteroItemSnapshot,
-    ) -> ZoteroAttachmentSnapshot: ...
+    def current_library_version(
+        self, *, credentials: ZoteroCredentials
+    ) -> int | None: ...
 
     async def fetch_page_dimensions(
         self,
@@ -104,24 +145,11 @@ class ZoteroOperations(Protocol):
         source_key: str | None,
     ) -> PageDimensions: ...
 
-    async def fetch_sync_batch(
-        self,
-        *,
-        credentials: ZoteroCredentials,
-        targets: tuple[ZoteroSyncTarget, ...],
-    ) -> ZoteroSyncBatch: ...
-
     async def upload_pdf(self, *, content: bytes) -> None: ...
 
-    def record_event(
-        self,
-        *,
-        actor: Actor,
-        name: str,
-        properties: dict[str, object],
-    ) -> None: ...
+    async def download_job_pdf(self, *, object_key: str) -> bytes: ...
 
-    def parse_date_added(self, value: str | None) -> datetime | None: ...
+    async def delete_job_pdf(self, *, object_key: str) -> None: ...
 
 
 class ZoteroWorkflow:
@@ -131,16 +159,19 @@ class ZoteroWorkflow:
         executor: ApplicationExecutor[ApplicationCapabilities],
         operations: ZoteroOperations,
         operation_factory: OperationContextFactory,
+        cursors: SignedCursorCodec,
     ) -> None:
         self._executor = executor
         self._operations = operations
         self._operation_factory = operation_factory
+        self._cursors = cursors
 
     def connect(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
+        request: ZoteroOAuthAuthorizationRequest,
     ) -> ZoteroConnectResponse:
         request_token = self._operations.request_token()
         if request_token is None:
@@ -156,6 +187,8 @@ class ZoteroWorkflow:
                 operation=operation,
                 request_token=request_token,
                 auth_url=auth_url,
+                return_path=request.return_path,
+                intent=request.intent,
             )
         )
 
@@ -165,7 +198,7 @@ class ZoteroWorkflow:
         oauth_token: str,
         oauth_verifier: str,
         request: RequestReference,
-    ) -> bool:
+    ) -> ZoteroOAuthCallbackResult:
         callback = self._executor.query(
             lambda capabilities: capabilities.zotero.prepare_oauth_callback(
                 oauth_token=oauth_token,
@@ -173,13 +206,42 @@ class ZoteroWorkflow:
             )
         )
         if callback is None:
-            return False
+            return ZoteroOAuthCallbackResult(
+                return_path="/library",
+                intent="manage",
+                state="zotero_oauth_expired",
+            )
+        if callback.expires_at < datetime.now(UTC):
+            return ZoteroOAuthCallbackResult(
+                return_path=callback.return_path,
+                intent=callback.intent,
+                state="zotero_oauth_expired",
+            )
         access_token = self._operations.exchange_access_token(
             callback=callback,
             verifier=oauth_verifier,
         )
         if access_token is None:
-            return False
+            return ZoteroOAuthCallbackResult(
+                return_path=callback.return_path,
+                intent=callback.intent,
+                state="zotero_oauth_exchange_failed",
+            )
+        try:
+            verified = self._operations.verify_access_token(access_token=access_token)
+        except Exception as exc:
+            logger.warning("zotero.oauth.permission_verification_failed")
+            return ZoteroOAuthCallbackResult(
+                return_path=callback.return_path,
+                intent=callback.intent,
+                state=_provider_error(exc).code,
+            )
+        if not verified:
+            return ZoteroOAuthCallbackResult(
+                return_path=callback.return_path,
+                intent=callback.intent,
+                state="zotero_permissions_insufficient",
+            )
         actor = self._executor.query(
             lambda capabilities: capabilities.identity.resolve_actor_by_user_id(
                 callback.user_id
@@ -192,7 +254,7 @@ class ZoteroWorkflow:
             origin=OAuthCallbackOrigin(request=request, provider="zotero"),
             credential=None,
         )
-        return self._executor.command(
+        connected = self._executor.command(
             lambda capabilities: capabilities.zotero.complete_oauth_callback(
                 actor=actor,
                 operation=operation,
@@ -200,169 +262,164 @@ class ZoteroWorkflow:
                 access_token=access_token,
             )
         )
+        return ZoteroOAuthCallbackResult(
+            return_path=callback.return_path,
+            intent=callback.intent,
+            state="connected" if connected else "zotero_connection_failed",
+        )
 
-    async def import_items(
+    def status(self, *, actor: Actor) -> ZoteroConnectionStatus:
+        return self._executor.query(
+            lambda capabilities: capabilities.zotero.status(actor=actor)
+        )
+
+    def set_sync_preferences(
         self,
         *,
         actor: Actor,
-        operation: OperationContext,
-        request: ZoteroImportRequest,
-        idempotency_key: str | None,
-    ) -> ZoteroImportResponse:
-        prepared = self._executor.command(
-            lambda capabilities: capabilities.zotero.prepare_import_batch(
-                actor=actor,
-                operation=operation,
-                request=request,
-                idempotency_key=idempotency_key,
-            )
-        )
-        if isinstance(prepared, ZoteroImportResponse):
-            return prepared
-        try:
-            items = self._operations.fetch_items(
-                credentials=prepared.credentials,
-                item_keys=tuple(prepared.request.item_keys),
-            )
-            plan = self._executor.query(
-                lambda capabilities: capabilities.zotero.plan_import(
-                    actor=actor,
-                    items=items,
-                )
-            )
-            result = await _execute_import_plan(
-                executor=self._executor,
-                operations=self._operations,
-                operation_factory=self._operation_factory,
-                actor=actor,
-                operation=operation,
-                credentials=prepared.credentials,
-                plan=plan,
-            )
-        except ValueError as exc:
-            self._fail_batch(
-                actor=actor,
-                operation=operation,
-                prepared=prepared,
-                error_code="zotero_import_invalid",
-            )
-            raise AppError(
-                code="zotero_import_invalid",
-                message="The selected Zotero items could not be imported",
-                kind=FailureKind.INVALID_ARGUMENT,
-            ) from exc
-        except Exception:
-            self._fail_batch(
-                actor=actor,
-                operation=operation,
-                prepared=prepared,
-                error_code="zotero_import_failed",
-            )
-            raise
-
-        complete_operation = self._operation_factory.child(
-            operation,
-            initiated_by=OperationInitiator.SYSTEM,
-        )
-        response = self._executor.command(
-            lambda capabilities: capabilities.zotero.complete_import_batch(
-                actor=actor,
-                operation=complete_operation,
-                prepared=prepared,
-                result=result,
-            )
-        )
-        if response.imported_count > 0:
-            self._record_event(
-                actor=actor,
-                name="zotero_import_batch",
-                properties={"count": response.imported_count},
-            )
-        return response
-
-    def library(self, *, actor: Actor) -> ZoteroLibraryResponse:
+        request: ZoteroSyncPreferencesRequest,
+    ) -> ZoteroConnectionStatus:
         credentials = self._executor.query(
             lambda capabilities: capabilities.zotero.prepare_library(actor=actor)
         )
-        snapshot = self._operations.fetch_library(credentials=credentials)
-        return self._executor.query(
+        try:
+            version = (
+                self._operations.current_library_version(credentials=credentials)
+                if request.auto_import_enabled
+                else None
+            )
+        except Exception as exc:
+            raise _provider_error(exc) from exc
+        return self._executor.command(
+            lambda capabilities: capabilities.zotero.set_sync_preferences(
+                actor=actor,
+                request=request,
+                library_version=version,
+            )
+        )
+
+    def library(
+        self,
+        *,
+        actor: Actor,
+        cursor: str | None,
+        query: str | None,
+        collection_key: str | None,
+        item_type: str | None,
+        sort: str,
+        limit: int,
+    ) -> ZoteroLibraryPage:
+        credentials = self._executor.query(
+            lambda capabilities: capabilities.zotero.prepare_library(actor=actor)
+        )
+        fingerprint = ":".join(
+            (
+                str(actor.id),
+                "items",
+                (query or "").casefold(),
+                collection_key or "",
+                item_type or "",
+                sort,
+                str(limit),
+            )
+        )
+        start = (
+            self._cursors.decode(cursor=cursor, fingerprint=fingerprint)
+            if cursor
+            else 0
+        )
+        provider_sort, direction = _zotero_sort(sort)
+        try:
+            snapshot = self._operations.fetch_library(
+                credentials=credentials,
+                limit=limit,
+                start=start,
+                query=query,
+                collection_key=collection_key,
+                item_type=item_type,
+                sort=provider_sort,
+                direction=direction,
+            )
+        except Exception as exc:
+            raise _provider_error(exc) from exc
+        response = self._executor.query(
             lambda capabilities: capabilities.zotero.library(
                 actor=actor,
                 snapshot=snapshot,
             )
         )
+        return response.model_copy(
+            update={
+                "previous_cursor": (
+                    self._cursors.encode(
+                        fingerprint=fingerprint,
+                        offset=max(0, start - limit),
+                    )
+                    if start > 0
+                    else None
+                ),
+                "next_cursor": (
+                    self._cursors.encode(
+                        fingerprint=fingerprint,
+                        offset=start + limit,
+                    )
+                    if start + len(response.items) < response.total_count
+                    else None
+                ),
+            }
+        )
 
-    async def sync(
+    def collections(
         self,
         *,
         actor: Actor,
-        operation: OperationContext,
-    ) -> ZoteroSyncResponse:
-        prepared = self._executor.query(
-            lambda capabilities: capabilities.zotero.prepare_sync(actor=actor)
+        cursor: str | None,
+        limit: int,
+    ) -> ZoteroCollectionPage:
+        credentials = self._executor.query(
+            lambda capabilities: capabilities.zotero.prepare_library(actor=actor)
         )
-        response = await _execute_sync(
-            executor=self._executor,
-            operations=self._operations,
-            operation_factory=self._operation_factory,
-            actor=actor,
-            operation=operation,
-            prepared=prepared,
+        fingerprint = f"{actor.id}:collections:{limit}"
+        start = (
+            self._cursors.decode(cursor=cursor, fingerprint=fingerprint)
+            if cursor
+            else 0
         )
-        if response.new_annotations_count > 0:
-            self._record_event(
-                actor=actor,
-                name="zotero_manual_sync",
-                properties={
-                    "papers": response.synced_papers_count,
-                    "annotations": response.new_annotations_count,
-                },
-            )
-        return response
-
-    def _fail_batch(
-        self,
-        *,
-        actor: Actor,
-        operation: OperationContext,
-        prepared: PreparedZoteroImport,
-        error_code: str,
-    ) -> None:
-        fail_operation = self._operation_factory.child(
-            operation,
-            initiated_by=OperationInitiator.SYSTEM,
-        )
-        self._executor.command(
-            lambda capabilities: capabilities.zotero.fail_import_batch(
-                actor=actor,
-                operation=fail_operation,
-                prepared=prepared,
-                error_code=error_code,
-            )
-        )
-
-    def _record_event(
-        self,
-        *,
-        actor: Actor,
-        name: str,
-        properties: dict[str, object],
-    ) -> None:
         try:
-            self._operations.record_event(
-                actor=actor,
-                name=name,
-                properties=properties,
+            page = self._operations.fetch_collections(
+                credentials=credentials,
+                limit=limit,
+                start=start,
             )
-        except Exception:
-            logger.warning(
-                "zotero.product_analytics.failed",
-                exc_info=True,
-                extra={"product_event": name},
-            )
+        except Exception as exc:
+            raise _provider_error(exc) from exc
+        return ZoteroCollectionPage(
+            items=[
+                ZoteroCollection(key=item.key, name=item.name) for item in page.items
+            ],
+            previous_cursor=(
+                self._cursors.encode(
+                    fingerprint=fingerprint,
+                    offset=max(0, start - limit),
+                )
+                if start > 0
+                else None
+            ),
+            next_cursor=(
+                self._cursors.encode(
+                    fingerprint=fingerprint,
+                    offset=start + limit,
+                )
+                if start + len(page.items) < page.total_count
+                else None
+            ),
+            total_count=page.total_count,
+        )
 
 
-class ZoteroPostprocessWorkflow:
+class ZoteroBackgroundWorkflow:
+    """Apply provider work returned by Jobs without exposing credentials in payloads."""
+
     def __init__(
         self,
         *,
@@ -381,195 +438,269 @@ class ZoteroPostprocessWorkflow:
         operation: OperationContext,
         job_id: UUID,
         payload: dict[str, object],
-    ) -> JobClaimResponse:
-        try:
-            callback = JobCallbackIdentity.model_validate(payload)
-        except ValueError as exc:
+    ) -> object:
+        if actor is None:
             raise AppError(
-                code="job_callback_invalid",
-                message="Job callback payload is invalid for its operation",
-                kind=FailureKind.UNPROCESSABLE,
-            ) from exc
-        prepared = self._executor.query(
-            lambda capabilities: capabilities.zotero.prepare_postprocess(
-                actor=actor,
-                job_id=job_id,
-                callback_task_id=callback.task_id,
+                code="job_owner_missing",
+                message="The Zotero job owner no longer exists",
+                kind=FailureKind.NOT_FOUND,
             )
+        kind = payload.get("operation")
+        callback = (
+            ZoteroImportWebhookData.model_validate(payload)
+            if kind == "import"
+            else ZoteroSyncWebhookData.model_validate(payload)
+            if kind == "sync"
+            else None
         )
-        if prepared.disposition == "already_completed":
-            return JobClaimResponse(claimed=False)
-        stage_operation = self._operation_factory.child(
+        if callback is None or callback.task_id != job_id:
+            raise AppError(
+                code="job_callback_mismatch",
+                message="Zotero job callback does not match",
+                kind=FailureKind.CONFLICT,
+            )
+        outcome_operation = self._operation_factory.child(
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
-        if prepared.disposition == "skip":
-            assert prepared.skip_reason is not None
-            result = ZoteroPostprocessResult(
-                synced_papers_count=0,
-                new_annotations_count=0,
-                auto_imported_count=0,
-                skipped_reason=prepared.skip_reason,
+        revision_is_current = self._executor.query(
+            lambda capabilities: capabilities.zotero.credential_revision_is_current(
+                user_id=actor.id,
+                revision=callback.credential_revision,
+            )
+        )
+        if not revision_is_current:
+            self._executor.command(
+                lambda capabilities: capabilities.zotero.fail_background_operation(
+                    actor=actor,
+                    operation=outcome_operation,
+                    operation_id=job_id,
+                    error_code="zotero_credentials_rotated",
+                )
+            )
+            return {"accepted": True, "status": "failed"}
+        self._executor.command(
+            lambda capabilities: capabilities.integrations.record_outcome(
+                actor=actor,
+                operation=outcome_operation,
+                provider=IntegrationProvider.ZOTERO,
+                credential_revision=callback.credential_revision,
+                outcome=callback.credential_outcome,
+                error_code=callback.error_code,
+            )
+        )
+        if callback.error_code:
+            self._executor.command(
+                lambda capabilities: capabilities.zotero.fail_background_operation(
+                    actor=actor,
+                    operation=outcome_operation,
+                    operation_id=job_id,
+                    error_code=callback.error_code or "zotero_unavailable",
+                )
+            )
+            return {"accepted": True, "status": "failed"}
+        if isinstance(callback, ZoteroImportWebhookData):
+            result = await self._apply_import_items(
+                actor=actor,
+                operation=outcome_operation,
+                items=callback.items,
             )
         else:
-            result = await self._run(
+            result = await self._apply_sync(
                 actor=actor,
-                operation=stage_operation,
-                prepared=prepared,
+                operation=outcome_operation,
+                callback=callback,
             )
-        complete_operation = self._operation_factory.child(
-            stage_operation,
-            initiated_by=OperationInitiator.SYSTEM,
-        )
-        changed = self._executor.command(
-            lambda capabilities: capabilities.zotero.complete_postprocess(
+        completed = self._executor.command(
+            lambda capabilities: capabilities.zotero.complete_background_operation(
                 actor=actor,
-                operation=complete_operation,
-                prepared=prepared,
+                operation=outcome_operation,
+                operation_id=job_id,
                 result=result,
             )
         )
-        if changed and actor is not None:
-            self._record_event(actor=actor, result=result)
-        return JobClaimResponse(claimed=changed)
+        return {"accepted": completed}
 
-    async def _run(
+    async def _apply_import_items(
         self,
         *,
-        actor: Actor | None,
+        actor: Actor,
         operation: OperationContext,
-        prepared: PreparedZoteroPostprocess,
-    ) -> ZoteroPostprocessResult:
-        if actor is None or prepared.credentials is None:
-            raise RuntimeError("runnable_zotero_postprocess_owner_missing")
-        try:
-            sync_prepared = self._executor.query(
-                lambda capabilities: capabilities.zotero.prepare_sync(actor=actor)
+        items: list[ZoteroWorkerImportItem],
+    ) -> dict[str, JsonValue]:
+        ready = [item for item in items if item.status == "ready"]
+        contents: dict[str, ZoteroImportContent] = {}
+        cleanup: list[str] = []
+        worker_errors = [
+            ZoteroImportError(
+                zotero_item_key=item.item_key,
+                error=item.error_code or "zotero_import_failed",
             )
-            sync_result = await _execute_sync(
+            for item in items
+            if item.status == "failed"
+        ]
+        try:
+            for item in ready:
+                assert item.metadata is not None
+                assert item.attachment is not None
+                assert item.s3_object_key is not None
+                cleanup.append(item.s3_object_key)
+                content = await self._operations.download_job_pdf(
+                    object_key=item.s3_object_key
+                )
+                snapshot = ZoteroItemSnapshot(**item.metadata.model_dump(mode="python"))
+                attachment = ZoteroAttachmentSnapshot(
+                    item_key=item.attachment.item_key,
+                    import_source=item.attachment.import_source,
+                    attachment_key=item.attachment.attachment_key,
+                    source_url=item.attachment.source_url,
+                    annotations_json=item.attachment.annotations_json,
+                    version=item.attachment.version,
+                )
+                contents[item.item_key] = ZoteroImportContent(
+                    item=snapshot,
+                    attachment=attachment,
+                    pdf_content=content,
+                    page_dimensions=tuple(item.page_dimensions),
+                    error=None,
+                )
+            plan = self._executor.query(
+                lambda capabilities: capabilities.zotero.plan_import(
+                    actor=actor,
+                    items=tuple(content.item for content in contents.values()),
+                )
+            )
+            applied = await _execute_import_plan(
                 executor=self._executor,
                 operations=self._operations,
                 operation_factory=self._operation_factory,
                 actor=actor,
                 operation=operation,
-                prepared=sync_prepared,
+                plan=plan,
+                content_by_item_key=contents,
             )
-            auto_imported = await self._auto_import(
-                actor=actor,
-                operation=operation,
-                credentials=prepared.credentials,
+        finally:
+            for object_key in cleanup:
+                try:
+                    await self._operations.delete_job_pdf(object_key=object_key)
+                except Exception:
+                    logger.warning(
+                        "zotero.job_object.cleanup_failed",
+                        extra={"object_prefix": "zotero-imports"},
+                        exc_info=True,
+                    )
+        errors = [*worker_errors, *applied.errors]
+        results: list[JsonValue] = []
+        for imported in applied.imported:
+            results.append(
+                {
+                    "zotero_item_key": imported.zotero_item_key,
+                    "status": "accepted",
+                    "title": imported.title,
+                    "document_id": str(imported.document_id),
+                    "ingestion_job_id": (
+                        str(imported.upload_job_id) if imported.upload_job_id else None
+                    ),
+                }
             )
-            return ZoteroPostprocessResult(
-                synced_papers_count=sync_result.synced_papers_count,
-                new_annotations_count=sync_result.new_annotations_count,
-                auto_imported_count=auto_imported,
+        for error in errors:
+            results.append(
+                {
+                    "zotero_item_key": error.zotero_item_key,
+                    "status": "failed",
+                    "error_code": error.error,
+                }
             )
-        except Exception:
-            fail_operation = self._operation_factory.child(
-                operation,
-                initiated_by=OperationInitiator.SYSTEM,
-            )
-            self._executor.command(
-                lambda capabilities: capabilities.zotero.fail_postprocess(
-                    actor=actor,
-                    operation=fail_operation,
-                    job_id=prepared.job_id,
-                    error_code="zotero_postprocess_failed",
-                )
-            )
-            raise
+        return {
+            "counts": {
+                "total": len(items),
+                "succeeded": applied.imported_count,
+                "failed": len(errors),
+                "skipped": applied.skipped_already_imported,
+            },
+            "items": results,
+        }
 
-    async def _auto_import(
+    async def _apply_sync(
         self,
         *,
         actor: Actor,
         operation: OperationContext,
-        credentials: ZoteroCredentials,
-    ) -> int:
-        import_since = self._executor.query(
-            lambda capabilities: capabilities.zotero.auto_import_since(actor=actor)
+        callback: ZoteroSyncWebhookData,
+    ) -> dict[str, JsonValue]:
+        sync_targets = self._executor.query(
+            lambda capabilities: capabilities.zotero.sync_targets(actor=actor)
         )
-        if import_since is None:
-            return 0
-        library = self._operations.fetch_library(
-            credentials=credentials,
-            limit=100,
-        )
-        items = tuple(
-            item
-            for item in library.items
-            if (
-                (added := self._operations.parse_date_added(item.date_added))
-                is not None
-                and added >= import_since
+        targets = {target.item_key: target for target in sync_targets}
+        updates = []
+        for value in callback.updates:
+            target = targets.get(value.item_key)
+            if target is None or target.attachment_key != value.attachment_key:
+                continue
+            dimensions = await self._operations.fetch_page_dimensions(
+                source_key=target.document_source_key
             )
-        )
-        if not items:
-            return 0
-        plan = self._executor.query(
-            lambda capabilities: capabilities.zotero.plan_import(
+            updates.append(
+                ZoteroSyncUpdate(
+                    target=target,
+                    annotations_json=value.annotations_json,
+                    page_dimensions=dimensions,
+                )
+            )
+        sync_result = self._executor.command(
+            lambda capabilities: capabilities.zotero.complete_sync(
                 actor=actor,
-                items=items,
+                operation=operation,
+                batch=ZoteroSyncBatch(
+                    updates=tuple(updates),
+                    failed_item_keys=tuple(
+                        failure.item_key for failure in callback.failures
+                    ),
+                ),
             )
         )
-        result = await _execute_import_plan(
-            executor=self._executor,
-            operations=self._operations,
-            operation_factory=self._operation_factory,
+        import_result = await self._apply_import_items(
             actor=actor,
             operation=operation,
-            credentials=credentials,
-            plan=plan,
+            items=callback.auto_imports,
         )
-        return result.imported_count
-
-    def _record_event(
-        self,
-        *,
-        actor: Actor,
-        result: ZoteroPostprocessResult,
-    ) -> None:
-        try:
-            self._operations.record_event(
+        library_version = callback.library_version
+        self._executor.command(
+            lambda capabilities: capabilities.zotero.advance_sync_checkpoint(
                 actor=actor,
-                name="zotero_auto_sync",
-                properties={
-                    "papers": result.synced_papers_count,
-                    "annotations": result.new_annotations_count,
-                    "auto_imported": result.auto_imported_count,
-                },
+                credential_revision=callback.credential_revision,
+                library_version=library_version,
             )
-        except Exception:
-            logger.warning(
-                "zotero.auto_sync.product_analytics_failed",
-                exc_info=True,
-            )
-
-
-async def _execute_sync(
-    *,
-    executor: ApplicationExecutor[ApplicationCapabilities],
-    operations: ZoteroOperations,
-    operation_factory: OperationContextFactory,
-    actor: Actor,
-    operation: OperationContext,
-    prepared: PreparedZoteroSync,
-) -> ZoteroSyncResponse:
-    batch = await operations.fetch_sync_batch(
-        credentials=prepared.credentials,
-        targets=prepared.targets,
-    )
-    complete_operation = operation_factory.child(
-        operation,
-        initiated_by=OperationInitiator.SYSTEM,
-    )
-    return executor.command(
-        lambda capabilities: capabilities.zotero.complete_sync(
-            actor=actor,
-            operation=complete_operation,
-            batch=batch,
         )
-    )
+        import_counts = import_result.get("counts")
+        assert isinstance(import_counts, dict)
+        imported = _json_count(import_counts.get("succeeded"))
+        import_failed = _json_count(import_counts.get("failed"))
+        skipped = _json_count(import_counts.get("skipped"))
+        return {
+            "counts": {
+                "total": len(callback.updates)
+                + len(callback.failures)
+                + len(callback.auto_imports),
+                "succeeded": sync_result.synced_papers_count + imported,
+                "failed": len(callback.failures) + import_failed,
+                "skipped": skipped,
+            },
+            "items": import_result.get("items") or [],
+            "synced_papers_count": sync_result.synced_papers_count,
+            "new_annotations_count": sync_result.new_annotations_count,
+            "auto_imported_count": imported,
+        }
+
+
+def _zotero_sort(value: str) -> tuple[str, str]:
+    return {
+        "modified_desc": ("dateModified", "desc"),
+        "added_desc": ("dateAdded", "desc"),
+        "published_desc": ("date", "desc"),
+        "title_asc": ("title", "asc"),
+        "creator_asc": ("creator", "asc"),
+    }.get(value, ("dateModified", "desc"))
 
 
 async def _execute_import_plan(
@@ -579,8 +710,8 @@ async def _execute_import_plan(
     operation_factory: OperationContextFactory,
     actor: Actor,
     operation: OperationContext,
-    credentials: ZoteroCredentials,
     plan: ZoteroImportPlan,
+    content_by_item_key: dict[str, ZoteroImportContent],
 ) -> ZoteroImportResponse:
     imported = []
     errors = list(plan.errors)
@@ -591,13 +722,11 @@ async def _execute_import_plan(
         if planned.disposition == "link_existing":
             existing_document_id = planned.document_id
             assert existing_document_id is not None
-            attachment = await operations.fetch_attachment(
-                credentials=credentials,
-                item=planned.item,
-            )
-            dimensions = await operations.fetch_page_dimensions(
-                source_key=planned.document_source_key,
-            )
+            prepared_content = content_by_item_key.get(planned.item.item_key)
+            if prepared_content is None:
+                raise RuntimeError("zotero_worker_import_content_missing")
+            attachment = prepared_content.attachment
+            page_dimensions = prepared_content.page_dimensions
             link_operation = operation_factory.child(
                 operation,
                 initiated_by=OperationInitiator.SYSTEM,
@@ -609,17 +738,16 @@ async def _execute_import_plan(
                     item=planned.item,
                     attachment=attachment,
                     document_id=existing_document_id,
-                    page_dimensions=dimensions,
+                    page_dimensions=page_dimensions,
                 )
             )
             continue
         if planned.disposition == "link_batch":
             continue
 
-        content = await operations.fetch_import_content(
-            credentials=credentials,
-            item=planned.item,
-        )
+        content = content_by_item_key.get(planned.item.item_key)
+        if content is None:
+            raise RuntimeError("zotero_worker_import_content_missing")
         if content.pdf_content is None:
             error_code = content.error or "No PDF available"
             failure_operation = operation_factory.child(
@@ -748,10 +876,9 @@ async def _execute_import_plan(
         document_id = document_by_item_key.get(source_item_key)
         if document_id is None:
             continue
-        attachment = await operations.fetch_attachment(
-            credentials=credentials,
-            item=planned.item,
-        )
+        prepared_content = content_by_item_key.get(planned.item.item_key)
+        if prepared_content is None:
+            raise RuntimeError("zotero_worker_import_content_missing")
         link_operation = operation_factory.child(
             operation,
             initiated_by=OperationInitiator.SYSTEM,
@@ -761,7 +888,7 @@ async def _execute_import_plan(
                 actor=actor,
                 operation=link_operation,
                 item=planned.item,
-                attachment=attachment,
+                attachment=prepared_content.attachment,
                 document_id=document_id,
                 page_dimensions=dimensions_by_item_key.get(
                     source_item_key,
@@ -779,4 +906,4 @@ async def _execute_import_plan(
     )
 
 
-__all__ = ["ZoteroOperations", "ZoteroPostprocessWorkflow", "ZoteroWorkflow"]
+__all__ = ["ZoteroBackgroundWorkflow", "ZoteroOperations", "ZoteroWorkflow"]

@@ -9,7 +9,7 @@ from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.workflows.pdf_postprocess import PdfPostprocessWorkflow
-from app.bootstrap.workflows.zotero import ZoteroPostprocessWorkflow
+from app.bootstrap.workflows.zotero import ZoteroBackgroundWorkflow
 from app.database.product_analytics import track_event
 from app.helpers.ai_limits import release_concurrency_by_id
 from app.modules.jobs.application.authentication import VerifiedJobCallback
@@ -62,13 +62,13 @@ class JobCompletionProcessor:
         executor: ApplicationExecutor[ApplicationCapabilities],
         operation_factory: OperationContextFactory,
         pdf_postprocess: PdfPostprocessWorkflow,
-        zotero_postprocess: ZoteroPostprocessWorkflow,
+        zotero_background: ZoteroBackgroundWorkflow,
     ) -> None:
         self._session_factory = session_factory
         self._executor = executor
         self._operation_factory = operation_factory
         self._pdf_postprocess = pdf_postprocess
-        self._zotero_postprocess = zotero_postprocess
+        self._zotero_background = zotero_background
 
     async def complete(
         self,
@@ -91,8 +91,10 @@ class JobCompletionProcessor:
             )
             await self._run_post_commit(result)
             return result.value
-        if job_operation is JobOperation.ZOTERO_POSTPROCESS:
-            return await self._zotero_postprocess.complete(
+        if job_operation in {JobOperation.ZOTERO_IMPORT, JobOperation.ZOTERO_SYNC}:
+            if resumed.actor is None:
+                raise RuntimeError("zotero_job_owner_missing")
+            return await self._zotero_background.complete(
                 actor=resumed.actor,
                 operation=resumed.operation,
                 job_id=job_id,

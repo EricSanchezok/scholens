@@ -143,6 +143,29 @@ class SqlAlchemyIntegrationGateway:
         self._db.flush()
         return _record(row)
 
+    def set_configuration(
+        self,
+        *,
+        user_id: int,
+        provider: IntegrationProvider,
+        configuration: dict[str, JsonValue],
+        now: datetime,
+    ) -> IntegrationRecord:
+        row = self._db.scalar(
+            select(IntegrationConnection)
+            .where(
+                IntegrationConnection.user_id == user_id,
+                IntegrationConnection.provider == provider.value,
+            )
+            .with_for_update()
+        )
+        if row is None:
+            raise RuntimeError("integration_connection_not_found")
+        row.configuration = configuration
+        row.updated_at = now
+        self._db.flush()
+        return _record(row)
+
     def delete(self, *, user_id: int, provider: IntegrationProvider) -> None:
         self._db.execute(
             delete(IntegrationConnection).where(

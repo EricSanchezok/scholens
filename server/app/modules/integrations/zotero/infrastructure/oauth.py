@@ -22,7 +22,7 @@ DEFAULT_PERMISSIONS: dict[str, str] = {
     "notes_access": "1",
     "write_access": "0",
     "name": "Scholens",
-    "all_groups": "read",
+    "all_groups": "none",
 }
 
 

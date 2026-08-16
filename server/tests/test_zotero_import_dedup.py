@@ -18,7 +18,6 @@ from app.modules.integrations.zotero.application.contracts import (
 )
 from app.modules.integrations.zotero.application.zotero import (
     ZoteroAttachmentSnapshot,
-    ZoteroCredentials,
     ZoteroImportContent,
     ZoteroImportPlan,
     ZoteroImportPlanItem,
@@ -62,7 +61,7 @@ def _item(key: str, *, doi: str | None = None) -> ZoteroItemSnapshot:
         date_added="2026-01-02T00:00:00Z",
         item_type="journalArticle",
         venue=None,
-        collections=(),
+        collection_keys=(),
         has_pdf_attachment=True,
         has_metadata=True,
     )
@@ -95,7 +94,7 @@ def test_plan_import_links_existing_and_duplicate_doi_without_title_dedup() -> N
         id=uuid4(),
         s3_object_key="documents/existing.pdf",
     )
-    gateway = DefaultZoteroGateway(MagicMock())
+    gateway = DefaultZoteroGateway(MagicMock(), connections=MagicMock())
     items = (
         _item("EXISTING", doi="10.1000/existing"),
         _item("FIRST", doi="10.1000/new"),
@@ -142,7 +141,7 @@ def test_plan_import_links_existing_and_duplicate_doi_without_title_dedup() -> N
 
 
 def test_plan_import_applies_remaining_capacity_only_to_new_documents() -> None:
-    gateway = DefaultZoteroGateway(MagicMock())
+    gateway = DefaultZoteroGateway(MagicMock(), connections=MagicMock())
     items = (_item("A"), _item("B"))
 
     with (
@@ -259,16 +258,10 @@ async def test_import_plan_keeps_remote_io_outside_commands() -> None:
     executor = _StageExecutor(capabilities, events)
     operations = MagicMock()
 
-    async def fetch_import_content(**_kwargs):  # type: ignore[no-untyped-def]
-        assert not executor.inside_transaction
-        events.append("fetch_remote")
-        return content
-
     async def upload_pdf(**_kwargs):  # type: ignore[no-untyped-def]
         assert not executor.inside_transaction
         events.append("upload_external")
 
-    operations.fetch_import_content = AsyncMock(side_effect=fetch_import_content)
     operations.upload_pdf = AsyncMock(side_effect=upload_pdf)
     result = await _execute_import_plan(
         executor=executor,  # type: ignore[arg-type]
@@ -276,17 +269,16 @@ async def test_import_plan_keeps_remote_io_outside_commands() -> None:
         operation_factory=OperationContextFactory(),
         actor=actor,
         operation=_operation(),
-        credentials=ZoteroCredentials(user_id="remote", api_key="secret"),
         plan=ZoteroImportPlan(
             items=(ZoteroImportPlanItem(item=item, disposition="import"),),
             skipped_already_imported=0,
             errors=(),
         ),
+        content_by_item_key={item.item_key: content},
     )
 
     assert result.imported_count == 1
     assert events == [
-        "fetch_remote",
         "query",
         "acquire",
         "upload_external",

@@ -5,10 +5,12 @@ from uuid import UUID
 from app.database.models import (
     JsonValue,
     Document,
-    ZoteroConnection,
     ZoteroImportedItem,
     ZoteroImportSource,
     ZoteroImportStatus,
+)
+from app.modules.integrations.connections.infrastructure.models import (
+    IntegrationConnection,
 )
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -108,6 +110,8 @@ class ZoteroImportRepository:
         annotations_payload: list[dict[str, JsonValue]] | None = None,
         status: str = ZoteroImportStatus.PROCESSING,
         last_synced_at: datetime | None = None,
+        zotero_item_version: int | None = None,
+        zotero_attachment_version: int | None = None,
     ) -> ZoteroImportedItem:
         db_obj = ZoteroImportedItem(
             user_id=user_id,
@@ -120,6 +124,8 @@ class ZoteroImportRepository:
             annotations_payload=annotations_payload,
             status=status,
             last_synced_at=last_synced_at,
+            zotero_item_version=zotero_item_version,
+            zotero_attachment_version=zotero_attachment_version,
         )
         db.add(db_obj)
         db.flush()
@@ -179,30 +185,52 @@ class ZoteroImportRepository:
         self, db: Session, *, threshold_hours: float = 24
     ) -> list[int]:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
-
-        rows = db.scalars(
-            select(ZoteroImportedItem.user_id)
-            # Only users who still have a live Zotero connection are syncable.
-            # Imported items survive a disconnect (the papers stay in the
-            # library), so without this join we'd surface disconnected users as
-            # "due for sync" and fail on the missing connection.
-            .join(
-                ZoteroConnection,
-                ZoteroConnection.user_id == ZoteroImportedItem.user_id,
+        connections = db.scalars(
+            select(IntegrationConnection).where(
+                IntegrationConnection.provider == "zotero",
+                IntegrationConnection.enabled.is_(True),
             )
-            .where(
-                ZoteroImportedItem.status == ZoteroImportStatus.COMPLETED,
-                ZoteroImportedItem.import_source == ZoteroImportSource.PDF_ATTACHMENT,
-                ZoteroImportedItem.zotero_attachment_key.isnot(None),
-                or_(
-                    ZoteroImportedItem.last_synced_at.is_(None),
-                    ZoteroImportedItem.last_synced_at < cutoff,
-                ),
-            )
-            .distinct()
         ).all()
-
-        return list(rows)
+        result: list[int] = []
+        for connection in connections:
+            last_sync_value = connection.configuration.get("last_sync_at")
+            try:
+                last_sync_at = (
+                    datetime.fromisoformat(str(last_sync_value))
+                    if last_sync_value
+                    else None
+                )
+            except ValueError:
+                last_sync_at = None
+            if last_sync_at is not None:
+                if last_sync_at.tzinfo is None:
+                    last_sync_at = last_sync_at.replace(tzinfo=timezone.utc)
+                if last_sync_at >= cutoff:
+                    continue
+            has_due_annotation_target = (
+                db.scalar(
+                    select(ZoteroImportedItem.id)
+                    .where(
+                        ZoteroImportedItem.user_id == connection.user_id,
+                        ZoteroImportedItem.status == ZoteroImportStatus.COMPLETED,
+                        ZoteroImportedItem.import_source
+                        == ZoteroImportSource.PDF_ATTACHMENT,
+                        ZoteroImportedItem.zotero_attachment_key.isnot(None),
+                        or_(
+                            ZoteroImportedItem.last_synced_at.is_(None),
+                            ZoteroImportedItem.last_synced_at < cutoff,
+                        ),
+                    )
+                    .limit(1)
+                )
+                is not None
+            )
+            if (
+                has_due_annotation_target
+                or connection.configuration.get("auto_import_enabled") is True
+            ):
+                result.append(connection.user_id)
+        return result
 
     def finalize_processing_import(
         self,
@@ -216,6 +244,8 @@ class ZoteroImportRepository:
         upload_job_id: UUID,
         annotations_payload: list[dict[str, JsonValue]] | None,
         last_synced_at: datetime | None = None,
+        zotero_item_version: int | None = None,
+        zotero_attachment_version: int | None = None,
     ) -> ZoteroImportChange:
         changed = (
             item.import_source != import_source
@@ -226,6 +256,8 @@ class ZoteroImportRepository:
             or item.annotations_payload != annotations_payload
             or item.error_message is not None
             or (last_synced_at is not None and item.last_synced_at != last_synced_at)
+            or item.zotero_item_version != zotero_item_version
+            or item.zotero_attachment_version != zotero_attachment_version
         )
         if not changed:
             return ZoteroImportChange(item=item, changed=False)
@@ -236,6 +268,8 @@ class ZoteroImportRepository:
         item.upload_job_id = upload_job_id
         item.annotations_payload = annotations_payload
         item.error_message = None
+        item.zotero_item_version = zotero_item_version
+        item.zotero_attachment_version = zotero_attachment_version
         if last_synced_at is not None:
             item.last_synced_at = last_synced_at
         db.add(item)

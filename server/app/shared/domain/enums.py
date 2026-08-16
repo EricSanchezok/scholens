@@ -58,7 +58,7 @@ class JobOperation(str, Enum):
     AUDIO_GENERATE = "audio_generate"
     DATA_TABLE_GENERATE = "data_table_generate"
     ZOTERO_IMPORT = "zotero_import"
-    ZOTERO_POSTPROCESS = "zotero_postprocess"
+    ZOTERO_SYNC = "zotero_sync"
     DOCUMENT_GC = "document_gc"
     STORAGE_DELETE = "storage_delete"
 

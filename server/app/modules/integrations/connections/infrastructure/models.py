@@ -16,7 +16,7 @@ class IntegrationConnection(Base):
     __tablename__ = "integration_connections"
     __table_args__ = (
         CheckConstraint(
-            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex')",
+            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex', 'zotero')",
             name="ck_integration_connections_provider",
         ),
         {"schema": "scholens"},

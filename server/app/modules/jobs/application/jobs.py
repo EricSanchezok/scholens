@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import UUID
 
@@ -54,6 +54,7 @@ class ReservedOperation:
 class EnqueuedJob:
     job: JobResponse
     created: bool
+    payload: dict[str, JsonValue] = field(default_factory=dict)
 
 
 class JobCommandPort(Protocol):

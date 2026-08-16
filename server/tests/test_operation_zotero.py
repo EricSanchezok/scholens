@@ -4,43 +4,42 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, call
-from uuid import uuid4
+from unittest.mock import MagicMock, call
+from uuid import UUID, uuid4
 
 import pytest
 
-from app.bootstrap.workflows.zotero import (
-    ZoteroPostprocessWorkflow,
-    ZoteroWorkflow,
-)
+from app.bootstrap.workflows.zotero import ZoteroWorkflow
 from app.modules.integrations.zotero.application.contracts import (
     ZoteroConnectResponse,
+    ZoteroImportRequest,
     ZoteroSyncResponse,
 )
 from app.modules.integrations.zotero.application.zotero import (
     PreparedZoteroCallback,
-    PreparedZoteroPostprocess,
-    PreparedZoteroSync,
     Zotero,
     ZoteroAccessToken,
     ZoteroConnectionChange,
+    ZoteroCredentials,
     ZoteroRequestToken,
     ZoteroSyncBatch,
     ZoteroSyncMutation,
 )
+from app.modules.jobs.application.contracts import JobResponse
+from app.modules.jobs.application.jobs import EnqueuedJob
 from app.modules.operation_journal.application import OperationJournal
 from app.shared.application import (
     Actor,
     CredentialKind,
     CredentialRef,
     HttpOrigin,
-    JobOrigin,
     OAuthCallbackOrigin,
     OperationContext,
     OperationContextFactory,
     OperationInitiator,
     RequestReference,
     SchedulerOrigin,
+    SignedCursorCodec,
 )
 from app.modules.jobs.application.callbacks import (
     JobCallbacks,
@@ -71,12 +70,30 @@ def _service(
     gateway: MagicMock,
     journal: MagicMock,
     idempotency: MagicMock | None = None,
+    jobs: MagicMock | None = None,
 ) -> Zotero:
     return Zotero(
         gateway=gateway,
         capacity=MagicMock(),
         idempotency=idempotency or MagicMock(),
+        jobs=jobs or MagicMock(),
         journal=journal,
+    )
+
+
+def _job(*, job_id: UUID | None = None) -> JobResponse:
+    return JobResponse(
+        id=job_id or uuid4(),
+        operation="zotero_import",
+        document_id=None,
+        project_id=None,
+        status="pending",
+        progress_code=None,
+        error_code=None,
+        result=None,
+        created_at=datetime.now(UTC),
+        started_at=None,
+        completed_at=None,
     )
 
 
@@ -92,6 +109,8 @@ def test_oauth_pending_persists_only_causality_and_is_not_journaled() -> None:
         operation=operation,
         request_token=token,
         auth_url="https://www.zotero.org/oauth/authorize",
+        return_path="/library",
+        intent="import",
     )
 
     assert response == ZoteroConnectResponse(
@@ -100,13 +119,15 @@ def test_oauth_pending_persists_only_causality_and_is_not_journaled() -> None:
     assert gateway.save_oauth_request.call_args.kwargs == {
         "user_id": 7,
         "request_token": token,
+        "return_path": "/library",
+        "intent": "import",
         "correlation_id": operation.trace.correlation_id,
         "origin_operation_id": operation.trace.operation_id,
     }
     journal.append.assert_not_called()
 
 
-def test_expired_oauth_callback_is_read_only() -> None:
+def test_expired_oauth_callback_retains_safe_return_path_for_workflow() -> None:
     gateway = MagicMock()
     gateway.oauth_callback.return_value = PreparedZoteroCallback(
         user_id=7,
@@ -114,29 +135,101 @@ def test_expired_oauth_callback_is_read_only() -> None:
         expires_at=datetime.now(UTC) - timedelta(seconds=1),
         correlation_id=uuid4(),
         origin_operation_id=uuid4(),
+        return_path="/library",
+        intent="import",
     )
     service = _service(
         gateway=gateway,
         journal=MagicMock(spec=OperationJournal),
     )
 
-    assert (
-        service.prepare_oauth_callback(
-            oauth_token="expired",
-            now=datetime.now(UTC),
-        )
-        is None
+    prepared = service.prepare_oauth_callback(
+        oauth_token="expired",
+        now=datetime.now(UTC),
     )
+
+    assert prepared is not None
+    assert prepared.return_path == "/library"
     assert gateway.method_calls == [
         call.oauth_callback(oauth_token="expired"),
     ]
+
+
+def test_import_enqueue_is_idempotent_and_never_serializes_credentials() -> None:
+    revision = uuid4()
+    gateway = MagicMock()
+    gateway.credentials.return_value = ZoteroCredentials(
+        user_id="42",
+        api_key="never-in-job-payload",
+        revision=revision,
+    )
+    jobs = MagicMock()
+    queued_job = _job()
+    jobs.enqueue.return_value = EnqueuedJob(
+        job=queued_job,
+        created=True,
+        payload={"item_keys": ["ITEM1"], "credential_revision": str(revision)},
+    )
+    service = _service(
+        gateway=gateway,
+        journal=MagicMock(spec=OperationJournal),
+        jobs=jobs,
+    )
+
+    result = service.enqueue_import(
+        actor=_actor(),
+        operation=_operation(),
+        request=ZoteroImportRequest(item_keys=["ITEM1"]),
+        idempotency_key="request-1",
+    )
+
+    command = jobs.enqueue.call_args.kwargs["command"]
+    assert result.id == queued_job.id
+    assert command.task_name == "import_zotero_items"
+    assert command.idempotency_key == "zotero-import:7:request-1"
+    assert command.payload == {
+        "item_keys": ["ITEM1"],
+        "credential_revision": str(revision),
+    }
+    assert "never-in-job-payload" not in repr(command)
+
+
+def test_import_rejects_idempotency_key_reuse_for_different_items() -> None:
+    revision = uuid4()
+    gateway = MagicMock()
+    gateway.credentials.return_value = ZoteroCredentials(
+        user_id="42",
+        api_key="secret",
+        revision=revision,
+    )
+    jobs = MagicMock()
+    jobs.enqueue.return_value = EnqueuedJob(
+        job=_job(),
+        created=False,
+        payload={"item_keys": ["ITEM1"], "credential_revision": str(revision)},
+    )
+    service = _service(
+        gateway=gateway,
+        journal=MagicMock(spec=OperationJournal),
+        jobs=jobs,
+    )
+
+    with pytest.raises(AppError) as raised:
+        service.enqueue_import(
+            actor=_actor(),
+            operation=_operation(),
+            request=ZoteroImportRequest(item_keys=["ITEM2"]),
+            idempotency_key="request-1",
+        )
+
+    assert raised.value.code == "idempotency_key_reused"
 
 
 def test_connection_change_journals_once_and_rejects_owner_mismatch() -> None:
     gateway = MagicMock()
     connection_id = uuid4()
     gateway.save_connection.return_value = ZoteroConnectionChange(
-        connection_id=connection_id,
+        connection_revision=connection_id,
         changed=True,
     )
     journal = MagicMock(spec=OperationJournal)
@@ -148,6 +241,8 @@ def test_connection_change_journals_once_and_rejects_owner_mismatch() -> None:
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         correlation_id=operation.trace.correlation_id,
         origin_operation_id=operation.trace.operation_id,
+        return_path="/library",
+        intent="import",
     )
     access_token = ZoteroAccessToken(user_id="remote-user", api_key="api-key")
 
@@ -160,7 +255,7 @@ def test_connection_change_journals_once_and_rejects_owner_mismatch() -> None:
     assert journal.append.call_args.kwargs["action"] == ("zotero.connection_connected")
 
     gateway.save_connection.return_value = ZoteroConnectionChange(
-        connection_id=connection_id,
+        connection_revision=connection_id,
         changed=False,
     )
     journal.reset_mock()
@@ -254,6 +349,8 @@ def test_oauth_workflow_resumes_verified_owner_causality() -> None:
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         correlation_id=correlation_id,
         origin_operation_id=origin_operation_id,
+        return_path="/library",
+        intent="import",
     )
     zotero = MagicMock()
     zotero.prepare_oauth_callback.return_value = callback
@@ -265,20 +362,28 @@ def test_oauth_workflow_resumes_verified_owner_causality() -> None:
         user_id="remote-user",
         api_key="api-key",
     )
+    operations.verify_access_token.return_value = True
     workflow = ZoteroWorkflow(
         executor=_Executor(  # type: ignore[arg-type]
             SimpleNamespace(zotero=zotero, identity=identity)
         ),
         operations=operations,
         operation_factory=OperationContextFactory(),
+        cursors=SignedCursorCodec(
+            "test-zotero-cursor-key",
+            revision="zotero-test-v1",
+            error_code="zotero_cursor_invalid",
+        ),
     )
     request = RequestReference(uuid4())
 
-    assert workflow.callback(
+    result = workflow.callback(
         oauth_token="token",
         oauth_verifier="verifier",
         request=request,
     )
+    assert result.state == "connected"
+    assert result.return_path == "/library"
 
     operation = zotero.complete_oauth_callback.call_args.kwargs["operation"]
     assert operation.trace.correlation_id == correlation_id
@@ -292,135 +397,42 @@ def test_oauth_workflow_resumes_verified_owner_causality() -> None:
     assert zotero.complete_oauth_callback.call_args.kwargs["actor"] is actor
 
 
-@pytest.mark.asyncio
-async def test_postprocess_uses_prepare_external_finalize_short_stages() -> None:
-    actor = _actor()
-    job_id = uuid4()
-    credentials = MagicMock()
-    prepared = PreparedZoteroPostprocess(
-        job_id=job_id,
-        credentials=credentials,
-        disposition="run",
+def test_expired_oauth_workflow_returns_to_original_internal_page() -> None:
+    callback = PreparedZoteroCallback(
+        user_id=7,
+        request_token=ZoteroRequestToken(token="expired", secret="secret"),
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        return_path="/settings?section=connections",
+        intent="manage",
     )
-    events: list[str] = []
     zotero = MagicMock()
-    zotero.prepare_postprocess.side_effect = lambda **_kwargs: (
-        events.append("prepare") or prepared
-    )
-    zotero.prepare_sync.side_effect = lambda **_kwargs: (
-        events.append("prepare_sync")
-        or PreparedZoteroSync(credentials=credentials, targets=())
-    )
-    zotero.complete_sync.side_effect = lambda **_kwargs: (
-        events.append("complete_sync")
-        or ZoteroSyncResponse(
-            synced_papers_count=2,
-            new_annotations_count=3,
-        )
-    )
-    zotero.auto_import_since.side_effect = lambda **_kwargs: (
-        events.append("auto_import_window") or None
-    )
-    zotero.complete_postprocess.side_effect = lambda **_kwargs: (
-        events.append("finalize") or True
-    )
+    zotero.prepare_oauth_callback.return_value = callback
     operations = MagicMock()
-
-    async def fetch_sync_batch(**_kwargs):  # type: ignore[no-untyped-def]
-        events.append("external_sync")
-        return ZoteroSyncBatch(updates=(), failed_item_keys=())
-
-    operations.fetch_sync_batch = AsyncMock(side_effect=fetch_sync_batch)
-    workflow = ZoteroPostprocessWorkflow(
-        executor=_Executor(SimpleNamespace(zotero=zotero)),  # type: ignore[arg-type]
+    workflow = ZoteroWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(zotero=zotero)
+        ),
         operations=operations,
         operation_factory=OperationContextFactory(),
-    )
-    operation = OperationContextFactory().resume(
-        correlation_id=uuid4(),
-        causation_id=uuid4(),
-        initiated_by=OperationInitiator.SYSTEM,
-        origin=JobOrigin(job_id=job_id, delivery_ref=None, request_id=uuid4()),
-        credential=None,
+        cursors=SignedCursorCodec(
+            "test-zotero-cursor-key",
+            revision="zotero-test-v1",
+            error_code="zotero_cursor_invalid",
+        ),
     )
 
-    response = await workflow.complete(
-        actor=actor,
-        operation=operation,
-        job_id=job_id,
-        payload={"task_id": str(job_id)},
+    result = workflow.callback(
+        oauth_token="expired",
+        oauth_verifier="unused",
+        request=RequestReference(uuid4()),
     )
 
-    assert response.claimed is True
-    assert events == [
-        "prepare",
-        "prepare_sync",
-        "external_sync",
-        "complete_sync",
-        "auto_import_window",
-        "finalize",
-    ]
-    sync_operation = zotero.complete_sync.call_args.kwargs["operation"]
-    complete_operation = zotero.complete_postprocess.call_args.kwargs["operation"]
-    assert sync_operation.trace.causation_id == complete_operation.trace.causation_id
-    assert sync_operation.trace.causation_id != operation.trace.operation_id
-    assert complete_operation.trace.correlation_id == operation.trace.correlation_id
-
-
-@pytest.mark.asyncio
-async def test_postprocess_failure_uses_child_operation_and_failure_stage() -> None:
-    actor = _actor()
-    job_id = uuid4()
-    prepared = PreparedZoteroPostprocess(
-        job_id=job_id,
-        credentials=MagicMock(),
-        disposition="run",
-    )
-    events: list[str] = []
-    zotero = MagicMock()
-    zotero.prepare_postprocess.side_effect = lambda **_kwargs: (
-        events.append("prepare") or prepared
-    )
-    zotero.prepare_sync.return_value = PreparedZoteroSync(
-        credentials=prepared.credentials,
-        targets=(),
-    )
-    zotero.fail_postprocess.side_effect = lambda **_kwargs: (
-        events.append("fail") or True
-    )
-    operations = MagicMock()
-
-    async def fail_external_sync(**_kwargs):  # type: ignore[no-untyped-def]
-        events.append("external")
-        raise RuntimeError("provider unavailable")
-
-    operations.fetch_sync_batch = AsyncMock(side_effect=fail_external_sync)
-    workflow = ZoteroPostprocessWorkflow(
-        executor=_Executor(SimpleNamespace(zotero=zotero)),  # type: ignore[arg-type]
-        operations=operations,
-        operation_factory=OperationContextFactory(),
-    )
-    operation = OperationContextFactory().resume(
-        correlation_id=uuid4(),
-        causation_id=uuid4(),
-        initiated_by=OperationInitiator.SYSTEM,
-        origin=JobOrigin(job_id=job_id, delivery_ref=None, request_id=uuid4()),
-        credential=None,
-    )
-
-    with pytest.raises(RuntimeError, match="provider unavailable"):
-        await workflow.complete(
-            actor=actor,
-            operation=operation,
-            job_id=job_id,
-            payload={"task_id": str(job_id)},
-        )
-
-    assert events == ["prepare", "external", "fail"]
-    zotero.complete_postprocess.assert_not_called()
-    fail_operation = zotero.fail_postprocess.call_args.kwargs["operation"]
-    assert fail_operation.trace.causation_id != operation.trace.operation_id
-    assert fail_operation.trace.correlation_id == operation.trace.correlation_id
+    assert result.return_path == "/settings?section=connections"
+    assert result.intent == "manage"
+    assert result.state == "zotero_oauth_expired"
+    operations.exchange_access_token.assert_not_called()
 
 
 def test_scheduler_journals_only_jobs_that_were_created() -> None:

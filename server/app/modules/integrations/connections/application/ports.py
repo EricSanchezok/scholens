@@ -87,6 +87,15 @@ class IntegrationGateway(Protocol):
         last_error_code: str | None,
     ) -> IntegrationRecord | None: ...
 
+    def set_configuration(
+        self,
+        *,
+        user_id: int,
+        provider: IntegrationProvider,
+        configuration: dict[str, JsonValue],
+        now: datetime,
+    ) -> IntegrationRecord: ...
+
     def delete(self, *, user_id: int, provider: IntegrationProvider) -> None: ...
 
 

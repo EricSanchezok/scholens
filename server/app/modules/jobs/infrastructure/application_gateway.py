@@ -74,6 +74,20 @@ class SqlAlchemyJobsGateway:
                         if command.operation is JobOperation.DOCUMENT_REFLOW
                         else {}
                     ),
+                    **(
+                        {
+                            "credential_url": (
+                                f"{base_url}/internal/v1/jobs/{command.job_id}"
+                                "/integration-credentials/zotero"
+                            ),
+                            "progress_url": (
+                                f"{base_url}/internal/v1/jobs/{command.job_id}/progress"
+                            ),
+                        }
+                        if command.operation
+                        in {JobOperation.ZOTERO_IMPORT, JobOperation.ZOTERO_SYNC}
+                        else {}
+                    ),
                 },
                 job_id=command.job_id,
             ),
@@ -81,6 +95,7 @@ class SqlAlchemyJobsGateway:
         return EnqueuedJob(
             job=job_response(persisted.job),
             created=persisted.created,
+            payload=persisted.job.payload,
         )
 
     def reserve(self, *, command: ReserveOperationCommand) -> ReservedOperation:
@@ -162,3 +177,11 @@ class SqlAlchemyJobsGateway:
                 requested_by_id=requested_by_id,
             )
         )
+
+    def cancel(self, *, requested_by_id: int, job_id: UUID) -> JobResponse:
+        job, _changed = job_repository.cancel(
+            self._db,
+            job_id=job_id,
+            requested_by_id=requested_by_id,
+        )
+        return job_response(job)
