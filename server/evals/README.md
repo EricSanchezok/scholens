@@ -1,7 +1,6 @@
 # Scholens evaluations
 
-This directory contains the maintained end-to-end Data Table evaluation and
-the historical ResearchQA methodology paper.
+This directory contains the maintained end-to-end Data Table evaluation.
 
 ## Data Table extraction
 
@@ -23,12 +22,6 @@ uv run python -m evals.run_data_table_eval --runs 1
 Use `--seed-only`, `--skip-seed`, or `--grade-only` for narrower workflows.
 Results are written to `evals/results/eval_data_table.json`.
 
-## ResearchQA archive
-
-The ResearchQA benchmark predates Scholens's provider-neutral AI runtime and its
-current sanchezcloud-identity/database contracts. Its paper remains in
-[`paper.md`](paper.md), and the published dataset is available at
-[`khoj-ai/ResearchQA`](https://huggingface.co/datasets/khoj-ai/ResearchQA).
-The exact historical harness used for the published results is preserved in
-the repository commit linked by the paper; it is intentionally not carried as
-unrunnable production code in the current tree.
+The committed manifest defines the extraction columns and expected values.
+Fixture titles, authors, download sources, licenses, and checksums are recorded
+in [`seed_data/README.md`](seed_data/README.md).

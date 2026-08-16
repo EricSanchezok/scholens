@@ -361,7 +361,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 void runAction(() => ingestion.cancel(id))
               }
               onNext={(cursor) => replaceSearch({ cursor })}
-              onOpenPaper={(documentId) =>
+              onOpenDocument={(documentId) =>
                 router.push(`/reader/${documentId}` as Route)
               }
               onPrevious={(cursor) => replaceSearch({ cursor })}

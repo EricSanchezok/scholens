@@ -623,7 +623,7 @@ export function PapersView({
   onDeleteTag,
   onDownload,
   onNext,
-  onOpenPaper,
+  onOpenDocument,
   onPrevious,
   onRemove,
   onRenameTag,
@@ -648,7 +648,7 @@ export function PapersView({
   onCreateTag: (name: string) => Promise<LibraryTag>;
   onDeleteTag: (tagId: string) => Promise<void>;
   onDownload: (documentId: string) => void;
-  onOpenPaper: (documentId: string) => void;
+  onOpenDocument: (documentId: string) => void;
   onNext: (cursor: string) => void;
   onPrevious: (cursor: string) => void;
   onRemove: (documentIds: string[]) => Promise<void>;
@@ -980,7 +980,7 @@ export function PapersView({
                         </td>
                         <td
                           className="text-secondary cursor-pointer px-3 py-3 align-middle text-sm"
-                          onClick={() => onOpenPaper(id)}
+                          onClick={() => onOpenDocument(id)}
                         >
                           {format.dateTime(new Date(paper.created_at), {
                             dateStyle: "medium",
@@ -988,7 +988,7 @@ export function PapersView({
                         </td>
                         <td
                           className="text-secondary cursor-pointer px-3 py-3 align-middle text-sm"
-                          onClick={() => onOpenPaper(id)}
+                          onClick={() => onOpenDocument(id)}
                         >
                           {metadata.publishDate
                             ? format.dateTime(new Date(metadata.publishDate), {

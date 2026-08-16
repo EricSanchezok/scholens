@@ -1466,12 +1466,9 @@ def test_global_discovery_surfaces_are_absent_from_client_sources() -> None:
         path.read_text(encoding="utf-8")
         for path in (
             ROOT / "README.md",
-            ROOT / "client" / "design.md",
             ROOT / "client" / "src" / "app" / "sitemap.ts",
             ROOT / "client" / "src" / "components" / "QuickActions.tsx",
             ROOT / "client" / "src" / "components" / "sidebar" / "navItems.ts",
-            ROOT / "client" / "src" / "content" / "introducing.mdx",
-            ROOT / "client" / "src" / "content" / "systematic_review.mdx",
             ROOT / "server" / "app" / "helpers" / "templates" / "project_invite.html",
         )
     )
