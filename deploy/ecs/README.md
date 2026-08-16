@@ -264,11 +264,11 @@ fields. Generate independent values for every JWT, HMAC, session, cursor, encryp
 callback, and origin token. Required JSON keys are:
 
 - core: `auth_jwt_secret`, `admin_session_secret`, `paper_search_cursor_secret`,
-  `jobs_webhook_signing_secret`, `integration_credential_encryption_key`;
+  `project_invitation_token_secret`, `jobs_webhook_signing_secret`,
+  `integration_credential_encryption_key`;
 - AI: `deepseek_api_key`, `moss_api_key`, `moss_voice_id`;
-- mail: `aliyun_access_key_id`, `aliyun_access_key_secret`, `aliyun_account_name`,
-  `resend_api_key`, `resend_from_address`, `resend_reply_to_address`,
-  `profile_notification_email`;
+- mail: `aliyun_access_key_id`, `aliyun_access_key_secret`,
+  `aliyun_account_name`;
 - billing: `stripe_api_key`, `stripe_webhook_secret`;
 - integrations: `zotero_client_key`, `zotero_client_secret`.
 

@@ -1089,12 +1089,76 @@
       "action": "添加 {count} 篇论文",
       "error": "无法添加所选论文，请重试。"
     },
+    "collaborators": {
+      "manage": "管理协作者",
+      "title": "管理协作者",
+      "description": "邀请成员，并让每位协作者只获得完成工作所需的最小权限。",
+      "close": "关闭协作者管理",
+      "members": "成员",
+      "owner": "所有者",
+      "loading": "正在加载协作者…",
+      "retry": "重试",
+      "savePermissions": "保存权限",
+      "removeMember": "移除成员",
+      "memberOutsideAuthority": "只有拥有该成员全部权限的协作者才能管理此成员。",
+      "inviteTitle": "邀请协作者",
+      "email": "邮箱地址",
+      "emailPlaceholder": "researcher@example.com",
+      "invalidEmail": "请输入有效的邮箱地址",
+      "sendInvitation": "发送邀请",
+      "invitations": "邀请",
+      "noInvitations": "暂无有效邀请。",
+      "resend": "发送新链接",
+      "revoke": "撤销",
+      "done": "完成",
+      "deliveredAt": "送达于 {date}",
+      "minimumAccess": "仅项目访问权限",
+      "deliveryFailedHint": "多次尝试后仍未送达。请发送新链接后重试。",
+      "delivery": {
+        "pending": "发送中",
+        "sent": "已发送",
+        "failed": "发送失败"
+      },
+      "permissions": {
+        "editProject": "编辑项目",
+        "managePapers": "管理论文",
+        "manageCollaborators": "管理协作者"
+      },
+      "errors": {
+        "alreadyMember": "该用户已经是项目成员。",
+        "permissionEscalation": "你不能授予或修改自己没有的权限。",
+        "notManageable": "你没有权限管理该成员。",
+        "deliveryPending": "该邀请已在等待发送。",
+        "offline": "请求未能连接 Scholens。请检查网络后重试。",
+        "unknown": "无法完成协作者变更，请重试。",
+        "unknownWithRequest": "无法完成协作者变更。请求 ID：{requestId}"
+      }
+    },
     "session": {
       "checking": "正在检查登录状态",
       "retry": "重试状态检查",
       "unavailableTitle": "项目暂时不可用",
       "unavailableDescription": "你可以保留此页面并重试登录状态检查。"
     }
+  },
+  "ProjectInvitation": {
+    "accepting": "正在接受项目邀请",
+    "openingProject": "正在打开项目",
+    "retry": "重试",
+    "sessionUnavailableTitle": "Scholens 无法检查登录状态",
+    "sessionUnavailableDescription": "请保留此页面，检查网络后重试。",
+    "switchAccount": "切换账户",
+    "accountMismatchTitle": "此邀请属于另一个账户",
+    "accountMismatchDescription": "请退出登录，再使用收到邀请邮件的账户登录。",
+    "invalidTitle": "此邀请已不可用",
+    "invalidDescription": "链接可能已过期、被撤销，或已由新的邀请链接替代。",
+    "authorityRevokedDescription": "邀请人已无法授予该项目的访问权限。",
+    "alreadyMemberTitle": "你已拥有项目访问权限",
+    "alreadyMemberDescription": "前往项目列表继续工作。",
+    "viewProjects": "查看项目",
+    "retryTitle": "无法接受邀请",
+    "retryDescription": "请检查网络后重试。",
+    "retryDescriptionWithRequest": "请检查网络后重试。请求 ID：{requestId}"
   },
   "Settings": {
     "title": "设置",

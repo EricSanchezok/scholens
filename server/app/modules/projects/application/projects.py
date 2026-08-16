@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 import json
 from collections.abc import Mapping
@@ -100,14 +100,6 @@ class ProjectOutputPage:
     positions: list[ProjectPagePosition]
     has_more: bool
     total_count: int
-
-
-@dataclass(frozen=True, slots=True)
-class InvitationDelivery:
-    response: ProjectInvitationResponse
-    recipient_email: str
-    project_title: str
-    raw_token: str = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,7 +229,7 @@ class ProjectGateway(Protocol):
         actor_id: int,
         project_id: UUID,
         request: ProjectInvitationCreateRequest,
-    ) -> InvitationDelivery: ...
+    ) -> ProjectInvitationResponse: ...
 
     def resend_invitation(
         self,
@@ -245,7 +237,7 @@ class ProjectGateway(Protocol):
         actor_id: int,
         project_id: UUID,
         invitation_id: UUID,
-    ) -> InvitationDelivery: ...
+    ) -> ProjectInvitationResponse: ...
 
     def revoke_invitation(
         self,
@@ -582,7 +574,7 @@ class Projects:
         actor: Actor,
         operation: OperationContext,
         raw_token: str,
-    ) -> None:
+    ) -> UUID:
         accepted = self._gateway.accept_invitation(
             raw_token=raw_token,
             user_id=actor.id,
@@ -600,6 +592,7 @@ class Projects:
                 ),
             ),
         )
+        return accepted.project_id
 
     def invitations(
         self,
@@ -621,8 +614,8 @@ class Projects:
         operation: OperationContext,
         project_id: UUID,
         request: ProjectInvitationCreateRequest,
-    ) -> InvitationDelivery:
-        delivery = self._gateway.create_invitation(
+    ) -> ProjectInvitationResponse:
+        invitation = self._gateway.create_invitation(
             actor_id=actor.id,
             project_id=project_id,
             request=request,
@@ -635,11 +628,11 @@ class Projects:
                 ResourceRef(type="project", id=str(project_id)),
                 ResourceRef(
                     type="project_invitation",
-                    id=str(delivery.response.id),
+                    id=str(invitation.id),
                 ),
             ),
         )
-        return delivery
+        return invitation
 
     def resend_invitation(
         self,
@@ -648,8 +641,8 @@ class Projects:
         operation: OperationContext,
         project_id: UUID,
         invitation_id: UUID,
-    ) -> InvitationDelivery:
-        delivery = self._gateway.resend_invitation(
+    ) -> ProjectInvitationResponse:
+        invitation = self._gateway.resend_invitation(
             actor_id=actor.id,
             project_id=project_id,
             invitation_id=invitation_id,
@@ -661,13 +654,9 @@ class Projects:
             resources=(
                 ResourceRef(type="project", id=str(project_id)),
                 ResourceRef(type="project_invitation", id=str(invitation_id)),
-                ResourceRef(
-                    type="project_invitation",
-                    id=str(delivery.response.id),
-                ),
             ),
         )
-        return delivery
+        return invitation
 
     def revoke_invitation(
         self,

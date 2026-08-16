@@ -10,6 +10,10 @@ export const projectKeys = {
     [...projectKeys.lists(), state] as const,
   detail: (projectId: string) =>
     [...projectKeys.all, "detail", projectId] as const,
+  members: (projectId: string) =>
+    [...projectKeys.detail(projectId), "members"] as const,
+  invitations: (projectId: string) =>
+    [...projectKeys.detail(projectId), "invitations"] as const,
   papers: (projectId: string, state: ProjectDetailSearchState) =>
     [
       ...projectKeys.detail(projectId),

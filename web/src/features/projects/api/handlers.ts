@@ -4,6 +4,8 @@ import {
   projectConversationFixtures,
   projectFixtures,
   projectLibraryPaperFixtures,
+  projectInvitationFixtures,
+  projectMemberFixtures,
   projectOutputFixtures,
   projectPaperFixtures,
 } from "./fixtures";
@@ -37,6 +39,12 @@ const populated = [
       previous_cursor: null,
       total_count: projectOutputFixtures.length,
     }),
+  ),
+  http.get(`${api}/projects/:projectId/members`, () =>
+    HttpResponse.json({ items: projectMemberFixtures, next_cursor: null }),
+  ),
+  http.get(`${api}/projects/:projectId/invitations`, () =>
+    HttpResponse.json({ items: projectInvitationFixtures, next_cursor: null }),
   ),
   http.get(`${api}/conversations`, () =>
     HttpResponse.json({
@@ -98,6 +106,57 @@ const populated = [
   ),
   http.post(`${api}/projects/:projectId/papers`, () =>
     HttpResponse.json({ added_count: 1, existing_count: 0 }, { status: 201 }),
+  ),
+  http.post(`${api}/projects/:projectId/invitations`, async ({ request }) => {
+    const body = (await request.json()) as {
+      email: string;
+      edit_project: boolean;
+      manage_collaborators: boolean;
+      manage_papers: boolean;
+    };
+    return HttpResponse.json(
+      {
+        ...projectInvitationFixtures[0],
+        ...body,
+        id: crypto.randomUUID(),
+        permissions: {
+          edit_project: body.edit_project,
+          manage_collaborators: body.manage_collaborators,
+          manage_papers: body.manage_papers,
+        },
+      },
+      { status: 201 },
+    );
+  }),
+  http.post(
+    `${api}/projects/:projectId/invitations/:invitationId/resend`,
+    ({ params }) =>
+      HttpResponse.json({
+        ...projectInvitationFixtures[0],
+        id: params.invitationId,
+      }),
+  ),
+  http.delete(
+    `${api}/projects/:projectId/invitations/:invitationId`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.patch(
+    `${api}/projects/:projectId/members/:userId`,
+    async ({ params, request }) => {
+      const permissions = await request.json();
+      return HttpResponse.json({
+        ...projectMemberFixtures[1],
+        permissions,
+        user_id: Number(params.userId),
+      });
+    },
+  ),
+  http.delete(
+    `${api}/projects/:projectId/members/:userId`,
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.post(`${api}/project-invitations/:token/accept`, () =>
+    HttpResponse.json({ project_id: projectFixtures[0]!.id }),
   ),
   http.delete(
     `${api}/projects/:projectId/papers/:documentId`,

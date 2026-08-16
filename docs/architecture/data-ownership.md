@@ -30,6 +30,23 @@ product schema.
   in `account_plan_grants`, and temporary numerical test limits live in
   `account_quota_overrides`; neither table mutates or impersonates Stripe.
 
+## Project invitation and email ownership
+
+`scholens.project_invitations` owns both collaboration intent and product-email
+delivery state. Creating an invitation writes its `pending` state in the same
+Server transaction; short-lived leases, attempt count, next-attempt time,
+sanitized failure code, and delivered time remain Scholens product data. The
+Server may claim and recover those leases across API replicas, but Aliyun does
+not own a queue or a product status.
+
+Invitation bearer tokens are not stored. A deployment-owned
+`PROJECT_INVITATION_TOKEN_SECRET` signs only invitation ID and revision. Normal
+delivery retries reuse a revision; an explicit resend increments it so the old
+link becomes invalid. Accepting still revalidates expiry, recipient identity,
+and the inviter's current authority. Identity verification and password-reset
+templates remain owned by `sanchezcloud-identity`; both interfaces may share one
+Aliyun DirectMail account without sharing application contracts or tables.
+
 ## Database roles and migration order
 
 - `auth_migrator` owns only `auth` and is used by the protected Identity workflow.

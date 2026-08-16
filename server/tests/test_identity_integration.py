@@ -163,17 +163,21 @@ def test_auth_config_uses_scholens_lockout_settings() -> None:
 def test_auth_email_sender_uses_scholens_action_urls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runtime_settings = runtime.AuthRuntimeSettings(
+    from app.shared.infrastructure.email_settings import ScholensEmailSettings
+
+    mail_settings = ScholensEmailSettings(
         _env_file=None,
-        aliyun_dm_access_key_id="key-id",
-        aliyun_dm_access_key_secret="key-secret",
-        aliyun_dm_account_name="sender@example.com",
-        public_web_url="https://scholens.example/",
+        scholens_aliyun_dm_access_key_id="key-id",
+        scholens_aliyun_dm_access_key_secret="key-secret",
+        scholens_aliyun_dm_account_name="sender@example.com",
     )
     factory = MagicMock(return_value=MagicMock())
     monkeypatch.setattr(runtime, "AliyunDirectMailSender", factory)
 
-    runtime.build_auth_email_sender(runtime_settings)
+    runtime.build_auth_email_sender(
+        mail_settings,
+        client_domain="https://scholens.example/",
+    )
 
     assert factory.call_args.kwargs["verification_url"] == (
         "https://scholens.example/login?mode=verify"
@@ -183,6 +187,28 @@ def test_auth_email_sender_uses_scholens_action_urls(
     )
     assert factory.call_args.kwargs["brand"] == "Scholens"
     assert factory.call_args.kwargs["reply_to_address"] is True
+
+
+def test_mail_settings_reject_partial_aliyun_credentials() -> None:
+    from app.shared.infrastructure.email_settings import ScholensEmailSettings
+
+    mail_settings = ScholensEmailSettings(
+        _env_file=None,
+        scholens_aliyun_dm_access_key_id="key-id",
+    )
+
+    with pytest.raises(RuntimeError, match="must be configured together"):
+        mail_settings.validate_configuration(required=False)
+
+
+def test_mail_settings_require_aliyun_credentials_in_production() -> None:
+    from app.shared.infrastructure.email_settings import ScholensEmailSettings
+
+    mail_settings = ScholensEmailSettings(_env_file=None)
+    mail_settings.validate_configuration(required=False)
+
+    with pytest.raises(RuntimeError, match="required in production"):
+        mail_settings.validate_configuration(required=True)
 
 
 @pytest.mark.asyncio

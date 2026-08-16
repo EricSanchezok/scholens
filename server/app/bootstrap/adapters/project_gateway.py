@@ -16,7 +16,6 @@ from app.database.models import (
     ProjectPaper,
     ResearchItem,
 )
-from app.helpers.email import send_project_invite_email
 from app.helpers.s3 import s3_service
 from app.bootstrap.adapters.upload_repository import (
     upload_reservation_repository,
@@ -28,6 +27,7 @@ from app.modules.projects.application.contracts import (
     ProjectCollaboratorUpdateRequest,
     ProjectCreateRequest,
     ProjectInvitationCreateRequest,
+    ProjectInvitationDeliveryStatus,
     ProjectInvitationResponse,
     ProjectPaperSort,
     ProjectPaperSummaryResponse,
@@ -41,7 +41,6 @@ from app.modules.projects.application.contracts import (
 )
 from app.modules.projects.application.projects import (
     AcceptedProjectInvitation,
-    InvitationDelivery,
     ProjectCollaboratorUpdateResult,
     ProjectDeletion,
     ProjectDocumentCollection,
@@ -57,11 +56,12 @@ from app.bootstrap.adapters.project_documents import (
     project_document_repository,
 )
 from app.bootstrap.adapters.project_presenters import project_response
-from app.bootstrap.adapters.project_repository import (
-    CreatedInvitation,
-    project_repository,
+from app.bootstrap.adapters.project_repository import project_repository
+from app.modules.projects.application.invitation_tokens import (
+    ProjectInvitationTokenCodec,
 )
 from app.shared.application import Actor
+from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ResearchAudienceType, ResearchItemKind
 from app.modules.papers.application.contracts.documents import LibraryOutputSort
 from app.modules.papers.application.library import (
@@ -98,8 +98,16 @@ def _collaborator_response(collaborator: object) -> ProjectCollaboratorResponse:
 
 
 class SqlAlchemyProjectGateway:
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        invitation_tokens: ProjectInvitationTokenCodec | None = None,
+    ) -> None:
         self._db = db
+        self._invitation_tokens = invitation_tokens or ProjectInvitationTokenCodec(
+            "development-only-invitation-secret"
+        )
 
     def _project(self, project: Project, *, user_id: int) -> ProjectResponse:
         return project_response(
@@ -129,15 +137,8 @@ class SqlAlchemyProjectGateway:
             ),
             expires_at=invitation.expires_at,
             created_at=invitation.created_at,
-        )
-
-    def _delivery(self, created: CreatedInvitation) -> InvitationDelivery:
-        response = self._invitation(created.invitation.id)
-        return InvitationDelivery(
-            response=response,
-            recipient_email=response.email,
-            project_title=response.project_name,
-            raw_token=created.raw_token,
+            delivery_status=ProjectInvitationDeliveryStatus(invitation.delivery_status),
+            delivered_at=invitation.delivered_at,
         )
 
     def create(
@@ -502,9 +503,17 @@ class SqlAlchemyProjectGateway:
         user_id: int,
         email: str,
     ) -> AcceptedProjectInvitation:
-        accepted = project_repository.accept_invitation_token(
+        decoded = self._invitation_tokens.decode(raw_token)
+        if decoded is None:
+            raise AppError(
+                code="project_invitation_invalid",
+                message="Invitation is invalid or expired",
+                kind=FailureKind.NOT_FOUND,
+            )
+        accepted = project_repository.accept_invitation(
             self._db,
-            raw_token=raw_token,
+            invitation_id=decoded.invitation_id,
+            token_revision=decoded.revision,
             user_id=user_id,
             email=email,
         )
@@ -534,16 +543,15 @@ class SqlAlchemyProjectGateway:
         actor_id: int,
         project_id: UUID,
         request: ProjectInvitationCreateRequest,
-    ) -> InvitationDelivery:
-        return self._delivery(
-            project_repository.create_invitation(
-                self._db,
-                project_id=project_id,
-                actor_id=actor_id,
-                email=str(request.email),
-                requested=request,
-            )
+    ) -> ProjectInvitationResponse:
+        created = project_repository.create_invitation(
+            self._db,
+            project_id=project_id,
+            actor_id=actor_id,
+            email=str(request.email),
+            requested=request,
         )
+        return self._invitation(created.invitation.id)
 
     def resend_invitation(
         self,
@@ -551,15 +559,14 @@ class SqlAlchemyProjectGateway:
         actor_id: int,
         project_id: UUID,
         invitation_id: UUID,
-    ) -> InvitationDelivery:
-        return self._delivery(
-            project_repository.resend_invitation(
-                self._db,
-                project_id=project_id,
-                invitation_id=invitation_id,
-                actor_id=actor_id,
-            )
+    ) -> ProjectInvitationResponse:
+        resent = project_repository.resend_invitation(
+            self._db,
+            project_id=project_id,
+            invitation_id=invitation_id,
+            actor_id=actor_id,
         )
+        return self._invitation(resent.invitation.id)
 
     def revoke_invitation(
         self,
@@ -877,14 +884,4 @@ class SqlAlchemyProjectGateway:
                 if scheduled is not None and scheduled.created
                 else None
             )
-        )
-
-
-class EmailProjectInvitationNotifier:
-    def send(self, *, inviter: Actor, delivery: InvitationDelivery) -> None:
-        send_project_invite_email(
-            to_email=delivery.recipient_email,
-            from_name=str(inviter.display_name or inviter.email),
-            project_title=delivery.project_title,
-            invitation_token=delivery.raw_token,
         )

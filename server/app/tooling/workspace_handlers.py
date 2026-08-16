@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from typing import Protocol
 from typing import cast
 from uuid import UUID
 
@@ -39,11 +38,11 @@ from app.modules.projects.application.contracts import (
     ProjectCollaboratorUpdateRequest,
     ProjectCreateRequest,
     ProjectInvitationCreateRequest,
+    ProjectInvitationResponse,
     ProjectResponse,
     ProjectTransferRequest,
     ProjectUpdateRequest,
 )
-from app.modules.projects.application.projects import InvitationDelivery
 from app.modules.research.application.contracts import (
     CreateAnnotationCommentRequest,
     CreateAnnotationThreadRequest,
@@ -52,7 +51,7 @@ from app.modules.research.application.contracts import (
     UpdateAnnotationThreadRequest,
 )
 from app.modules.research.application.search import ResearchSearchRequest
-from app.shared.application import Actor, ApplicationExecutor, SignedCursorCodec
+from app.shared.application import ApplicationExecutor, SignedCursorCodec
 from app.shared.domain import AppError, FailureKind, JsonValue
 from app.shared.domain.enums import ResearchAudienceType, ResearchItemKind, RoleType
 from app.tooling.contracts import (
@@ -70,10 +69,6 @@ _OUTPUT_KINDS = {
     ResearchItemKind.AUDIO_OVERVIEW,
     ResearchItemKind.DATA_TABLE,
 }
-
-
-class ProjectInvitationNotifier(Protocol):
-    def send(self, *, inviter: Actor, delivery: InvitationDelivery) -> None: ...
 
 
 def _json(value: object) -> JsonValue:
@@ -159,14 +154,12 @@ class WorkspaceToolHandlers:
         executor: ApplicationExecutor[ApplicationCapabilities],
         ingestion: PaperIngestionWorkflow,
         citations: CitationWorkflow,
-        invitation_notifier: ProjectInvitationNotifier,
         web_base_url: str,
         cursor_secret: str,
     ) -> None:
         self._executor = executor
         self._ingestion = ingestion
         self._citations = citations
-        self._invitation_notifier = invitation_notifier
         self._web_base_url = web_base_url.rstrip("/")
         self._knowledge_cursors = SignedCursorCodec(
             cursor_secret,
@@ -1263,7 +1256,7 @@ class WorkspaceToolHandlers:
 
         def execute(
             capabilities: ApplicationCapabilities,
-        ) -> ToolOutcome | InvitationDelivery:
+        ) -> ToolOutcome | ProjectInvitationResponse:
             project = capabilities.projects.get(
                 actor=context.actor, project_id=parsed.project_id
             )
@@ -1311,27 +1304,21 @@ class WorkspaceToolHandlers:
         outcome = await asyncio.to_thread(self._executor.command, execute)
         if isinstance(outcome, ToolOutcome):
             return outcome
-        delivery_status = "sent"
-        guidance = None
-        try:
-            await asyncio.to_thread(
-                self._invitation_notifier.send, inviter=context.actor, delivery=outcome
-            )
-        except Exception:
-            delivery_status = "failed"
-            guidance = "The invitation exists but email delivery failed. Use resend_project_invitation with its invitation ID."
         return self._completed(
             action="project_invitation_created",
             affected_resources=[
                 f"project:{parsed.project_id}",
-                f"invitation:{outcome.response.id}",
+                f"invitation:{outcome.id}",
             ],
             result={
-                "invitation": _json(outcome.response),
-                "email_delivery": delivery_status,
+                "invitation": _json(outcome),
+                "email_delivery": str(outcome.delivery_status),
             },
-            guidance=guidance,
-            links=(_project_link(parsed.project_id, outcome.project_title),),
+            guidance=(
+                "Email delivery is queued. Check list_project_invitations for "
+                "sent or failed status."
+            ),
+            links=(_project_link(parsed.project_id, outcome.project_name),),
         )
 
     async def resend_project_invitation(
@@ -1342,7 +1329,7 @@ class WorkspaceToolHandlers:
 
         def execute(
             capabilities: ApplicationCapabilities,
-        ) -> ToolOutcome | InvitationDelivery:
+        ) -> ToolOutcome | ProjectInvitationResponse:
             project = capabilities.projects.get(
                 actor=context.actor, project_id=parsed.project_id
             )
@@ -1392,27 +1379,21 @@ class WorkspaceToolHandlers:
         outcome = await asyncio.to_thread(self._executor.command, execute)
         if isinstance(outcome, ToolOutcome):
             return outcome
-        delivery_status = "sent"
-        guidance = None
-        try:
-            await asyncio.to_thread(
-                self._invitation_notifier.send, inviter=context.actor, delivery=outcome
-            )
-        except Exception:
-            delivery_status = "failed"
-            guidance = "The replacement invitation exists but email delivery failed; retry resend with a new confirmation."
         return self._completed(
             action="project_invitation_resent",
             affected_resources=[
                 f"project:{parsed.project_id}",
-                f"invitation:{outcome.response.id}",
+                f"invitation:{outcome.id}",
             ],
             result={
-                "invitation": _json(outcome.response),
-                "email_delivery": delivery_status,
+                "invitation": _json(outcome),
+                "email_delivery": str(outcome.delivery_status),
             },
-            guidance=guidance,
-            links=(_project_link(parsed.project_id, outcome.project_title),),
+            guidance=(
+                "Email delivery is queued. Check list_project_invitations for "
+                "sent or failed status."
+            ),
+            links=(_project_link(parsed.project_id, outcome.project_name),),
         )
 
     def revoke_project_invitation(

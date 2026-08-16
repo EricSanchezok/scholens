@@ -2491,19 +2491,6 @@ wheels = [
 ]
 
 [[package]]
-name = "resend"
-version = "2.10.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/03/6c/57f032ea10d19bede1f21195301a40722e81fe6563fafbae7e37af77c8d5/resend-2.10.0.tar.gz", hash = "sha256:f9091f487f0d878095bb7a744549969c624815413b7ac82ba92039e2d0804b75", size = 14779, upload-time = "2025-05-15T01:06:15.06Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/5e/ad687375e7610050de72ea5c254514c002e18c38d96ffc4afa4c8aa4d924/resend-2.10.0-py2.py3-none-any.whl", hash = "sha256:1d65a36b032522d5eb738e08956ca29cbaa217a270efbe915a071eb72c0d6956", size = 21354, upload-time = "2025-05-15T01:06:13.629Z" },
-]
-
-[[package]]
 name = "rpds-py"
 version = "2026.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2667,6 +2654,9 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "alibabacloud-dm20151123" },
+    { name = "alibabacloud-tea-openapi" },
+    { name = "alibabacloud-tea-util" },
     { name = "boto3" },
     { name = "celery", extra = ["sqs"] },
     { name = "click" },
@@ -2695,7 +2685,6 @@ dependencies = [
     { name = "redis" },
     { name = "requests" },
     { name = "requests-oauthlib" },
-    { name = "resend" },
     { name = "sanchezcloud-identity", extra = ["aliyun", "fastapi"] },
     { name = "scholens-ai" },
     { name = "scholens-job-contracts" },
@@ -2723,6 +2712,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.15.1" },
+    { name = "alibabacloud-dm20151123", specifier = ">=1.2.2" },
+    { name = "alibabacloud-tea-openapi", specifier = ">=0.4.3" },
+    { name = "alibabacloud-tea-util", specifier = ">=0.3.14" },
     { name = "boto3", specifier = ">=1.37.33" },
     { name = "celery", extras = ["sqs"], specifier = ">=5.6.2" },
     { name = "click", specifier = ">=8.2,<9" },
@@ -2751,7 +2743,6 @@ requires-dist = [
     { name = "redis", specifier = ">=5.2" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "requests-oauthlib", specifier = ">=2.0.0" },
-    { name = "resend", specifier = ">=2.10.0" },
     { name = "sanchezcloud-identity", extras = ["aliyun", "fastapi"], git = "https://github.com/EricSanchezok/sanchezcloud-identity.git?rev=v0.5.2" },
     { name = "scholens-ai", directory = "../packages/scholens_ai" },
     { name = "scholens-job-contracts", directory = "../packages/scholens_job_contracts" },

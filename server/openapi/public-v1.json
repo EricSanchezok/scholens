@@ -6995,6 +6995,20 @@
         "title": "ProjectCreateRequest",
         "type": "object"
       },
+      "ProjectInvitationAcceptedResponse": {
+        "properties": {
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "ProjectInvitationAcceptedResponse",
+        "type": "object"
+      },
       "ProjectInvitationCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7024,6 +7038,15 @@
         ],
         "title": "ProjectInvitationCreateRequest",
         "type": "object"
+      },
+      "ProjectInvitationDeliveryStatus": {
+        "enum": [
+          "pending",
+          "sent",
+          "failed"
+        ],
+        "title": "ProjectInvitationDeliveryStatus",
+        "type": "string"
       },
       "ProjectInvitationListResponse": {
         "properties": {
@@ -7058,6 +7081,21 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_status": {
+            "$ref": "#/components/schemas/ProjectInvitationDeliveryStatus"
           },
           "email": {
             "format": "email",
@@ -7099,7 +7137,9 @@
           "invited_by",
           "permissions",
           "expires_at",
-          "created_at"
+          "created_at",
+          "delivery_status",
+          "delivered_at"
         ],
         "title": "ProjectInvitationResponse",
         "type": "object"
@@ -14883,7 +14923,14 @@
           }
         ],
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInvitationAcceptedResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "422": {

@@ -342,7 +342,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: RetainExceptOnCreate
     UpdateReplacePolicy: Retain
-    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: auth_jwt_secret, PasswordLength: 64, SecretStringTemplate: '{"admin_session_secret":"","paper_search_cursor_secret":"","jobs_webhook_signing_secret":"","integration_credential_encryption_key":""}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/scholens/production/core}
+    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: auth_jwt_secret, PasswordLength: 64, SecretStringTemplate: '{"admin_session_secret":"","paper_search_cursor_secret":"","project_invitation_token_secret":"","jobs_webhook_signing_secret":"","integration_credential_encryption_key":""}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/scholens/production/core}
   AiSecret:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: RetainExceptOnCreate

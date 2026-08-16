@@ -1089,12 +1089,76 @@
       "action": "Add {count, plural, one {# paper} other {# papers}}",
       "error": "The selected papers could not be added. Try again."
     },
+    "collaborators": {
+      "manage": "Manage collaborators",
+      "title": "Manage collaborators",
+      "description": "Invite people and keep every collaborator at the minimum access they need.",
+      "close": "Close collaborator manager",
+      "members": "Members",
+      "owner": "Owner",
+      "loading": "Loading collaborators…",
+      "retry": "Try again",
+      "savePermissions": "Save permissions",
+      "removeMember": "Remove member",
+      "memberOutsideAuthority": "Only a collaborator with all of this member’s permissions can manage them.",
+      "inviteTitle": "Invite a collaborator",
+      "email": "Email address",
+      "emailPlaceholder": "researcher@example.com",
+      "invalidEmail": "Enter a valid email address",
+      "sendInvitation": "Send invitation",
+      "invitations": "Invitations",
+      "noInvitations": "No active invitations.",
+      "resend": "Send a new link",
+      "revoke": "Revoke",
+      "done": "Done",
+      "deliveredAt": "Delivered {date}",
+      "minimumAccess": "Project access only",
+      "deliveryFailedHint": "Delivery stopped after repeated failures. Send a new link to try again.",
+      "delivery": {
+        "pending": "Sending",
+        "sent": "Sent",
+        "failed": "Failed"
+      },
+      "permissions": {
+        "editProject": "Edit project",
+        "managePapers": "Manage papers",
+        "manageCollaborators": "Manage collaborators"
+      },
+      "errors": {
+        "alreadyMember": "This person is already a member of the project.",
+        "permissionEscalation": "You cannot grant or change a permission you do not have.",
+        "notManageable": "You do not have permission to manage this member.",
+        "deliveryPending": "This invitation is already queued for delivery.",
+        "offline": "The request could not reach Scholens. Check your connection and try again.",
+        "unknown": "The collaborator change could not be completed. Try again.",
+        "unknownWithRequest": "The collaborator change could not be completed. Request ID: {requestId}"
+      }
+    },
     "session": {
       "checking": "Checking your session",
       "retry": "Retry session check",
       "unavailableTitle": "Projects are temporarily unavailable",
       "unavailableDescription": "Keep this page open and retry the session check."
     }
+  },
+  "ProjectInvitation": {
+    "accepting": "Accepting project invitation",
+    "openingProject": "Opening project",
+    "retry": "Try again",
+    "sessionUnavailableTitle": "Scholens cannot check your session",
+    "sessionUnavailableDescription": "Keep this page open, check your connection, and retry.",
+    "switchAccount": "Switch account",
+    "accountMismatchTitle": "This invitation belongs to another account",
+    "accountMismatchDescription": "Sign out, then use the email account that received the invitation.",
+    "invalidTitle": "This invitation is no longer available",
+    "invalidDescription": "The link may have expired, been revoked, or been replaced by a newer invitation.",
+    "authorityRevokedDescription": "The inviter can no longer grant this project access.",
+    "alreadyMemberTitle": "You already have project access",
+    "alreadyMemberDescription": "Open Projects to continue working.",
+    "viewProjects": "View projects",
+    "retryTitle": "The invitation could not be accepted",
+    "retryDescription": "Check your connection and try again.",
+    "retryDescriptionWithRequest": "Check your connection and try again. Request ID: {requestId}"
   },
   "Settings": {
     "title": "Settings",

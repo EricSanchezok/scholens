@@ -1,4 +1,7 @@
 import { apiClient } from "@/lib/api";
+import type { components } from "@/lib/api/generated/schema";
+
+type ProjectPermissions = components["schemas"]["ProjectPermissionSet"];
 
 export async function createProject(input: {
   title: string;
@@ -61,4 +64,81 @@ export async function removeProjectPaper(
       path: { document_id: documentId, project_id: projectId },
     },
   });
+}
+
+export async function createProjectInvitation(
+  projectId: string,
+  input: ProjectPermissions & { email: string },
+) {
+  const { data } = await apiClient.POST(
+    "/api/v1/projects/{project_id}/invitations",
+    {
+      body: input,
+      params: { path: { project_id: projectId } },
+    },
+  );
+  if (!data) throw new Error("Project invitation response was empty");
+  return data;
+}
+
+export async function resendProjectInvitation(
+  projectId: string,
+  invitationId: string,
+) {
+  const { data } = await apiClient.POST(
+    "/api/v1/projects/{project_id}/invitations/{invitation_id}/resend",
+    {
+      params: {
+        path: { invitation_id: invitationId, project_id: projectId },
+      },
+    },
+  );
+  if (!data) throw new Error("Project invitation response was empty");
+  return data;
+}
+
+export async function revokeProjectInvitation(
+  projectId: string,
+  invitationId: string,
+) {
+  await apiClient.DELETE(
+    "/api/v1/projects/{project_id}/invitations/{invitation_id}",
+    {
+      params: {
+        path: { invitation_id: invitationId, project_id: projectId },
+      },
+    },
+  );
+}
+
+export async function updateProjectMember(
+  projectId: string,
+  userId: number,
+  permissions: ProjectPermissions,
+) {
+  const { data } = await apiClient.PATCH(
+    "/api/v1/projects/{project_id}/members/{user_id}",
+    {
+      body: permissions,
+      params: { path: { project_id: projectId, user_id: userId } },
+    },
+  );
+  if (!data) throw new Error("Project member response was empty");
+  return data;
+}
+
+export async function removeProjectMember(projectId: string, userId: number) {
+  await apiClient.DELETE("/api/v1/projects/{project_id}/members/{user_id}", {
+    params: { path: { project_id: projectId, user_id: userId } },
+  });
+}
+
+export async function acceptProjectInvitation(token: string) {
+  const { data } = await apiClient.POST(
+    "/api/v1/project-invitations/{token}/accept",
+    { params: { path: { token } } },
+  );
+  if (!data)
+    throw new Error("Project invitation acceptance response was empty");
+  return data;
 }

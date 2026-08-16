@@ -5,6 +5,8 @@ type Paper = components["schemas"]["ProjectPaperSummaryResponse"];
 type Output = components["schemas"]["LibraryOutputResponse"];
 type Conversation = components["schemas"]["ConversationSummaryResponse"];
 type LibraryPaper = components["schemas"]["LibraryPaperListPaperEntry"];
+type ProjectMember = components["schemas"]["ProjectCollaboratorResponse"];
+type ProjectInvitation = components["schemas"]["ProjectInvitationResponse"];
 
 const owner = {
   display_name: "Eric Sanchez",
@@ -73,6 +75,84 @@ export const projectFixtures: Project[] = [
     owner: { display_name: "Mina Park", email: "mina@example.com", id: 8 },
     title: "Long-context retrieval",
     updated_at: "2026-08-10T05:20:00Z",
+  },
+];
+
+export const projectMemberFixtures: ProjectMember[] = [
+  {
+    display_name: owner.display_name,
+    email: owner.email,
+    is_owner: true,
+    joined_at: null,
+    permissions: {
+      edit_project: true,
+      manage_collaborators: true,
+      manage_papers: true,
+    },
+    user_id: owner.id,
+  },
+  {
+    display_name: "Mina Park",
+    email: "mina@example.com",
+    is_owner: false,
+    joined_at: "2026-08-02T09:00:00Z",
+    permissions: {
+      edit_project: true,
+      manage_collaborators: false,
+      manage_papers: true,
+    },
+    user_id: 8,
+  },
+];
+
+export const projectInvitationFixtures: ProjectInvitation[] = [
+  {
+    created_at: "2026-08-15T08:00:00Z",
+    delivered_at: null,
+    delivery_status: "pending",
+    email: "pending@example.com",
+    expires_at: "2026-08-22T08:00:00Z",
+    id: "60000000-0000-4000-8000-000000000001",
+    invited_by: owner.display_name,
+    permissions: {
+      edit_project: false,
+      manage_collaborators: false,
+      manage_papers: false,
+    },
+    project_id: projectFixtures[0]!.id,
+    project_name: projectFixtures[0]!.title,
+  },
+  {
+    created_at: "2026-08-13T08:00:00Z",
+    delivered_at: "2026-08-13T08:01:14Z",
+    delivery_status: "sent",
+    email: "delivered@example.com",
+    expires_at: "2026-08-20T08:00:00Z",
+    id: "60000000-0000-4000-8000-000000000003",
+    invited_by: owner.display_name,
+    permissions: {
+      edit_project: false,
+      manage_collaborators: false,
+      manage_papers: true,
+    },
+    project_id: projectFixtures[0]!.id,
+    project_name: projectFixtures[0]!.title,
+  },
+  {
+    created_at: "2026-08-14T08:00:00Z",
+    delivered_at: null,
+    delivery_status: "failed",
+    email: "failed@example.com",
+    expires_at: "2026-08-21T08:00:00Z",
+    id: "60000000-0000-4000-8000-000000000002",
+    invited_by: owner.display_name,
+    permissions: {
+      edit_project: true,
+      manage_collaborators: false,
+      manage_papers: true,
+    },
+    project_id: projectFixtures[0]!.id,
+    project_name: projectFixtures[0]!.title,
   },
 ];
 

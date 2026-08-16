@@ -32,6 +32,18 @@ and the shared Conversation feature.
   viewer are truthful list rows rather than fake links.
 - Archive is not exposed because there is no archived-project collection or
   restore contract. Owners may delete; collaborators may leave.
+- Members with `manage_collaborators` see Manage collaborators in the existing
+  Manage Project menu. Its responsive dialog shows the owner, editable member
+  permissions, and active invitations. New invitations default to no delegated
+  powers. Permission controls never allow a manager to grant a power they do
+  not hold. Pending delivery is polled; sent includes delivery time; failed
+  provides an explicit new-link action. Remove, revoke, and resend remain
+  visible operations rather than optimistic disappearance.
+- `/project-invitations/[token]` preserves its path through login. An
+  authenticated visit submits one acceptance attempt, replaces the bearer URL
+  with the accepted Project on success, offers account switching for recipient
+  mismatch, treats expired/revoked/authority failures as terminal, and exposes
+  retry only for connection or service failure.
 
 List search, sort, and cursor live in the URL. Detail view, selected
 conversation, chat disclosure, and namespaced paper/output filters also live in
@@ -85,24 +97,34 @@ independent action target and is always discoverable on touch layouts.
   presents that impact; only the explicit retry sends the token in
   `X-Scholens-Confirmation-Token`. A stale, changed, or reused token fails
   without deleting anything.
+- `GET /members` and `GET /invitations` supply the collaborator dialog;
+  member permission mutation, removal, invitation creation, resend, and revoke
+  use their generated public contracts. Invitations expose
+  `delivery_status=pending|sent|failed` and optional `delivered_at`.
+- `POST /api/v1/project-invitations/{token}/accept` returns
+  `{ project_id }`, allowing the route to clear the token with
+  `router.replace` before entering the Project.
 
 ## Figma and Storybook acceptance
 
 Canonical Figma file: [Scholens — Product Design](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design).
 
-| Acceptance state          | Figma node               | Story                                              |
-| ------------------------- | ------------------------ | -------------------------------------------------- |
-| list populated / empty    | `330:2`, `333:249`       | `Features/Projects/List` → `Populated`, `Empty`    |
-| create project            | `334:608`                | `CreateProject`, `Features/Projects/Project Form`  |
-| row actions               | `335:844`                | `Features/Projects/Project Row` owner/collaborator |
-| overview, chat collapsed  | `1085:1371`              | `Features/Projects/Detail` → `OverviewCollapsed`   |
-| chat expanded             | `1085:1431`              | `ChatExpanded`                                     |
-| shared history open       | `1087:1783`              | `ChatExpanded`, Conversation switcher stories      |
-| papers populated / empty  | `1087:1538`              | `Papers`, `PapersEmpty`                            |
-| outputs populated / empty | `1087:1622`              | `Outputs`, `OutputsEmpty`                          |
-| manage / Add papers first | `1087:1715`              | `Papers`                                           |
-| mobile 390 project / chat | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                    |
-| mobile 430 project / chat | `1088:1937`, `1088:1981` | `Mobile430`, `MobileChat`                          |
+| Acceptance state                            | Figma node               | Story                                                       |
+| ------------------------------------------- | ------------------------ | ----------------------------------------------------------- |
+| list populated / empty                      | `330:2`, `333:249`       | `Features/Projects/List` → `Populated`, `Empty`             |
+| create project                              | `334:608`                | `CreateProject`, `Features/Projects/Project Form`           |
+| row actions                                 | `335:844`                | `Features/Projects/Project Row` owner/collaborator          |
+| overview, chat collapsed                    | `1085:1371`              | `Features/Projects/Detail` → `OverviewCollapsed`            |
+| chat expanded                               | `1085:1431`              | `ChatExpanded`                                              |
+| shared history open                         | `1087:1783`              | `ChatExpanded`, Conversation switcher stories               |
+| papers populated / empty                    | `1087:1538`              | `Papers`, `PapersEmpty`                                     |
+| outputs populated / empty                   | `1087:1622`              | `Outputs`, `OutputsEmpty`                                   |
+| manage / Add papers first                   | `1087:1715`              | `Papers`                                                    |
+| mobile 390 project / chat                   | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                             |
+| mobile 430 project / chat                   | `1088:1937`, `1088:1981` | `Mobile430`, `MobileChat`                                   |
+| collaborator delivery states                | `1151:2`                 | `Features/Projects/Manage collaborators` → `DeliveryStates` |
+| collaborator 390 / 320 dark zh-CN           | `1154:2`, `1154:74`      | `Mobile390`, `SmallMobile320`, `ChineseDark`                |
+| invitation desktop states / 430 zh-CN retry | `1152:2`, `1154:98`      | `Features/Projects/Accept invitation`                       |
 
 The list implementation uses a single-column, Library-aligned row composition
 instead of the superseded card grid; the active Figma list frames record this

@@ -101,7 +101,6 @@ def _handler() -> WorkspaceToolHandlers:
         executor=MagicMock(),
         ingestion=MagicMock(),
         citations=MagicMock(),
-        invitation_notifier=MagicMock(),
         web_base_url="https://scholens.example",
         cursor_secret="test-secret",
     )

@@ -174,14 +174,12 @@ def create_workspace_tooling(
     ToolCatalog[ApplicationCapabilities],
     ToolDispatcher[ApplicationCapabilities],
 ]:
-    from app.bootstrap.container import build_project_invitation_notifier
     from app.tooling.workspace import build_workspace_tool_catalog
 
     catalog = build_workspace_tool_catalog(
         executor=executor,
         ingestion=ingestion,
         citations=citations,
-        invitation_notifier=build_project_invitation_notifier(),
         web_base_url=settings.client_domain,
         cursor_secret=settings.paper_search_cursor_secret,
     )
@@ -258,7 +256,6 @@ def create_billing_workflow(
     operation_factory: OperationContextFactory,
 ) -> BillingWorkflow:
     from app.modules.billing.infrastructure.application_gateway import (
-        EmailBillingNotifier,
         PostHogBillingEvents,
         StripePaymentProvider,
     )
@@ -267,7 +264,6 @@ def create_billing_workflow(
         executor=executor,
         payments=StripePaymentProvider(),
         events=PostHogBillingEvents(),
-        notifier=EmailBillingNotifier(),
         operation_factory=operation_factory,
     )
 
@@ -280,7 +276,6 @@ def create_stripe_webhook_processor(
     from app.bootstrap.adapters.stripe_webhook import StripeWebhookWorkflow
     from app.database.database import engine
     from app.modules.billing.infrastructure.application_gateway import (
-        EmailBillingNotifier,
         PostHogBillingEvents,
     )
     from app.modules.billing.infrastructure.config import STRIPE_WEBHOOK_SECRET
@@ -291,7 +286,6 @@ def create_stripe_webhook_processor(
         engine=engine,
         operation_factory=operation_factory,
         events=PostHogBillingEvents(),
-        notifier=EmailBillingNotifier(),
         webhook_secret=STRIPE_WEBHOOK_SECRET,
     )
 

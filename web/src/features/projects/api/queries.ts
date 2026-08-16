@@ -39,6 +39,42 @@ export const projectQueries = {
         return data;
       },
     }),
+  members: (projectId: string) =>
+    queryOptions({
+      queryKey: projectKeys.members(projectId),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET(
+          "/api/v1/projects/{project_id}/members",
+          {
+            params: { path: { project_id: projectId } },
+            signal,
+          },
+        );
+        if (!data) throw new Error("Project member response was empty");
+        return data;
+      },
+    }),
+  invitations: (projectId: string) =>
+    queryOptions({
+      queryKey: projectKeys.invitations(projectId),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET(
+          "/api/v1/projects/{project_id}/invitations",
+          {
+            params: { path: { project_id: projectId } },
+            signal,
+          },
+        );
+        if (!data) throw new Error("Project invitation response was empty");
+        return data;
+      },
+      refetchInterval: (query) =>
+        query.state.data?.items.some(
+          (invitation) => invitation.delivery_status === "pending",
+        )
+          ? 2_000
+          : false,
+    }),
   papers: (projectId: string, state: ProjectDetailSearchState) =>
     queryOptions({
       queryKey: projectKeys.papers(projectId, state),

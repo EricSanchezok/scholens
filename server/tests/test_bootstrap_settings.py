@@ -15,6 +15,7 @@ def test_production_accepts_a_dedicated_search_cursor_secret() -> None:
     settings = AppSettings(
         environment="production",
         paper_search_cursor_secret="production-search-cursor-secret-value",
+        project_invitation_token_secret="production-invitation-secret-value",
         integration_credential_encryption_key=(
             "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
         ),
@@ -44,6 +45,7 @@ def test_production_cache_rejects_missing_credentials_and_unmanaged_host() -> No
     common = {
         "environment": "production",
         "paper_search_cursor_secret": "production-search-cursor-secret-value",
+        "project_invitation_token_secret": "production-invitation-secret-value",
         "integration_credential_encryption_key": (
             "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
         ),

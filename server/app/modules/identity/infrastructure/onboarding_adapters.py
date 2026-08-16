@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from app.database.product_analytics import track_event
-from app.helpers.email import send_profile_email
 from app.modules.identity.application.onboarding_contracts import (
     CreateOnboardingRequest,
     OnboardingResponse,
@@ -59,11 +58,6 @@ class SqlAlchemyOnboardingWriter:
 class CloudAuthDisplayNameWriter:
     async def set_display_name(self, *, user_id: int, display_name: str) -> None:
         await auth_manager.update_profile(user_id, display_name)
-
-
-class EmailOnboardingNotifier:
-    def notify(self, onboarding: OnboardingResponse) -> None:
-        send_profile_email(onboarding)
 
 
 class PostHogOnboardingEventRecorder:

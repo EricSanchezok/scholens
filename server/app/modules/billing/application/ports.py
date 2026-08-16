@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Mapping, Protocol
+from typing import Mapping, Protocol
 from uuid import UUID
 
 from app.modules.billing.application.contracts import UsagePeriod, UsageResponse
@@ -144,45 +144,3 @@ class BillingEvent:
 
 class BillingEvents(Protocol):
     def record(self, event: BillingEvent) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class IntervalChangeScheduledNotification:
-    email: str
-    display_name: str | None
-    new_interval: str
-    kind: Literal["interval_change_scheduled"] = "interval_change_scheduled"
-
-
-@dataclass(frozen=True, slots=True)
-class SubscriptionWelcomeNotification:
-    email: str
-    display_name: str | None
-    kind: Literal["subscription_welcome"] = "subscription_welcome"
-
-
-@dataclass(frozen=True, slots=True)
-class CancellationConfirmedNotification:
-    email: str
-    display_name: str | None
-    kind: Literal["cancellation_confirmed"] = "cancellation_confirmed"
-
-
-@dataclass(frozen=True, slots=True)
-class BillingIssueNotification:
-    email: str
-    display_name: str | None
-    issue: str
-    kind: Literal["billing_issue"] = "billing_issue"
-
-
-type BillingNotification = (
-    IntervalChangeScheduledNotification
-    | SubscriptionWelcomeNotification
-    | CancellationConfirmedNotification
-    | BillingIssueNotification
-)
-
-
-class BillingNotifier(Protocol):
-    def send(self, notification: BillingNotification) -> None: ...

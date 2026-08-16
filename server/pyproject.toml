@@ -29,6 +29,9 @@ dependencies = [
     "python-multipart>=0.0.31",
     "pydantic-settings>=2.8.1",
     "boto3>=1.37.33",
+    "alibabacloud-dm20151123>=1.2.2",
+    "alibabacloud-tea-openapi>=0.4.3",
+    "alibabacloud-tea-util>=0.3.14",
     "sqladmin[full]>=0.25.1",
     "itsdangerous>=2.2.0",
     "gunicorn>=23.0.0",
@@ -36,7 +39,6 @@ dependencies = [
     "openai>=1.82.0",
     "pydantic-ai-slim[openai]>=1.0,<2",
     "posthog>=4.2.0",
-    "resend>=2.10.0",
     "celery[sqs]>=5.6.2",
     "click>=8.2,<9",
     "stripe>=12.3.0",
@@ -93,7 +95,20 @@ show_error_codes = true
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["asyncpg", "asyncpg.*", "requests_oauthlib", "requests_oauthlib.*"]
+module = [
+    "asyncpg",
+    "asyncpg.*",
+    "requests_oauthlib",
+    "requests_oauthlib.*",
+    "Tea",
+    "Tea.*",
+    "alibabacloud_dm20151123",
+    "alibabacloud_dm20151123.*",
+    "alibabacloud_tea_openapi",
+    "alibabacloud_tea_openapi.*",
+    "alibabacloud_tea_util",
+    "alibabacloud_tea_util.*",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

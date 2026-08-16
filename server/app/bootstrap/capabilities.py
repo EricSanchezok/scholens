@@ -238,6 +238,7 @@ class ApplicationCapabilities:
         return build_projects(
             db=self._session,
             cursor_secret=self._settings.paper_search_cursor_secret,
+            invitation_token_secret=(self._settings.project_invitation_token_secret),
             journal=self._journal,
         )
 

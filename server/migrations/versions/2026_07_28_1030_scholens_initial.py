@@ -1450,7 +1450,7 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("project_id", sa.UUID(), nullable=False),
         sa.Column("email", sa.String(length=320), nullable=False),
-        sa.Column("token_hash", sa.String(length=64), nullable=False),
+        sa.Column("token_revision", sa.Integer(), server_default="1", nullable=False),
         sa.Column("invited_by_id", sa.BigInteger(), nullable=False),
         sa.Column(
             "can_edit_project", sa.Boolean(), server_default="false", nullable=False
@@ -1467,6 +1467,27 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "delivery_status",
+            sa.String(length=16),
+            server_default="pending",
+            nullable=False,
+        ),
+        sa.Column(
+            "delivery_attempt_count", sa.Integer(), server_default="0", nullable=False
+        ),
+        sa.Column(
+            "delivery_next_attempt_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("delivery_lease_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "delivery_lease_expires_at", sa.DateTime(timezone=True), nullable=True
+        ),
+        sa.Column("delivery_failure_code", sa.String(length=80), nullable=True),
+        sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -1496,10 +1517,10 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_index(
-        "ix_project_invitations_token_hash",
+        "ix_project_invitations_delivery_claim",
         "project_invitations",
-        ["token_hash"],
-        unique=True,
+        ["delivery_status", "delivery_next_attempt_at", "delivery_lease_expires_at"],
+        unique=False,
         schema="scholens",
     )
     op.create_index(
@@ -2493,7 +2514,7 @@ def downgrade() -> None:
         postgresql_where=sa.text("accepted_at IS NULL AND revoked_at IS NULL"),
     )
     op.drop_index(
-        "ix_project_invitations_token_hash",
+        "ix_project_invitations_delivery_claim",
         table_name="project_invitations",
         schema="scholens",
     )
