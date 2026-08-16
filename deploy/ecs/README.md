@@ -150,7 +150,9 @@ commit SHA already contained in `main`. Rollback redeploys an older immutable ma
 does not move tags, rebuild images, reverse a migration, or restore a database snapshot.
 
 The runtime template exceeds CloudFormation's inline limit. The production workflow uses
-the release bucket's `cloudformation/<sha>/` prefix. Release manifests remain immutable;
+the release bucket's `cloudformation/<sha>/` prefix and explicitly encrypts each uploaded
+template with the foundation configuration KMS key; relying on the AWS CLI's default
+artifact encryption is rejected by the bucket policy. Release manifests remain immutable;
 CloudFormation packages and source maps expire only after their 365-day compliance
 retention has elapsed.
 

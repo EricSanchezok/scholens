@@ -1081,6 +1081,8 @@ def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
     assert "environment: production" in workflows["release.yml"]
     assert "aws cloudformation deploy" in workflows["release.yml"]
     assert "--s3-bucket" in workflows["release.yml"]
+    assert "sanchezcloud-scholens-configuration-key-arn" in workflows["release.yml"]
+    assert '--kms-key-id "$template_kms_key_arn"' in workflows["release.yml"]
     assert "create-migration-attestation" in workflows["database-production.yml"]
     assert "migrations/current.json" in workflows["database-production.yml"]
     assert "--if-none-match '*'" in workflows["database-production.yml"]
