@@ -71,6 +71,12 @@ or cluster.
 | `sanchezcloud-scholens-api` | API and one-off product migration | The entrypoint composes an escaped RDS URL from independent secret fields and enforces `verify-full` TLS. |
 | `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. |
 
+The API runtime uses a digest-pinned Alpine Python image. The Jobs image builds its
+locked dependencies on the digest-pinned Debian Python image because PyMuPDF publishes
+glibc-only Linux wheels, then copies CPython and the application into a digest-pinned,
+non-root distroless runtime. Both runtime images omit Perl and build toolchains; do not
+replace the Jobs runtime with Alpine or add a shell solely to make its dependencies fit.
+
 The pinned ADOT sidecar sends traces to X-Ray and metrics to CloudWatch. Application and
 worker task roles are separate; the execution role can pull images and inject only the
 reviewed secrets.
