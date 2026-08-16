@@ -515,6 +515,26 @@ def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() ->
         }
     }
 
+    bucket_policy_delete = next(
+        item
+        for item in bootstrap_statements
+        if "s3:DeleteBucketPolicy" in _actions(item)
+    )
+    assert bucket_policy_delete["Resource"] == {
+        "Fn::Sub": "arn:${AWS::Partition}:s3:::sanchezcloud-scholens-*"
+    }
+    serverless_cache = next(
+        item
+        for item in bootstrap_statements
+        if "elasticache:CreateServerlessCache" in _actions(item)
+    )
+    assert {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:elasticache:${AWS::Region}:"
+            "${AWS::AccountId}:serverlesscache:sanchezcloud-scholens"
+        )
+    } in serverless_cache["Resource"]
+
     runtime_compute = bootstrap_resources["RuntimeComputePolicy"]
     runtime_create_security_group = next(
         item

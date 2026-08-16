@@ -216,6 +216,10 @@ therefore fails closed if its template tries to mutate IAM. Standard resource ta
 inherited from the four stack tags above; the protected foundation workflow supplies the
 same tags on later data-plane updates. Any role, managed-policy, permissions-boundary, or
 bootstrap permission change requires a separately reviewed administrator update.
+The restricted role scopes the serverless-cache ARN to the canonical
+`sanchezcloud-scholens` name and includes both create and rollback deletion for each
+CloudFormation-managed bucket policy; keep those lifecycle permissions symmetric when the
+foundation adds a retained resource.
 
 Confirm the SNS email subscription. Later foundation changes use the protected
 `Update production foundation` workflow; `plan` creates, describes, and deletes a change
