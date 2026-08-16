@@ -58,7 +58,9 @@ Every release updates the runtime stack with digest-qualified images. It owns:
   state;
 - document, research, and maintenance Celery services with one on-demand base task and
   Fargate Spot for scale-out;
-- a private Cloud Map name for worker callbacks; `/internal/v1` is never on the ALB;
+- a private Cloud Map `A` record for worker callbacks, registered directly from each API
+  task's `awsvpc` ENI; the ECS service registry therefore carries only the registry ARN,
+  while `/internal/v1` is never on the ALB;
 - an EventBridge Scheduler one-shot task for daily Zotero orchestration;
 - migration and scheduler task definitions, autoscaling policies, alarms, logs, and the
   `SanchezCloud-Scholens` dashboard.
