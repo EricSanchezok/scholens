@@ -12,15 +12,15 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
   WebImage:
     Type: String
-    AllowedPattern: 
+    AllowedPattern:
       ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/sanchezcloud-scholens-web@sha256:[0-9a-f]{64}$
   ApiImage:
     Type: String
-    AllowedPattern: 
+    AllowedPattern:
       ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/sanchezcloud-scholens-api@sha256:[0-9a-f]{64}$
   JobsImage:
     Type: String
-    AllowedPattern: 
+    AllowedPattern:
       ^[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com/sanchezcloud-scholens-jobs@sha256:[0-9a-f]{64}$
   ReleaseSha:
     Type: String
@@ -71,9 +71,9 @@ Parameters:
     MinValue: 1
   AdotImage:
     Type: String
-    Default: 
+    Default:
       public.ecr.aws/aws-observability/aws-otel-collector@sha256:89f97137f225aa96e055fee127de0ce0650e71ecc860bf862bf6aa55c49ba698
-    AllowedPattern: 
+    AllowedPattern:
       ^public\.ecr\.aws/aws-observability/aws-otel-collector@sha256:[0-9a-f]{64}$
 Rules:
   SchedulesRequireApplication:
@@ -86,7 +86,7 @@ Rules:
         - Fn::Equals:
           - Ref: ApplicationEnabled
           - 'true'
-      AssertDescription: Schedules require the Scholens application to be 
+      AssertDescription: Schedules require the Scholens application to be
         enabled
 Conditions:
   RunApplication:
@@ -520,7 +520,7 @@ Resources:
           - logs:DescribeLogStreams
           - logs:PutLogEvents
           Resource:
-            Fn::Sub: 
+            Fn::Sub:
               arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*
       Roles:
       - Ref: ApiTaskRole
@@ -1195,7 +1195,7 @@ Resources:
             Ref: StripeYearlyPriceId
         - Name: ZOTERO_REDIRECT_URI
           Value:
-            Fn::Sub: 
+            Fn::Sub:
               https://${DomainName}/api/v1/integrations/zotero/oauth/callback
         - Name: SOURCE_REPOSITORY_URL
           Value: https://github.com/EricSanchezok/scholens
@@ -1220,35 +1220,35 @@ Resources:
             Fn::Sub:
             - '${Secret}:host::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-runtime-secret-arn
         - Name: DATABASE_PORT
           ValueFrom:
             Fn::Sub:
             - '${Secret}:port::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-runtime-secret-arn
         - Name: DATABASE_NAME
           ValueFrom:
             Fn::Sub:
             - '${Secret}:dbname::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-runtime-secret-arn
         - Name: DATABASE_USERNAME
           ValueFrom:
             Fn::Sub:
             - '${Secret}:username::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-runtime-secret-arn
         - Name: DATABASE_PASSWORD
           ValueFrom:
             Fn::Sub:
             - '${Secret}:password::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-runtime-secret-arn
         - Name: AUTH_JWT_SECRET
           ValueFrom:
@@ -1387,7 +1387,7 @@ Resources:
           - CMD
           - python
           - -c
-          - import urllib.request; 
+          - import urllib.request;
             urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=3)
           Interval: 30
           Timeout: 5
@@ -1484,35 +1484,35 @@ Resources:
             Fn::Sub:
             - '${Secret}:host::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-migrator-secret-arn
         - Name: DATABASE_PORT
           ValueFrom:
             Fn::Sub:
             - '${Secret}:port::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-migrator-secret-arn
         - Name: DATABASE_NAME
           ValueFrom:
             Fn::Sub:
             - '${Secret}:dbname::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-migrator-secret-arn
         - Name: DATABASE_USERNAME
           ValueFrom:
             Fn::Sub:
             - '${Secret}:username::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-migrator-secret-arn
         - Name: DATABASE_PASSWORD
           ValueFrom:
             Fn::Sub:
             - '${Secret}:password::'
             - Secret:
-                Fn::ImportValue: 
+                Fn::ImportValue:
                   sanchezcloud-scholens-database-migrator-secret-arn
         LogConfiguration:
           LogDriver: awslogs
@@ -2544,7 +2544,7 @@ Resources:
         - 6
         - 0
       RoleARN:
-        Fn::Sub: 
+        Fn::Sub:
           arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
   ApiScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
@@ -2570,7 +2570,7 @@ Resources:
         - Ref: ApiMaxCapacity
         - 0
       RoleARN:
-        Fn::Sub: 
+        Fn::Sub:
           arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
   WebCpuScaling:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
@@ -2694,7 +2694,7 @@ Resources:
         - 8
         - 0
       RoleARN:
-        Fn::Sub: 
+        Fn::Sub:
           arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
   ResearchWorkerScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
@@ -2720,7 +2720,7 @@ Resources:
         - 6
         - 0
       RoleARN:
-        Fn::Sub: 
+        Fn::Sub:
           arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
   MaintenanceWorkerScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
@@ -2746,7 +2746,7 @@ Resources:
         - 2
         - 0
       RoleARN:
-        Fn::Sub: 
+        Fn::Sub:
           arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
   DocumentBacklogScaling:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
