@@ -537,6 +537,72 @@ def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() ->
         )
     } in serverless_cache["Resource"]
 
+    production_vpc_arn = {
+        "Fn::Sub": [
+            "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}",
+            {"VpcId": {"Fn::ImportValue": "sanchezcloud-production-vpc-id"}},
+        ]
+    }
+    create_vpc_endpoint = next(
+        item
+        for item in bootstrap_statements
+        if "ec2:CreateVpcEndpoint" in _actions(item)
+    )
+    assert create_vpc_endpoint["Resource"] == [
+        production_vpc_arn,
+        {
+            "Fn::Sub": [
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:"
+                "${AWS::AccountId}:subnet/${SubnetId}",
+                {
+                    "SubnetId": {
+                        "Fn::ImportValue": "sanchezcloud-production-private-subnet-1"
+                    }
+                },
+            ]
+        },
+        {
+            "Fn::Sub": [
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:"
+                "${AWS::AccountId}:subnet/${SubnetId}",
+                {
+                    "SubnetId": {
+                        "Fn::ImportValue": "sanchezcloud-production-private-subnet-2"
+                    }
+                },
+            ]
+        },
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:"
+                "${AWS::AccountId}:security-group/*"
+            )
+        },
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:ec2:${AWS::Region}:"
+                "${AWS::AccountId}:vpc-endpoint/*"
+            )
+        },
+    ]
+    delete_vpc_endpoint = next(
+        item
+        for item in bootstrap_statements
+        if "ec2:DeleteVpcEndpoints" in _actions(item)
+    )
+    assert delete_vpc_endpoint["Condition"] == {
+        "ArnEquals": {"ec2:Vpc": production_vpc_arn}
+    }
+    tag_vpc_endpoint = next(
+        item
+        for item in bootstrap_statements
+        if "ec2:CreateTags" in _actions(item)
+        and "vpc-endpoint/*" in str(item["Resource"])
+    )
+    assert tag_vpc_endpoint["Condition"] == {
+        "StringEquals": {"ec2:CreateAction": "CreateVpcEndpoint"}
+    }
+
     runtime_compute = bootstrap_resources["RuntimeComputePolicy"]
     runtime_create_security_group = next(
         item

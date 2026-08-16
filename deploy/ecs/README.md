@@ -220,7 +220,10 @@ bootstrap permission change requires a separately reviewed administrator update.
 The restricted role scopes the serverless-cache ARN to the canonical
 `sanchezcloud-scholens` name and includes both create and rollback deletion for each
 CloudFormation-managed bucket policy; keep those lifecycle permissions symmetric when the
-foundation adds a retained resource.
+foundation adds a retained resource. ElastiCache Serverless also requires EC2 dependent
+actions for its managed interface endpoint; those actions are restricted to the imported
+production VPC, its two private subnets, the Scholens security group, and endpoint tagging
+during `CreateVpcEndpoint`.
 
 Confirm the SNS email subscription. Later foundation changes use the protected
 `Update production foundation` workflow; `plan` creates, describes, and deletes a change
