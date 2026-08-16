@@ -6,6 +6,7 @@ import {
   UploadIcon,
   WarningIcon,
   DismissIcon,
+  IntegrationIcon,
 } from "@/design-system/icons/semantic-icons";
 import { useTranslations } from "next-intl";
 import * as React from "react";
@@ -66,12 +67,14 @@ const sourceSchema = z.object({
 type SourceForm = z.infer<typeof sourceSchema>;
 
 export function AddPapersDialog({
+  onBrowseZotero,
   onOpenChange,
   onConnectOpenAlex,
   onSubmitSource,
   onUploadFiles,
   open,
 }: {
+  onBrowseZotero: () => void;
   onOpenChange: (open: boolean) => void;
   onConnectOpenAlex: () => void;
   onSubmitSource: (input: {
@@ -277,6 +280,28 @@ export function AddPapersDialog({
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <section className="grid gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">{t("zoteroTitle")}</h3>
+              <p className="text-secondary mt-1 text-sm">
+                {t("zoteroDescription")}
+              </p>
+            </div>
+            <Button
+              className="justify-self-start"
+              onClick={() => {
+                onOpenChange(false);
+                onBrowseZotero();
+              }}
+              variant="secondary"
+            >
+              <Icon glyph={IntegrationIcon} size={20} />
+              {t("browseZotero")}
+            </Button>
+          </section>
+
+          <div className="border-line my-6 border-t" />
+
           <section className="grid gap-3">
             <div>
               <h3 className="text-sm font-semibold">{t("pdfTitle")}</h3>
