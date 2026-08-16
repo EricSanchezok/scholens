@@ -1,5 +1,6 @@
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -9,7 +10,10 @@ from app.bootstrap.workflows.zotero import (
     ZoteroBackgroundWorkflow,
     _recoverable_auto_import_cursor,
 )
-from app.modules.integrations.zotero.application.zotero import ZoteroImportPlan
+from app.modules.integrations.zotero.application.zotero import (
+    ZoteroImportPlan,
+    ZoteroImportPlanItem,
+)
 from app.modules.integrations.zotero.application.contracts import ZoteroImportRequest
 from app.modules.jobs.application.contracts import (
     MAX_ZOTERO_ANNOTATIONS_BYTES,
@@ -389,6 +393,7 @@ async def test_rotation_after_initial_check_blocks_mutation_and_cleans_staging()
     zotero.plan_import.assert_called_once()
     zotero.reserve_import_item.assert_not_called()
     zotero.complete_import_item.assert_not_called()
+    operations.download_job_pdf.assert_not_awaited()
     operations.delete_job_pdf.assert_awaited_once_with(
         object_key=f"zotero-imports/{job_id}/ITEM0001.pdf"
     )
@@ -396,6 +401,223 @@ async def test_rotation_after_initial_check_blocks_mutation_and_cleans_staging()
         zotero.fail_background_operation.call_args.kwargs["error_code"]
         == "zotero_credentials_rotated"
     )
+
+
+@pytest.mark.asyncio
+async def test_callback_processing_timeout_preserves_staging_for_lifecycle() -> None:
+    job_id = uuid4()
+    revision = uuid4()
+    integrations = MagicMock()
+    zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
+    zotero.credential_revision_is_current.return_value = True
+    zotero.heartbeat_background_operation.return_value = True
+    zotero.fail_background_operation.return_value = True
+
+    def plan_import(**kwargs):  # type: ignore[no-untyped-def]
+        return ZoteroImportPlan(
+            items=(
+                ZoteroImportPlanItem(
+                    item=kwargs["items"][0],
+                    disposition="import",
+                ),
+            ),
+            skipped_already_imported=0,
+            errors=(),
+        )
+
+    zotero.plan_import.side_effect = plan_import
+    operations = MagicMock()
+
+    async def slow_download(**_kwargs):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(1)
+        return b"%PDF-staged"
+
+    operations.download_job_pdf = AsyncMock(side_effect=slow_download)
+    operations.delete_job_pdf = AsyncMock(return_value=None)
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(integrations=integrations, zotero=zotero)
+        ),
+        operations=operations,
+        operation_factory=OperationContextFactory(),
+    )
+
+    with patch(
+        "app.bootstrap.workflows.zotero.ZOTERO_CALLBACK_PROCESSING_TIMEOUT_SECONDS",
+        0.01,
+    ):
+        result = await workflow.complete(
+            actor=_actor(),
+            operation=_operation(),
+            job_id=job_id,
+            payload={
+                "task_id": str(job_id),
+                "operation": "import",
+                "credential_revision": str(revision),
+                "credential_outcome": "verified",
+                "items": [
+                    {
+                        "item_key": "ITEM0001",
+                        "status": "ready",
+                        "s3_object_key": f"zotero-imports/{job_id}/ITEM0001.pdf",
+                        "metadata": {
+                            "item_key": "ITEM0001",
+                            "title": "Paper",
+                            "item_type": "journalArticle",
+                        },
+                        "attachment": {
+                            "item_key": "ITEM0001",
+                            "attachment_key": "ATTACH01",
+                            "import_source": "pdf_attachment",
+                            "annotations_json": "[]",
+                        },
+                    }
+                ],
+            },
+        )
+
+    assert result == {"accepted": True, "status": "failed"}
+    operations.download_job_pdf.assert_awaited_once()
+    operations.delete_job_pdf.assert_not_awaited()
+    assert (
+        zotero.fail_background_operation.call_args.kwargs["error_code"]
+        == "zotero_callback_processing_timeout"
+    )
+    zotero.complete_background_operation.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_timeout_during_canonical_upload_releases_permit_without_mutation() -> (
+    None
+):
+    job_id = uuid4()
+    revision = uuid4()
+    integrations = MagicMock()
+    zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
+    zotero.credential_revision_is_current.return_value = True
+    zotero.heartbeat_background_operation.return_value = True
+    zotero.fail_background_operation.return_value = True
+
+    def plan_import(**kwargs):  # type: ignore[no-untyped-def]
+        return ZoteroImportPlan(
+            items=(
+                ZoteroImportPlanItem(
+                    item=kwargs["items"][0],
+                    disposition="import",
+                ),
+            ),
+            skipped_already_imported=0,
+            errors=(),
+        )
+
+    zotero.plan_import.side_effect = plan_import
+    paper_ingestion = MagicMock()
+    paper_ingestion.acquire = AsyncMock(return_value=None)
+    paper_ingestion.release = AsyncMock(return_value=None)
+    operations = MagicMock()
+    operations.download_job_pdf = AsyncMock(return_value=b"%PDF-staged")
+
+    async def slow_upload(**_kwargs):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(1)
+
+    operations.upload_pdf = AsyncMock(side_effect=slow_upload)
+    operations.delete_job_pdf = AsyncMock(return_value=None)
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(
+                integrations=integrations,
+                zotero=zotero,
+                paper_ingestion=paper_ingestion,
+            )
+        ),
+        operations=operations,
+        operation_factory=OperationContextFactory(),
+    )
+
+    with patch(
+        "app.bootstrap.workflows.zotero.ZOTERO_CALLBACK_PROCESSING_TIMEOUT_SECONDS",
+        0.01,
+    ):
+        result = await workflow.complete(
+            actor=_actor(),
+            operation=_operation(),
+            job_id=job_id,
+            payload={
+                "task_id": str(job_id),
+                "operation": "import",
+                "credential_revision": str(revision),
+                "credential_outcome": "verified",
+                "items": [
+                    {
+                        "item_key": "ITEM0001",
+                        "status": "ready",
+                        "s3_object_key": f"zotero-imports/{job_id}/ITEM0001.pdf",
+                        "metadata": {
+                            "item_key": "ITEM0001",
+                            "title": "Paper",
+                            "item_type": "journalArticle",
+                        },
+                        "attachment": {
+                            "item_key": "ITEM0001",
+                            "attachment_key": "ATTACH01",
+                            "import_source": "pdf_attachment",
+                            "annotations_json": "[]",
+                        },
+                    }
+                ],
+            },
+        )
+
+    assert result == {"accepted": True, "status": "failed"}
+    paper_ingestion.acquire.assert_awaited_once()
+    paper_ingestion.release.assert_awaited_once()
+    paper_ingestion.accept.assert_not_called()
+    zotero.reserve_import_item.assert_not_called()
+    zotero.complete_import_item.assert_not_called()
+    operations.delete_job_pdf.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_long_callback_renews_its_claim_periodically() -> None:
+    zotero = MagicMock()
+    zotero.heartbeat_background_operation.return_value = True
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(zotero=zotero)
+        ),
+        operations=MagicMock(),
+        operation_factory=OperationContextFactory(),
+    )
+    stop = asyncio.Event()
+    lost = asyncio.Event()
+
+    with patch(
+        "app.bootstrap.workflows.zotero.ZOTERO_CALLBACK_HEARTBEAT_SECONDS",
+        0.01,
+    ):
+        task = asyncio.create_task(
+            workflow._heartbeat_callback_claim(
+                actor=_actor(),
+                operation_id=uuid4(),
+                claim_id=uuid4(),
+                stop=stop,
+                lost=lost,
+            )
+        )
+        await asyncio.sleep(0.035)
+        stop.set()
+        await task
+
+    assert zotero.heartbeat_background_operation.call_count >= 2
+    assert lost.is_set() is False
 
 
 @pytest.mark.asyncio

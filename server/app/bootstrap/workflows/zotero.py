@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -31,8 +33,8 @@ from app.modules.integrations.zotero.application.zotero import (
     ZoteroAutoImportCursor,
     ZoteroCredentials,
     ZoteroCollectionSnapshotPage,
-    ZoteroImportContent,
     ZoteroImportPlan,
+    ZoteroImportPlanItem,
     ZoteroItemSnapshot,
     ZoteroLibrarySnapshot,
     ZoteroRequestToken,
@@ -62,6 +64,10 @@ from app.shared.application import (
     SignedCursorCodec,
 )
 from app.shared.domain import AppError, FailureKind, JsonValue
+from scholens_job_contracts import (
+    ZOTERO_CALLBACK_HEARTBEAT_SECONDS,
+    ZOTERO_CALLBACK_PROCESSING_TIMEOUT_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +81,14 @@ _PERMANENT_AUTO_IMPORT_ERRORS = frozenset(
         "zotero_pdf_encrypted",
     }
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedZoteroImport:
+    item: ZoteroItemSnapshot
+    attachment: ZoteroAttachmentSnapshot
+    object_key: str
+    page_dimensions: PageDimensions
 
 
 def _json_count(value: JsonValue | None) -> int:
@@ -485,6 +499,71 @@ class ZoteroBackgroundWorkflow:
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
+        heartbeat_stop = asyncio.Event()
+        heartbeat_lost = asyncio.Event()
+        heartbeat_task = asyncio.create_task(
+            self._heartbeat_callback_claim(
+                actor=actor,
+                operation_id=job_id,
+                claim_id=claim_id,
+                stop=heartbeat_stop,
+                lost=heartbeat_lost,
+            )
+        )
+        try:
+            try:
+                async with asyncio.timeout(ZOTERO_CALLBACK_PROCESSING_TIMEOUT_SECONDS):
+                    return await self._complete_claimed(
+                        actor=actor,
+                        operation=outcome_operation,
+                        job_id=job_id,
+                        claim_id=claim_id,
+                        callback=callback,
+                        heartbeat_lost=heartbeat_lost,
+                    )
+            except TimeoutError:
+                changed = self._executor.command(
+                    lambda capabilities: capabilities.zotero.fail_background_operation(
+                        actor=actor,
+                        operation=outcome_operation,
+                        operation_id=job_id,
+                        claim_id=claim_id,
+                        error_code="zotero_callback_processing_timeout",
+                    )
+                )
+                return (
+                    {"accepted": True, "status": "failed"}
+                    if changed
+                    else {"accepted": False}
+                )
+        finally:
+            heartbeat_stop.set()
+            await heartbeat_task
+
+    async def _complete_claimed(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        job_id: UUID,
+        claim_id: UUID,
+        callback: ZoteroImportWebhookData | ZoteroSyncWebhookData,
+        heartbeat_lost: asyncio.Event,
+    ) -> object:
+        def maintain_claim() -> None:
+            if heartbeat_lost.is_set() or not self._executor.command(
+                lambda capabilities: capabilities.zotero.heartbeat_background_operation(
+                    actor=actor,
+                    operation_id=job_id,
+                    claim_id=claim_id,
+                )
+            ):
+                raise AppError(
+                    code="zotero_callback_lease_lost",
+                    message="The Zotero callback claim is no longer current",
+                    kind=FailureKind.CONFLICT,
+                )
+
         revision_is_current = self._executor.query(
             lambda capabilities: capabilities.zotero.credential_revision_is_current(
                 user_id=actor.id,
@@ -495,7 +574,7 @@ class ZoteroBackgroundWorkflow:
             self._executor.command(
                 lambda capabilities: capabilities.zotero.fail_background_operation(
                     actor=actor,
-                    operation=outcome_operation,
+                    operation=operation,
                     operation_id=job_id,
                     claim_id=claim_id,
                     error_code="zotero_credentials_rotated",
@@ -505,7 +584,7 @@ class ZoteroBackgroundWorkflow:
         self._executor.command(
             lambda capabilities: capabilities.integrations.record_outcome(
                 actor=actor,
-                operation=outcome_operation,
+                operation=operation,
                 provider=IntegrationProvider.ZOTERO,
                 credential_revision=callback.credential_revision,
                 outcome=callback.credential_outcome,
@@ -516,7 +595,7 @@ class ZoteroBackgroundWorkflow:
             self._executor.command(
                 lambda capabilities: capabilities.zotero.fail_background_operation(
                     actor=actor,
-                    operation=outcome_operation,
+                    operation=operation,
                     operation_id=job_id,
                     claim_id=claim_id,
                     error_code=callback.error_code or "zotero_unavailable",
@@ -527,39 +606,80 @@ class ZoteroBackgroundWorkflow:
             if isinstance(callback, ZoteroImportWebhookData):
                 result = await self._apply_import_items(
                     actor=actor,
-                    operation=outcome_operation,
+                    operation=operation,
                     items=callback.items,
                     credential_revision=callback.credential_revision,
+                    maintain_claim=maintain_claim,
                 )
             else:
                 result = await self._apply_sync(
                     actor=actor,
-                    operation=outcome_operation,
+                    operation=operation,
                     callback=callback,
+                    maintain_claim=maintain_claim,
                 )
         except AppError as exc:
+            if exc.code == "zotero_callback_lease_lost":
+                return {"accepted": False}
             if exc.code != "zotero_credentials_rotated":
                 raise
             self._executor.command(
                 lambda capabilities: capabilities.zotero.fail_background_operation(
                     actor=actor,
-                    operation=outcome_operation,
+                    operation=operation,
                     operation_id=job_id,
                     claim_id=claim_id,
                     error_code="zotero_credentials_rotated",
                 )
             )
             return {"accepted": True, "status": "failed"}
+        maintain_claim()
         completed = self._executor.command(
             lambda capabilities: capabilities.zotero.complete_background_operation(
                 actor=actor,
-                operation=outcome_operation,
+                operation=operation,
                 operation_id=job_id,
                 claim_id=claim_id,
                 result=result,
             )
         )
         return {"accepted": completed}
+
+    async def _heartbeat_callback_claim(
+        self,
+        *,
+        actor: Actor,
+        operation_id: UUID,
+        claim_id: UUID,
+        stop: asyncio.Event,
+        lost: asyncio.Event,
+    ) -> None:
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(
+                    stop.wait(),
+                    timeout=ZOTERO_CALLBACK_HEARTBEAT_SECONDS,
+                )
+            except TimeoutError:
+                try:
+                    maintained = self._executor.command(
+                        lambda capabilities: (
+                            capabilities.zotero.heartbeat_background_operation(
+                                actor=actor,
+                                operation_id=operation_id,
+                                claim_id=claim_id,
+                            )
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "zotero.callback_heartbeat.failed",
+                        extra={"exception_type": type(exc).__name__},
+                    )
+                    continue
+                if not maintained:
+                    lost.set()
+                    return
 
     async def _apply_import_items(
         self,
@@ -568,10 +688,12 @@ class ZoteroBackgroundWorkflow:
         operation: OperationContext,
         items: list[ZoteroWorkerImportItem],
         credential_revision: UUID,
+        maintain_claim: Callable[[], None],
     ) -> dict[str, JsonValue]:
         ready = [item for item in items if item.status == "ready"]
-        contents: dict[str, ZoteroImportContent] = {}
+        staged: dict[str, _StagedZoteroImport] = {}
         cleanup: list[str] = []
+        cleanup_owned = True
         worker_errors = [
             ZoteroImportError(
                 zotero_item_key=item.item_key,
@@ -586,9 +708,6 @@ class ZoteroBackgroundWorkflow:
                 assert item.attachment is not None
                 assert item.s3_object_key is not None
                 cleanup.append(item.s3_object_key)
-                content = await self._operations.download_job_pdf(
-                    object_key=item.s3_object_key
-                )
                 snapshot = ZoteroItemSnapshot(**item.metadata.model_dump(mode="python"))
                 attachment = ZoteroAttachmentSnapshot(
                     item_key=item.attachment.item_key,
@@ -598,17 +717,17 @@ class ZoteroBackgroundWorkflow:
                     annotations_json=item.attachment.annotations_json,
                     version=item.attachment.version,
                 )
-                contents[item.item_key] = ZoteroImportContent(
+                staged[item.item_key] = _StagedZoteroImport(
                     item=snapshot,
                     attachment=attachment,
-                    pdf_content=content,
+                    object_key=item.s3_object_key,
                     page_dimensions=tuple(item.page_dimensions),
-                    error=None,
                 )
+            maintain_claim()
             plan = self._executor.command(
                 lambda capabilities: capabilities.zotero.plan_import(
                     actor=actor,
-                    items=tuple(content.item for content in contents.values()),
+                    items=tuple(value.item for value in staged.values()),
                     credential_revision=credential_revision,
                 )
             )
@@ -619,19 +738,28 @@ class ZoteroBackgroundWorkflow:
                 actor=actor,
                 operation=operation,
                 plan=plan,
-                content_by_item_key=contents,
+                staged_by_item_key=staged,
                 credential_revision=credential_revision,
+                maintain_claim=maintain_claim,
             )
+        except asyncio.CancelledError:
+            cleanup_owned = False
+            raise
+        except AppError as exc:
+            if exc.code == "zotero_callback_lease_lost":
+                cleanup_owned = False
+            raise
         finally:
-            for object_key in cleanup:
-                try:
-                    await self._operations.delete_job_pdf(object_key=object_key)
-                except Exception:
-                    logger.warning(
-                        "zotero.job_object.cleanup_failed",
-                        extra={"object_prefix": "zotero-imports"},
-                        exc_info=True,
-                    )
+            if cleanup_owned:
+                for object_key in cleanup:
+                    try:
+                        await self._operations.delete_job_pdf(object_key=object_key)
+                    except Exception:
+                        logger.warning(
+                            "zotero.job_object.cleanup_failed",
+                            extra={"object_prefix": "zotero-imports"},
+                            exc_info=True,
+                        )
         errors = [*worker_errors, *applied.errors]
         results: list[JsonValue] = []
         for imported in applied.imported:
@@ -677,7 +805,9 @@ class ZoteroBackgroundWorkflow:
         actor: Actor,
         operation: OperationContext,
         callback: ZoteroSyncWebhookData,
+        maintain_claim: Callable[[], None],
     ) -> dict[str, JsonValue]:
+        maintain_claim()
         sync_targets = self._executor.command(
             lambda capabilities: capabilities.zotero.sync_targets(
                 actor=actor,
@@ -687,6 +817,7 @@ class ZoteroBackgroundWorkflow:
         targets = {target.item_key: target for target in sync_targets}
         updates = []
         for value in callback.updates:
+            maintain_claim()
             target = targets.get(value.item_key)
             if target is None or target.attachment_key != value.attachment_key:
                 continue
@@ -700,6 +831,7 @@ class ZoteroBackgroundWorkflow:
                     page_dimensions=dimensions,
                 )
             )
+        maintain_claim()
         sync_result = self._executor.command(
             lambda capabilities: capabilities.zotero.complete_sync(
                 actor=actor,
@@ -722,12 +854,14 @@ class ZoteroBackgroundWorkflow:
             operation=operation,
             items=callback.auto_imports,
             credential_revision=callback.credential_revision,
+            maintain_claim=maintain_claim,
         )
         library_version = callback.library_version
         auto_import_cursor = _recoverable_auto_import_cursor(
             callback=callback,
             import_result=import_result,
         )
+        maintain_claim()
         checkpoint_advanced = self._executor.command(
             lambda capabilities: capabilities.zotero.advance_sync_checkpoint(
                 actor=actor,
@@ -817,6 +951,132 @@ def _zotero_sort(value: str) -> tuple[str, str]:
     }.get(value, ("dateModified", "desc"))
 
 
+async def _execute_planned_import(
+    *,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+    operations: ZoteroOperations,
+    operation_factory: OperationContextFactory,
+    actor: Actor,
+    operation: OperationContext,
+    planned: ZoteroImportPlanItem,
+    staged: _StagedZoteroImport,
+    credential_revision: UUID,
+    maintain_claim: Callable[[], None],
+) -> tuple[ZoteroImportItemResult | None, UUID | None, ZoteroImportError | None]:
+    """Consume one staged PDF so callback memory never scales with batch size."""
+    accept_operation = operation_factory.child(
+        operation,
+        initiated_by=OperationInitiator.SYSTEM,
+    )
+    proposed_job_id = uuid4()
+    ingestion: IngestPaper | None = None
+    acquired = False
+    try:
+        maintain_claim()
+        pdf_content = await operations.download_job_pdf(object_key=staged.object_key)
+        maintain_claim()
+        prepared_paper = PreparedPaperInput(
+            content=pdf_content,
+            filename=f"zotero-{planned.item.item_key}.pdf",
+            display_name=planned.item.title or f"Zotero {planned.item.item_key}",
+            source_kind="upload",
+        )
+        ingestion = executor.query(lambda capabilities: capabilities.paper_ingestion)
+        await ingestion.acquire(actor=actor, job_id=proposed_job_id)
+        acquired = True
+        maintain_claim()
+        await operations.upload_pdf(content=pdf_content)
+        maintain_claim()
+
+        def accept(
+            capabilities: ApplicationCapabilities,
+        ) -> tuple[AcceptedIngestion, ZoteroImportItemResult]:
+            accepted = capabilities.paper_ingestion.accept(
+                actor=actor,
+                operation=accept_operation,
+                prepared=prepared_paper,
+                project_id=None,
+                idempotency_key=(
+                    f"zotero:{planned.item.item_key}:"
+                    f"{accept_operation.trace.operation_id}"
+                ),
+                job_id=proposed_job_id,
+            )
+            document_id = accepted.ingestion.document_id
+            if document_id is None:
+                raise RuntimeError("accepted_zotero_ingestion_has_no_document")
+            capabilities.zotero.reserve_import_item(
+                actor=actor,
+                item_key=planned.item.item_key,
+                upload_job_id=accepted.ingestion.id,
+                credential_revision=credential_revision,
+            )
+            item_result = capabilities.zotero.complete_import_item(
+                actor=actor,
+                operation=accept_operation,
+                item=planned.item,
+                attachment=staged.attachment,
+                upload_job_id=accepted.ingestion.id,
+                document_id=document_id,
+                reused_document=not accepted.processing_required,
+                page_dimensions=staged.page_dimensions,
+                credential_revision=credential_revision,
+            )
+            return accepted, item_result
+
+        accepted, item_result = executor.command(accept)
+        document_id = accepted.ingestion.document_id
+        if document_id is None:
+            raise RuntimeError("accepted_zotero_ingestion_has_no_document")
+        if (
+            accepted.replayed
+            or accepted.ingestion.id != proposed_job_id
+            or not accepted.processing_required
+        ):
+            await ingestion.release(actor=actor, job_id=proposed_job_id)
+            acquired = False
+        return item_result, document_id, None
+    except asyncio.CancelledError:
+        if acquired and ingestion is not None:
+            await ingestion.release(actor=actor, job_id=proposed_job_id)
+        raise
+    except Exception as exc:
+        if acquired and ingestion is not None:
+            await ingestion.release(actor=actor, job_id=proposed_job_id)
+        if isinstance(exc, AppError) and exc.code in {
+            "zotero_credentials_rotated",
+            "zotero_callback_lease_lost",
+        }:
+            raise
+        logger.exception(
+            "zotero.item_import.failed",
+            extra={"zotero_item_key": planned.item.item_key},
+        )
+        maintain_claim()
+        failure_operation = operation_factory.child(
+            accept_operation,
+            initiated_by=OperationInitiator.SYSTEM,
+        )
+        executor.command(
+            lambda capabilities: capabilities.zotero.fail_import_item(
+                actor=actor,
+                operation=failure_operation,
+                item_key=planned.item.item_key,
+                upload_job_id=None,
+                error_code="zotero_import_failed",
+                credential_revision=credential_revision,
+            )
+        )
+        return (
+            None,
+            None,
+            ZoteroImportError(
+                zotero_item_key=planned.item.item_key,
+                error="zotero_import_failed",
+            ),
+        )
+
+
 async def _execute_import_plan(
     *,
     executor: ApplicationExecutor[ApplicationCapabilities],
@@ -825,8 +1085,9 @@ async def _execute_import_plan(
     actor: Actor,
     operation: OperationContext,
     plan: ZoteroImportPlan,
-    content_by_item_key: dict[str, ZoteroImportContent],
+    staged_by_item_key: dict[str, _StagedZoteroImport],
     credential_revision: UUID,
+    maintain_claim: Callable[[], None],
 ) -> ZoteroImportResponse:
     imported = []
     errors = list(plan.errors)
@@ -837,11 +1098,12 @@ async def _execute_import_plan(
         if planned.disposition == "link_existing":
             existing_document_id = planned.document_id
             assert existing_document_id is not None
-            prepared_content = content_by_item_key.get(planned.item.item_key)
-            if prepared_content is None:
+            staged = staged_by_item_key.get(planned.item.item_key)
+            if staged is None:
                 raise RuntimeError("zotero_worker_import_content_missing")
-            attachment = prepared_content.attachment
-            page_dimensions = prepared_content.page_dimensions
+            attachment = staged.attachment
+            page_dimensions = staged.page_dimensions
+            maintain_claim()
             link_operation = operation_factory.child(
                 operation,
                 initiated_by=OperationInitiator.SYSTEM,
@@ -861,134 +1123,28 @@ async def _execute_import_plan(
         if planned.disposition == "link_batch":
             continue
 
-        content = content_by_item_key.get(planned.item.item_key)
-        if content is None:
+        staged = staged_by_item_key.get(planned.item.item_key)
+        if staged is None:
             raise RuntimeError("zotero_worker_import_content_missing")
-        if content.pdf_content is None:
-            error_code = content.error or "No PDF available"
-            failure_operation = operation_factory.child(
-                operation,
-                initiated_by=OperationInitiator.SYSTEM,
-            )
-            executor.command(
-                lambda capabilities: capabilities.zotero.fail_import_item(
-                    actor=actor,
-                    operation=failure_operation,
-                    item_key=planned.item.item_key,
-                    upload_job_id=None,
-                    error_code=error_code,
-                    credential_revision=credential_revision,
-                )
-            )
-            errors.append(
-                ZoteroImportError(
-                    zotero_item_key=planned.item.item_key,
-                    error=error_code,
-                )
-            )
+        item_result, document_id, error = await _execute_planned_import(
+            executor=executor,
+            operations=operations,
+            operation_factory=operation_factory,
+            actor=actor,
+            operation=operation,
+            planned=planned,
+            staged=staged,
+            credential_revision=credential_revision,
+            maintain_claim=maintain_claim,
+        )
+        if error is not None:
+            errors.append(error)
             continue
-
-        prepared_paper = PreparedPaperInput(
-            content=content.pdf_content,
-            filename=f"zotero-{planned.item.item_key}.pdf",
-            display_name=planned.item.title or f"Zotero {planned.item.item_key}",
-            source_kind="upload",
-        )
-        accept_operation = operation_factory.child(
-            operation,
-            initiated_by=OperationInitiator.SYSTEM,
-        )
-        proposed_job_id = uuid4()
-        ingestion: IngestPaper | None = None
-        acquired = False
-
-        try:
-            ingestion = executor.query(
-                lambda capabilities: capabilities.paper_ingestion
-            )
-            await ingestion.acquire(actor=actor, job_id=proposed_job_id)
-            acquired = True
-            await operations.upload_pdf(content=content.pdf_content)
-
-            def accept(
-                capabilities: ApplicationCapabilities,
-            ) -> tuple[AcceptedIngestion, ZoteroImportItemResult]:
-                accepted = capabilities.paper_ingestion.accept(
-                    actor=actor,
-                    operation=accept_operation,
-                    prepared=prepared_paper,
-                    project_id=None,
-                    idempotency_key=(
-                        f"zotero:{planned.item.item_key}:"
-                        f"{accept_operation.trace.operation_id}"
-                    ),
-                    job_id=proposed_job_id,
-                )
-                document_id = accepted.ingestion.document_id
-                if document_id is None:
-                    raise RuntimeError("accepted_zotero_ingestion_has_no_document")
-                capabilities.zotero.reserve_import_item(
-                    actor=actor,
-                    item_key=planned.item.item_key,
-                    upload_job_id=accepted.ingestion.id,
-                    credential_revision=credential_revision,
-                )
-                item_result = capabilities.zotero.complete_import_item(
-                    actor=actor,
-                    operation=accept_operation,
-                    item=planned.item,
-                    attachment=content.attachment,
-                    upload_job_id=accepted.ingestion.id,
-                    document_id=document_id,
-                    reused_document=not accepted.processing_required,
-                    page_dimensions=content.page_dimensions,
-                    credential_revision=credential_revision,
-                )
-                return accepted, item_result
-
-            accepted, item_result = executor.command(accept)
-            imported.append(item_result)
-            document_id = accepted.ingestion.document_id
-            if document_id is None:
-                raise RuntimeError("accepted_zotero_ingestion_has_no_document")
-            document_by_item_key[planned.item.item_key] = document_id
-            dimensions_by_item_key[planned.item.item_key] = content.page_dimensions
-            if (
-                accepted.replayed
-                or accepted.ingestion.id != proposed_job_id
-                or not accepted.processing_required
-            ):
-                await ingestion.release(actor=actor, job_id=proposed_job_id)
-                acquired = False
-        except Exception as exc:
-            logger.exception(
-                "zotero.item_import.failed",
-                extra={"zotero_item_key": planned.item.item_key},
-            )
-            if acquired and ingestion is not None:
-                await ingestion.release(actor=actor, job_id=proposed_job_id)
-            if isinstance(exc, AppError) and exc.code == "zotero_credentials_rotated":
-                raise
-            failure_operation = operation_factory.child(
-                accept_operation,
-                initiated_by=OperationInitiator.SYSTEM,
-            )
-            executor.command(
-                lambda capabilities: capabilities.zotero.fail_import_item(
-                    actor=actor,
-                    operation=failure_operation,
-                    item_key=planned.item.item_key,
-                    upload_job_id=None,
-                    error_code="zotero_import_failed",
-                    credential_revision=credential_revision,
-                )
-            )
-            errors.append(
-                ZoteroImportError(
-                    zotero_item_key=planned.item.item_key,
-                    error="zotero_import_failed",
-                )
-            )
+        assert item_result is not None
+        assert document_id is not None
+        imported.append(item_result)
+        document_by_item_key[planned.item.item_key] = document_id
+        dimensions_by_item_key[planned.item.item_key] = staged.page_dimensions
 
     for planned in plan.items:
         if planned.disposition != "link_batch":
@@ -1004,9 +1160,10 @@ async def _execute_import_plan(
                 )
             )
             continue
-        prepared_content = content_by_item_key.get(planned.item.item_key)
-        if prepared_content is None:
+        staged = staged_by_item_key.get(planned.item.item_key)
+        if staged is None:
             raise RuntimeError("zotero_worker_import_content_missing")
+        maintain_claim()
         link_operation = operation_factory.child(
             operation,
             initiated_by=OperationInitiator.SYSTEM,
@@ -1016,7 +1173,7 @@ async def _execute_import_plan(
                 actor=actor,
                 operation=link_operation,
                 item=planned.item,
-                attachment=prepared_content.attachment,
+                attachment=staged.attachment,
                 document_id=document_id,
                 page_dimensions=dimensions_by_item_key.get(
                     source_item_key,

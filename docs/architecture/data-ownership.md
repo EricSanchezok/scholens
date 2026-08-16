@@ -209,7 +209,10 @@ identity, summary counts, safe terminal code, and ordered item results.
 Its DurableJob also owns a short-lived callback lease distinct from the worker
 lease. Server must atomically acquire that lease before applying provider
 outcomes; terminal, cancelled, concurrent, and replayed callbacks own no product
-side effects.
+side effects. The claim is renewable while the callback consumes a batch one
+PDF at a time. Server owns the 12-minute processing bound and 30-second
+heartbeat, Jobs waits up to 13 minutes, and the claim remains exclusive for 15
+minutes. These values are a shared service-neutral contract, not queue policy.
 `ZoteroImportedItem` links the user's Zotero item and optional attachment to
 the canonical Document and paper-ingestion job. It separately records
 `last_sync_attempted_at`, successful `last_synced_at`, annotation-source status,
@@ -231,6 +234,23 @@ Library memberships, or annotation threads already created through the
 integration. Jobs may retrieve the current Zotero API key only for a claimed,
 owner- and operation-scoped Zotero job. The key and revision follow the same
 payload, logging, callback, and stale-failure restrictions as MinerU.
+
+Jobs owns private `zotero-imports/` staging until a delivery has a definite
+Server outcome. It may delete staging after controlled provider failure or
+cooperative cancellation before delivery. Once delivery begins, Server may be
+reading the object; an HTTP timeout or connection failure is therefore
+ambiguous and preserves staging. Server deletes it after a definite claimed
+result, and the bucket's two-day lifecycle owns crash and ambiguous-delivery
+cleanup.
+
+Server owns canonical `documents/{sha256}/source.pdf` objects. Callback import
+holds only one downloaded PDF at a time. If cancellation interrupts a
+thread-backed canonical upload, Server tracks the still-running task until it
+settles without extending the callback processing bound. If cancellation wins
+before the matching Document transaction, the content-addressed object is
+retry-safe but may be unreferenced. Only reference-aware Server
+document-storage reconciliation may reclaim it; neither Jobs nor the Zotero
+staging cleanup path may delete canonical document content.
 
 `DocumentReflow`, its ordered `DocumentReflowBlock` rows, and
 `DocumentReflowAsset` rows are derived from the Document's canonical parser

@@ -39,12 +39,12 @@ from src.token_usage import collect_token_usage
 from src.utils import time_it
 from src.webhook_signing import post_signed_json
 from src.zotero import (
-    discard_prepared_items,
     ZoteroJobCredential,
     ZoteroJobError,
     import_items as import_zotero_items,
     sync_items as sync_zotero_items,
 )
+from scholens_job_contracts import ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS
 from src.schemas import AudioOverviewRequest
 
 logger = logging.getLogger(__name__)
@@ -168,15 +168,34 @@ def _deliver_webhook(
     payload: dict[str, Any],
     *,
     task_id: str,
+    timeout: float = 60,
 ) -> bool:
+    response: requests.Response | None = None
     try:
-        response = post_signed_json(webhook_url, payload, timeout=60)
+        response = post_signed_json(webhook_url, payload, timeout=timeout)
         response.raise_for_status()
         logger.info("job.webhook.delivered", extra={"job_id": task_id})
         return True
     except requests.RequestException:
         logger.exception("job.webhook.delivery_failed", extra={"job_id": task_id})
         return False
+    finally:
+        if response is not None:
+            response.close()
+
+
+def _deliver_zotero_webhook(
+    webhook_url: str,
+    payload: dict[str, Any],
+    *,
+    task_id: str,
+) -> bool:
+    return _deliver_webhook(
+        webhook_url,
+        payload,
+        task_id=task_id,
+        timeout=ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS,
+    )
 
 
 def _claim_job(claim_url: str | None, *, task_id: str) -> bool:
@@ -789,7 +808,7 @@ def import_zotero_items_task(
             "error_code": exc.code,
             "items": [],
         }
-        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        if not _deliver_zotero_webhook(webhook_url, payload, task_id=task_id):
             raise RuntimeError("zotero_import_callback_failed")
         return payload
     if expected_revision != credential.revision:
@@ -801,7 +820,7 @@ def import_zotero_items_task(
             "error_code": "zotero_credentials_rotated",
             "items": [],
         }
-        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        if not _deliver_zotero_webhook(webhook_url, payload, task_id=task_id):
             raise RuntimeError("zotero_import_callback_failed")
         return payload
     if not _zotero_progress(progress_url, "fetching_library"):
@@ -831,8 +850,7 @@ def import_zotero_items_task(
             "error_code": exc.code,
             "items": [],
         }
-    if not _deliver_webhook(webhook_url, payload, task_id=task_id):
-        discard_prepared_items(payload.get("items") or [])
+    if not _deliver_zotero_webhook(webhook_url, payload, task_id=task_id):
         raise RuntimeError("zotero_import_callback_failed")
     return payload
 
@@ -863,7 +881,7 @@ def sync_zotero_task(
             "failures": [],
             "auto_imports": [],
         }
-        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        if not _deliver_zotero_webhook(webhook_url, payload, task_id=task_id):
             raise RuntimeError("zotero_sync_callback_failed")
         return payload
     if expected_revision != credential.revision:
@@ -877,7 +895,7 @@ def sync_zotero_task(
             "failures": [],
             "auto_imports": [],
         }
-        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        if not _deliver_zotero_webhook(webhook_url, payload, task_id=task_id):
             raise RuntimeError("zotero_sync_callback_failed")
         return payload
     if not _zotero_progress(progress_url, "syncing_annotations"):
@@ -927,7 +945,6 @@ def sync_zotero_task(
             "failures": [],
             "auto_imports": [],
         }
-    if not _deliver_webhook(webhook_url, payload, task_id=task_id):
-        discard_prepared_items(payload.get("auto_imports") or [])
+    if not _deliver_zotero_webhook(webhook_url, payload, task_id=task_id):
         raise RuntimeError("zotero_sync_callback_failed")
     return payload

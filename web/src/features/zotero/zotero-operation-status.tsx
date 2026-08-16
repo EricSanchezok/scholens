@@ -123,6 +123,11 @@ export function ZoteroOperationStatus({
           )}
         </p>
       ) : null}
+      {terminal && value.error_code ? (
+        <p className="text-danger text-sm" role="alert">
+          {t(zoteroOperationErrorKey(value.error_code))}
+        </p>
+      ) : null}
       {(value.items?.length ?? 0) > 0 && terminal ? (
         <ul className="grid gap-1 text-sm">
           {(value.items ?? [])

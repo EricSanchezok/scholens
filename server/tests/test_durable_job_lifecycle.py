@@ -124,6 +124,43 @@ def test_callback_terminal_transition_requires_own_claim() -> None:
     assert job.status == JobStatus.RUNNING.value
 
 
+def test_callback_heartbeat_renews_only_the_current_unexpired_claim() -> None:
+    claim_id = uuid4()
+    job = _job(status=JobStatus.RUNNING)
+    original_expiry = datetime.now(UTC) + timedelta(minutes=1)
+    job.callback_lease_id = claim_id
+    job.callback_lease_expires_at = original_expiry
+    job.lease_expires_at = original_expiry
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = job
+
+    renewed = job_repository.heartbeat_callback(
+        db,
+        job_id=job.id,
+        requested_by_id=7,
+        claim_id=claim_id,
+        lease=timedelta(minutes=5),
+    )
+
+    assert renewed is True
+    assert job.callback_lease_expires_at > original_expiry
+    assert job.lease_expires_at == job.callback_lease_expires_at
+    db.flush.assert_called_once_with()
+
+    job.callback_lease_id = uuid4()
+    db.flush.reset_mock()
+    assert (
+        job_repository.heartbeat_callback(
+            db,
+            job_id=job.id,
+            requested_by_id=7,
+            claim_id=claim_id,
+        )
+        is False
+    )
+    db.flush.assert_not_called()
+
+
 def test_expired_worker_lease_requeues_the_existing_dispatch() -> None:
     job = _job(status=JobStatus.RUNNING)
     job.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)

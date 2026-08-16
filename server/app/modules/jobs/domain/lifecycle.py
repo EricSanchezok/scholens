@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from app.shared.domain.enums import JobStatus
+from scholens_job_contracts import ZOTERO_CALLBACK_LEASE_SECONDS
 
 DEFAULT_JOB_LEASE = timedelta(hours=1)
-DEFAULT_CALLBACK_LEASE = timedelta(minutes=15)
+DEFAULT_CALLBACK_LEASE = timedelta(seconds=ZOTERO_CALLBACK_LEASE_SECONDS)
 
 
 def can_claim_job(

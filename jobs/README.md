@@ -100,12 +100,23 @@ rolling back accepted papers. Provider rate limits use bounded retry delay;
 credential replacement, disconnect, and cancellation are checked at expensive
 boundaries. Every outbound session ignores environment proxies; public PDF
 redirects are revalidated against the connected peer address, and a Zotero API
-key is never forwarded across origins. Controlled failures, cancellation, and
-failed callback delivery remove temporary `zotero-imports/` objects.
+key is never forwarded across origins. Controlled provider failures and
+cooperative cancellation before callback delivery remove temporary
+`zotero-imports/` objects. An HTTP timeout, connection loss, or 5xx after
+delivery begins has an unknown Server outcome, so Jobs must retain those
+objects; Server removes them after definite completion, while the bucket's
+two-day lifecycle is the crash and ambiguous-delivery fallback.
 Worker inputs and provider outputs must use canonical eight-character Zotero
 item, attachment, collection, and annotation keys. Metadata and annotation
 snapshots are bounded before callback delivery so a provider-controlled library
 cannot amplify an internal callback without limit.
+
+The shared completion contract gives Server a 12-minute processing bound,
+Jobs a 13-minute HTTP timeout, and the Server claim a renewable 15-minute
+lease with a 30-second heartbeat. This ordering lets a healthy Server return a
+stable timeout before Jobs abandons the request, while an active callback
+cannot be recovered by a second replica. Jobs never deletes staging merely
+because its own HTTP wait elapsed.
 
 A sync fetches new annotations for papers already imported into Scholens and
 returns their Zotero annotation keys for idempotent append-only application.

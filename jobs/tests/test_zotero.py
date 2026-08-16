@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from scholens_job_contracts import ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS
 
+from src.tasks import import_zotero_items_task
 from src.zotero import (
     ZoteroClient,
     ZoteroJobCredential,
@@ -148,6 +150,45 @@ def test_import_deletes_staging_objects_after_cooperative_cancellation() -> None
 
     assert raised.value.code == "zotero_operation_cancelled"
     delete_file.assert_called_once_with("zotero-imports/job-1/ITEM0001.pdf")
+
+
+def test_callback_timeout_keeps_staging_for_server_or_lifecycle_cleanup() -> None:
+    task_id = "10000000-0000-4000-8000-000000000001"
+    staged_key = f"zotero-imports/{task_id}/ITEM0001.pdf"
+    prepared = [
+        {
+            "item_key": "ITEM0001",
+            "status": "ready",
+            "s3_object_key": staged_key,
+        }
+    ]
+
+    with (
+        patch("src.tasks._claim_job", return_value=True),
+        patch("src.tasks._zotero_progress", return_value=True),
+        patch("src.tasks._fetch_zotero_credential", return_value=_credential()),
+        patch("src.tasks.import_zotero_items", return_value=(prepared, 10)),
+        patch(
+            "src.tasks.post_signed_json",
+            side_effect=requests.Timeout("callback result unknown"),
+        ) as post,
+        patch("src.zotero.s3_service.delete_file") as delete_file,
+    ):
+        with pytest.raises(RuntimeError, match="zotero_import_callback_failed"):
+            import_zotero_items_task.apply(
+                args=(
+                    {"item_keys": ["ITEM0001"], "credential_revision": "revision-1"},
+                    "https://server.example/callback",
+                    "https://server.example/claim",
+                    "https://server.example/credential",
+                    "https://server.example/progress",
+                ),
+                task_id=task_id,
+                throw=True,
+            ).get()
+
+    assert post.call_args.kwargs["timeout"] == ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS
+    delete_file.assert_not_called()
 
 
 def test_version_batch_stays_bounded_when_more_than_fifty_share_a_version() -> None:

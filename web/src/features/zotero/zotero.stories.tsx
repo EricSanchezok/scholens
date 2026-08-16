@@ -423,6 +423,54 @@ export const PartialSuccess: Story = {
   },
 };
 
+export const FailedCallbackTimeout: Story = {
+  render: () => (
+    <ZoteroOperationStatus
+      initialOperation={{
+        completed_at: "2026-08-16T08:12:00Z",
+        counts: { failed: 0, skipped: 0, succeeded: 0, total: 2 },
+        created_at: "2026-08-16T08:00:00Z",
+        error_code: "zotero_callback_processing_timeout",
+        id: "51000000-0000-4000-8000-000000000102",
+        items: [],
+        kind: "import",
+        started_at: "2026-08-16T08:00:10Z",
+        status: "failed",
+      }}
+      operationId="51000000-0000-4000-8000-000000000102"
+      onComplete={fn()}
+      onDismiss={fn()}
+    />
+  ),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get(`${api}/imports/:operationId`, () =>
+          HttpResponse.json({
+            completed_at: "2026-08-16T08:12:00Z",
+            counts: { failed: 0, skipped: 0, succeeded: 0, total: 2 },
+            created_at: "2026-08-16T08:00:00Z",
+            error_code: "zotero_callback_processing_timeout",
+            id: "51000000-0000-4000-8000-000000000102",
+            items: [],
+            kind: "import",
+            started_at: "2026-08-16T08:00:10Z",
+            status: "failed",
+          }),
+        ),
+      ],
+    },
+  },
+  play: async () => {
+    const body = within(document.body);
+    await expect(
+      await body.findByText(
+        "Scholens took too long to finish this Zotero batch. Try the import or sync again.",
+      ),
+    ).toBeVisible();
+  },
+};
+
 export const RecoveredRunningImport: Story = {
   render: () => (
     <ZoteroOperationStatus

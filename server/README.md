@@ -313,6 +313,24 @@ lease. Terminal, cancelled, concurrent, and replayed deliveries make no
 connection, paper, annotation, journal, or storage mutation. Canonical
 eight-character Zotero keys and bounded metadata/annotation callback payloads
 are enforced at both public and internal boundaries.
+Import callbacks plan deduplication and quota decisions before downloading any
+staged content, then consume one PDF at a time. A 50-paper operation therefore
+holds at most one 30 MiB provider PDF payload in the API process. The callback
+renews its 15-minute claim every 30 seconds, has a 12-minute processing bound,
+and rechecks the claim after download, after ingestion-capacity acquisition,
+and before each persistent mutation. Claim loss releases an acquired permit
+without uploading or accepting that paper.
+
+Server deletes `zotero-imports/` staging only after a callback has a definite,
+owned result. Processing timeout, request cancellation, lease loss, or an
+unknown HTTP delivery outcome preserves staging for retry or the bucket's
+two-day lifecycle. A canonical `documents/{sha256}/source.pdf` upload cannot
+stop its underlying thread when the callback is cancelled. Server retains an
+explicit task reference until that write settles without delaying the callback
+processing bound or treating the write as cleaned up. A completed but
+unreferenced content-addressed write is safe to reuse; reclamation belongs to
+reference-aware Server document storage reconciliation, never eager callback
+cleanup that could delete another ingestion's source.
 
 A manual sync inspects only already imported papers. Researcher scheduling
 automatically syncs their annotations and may also import later Zotero items

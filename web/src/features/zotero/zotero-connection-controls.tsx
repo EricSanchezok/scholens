@@ -16,7 +16,11 @@ import {
   zoteroKeys,
   zoteroQueries,
 } from "./api";
-import { zoteroOAuthResultKey, zoteroSettingsErrorKey } from "./message-keys";
+import {
+  zoteroOAuthResultKey,
+  zoteroOperationErrorKey,
+  zoteroSettingsErrorKey,
+} from "./message-keys";
 import { buildZoteroReturnPath } from "./oauth-return";
 
 function zoteroErrorCode(error: unknown) {
@@ -33,6 +37,7 @@ export function ZoteroConnectionControls({
   onDisconnect: () => void;
 }) {
   const t = useTranslations("Zotero.settings");
+  const operationT = useTranslations("Zotero.operation");
   const oauthT = useTranslations("Zotero.oauth");
   const format = useFormatter();
   const router = useRouter();
@@ -256,16 +261,26 @@ export function ZoteroConnectionControls({
                 </p>
               ) : null}
               {operation.data ? (
-                <p
-                  className={
-                    operation.data.status === "failed"
-                      ? "text-danger"
-                      : "text-secondary"
-                  }
-                  role="status"
-                >
-                  {t(`operation.${operation.data.status}`)}
-                </p>
+                <div className="grid gap-1">
+                  <p
+                    className={
+                      operation.data.status === "failed"
+                        ? "text-danger"
+                        : "text-secondary"
+                    }
+                    role="status"
+                  >
+                    {t(`operation.${operation.data.status}`)}
+                  </p>
+                  {["failed", "partial"].includes(operation.data.status) &&
+                  operation.data.error_code ? (
+                    <p className="text-danger" role="alert">
+                      {operationT(
+                        zoteroOperationErrorKey(operation.data.error_code),
+                      )}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
               {current.active_operation_kind === "import" ? (
                 <p className="text-secondary" role="status">

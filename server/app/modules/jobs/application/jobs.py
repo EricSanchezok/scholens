@@ -86,6 +86,14 @@ class IdempotentOperationPort(Protocol):
         requested_by_id: int,
     ) -> OperationClaim: ...
 
+    def heartbeat_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+        claim_id: UUID,
+    ) -> bool: ...
+
     def complete(
         self,
         *,

@@ -118,6 +118,9 @@ def _page_dimensions(content: bytes) -> PageDimensions:
 class DefaultZoteroOperations:
     """Calls remote providers only; it never owns or receives a database Session."""
 
+    def __init__(self) -> None:
+        self._detached_uploads: set[asyncio.Task[str]] = set()
+
     def request_token(self) -> ZoteroRequestToken | None:
         result = zotero_auth_client.get_request_token()
         if result is None:
@@ -258,11 +261,32 @@ class DefaultZoteroOperations:
     async def upload_pdf(self, *, content: bytes) -> None:
         import hashlib
 
-        await asyncio.to_thread(
-            s3_service.upload_document_source,
-            sha256=hashlib.sha256(content).hexdigest(),
-            pdf_bytes=content,
+        upload = asyncio.create_task(
+            asyncio.to_thread(
+                s3_service.upload_document_source,
+                sha256=hashlib.sha256(content).hexdigest(),
+                pdf_bytes=content,
+            )
         )
+        try:
+            await asyncio.shield(upload)
+        except asyncio.CancelledError:
+            # A to_thread call cannot be stopped. Keep a strong reference until the
+            # content-addressed write settles, but do not defeat the callback timeout.
+            self._detached_uploads.add(upload)
+            upload.add_done_callback(self._finish_detached_upload)
+            raise
+
+    def _finish_detached_upload(self, upload: asyncio.Task[str]) -> None:
+        self._detached_uploads.discard(upload)
+        if upload.cancelled():
+            return
+        error = upload.exception()
+        if error is not None:
+            logger.warning(
+                "zotero.canonical_upload.failed_after_cancellation",
+                extra={"exception_type": type(error).__name__},
+            )
 
     async def download_job_pdf(self, *, object_key: str) -> bytes:
         if not object_key.startswith("zotero-imports/"):

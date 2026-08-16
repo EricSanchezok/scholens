@@ -324,6 +324,44 @@ class JobRepository:
         return job, claim_id, True
 
     @staticmethod
+    def heartbeat_callback(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        requested_by_id: int,
+        claim_id: uuid.UUID,
+        lease: timedelta = DEFAULT_CALLBACK_LEASE,
+    ) -> bool:
+        """Renew an unexpired callback claim while its owner is still processing."""
+        now = datetime.now(UTC)
+        job = db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == requested_by_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if (
+            not can_complete_job(JobStatus(job.status))
+            or job.callback_lease_id != claim_id
+            or job.callback_lease_expires_at is None
+            or job.callback_lease_expires_at <= now
+        ):
+            return False
+        lease_expires_at = now + lease
+        job.callback_lease_expires_at = lease_expires_at
+        job.lease_expires_at = lease_expires_at
+        db.flush()
+        return True
+
+    @staticmethod
     def recover_expired_leases(db: Session, *, limit: int) -> int:
         """Return abandoned jobs to the outbox without creating a second job."""
         now = datetime.now(UTC)

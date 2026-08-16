@@ -232,6 +232,13 @@ lease. A terminal, cancelled, concurrent, or replayed callback exits before
 provider-outcome recording or any import, annotation, journal, or storage
 mutation. Callback keys, staging paths, metadata, annotation content, and total
 serialized size are validated against bounded internal contracts.
+The renewable claim uses a 30-second heartbeat and 15-minute lease around a
+12-minute Server processing bound; Jobs waits 13 minutes for the signed HTTP
+result. Import planning precedes any staged download, and Server consumes one
+PDF at a time with claim checks after download and capacity acquisition. A lost
+claim releases the capacity permit before upload. Ambiguous delivery timeout or
+request cancellation preserves `zotero-imports/` staging for retry and the
+two-day lifecycle instead of racing a Server reader.
 
 Manual sync includes only already imported Zotero items. Scheduled sync is
 eligible only for Researcher and uses Zotero library/item versions for

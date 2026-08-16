@@ -161,6 +161,20 @@ class SqlAlchemyJobsGateway:
             acquired=acquired,
         )
 
+    def heartbeat_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+        claim_id: UUID,
+    ) -> bool:
+        return job_repository.heartbeat_callback(
+            self._db,
+            job_id=operation_id,
+            requested_by_id=requested_by_id,
+            claim_id=claim_id,
+        )
+
     def fail(
         self,
         *,

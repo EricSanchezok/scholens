@@ -64,7 +64,31 @@ Before any callback outcome or product mutation, Server atomically claims a
 separate expiring callback lease on the non-terminal job. Completed, failed,
 cancelled, concurrent, and replayed callbacks therefore exit before connection,
 document, import, annotation, journal, or object-storage side effects. The lease
-expires with the job recovery boundary after a crash.
+is renewed while processing. Shared service-neutral timing fixes the processing
+bound at 12 minutes, the Jobs HTTP wait at 13 minutes, the renewable claim at
+15 minutes, and its heartbeat at 30 seconds. This makes recovery mutually
+exclusive while allowing Server to return a stable processing timeout before
+the caller stops waiting.
+
+Server plans the complete import batch before reading staging, then downloads,
+acquires capacity, uploads, and persists one paper at a time. Resident PDF
+memory is therefore bounded by one item rather than the batch maximum. Claim
+checks after download and after capacity acquisition prevent cancelled work
+from continuing into canonical storage; a lost claim after acquisition releases
+that permit. Because a thread-backed canonical upload cannot be cancelled
+safely, Server retains an explicit task reference until it settles but does not
+delay the callback processing bound or claim that the source was cleaned up.
+The `documents/{sha256}` identity makes retry idempotent, but a settled write
+may still be unreferenced if cancellation wins before the database command;
+reference-aware Server storage reconciliation owns that eventual reclamation.
+The callback must not eagerly delete canonical content that another ingestion
+may reference.
+
+`zotero-imports/` staging has different ownership. Server deletes it after a
+definite owned callback result, and Jobs deletes it only for controlled failure
+or cancellation before delivery. Transport timeout and connection failure are
+ambiguous—Server may still be reading—so neither side deletes staging then; the
+two-day bucket lifecycle is the crash and ambiguous-delivery backstop.
 
 Manual sync applies new annotations only to papers already imported from
 Zotero. Researcher scheduled sync performs the same annotation work. Automatic
@@ -131,13 +155,14 @@ not enable scheduler or deployment configuration.
 
 Server tests cover OAuth expiry/replay/return paths, encrypted secrets,
 permission verification, cursor binding, 100-item pagination, quota,
-idempotency, callback leases/replay, bounded callback content, complete
+idempotency, callback leases/replay/heartbeat, bounded callback content and
+one-PDF import memory, cancellation during canonical upload, complete
 collection pagination, visible-item attachment classification, checkpoints,
 fair failed-target scheduling, entitlement pause/resume, stale revisions,
 cancellation, and retained data. Jobs tests cover success, partial failure,
 rate limiting, canonical keys, credential rotation, retry, cancellation, PDF safety, version
-pagination, and secret-free logging. Web unit and Storybook tests cover OAuth
+pagination, callback timeout retention, and secret-free logging. Web unit and Storybook tests cover OAuth
 return, connection management, browsing, collection pagination beyond 100,
 retained selection across pages,
 quota, batch progress, partial completion, keyboard behavior, narrow layouts,
-themes, and English/Simplified Chinese states.
+themes, job-level recovery errors, and English/Simplified Chinese states.

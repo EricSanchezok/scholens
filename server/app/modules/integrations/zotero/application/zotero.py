@@ -286,15 +286,6 @@ class ZoteroAttachmentSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
-class ZoteroImportContent:
-    item: ZoteroItemSnapshot
-    attachment: ZoteroAttachmentSnapshot
-    pdf_content: bytes | None
-    page_dimensions: PageDimensions
-    error: str | None
-
-
-@dataclass(frozen=True, slots=True)
 class ZoteroImportPlanItem:
     item: ZoteroItemSnapshot
     disposition: Literal["import", "link_existing", "link_batch"]
@@ -788,6 +779,19 @@ class Zotero:
         return self._idempotency.claim_completion(
             operation_id=operation_id,
             requested_by_id=actor.id,
+        )
+
+    def heartbeat_background_operation(
+        self,
+        *,
+        actor: Actor,
+        operation_id: UUID,
+        claim_id: UUID,
+    ) -> bool:
+        return self._idempotency.heartbeat_completion(
+            operation_id=operation_id,
+            requested_by_id=actor.id,
+            claim_id=claim_id,
         )
 
     def plan_import(

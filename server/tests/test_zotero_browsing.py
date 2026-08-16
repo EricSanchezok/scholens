@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -5,6 +6,7 @@ from uuid import uuid4
 import pytest
 import requests
 
+from app.bootstrap.adapters.zotero_operations import DefaultZoteroOperations
 from app.bootstrap.workflows.zotero import ZoteroWorkflow
 from app.modules.integrations.zotero.application.contracts import ZoteroLibraryPage
 from app.modules.integrations.zotero.application.zotero import (
@@ -153,6 +155,32 @@ def test_visible_item_attachment_lookup_classifies_only_requested_page() -> None
         "limit": 100,
         "start": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_cancelled_canonical_upload_tracks_the_background_write() -> None:
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def blocked_to_thread(*_args: object, **_kwargs: object) -> None:
+        started.set()
+        await finish.wait()
+
+    operations = DefaultZoteroOperations()
+    with patch(
+        "app.bootstrap.adapters.zotero_operations.asyncio.to_thread",
+        side_effect=blocked_to_thread,
+    ):
+        task = asyncio.create_task(operations.upload_pdf(content=b"%PDF-staged"))
+        await started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(operations._detached_uploads) == 1
+        finish.set()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert operations._detached_uploads == set()
 
 
 def test_library_cursor_is_bound_to_owner_and_filters() -> None:

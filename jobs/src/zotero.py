@@ -466,18 +466,6 @@ def _delete_uploaded_keys(object_keys: list[str]) -> None:
             )
 
 
-def discard_prepared_items(items: Iterable[dict[str, Any]]) -> None:
-    _delete_uploaded_keys(
-        [
-            object_key
-            for item in items
-            if isinstance(item, dict)
-            and isinstance((object_key := item.get("s3_object_key")), str)
-            and object_key.startswith("zotero-imports/")
-        ]
-    )
-
-
 def _annotations_json(annotations: list[dict[str, Any]]) -> str:
     stable = []
     for value in annotations:
