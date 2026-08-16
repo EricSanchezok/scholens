@@ -2281,8 +2281,6 @@ Resources:
           Fn::GetAtt:
           - ApiDiscoveryService
           - Arn
-        ContainerName: api
-        ContainerPort: 8000
       Tags:
       - Key: System
         Value: SanchezCloud

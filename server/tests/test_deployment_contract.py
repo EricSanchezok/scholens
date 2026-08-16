@@ -893,7 +893,14 @@ def test_runtime_uses_private_fargate_services_and_digest_images() -> None:
             "FARGATE_SPOT",
         }
 
-    assert resources["ApiDiscoveryService"]["Type"] == "AWS::ServiceDiscovery::Service"
+    discovery = resources["ApiDiscoveryService"]
+    assert discovery["Type"] == "AWS::ServiceDiscovery::Service"
+    assert discovery["Properties"]["DnsConfig"]["DnsRecords"] == [
+        {"Type": "A", "TTL": 10}
+    ]
+    assert services["ApiService"]["Properties"]["ServiceRegistries"] == [
+        {"RegistryArn": {"Fn::GetAtt": ["ApiDiscoveryService", "Arn"]}}
+    ]
     assert resources["WebAclAssociation"]["Type"] == "AWS::WAFv2::WebACLAssociation"
     runtime_text = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
     assert "/internal/v1" not in runtime_text
