@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.adapters.openalex import UserOpenAlex
 from app.bootstrap.settings import AppSettings
 from app.llm.conversation_agent import ScholensConversationAgent
 from app.llm.follow_up_suggestions import FollowUpSuggestionGenerator
@@ -74,17 +75,33 @@ def create_connector_tool_resolver(
     )
 
 
+def create_user_openalex(
+    *,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+    operation_factory: OperationContextFactory,
+) -> UserOpenAlex:
+    return UserOpenAlex(
+        executor=executor,
+        operation_factory=operation_factory,
+    )
+
+
 def create_integration_workflow(
     *,
     executor: ApplicationExecutor[ApplicationCapabilities],
     resolver: object,
+    openalex: UserOpenAlex,
 ) -> IntegrationWorkflow:
     from app.modules.integrations.connectors.infrastructure.mcp import (
         ConnectorToolResolver,
     )
 
     assert isinstance(resolver, ConnectorToolResolver)
-    return IntegrationWorkflow(executor=executor, resolver=resolver)
+    return IntegrationWorkflow(
+        executor=executor,
+        resolver=resolver,
+        openalex=openalex,
+    )
 
 
 def create_conversation_chat(
@@ -112,6 +129,7 @@ def create_citation_workflow(
     *,
     executor: ApplicationExecutor[ApplicationCapabilities],
     connector_tools: object,
+    openalex: UserOpenAlex,
     operation_factory: OperationContextFactory,
 ) -> CitationWorkflow:
     from app.bootstrap.adapters.citation_provider import CitationMetadataProvider
@@ -122,7 +140,7 @@ def create_citation_workflow(
     assert isinstance(connector_tools, ConnectorToolResolver)
     return CitationWorkflow(
         executor=executor,
-        provider=CitationMetadataProvider(connector_tools),
+        provider=CitationMetadataProvider(connector_tools, openalex),
         operation_factory=operation_factory,
     )
 
@@ -132,6 +150,7 @@ def create_paper_discovery_workflow(
     executor: ApplicationExecutor[ApplicationCapabilities],
     settings: AppSettings,
     operation_factory: OperationContextFactory,
+    openalex: UserOpenAlex,
 ) -> PaperDiscoveryWorkflow:
     from app.bootstrap.container import build_external_paper_discovery
 
@@ -139,6 +158,7 @@ def create_paper_discovery_workflow(
         executor=executor,
         external=build_external_paper_discovery(
             cursor_secret=settings.paper_search_cursor_secret,
+            catalog=openalex,
         ),
         operation_factory=operation_factory,
     )
@@ -279,6 +299,7 @@ def create_stripe_webhook_processor(
 def create_paper_ingestion_workflow(
     executor: ApplicationExecutor[ApplicationCapabilities],
     operation_factory: OperationContextFactory,
+    openalex: UserOpenAlex,
 ) -> PaperIngestionWorkflow:
     from app.bootstrap.container import (
         build_paper_source_resolver,
@@ -289,7 +310,7 @@ def create_paper_ingestion_workflow(
     return PaperIngestionWorkflow(
         executor=executor,
         url_source=build_pdf_url_source(),
-        source_resolver=build_paper_source_resolver(),
+        source_resolver=build_paper_source_resolver(openalex=openalex),
         operation_factory=operation_factory,
         jobs=jobs_client,
     )
@@ -357,6 +378,7 @@ def create_job_completion_processor(
     executor: ApplicationExecutor[ApplicationCapabilities],
     connector_tools: object,
     operation_factory: OperationContextFactory,
+    openalex: UserOpenAlex,
 ) -> JobCompletionProcessor:
     from app.bootstrap.adapters.citation_provider import CitationMetadataProvider
     from app.bootstrap.adapters.document_job_callbacks import (
@@ -375,7 +397,7 @@ def create_job_completion_processor(
         pdf_postprocess=PdfPostprocessWorkflow(
             executor=executor,
             reader=SqlAlchemyPdfPostprocessReader(SessionLocal),
-            provider=CitationMetadataProvider(connector_tools),
+            provider=CitationMetadataProvider(connector_tools, openalex),
             operation_factory=operation_factory,
         ),
         zotero_postprocess=ZoteroPostprocessWorkflow(

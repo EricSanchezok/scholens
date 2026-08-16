@@ -59,6 +59,22 @@ as one system rather than a collection of separately themed tools.
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
+## External scholarly catalogs use user-owned credentials
+
+OpenAlex access belongs to the researcher who connects it. Scholens does not
+ship or silently fall back to a shared OpenAlex credential. DOI import,
+external paper search, author works, and citation graphs use the current
+actor's enabled connection; a missing or rejected key produces a clear
+connection action. Upload, direct PDF URL, and arXiv import remain independent
+of OpenAlex. DOI import uses OpenAlex's catalog result as its deterministic
+source and never substitutes a general web-search provider.
+
+Bibliographic hydration remains usable without an OpenAlex connection:
+Crossref is consulted first, complete Crossref metadata ends the lookup, and
+OpenAlex may fill only missing fields when the current user has connected it.
+Provider credentials never enter public DTOs, logs, telemetry, or research
+provenance.
+
 Conversation history is durable research provenance. Editing a visible user
 prompt creates an alternate path from that point instead of rewriting the
 original prompt or discarding its answer. Switching prompt versions restores

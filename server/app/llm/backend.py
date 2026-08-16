@@ -193,7 +193,7 @@ class ProfiledChatBackend(LLMBackend):
 
     @staticmethod
     def _new_client(profile: AIProfile) -> openai.OpenAI:
-        if profile.provider not in {"deepseek", "openai", "moonshotai"}:
+        if profile.provider not in {"deepseek", "moonshotai"}:
             raise ValueError(
                 f"Profile {profile.name.value} selects {profile.provider}, which "
                 "does not expose the synchronous chat-compatible interface"

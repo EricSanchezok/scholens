@@ -49,8 +49,12 @@ class _Provider:
     def deterministic(
         self,
         *,
+        actor: Actor,
+        operation: OperationContext,
         fields: CitationFields,
     ) -> CitationProviderResult:
+        assert actor == _actor()
+        assert operation.initiated_by is OperationInitiator.SYSTEM
         self._events.append("external")
         return CitationProviderResult(
             patch=CitationMetadataPatch(doi="10.1/example"),

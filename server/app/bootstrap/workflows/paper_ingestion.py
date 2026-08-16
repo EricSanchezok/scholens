@@ -33,7 +33,14 @@ logger = logging.getLogger(__name__)
 
 
 class PaperSourceResolver(Protocol):
-    async def resolve(self, *, kind: str, value: str) -> str: ...
+    async def resolve(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        kind: str,
+        value: str,
+    ) -> str: ...
 
 
 class PaperIngestionWorkflow:
@@ -92,7 +99,12 @@ class PaperIngestionWorkflow:
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
-        url = await self._source_resolver.resolve(kind=kind, value=value)
+        url = await self._source_resolver.resolve(
+            actor=actor,
+            operation=operation,
+            kind=kind,
+            value=value,
+        )
         ingestion = self._executor.query(
             lambda capabilities: capabilities.paper_ingestion
         )

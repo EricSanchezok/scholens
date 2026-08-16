@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 
 import { authHandlers, actor } from "../../../.storybook/msw/auth-handlers";
@@ -266,6 +267,72 @@ export const AddPapersDuplicateSelection: Story = {
     await expect(body.getAllByText("same-paper.pdf")).toHaveLength(1);
     await expect(
       body.getByRole("button", { name: "Upload 1 file" }),
+    ).toBeVisible();
+  },
+};
+
+export const AddPapersOpenAlexRequired: Story = {
+  parameters: {
+    msw: {
+      handlers: [...authHandlers.success, ...libraryHandlers.openAlexRequired],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      await within(canvasElement).findByRole("button", { name: "Add papers" }),
+    );
+    const body = within(document.body);
+    await userEvent.type(
+      await body.findByPlaceholderText("10.1000/example"),
+      "10.1038/example",
+    );
+    await userEvent.click(body.getByRole("button", { name: "Add source" }));
+    await expect(
+      await body.findByText(/Connect your OpenAlex API key/),
+    ).toBeVisible();
+    await expect(body.getByDisplayValue("10.1038/example")).toBeVisible();
+    await userEvent.click(
+      body.getByRole("button", { name: "Connect OpenAlex" }),
+    );
+    await expect(getRouter().replace).toHaveBeenCalledWith(
+      expect.stringContaining("settings=connections"),
+      { scroll: false },
+    );
+  },
+};
+
+export const Mobile320AddPapersOpenAlexRequired: Story = {
+  ...AddPapersOpenAlexRequired,
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+};
+
+export const Mobile390AddPapersOpenAlexRequired: Story = {
+  ...AddPapersOpenAlexRequired,
+  globals: { viewport: { value: "mobile", isRotated: false } },
+};
+
+export const DarkChineseAddPapersOpenAlexRequired: Story = {
+  globals: { appearance: "dark", locale: "zh-CN" },
+  parameters: {
+    msw: {
+      handlers: [...authHandlers.success, ...libraryHandlers.openAlexRequired],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      await within(canvasElement).findByRole("button", { name: "添加论文" }),
+    );
+    const body = within(document.body);
+    await userEvent.type(
+      await body.findByPlaceholderText("10.1000/example"),
+      "10.1038/example",
+    );
+    await userEvent.click(body.getByRole("button", { name: "添加来源" }));
+    await expect(
+      await body.findByText(/需要先连接你自己的 OpenAlex API Key/),
+    ).toBeVisible();
+    await expect(
+      body.getByRole("button", { name: "连接 OpenAlex" }),
     ).toBeVisible();
   },
 };

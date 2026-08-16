@@ -434,6 +434,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       </div>
 
       <AddPapersDialog
+        onConnectOpenAlex={() => setSettingsSection("connections")}
         onOpenChange={setAddOpen}
         onSubmitSource={ingestion.submitSource}
         onUploadFiles={ingestion.startUploads}

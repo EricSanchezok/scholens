@@ -3329,7 +3329,7 @@ export interface components {
          * IntegrationProvider
          * @enum {string}
          */
-        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl";
+        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex";
         /** IntegrationUpdateRequest */
         IntegrationUpdateRequest: {
             /** Enabled */

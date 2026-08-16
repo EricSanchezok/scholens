@@ -50,6 +50,12 @@ a second capability map, provider-specific tool wrappers, or renamed connector
 aliases. A connector tool whose native name conflicts with another exposed tool
 is omitted explicitly instead of overriding it.
 
+OpenAlex is a separate user-level Connection backed by its official REST API,
+not a dynamic MCP connector and not a Server environment credential. The
+current actor's encrypted key gates DOI resolution, external paper search,
+author works, and citation graphs. Crossref metadata lookup runs first and can
+degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
+
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
@@ -265,6 +271,13 @@ visible at the beginning of the first forward page. PDF content SHA-256 is the s
 authority, including concurrent requests. `DELETE
 /api/v1/paper-ingestions/{job_id}` cancels an owned ingestion, and late worker
 callbacks cannot restore it.
+
+DOI source ingestion validates the identifier before requiring the current
+actor's enabled OpenAlex connection. It accepts only an open PDF location from
+that catalog and returns stable credential, rate-limit, or availability errors
+without substituting an MCP or general web-search result. A catalog `404` or a
+work with no open PDF retains the existing source-unavailable/not-found
+semantics.
 
 The PDF completion callback persists extracted metadata, generated summary,
 and summary citations on the canonical `Document`. Ingestion never creates a

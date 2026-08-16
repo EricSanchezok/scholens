@@ -20,7 +20,7 @@ from app.database.models import (
     UploadReservation,
 )
 from app.shared.domain import AppError, FailureKind
-from app.helpers.paper_search import normalize_doi
+from app.modules.papers.domain import normalize_doi
 from app.modules.papers.infrastructure.access import (
     get_document_access,
     require_document_access,

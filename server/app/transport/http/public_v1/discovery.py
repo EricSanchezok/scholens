@@ -29,9 +29,11 @@ async def search_external_papers(
     cursor: str | None = Query(default=None, max_length=2048),
     workflow: PaperDiscoveryWorkflow = Depends(get_paper_discovery_workflow),
     current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
 ) -> DiscoveryPaperListResponse:
     return await workflow.search(
         actor=current_user,
+        operation=operation,
         client_ip=http_client_ip(request),
         query=query,
         cursor=cursor,
@@ -63,9 +65,11 @@ async def get_author_works(
     cursor: str | None = Query(default=None, max_length=2048),
     workflow: PaperDiscoveryWorkflow = Depends(get_paper_discovery_workflow),
     current_user: Actor = Depends(get_required_user),
+    operation: OperationContext = Depends(get_required_operation),
 ) -> DiscoveryPaperListResponse:
     return await workflow.author_works(
         actor=current_user,
+        operation=operation,
         client_ip=http_client_ip(request),
         author_id=author_id,
         cursor=cursor,

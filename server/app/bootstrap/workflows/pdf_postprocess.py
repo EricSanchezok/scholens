@@ -93,6 +93,7 @@ class PdfPostprocessWorkflow:
             else await asyncio.to_thread(
                 self._resolve_external,
                 actor,
+                operation,
                 _require_fields(snapshot),
             )
         )
@@ -113,11 +114,16 @@ class PdfPostprocessWorkflow:
     def _resolve_external(
         self,
         actor: Actor,
+        operation: OperationContext,
         fields: CitationFields,
     ) -> PdfPostprocessResolution:
         deterministic_patch = CitationMetadataPatch()
         try:
-            deterministic = self._provider.deterministic(fields=fields)
+            deterministic = self._provider.deterministic(
+                actor=actor,
+                operation=operation,
+                fields=fields,
+            )
             deterministic_patch = deterministic.patch
         except Exception:
             logger.exception("paper.pdf_metadata.deterministic_resolution_failed")

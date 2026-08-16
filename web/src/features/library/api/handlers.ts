@@ -110,6 +110,40 @@ const populatedHandlers = [
 
 export const libraryHandlers = {
   populated: populatedHandlers,
+  openAlexRequired: [
+    http.post(`${api}/paper-ingestions/sources`, () =>
+      HttpResponse.json(
+        {
+          code: "openalex_credential_required",
+          details: { required_integration: "openalex" },
+          message: "A connected OpenAlex API key is required",
+          retryable: true,
+        },
+        { status: 409 },
+      ),
+    ),
+    http.get(`${api}/me/integrations`, () =>
+      HttpResponse.json({
+        items: [
+          {
+            category: "built_in",
+            enabled: true,
+            managed: true,
+            provider: "scholight",
+            state: "connected",
+          },
+          {
+            category: "search",
+            enabled: false,
+            managed: false,
+            provider: "openalex",
+            state: "disconnected",
+          },
+        ],
+      }),
+    ),
+    ...populatedHandlers,
+  ],
   empty: [
     http.get(`${api}/library/papers`, () =>
       HttpResponse.json({

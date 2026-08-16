@@ -266,7 +266,12 @@
       "sourceFailed": "无法添加此来源，请确认存在可访问的开放 PDF。",
       "sourcePending": "正在验证来源",
       "cancelSource": "取消",
+      "connectOpenAlex": "连接 OpenAlex",
       "errors": {
+        "openAlexRequired": "需要先连接你自己的 OpenAlex API Key，才能通过此 DOI 解析开放 PDF；当前 DOI 已保留。",
+        "openAlexInvalid": "你的 OpenAlex API Key 已失效，请在“连接”中更换，然后重新提交此 DOI。",
+        "openAlexRateLimited": "OpenAlex 正在限制此 API Key 的请求；当前 DOI 已保留，请稍后重试。",
+        "openAlexUnavailable": "OpenAlex 暂时不可用；当前 DOI 已保留，请稍后重试。",
         "unavailable": "没有找到可访问的开放 PDF。",
         "unsafeAddress": "不允许访问这个地址，请使用公网 PDF 直链。",
         "tooLarge": "此 PDF 超过 50 MB。",
@@ -1225,7 +1230,8 @@
         "anysearch": "AnySearch",
         "tavily": "Tavily",
         "exa": "Exa",
-        "firecrawl": "Firecrawl"
+        "firecrawl": "Firecrawl",
+        "openalex": "OpenAlex"
       },
       "providerDescription": {
         "scholight": "内置学术发现服务。",
@@ -1233,7 +1239,8 @@
         "anysearch": "网页与学术搜索。",
         "tavily": "用于研究溯源的网页搜索。",
         "exa": "语义网页搜索。",
-        "firecrawl": "研究来源的网页内容提取。"
+        "firecrawl": "研究来源的网页内容提取。",
+        "openalex": "DOI 解析、外部论文搜索、作者作品与引用图谱。"
       },
       "state": {
         "connected": "已连接",
@@ -1244,17 +1251,21 @@
       },
       "builtIn": "内置",
       "connect": "连接",
-      "replace": "更换 Token",
+      "replace": "更换凭据",
       "disconnect": "断开连接",
       "toggle": "启用 {provider}",
       "connectTitle": "连接 {provider}",
-      "secretDescription": "输入服务商提供的凭据。Scholens 会加密保存，并且仅向获得授权的运行中任务临时提供。",
+      "secretDescription": "输入服务商提供的凭据。Scholens 会加密保存，并仅用于你发起的服务端请求。",
       "accessToken": "Access Token",
+      "apiKey": "API Key",
       "tokenPlaceholder": "粘贴 Access Token",
+      "apiKeyPlaceholder": "粘贴 API Key",
       "tokenError": "请输入至少 8 个字符的有效 Token。",
+      "apiKeyError": "请输入至少 8 个字符的有效 API Key。",
       "showToken": "显示 Token",
       "hideToken": "隐藏 Token",
       "getMineruToken": "获取 MinerU Token",
+      "getOpenAlexKey": "获取 OpenAlex API Key",
       "getCredential": "打开服务商控制台",
       "save": "保存连接",
       "mineruSaveError": "无法保存此 MinerU Token，请检查后重试；系统会在首次使用时完成验证。",

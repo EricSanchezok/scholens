@@ -82,6 +82,7 @@ from app.bootstrap.execution import (
     create_research_generation_workflow,
     create_stripe_webhook_processor,
     create_translation_workflow,
+    create_user_openalex,
     create_workspace_tooling,
     create_zotero_workflow,
 )
@@ -191,19 +192,26 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         executor=executor,
         settings=runtime_settings,
     )
+    user_openalex = create_user_openalex(
+        executor=executor,
+        operation_factory=operation_context_factory,
+    )
     application.state.connector_tool_resolver = connector_tool_resolver
     application.state.integration_workflow = create_integration_workflow(
         executor=executor,
         resolver=connector_tool_resolver,
+        openalex=user_openalex,
     )
     ingestion_workflow = create_paper_ingestion_workflow(
         executor,
         operation_context_factory,
+        user_openalex,
     )
     citation_workflow = create_citation_workflow(
         executor=executor,
         connector_tools=connector_tool_resolver,
         operation_factory=operation_context_factory,
+        openalex=user_openalex,
     )
     tool_catalog, tool_dispatcher = create_workspace_tooling(
         executor=executor,
@@ -251,6 +259,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         executor=executor,
         settings=runtime_settings,
         operation_factory=operation_context_factory,
+        openalex=user_openalex,
     )
     application.state.research_generation_workflow = (
         create_research_generation_workflow(executor, operation_context_factory)
@@ -268,6 +277,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         executor,
         connector_tool_resolver,
         operation_context_factory,
+        user_openalex,
     )
     application.add_middleware(UnhandledErrorMiddleware)
     application.add_middleware(

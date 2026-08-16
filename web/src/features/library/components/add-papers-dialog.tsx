@@ -42,6 +42,7 @@ import type { PreparedPaperUpload } from "../use-paper-ingestions";
 type SourceKind = KnownPaperSource["kind"];
 
 type QueuedFile = PreparedPaperUpload & { errorCode?: "fileTooLarge" };
+type SourceError = { connectOpenAlex: boolean; message: string };
 
 const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
@@ -66,11 +67,13 @@ type SourceForm = z.infer<typeof sourceSchema>;
 
 export function AddPapersDialog({
   onOpenChange,
+  onConnectOpenAlex,
   onSubmitSource,
   onUploadFiles,
   open,
 }: {
   onOpenChange: (open: boolean) => void;
+  onConnectOpenAlex: () => void;
   onSubmitSource: (input: {
     idempotencyKey: string;
     signal: AbortSignal;
@@ -84,7 +87,7 @@ export function AddPapersDialog({
   const [filesChecking, setFilesChecking] = React.useState(false);
   const [duplicateCount, setDuplicateCount] = React.useState(0);
   const [sourcePending, setSourcePending] = React.useState(false);
-  const [sourceError, setSourceError] = React.useState<string>();
+  const [sourceError, setSourceError] = React.useState<SourceError>();
   const [sourceController, setSourceController] = React.useState<
     AbortController | undefined
   >();
@@ -155,35 +158,63 @@ export function AddPapersDialog({
 
   function sourceErrorMessage(error: unknown) {
     const code = error instanceof ApiError ? error.code : "connection_failed";
+    if (code === "openalex_credential_required") {
+      return {
+        connectOpenAlex: true,
+        message: t("errors.openAlexRequired"),
+      };
+    }
+    if (code === "openalex_credential_invalid") {
+      return {
+        connectOpenAlex: true,
+        message: t("errors.openAlexInvalid"),
+      };
+    }
+    let message: string;
     switch (code) {
       case "paper_source_pdf_unavailable":
-        return t("errors.unavailable");
+        message = t("errors.unavailable");
+        break;
       case "paper_source_unsafe_address":
-        return t("errors.unsafeAddress");
+        message = t("errors.unsafeAddress");
+        break;
       case "document_already_in_library":
       case "document_already_in_project":
-        return t("errors.alreadyInCollection");
+        message = t("errors.alreadyInCollection");
+        break;
       case "document_upload_in_progress":
-        return t("errors.uploadInProgress");
+        message = t("errors.uploadInProgress");
+        break;
       case "upload_too_large":
-        return t("errors.tooLarge");
+        message = t("errors.tooLarge");
+        break;
       case "invalid_pdf":
       case "pdf_encrypted":
-        return t("errors.invalidPdf");
+        message = t("errors.invalidPdf");
+        break;
       case "upload_quota_exceeded":
       case "paper_upload_quota_exceeded":
       case "paper_quota_exceeded":
       case "storage_quota_exceeded":
       case "project_owner_quota_exceeded":
       case "project_paper_quota_exceeded":
-        return t("errors.quota");
+        message = t("errors.quota");
+        break;
+      case "openalex_rate_limited":
+        message = t("errors.openAlexRateLimited");
+        break;
+      case "openalex_unavailable":
+        message = t("errors.openAlexUnavailable");
+        break;
       case "connection_failed":
       case "jobs_submission_failed":
       case "service_unavailable":
-        return t("errors.serviceUnavailable");
+        message = t("errors.serviceUnavailable");
+        break;
       default:
-        return t("sourceFailed");
+        message = t("sourceFailed");
     }
+    return { connectOpenAlex: false, message };
   }
 
   async function submitSource(values: SourceForm) {
@@ -352,6 +383,7 @@ export function AddPapersDialog({
                   <Select
                     onValueChange={(value) => {
                       setSourceKey(undefined);
+                      setSourceError(undefined);
                       form.setValue("sourceKind", value as SourceKind);
                     }}
                     value={sourceKind}
@@ -400,11 +432,26 @@ export function AddPapersDialog({
                 </Button>
               )}
             </div>
-            {sourceError && (
-              <p className="text-danger text-sm" role="alert">
-                {sourceError}
-              </p>
-            )}
+            {sourceError ? (
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <p className="text-danger min-w-0 flex-1 text-sm" role="alert">
+                  {sourceError.message}
+                </p>
+                {sourceError.connectOpenAlex ? (
+                  <Button
+                    onClick={() => {
+                      handleOpenChange(false);
+                      onConnectOpenAlex();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    {t("connectOpenAlex")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </form>
         </DialogBody>
       </DialogContent>

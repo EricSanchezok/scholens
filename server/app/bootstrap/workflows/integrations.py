@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
+from app.bootstrap.adapters.openalex import UserOpenAlex
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.modules.integrations.connections.application import (
     IntegrationConnectionResponse,
     IntegrationListResponse,
 )
 from app.modules.integrations.connections.domain import (
-    SEARCH_CONNECTOR_PROVIDERS,
+    MCP_CONNECTOR_PROVIDERS,
     IntegrationProvider,
 )
 from app.modules.integrations.connectors.infrastructure.mcp import ConnectorToolResolver
@@ -21,9 +24,11 @@ class IntegrationWorkflow:
         *,
         executor: ApplicationExecutor[ApplicationCapabilities],
         resolver: ConnectorToolResolver,
+        openalex: UserOpenAlex,
     ) -> None:
         self._executor = executor
         self._resolver = resolver
+        self._openalex = openalex
 
     def list(self, *, actor: Actor) -> IntegrationListResponse:
         return self._executor.query(
@@ -38,9 +43,13 @@ class IntegrationWorkflow:
         provider: IntegrationProvider,
         credential: str,
     ) -> IntegrationConnectionResponse:
-        verified = provider in SEARCH_CONNECTOR_PROVIDERS
-        if verified:
+        verified = provider in MCP_CONNECTOR_PROVIDERS or (
+            provider is IntegrationProvider.OPENALEX
+        )
+        if provider in MCP_CONNECTOR_PROVIDERS:
             await self._resolver.probe(provider=provider, api_key=credential)
+        elif provider is IntegrationProvider.OPENALEX:
+            await self._openalex.probe(api_key=credential)
         return self._executor.command(
             lambda capabilities: capabilities.integrations.connect(
                 actor=actor,
@@ -60,7 +69,11 @@ class IntegrationWorkflow:
         enabled: bool,
     ) -> IntegrationConnectionResponse:
         verified = False
-        if enabled and provider in SEARCH_CONNECTOR_PROVIDERS:
+        credential_revision: UUID | None = None
+        if enabled and (
+            provider in MCP_CONNECTOR_PROVIDERS
+            or provider is IntegrationProvider.OPENALEX
+        ):
             credential = self._executor.query(
                 lambda capabilities: capabilities.integrations.credential(
                     actor=actor,
@@ -68,10 +81,14 @@ class IntegrationWorkflow:
                     require_enabled=False,
                 )
             )
-            await self._resolver.probe(
-                provider=provider,
-                api_key=credential.secret,
-            )
+            credential_revision = credential.revision
+            if provider in MCP_CONNECTOR_PROVIDERS:
+                await self._resolver.probe(
+                    provider=provider,
+                    api_key=credential.secret,
+                )
+            else:
+                await self._openalex.probe(api_key=credential.secret)
             verified = True
         return self._executor.command(
             lambda capabilities: capabilities.integrations.set_enabled(
@@ -80,6 +97,7 @@ class IntegrationWorkflow:
                 provider=provider,
                 enabled=enabled,
                 verified=verified,
+                expected_credential_revision=credential_revision,
             )
         )
 

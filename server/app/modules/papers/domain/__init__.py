@@ -12,6 +12,7 @@ from .ingestion import (
     durable_ingestion_key,
     normalize_idempotency_key,
 )
+from .identifiers import extract_doi, normalize_doi
 from .lifecycle import (
     can_begin_processing,
     can_complete_processing,
@@ -29,5 +30,7 @@ __all__ = [
     "classify_document_access",
     "content_sha256",
     "durable_ingestion_key",
+    "extract_doi",
     "normalize_idempotency_key",
+    "normalize_doi",
 ]

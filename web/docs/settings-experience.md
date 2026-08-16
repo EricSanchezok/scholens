@@ -59,7 +59,7 @@ the version of the network service they are using.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.
   A secret is never recoverable after the creation acknowledgement is closed.
 - Connections owns built-in and user-configured provider status. Scholight is
-  built in; MinerU, AnySearch, Tavily, Exa, and Firecrawl use the shared
+  built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the shared
   integration feature and public `/me/integrations` contract.
 - Translation uses the same translation-preference feature as Reader. It does
   not duplicate server state or couple paper language to interface locale.
@@ -83,6 +83,22 @@ hide the normal PDF/local fallback. Invalid credentials, rate limiting,
 provider unavailability, insufficient content, and unsafe responses have
 separate localized outcomes.
 
+## OpenAlex connection contract
+
+OpenAlex is user supplied and uses the official API-key page at
+`https://openalex.org/settings/api`. Saving or re-enabling a key performs an
+external `/rate-limit` probe before the short persistence command. The Web
+shows connected, disabled, and invalid states but never receives the key or a
+user-configurable endpoint. OpenAlex is categorized with search connections,
+while remaining outside the dynamic MCP connector inventory.
+
+A DOI submission that reports a missing or invalid OpenAlex credential keeps
+the entered DOI, shows a dedicated explanation, and offers Connect OpenAlex.
+That action closes Add Papers and opens Settings → Connections. Returning to
+Add Papers preserves the DOI for an explicit resubmission; the Web does not
+retry secretly after connection. Rate limiting and provider unavailability
+remain separate retry-later messages.
+
 ## State and component ownership
 
 Settings panels compose product feature slices; they do not handwrite backend
@@ -103,8 +119,9 @@ expanded/collapsed desktop, mobile settings trigger, localized Dark mode, the
 source-code link, and the exact Settings/Account/Usage URL writes. Usage covers
 the per-Project paper limit, correct English/Chinese
 KiB-derived storage display, and UTC-negative date-only formatting.
-Connection stories include connected, not connected, invalid, and replacement
-behavior. Access Key stories include empty, populated, create, edit, revoke,
+Connection stories include connected, not connected, invalid, replacement,
+OpenAlex key-link, and OpenAlex invalid behavior. Access Key stories include
+empty, populated, create, edit, revoke,
 and one-time secret states. The shared Dialog responsive-full story verifies
 the mobile shell independently.
 

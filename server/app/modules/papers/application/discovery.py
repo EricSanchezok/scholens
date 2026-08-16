@@ -47,20 +47,48 @@ class DiscoveryListPreparation:
 
 
 class ExternalPaperCatalog(Protocol):
-    async def search(self, *, query: str, page: int) -> OpenAlexResponse: ...
+    async def search(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        query: str,
+        page: int,
+    ) -> OpenAlexResponse: ...
 
     async def author_works(
         self,
         *,
+        actor: Actor,
+        operation: OperationContext,
         author_id: str,
         page: int,
     ) -> OpenAlexResponse: ...
 
-    async def resolve_doi(self, *, title: str) -> str | None: ...
+    async def resolve_doi(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        title: str,
+        authors: list[str] | None = None,
+    ) -> str | None: ...
 
-    async def find_by_doi(self, *, doi: str) -> OpenAlexWork | None: ...
+    async def find_by_doi(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        doi: str,
+    ) -> OpenAlexWork | None: ...
 
-    async def citation_graph(self, *, work_id: str) -> OpenAlexCitationGraph: ...
+    async def citation_graph(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        work_id: str,
+    ) -> OpenAlexCitationGraph: ...
 
 
 class DiscoveryDocumentGateway(Protocol):
@@ -194,11 +222,14 @@ class ExternalPaperDiscovery:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         preparation: DiscoveryListPreparation,
     ) -> DiscoveryPaperListResponse:
         await self._rate_limiter.check(actor=actor, client_ip=client_ip)
         results = await self._catalog.search(
+            actor=actor,
+            operation=operation,
             query=preparation.value,
             page=preparation.page,
         )
@@ -234,11 +265,14 @@ class ExternalPaperDiscovery:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         preparation: DiscoveryListPreparation,
     ) -> DiscoveryPaperListResponse:
         await self._rate_limiter.check(actor=actor, client_ip=client_ip)
         results = await self._catalog.author_works(
+            actor=actor,
+            operation=operation,
             author_id=preparation.value,
             page=preparation.page,
         )
@@ -256,6 +290,7 @@ class ExternalPaperDiscovery:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         preparation: DiscoveryMatchPreparation,
     ) -> DiscoveryMatchResult:
@@ -263,7 +298,11 @@ class ExternalPaperDiscovery:
         document = preparation.document
         doi = preparation.doi
         if doi is None and document is not None and document.title:
-            doi = await self._catalog.resolve_doi(title=document.title)
+            doi = await self._catalog.resolve_doi(
+                actor=actor,
+                operation=operation,
+                title=document.title,
+            )
 
         if doi is None:
             raise AppError(
@@ -271,14 +310,22 @@ class ExternalPaperDiscovery:
                 message="A DOI could not be determined for this paper",
                 kind=FailureKind.INVALID_ARGUMENT,
             )
-        work = await self._catalog.find_by_doi(doi=doi)
+        work = await self._catalog.find_by_doi(
+            actor=actor,
+            operation=operation,
+            doi=doi,
+        )
         if work is None:
             raise AppError(
                 code="openalex_paper_not_found",
                 message="OpenAlex could not find a paper for this DOI",
                 kind=FailureKind.NOT_FOUND,
             )
-        graph = await self._catalog.citation_graph(work_id=work.id)
+        graph = await self._catalog.citation_graph(
+            actor=actor,
+            operation=operation,
+            work_id=work.id,
+        )
         return DiscoveryMatchResult(graph=graph, resolved_doi=doi)
 
     def record_match(

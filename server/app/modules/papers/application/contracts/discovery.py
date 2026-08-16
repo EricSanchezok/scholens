@@ -170,14 +170,6 @@ class OpenAlexCitationGraph(BaseModel):
     cited_by: OpenAlexResponse
 
 
-class OpenAlexFilter(BaseModel):
-    authors: list[str] | None = None
-    institutions: list[str] | None = None
-    only_oa: bool = False
-    from_publication_date: str | None = None
-    min_cited_by_count: int | None = None
-
-
 class EnrichedData(BaseModel):
     publisher: str | None
     journal: str | None

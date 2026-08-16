@@ -32,7 +32,7 @@ def test_profile_revision_is_stable_and_covers_runtime_policy() -> None:
     repeated = resolve_profile(AIProfileName.STANDARD, environment={})
     changed_model = resolve_profile(
         AIProfileName.STANDARD,
-        environment={"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
+        environment={"SCHOLENS_AI_STANDARD_MODEL": "google:gemini-2.5-pro"},
     )
     changed_limit = resolve_profile(
         AIProfileName.STANDARD,
@@ -50,6 +50,10 @@ def test_profile_revision_is_stable_and_covers_runtime_policy() -> None:
         ({"SCHOLENS_AI_STANDARD_MODEL": "ambiguous"}, "provider:model"),
         ({"SCHOLENS_AI_STANDARD_MODEL": ":missing-provider"}, "provider:model"),
         ({"SCHOLENS_AI_STANDARD_MODEL": "openai:"}, "provider:model"),
+        (
+            {"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
+            "Unsupported AI provider",
+        ),
         ({"SCHOLENS_AI_MAX_RETRIES": "not-an-int"}, "must be an integer"),
         ({"SCHOLENS_AI_MAX_RETRIES": "-1"}, "must not be negative"),
         (
