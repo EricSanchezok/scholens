@@ -101,9 +101,11 @@ CloudFormation from rolling back a failed resource create.
 
 KMS keys, buckets, secrets, repositories, queues, schedules, topics, log groups, alarms,
 dashboards, ALB/WAF resources, and runtime task families use Scholens ARNs or product/stack
-tags. `Resource: "*"` remains only where the AWS authorization model requires it or where a
-create operation has no resource ARN yet: service/resource discovery (`Describe*`, selected
-`List*`, Cloud Map reads), KMS `CreateKey` and `ListAliases`, Secrets Manager
+tags. The runtime role's EventBridge Scheduler lifecycle is bound to the single declared
+`sanchezcloud-scholens-zotero-sync` schedule. `Resource: "*"` remains only where the AWS
+authorization model requires it or where a create operation has no resource ARN yet:
+service/resource discovery (`Describe*`, selected `List*`, Cloud Map reads), KMS `CreateKey`
+and `ListAliases`, Secrets Manager
 `GetRandomPassword`, service-linked-role creation with an exact service condition,
 ECS/ELB/Application Auto Scaling creation and registration, Cloud Map service creation with
 a product request-tag condition, CloudWatch alarm discovery, and the documented WAF/ALB

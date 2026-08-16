@@ -491,6 +491,26 @@ def test_runtime_role_limits_aws_managed_rule_set_validation_to_web_acl_writes()
     ]
 
 
+def test_runtime_role_scopes_scheduler_lifecycle_to_declared_schedule() -> None:
+    bootstrap = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    runtime = load_template("scholens-production.yml")
+    schedule_name = runtime["Resources"]["ZoteroSchedule"]["Properties"]["Name"]
+    statements = bootstrap["RuntimeOperationsPolicy"]["Properties"]["PolicyDocument"][
+        "Statement"
+    ]
+    scheduler = next(
+        item for item in statements if "scheduler:CreateSchedule" in _actions(item)
+    )
+
+    assert schedule_name == "sanchezcloud-scholens-zotero-sync"
+    assert scheduler["Resource"] == {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:"
+            f"schedule/default/{schedule_name}"
+        )
+    }
+
+
 def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() -> None:
     foundation = load_template("scholens-foundation.yml")
     bootstrap = load_template("scholens-foundation-bootstrap.yml")
