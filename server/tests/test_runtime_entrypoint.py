@@ -9,6 +9,7 @@ import pytest
 from app.bootstrap.runtime_entrypoint import (
     _database_url,
     _identity_database_url,
+    _release_sha,
     main,
 )
 
@@ -39,6 +40,19 @@ def test_identity_database_url_uses_asyncpg_scheme_without_changing_parameters()
     assert _identity_database_url(application_url) == application_url.replace(
         "postgresql+psycopg2://", "postgresql://", 1
     )
+
+
+def test_release_sha_must_be_an_exact_commit(monkeypatch) -> None:
+    monkeypatch.delenv("RELEASE_SHA", raising=False)
+    with pytest.raises(RuntimeError, match="missing or invalid release SHA"):
+        _release_sha()
+
+    monkeypatch.setenv("RELEASE_SHA", "A" * 40)
+    with pytest.raises(RuntimeError, match="missing or invalid release SHA"):
+        _release_sha()
+
+    monkeypatch.setenv("RELEASE_SHA", "a" * 40)
+    assert _release_sha() == "a" * 40
 
 
 def test_production_database_accepts_only_rds_hostname(monkeypatch) -> None:

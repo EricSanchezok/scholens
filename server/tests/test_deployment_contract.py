@@ -1372,6 +1372,9 @@ def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None
     assert "aws ecs wait tasks-stopped" not in workflow
     assert "deadline=$((SECONDS + 3600))" in workflow
     assert "migration-workflow-timeout" in workflow
+    assert "RELEASE_SHA: ${{ inputs.release_sha }}" in workflow
+    assert '--arg release_sha "$RELEASE_SHA"' in workflow
+    assert '--overrides "$overrides"' in workflow
     assert "stoppedReason:stoppedReason" in workflow
     assert "reason:reason" in workflow
     assert "logStreamName:logStreamName" in workflow
