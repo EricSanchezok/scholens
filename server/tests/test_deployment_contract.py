@@ -467,6 +467,30 @@ def test_runtime_role_scopes_shared_rds_alarm_lifecycle_symmetrically() -> None:
     ]
 
 
+def test_runtime_role_limits_aws_managed_rule_set_validation_to_web_acl_writes() -> (
+    None
+):
+    resources = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    statements = resources["RuntimeOperationsPolicy"]["Properties"]["PolicyDocument"][
+        "Statement"
+    ]
+    managed_rule_set_arn = (
+        "arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:"
+        "regional/managedruleset/*/*"
+    )
+    managed_rule_set_statements = [
+        item for item in statements if "managedruleset/" in str(item["Resource"])
+    ]
+
+    assert managed_rule_set_statements == [
+        {
+            "Action": ["wafv2:CreateWebACL", "wafv2:UpdateWebACL"],
+            "Effect": "Allow",
+            "Resource": {"Fn::Sub": managed_rule_set_arn},
+        }
+    ]
+
+
 def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() -> None:
     foundation = load_template("scholens-foundation.yml")
     bootstrap = load_template("scholens-foundation-bootstrap.yml")
