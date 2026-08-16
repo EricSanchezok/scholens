@@ -315,7 +315,7 @@ Resources:
       ServerlessCacheName: sanchezcloud-scholens
       Engine: valkey
       MajorEngineVersion: '8'
-      DailySnapshotTime: 1080
+      DailySnapshotTime: '18:00'
       SnapshotRetentionLimit: 1
       SecurityGroupIds:
       - !Ref CacheSecurityGroup
