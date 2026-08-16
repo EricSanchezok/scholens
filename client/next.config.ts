@@ -10,17 +10,6 @@ const nextConfig = {
     productionBrowserSourceMaps: process.env.UPLOAD_SOURCE_MAPS === 'true',
     // Transpile packages that import CSS from node_modules
     transpilePackages: ['react-pdf-highlighter-extended', 'pdfjs-dist'],
-    // Add image remote patterns configuration
-    images: {
-        remotePatterns: [
-            {
-                protocol: 'https' as const,
-                hostname: 'assets.khoj.dev',
-                port: '',
-                pathname: '/**',
-            },
-        ],
-    },
 }
 
 const withMDX = createMDX({

@@ -394,6 +394,11 @@ export const AccountMenuUsage: Story = {
     await expect(
       await within(menu).findByText("Credits reset on Aug 17, 2026"),
     ).toBeVisible();
+    await expect(
+      within(menu).getByRole("menuitem", {
+        name: "Source code · AGPL-3.0",
+      }),
+    ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
 
     await userEvent.click(
       within(menu).getByRole("menuitem", { name: "Settings" }),
@@ -476,6 +481,21 @@ export const AccountMenuKeyboard: Story = {
       "/?settings=general",
       { scroll: false },
     );
+  },
+};
+
+export const AccountMenuSourceKeyboard: Story = {
+  play: async ({ canvasElement }) => {
+    const trigger = within(canvasElement).getByRole("button", {
+      name: "Open account menu",
+    });
+    trigger.focus();
+    await userEvent.keyboard("{Enter}{ArrowDown}{ArrowDown}{ArrowDown}");
+    await expect(
+      within(document.body).getByRole("menuitem", {
+        name: "Source code · AGPL-3.0",
+      }),
+    ).toHaveFocus();
   },
 };
 
@@ -580,6 +600,11 @@ export const AccountMenuDarkChinese: Story = {
     ).toBeVisible();
     await expect(
       within(menu).getByRole("menuitem", { name: "用量" }),
+    ).toBeVisible();
+    await expect(
+      within(menu).getByRole("menuitem", {
+        name: "源代码 · AGPL-3.0",
+      }),
     ).toBeVisible();
   },
 };

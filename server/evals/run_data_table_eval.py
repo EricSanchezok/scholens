@@ -1,9 +1,8 @@
-"""
-End-to-end eval for the Data Table extraction flow (KHO-308).
+"""End-to-end evaluation for the Data Table extraction flow.
 
 Characterizes what the live extraction pipeline does with columns that
-require arithmetic (derived columns), per KHO-305. Seeds an eval user and
-one project per manifest paper, then drives the REAL flow over HTTP:
+require arithmetic (derived columns). Seeds an evaluation user and one project
+per manifest paper, then drives the real flow over HTTP:
 
     POST /api/v1/projects/{project_id}/data-tables
       -> Celery (jobs worker) -> internal callback -> durable job result
@@ -97,7 +96,9 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
 def get_eval_user(db) -> Actor:
     raw_user_id = os.getenv("EVAL_USER_ID")
     if not raw_user_id or not raw_user_id.isdigit():
-        raise RuntimeError("EVAL_USER_ID must identify an existing sanchezcloud-identity user")
+        raise RuntimeError(
+            "EVAL_USER_ID must identify an existing sanchezcloud-identity user"
+        )
     user = db.get(AuthUser, int(raw_user_id))
     if user is None:
         raise RuntimeError("EVAL_USER_ID does not exist in auth.users")
@@ -169,7 +170,7 @@ def seed(db, current_user: Actor, manifest: dict, results: dict) -> dict:
             db,
             owner_id=current_user.id,
             title=f"DT Eval — {key}",
-            description="Seeded by evals.run_data_table_eval (KHO-308)",
+            description="Seeded by evals.run_data_table_eval",
         )
 
         document_repository.attach_project(
@@ -348,7 +349,7 @@ def grade_run(run_record: dict, manifest: dict, paper_texts: dict) -> dict:
 
 
 def summarize(results: dict, manifest: dict) -> dict:
-    """Aggregate graded runs into the KHO-305 'three worlds' classification."""
+    """Aggregate graded runs into primitive and derived outcome classes."""
     primitives: list[dict] = []
     derived: list[dict] = []
     derived_by_column: dict[str, list[str]] = {}

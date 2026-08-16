@@ -9,7 +9,6 @@ import {
 	DialogTitle
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import Image from "next/image";
 
 export function ZoteroGuideModal({
 	open,
@@ -49,18 +48,11 @@ export function ZoteroGuideModal({
 					</li>
 				<li className="flex gap-3">
 					<span className="font-semibold shrink-0">2.</span>
-					<div className="space-y-2">
+					<div>
 						<p className="font-medium">Sync with your Zotero desktop app</p>
 						<p className="text-muted-foreground mt-0.5">
 							Open the Zotero desktop app and click the sync button (the circular arrow) in the toolbar to make sure your library is up to date.
 						</p>
-						<Image
-							src="/zotero-desktop-sync-button.png"
-							alt="Zotero sync button location in the toolbar"
-							width={1200}
-							height={675}
-							className="border w-full object-cover"
-						/>
 					</div>
 				</li>
 					<li className="flex gap-3">

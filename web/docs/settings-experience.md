@@ -33,6 +33,11 @@ sections. Appearance is not duplicated in the menu. Routes mount one
 supports keyboard navigation, visible focus, Light and Dark themes, English and
 Simplified Chinese, 320px containment, and reduced-motion-safe feedback.
 
+The account menu also exposes a localized external
+`Source code · AGPL-3.0` link. The authentication shell exposes the same link
+before sign-in so anonymous and authenticated users can reach the source for
+the version of the network service they are using.
+
 ## Panel responsibilities
 
 - General is labeled Appearance, motion & language. It owns application locale,
@@ -90,12 +95,13 @@ dialogs, feedback, and semantic Iconoir wrappers remain shared components.
 ## Acceptance states
 
 Storybook covers Appearance, Motion & Language, Account, Usage, Access Keys,
-Connections, Translation, 390px mobile, and Dark Chinese states. Account states cover direct
-URL navigation, read-only identity, canonical and overridden Account Center,
-current-session Sign out, mobile, and Dark. The shell account menu covers real
-usage success, loading, failure/retry, keyboard open, expanded/collapsed desktop,
-mobile settings trigger, localized Dark mode, and the exact Settings/Account/Usage
-URL writes. Usage covers the per-Project paper limit, correct English/Chinese
+Connections, Translation, 390px mobile, and Dark Chinese states. Account states
+cover direct URL navigation, read-only identity, canonical and overridden
+Account Center, current-session Sign out, mobile, and Dark. The shell account
+menu covers real usage success, loading, failure/retry, keyboard open,
+expanded/collapsed desktop, mobile settings trigger, localized Dark mode, the
+source-code link, and the exact Settings/Account/Usage URL writes. Usage covers
+the per-Project paper limit, correct English/Chinese
 KiB-derived storage display, and UTC-negative date-only formatting.
 Connection stories include connected, not connected, invalid, and replacement
 behavior. Access Key stories include empty, populated, create, edit, revoke,

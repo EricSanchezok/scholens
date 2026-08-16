@@ -143,11 +143,6 @@ function ProjectsPage() {
 						</Link>
 					</Button>
 				)}
-				<Button variant="outline" size="lg" asChild>
-					<Link href="/blog/projects">
-						Learn more
-					</Link>
-				</Button>
 			</div>
 
 			{/* Feature highlights */}

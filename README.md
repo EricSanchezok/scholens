@@ -1,71 +1,63 @@
 # Scholens
 
-**The fastest way to annotate and deeply understand research papers.**
+[简体中文](./README.zh-CN.md)
 
-Scholens is a workspace for reading research. Upload your papers, highlight and annotate them, take notes, and ask questions — with an AI assistant that grounds every answer in verifiable citations you can click to jump straight to the source.
+Scholens is a pre-release research workspace for building a durable, traceable
+reading and analysis workflow around scholarly papers. The canonical product is
+the Next.js application in `web/`, backed by the FastAPI service in `server/`
+and asynchronous workers in `jobs/`.
 
-## Why Scholens?
+## What is implemented
 
-Reading papers means constant context switching: looking up unfamiliar terms, chasing references, re-finding that one result you highlighted three papers ago. Scholens brings all of that into one place, so you can stay in the flow of actually reading.
+- A single contextual conversation experience across the home workspace,
+  projects, and individual papers.
+- A personal paper library with PDF, DOI, arXiv, direct-URL, and Zotero
+  ingestion paths.
+- Project workspaces for organizing papers, conversations, generated outputs,
+  and collaborator-visible research context.
+- A document reader with PDF navigation, source-grounded conversations,
+  anchored annotation threads, selection translation, and evidence-preserving
+  reading reflow.
+- User-owned connections for optional search, parsing, and research providers.
 
-## Features
+The stable product principles are documented in [PRODUCT.md](./PRODUCT.md).
+Executable contracts, generated API schemas, and tests remain the authority for
+the exact behavior available in a checkout.
 
-### Read with an AI assistant by your side
+## Repository layout
 
-![ai copilot](https://assets.khoj.dev/op_chat_1.png)
+| Path          | Responsibility                                      |
+| ------------- | --------------------------------------------------- |
+| `web/`        | Canonical product frontend                          |
+| `server/`     | FastAPI application and synchronous product APIs    |
+| `jobs/`       | Asynchronous ingestion and generation workers       |
+| `packages/`   | Shared Python contracts and infrastructure packages |
+| `client/`     | Legacy comparison frontend; not a production target |
+| `deploy/ecs/` | Production ECS/Fargate release infrastructure       |
 
-Your paper and the AI assistant sit side by side, so you never leave the document. As soon as you upload a PDF, you get an AI-generated brief and starter questions to ground yourself before diving in. Every response uses contextual citations — click one and you're taken to the exact passage in the paper it came from. Trust, but verify.
+## Development
 
-> **Curious how we verify our answers?** We built [ResearchQA](https://arxiv.org/abs/2607.11074), a citation-grounded benchmark for scientific QA. Its methodology is preserved in the [evaluation archive](./server/evals/README.md); the current repository also includes a maintained Data Table end-to-end evaluation.
+Start with the documentation index in [docs/README.md](./docs/README.md).
 
-### Highlight, annotate, and take notes
+- [DEVELOPMENT.md](./DEVELOPMENT.md) covers prerequisites, environment
+  variables, fixed local ports, setup, and startup commands.
+- [CONTRIBUTING.md](./CONTRIBUTING.md) defines the branch, review, documentation,
+  and verification workflow.
+- [AGENTS.md](./AGENTS.md) contains repository boundaries and mandatory agent
+  guardrails.
 
-![annotations](https://assets.khoj.dev/op_annotations_1.jpeg)
+The root verification entry point is:
 
-Select any text to highlight it, attach a comment, or send it to the AI assistant for a deeper explanation. Notes live in context with your paper, with a markdown view when you want it. Your annotations help you recall insights quickly and jump back to the parts that mattered.
+```bash
+./scripts/run-gates.sh <server|jobs|shared-packages|web|client|deployment|docs|all>
+```
 
-### Organize papers into projects
+The runner verifies a prepared checkout. It does not install dependencies,
+start persistent services, or apply migrations.
 
-Group related papers into projects and unlock cross-paper insights. Ask questions that span your whole collection, generate artifacts, and keep verifiable citations throughout. Data tables let you define custom schemas to extract key fields across every paper in a project — each cell grounded in its source — and export to CSV when you're ready to analyze.
+## License and provenance
 
-Architecture boundaries are documented in
-[docs/architecture/data-ownership.md](docs/architecture/data-ownership.md).
-
-### Understand topics across your library
-
-Ask a research question and get a synthesized answer drawing on the papers in your library, so your accumulated reading actually compounds.
-
-### Import from Zotero
-
-Connect your Zotero account to import your existing library and keep it automatically in sync.
-
-### Listen on the go
-
-Generate audio overviews of your papers for when reading isn't an option.
-
-## Self-hosting
-
-Scholens is open source, and you can run the full stack yourself. Fair warning: it's built primarily as a hosted service and isn't optimized for self-hosting, so expect some assembly (Postgres, S3-compatible storage, LLM API keys, background workers). The setup in [DEVELOPMENT.md](./DEVELOPMENT.md) is the best starting point.
-
-For the hardened ECS/Fargate deployment on the shared SanchezCloud platform, see
-[`deploy/ecs/README.md`](./deploy/ecs/README.md).
-
-## Contributing
-
-Contributions are welcome! To get a local development environment running:
-
-- **[AGENTS.md](./AGENTS.md)** — repository boundaries and required engineering documentation for coding agents.
-- **[CONTRIBUTING.md](./CONTRIBUTING.md)** — branch, commit, pull-request, documentation, and verification workflow.
-- **[DEVELOPMENT.md](./DEVELOPMENT.md)** — full setup guide: prerequisites, environment variables, ports, and how to start the local stack.
-- **[web/README.md](./web/README.md)** — the replacement Next.js application and engineering handbook.
-- **[server/README.md](./server/README.md)** — the FastAPI backend.
-- **[client/README.md](./client/README.md)** — the legacy comparison frontend.
-- **[jobs/README.md](./jobs/README.md)** — the Celery worker for async processing (PDF parsing, Zotero sync, audio).
-
-Scholens is derived from the AGPL-licensed
-[Open Paper](https://github.com/khoj-ai/openpaper) project. Upstream copyright
-and license notices remain in the repository.
-
-## License
-
-Scholens is licensed under the [AGPL-3.0](./LICENSE).
+Scholens is distributed under the [GNU Affero General Public License,
+version 3](./LICENSE). See [NOTICE.md](./NOTICE.md) for the required provenance
+and modification notice. Separately licensed evaluation fixtures are documented
+beside those fixtures.

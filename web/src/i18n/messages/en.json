@@ -73,6 +73,7 @@
       "settings": "Settings",
       "accountSettings": "Account",
       "usageSettings": "Usage",
+      "sourceCode": "Source code · AGPL-3.0",
       "signOut": "Sign out",
       "signingOut": "Signing out…"
     }
@@ -814,6 +815,7 @@
   },
   "Authentication": {
     "brand": "Scholens",
+    "sourceCode": "Source code · AGPL-3.0",
     "a11y": {
       "showPassword": "Show password",
       "hidePassword": "Hide password"

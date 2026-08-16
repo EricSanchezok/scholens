@@ -119,6 +119,7 @@ Keep one canonical home for each kind of information:
 | Record                                              | Purpose                                                                                     |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `AGENTS.md`                                         | Mandatory repository rules and navigation for coding agents                                 |
+| [`docs/README.md`](./docs/README.md)                | Current documentation map, ownership, and maintenance rules                                 |
 | `CONTRIBUTING.md`                                   | Human development, branch, commit, pull-request, and verification workflow                  |
 | `DEVELOPMENT.md`                                    | Environment, installation, fixed ports, startup, and migration commands                     |
 | Product, architecture, feature, and service docs    | Current behavior and ownership                                                              |
