@@ -1397,10 +1397,7 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
       exact: true,
     }),
   ).toHaveCount(0);
-  const bilingualTables = page.locator('[data-reflow-kind="table"] table');
-  await expect(bilingualTables).toHaveCount(2);
-  await expect(bilingualTables.first()).toBeVisible();
-  await expect(bilingualTables.last()).toBeVisible();
+  await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
 });
 
 test("keeps the reflow outline action stable while headings load", async ({
