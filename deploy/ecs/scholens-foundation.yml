@@ -1,0 +1,419 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Scholens retained foundation
+Parameters:
+  ProductionDomain: {AllowedPattern: '^[A-Za-z0-9.-]+$', Default: scholens.sanchezcloud.net, Type: String}
+  AlertEmail: {Default: '', Type: String}
+Conditions:
+  HasAlertEmail: !Not
+  - !Equals
+    - !Ref AlertEmail
+    - ''
+Resources:
+  ConfigurationKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      EnableKeyRotation: true
+      Tags: [{Key: ManagedBy, Value: CloudFormation}, {Key: Product, Value: Scholens}]
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 'kms:*', Effect: Allow, Principal: {AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'}, Resource: '*', Sid: EnableAccountAdministration}
+  ConfigurationKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/sanchezcloud-scholens-configuration
+      TargetKeyId: !Ref ConfigurationKey
+  ContentKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      EnableKeyRotation: true
+      Tags: [{Key: ManagedBy, Value: CloudFormation}, {Key: Product, Value: Scholens}]
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 'kms:*', Effect: Allow, Principal: {AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'}, Resource: '*', Sid: EnableAccountAdministration}
+  ContentKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/sanchezcloud-scholens-content
+      TargetKeyId: !Ref ContentKey
+  DiagnosticKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      EnableKeyRotation: true
+      Tags: [{Key: ManagedBy, Value: CloudFormation}, {Key: Product, Value: Scholens}]
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 'kms:*', Effect: Allow, Principal: {AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'}, Resource: '*', Sid: EnableAccountAdministration}
+  DiagnosticKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/sanchezcloud-scholens-diagnostics
+      TargetKeyId: !Ref DiagnosticKey
+  ReleaseBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ObjectLockEnabled: true
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention: {Days: 365, Mode: COMPLIANCE}
+      BucketName: !Sub sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            SSEAlgorithm: aws:kms
+            KMSMasterKeyID: !GetAtt ConfigurationKey.Arn
+      LifecycleConfiguration:
+        Rules:
+        - Id: RetainReleaseHistory
+          Status: Enabled
+          NoncurrentVersionExpiration: {NoncurrentDays: 365}
+        - Id: ExpireCloudFormationArtifacts
+          Status: Enabled
+          Prefix: cloudformation/
+          ExpirationInDays: 365
+          NoncurrentVersionExpiration: {NoncurrentDays: 7}
+        - Id: ExpireSourceMaps
+          Status: Enabled
+          Prefix: source-maps/
+          ExpirationInDays: 365
+          NoncurrentVersionExpiration: {NoncurrentDays: 365}
+      OwnershipControls:
+        Rules:
+        - {ObjectOwnership: BucketOwnerEnforced}
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      VersioningConfiguration: {Status: Enabled}
+  ReleaseBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ReleaseBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 's3:*', Condition: {Bool: {'aws:SecureTransport': 'false'}}, Effect: Deny, Principal: '*', Resource: [!GetAtt ReleaseBucket.Arn, !Sub '${ReleaseBucket.Arn}/*'], Sid: DenyInsecureTransport}
+        - {Action: 's3:PutObject', Condition: {'Null': {'s3:x-amz-server-side-encryption': 'false'}, StringNotEquals: {'s3:x-amz-server-side-encryption': 'aws:kms'}}, Effect: Deny, Principal: '*', Resource: !Sub '${ReleaseBucket.Arn}/*', Sid: DenyExplicitNonKmsEncryption}
+        - {Action: 's3:PutObject', Condition: {'Null': {'s3:x-amz-server-side-encryption-aws-kms-key-id': 'false'}, StringNotEquals: {'s3:x-amz-server-side-encryption-aws-kms-key-id': !GetAtt ConfigurationKey.Arn}}, Effect: Deny, Principal: '*', Resource: !Sub '${ReleaseBucket.Arn}/*', Sid: DenyExplicitWrongKmsKey}
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub sanchezcloud-scholens-content-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            SSEAlgorithm: aws:kms
+            KMSMasterKeyID: !GetAtt ContentKey.Arn
+      CorsConfiguration:
+        CorsRules:
+        - AllowedHeaders: ['*']
+          AllowedMethods: [GET, HEAD, PUT, POST]
+          AllowedOrigins:
+          - !Sub https://${ProductionDomain}
+          ExposedHeaders: [ETag]
+          MaxAge: 3600
+      LifecycleConfiguration:
+        Rules:
+        - Id: AbortIncompleteUploads
+          Status: Enabled
+          AbortIncompleteMultipartUpload: {DaysAfterInitiation: 7}
+        - Id: ExpireNoncurrentVersions
+          Status: Enabled
+          NoncurrentVersionExpiration: {NoncurrentDays: 30}
+      OwnershipControls:
+        Rules:
+        - {ObjectOwnership: BucketOwnerEnforced}
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      VersioningConfiguration: {Status: Enabled}
+  ContentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ContentBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 's3:*', Condition: {Bool: {'aws:SecureTransport': 'false'}}, Effect: Deny, Principal: '*', Resource: [!GetAtt ContentBucket.Arn, !Sub '${ContentBucket.Arn}/*'], Sid: DenyInsecureTransport}
+        - {Action: 's3:PutObject', Condition: {'Null': {'s3:x-amz-server-side-encryption': 'false'}, StringNotEquals: {'s3:x-amz-server-side-encryption': 'aws:kms'}}, Effect: Deny, Principal: '*', Resource: !Sub '${ContentBucket.Arn}/*', Sid: DenyExplicitNonKmsEncryption}
+        - {Action: 's3:PutObject', Condition: {'Null': {'s3:x-amz-server-side-encryption-aws-kms-key-id': 'false'}, StringNotEquals: {'s3:x-amz-server-side-encryption-aws-kms-key-id': !GetAtt ContentKey.Arn}}, Effect: Deny, Principal: '*', Resource: !Sub '${ContentBucket.Arn}/*', Sid: DenyExplicitWrongKmsKey}
+  DiagnosticBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            SSEAlgorithm: aws:kms
+            KMSMasterKeyID: !GetAtt DiagnosticKey.Arn
+      LifecycleConfiguration:
+        Rules:
+        - Id: ExpireDiagnosticSnapshots
+          Status: Enabled
+          ExpirationInDays: 30
+          NoncurrentVersionExpiration: {NoncurrentDays: 7}
+      OwnershipControls:
+        Rules:
+        - {ObjectOwnership: BucketOwnerEnforced}
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      VersioningConfiguration: {Status: Enabled}
+  DiagnosticBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DiagnosticBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - {Action: 's3:*', Condition: {Bool: {'aws:SecureTransport': 'false'}}, Effect: Deny, Principal: '*', Resource: [!GetAtt DiagnosticBucket.Arn, !Sub '${DiagnosticBucket.Arn}/*'], Sid: DenyInsecureTransport}
+        - {Action: 's3:PutObject', Condition: {'Null': {'s3:x-amz-server-side-encryption': 'false'}, StringNotEquals: {'s3:x-amz-server-side-encryption': 'aws:kms'}}, Effect: Deny, Principal: '*', Resource: !Sub '${DiagnosticBucket.Arn}/*', Sid: DenyExplicitNonKmsEncryption}
+        - {Action: 's3:PutObject', Condition: {'Null': {'s3:x-amz-server-side-encryption-aws-kms-key-id': 'false'}, StringNotEquals: {'s3:x-amz-server-side-encryption-aws-kms-key-id': !GetAtt DiagnosticKey.Arn}}, Effect: Deny, Principal: '*', Resource: !Sub '${DiagnosticBucket.Arn}/*', Sid: DenyExplicitWrongKmsKey}
+  WebRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sanchezcloud-scholens-web
+      ImageScanningConfiguration: {ScanOnPush: true}
+      ImageTagMutability: IMMUTABLE
+      LifecyclePolicy: {LifecyclePolicyText: "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire untagged build layers after 30 days\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\"\
+          ,\"countUnit\":\"days\",\"countNumber\":30},\"action\":{\"type\":\"expire\"}}]}"}
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sanchezcloud-scholens-api
+      ImageScanningConfiguration: {ScanOnPush: true}
+      ImageTagMutability: IMMUTABLE
+      LifecyclePolicy: {LifecyclePolicyText: "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire untagged build layers after 30 days\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\"\
+          ,\"countUnit\":\"days\",\"countNumber\":30},\"action\":{\"type\":\"expire\"}}]}"}
+  JobsRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: sanchezcloud-scholens-jobs
+      ImageScanningConfiguration: {ScanOnPush: true}
+      ImageTagMutability: IMMUTABLE
+      LifecyclePolicy: {LifecyclePolicyText: "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire untagged build layers after 30 days\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\"\
+          ,\"countUnit\":\"days\",\"countNumber\":30},\"action\":{\"type\":\"expire\"}}]}"}
+  DocumentDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document-dlq, SqsManagedSseEnabled: true}
+  DocumentQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-document, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt DocumentDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 2700}
+  ResearchDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-research-dlq, SqsManagedSseEnabled: true}
+  ResearchQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-research, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt ResearchDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 2700}
+  MaintenanceDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-maintenance-dlq, SqsManagedSseEnabled: true}
+  MaintenanceQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-maintenance, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt MaintenanceDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 2700}
+  SchedulerDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-scheduler-dlq, SqsManagedSseEnabled: true}
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Scholens private ECS application tasks
+      VpcId: !ImportValue sanchezcloud-production-vpc-id
+      SecurityGroupEgress:
+      - {CidrIp: '0.0.0.0/0', IpProtocol: -1}
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Scholens managed Valkey ingress
+      VpcId: !ImportValue sanchezcloud-production-vpc-id
+      SecurityGroupEgress:
+      - {CidrIp: '0.0.0.0/0', IpProtocol: -1}
+  CacheIngressFromApplication:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref CacheSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref ApplicationSecurityGroup
+  ApiCacheSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: password, PasswordLength: 48, SecretStringTemplate: '{"username":"scholens-api"}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/scholens/production/cache-api}
+  JobsCacheSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: password, PasswordLength: 48, SecretStringTemplate: '{"username":"scholens-jobs"}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/scholens/production/cache-jobs}
+  ApiCacheUser:
+    Type: AWS::ElastiCache::User
+    Properties:
+      UserId: scholens-api
+      UserName: scholens-api
+      Engine: valkey
+      AccessString: on ~scholens:rate:* ~scholens:concurrency:* ~scholens:translation:* +@all -@dangerous
+      AuthenticationMode:
+        Type: password
+        Passwords:
+        - !Sub '{{resolve:secretsmanager:${ApiCacheSecret}:SecretString:password}}'
+  JobsCacheUser:
+    Type: AWS::ElastiCache::User
+    Properties:
+      UserId: scholens-jobs
+      UserName: scholens-jobs
+      Engine: valkey
+      AccessString: on ~scholens:pdf-parse:* +@all -@dangerous
+      AuthenticationMode:
+        Type: password
+        Passwords:
+        - !Sub '{{resolve:secretsmanager:${JobsCacheSecret}:SecretString:password}}'
+  CacheUserGroup:
+    Type: AWS::ElastiCache::UserGroup
+    Properties:
+      Engine: valkey
+      UserGroupId: scholens-production
+      UserIds:
+      - !Ref ApiCacheUser
+      - !Ref JobsCacheUser
+  Cache:
+    Type: AWS::ElastiCache::ServerlessCache
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      ServerlessCacheName: sanchezcloud-scholens
+      Engine: valkey
+      MajorEngineVersion: '8'
+      DailySnapshotTime: 1080
+      SnapshotRetentionLimit: 1
+      SecurityGroupIds:
+      - !Ref CacheSecurityGroup
+      SubnetIds:
+      - !ImportValue sanchezcloud-production-private-subnet-1
+      - !ImportValue sanchezcloud-production-private-subnet-2
+      UserGroupId: !Ref CacheUserGroup
+  DatabaseRuntimeSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: password, PasswordLength: 48, SecretStringTemplate: '{"username":"scholens_app","host":"sanchezcloud-pg.cjauioq8a7en.ap-southeast-1.rds.amazonaws.com","port":"5432","dbname":"sanchezcloud"}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/database/scholens-runtime}
+  DatabaseMigratorSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: password, PasswordLength: 48, SecretStringTemplate: '{"username":"scholens_migrator","host":"sanchezcloud-pg.cjauioq8a7en.ap-southeast-1.rds.amazonaws.com","port":"5432","dbname":"sanchezcloud"}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/database/scholens-migrator}
+  CoreSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: auth_jwt_secret, PasswordLength: 64, SecretStringTemplate: '{"admin_session_secret":"","paper_search_cursor_secret":"","jobs_webhook_signing_secret":"","integration_credential_encryption_key":""}'}, KmsKeyId: !GetAtt ConfigurationKey.Arn, Name: /sanchezcloud/scholens/production/core}
+  AiSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: /sanchezcloud/scholens/production/ai
+      KmsKeyId: !GetAtt ConfigurationKey.Arn
+  MailSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: /sanchezcloud/scholens/production/mail
+      KmsKeyId: !GetAtt ConfigurationKey.Arn
+  BillingSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: /sanchezcloud/scholens/production/billing
+      KmsKeyId: !GetAtt ConfigurationKey.Arn
+  IntegrationsSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: /sanchezcloud/scholens/production/integrations
+      KmsKeyId: !GetAtt ConfigurationKey.Arn
+  EdgeSecret:
+    Type: AWS::SecretsManager::Secret
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: /sanchezcloud/scholens/production/edge
+      KmsKeyId: !GetAtt ConfigurationKey.Arn
+      GenerateSecretString: {ExcludePunctuation: true, GenerateStringKey: origin_token, PasswordLength: 64, SecretStringTemplate: '{}'}
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties: {KmsMasterKeyId: alias/aws/sns, TopicName: sanchezcloud-scholens-alerts}
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+Outputs:
+  ConfigurationKeyArn: {Value: !GetAtt ConfigurationKey.Arn, Export: {Name: sanchezcloud-scholens-configuration-key-arn}}
+  ContentKeyArn: {Value: !GetAtt ContentKey.Arn, Export: {Name: sanchezcloud-scholens-content-key-arn}}
+  DiagnosticKeyArn: {Value: !GetAtt DiagnosticKey.Arn, Export: {Name: sanchezcloud-scholens-diagnostic-key-arn}}
+  ReleaseBucketName: {Value: !Ref ReleaseBucket, Export: {Name: sanchezcloud-scholens-release-bucket-name}}
+  ContentBucketName: {Value: !Ref ContentBucket, Export: {Name: sanchezcloud-scholens-content-bucket-name}}
+  ContentBucketArn: {Value: !GetAtt ContentBucket.Arn, Export: {Name: sanchezcloud-scholens-content-bucket-arn}}
+  DiagnosticBucketName: {Value: !Ref DiagnosticBucket, Export: {Name: sanchezcloud-scholens-diagnostic-bucket-name}}
+  DiagnosticBucketArn: {Value: !GetAtt DiagnosticBucket.Arn, Export: {Name: sanchezcloud-scholens-diagnostic-bucket-arn}}
+  DocumentQueueUrl: {Value: !Ref DocumentQueue, Export: {Name: sanchezcloud-scholens-document-queue-url}}
+  DocumentQueueArn: {Value: !GetAtt DocumentQueue.Arn, Export: {Name: sanchezcloud-scholens-document-queue-arn}}
+  ResearchQueueUrl: {Value: !Ref ResearchQueue, Export: {Name: sanchezcloud-scholens-research-queue-url}}
+  ResearchQueueArn: {Value: !GetAtt ResearchQueue.Arn, Export: {Name: sanchezcloud-scholens-research-queue-arn}}
+  MaintenanceQueueUrl: {Value: !Ref MaintenanceQueue, Export: {Name: sanchezcloud-scholens-maintenance-queue-url}}
+  MaintenanceQueueArn: {Value: !GetAtt MaintenanceQueue.Arn, Export: {Name: sanchezcloud-scholens-maintenance-queue-arn}}
+  SchedulerDeadLetterQueueArn: {Value: !GetAtt SchedulerDeadLetterQueue.Arn, Export: {Name: sanchezcloud-scholens-scheduler-dlq-arn}}
+  ApplicationSecurityGroupId: {Value: !Ref ApplicationSecurityGroup, Export: {Name: sanchezcloud-scholens-application-sg-id}}
+  CacheEndpointAddress: {Value: !GetAtt Cache.Endpoint.Address, Export: {Name: sanchezcloud-scholens-cache-endpoint}}
+  CacheEndpointPort: {Value: !GetAtt Cache.Endpoint.Port, Export: {Name: sanchezcloud-scholens-cache-port}}
+  DatabaseRuntimeSecretArn: {Value: !Ref DatabaseRuntimeSecret, Export: {Name: sanchezcloud-scholens-database-runtime-secret-arn}}
+  DatabaseMigratorSecretArn: {Value: !Ref DatabaseMigratorSecret, Export: {Name: sanchezcloud-scholens-database-migrator-secret-arn}}
+  CoreSecretArn: {Value: !Ref CoreSecret, Export: {Name: sanchezcloud-scholens-core-secret-arn}}
+  AiSecretArn: {Value: !Ref AiSecret, Export: {Name: sanchezcloud-scholens-ai-secret-arn}}
+  MailSecretArn: {Value: !Ref MailSecret, Export: {Name: sanchezcloud-scholens-mail-secret-arn}}
+  BillingSecretArn: {Value: !Ref BillingSecret, Export: {Name: sanchezcloud-scholens-billing-secret-arn}}
+  IntegrationsSecretArn: {Value: !Ref IntegrationsSecret, Export: {Name: sanchezcloud-scholens-integrations-secret-arn}}
+  EdgeSecretArn: {Value: !Ref EdgeSecret, Export: {Name: sanchezcloud-scholens-edge-secret-arn}}
+  ApiCacheSecretArn: {Value: !Ref ApiCacheSecret, Export: {Name: sanchezcloud-scholens-api-cache-secret-arn}}
+  JobsCacheSecretArn: {Value: !Ref JobsCacheSecret, Export: {Name: sanchezcloud-scholens-jobs-cache-secret-arn}}
+  AlertTopicArn: {Value: !Ref AlertTopic, Export: {Name: sanchezcloud-scholens-alert-topic-arn}}
+  WebRepositoryUri: {Value: !GetAtt WebRepository.RepositoryUri}
+  ApiRepositoryUri: {Value: !GetAtt ApiRepository.RepositoryUri}
+  JobsRepositoryUri: {Value: !GetAtt JobsRepository.RepositoryUri}

@@ -1,31 +1,45 @@
-"""Shared connection defaults for the Celery jobs service.
-
-The server submits tasks to the jobs worker from a few places (PDF processing,
-PDF processing), all of which need the same broker / webhook / status-API
-endpoints. Keeping the defaults here avoids drift between those call sites.
-
-The broker default points at RabbitMQ, which is what the jobs worker consumes
-from (see ``jobs/src/celery_app.py``). Override any of these via the matching
-environment variable in deployed environments.
-"""
+"""Shared Celery producer configuration for the durable Jobs outbox."""
 
 import os
 
 DEFAULT_CELERY_BROKER_URL = "pyamqp://guest@127.0.0.1:55672//"
 DEFAULT_WEBHOOK_BASE_URL = "http://127.0.0.1:7301"
-DEFAULT_CELERY_API_URL = "http://127.0.0.1:7302"
+SQS_QUEUE_ENVIRONMENT = {
+    "document": "SQS_DOCUMENT_QUEUE_URL",
+    "research": "SQS_RESEARCH_QUEUE_URL",
+    "maintenance": "SQS_MAINTENANCE_QUEUE_URL",
+}
 
 
 def get_celery_broker_url(override: str | None = None) -> str:
     """Resolve the Celery broker URL (explicit override > env var > default)."""
-    return override or os.environ.get("CELERY_BROKER_URL") or DEFAULT_CELERY_BROKER_URL
+    configured = override or os.environ.get("CELERY_BROKER_URL")
+    if configured:
+        return configured
+    if os.environ.get("ENVIRONMENT", "development").casefold() == "production":
+        raise RuntimeError("CELERY_BROKER_URL is required in production")
+    return DEFAULT_CELERY_BROKER_URL
+
+
+def get_celery_transport_options(broker_url: str) -> dict[str, object]:
+    """Build IAM-only SQS transport options or local RabbitMQ confirms."""
+    if not broker_url.startswith("sqs://"):
+        return {"confirm_publish": True}
+    missing = [name for name in SQS_QUEUE_ENVIRONMENT.values() if not os.getenv(name)]
+    if missing:
+        raise RuntimeError(f"missing predefined SQS queues: {', '.join(missing)}")
+    return {
+        "region": os.getenv("AWS_REGION", "ap-southeast-1"),
+        "visibility_timeout": 45 * 60,
+        "wait_time_seconds": 20,
+        "polling_interval": 1,
+        "predefined_queues": {
+            queue: {"url": os.environ[environment]}
+            for queue, environment in SQS_QUEUE_ENVIRONMENT.items()
+        },
+    }
 
 
 def get_webhook_base_url(override: str | None = None) -> str:
     """Resolve the base URL the jobs worker calls back for webhooks."""
     return override or os.environ.get("WEBHOOK_BASE_URL") or DEFAULT_WEBHOOK_BASE_URL
-
-
-def get_celery_api_url(override: str | None = None) -> str:
-    """Resolve the base URL of the Celery status API service."""
-    return override or os.environ.get("CELERY_API_URL") or DEFAULT_CELERY_API_URL

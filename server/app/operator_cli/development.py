@@ -85,7 +85,7 @@ def _apply_local_grants(admin_url: str) -> None:
     if any(not _ROLE_PATTERN.fullmatch(role) for role in roles.values()):
         raise ValueError("Database role names must be lowercase SQL identifiers")
     bootstrap = (
-        Path(__file__).resolve().parents[3] / "deploy/production/bootstrap-db.sql"
+        Path(__file__).resolve().parents[3] / "deploy/ecs/database-bootstrap.sql"
     )
     environment = os.environ.copy()
     if parsed.password:

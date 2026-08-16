@@ -47,8 +47,8 @@ Generate audio overviews of your papers for when reading isn't an option.
 
 Scholens is open source, and you can run the full stack yourself. Fair warning: it's built primarily as a hosted service and isn't optimized for self-hosting, so expect some assembly (Postgres, S3-compatible storage, LLM API keys, background workers). The setup in [DEVELOPMENT.md](./DEVELOPMENT.md) is the best starting point.
 
-For the hardened AWS/EC2 deployment that shares SanchezCloud accounts with Scholight, see
-[`deploy/production/README.md`](./deploy/production/README.md).
+For the hardened ECS/Fargate deployment on the shared SanchezCloud platform, see
+[`deploy/ecs/README.md`](./deploy/ecs/README.md).
 
 ## Contributing
 

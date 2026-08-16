@@ -41,5 +41,5 @@ def test_pdf_task_budget_reserves_time_after_mineru_retries() -> None:
     assert "upgrade_pdf_parser" not in task_routes
     assert upload_and_process_file.soft_time_limit == 1200
     assert upload_and_process_file.time_limit == 1260
-    assert "--soft-time-limit=900" in worker_script
-    assert "--time-limit=960" in worker_script
+    assert "--soft-time-limit" not in worker_script
+    assert "--time-limit" not in worker_script

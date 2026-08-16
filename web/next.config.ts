@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["motion/react", "motion/react-m"],
   },
+  generateBuildId: async () =>
+    process.env.NEXT_PUBLIC_RELEASE_SHA ?? "development",
+  output: "standalone",
+  productionBrowserSourceMaps: true,
   reactStrictMode: true,
   typedRoutes: true,
 };

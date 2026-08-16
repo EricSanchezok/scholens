@@ -6,6 +6,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from scholens_job_contracts import JobQueue
+
 from app.database.models import (
     Conversation,
     ConversationScopeType,
@@ -88,7 +90,7 @@ def schedule_document_gc(
             ),
             payload={"document_id": str(document.id)},
             task_name="collect_document",
-            queue="storage_gc",
+            queue=JobQueue.MAINTENANCE,
             task_kwargs={
                 "callback_url": (f"{base_url}/internal/v1/jobs/{job_id}/complete"),
                 "claim_url": f"{base_url}/internal/v1/jobs/{job_id}/claim",

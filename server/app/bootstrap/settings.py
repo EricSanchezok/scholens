@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, IPvAnyNetwork, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.bootstrap.cache_endpoint import cache_url_from_fields
 
 PUBLIC_API_PREFIX = "/api/v1"
 WEBHOOK_API_PREFIX = "/webhooks/v1"
@@ -23,6 +25,8 @@ class AppSettings(BaseSettings):
     diagnostic_snapshot_bucket: str | None = None
     diagnostic_snapshot_kms_key_id: str | None = None
     diagnostic_success_sample_rate: float = Field(default=0.01, ge=0, le=1)
+    trust_cloudflare_client_ip: bool = False
+    trusted_proxy_cidr: IPvAnyNetwork | None = None
     client_domain: str = "http://127.0.0.1:7300"
     client_allowed_origins: str | None = None
     paper_search_backend: Literal["postgres_fts"] = "postgres_fts"
@@ -30,7 +34,12 @@ class AppSettings(BaseSettings):
         default="development-only-search-cursor-secret",
         min_length=32,
     )
-    ai_limit_redis_url: str | None = None
+    cache_url: str | None = None
+    cache_host: str | None = None
+    cache_port: int = Field(default=6379, ge=1, le=65535)
+    cache_username: str | None = None
+    cache_password: str | None = None
+    cache_tls: bool = False
     integration_credential_encryption_key: str = _DEVELOPMENT_INTEGRATION_KEY
     scholight_mcp_url: str = "https://scholight.sanchezcloud.net/api/mcp"
     scholight_mcp_delegation_jwt_secret: str | None = None
@@ -41,6 +50,18 @@ class AppSettings(BaseSettings):
         raw_origins = self.client_allowed_origins or self.client_domain
         origins = (origin.strip() for origin in raw_origins.split(","))
         return list(dict.fromkeys(origin for origin in origins if origin))
+
+    @property
+    def resolved_cache_url(self) -> str | None:
+        return cache_url_from_fields(
+            configured_url=self.cache_url,
+            host=self.cache_host,
+            port=self.cache_port,
+            username=self.cache_username,
+            password=self.cache_password,
+            tls=self.cache_tls,
+            environment=self.environment,
+        )
 
     @model_validator(mode="after")
     def reject_development_secrets_in_production(self) -> AppSettings:
@@ -77,4 +98,14 @@ class AppSettings(BaseSettings):
             raise ValueError(
                 "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET is required in production"
             )
+        if (
+            self.environment.casefold() == "production"
+            and self.trust_cloudflare_client_ip
+            and self.trusted_proxy_cidr is None
+        ):
+            raise ValueError(
+                "TRUSTED_PROXY_CIDR is required when Cloudflare client IP is trusted"
+            )
+        if self.environment.casefold() == "production":
+            self.resolved_cache_url
         return self

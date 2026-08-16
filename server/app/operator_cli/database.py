@@ -89,6 +89,29 @@ def migration_status() -> dict[str, object]:
     }
 
 
+def _require_unique_current_head(payload: dict[str, object]) -> None:
+    expected_value = payload.get("expected_revisions")
+    current_value = payload.get("current_revisions")
+    if not isinstance(expected_value, (list, tuple)) or not all(
+        isinstance(value, str) for value in expected_value
+    ):
+        raise RuntimeError("expected migration revisions are malformed")
+    if not isinstance(current_value, (list, tuple)) or not all(
+        isinstance(value, str) for value in current_value
+    ):
+        raise RuntimeError("current migration revisions are malformed")
+    expected = tuple(expected_value)
+    current = tuple(current_value)
+    if (
+        len(expected) != 1
+        or current != expected
+        or payload.get("up_to_date") is not True
+    ):
+        raise RuntimeError(
+            "migration did not converge to the one expected Scholens head"
+        )
+
+
 @click.group("db", cls=OutputGroup)
 def database_group() -> None:
     """Inspect or explicitly migrate the Scholens schema."""
@@ -116,6 +139,7 @@ def upgrade_command(state: CliState, yes: bool) -> None:
             "The migration database role must own the scholens schema."
         )
     if before["up_to_date"]:
+        _require_unique_current_head(before)
         emit(
             state,
             {"status": "unchanged", **before},
@@ -125,6 +149,7 @@ def upgrade_command(state: CliState, yes: bool) -> None:
     confirm("Apply all pending Scholens product migrations?", yes=yes)
     command.upgrade(alembic_config(database_url=database_url), "head")
     payload = migration_status()
+    _require_unique_current_head(payload)
     emit(state, {"status": "changed", **payload}, human="Scholens schema is current.")
 
 

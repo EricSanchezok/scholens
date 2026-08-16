@@ -9,6 +9,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from app.shared.application import OperationContext
+from app.transport.client_ip import apply_trusted_proxy_scheme, resolve_scope_client_ip
 from scholens_observability import (
     ObservabilityContext,
     build_snapshot,
@@ -82,6 +83,7 @@ class RequestObservabilityMiddleware:
             release=release,
         )
         self._success_sample_rate = success_sample_rate
+        self._environment = environment
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -90,6 +92,26 @@ class RequestObservabilityMiddleware:
         request_id = str(uuid4())
         state = scope.setdefault("state", {})
         state["request_id"] = request_id
+        application = scope.get("app")
+        runtime_settings = getattr(
+            getattr(application, "state", None), "settings", None
+        )
+        state["client_ip"] = resolve_scope_client_ip(
+            scope,
+            environment=self._environment,
+            trust_cloudflare=bool(
+                getattr(runtime_settings, "trust_cloudflare_client_ip", False)
+            ),
+            trusted_proxy_cidr=getattr(runtime_settings, "trusted_proxy_cidr", None),
+        )
+        apply_trusted_proxy_scheme(
+            scope,
+            environment=self._environment,
+            trust_cloudflare=bool(
+                getattr(runtime_settings, "trust_cloudflare_client_ip", False)
+            ),
+            trusted_proxy_cidr=getattr(runtime_settings, "trusted_proxy_cidr", None),
+        )
         started = monotonic()
         response_status = 500
         response_started = False
@@ -115,6 +137,7 @@ class RequestObservabilityMiddleware:
                 logging.INFO,
                 "http.request.started",
                 method=scope.get("method", "UNKNOWN"),
+                client_ip=state["client_ip"],
             )
             try:
                 await self._app(scope, receive, observed_send)
@@ -128,6 +151,7 @@ class RequestObservabilityMiddleware:
                     method=scope.get("method", "UNKNOWN"),
                     route=_route_template(scope),
                     duration_ms=round(duration_ms, 3),
+                    client_ip=state["client_ip"],
                 )
                 raise
             finally:
@@ -159,6 +183,7 @@ class RequestObservabilityMiddleware:
                     response_started=response_started,
                     stream_failed=stream_failed,
                     duration_ms=round(duration_ms, 3),
+                    client_ip=state["client_ip"],
                 )
                 self._record_sampled_success(
                     scope=scope,

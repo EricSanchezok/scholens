@@ -35,6 +35,7 @@ threads = 1  # Number of threads per worker (Uvicorn handles concurrency well, o
 # Environment variables to pass to workers (if needed)
 # raw_env = ["VAR1=value1", "VAR2=value2"]
 
-# Forwarded headers (if behind a proxy like Nginx)
-forwarded_allow_ips = os.getenv("FORWARDED_ALLOW_IPS", "127.0.0.1")
-proxy_headers = True  # Enable reading proxy headers (X-Forwarded-For, etc.)
+# Preserve the raw ALB peer in ASGI scope. The application owns the stricter
+# Cloudflare header and scheme contract after verifying the private ALB hop.
+forwarded_allow_ips = ""
+proxy_headers = False

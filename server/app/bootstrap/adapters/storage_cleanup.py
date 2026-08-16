@@ -6,6 +6,8 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from scholens_job_contracts import JobQueue
+
 from app.database.models import JobOperation
 from app.shared.domain import JsonValue
 from app.helpers.celery_config import get_webhook_base_url
@@ -43,7 +45,7 @@ def schedule_storage_deletion(
             idempotency_key=f"storage-delete:{idempotency_key}",
             payload={"object_keys": keys_json},
             task_name="delete_storage_objects",
-            queue="storage_gc",
+            queue=JobQueue.MAINTENANCE,
             task_kwargs={
                 "object_keys": keys_json,
                 "callback_url": (f"{base_url}/internal/v1/jobs/{job_id}/complete"),

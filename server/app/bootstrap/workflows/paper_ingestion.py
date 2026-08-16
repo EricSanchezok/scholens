@@ -200,14 +200,6 @@ class PaperIngestionWorkflow:
             )
         )
         if changed:
-            try:
-                self._jobs.revoke(job_id=str(job_id))
-            except RuntimeError:
-                logger.warning(
-                    "paper_ingestion.revoke_failed",
-                    exc_info=True,
-                    extra={"job_id": str(job_id)},
-                )
             ingestion = self._executor.query(
                 lambda capabilities: capabilities.paper_ingestion
             )

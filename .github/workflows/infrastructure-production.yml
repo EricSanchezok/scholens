@@ -1,0 +1,135 @@
+name: Update production foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Preview or apply the persistent foundation stack
+        required: true
+        type: choice
+        options: [plan, apply]
+      ref:
+        description: Exact main revision containing the reviewed template
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: scholens-production-control-plane
+  cancel-in-progress: false
+
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    environment: infrastructure-production
+    steps:
+      - name: Check out reviewed infrastructure
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require revision to be merged into main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - name: Configure AWS infrastructure credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.AWS_INFRASTRUCTURE_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Validate foundation template
+        run: >-
+          aws cloudformation validate-template
+          --template-body file://deploy/ecs/scholens-foundation.yml
+          >/dev/null
+      - name: Require the administrator-created foundation stack
+        run: >-
+          aws cloudformation describe-stacks
+          --stack-name sanchezcloud-scholens-foundation
+          >/dev/null
+      - name: Preview foundation change set
+        if: inputs.operation == 'plan'
+        env:
+          PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+          FOUNDATION_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN }}
+        run: |
+          change_set="github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup_change_set() {
+            aws cloudformation delete-change-set \
+              --stack-name sanchezcloud-scholens-foundation \
+              --change-set-name "$change_set" >/dev/null 2>&1 || true
+          }
+          trap cleanup_change_set EXIT
+          aws cloudformation create-change-set \
+            --stack-name sanchezcloud-scholens-foundation \
+            --change-set-name "$change_set" \
+            --change-set-type UPDATE \
+            --template-body file://deploy/ecs/scholens-foundation.yml \
+            --role-arn "$FOUNDATION_CLOUDFORMATION_ROLE_ARN" \
+            --parameters \
+              ParameterKey=ProductionDomain,ParameterValue="$PRODUCTION_DOMAIN" \
+              ParameterKey=AlertEmail,ParameterValue="$ALERT_EMAIL" \
+            --tags \
+              Key=System,Value=SanchezCloud \
+              Key=Product,Value=Scholens \
+              Key=Environment,Value=production \
+              Key=ManagedBy,Value=CloudFormation \
+            >/dev/null
+          set +e
+          aws cloudformation wait change-set-create-complete \
+            --stack-name sanchezcloud-scholens-foundation \
+            --change-set-name "$change_set"
+          wait_status=$?
+          set -e
+          aws cloudformation describe-change-set \
+            --stack-name sanchezcloud-scholens-foundation \
+            --change-set-name "$change_set" \
+            --query '{Status:Status,Reason:StatusReason,Changes:Changes[].ResourceChange.{Action:Action,LogicalId:LogicalResourceId,Type:ResourceType,Replacement:Replacement}}'
+          status=$(aws cloudformation describe-change-set \
+            --stack-name sanchezcloud-scholens-foundation \
+            --change-set-name "$change_set" \
+            --query Status --output text)
+          reason=$(aws cloudformation describe-change-set \
+            --stack-name sanchezcloud-scholens-foundation \
+            --change-set-name "$change_set" \
+            --query StatusReason --output text)
+          if [[ "$wait_status" -ne 0 ]]; then
+            if [[ "$status" == "FAILED" && "$reason" == *"didn't contain changes"* ]]; then
+              echo "No foundation changes."
+              exit 0
+            fi
+            echo "Foundation change set failed: $status: $reason" >&2
+            exit 1
+          fi
+          test "$status" = "CREATE_COMPLETE"
+      - name: Apply foundation change set
+        if: inputs.operation == 'apply'
+        env:
+          PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+          FOUNDATION_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN }}
+        run: |
+          aws cloudformation deploy \
+            --stack-name sanchezcloud-scholens-foundation \
+            --template-file deploy/ecs/scholens-foundation.yml \
+            --role-arn "$FOUNDATION_CLOUDFORMATION_ROLE_ARN" \
+            --no-fail-on-empty-changeset \
+            --tags \
+              System=SanchezCloud \
+              Product=Scholens \
+              Environment=production \
+              ManagedBy=CloudFormation \
+            --parameter-overrides \
+              ProductionDomain="$PRODUCTION_DOMAIN" \
+              AlertEmail="$ALERT_EMAIL"
+      - name: Record foundation operation
+        run: |
+          {
+            echo "### Scholens foundation ${{ inputs.operation }}"
+            echo "- Revision: \`$(git rev-parse HEAD)\`"
+            echo "- Stack: \`sanchezcloud-scholens-foundation\`"
+          } >> "$GITHUB_STEP_SUMMARY"

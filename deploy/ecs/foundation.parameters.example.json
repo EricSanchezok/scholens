@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "ProductionDomain",
+    "ParameterValue": "scholens.sanchezcloud.net"
+  },
+  {
+    "ParameterKey": "AlertEmail",
+    "ParameterValue": "operator@example.invalid"
+  }
+]

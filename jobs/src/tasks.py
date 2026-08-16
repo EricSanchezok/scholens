@@ -8,7 +8,6 @@ import os
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from functools import partial
 from typing import Any, Literal
 
 import psutil
@@ -33,7 +32,7 @@ from src.pdf.models import (
     ParserTransientError,
 )
 from src.pdf.pipeline import process_pdf_file
-from src.celery_app import celery_app, ZOTERO_SYNC_INTERVAL_SECONDS
+from src.celery_app import celery_app
 from src.s3_service import s3_service
 from src.token_usage import collect_token_usage
 from src.utils import time_it
@@ -92,11 +91,9 @@ class ProgressReporter:
     def __init__(
         self,
         *,
-        task: Any,
         task_id: str,
         progress_url: str,
     ) -> None:
-        self._task = task
         self._task_id = task_id
         self._progress_url = progress_url
         self._progress_code = "downloading"
@@ -117,7 +114,10 @@ class ProgressReporter:
         self._thread.join(timeout=JOB_PROGRESS_TIMEOUT_SECONDS + 1)
 
     def update(self, status: str) -> None:
-        _update_status(self._task, self._task_id, status)
+        logger.info(
+            "job.status.updating",
+            extra={"job_id": self._task_id, "status": status},
+        )
         self._progress_code = _normalize_pdf_progress(
             status,
             current=self._progress_code,
@@ -155,14 +155,6 @@ class ProgressReporter:
             )
 
 
-def _update_status(task: Any, task_id: str, status: str) -> None:
-    logger.info("job.status.updating", extra={"job_id": task_id})
-    try:
-        task.update_state(state="PROGRESS", meta={"status": status})
-    except Exception:
-        logger.exception("job.status.update_failed", extra={"job_id": task_id})
-
-
 def _deliver_webhook(
     webhook_url: str,
     payload: dict[str, Any],
@@ -192,6 +184,14 @@ def _claim_job(claim_url: str | None, *, task_id: str) -> bool:
     except requests.RequestException:
         logger.exception("job.claim.failed", extra={"job_id": task_id})
         raise
+
+
+def _log_data_table_progress(task_id: str, status: str) -> None:
+    """Record progress without relying on a Celery result backend."""
+    logger.info(
+        "job.data_table.progress",
+        extra={"job_id": task_id, "status": status},
+    )
 
 
 def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
@@ -308,7 +308,6 @@ def upload_and_process_file(
 
     try:
         with ProgressReporter(
-            task=self,
             task_id=task_id,
             progress_url=progress_url,
         ) as progress:
@@ -436,7 +435,9 @@ def construct_data_table_task(
     if not _claim_job(claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
-    write_to_status = partial(_update_status, self, task_id)
+
+    def write_to_status(status: str) -> None:
+        _log_data_table_progress(task_id, status)
 
     write_to_status("Starting data table construction")
 
@@ -726,26 +727,6 @@ def health_check(self):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "worker_id": self.request.hostname,
         }
-
-
-@celery_app.task(bind=True, name="periodic_zotero_sync")
-def periodic_zotero_sync(self):
-    """Ask Server to persist due per-user Zotero jobs in its outbox."""
-    webhook_base = os.getenv("WEBHOOK_BASE_URL", "http://127.0.0.1:7301")
-    sync_interval = int(ZOTERO_SYNC_INTERVAL_SECONDS)
-    url = (
-        f"{webhook_base}/internal/v1/schedules/zotero-sync"
-        f"?threshold_seconds={sync_interval}"
-    )
-    logger.info("job.zotero_schedule.started")
-    resp = post_signed_json(url, timeout=120)
-    resp.raise_for_status()
-    result = resp.json()
-    logger.info(
-        "job.zotero_schedule.completed",
-        extra={"scheduled_job_count": result.get("scheduled_jobs", 0)},
-    )
-    return result
 
 
 @celery_app.task(bind=True, name="postprocess_zotero")

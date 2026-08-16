@@ -14,7 +14,7 @@ Current facts have one canonical home:
 - shared-package public behavior, consumers, and limitations belong in that
   package's README;
 - local commands and environment behavior belong in `DEVELOPMENT.md`;
-- production operations belong in `deploy/production/README.md`.
+- production operations belong in `deploy/ecs/README.md`.
 
 Write an ADR before deliberately changing a foundational rule such as adding a
 global state library, a primitive or icon system, a shared package, a
@@ -53,6 +53,7 @@ change what the accepted record decided.
 - [ADR 0019: User-owned integration credentials and explicit AI reflow](./0019-user-owned-integration-credentials.md)
 - [ADR 0020: Separate paid subscriptions from product-granted entitlements](./0020-separate-paid-and-product-entitlements.md)
 - [ADR 0021: Semantic Web motion system](./0021-web-motion-system.md)
+- [ADR 0022: Immutable ECS release boundary](./0022-immutable-ecs-release-boundary.md)
 
 ## Template
 

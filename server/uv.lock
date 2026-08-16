@@ -553,7 +553,7 @@ wheels = [
 
 [[package]]
 name = "celery"
-version = "5.5.3"
+version = "5.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "billiard" },
@@ -563,11 +563,20 @@ dependencies = [
     { name = "click-repl" },
     { name = "kombu" },
     { name = "python-dateutil" },
+    { name = "tzlocal" },
     { name = "vine" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bb/7d/6c289f407d219ba36d8b384b42489ebdd0c84ce9c413875a8aae0c85f35b/celery-5.5.3.tar.gz", hash = "sha256:6c972ae7968c2b5281227f01c3a3f984037d21c5129d07bf3550cc2afc6b10a5", size = 1667144, upload-time = "2025-06-01T11:08:12.563Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/b4/a1233943ab5c8ea05fb877a88a0a0622bf47444b99e4991a8045ac37ea1d/celery-5.6.3.tar.gz", hash = "sha256:177006bd2054b882e9f01be59abd8529e88879ef50d7918a7050c5a9f4e12912", size = 1742243, upload-time = "2026-03-26T12:14:51.76Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/af/0dcccc7fdcdf170f9a1585e5e96b6fb0ba1749ef6be8c89a6202284759bd/celery-5.5.3-py3-none-any.whl", hash = "sha256:0b5761a07057acee94694464ca482416b959568904c9dfa41ce8413a7d65d525", size = 438775, upload-time = "2025-06-01T11:08:09.94Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/c9/6eccdda96e098f7ae843162db2d3c149c6931a24fda69fe4ab84d0027eb5/celery-5.6.3-py3-none-any.whl", hash = "sha256:0808f42f80909c4d5833202360ffafb2a4f83f4d8e23e1285d926610e9a7afa6", size = 451235, upload-time = "2026-03-26T12:14:49.491Z" },
+]
+
+[package.optional-dependencies]
+sqs = [
+    { name = "boto3" },
+    { name = "kombu", extra = ["sqs"] },
+    { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
+    { name = "urllib3" },
 ]
 
 [[package]]
@@ -1300,7 +1309,7 @@ wheels = [
 
 [[package]]
 name = "kombu"
-version = "5.5.4"
+version = "5.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "amqp" },
@@ -1308,9 +1317,16 @@ dependencies = [
     { name = "tzdata" },
     { name = "vine" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/d3/5ff936d8319ac86b9c409f1501b07c426e6ad41966fedace9ef1b966e23f/kombu-5.5.4.tar.gz", hash = "sha256:886600168275ebeada93b888e831352fe578168342f0d1d5833d88ba0d847363", size = 461992, upload-time = "2025-06-01T10:19:22.281Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/a5/607e533ed6c83ae1a696969b8e1c137dfebd5759a2e9682e26ff1b97740b/kombu-5.6.2.tar.gz", hash = "sha256:8060497058066c6f5aed7c26d7cd0d3b574990b09de842a8c5aaed0b92cc5a55", size = 472594, upload-time = "2025-12-29T20:30:07.779Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/70/a07dcf4f62598c8ad579df241af55ced65bed76e42e45d3c368a6d82dbc1/kombu-5.5.4-py3-none-any.whl", hash = "sha256:a12ed0557c238897d8e518f1d1fdf84bd1516c5e305af2dacd85c2015115feb8", size = 210034, upload-time = "2025-06-01T10:19:20.436Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/0f/834427d8c03ff1d7e867d3db3d176470c64871753252b21b4f4897d1fa45/kombu-5.6.2-py3-none-any.whl", hash = "sha256:efcfc559da324d41d61ca311b0c64965ea35b4c55cc04ee36e55386145dace93", size = 214219, upload-time = "2025-12-29T20:30:05.74Z" },
+]
+
+[package.optional-dependencies]
+sqs = [
+    { name = "boto3" },
+    { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
+    { name = "urllib3" },
 ]
 
 [[package]]
@@ -2003,6 +2019,30 @@ wheels = [
 ]
 
 [[package]]
+name = "pycurl"
+version = "7.47.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/bc/705aa3bc36b99946a128d068e1afd4b6f3eebb36c6b97f551f3d2d740460/pycurl-7.47.0.tar.gz", hash = "sha256:5e3cf357939da8d4ceefe3c7f305afcf9b47cba66cfd95e7768ca43b38445e14", size = 301499, upload-time = "2026-06-29T18:59:11.712Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cc/fa/adc92c7af81d9dc50d1e6e25357ec80ee0b2115b135868a86e78e025860f/pycurl-7.47.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:a36d2a0e1a159cf1dc6d7683c40ba2e6d346fe6450e418dec95d98555e9c349d", size = 3681328, upload-time = "2026-06-29T18:58:32.425Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/f7/d2c4719c7e76735c6426016aab7bd8f00b111c131d15e878ac0a99706101/pycurl-7.47.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:09fdb6ca1e4f7f166dd8dc0371d69f4aad72e3d7f5123e755548993219d10f8d", size = 3788454, upload-time = "2026-06-29T18:58:34.094Z" },
+    { url = "https://files.pythonhosted.org/packages/93/b4/836f5bca844684b375285f3ab556b50fb2f5b860b2eaf2f4b21d05180232/pycurl-7.47.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:065e900f45c1882738c6866b1557e983050d51bf2eef8b3b0e47145a484b6515", size = 5423110, upload-time = "2026-06-29T18:58:35.879Z" },
+    { url = "https://files.pythonhosted.org/packages/03/07/017e8028dda0eaefd67de09819bdcb2df162e51e9f7072f04e93d007e620/pycurl-7.47.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:478c76dacb28cb59dc19cf7e7d1a8e0211385d2a3082c63e326883109963a617", size = 5128009, upload-time = "2026-06-29T18:58:37.496Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/09/00145a37bb668e808ece345b559cc2bdd6cfc0cb44e22aad4d80ed01a6f3/pycurl-7.47.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:75f576d491fff65b059bf9de0d7a9c8babb83d73cdf2db2f3b1acbfce52942dc", size = 3681240, upload-time = "2026-06-29T18:58:43.002Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/8f/b8546b3052309b6620b0a2949a7271d787135f9800f49a778aaee2836d0b/pycurl-7.47.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:5b149b78b8ada4814f31b952370d90d07783df609e746022849481e4f415dba3", size = 3788290, upload-time = "2026-06-29T18:58:44.552Z" },
+    { url = "https://files.pythonhosted.org/packages/f6/17/41f903519c6b6f42d970f184d6c51222871c07c352daf8468b5fac800e50/pycurl-7.47.0-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:1002b12a3e8f3596f94a57f2a5f58a3f61fbd97261ea23c0407f3d00fabdbf0d", size = 5428392, upload-time = "2026-06-29T18:58:46.199Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/49/b38c4dcd6289eb64c38c999341a22abd5893f8f31969e81f66eb3a40037c/pycurl-7.47.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:1a23f26e739147588610f1cba82abb9346dd913b0e1f9839942e946a76a955f6", size = 5132701, upload-time = "2026-06-29T18:58:47.682Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/c0/c5e60ebf6243213151552b96af2d34d952ba88fce1f160790b31fa915d91/pycurl-7.47.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:2679e52599d1104883ff3ba57d3c288a2e63b9e69c3fa99ab2fbb6677a706308", size = 3680804, upload-time = "2026-06-29T18:58:52.35Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/98/7d4b133b5f18b40a4341aa4710299becd18ed6a8740617827255d958ebd2/pycurl-7.47.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:36a1f8e1a293c8cda453724df05d98f95fa85ebc43628e2f85f0d8f90ccdb29a", size = 3788034, upload-time = "2026-06-29T18:58:54.032Z" },
+    { url = "https://files.pythonhosted.org/packages/26/2e/eb2d6b41ae2efd8382dd59bcbbad6fd2ed6e6b39766ea80b5fa736d5359c/pycurl-7.47.0-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:e9f950b5f33565af3e0fc2023c8e311c0d3dd25701c9402de525931ff67c5101", size = 5427677, upload-time = "2026-06-29T18:58:55.942Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/27/8a5c2e06cd26556679da9e8058caf85761f57eec80b89b8f4206d864c43d/pycurl-7.47.0-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:36f3ca3e81468ed359f98c5e93af616c9c781f47cf0859563f2a8ec5b51d8795", size = 5130920, upload-time = "2026-06-29T18:58:57.753Z" },
+    { url = "https://files.pythonhosted.org/packages/38/21/b78db5d43f694a75517fa8d80990162f11658337becedc2374f261f164d7/pycurl-7.47.0-cp314-cp314t-macosx_10_15_x86_64.whl", hash = "sha256:ce7648d04766aaacf9ce082eac3d45a4faffae3f905622f69ad9b1d89d8a2c27", size = 3684932, upload-time = "2026-06-29T18:59:02.142Z" },
+    { url = "https://files.pythonhosted.org/packages/93/5e/b40a4b49e2e9a4850736b8f199c4722882fa43ca8994c1d63e4473f2425c/pycurl-7.47.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:89bb4492f480b2a5dbd7220d4261c4cc8f6b69604193ef8ac1b11e7267ba9b99", size = 3790659, upload-time = "2026-06-29T18:59:03.588Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/8b/ff8eabd99583af0a2cff0b173e2f53dba6580ee054d496993a88b3d85520/pycurl-7.47.0-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:2540c99276b131b2ceb07aedeca06ecee63d7cf80f817bc555ddb51fdc422c21", size = 5514311, upload-time = "2026-06-29T18:59:05.04Z" },
+    { url = "https://files.pythonhosted.org/packages/70/9e/bab826db8ba5f1efa8ee18c546a733bd18dc11227c1bd1e13b7ab9c2eb6d/pycurl-7.47.0-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:43517146a604a3f710cb51da555d68ebadf7982083b6557b08d2325f9f7beb2b", size = 5209262, upload-time = "2026-06-29T18:59:06.652Z" },
+]
+
+[[package]]
 name = "pydantic"
 version = "2.13.4"
 source = { registry = "https://pypi.org/simple" }
@@ -2628,7 +2668,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "boto3" },
-    { name = "celery" },
+    { name = "celery", extra = ["sqs"] },
     { name = "click" },
     { name = "cryptography" },
     { name = "fastapi" },
@@ -2658,7 +2698,9 @@ dependencies = [
     { name = "resend" },
     { name = "sanchezcloud-identity", extra = ["aliyun", "fastapi"] },
     { name = "scholens-ai" },
+    { name = "scholens-job-contracts" },
     { name = "scholens-observability" },
+    { name = "scholens-runtime-contracts" },
     { name = "sqladmin", extra = ["full"] },
     { name = "sqlalchemy" },
     { name = "stripe" },
@@ -2682,7 +2724,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.15.1" },
     { name = "boto3", specifier = ">=1.37.33" },
-    { name = "celery", specifier = ">=5.5.3" },
+    { name = "celery", extras = ["sqs"], specifier = ">=5.6.2" },
     { name = "click", specifier = ">=8.2,<9" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "fastapi", specifier = ">=0.115" },
@@ -2712,7 +2754,9 @@ requires-dist = [
     { name = "resend", specifier = ">=2.10.0" },
     { name = "sanchezcloud-identity", extras = ["aliyun", "fastapi"], git = "https://github.com/EricSanchezok/sanchezcloud-identity.git?rev=v0.5.2" },
     { name = "scholens-ai", directory = "../packages/scholens_ai" },
+    { name = "scholens-job-contracts", directory = "../packages/scholens_job_contracts" },
     { name = "scholens-observability", directory = "../packages/scholens_observability" },
+    { name = "scholens-runtime-contracts", directory = "../packages/scholens_runtime_contracts" },
     { name = "sqladmin", extras = ["full"], specifier = ">=0.25.1" },
     { name = "sqlalchemy", specifier = ">=2.0.39" },
     { name = "stripe", specifier = ">=12.3.0" },
@@ -2748,6 +2792,11 @@ requires-dist = [
 ]
 
 [[package]]
+name = "scholens-job-contracts"
+version = "0.1.0"
+source = { directory = "../packages/scholens_job_contracts" }
+
+[[package]]
 name = "scholens-observability"
 version = "0.1.0"
 source = { directory = "../packages/scholens_observability" }
@@ -2763,6 +2812,11 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.30,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.30,<2" },
 ]
+
+[[package]]
+name = "scholens-runtime-contracts"
+version = "0.1.0"
+source = { directory = "../packages/scholens_runtime_contracts" }
 
 [[package]]
 name = "six"

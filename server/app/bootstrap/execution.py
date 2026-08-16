@@ -323,10 +323,10 @@ def create_translation_workflow(
     return TranslationWorkflow(
         executor=executor,
         result_store=SqlTranslationResultStore(SessionLocal),
-        singleflight=RedisTranslationSingleFlight(settings.ai_limit_redis_url),
+        singleflight=RedisTranslationSingleFlight(settings.resolved_cache_url),
         provider=LLMTranslationStreamProvider(),
         capacity=RedisTranslationCapacity(
-            redis_url=settings.ai_limit_redis_url,
+            redis_url=settings.resolved_cache_url,
             environment=settings.environment,
         ),
         diagnostic_recorder=diagnostic_recorder,

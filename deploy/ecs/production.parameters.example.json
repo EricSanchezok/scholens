@@ -1,0 +1,11 @@
+[
+  { "ParameterKey": "DomainName", "ParameterValue": "scholens.sanchezcloud.net" },
+  { "ParameterKey": "CertificateArn", "ParameterValue": "arn:aws:acm:ap-southeast-1:919651863140:certificate/replace-me" },
+  { "ParameterKey": "RdsSecurityGroupId", "ParameterValue": "sg-0ac42d2a5ddffaddf" },
+  { "ParameterKey": "WebImage", "ParameterValue": "919651863140.dkr.ecr.ap-southeast-1.amazonaws.com/sanchezcloud-scholens-web@sha256:0000000000000000000000000000000000000000000000000000000000000000" },
+  { "ParameterKey": "ApiImage", "ParameterValue": "919651863140.dkr.ecr.ap-southeast-1.amazonaws.com/sanchezcloud-scholens-api@sha256:0000000000000000000000000000000000000000000000000000000000000000" },
+  { "ParameterKey": "JobsImage", "ParameterValue": "919651863140.dkr.ecr.ap-southeast-1.amazonaws.com/sanchezcloud-scholens-jobs@sha256:0000000000000000000000000000000000000000000000000000000000000000" },
+  { "ParameterKey": "ReleaseSha", "ParameterValue": "0000000000000000000000000000000000000000" },
+  { "ParameterKey": "ApplicationEnabled", "ParameterValue": "false" },
+  { "ParameterKey": "SchedulerState", "ParameterValue": "DISABLED" }
+]

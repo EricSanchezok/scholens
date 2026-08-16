@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import logging
 
+from scholens_job_contracts import JobQueue
+
 from app.bootstrap.adapters.project_documents import (
     project_document_repository,
 )
@@ -148,7 +150,7 @@ def finalize_reserved_document(
             db,
             job=durable_job,
             task_name="upload_and_process_file",
-            queue="pdf_processing",
+            queue=JobQueue.DOCUMENT,
             kwargs={
                 "s3_object_key": document.s3_object_key,
                 "webhook_url": (

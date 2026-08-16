@@ -39,7 +39,7 @@ product schema.
   security-event capability, and Scholens runtime DML. It cannot write migration ledgers, execute
   DDL, alter another schema, or update/delete operation-journal entries.
 
-`deploy/production/bootstrap-db.sql` is the reviewed grant contract. It does not create login
+`deploy/ecs/database-bootstrap.sql` is the reviewed grant contract. It does not create login
 roles or persist credentials. The required order is:
 
 1. infrastructure creates roles and runs the bootstrap to create owned schemas;

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Awaitable, Protocol, cast
@@ -12,7 +11,8 @@ from typing import Awaitable, Protocol, cast
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from src.pdf.models import ParserConfigurationError, ParserTransientError
+from src.cache_config import cache_url
+from src.pdf.models import ParserTransientError
 
 STATE_TTL_SECONDS = 24 * 60 * 60
 SUBMIT_LOCK_TTL_SECONDS = 60
@@ -72,16 +72,7 @@ class ParserTaskState(Protocol):
 
 
 def parser_state_redis_url() -> str:
-    configured = os.getenv("PDF_PARSE_REDIS_URL") or os.getenv("CELERY_RESULT_BACKEND")
-    if not configured:
-        if os.getenv("ENVIRONMENT", "development").lower() == "production":
-            raise ParserConfigurationError(
-                "PDF_PARSE_REDIS_URL or CELERY_RESULT_BACKEND is required in production"
-            )
-        configured = "redis://127.0.0.1:56379/0"
-    if not configured.startswith(("redis://", "rediss://")):
-        raise ParserConfigurationError("PDF parser state requires a Redis URL")
-    return configured
+    return cache_url()
 
 
 class ParserStateStore:

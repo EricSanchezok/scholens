@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.helpers.celery_config import get_celery_broker_url
+from app.helpers.celery_config import (
+    get_celery_broker_url,
+    get_celery_transport_options,
+)
 from celery import Celery
 
 
@@ -18,7 +21,9 @@ class JobsClient:
             broker_connection_retry_on_startup=True,
             broker_connection_retry=True,
             broker_connection_max_retries=3,
-            broker_transport_options={"confirm_publish": True},
+            broker_transport_options=get_celery_transport_options(
+                self.celery_broker_url
+            ),
             task_serializer="json",
             accept_content=["json"],
             result_serializer="json",
@@ -57,18 +62,6 @@ class JobsClient:
             if "Connection refused" in error_text or "111" in error_text:
                 raise RuntimeError("jobs_broker_unavailable") from exc
             raise RuntimeError("jobs_publish_failed") from exc
-
-    def revoke(self, *, job_id: str) -> None:
-        """Best-effort queued-task cancellation; workers stop cooperatively.
-
-        Deliberately do not use ``terminate=True``: Celery documents that as an
-        administrator-only last resort because the worker process may already
-        have moved on to a different task.
-        """
-        try:
-            self._celery_app.control.revoke(job_id, terminate=False)
-        except Exception as exc:
-            raise RuntimeError("jobs_revoke_failed") from exc
 
 
 jobs_client = JobsClient()

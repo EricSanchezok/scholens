@@ -4,6 +4,8 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
+from scholens_job_contracts import JobQueue
+
 from app.bootstrap.adapters.upload_repository import (
     upload_reservation_repository,
 )
@@ -171,7 +173,7 @@ def _enqueue_pdf_postprocess(
             idempotency_key=f"pdf-postprocess:{ingestion_job_id}",
             payload={"ingestion_job_id": str(ingestion_job_id)},
             task_name="postprocess_pdf",
-            queue="pdf_processing",
+            queue=JobQueue.DOCUMENT,
             task_kwargs={
                 "callback_url": (
                     f"{base_url}/internal/v1/jobs/{postprocess_job_id}/complete"
@@ -1159,7 +1161,7 @@ def schedule_zotero_jobs(
                 idempotency_key=f"zotero-postprocess:{user.id}:{window}",
                 payload={"threshold_seconds": threshold_seconds},
                 task_name="postprocess_zotero",
-                queue="zotero_sync",
+                queue=JobQueue.MAINTENANCE,
                 task_kwargs={
                     "callback_url": (f"{base_url}/internal/v1/jobs/{job_id}/complete"),
                     "claim_url": f"{base_url}/internal/v1/jobs/{job_id}/claim",

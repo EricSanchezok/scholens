@@ -35,9 +35,19 @@ class PackageSpec:
 PACKAGE_SPECS = (
     PackageSpec("scholens_ai", "scholens-ai", "scholens_ai"),
     PackageSpec(
+        "scholens_job_contracts",
+        "scholens-job-contracts",
+        "scholens_job_contracts",
+    ),
+    PackageSpec(
         "scholens_observability",
         "scholens-observability",
         "scholens_observability",
+    ),
+    PackageSpec(
+        "scholens_runtime_contracts",
+        "scholens-runtime-contracts",
+        "scholens_runtime_contracts",
     ),
 )
 CONSUMERS = ("server", "jobs")

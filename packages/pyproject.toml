@@ -6,7 +6,9 @@ description = "Direct development environment for Scholens shared Python package
 readme = "README.md"
 dependencies = [
     "scholens-ai",
+    "scholens-job-contracts",
     "scholens-observability",
+    "scholens-runtime-contracts",
 ]
 
 [tool.uv]
@@ -14,12 +16,16 @@ package = false
 
 [tool.uv.sources]
 scholens-ai = { workspace = true }
+scholens-job-contracts = { workspace = true }
 scholens-observability = { workspace = true }
+scholens-runtime-contracts = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "scholens_ai",
+    "scholens_job_contracts",
     "scholens_observability",
+    "scholens_runtime_contracts",
 ]
 
 [dependency-groups]
@@ -37,7 +43,9 @@ strict = true
 [tool.pytest.ini_options]
 testpaths = [
     "scholens_ai/tests",
+    "scholens_job_contracts/tests",
     "scholens_observability/tests",
+    "scholens_runtime_contracts/tests",
 ]
 
 [tool.ruff]

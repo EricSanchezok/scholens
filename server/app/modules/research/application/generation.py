@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
 
+from scholens_job_contracts import JobQueue
+
 from app.modules.jobs.application.contracts import (
     AudioOverviewTaskPayload,
     AudioSourceDocumentPayload,
@@ -231,7 +233,7 @@ class ResearchGeneration:
                 idempotency_key=operation_key,
                 payload=payload,
                 task_name="generate_audio_overview",
-                queue="audio",
+                queue=JobQueue.RESEARCH,
             ),
             feature="audio",
         )
@@ -290,7 +292,7 @@ class ResearchGeneration:
                 idempotency_key=operation_key,
                 payload=payload,
                 task_name="process_data_table",
-                queue="data_table",
+                queue=JobQueue.RESEARCH,
             ),
             feature="data_table",
         )

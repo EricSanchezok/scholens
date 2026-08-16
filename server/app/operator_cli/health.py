@@ -52,11 +52,9 @@ def _migration() -> dict[str, object]:
 
 
 def _redis() -> dict[str, object]:
-    url = (
-        os.getenv("AI_LIMIT_REDIS_URL")
-        or os.getenv("CELERY_RESULT_BACKEND")
-        or "redis://127.0.0.1:56379/0"
-    )
+    from app.bootstrap.cache_endpoint import cache_url_from_environment
+
+    url = cache_url_from_environment() or "redis://127.0.0.1:56379/0"
     client = redis.Redis.from_url(
         url,
         socket_connect_timeout=1,
@@ -66,21 +64,52 @@ def _redis() -> dict[str, object]:
     return {"reachable": True}
 
 
-def _rabbitmq() -> dict[str, object]:
-    from app.helpers.celery_config import get_celery_broker_url
+def _job_broker() -> dict[str, object]:
+    from app.helpers.celery_config import (
+        get_celery_broker_url,
+        get_celery_transport_options,
+    )
 
-    parsed = urlparse(get_celery_broker_url())
+    broker_url = get_celery_broker_url()
+    if broker_url.startswith("sqs://"):
+        options = get_celery_transport_options(broker_url)
+        queues = options["predefined_queues"]
+        if not isinstance(queues, dict):
+            raise RuntimeError("predefined SQS queues are malformed")
+        client = boto3.client(
+            "sqs",
+            region_name=str(options["region"]),
+            config=Config(
+                connect_timeout=2,
+                read_timeout=2,
+                retries={"max_attempts": 1},
+            ),
+        )
+        for queue in queues.values():
+            if not isinstance(queue, dict) or not isinstance(queue.get("url"), str):
+                raise RuntimeError("predefined SQS queue URL is malformed")
+            client.get_queue_attributes(
+                QueueUrl=queue["url"], AttributeNames=["QueueArn"]
+            )
+        return {
+            "reachable": True,
+            "transport": "sqs",
+            "queues": sorted(queues),
+        }
+
+    parsed = urlparse(broker_url)
     host = parsed.hostname or "127.0.0.1"
     port = parsed.port or 5672
     with socket.create_connection((host, port), timeout=1):
         pass
-    return {"reachable": True}
+    return {"reachable": True, "transport": "amqp"}
 
 
 def _jobs() -> dict[str, object]:
-    from app.helpers.celery_config import get_celery_api_url
+    if os.getenv("ENVIRONMENT", "development").casefold() == "production":
+        return {"reachable": True, "deployed": False, "mode": "worker-only"}
 
-    response = httpx.get(f"{get_celery_api_url().rstrip('/')}/health", timeout=2)
+    response = httpx.get("http://127.0.0.1:7302/health", timeout=2)
     response.raise_for_status()
     body = response.json()
     if body.get("status") != "healthy":
@@ -136,7 +165,7 @@ def doctor_command(state: CliState) -> None:
         _run_check("database", _database),
         _run_check("migration", _migration),
         _run_check("redis", _redis),
-        _run_check("rabbitmq", _rabbitmq),
+        _run_check("job_broker", _job_broker),
         _run_check("jobs_api", _jobs),
         _run_check("s3", _s3),
         _run_check("ai_profiles", _ai_profiles),

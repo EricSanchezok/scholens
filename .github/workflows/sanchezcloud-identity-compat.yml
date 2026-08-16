@@ -126,7 +126,7 @@ jobs:
             -v app_role=scholens_app \
             -v auth_migrator_role=auth_migrator \
             -v product_migrator_role=scholens_migrator \
-            -f deploy/production/bootstrap-db.sql
+            -f deploy/ecs/database-bootstrap.sql
           server/.venv/bin/sanchezcloud-identity migrate
           server/.venv/bin/sanchezcloud-identity migrate
           server/.venv/bin/sanchezcloud-identity check-schema
@@ -135,7 +135,7 @@ jobs:
             -v app_role=scholens_app \
             -v auth_migrator_role=auth_migrator \
             -v product_migrator_role=scholens_migrator \
-            -f deploy/production/bootstrap-db.sql
+            -f deploy/ecs/database-bootstrap.sql
           AUTH_DATABASE_URL=postgresql://scholens_app:scholens-app-password@127.0.0.1:5432/sanchezcloud \
             server/.venv/bin/sanchezcloud-identity audit-database-role --profile product-runtime
       - name: Build Scholens with the candidate SDK
