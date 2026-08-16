@@ -15,7 +15,14 @@ ZoteroAutomaticState = Literal["active", "off", "paused"]
 ZoteroImportState = Literal["available", "imported", "in_progress", "failed"]
 ZoteroSourceAvailability = Literal["stored_pdf", "resolvable_source", "unavailable"]
 ZoteroOperationStatus = Literal[
-    "queued", "running", "partial", "succeeded", "failed", "cancelling", "cancelled"
+    "queued", "running", "partial", "succeeded", "failed", "cancelled"
+]
+ZoteroOperationKind = Literal["import", "sync"]
+ZoteroOperationProgress = Literal[
+    "queued",
+    "fetching_library",
+    "syncing_annotations",
+    "importing_papers",
 ]
 
 
@@ -54,6 +61,7 @@ class ZoteroConnectionStatus(BaseModel):
     auto_import_state: ZoteroAutomaticState = "off"
     last_error_code: str | None = None
     active_operation_id: UUID | None = None
+    active_operation_kind: ZoteroOperationKind | None = None
 
 
 class ZoteroSyncPreferencesRequest(BaseModel):
@@ -109,8 +117,9 @@ class ZoteroOperationCounts(BaseModel):
 
 class ZoteroOperation(BaseModel):
     id: UUID
-    kind: Literal["import", "sync"]
+    kind: ZoteroOperationKind
     status: ZoteroOperationStatus
+    progress_code: ZoteroOperationProgress | None = None
     counts: ZoteroOperationCounts
     items: list[ZoteroOperationItem] = Field(default_factory=list)
     error_code: str | None = None
@@ -166,4 +175,5 @@ class ZoteroImportResponse(BaseModel):
     imported_count: int
     imported_via_url: int
     skipped_already_imported: int
+    skipped_item_keys: list[str] = Field(default_factory=list)
     errors: list[ZoteroImportError]

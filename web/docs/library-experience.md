@@ -155,8 +155,10 @@ slots)`; zero capacity is an explicit state rather than a paid-upgrade action.
 
 Submitting creates one idempotent asynchronous import operation and closes the
 chooser after Server returns `202`. The operation surface polls its durable
-`queued`, `running`, `partial`, `succeeded`, `failed`, `cancelling`, or
-`cancelled` state and supports cooperative cancellation. Each accepted item
+`queued`, `running`, `partial`, `succeeded`, `failed`, or `cancelled` state and
+supports cooperative cancellation. It restores the active import from Zotero
+status after refresh or navigation and shows worker stages without a fabricated
+percentage. Each accepted item
 immediately continues through the existing Library ingestion row and PDF
 stages; the Zotero batch is progress context, not another paper-row authority.
 Partial success preserves successful papers and gives every failed Zotero item

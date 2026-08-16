@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -28,6 +28,7 @@ import {
   startZoteroImport,
   type ZoteroLibraryFilters,
   type ZoteroOperation,
+  zoteroKeys,
   zoteroQueries,
 } from "./api";
 import { zoteroLibraryErrorKey } from "./message-keys";
@@ -62,6 +63,7 @@ export function ZoteroLibraryDialog({
   open: boolean;
 }) {
   const t = useTranslations("Zotero.library");
+  const queryClient = useQueryClient();
   const [query, setQuery] = React.useState("");
   const debouncedQuery = useDebouncedValue(query);
   const [filters, setFilters] = React.useState(defaultFilters);
@@ -99,6 +101,9 @@ export function ZoteroLibraryDialog({
       onImportAccepted(operation);
       onOpenChange(false);
     },
+    onError: async () => {
+      await queryClient.invalidateQueries({ queryKey: zoteroKeys.status() });
+    },
   });
 
   function handleOpenChange(nextOpen: boolean) {
@@ -123,6 +128,7 @@ export function ZoteroLibraryDialog({
     library.data?.remaining_slots ?? 50,
     50,
   );
+  const hasActiveOperation = Boolean(status.data?.active_operation_id);
 
   return (
     <Dialog onOpenChange={handleOpenChange} open={open}>
@@ -260,6 +266,12 @@ export function ZoteroLibraryDialog({
                 </Select>
               </div>
 
+              {hasActiveOperation ? (
+                <p className="text-secondary text-sm" role="status">
+                  {t("operationActive")}
+                </p>
+              ) : null}
+
               {library.isPending ? (
                 <LoadingState label={t("loading")} />
               ) : library.isError ? (
@@ -289,6 +301,7 @@ export function ZoteroLibraryDialog({
                       item.import_state !== "available";
                     const disabled =
                       unavailable ||
+                      hasActiveOperation ||
                       (!checked && selected.length >= maxSelection);
                     return (
                       <label
@@ -385,7 +398,11 @@ export function ZoteroLibraryDialog({
               {t("cancel")}
             </Button>
             <Button
-              disabled={selected.length === 0 || maxSelection === 0}
+              disabled={
+                selected.length === 0 ||
+                maxSelection === 0 ||
+                hasActiveOperation
+              }
               loading={importMutation.isPending}
               onClick={() => importMutation.mutate(selected)}
             >

@@ -98,14 +98,20 @@ then creates the ordinary paper-ingestion lifecycle with Zotero metadata as
 the authority. One bad item therefore yields a partial operation instead of
 rolling back accepted papers. Provider rate limits use bounded retry delay;
 credential replacement, disconnect, and cancellation are checked at expensive
-boundaries.
+boundaries. Every outbound session ignores environment proxies; public PDF
+redirects are revalidated against the connected peer address, and a Zotero API
+key is never forwarded across origins. Controlled failures, cancellation, and
+failed callback delivery remove temporary `zotero-imports/` objects.
 
 A sync fetches new annotations for papers already imported into Scholens and
 returns their Zotero annotation keys for idempotent append-only application.
 Automatic Researcher runs may additionally request items modified after the
-Server-provided library-version checkpoint. The worker follows Zotero's
-version pagination until complete and returns the observed final version; it
-does not infer eligibility, enable auto import, or own the checkpoint. Group
+Server-provided library-version checkpoint. Each run reads at most 50 later
+items from a stable ascending provider page and returns both its bounded page
+position and the observed final version. Server alone advances the recoverable
+checkpoint through the contiguous success/permanent-skip prefix; transient or
+quota failures remain eligible on the next run. The worker does not infer
+eligibility, enable auto import, or own the checkpoint. Group
 Libraries, annotation deletion/overwrite, and writes to Zotero are outside the
 worker contract.
 

@@ -214,6 +214,9 @@ only stable metadata, current import state, and `stored_pdf`,
 Import and sync acceptance are short application commands. They enforce
 connection, quota, ownership, idempotency, and concurrency; then commit one
 `ZoteroOperation`, DurableJob, and outbox row and return `202`. The broker
+acceptance transaction locks the user's connection, so import and sync share a
+single active-operation slot. Status projects the active kind and ID without
+exposing the generic job payload.
 payload contains no API key. After the worker claims the operation, it obtains
 the current revision-scoped credential, performs Zotero reads and PDF
 validation, and sends idempotent signed progress and item callbacks. Server
@@ -225,8 +228,10 @@ Manual sync includes only already imported Zotero items. Scheduled sync is
 eligible only for Researcher and uses Zotero library/item versions for
 incremental annotation work. Automatic import is a separate default-off
 preference: enabling it snapshots the current library version, scheduled work
-requests only later items, and Server advances the checkpoint after accepting
-the result. Losing Researcher pauses both automatic behaviors without clearing
+requests a bounded 50-item ascending page, and Server persists a secondary
+position only through the contiguous success/permanent-skip prefix. Temporary
+provider, download, or quota failures stop advancement and are retried. Losing
+Researcher pauses both automatic behaviors without clearing
 the preference. Disconnecting removes future access but not imported Documents,
 Library memberships, annotations, operations, or journal records.
 

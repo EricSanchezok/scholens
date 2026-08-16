@@ -45,14 +45,18 @@ and uploads accepted sources to temporary private storage. Its signed item
 callbacks ask Server to create the standard paper-ingestion lifecycle or apply
 annotations idempotently by Zotero annotation key. Operation state supports
 partial success, retryable rate limits, cooperative cancellation, and replayed
-callbacks.
+callbacks. The connection row serializes acceptance so a user has only one
+active Zotero operation, and status exposes its kind and ID for refresh-safe
+recovery without exposing a generic job payload.
 
 Manual sync applies new annotations only to papers already imported from
 Zotero. Researcher scheduled sync performs the same annotation work. Automatic
 paper import is a distinct, explicit, default-off Researcher preference. When
-enabled, Server records the current Zotero library version and later advances
-that checkpoint after accepted incremental results, so it does not backfill the
-existing library. Losing Researcher access pauses automatic work without
+enabled, Server records the current Zotero library version. Each scheduled run
+reads a bounded 50-item page and persists a secondary position only through the
+contiguous accepted/permanent-skip prefix; transient downloads, rate limits,
+and quota failures are retried instead of being skipped. Losing Researcher
+access pauses automatic work without
 clearing the preference. Disconnecting revokes future access but retains
 imported papers, annotations, operations, and audit history.
 

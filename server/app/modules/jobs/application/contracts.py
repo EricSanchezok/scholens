@@ -141,6 +141,7 @@ class ZoteroWorkerImportItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     item_key: str
+    version: int | None = None
     status: Literal["ready", "failed"]
     title: str | None = None
     error_code: str | None = None
@@ -197,8 +198,13 @@ class ZoteroSyncWebhookData(BaseModel):
     error_code: str | None = None
     updates: list[ZoteroWorkerSyncUpdate] = Field(default_factory=list, max_length=500)
     failures: list[ZoteroWorkerFailure] = Field(default_factory=list, max_length=500)
-    auto_imports: list[ZoteroWorkerImportItem] = Field(default_factory=list)
+    auto_imports: list[ZoteroWorkerImportItem] = Field(
+        default_factory=list, max_length=50
+    )
     library_version: int | None = None
+    auto_import_base_version: int | None = None
+    auto_import_base_start: int = Field(default=0, ge=0)
+    auto_import_caught_up_version: int | None = None
 
 
 class PDFProcessingResult(BaseModel):

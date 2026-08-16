@@ -26,7 +26,7 @@ from app.modules.integrations.zotero.application.zotero import (
     ZoteroSyncMutation,
 )
 from app.modules.jobs.application.contracts import JobResponse
-from app.modules.jobs.application.jobs import EnqueuedJob
+from app.modules.jobs.application.jobs import EnqueuedJob, OperationTransition
 from app.modules.operation_journal.application import OperationJournal
 from app.shared.application import (
     Actor,
@@ -81,14 +81,20 @@ def _service(
     )
 
 
-def _job(*, job_id: UUID | None = None) -> JobResponse:
+def _job(
+    *,
+    job_id: UUID | None = None,
+    operation: str = "zotero_import",
+    status: str = "pending",
+    progress_code: str | None = None,
+) -> JobResponse:
     return JobResponse(
         id=job_id or uuid4(),
-        operation="zotero_import",
+        operation=operation,
         document_id=None,
         project_id=None,
-        status="pending",
-        progress_code=None,
+        status=status,
+        progress_code=progress_code,
         error_code=None,
         result=None,
         created_at=datetime.now(UTC),
@@ -129,7 +135,7 @@ def test_oauth_pending_persists_only_causality_and_is_not_journaled() -> None:
 
 def test_expired_oauth_callback_retains_safe_return_path_for_workflow() -> None:
     gateway = MagicMock()
-    gateway.oauth_callback.return_value = PreparedZoteroCallback(
+    gateway.consume_oauth_callback.return_value = PreparedZoteroCallback(
         user_id=7,
         request_token=ZoteroRequestToken(token="expired", secret="secret"),
         expires_at=datetime.now(UTC) - timedelta(seconds=1),
@@ -143,7 +149,7 @@ def test_expired_oauth_callback_retains_safe_return_path_for_workflow() -> None:
         journal=MagicMock(spec=OperationJournal),
     )
 
-    prepared = service.prepare_oauth_callback(
+    prepared = service.consume_oauth_callback(
         oauth_token="expired",
         now=datetime.now(UTC),
     )
@@ -151,8 +157,49 @@ def test_expired_oauth_callback_retains_safe_return_path_for_workflow() -> None:
     assert prepared is not None
     assert prepared.return_path == "/library"
     assert gateway.method_calls == [
-        call.oauth_callback(oauth_token="expired"),
+        call.consume_oauth_callback(oauth_token="expired"),
     ]
+
+
+@pytest.mark.parametrize("method", ["complete", "fail"])
+def test_background_terminal_transition_suppresses_concurrent_replay_journal(
+    method: str,
+) -> None:
+    gateway = MagicMock()
+    journal = MagicMock(spec=OperationJournal)
+    idempotency = MagicMock()
+    jobs = MagicMock()
+    jobs.find_by_idempotency_key.return_value = None
+    jobs.list.return_value = []
+    operation_id = uuid4()
+    jobs.get.return_value = _job(job_id=operation_id)
+    transition = OperationTransition(job=_job(job_id=operation_id), changed=False)
+    getattr(idempotency, method).return_value = transition
+    service = _service(
+        gateway=gateway,
+        journal=journal,
+        idempotency=idempotency,
+        jobs=jobs,
+    )
+
+    if method == "complete":
+        changed = service.complete_background_operation(
+            actor=_actor(),
+            operation=_operation(),
+            operation_id=operation_id,
+            result={"items": []},
+        )
+    else:
+        changed = service.fail_background_operation(
+            actor=_actor(),
+            operation=_operation(),
+            operation_id=operation_id,
+            error_code="zotero_unavailable",
+        )
+
+    assert changed is False
+    getattr(idempotency, method).assert_called_once()
+    journal.append.assert_not_called()
 
 
 def test_import_enqueue_is_idempotent_and_never_serializes_credentials() -> None:
@@ -164,6 +211,8 @@ def test_import_enqueue_is_idempotent_and_never_serializes_credentials() -> None
         revision=revision,
     )
     jobs = MagicMock()
+    jobs.find_by_idempotency_key.return_value = None
+    jobs.list.return_value = []
     queued_job = _job()
     jobs.enqueue.return_value = EnqueuedJob(
         job=queued_job,
@@ -223,6 +272,68 @@ def test_import_rejects_idempotency_key_reuse_for_different_items() -> None:
         )
 
     assert raised.value.code == "idempotency_key_reused"
+
+
+def test_enqueue_rejects_second_active_zotero_operation_under_connection_lock() -> None:
+    revision = uuid4()
+    gateway = MagicMock()
+    gateway.credentials.return_value = ZoteroCredentials(
+        user_id="42",
+        api_key="secret",
+        revision=revision,
+    )
+    jobs = MagicMock()
+    jobs.find_by_idempotency_key.return_value = None
+    active = _job(operation="zotero_sync", status="running")
+    jobs.list.return_value = [active]
+    service = _service(
+        gateway=gateway,
+        journal=MagicMock(spec=OperationJournal),
+        jobs=jobs,
+    )
+
+    with pytest.raises(AppError) as raised:
+        service.enqueue_import(
+            actor=_actor(),
+            operation=_operation(),
+            request=ZoteroImportRequest(item_keys=["ITEM1"]),
+            idempotency_key="request-2",
+        )
+
+    assert raised.value.code == "zotero_operation_active"
+    assert raised.value.details == {
+        "operation_id": str(active.id),
+        "operation_kind": "sync",
+    }
+    gateway.credentials.assert_called_once_with(user_id=7, lock=True)
+    jobs.enqueue.assert_not_called()
+
+
+def test_active_operation_projects_safe_real_item_totals_and_stage() -> None:
+    jobs = MagicMock()
+    active = _job(status="running", progress_code="importing_papers")
+    jobs.get.return_value = active
+    jobs.payload.return_value = {
+        "item_keys": ["ITEM1", "ITEM2"],
+        "credential_revision": "must-not-be-exposed",
+    }
+    service = _service(
+        gateway=MagicMock(),
+        journal=MagicMock(spec=OperationJournal),
+        jobs=jobs,
+    )
+
+    response = service.operation(
+        actor=_actor(),
+        operation_id=active.id,
+        kind="import",
+    )
+
+    assert response.status == "running"
+    assert response.progress_code == "importing_papers"
+    assert response.counts.total == 2
+    assert [item.status for item in response.items] == ["running", "running"]
+    assert "credential_revision" not in response.model_dump()
 
 
 def test_connection_change_journals_once_and_rejects_owner_mismatch() -> None:
@@ -306,6 +417,7 @@ def test_disconnect_and_sync_suppress_noop_journal_entries() -> None:
         actor=actor,
         operation=operation,
         batch=ZoteroSyncBatch(updates=(), failed_item_keys=()),
+        credential_revision=uuid4(),
     )
     journal.append.assert_not_called()
 
@@ -321,6 +433,7 @@ def test_disconnect_and_sync_suppress_noop_journal_entries() -> None:
         actor=actor,
         operation=operation,
         batch=ZoteroSyncBatch(updates=(), failed_item_keys=()),
+        credential_revision=uuid4(),
     )
     assert journal.append.call_args.kwargs["action"] == "zotero.annotations_synced"
     assert journal.append.call_args.kwargs["resources"][0].id == str(
@@ -353,7 +466,7 @@ def test_oauth_workflow_resumes_verified_owner_causality() -> None:
         intent="import",
     )
     zotero = MagicMock()
-    zotero.prepare_oauth_callback.return_value = callback
+    zotero.consume_oauth_callback.return_value = callback
     zotero.complete_oauth_callback.return_value = True
     identity = MagicMock()
     identity.resolve_actor_by_user_id.return_value = actor
@@ -408,7 +521,7 @@ def test_expired_oauth_workflow_returns_to_original_internal_page() -> None:
         intent="manage",
     )
     zotero = MagicMock()
-    zotero.prepare_oauth_callback.return_value = callback
+    zotero.consume_oauth_callback.return_value = callback
     operations = MagicMock()
     workflow = ZoteroWorkflow(
         executor=_Executor(  # type: ignore[arg-type]

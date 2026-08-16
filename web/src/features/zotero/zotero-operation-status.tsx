@@ -16,26 +16,30 @@ import { zoteroOperationErrorKey } from "./message-keys";
 
 export function ZoteroOperationStatus({
   initialOperation,
+  operationId,
   onComplete,
   onDismiss,
 }: {
-  initialOperation: ZoteroOperation;
+  initialOperation?: ZoteroOperation;
+  operationId: string;
   onComplete: () => void;
   onDismiss: () => void;
 }) {
   const t = useTranslations("Zotero.operation");
   const queryClient = useQueryClient();
   const operation = useQuery({
-    ...zoteroQueries.operation("import", initialOperation.id),
+    ...zoteroQueries.operation("import", operationId),
     initialData: initialOperation,
   });
   const cancel = useMutation({
-    mutationFn: () => cancelZoteroImport(initialOperation.id),
-    onSuccess: (result) =>
+    mutationFn: () => cancelZoteroImport(operationId),
+    onSuccess: async (result) => {
       queryClient.setQueryData(
-        zoteroKeys.operation("import", initialOperation.id),
+        zoteroKeys.operation("import", operationId),
         result,
-      ),
+      );
+      await queryClient.invalidateQueries({ queryKey: zoteroKeys.status() });
+    },
   });
   const value = operation.data;
   const terminal = value
@@ -49,14 +53,25 @@ export function ZoteroOperationStatus({
     onComplete();
   }, [onComplete, terminal]);
 
-  if (!value) return null;
+  if (!value) {
+    return (
+      <section
+        aria-label={t("label")}
+        className="border-line bg-subtle mt-4 rounded-[var(--radius-lg)] border p-4"
+      >
+        <p className="text-secondary text-sm" role="status">
+          {t("loading")}
+        </p>
+      </section>
+    );
+  }
   const completed =
     value.counts.succeeded + value.counts.failed + value.counts.skipped;
   const percent = value.counts.total
     ? Math.round((completed / value.counts.total) * 100)
     : value.status === "succeeded"
       ? 100
-      : 8;
+      : 0;
 
   return (
     <section
@@ -66,6 +81,11 @@ export function ZoteroOperationStatus({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">{t(`status.${value.status}`)}</p>
+          {!terminal && value.progress_code ? (
+            <p className="text-secondary mt-1 text-sm" role="status">
+              {t(`stage.${value.progress_code}`)}
+            </p>
+          ) : null}
           <p className="text-secondary mt-1 text-sm">
             {t("counts", {
               failed: value.counts.failed,
@@ -89,7 +109,9 @@ export function ZoteroOperationStatus({
           </Button>
         )}
       </div>
-      <Progress aria-label={t("progress")} value={percent} />
+      {terminal ? (
+        <Progress aria-label={t("progress")} value={percent} />
+      ) : null}
       {cancel.isError ? (
         <p className="text-danger text-sm" role="alert">
           {t(

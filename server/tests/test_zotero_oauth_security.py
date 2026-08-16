@@ -7,12 +7,20 @@ import pytest
 from pydantic import ValidationError
 
 from app.bootstrap.adapters.zotero_gateway import DefaultZoteroGateway
+from app.bootstrap.workflows.zotero import ZoteroWorkflow
 from app.modules.integrations.zotero.application.contracts import (
     ZoteroOAuthAuthorizationRequest,
 )
 from app.modules.integrations.zotero.infrastructure.connection_repository import (
     ZoteroConnectionRepository,
 )
+from app.shared.application import (
+    OperationContextFactory,
+    RequestReference,
+    SignedCursorCodec,
+)
+from app.shared.infrastructure import SqlAlchemyApplicationExecutor
+from sqlalchemy.orm import Session
 
 
 @pytest.mark.parametrize(
@@ -68,11 +76,45 @@ def test_oauth_callback_is_consumed_once() -> None:
     repository.pending_secret.return_value = "decrypted-secret"
     gateway = DefaultZoteroGateway(MagicMock(), connections=repository)
 
-    first = gateway.oauth_callback(oauth_token="request-token")
-    second = gateway.oauth_callback(oauth_token="request-token")
+    first = gateway.consume_oauth_callback(oauth_token="request-token")
+    second = gateway.consume_oauth_callback(oauth_token="request-token")
 
     assert first is not None
     assert first.request_token.secret == "decrypted-secret"
     assert first.return_path == "/library"
     assert second is None
     repository.delete_pending.assert_called_once_with(pending=pending)
+
+
+def test_oauth_workflow_commits_pending_consumption_before_provider_exchange() -> None:
+    consume_session = MagicMock(spec=Session)
+    sessions = [consume_session]
+    zotero = MagicMock()
+    zotero.consume_oauth_callback.return_value = None
+    executor = SqlAlchemyApplicationExecutor(
+        MagicMock(side_effect=sessions),
+        lambda _session: SimpleNamespace(zotero=zotero),
+    )
+    operations = MagicMock()
+    workflow = ZoteroWorkflow(
+        executor=executor,
+        operations=operations,
+        operation_factory=OperationContextFactory(),
+        cursors=SignedCursorCodec(
+            "test-zotero-cursor-key",
+            revision="zotero-test-v1",
+            error_code="zotero_cursor_invalid",
+        ),
+    )
+
+    result = workflow.callback(
+        oauth_token="already-consumed",
+        oauth_verifier="verifier",
+        request=RequestReference(uuid4()),
+    )
+
+    assert result.state == "zotero_oauth_expired"
+    consume_session.commit.assert_called_once_with()
+    consume_session.rollback.assert_not_called()
+    consume_session.close.assert_called_once_with()
+    operations.exchange_access_token.assert_not_called()

@@ -1,7 +1,10 @@
 import json
+import socket
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from src.zotero import (
     ZoteroClient,
@@ -9,6 +12,7 @@ from src.zotero import (
     ZoteroJobError,
     _annotations_json,
     _bounded_version_batch,
+    _fetch_public_pdf,
     import_items,
     sync_items,
 )
@@ -64,20 +68,103 @@ def test_import_stops_before_provider_io_after_cancellation() -> None:
     items.assert_not_called()
 
 
-def test_version_batch_never_splits_items_with_same_version() -> None:
-    values = [_item(f"ITEM{index}", index) for index in range(1, 50)]
-    values.extend([_item("ITEM50", 50), _item("ITEM51", 50), _item("ITEM52", 51)])
+def test_import_deletes_prior_staging_objects_after_late_credential_failure() -> None:
+    client = MagicMock()
+    client.items.return_value = [_item("ITEM1", 1), _item("ITEM2", 2)]
+
+    def prepare(**kwargs):  # type: ignore[no-untyped-def]
+        if kwargs["item_key"] == "ITEM1":
+            key = "zotero-imports/job-1/ITEM1.pdf"
+            kwargs["uploaded_keys"].append(key)
+            return {"item_key": "ITEM1", "status": "ready", "s3_object_key": key}
+        raise ZoteroJobError(
+            "zotero_credentials_invalid",
+            invalid_credential=True,
+        )
+
+    with (
+        patch("src.zotero.ZoteroClient", return_value=client),
+        patch("src.zotero._prepare_import_item", side_effect=prepare),
+        patch("src.zotero.s3_service.delete_file") as delete_file,
+    ):
+        with pytest.raises(ZoteroJobError) as raised:
+            import_items(
+                task_id="job-1",
+                credential=_credential(),
+                item_keys=["ITEM1", "ITEM2"],
+                is_active=lambda: True,
+            )
+
+    assert raised.value.code == "zotero_credentials_invalid"
+    delete_file.assert_called_once_with("zotero-imports/job-1/ITEM1.pdf")
+
+
+def test_import_deletes_staging_objects_after_cooperative_cancellation() -> None:
+    client = MagicMock()
+    client.items.return_value = [_item("ITEM1", 1), _item("ITEM2", 2)]
+    activity = iter([True, True, False])
+
+    def prepare(**kwargs):  # type: ignore[no-untyped-def]
+        key = "zotero-imports/job-1/ITEM1.pdf"
+        kwargs["uploaded_keys"].append(key)
+        return {"item_key": "ITEM1", "status": "ready", "s3_object_key": key}
+
+    with (
+        patch("src.zotero.ZoteroClient", return_value=client),
+        patch("src.zotero._prepare_import_item", side_effect=prepare),
+        patch("src.zotero.s3_service.delete_file") as delete_file,
+    ):
+        with pytest.raises(ZoteroJobError) as raised:
+            import_items(
+                task_id="job-1",
+                credential=_credential(),
+                item_keys=["ITEM1", "ITEM2"],
+                is_active=lambda: next(activity),
+            )
+
+    assert raised.value.code == "zotero_operation_cancelled"
+    delete_file.assert_called_once_with("zotero-imports/job-1/ITEM1.pdf")
+
+
+def test_version_batch_stays_bounded_when_more_than_fifty_share_a_version() -> None:
+    values = [_item(f"ITEM{index:03}", 50) for index in range(75)]
 
     selected = _bounded_version_batch(values)
 
-    assert [value["key"] for value in selected[-2:]] == ["ITEM50", "ITEM51"]
-    assert len(selected) == 51
+    assert len(selected) == 50
+    assert selected[-1]["key"] == "ITEM049"
 
 
-def test_sync_advances_only_to_processed_incremental_version() -> None:
-    changed = [_item(f"ITEM{index}", index) for index in range(1, 52)]
+def test_incremental_fetch_is_one_bounded_provider_page() -> None:
+    response = MagicMock(status_code=200)
+    response.headers = {
+        "Last-Modified-Version": "80",
+        "Total-Results": "75",
+    }
+    response.json.return_value = [_item(f"ITEM{index:03}", 50) for index in range(50)]
+    client = ZoteroClient(_credential())
+
+    with patch.object(client, "_request", return_value=response) as request:
+        items, version, has_more = client.items_since(40, start=0, limit=50)
+
+    assert len(items) == 50
+    assert version == 80
+    assert has_more is True
+    assert request.call_args.kwargs["params"] == {
+        "since": 40,
+        "limit": 50,
+        "start": 0,
+        "sort": "dateModified",
+        "direction": "asc",
+        "itemType": "conferencePaper || journalArticle || preprint",
+    }
+    response.close.assert_called_once_with()
+
+
+def test_sync_uses_secondary_cursor_for_more_than_fifty_items_at_one_version() -> None:
+    changed = [_item(f"ITEM{index:03}", 50) for index in range(75)]
     client = MagicMock()
-    client.items_since.return_value = (changed, 80)
+    client.items_since.return_value = (changed[:50], 80, True)
     client.current_library_version.return_value = 80
     with (
         patch("src.zotero.ZoteroClient", return_value=client),
@@ -95,11 +182,43 @@ def test_sync_advances_only_to_processed_incremental_version() -> None:
             credential=_credential(),
             targets=[],
             auto_import_version=0,
+            auto_import_start=0,
             is_active=lambda: True,
         )
 
-    assert result["library_version"] == 50
+    assert result["library_version"] == 80
     assert len(result["auto_imports"]) == 50
+    assert result["auto_import_base_version"] == 0
+    assert result["auto_import_base_start"] == 0
+    assert result["auto_import_caught_up_version"] is None
+
+    client.items_since.return_value = (changed[50:], 80, False)
+    with (
+        patch("src.zotero.ZoteroClient", return_value=client),
+        patch(
+            "src.zotero._prepare_import_item",
+            side_effect=lambda **kwargs: {
+                "item_key": kwargs["item_key"],
+                "status": "failed",
+                "error_code": "zotero_pdf_unavailable",
+            },
+        ),
+    ):
+        second = sync_items(
+            task_id="job-2",
+            credential=_credential(),
+            targets=[],
+            auto_import_version=0,
+            auto_import_start=50,
+            is_active=lambda: True,
+        )
+
+    assert [item["item_key"] for item in second["auto_imports"]] == [
+        f"ITEM{index:03}" for index in range(50, 75)
+    ]
+    assert second["auto_import_caught_up_version"] == 80
+    assert client.items_since.call_args_list[-1].args[0] == 0
+    assert client.items_since.call_args_list[-1].kwargs["start"] == 50
 
 
 def test_rate_limit_exhaustion_uses_stable_error_code() -> None:
@@ -115,3 +234,91 @@ def test_rate_limit_exhaustion_uses_stable_error_code() -> None:
             client.current_library_version()
 
     assert raised.value.code == "zotero_rate_limited"
+
+
+def test_attachment_cross_origin_redirect_never_forwards_zotero_api_key() -> None:
+    redirect = MagicMock(status_code=302)
+    redirect.headers = {"Location": "https://storage.example/paper.pdf"}
+    final = MagicMock(status_code=200)
+    final.headers = {"Content-Length": "4"}
+    final.raise_for_status.return_value = None
+    final.iter_content.return_value = [b"%PDF"]
+    client = ZoteroClient(_credential())
+
+    with (
+        patch.object(client._session, "get", side_effect=[redirect, final]) as get,
+        patch("src.zotero._require_public_url"),
+        patch("src.zotero._require_global_peer"),
+    ):
+        assert client.download_attachment("ATTACHMENT") == b"%PDF"
+
+    first_headers = get.call_args_list[0].kwargs["headers"]
+    redirected_headers = get.call_args_list[1].kwargs["headers"]
+    assert first_headers["Zotero-API-Key"] == "private-zotero-api-key"
+    assert "Zotero-API-Key" not in redirected_headers
+    redirect.close.assert_called_once_with()
+    final.close.assert_called_once_with()
+
+
+def test_public_pdf_rejects_private_connected_peer_after_public_dns_resolution() -> (
+    None
+):
+    peer_socket = MagicMock()
+    peer_socket.getpeername.return_value = ("127.0.0.1", 443)
+    response = MagicMock()
+    response.raw = SimpleNamespace(
+        _connection=SimpleNamespace(sock=peer_socket),
+    )
+    response.is_redirect = False
+    response.is_permanent_redirect = False
+    session = MagicMock()
+    session.get.return_value = response
+
+    with (
+        patch("src.zotero.requests.Session", return_value=session),
+        patch(
+            "src.zotero.socket.getaddrinfo",
+            return_value=[
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                    "",
+                    ("93.184.216.34", 443),
+                )
+            ],
+        ),
+    ):
+        with pytest.raises(ZoteroJobError) as raised:
+            _fetch_public_pdf("https://example.com/paper.pdf")
+
+    assert raised.value.code == "zotero_pdf_unsafe_address"
+    response.close.assert_called_once_with()
+
+
+def test_public_pdf_session_ignores_environment_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:8888")
+    session = MagicMock()
+    session.get.side_effect = requests.RequestException("offline")
+
+    with (
+        patch("src.zotero.requests.Session", return_value=session),
+        patch(
+            "src.zotero.socket.getaddrinfo",
+            return_value=[
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                    "",
+                    ("93.184.216.34", 443),
+                )
+            ],
+        ),
+    ):
+        with pytest.raises(ZoteroJobError):
+            _fetch_public_pdf("https://example.com/paper.pdf")
+
+    assert session.trust_env is False

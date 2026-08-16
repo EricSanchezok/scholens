@@ -295,6 +295,9 @@ Collection and library browsing perform remote I/O outside an application
 transaction, enforce Zotero's 100-item page ceiling, and bind opaque cursors to
 the user and complete query. Import and sync mutations only commit a
 `ZoteroOperation`, DurableJob, and dispatch outbox before returning `202`.
+The connection row is locked during acceptance, so each user has at most one
+active Zotero import or sync; status returns its kind and ID for refresh-safe
+polling and cancellation.
 Workers retrieve a current revision-scoped API key through the signed internal
 API, then return item-level signed callbacks. The Server creates standard paper
 ingestions, applies annotations idempotently by Zotero annotation key, and
@@ -305,8 +308,11 @@ history.
 A manual sync inspects only already imported papers. Researcher scheduling
 automatically syncs their annotations and may also import later Zotero items
 when the user has explicitly enabled auto import. Enabling it records the
-current Zotero library version, and incremental runs advance that checkpoint
-instead of scanning a fixed first page or backfilling the existing library.
+current Zotero library version. Incremental work persists a bounded secondary
+page position, processes no more than 50 items per run, and advances only
+through a contiguous prefix of accepted or permanently skipped items. Rate
+limits, temporary downloads, and quota failures are retried rather than being
+skipped by the checkpoint.
 Loss of Researcher access pauses the preference without clearing it.
 
 The PDF completion callback persists extracted metadata, generated summary,

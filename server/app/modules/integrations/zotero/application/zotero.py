@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 from uuid import UUID, uuid4
 
 from app.modules.integrations.zotero.application.contracts import (
@@ -17,6 +17,7 @@ from app.modules.integrations.zotero.application.contracts import (
     ZoteroOperation,
     ZoteroOperationCounts,
     ZoteroOperationItem,
+    ZoteroOperationProgress,
     ZoteroSyncPreferencesRequest,
     ZoteroSyncResponse,
 )
@@ -66,7 +67,7 @@ class ZoteroGateway(Protocol):
         origin_operation_id: UUID,
     ) -> None: ...
 
-    def oauth_callback(
+    def consume_oauth_callback(
         self,
         *,
         oauth_token: str,
@@ -91,7 +92,12 @@ class ZoteroGateway(Protocol):
 
     def disconnect(self, *, user_id: int) -> UUID | None: ...
 
-    def credentials(self, *, user_id: int) -> ZoteroCredentials | None: ...
+    def credentials(
+        self,
+        *,
+        user_id: int,
+        lock: bool = False,
+    ) -> ZoteroCredentials | None: ...
 
     def credential_revision_is_current(
         self,
@@ -112,6 +118,7 @@ class ZoteroGateway(Protocol):
         *,
         actor: Actor,
         items: tuple[ZoteroItemSnapshot, ...],
+        credential_revision: UUID,
     ) -> ZoteroImportPlan: ...
 
     def reserve_import_item(
@@ -120,6 +127,7 @@ class ZoteroGateway(Protocol):
         user_id: int,
         item_key: str,
         upload_job_id: UUID,
+        credential_revision: UUID,
     ) -> UUID: ...
 
     def fail_import_item(
@@ -129,6 +137,7 @@ class ZoteroGateway(Protocol):
         item_key: str,
         upload_job_id: UUID | None,
         error_code: str,
+        credential_revision: UUID,
     ) -> ZoteroItemMutation: ...
 
     def complete_import_item(
@@ -141,6 +150,7 @@ class ZoteroGateway(Protocol):
         document_id: UUID,
         reused_document: bool,
         page_dimensions: PageDimensions,
+        credential_revision: UUID,
     ) -> ZoteroImportMutation: ...
 
     def link_import_item(
@@ -151,6 +161,7 @@ class ZoteroGateway(Protocol):
         attachment: ZoteroAttachmentSnapshot,
         document_id: UUID,
         page_dimensions: PageDimensions,
+        credential_revision: UUID,
     ) -> ZoteroImportMutation: ...
 
     def sync_targets(
@@ -158,6 +169,7 @@ class ZoteroGateway(Protocol):
         *,
         user_id: int,
         limit: int,
+        credential_revision: UUID,
     ) -> tuple[ZoteroSyncTarget, ...]: ...
 
     def apply_sync(
@@ -165,9 +177,10 @@ class ZoteroGateway(Protocol):
         *,
         actor: Actor,
         batch: ZoteroSyncBatch,
+        credential_revision: UUID,
     ) -> ZoteroSyncMutation: ...
 
-    def auto_import_version(self, *, user_id: int) -> int | None: ...
+    def auto_import_cursor(self, *, user_id: int) -> ZoteroAutoImportCursor | None: ...
 
     def advance_sync_checkpoint(
         self,
@@ -175,6 +188,7 @@ class ZoteroGateway(Protocol):
         user_id: int,
         credential_revision: UUID,
         library_version: int | None,
+        auto_import_cursor: ZoteroAutoImportCursor | None,
     ) -> bool: ...
 
 
@@ -184,6 +198,10 @@ class ZoteroImportCapacity(Protocol):
 
 class ZoteroJobs(JobCommandPort, JobQueryPort, Protocol):
     def cancel(self, *, requested_by_id: int, job_id: UUID) -> JobResponse: ...
+
+    def payload(
+        self, *, requested_by_id: int, job_id: UUID
+    ) -> dict[str, JsonValue]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +221,12 @@ class ZoteroRequestToken:
 class ZoteroAccessToken:
     user_id: str
     api_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class ZoteroAutoImportCursor:
+    library_version: int
+    start: int = 0
 
 
 type PageDimensions = tuple[tuple[int, float, float], ...]
@@ -283,6 +307,7 @@ class ZoteroImportPlan:
     items: tuple[ZoteroImportPlanItem, ...]
     skipped_already_imported: int
     errors: tuple[ZoteroImportError, ...]
+    skipped_item_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,14 +405,14 @@ class Zotero:
         )
         return ZoteroConnectResponse(auth_url=auth_url)
 
-    def prepare_oauth_callback(
+    def consume_oauth_callback(
         self,
         *,
         oauth_token: str,
         now: datetime,
     ) -> PreparedZoteroCallback | None:
         del now
-        callback = self._gateway.oauth_callback(
+        callback = self._gateway.consume_oauth_callback(
             oauth_token=oauth_token,
         )
         return callback
@@ -442,7 +467,16 @@ class Zotero:
             None,
         )
         return response.model_copy(
-            update={"active_operation_id": active.id if active else None}
+            update={
+                "active_operation_id": active.id if active else None,
+                "active_operation_kind": (
+                    "import"
+                    if active and active.operation == JobOperation.ZOTERO_IMPORT.value
+                    else "sync"
+                    if active
+                    else None
+                ),
+            }
         )
 
     def set_sync_preferences(
@@ -509,8 +543,26 @@ class Zotero:
         request: ZoteroImportRequest,
         idempotency_key: str,
     ) -> ZoteroOperation:
-        credentials = self._require_credentials(actor)
+        credentials = self._require_credentials(actor, lock=True)
         self._capacity.require(actor=actor)
+        operation_key = import_idempotency_key(
+            actor_id=actor.id,
+            request_key=idempotency_key,
+        )
+        existing = self._jobs.find_by_idempotency_key(key=operation_key)
+        if existing is not None:
+            payload = self._jobs.payload(
+                requested_by_id=actor.id,
+                job_id=existing.id,
+            )
+            if payload.get("item_keys") != list(request.item_keys):
+                raise AppError(
+                    code="idempotency_key_reused",
+                    message="The idempotency key was already used for another request",
+                    kind=FailureKind.CONFLICT,
+                )
+            return _operation_response(existing, kind="import", payload=payload)
+        self._require_no_active_operation(actor=actor)
         job_id = uuid4()
         enqueued = self._jobs.enqueue(
             command=EnqueueJobCommand(
@@ -519,10 +571,7 @@ class Zotero:
                 requested_by_id=actor.id,
                 correlation_id=operation.trace.correlation_id,
                 origin_operation_id=operation.trace.operation_id,
-                idempotency_key=import_idempotency_key(
-                    actor_id=actor.id,
-                    request_key=idempotency_key,
-                ),
+                idempotency_key=operation_key,
                 payload={
                     "item_keys": list(request.item_keys),
                     "credential_revision": str(credentials.revision),
@@ -546,7 +595,11 @@ class Zotero:
                 action=JOB_CREATED,
                 resources=(ResourceRef("job", str(enqueued.job.id)),),
             )
-        return _operation_response(enqueued.job, kind="import")
+        return _operation_response(
+            enqueued.job,
+            kind="import",
+            payload=enqueued.payload,
+        )
 
     def enqueue_sync(
         self,
@@ -556,10 +609,29 @@ class Zotero:
         idempotency_key: str,
         automatic: bool = False,
     ) -> ZoteroOperation:
-        credentials = self._require_credentials(actor)
-        targets = self._gateway.sync_targets(user_id=actor.id, limit=500)
-        auto_import_version = (
-            self._gateway.auto_import_version(user_id=actor.id) if automatic else None
+        credentials = self._require_credentials(actor, lock=True)
+        operation_key = f"zotero-sync:{actor.id}:{idempotency_key}"
+        existing = self._jobs.find_by_idempotency_key(key=operation_key)
+        if existing is not None:
+            payload = self._jobs.payload(
+                requested_by_id=actor.id,
+                job_id=existing.id,
+            )
+            if payload.get("automatic") is not automatic:
+                raise AppError(
+                    code="idempotency_key_reused",
+                    message="The idempotency key was already used for another request",
+                    kind=FailureKind.CONFLICT,
+                )
+            return _operation_response(existing, kind="sync", payload=payload)
+        self._require_no_active_operation(actor=actor)
+        targets = self._gateway.sync_targets(
+            user_id=actor.id,
+            limit=500,
+            credential_revision=credentials.revision,
+        )
+        auto_import_cursor = (
+            self._gateway.auto_import_cursor(user_id=actor.id) if automatic else None
         )
         job_id = uuid4()
         enqueued = self._jobs.enqueue(
@@ -569,7 +641,7 @@ class Zotero:
                 requested_by_id=actor.id,
                 correlation_id=operation.trace.correlation_id,
                 origin_operation_id=operation.trace.operation_id,
-                idempotency_key=f"zotero-sync:{actor.id}:{idempotency_key}",
+                idempotency_key=operation_key,
                 payload={
                     "targets": [
                         {
@@ -579,7 +651,16 @@ class Zotero:
                         for target in targets
                     ],
                     "automatic": automatic,
-                    "auto_import_version": auto_import_version,
+                    "auto_import_version": (
+                        auto_import_cursor.library_version
+                        if auto_import_cursor is not None
+                        else None
+                    ),
+                    "auto_import_start": (
+                        auto_import_cursor.start
+                        if auto_import_cursor is not None
+                        else 0
+                    ),
                     "credential_revision": str(credentials.revision),
                 },
                 task_name="sync_zotero",
@@ -593,7 +674,11 @@ class Zotero:
                 action=JOB_CREATED,
                 resources=(ResourceRef("job", str(enqueued.job.id)),),
             )
-        return _operation_response(enqueued.job, kind="sync")
+        return _operation_response(
+            enqueued.job,
+            kind="sync",
+            payload=enqueued.payload,
+        )
 
     def operation(
         self,
@@ -612,7 +697,14 @@ class Zotero:
                 message="Zotero operation not found",
                 kind=FailureKind.NOT_FOUND,
             )
-        return _operation_response(job, kind=kind)
+        return _operation_response(
+            job,
+            kind=kind,
+            payload=self._jobs.payload(
+                requested_by_id=actor.id,
+                job_id=operation_id,
+            ),
+        )
 
     def cancel_operation(
         self,
@@ -623,7 +715,14 @@ class Zotero:
     ) -> ZoteroOperation:
         self.operation(actor=actor, operation_id=operation_id, kind=kind)
         job = self._jobs.cancel(requested_by_id=actor.id, job_id=operation_id)
-        return _operation_response(job, kind=kind)
+        return _operation_response(
+            job,
+            kind=kind,
+            payload=self._jobs.payload(
+                requested_by_id=actor.id,
+                job_id=operation_id,
+            ),
+        )
 
     def complete_background_operation(
         self,
@@ -640,7 +739,12 @@ class Zotero:
             JobStatus.CANCELLED.value,
         }:
             return False
-        self._idempotency.complete(operation_id=operation_id, result=result)
+        transition = self._idempotency.complete(
+            operation_id=operation_id,
+            result=result,
+        )
+        if not transition.changed:
+            return False
         self._journal.append(
             actor=actor,
             operation=operation,
@@ -664,7 +768,12 @@ class Zotero:
             JobStatus.CANCELLED.value,
         }:
             return False
-        self._idempotency.fail(operation_id=operation_id, error_code=error_code)
+        transition = self._idempotency.fail(
+            operation_id=operation_id,
+            error_code=error_code,
+        )
+        if not transition.changed:
+            return False
         self._journal.append(
             actor=actor,
             operation=operation,
@@ -678,8 +787,13 @@ class Zotero:
         *,
         actor: Actor,
         items: tuple[ZoteroItemSnapshot, ...],
+        credential_revision: UUID,
     ) -> ZoteroImportPlan:
-        return self._gateway.plan_import(actor=actor, items=items)
+        return self._gateway.plan_import(
+            actor=actor,
+            items=items,
+            credential_revision=credential_revision,
+        )
 
     def reserve_import_item(
         self,
@@ -687,11 +801,13 @@ class Zotero:
         actor: Actor,
         item_key: str,
         upload_job_id: UUID,
+        credential_revision: UUID,
     ) -> UUID:
         return self._gateway.reserve_import_item(
             user_id=actor.id,
             item_key=item_key,
             upload_job_id=upload_job_id,
+            credential_revision=credential_revision,
         )
 
     def fail_import_item(
@@ -702,12 +818,14 @@ class Zotero:
         item_key: str,
         upload_job_id: UUID | None,
         error_code: str,
+        credential_revision: UUID,
     ) -> None:
         change = self._gateway.fail_import_item(
             user_id=actor.id,
             item_key=item_key,
             upload_job_id=upload_job_id,
             error_code=error_code,
+            credential_revision=credential_revision,
         )
         if change.changed:
             self._journal.append(
@@ -728,6 +846,7 @@ class Zotero:
         document_id: UUID,
         reused_document: bool,
         page_dimensions: PageDimensions,
+        credential_revision: UUID,
     ) -> ZoteroImportItemResult:
         change = self._gateway.complete_import_item(
             actor=actor,
@@ -737,6 +856,7 @@ class Zotero:
             document_id=document_id,
             reused_document=reused_document,
             page_dimensions=page_dimensions,
+            credential_revision=credential_revision,
         )
         self._record_import_change(
             actor=actor,
@@ -756,6 +876,7 @@ class Zotero:
         attachment: ZoteroAttachmentSnapshot,
         document_id: UUID,
         page_dimensions: PageDimensions,
+        credential_revision: UUID,
     ) -> ZoteroImportItemResult:
         change = self._gateway.link_import_item(
             actor=actor,
@@ -763,6 +884,7 @@ class Zotero:
             attachment=attachment,
             document_id=document_id,
             page_dimensions=page_dimensions,
+            credential_revision=credential_revision,
         )
         self._record_import_change(
             actor=actor,
@@ -779,8 +901,13 @@ class Zotero:
         actor: Actor,
         operation: OperationContext,
         batch: ZoteroSyncBatch,
+        credential_revision: UUID,
     ) -> ZoteroSyncResponse:
-        mutation = self._gateway.apply_sync(actor=actor, batch=batch)
+        mutation = self._gateway.apply_sync(
+            actor=actor,
+            batch=batch,
+            credential_revision=credential_revision,
+        )
         if mutation.changed_document_ids:
             self._journal.append(
                 actor=actor,
@@ -793,11 +920,20 @@ class Zotero:
             )
         return mutation.response
 
-    def sync_targets(self, *, actor: Actor) -> tuple[ZoteroSyncTarget, ...]:
-        return self._gateway.sync_targets(user_id=actor.id, limit=500)
+    def sync_targets(
+        self,
+        *,
+        actor: Actor,
+        credential_revision: UUID,
+    ) -> tuple[ZoteroSyncTarget, ...]:
+        return self._gateway.sync_targets(
+            user_id=actor.id,
+            limit=500,
+            credential_revision=credential_revision,
+        )
 
-    def auto_import_version(self, *, actor: Actor) -> int | None:
-        return self._gateway.auto_import_version(user_id=actor.id)
+    def auto_import_cursor(self, *, actor: Actor) -> ZoteroAutoImportCursor | None:
+        return self._gateway.auto_import_cursor(user_id=actor.id)
 
     def advance_sync_checkpoint(
         self,
@@ -805,11 +941,13 @@ class Zotero:
         actor: Actor,
         credential_revision: UUID,
         library_version: int | None,
+        auto_import_cursor: ZoteroAutoImportCursor | None,
     ) -> bool:
         return self._gateway.advance_sync_checkpoint(
             user_id=actor.id,
             credential_revision=credential_revision,
             library_version=library_version,
+            auto_import_cursor=auto_import_cursor,
         )
 
     def _record_import_change(
@@ -838,8 +976,45 @@ class Zotero:
             resources=tuple(resources),
         )
 
-    def _require_credentials(self, actor: Actor) -> ZoteroCredentials:
-        credentials = self._gateway.credentials(user_id=actor.id)
+    def _require_no_active_operation(self, *, actor: Actor) -> None:
+        active = next(
+            (
+                job
+                for job in self._jobs.list(
+                    requested_by_id=actor.id,
+                    project_id=None,
+                    document_id=None,
+                    operation=None,
+                    statuses=(JobStatus.PENDING, JobStatus.RUNNING),
+                )
+                if job.operation
+                in {JobOperation.ZOTERO_IMPORT.value, JobOperation.ZOTERO_SYNC.value}
+            ),
+            None,
+        )
+        if active is None:
+            return
+        raise AppError(
+            code="zotero_operation_active",
+            message="Another Zotero operation is already active",
+            kind=FailureKind.CONFLICT,
+            details={
+                "operation_id": str(active.id),
+                "operation_kind": (
+                    "import"
+                    if active.operation == JobOperation.ZOTERO_IMPORT.value
+                    else "sync"
+                ),
+            },
+        )
+
+    def _require_credentials(
+        self,
+        actor: Actor,
+        *,
+        lock: bool = False,
+    ) -> ZoteroCredentials:
+        credentials = self._gateway.credentials(user_id=actor.id, lock=lock)
         require_zotero_connected(connected=credentials is not None)
         assert credentials is not None
         return credentials
@@ -849,6 +1024,7 @@ def _operation_response(
     job: JobResponse,
     *,
     kind: Literal["import", "sync"],
+    payload: dict[str, JsonValue],
 ) -> ZoteroOperation:
     result = job.result or {}
     raw_items = result.get("items")
@@ -860,6 +1036,30 @@ def _operation_response(
                     items.append(ZoteroOperationItem.model_validate(value))
                 except ValueError:
                     continue
+    if not items and job.status in {
+        JobStatus.PENDING.value,
+        JobStatus.RUNNING.value,
+    }:
+        raw_item_keys = payload.get("item_keys")
+        if not isinstance(raw_item_keys, list):
+            raw_targets = payload.get("targets")
+            raw_item_keys = (
+                [
+                    value.get("item_key")
+                    for value in raw_targets
+                    if isinstance(value, dict)
+                ]
+                if isinstance(raw_targets, list)
+                else []
+            )
+        item_status: Literal["queued", "running"] = (
+            "running" if job.status == JobStatus.RUNNING.value else "queued"
+        )
+        items = [
+            ZoteroOperationItem(zotero_item_key=value, status=item_status)
+            for value in raw_item_keys
+            if isinstance(value, str) and value
+        ]
     raw_counts = result.get("counts")
     try:
         counts = ZoteroOperationCounts.model_validate(raw_counts or {})
@@ -877,7 +1077,6 @@ def _operation_response(
         "partial",
         "succeeded",
         "failed",
-        "cancelling",
         "cancelled",
     ]
     if job.status == JobStatus.PENDING.value:
@@ -898,6 +1097,19 @@ def _operation_response(
         id=job.id,
         kind=kind,
         status=status,
+        progress_code=(
+            cast(ZoteroOperationProgress, job.progress_code)
+            if job.progress_code
+            in {
+                "queued",
+                "fetching_library",
+                "syncing_annotations",
+                "importing_papers",
+            }
+            else "queued"
+            if status == "queued"
+            else None
+        ),
         counts=counts,
         items=items,
         error_code=job.error_code,

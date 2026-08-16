@@ -51,6 +51,12 @@ class ReservedOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationTransition:
+    job: JobResponse
+    changed: bool
+
+
+@dataclass(frozen=True, slots=True)
 class EnqueuedJob:
     job: JobResponse
     created: bool
@@ -71,9 +77,9 @@ class IdempotentOperationPort(Protocol):
         *,
         operation_id: UUID,
         result: dict[str, JsonValue],
-    ) -> JobResponse: ...
+    ) -> OperationTransition: ...
 
-    def fail(self, *, operation_id: UUID, error_code: str) -> JobResponse: ...
+    def fail(self, *, operation_id: UUID, error_code: str) -> OperationTransition: ...
 
 
 class JobQueryPort(Protocol):

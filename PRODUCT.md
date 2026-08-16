@@ -156,6 +156,9 @@ scheduled annotation sync and may explicitly enable automatic import for
 papers added to Zotero in the future. Automatic import is off by default and
 starts from the library version observed when it is enabled, so existing
 Zotero papers are not backfilled unexpectedly.
+An account has at most one active Zotero import or sync. Its durable status is
+restored after refresh, and automatic-import progress never advances beyond a
+temporary provider, download, or Scholens quota failure.
 
 Losing Researcher access pauses automatic behavior without discarding the
 preference or imported research; restoring access resumes it. Disconnecting

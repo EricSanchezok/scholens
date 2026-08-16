@@ -28,6 +28,7 @@ from app.modules.integrations.zotero.application.zotero import (
     PreparedZoteroCallback,
     ZoteroAccessToken,
     ZoteroAttachmentSnapshot,
+    ZoteroAutoImportCursor,
     ZoteroCredentials,
     ZoteroCollectionSnapshotPage,
     ZoteroImportContent,
@@ -62,6 +63,17 @@ from app.shared.application import (
 from app.shared.domain import AppError, FailureKind, JsonValue
 
 logger = logging.getLogger(__name__)
+
+_PERMANENT_AUTO_IMPORT_ERRORS = frozenset(
+    {
+        "zotero_item_not_found",
+        "zotero_item_not_supported",
+        "zotero_pdf_unavailable",
+        "zotero_pdf_unsafe_address",
+        "zotero_pdf_too_large",
+        "zotero_pdf_encrypted",
+    }
+)
 
 
 def _json_count(value: JsonValue | None) -> int:
@@ -199,8 +211,8 @@ class ZoteroWorkflow:
         oauth_verifier: str,
         request: RequestReference,
     ) -> ZoteroOAuthCallbackResult:
-        callback = self._executor.query(
-            lambda capabilities: capabilities.zotero.prepare_oauth_callback(
+        callback = self._executor.command(
+            lambda capabilities: capabilities.zotero.consume_oauth_callback(
                 oauth_token=oauth_token,
                 now=datetime.now(UTC),
             )
@@ -499,18 +511,32 @@ class ZoteroBackgroundWorkflow:
                 )
             )
             return {"accepted": True, "status": "failed"}
-        if isinstance(callback, ZoteroImportWebhookData):
-            result = await self._apply_import_items(
-                actor=actor,
-                operation=outcome_operation,
-                items=callback.items,
+        try:
+            if isinstance(callback, ZoteroImportWebhookData):
+                result = await self._apply_import_items(
+                    actor=actor,
+                    operation=outcome_operation,
+                    items=callback.items,
+                    credential_revision=callback.credential_revision,
+                )
+            else:
+                result = await self._apply_sync(
+                    actor=actor,
+                    operation=outcome_operation,
+                    callback=callback,
+                )
+        except AppError as exc:
+            if exc.code != "zotero_credentials_rotated":
+                raise
+            self._executor.command(
+                lambda capabilities: capabilities.zotero.fail_background_operation(
+                    actor=actor,
+                    operation=outcome_operation,
+                    operation_id=job_id,
+                    error_code="zotero_credentials_rotated",
+                )
             )
-        else:
-            result = await self._apply_sync(
-                actor=actor,
-                operation=outcome_operation,
-                callback=callback,
-            )
+            return {"accepted": True, "status": "failed"}
         completed = self._executor.command(
             lambda capabilities: capabilities.zotero.complete_background_operation(
                 actor=actor,
@@ -527,6 +553,7 @@ class ZoteroBackgroundWorkflow:
         actor: Actor,
         operation: OperationContext,
         items: list[ZoteroWorkerImportItem],
+        credential_revision: UUID,
     ) -> dict[str, JsonValue]:
         ready = [item for item in items if item.status == "ready"]
         contents: dict[str, ZoteroImportContent] = {}
@@ -564,10 +591,11 @@ class ZoteroBackgroundWorkflow:
                     page_dimensions=tuple(item.page_dimensions),
                     error=None,
                 )
-            plan = self._executor.query(
+            plan = self._executor.command(
                 lambda capabilities: capabilities.zotero.plan_import(
                     actor=actor,
                     items=tuple(content.item for content in contents.values()),
+                    credential_revision=credential_revision,
                 )
             )
             applied = await _execute_import_plan(
@@ -578,6 +606,7 @@ class ZoteroBackgroundWorkflow:
                 operation=operation,
                 plan=plan,
                 content_by_item_key=contents,
+                credential_revision=credential_revision,
             )
         finally:
             for object_key in cleanup:
@@ -611,6 +640,13 @@ class ZoteroBackgroundWorkflow:
                     "error_code": error.error,
                 }
             )
+        for item_key in applied.skipped_item_keys:
+            results.append(
+                {
+                    "zotero_item_key": item_key,
+                    "status": "cancelled",
+                }
+            )
         return {
             "counts": {
                 "total": len(items),
@@ -628,8 +664,11 @@ class ZoteroBackgroundWorkflow:
         operation: OperationContext,
         callback: ZoteroSyncWebhookData,
     ) -> dict[str, JsonValue]:
-        sync_targets = self._executor.query(
-            lambda capabilities: capabilities.zotero.sync_targets(actor=actor)
+        sync_targets = self._executor.command(
+            lambda capabilities: capabilities.zotero.sync_targets(
+                actor=actor,
+                credential_revision=callback.credential_revision,
+            )
         )
         targets = {target.item_key: target for target in sync_targets}
         updates = []
@@ -657,21 +696,34 @@ class ZoteroBackgroundWorkflow:
                         failure.item_key for failure in callback.failures
                     ),
                 ),
+                credential_revision=callback.credential_revision,
             )
         )
         import_result = await self._apply_import_items(
             actor=actor,
             operation=operation,
             items=callback.auto_imports,
+            credential_revision=callback.credential_revision,
         )
         library_version = callback.library_version
-        self._executor.command(
+        auto_import_cursor = _recoverable_auto_import_cursor(
+            callback=callback,
+            import_result=import_result,
+        )
+        checkpoint_advanced = self._executor.command(
             lambda capabilities: capabilities.zotero.advance_sync_checkpoint(
                 actor=actor,
                 credential_revision=callback.credential_revision,
                 library_version=library_version,
+                auto_import_cursor=auto_import_cursor,
             )
         )
+        if not checkpoint_advanced:
+            raise AppError(
+                code="zotero_credentials_rotated",
+                message="The Zotero connection changed before sync completed",
+                kind=FailureKind.CONFLICT,
+            )
         import_counts = import_result.get("counts")
         assert isinstance(import_counts, dict)
         imported = _json_count(import_counts.get("succeeded"))
@@ -693,6 +745,50 @@ class ZoteroBackgroundWorkflow:
         }
 
 
+def _recoverable_auto_import_cursor(
+    *,
+    callback: ZoteroSyncWebhookData,
+    import_result: dict[str, JsonValue],
+) -> ZoteroAutoImportCursor | None:
+    raw_results = import_result.get("items")
+    results_by_key = (
+        {
+            str(value.get("zotero_item_key")): value
+            for value in raw_results
+            if isinstance(raw_results, list)
+            and isinstance(value, dict)
+            and value.get("zotero_item_key")
+        }
+        if isinstance(raw_results, list)
+        else {}
+    )
+    cursor: ZoteroAutoImportCursor | None = None
+    all_resolved = True
+    resolved_count = 0
+    for item in callback.auto_imports:
+        result = results_by_key.get(item.item_key)
+        status = result.get("status") if result is not None else None
+        error_code = result.get("error_code") if result is not None else None
+        resolved = status in {"accepted", "cancelled"} or (
+            status == "failed" and error_code in _PERMANENT_AUTO_IMPORT_ERRORS
+        )
+        if not resolved:
+            all_resolved = False
+            break
+        resolved_count += 1
+    if all_resolved and callback.auto_import_caught_up_version is not None:
+        return ZoteroAutoImportCursor(
+            library_version=callback.auto_import_caught_up_version,
+            start=0,
+        )
+    if callback.auto_import_base_version is not None and resolved_count:
+        cursor = ZoteroAutoImportCursor(
+            library_version=callback.auto_import_base_version,
+            start=callback.auto_import_base_start + resolved_count,
+        )
+    return cursor
+
+
 def _zotero_sort(value: str) -> tuple[str, str]:
     return {
         "modified_desc": ("dateModified", "desc"),
@@ -712,6 +808,7 @@ async def _execute_import_plan(
     operation: OperationContext,
     plan: ZoteroImportPlan,
     content_by_item_key: dict[str, ZoteroImportContent],
+    credential_revision: UUID,
 ) -> ZoteroImportResponse:
     imported = []
     errors = list(plan.errors)
@@ -739,6 +836,7 @@ async def _execute_import_plan(
                     attachment=attachment,
                     document_id=existing_document_id,
                     page_dimensions=page_dimensions,
+                    credential_revision=credential_revision,
                 )
             )
             continue
@@ -761,6 +859,7 @@ async def _execute_import_plan(
                     item_key=planned.item.item_key,
                     upload_job_id=None,
                     error_code=error_code,
+                    credential_revision=credential_revision,
                 )
             )
             errors.append(
@@ -814,6 +913,7 @@ async def _execute_import_plan(
                     actor=actor,
                     item_key=planned.item.item_key,
                     upload_job_id=accepted.ingestion.id,
+                    credential_revision=credential_revision,
                 )
                 item_result = capabilities.zotero.complete_import_item(
                     actor=actor,
@@ -824,6 +924,7 @@ async def _execute_import_plan(
                     document_id=document_id,
                     reused_document=not accepted.processing_required,
                     page_dimensions=content.page_dimensions,
+                    credential_revision=credential_revision,
                 )
                 return accepted, item_result
 
@@ -841,13 +942,15 @@ async def _execute_import_plan(
             ):
                 await ingestion.release(actor=actor, job_id=proposed_job_id)
                 acquired = False
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "zotero.item_import.failed",
                 extra={"zotero_item_key": planned.item.item_key},
             )
             if acquired and ingestion is not None:
                 await ingestion.release(actor=actor, job_id=proposed_job_id)
+            if isinstance(exc, AppError) and exc.code == "zotero_credentials_rotated":
+                raise
             failure_operation = operation_factory.child(
                 accept_operation,
                 initiated_by=OperationInitiator.SYSTEM,
@@ -859,6 +962,7 @@ async def _execute_import_plan(
                     item_key=planned.item.item_key,
                     upload_job_id=None,
                     error_code="zotero_import_failed",
+                    credential_revision=credential_revision,
                 )
             )
             errors.append(
@@ -875,6 +979,12 @@ async def _execute_import_plan(
         assert source_item_key is not None
         document_id = document_by_item_key.get(source_item_key)
         if document_id is None:
+            errors.append(
+                ZoteroImportError(
+                    zotero_item_key=planned.item.item_key,
+                    error="zotero_import_failed",
+                )
+            )
             continue
         prepared_content = content_by_item_key.get(planned.item.item_key)
         if prepared_content is None:
@@ -894,6 +1004,7 @@ async def _execute_import_plan(
                     source_item_key,
                     (),
                 ),
+                credential_revision=credential_revision,
             )
         )
 
@@ -902,6 +1013,7 @@ async def _execute_import_plan(
         imported_count=len(imported),
         imported_via_url=sum(item.import_source == "url" for item in imported),
         skipped_already_imported=plan.skipped_already_imported,
+        skipped_item_keys=list(plan.skipped_item_keys),
         errors=errors,
     )
 

@@ -1,6 +1,7 @@
 export {
   beginZoteroAuthorization,
   cancelZoteroImport,
+  cancelZoteroSync,
   disconnectZotero,
   startZoteroImport,
   startZoteroSync,

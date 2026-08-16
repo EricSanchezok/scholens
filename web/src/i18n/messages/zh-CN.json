@@ -1188,6 +1188,7 @@
       "autoImportDescription": "只从开启后新增的论文开始，不会自动回溯现有 Zotero 文库。",
       "autoImportPaused": "此偏好已保留，恢复研究者权限后将继续执行。",
       "syncNow": "立即同步",
+      "cancelSync": "取消同步",
       "disconnect": "断开连接",
       "operation": {
         "queued": "同步已排队",
@@ -1195,8 +1196,8 @@
         "partial": "同步完成，部分条目不可用",
         "succeeded": "同步完成",
         "failed": "同步失败，可以重试。",
-        "cancelling": "正在取消同步",
-        "cancelled": "同步已取消"
+        "cancelled": "同步已取消",
+        "importActive": "已有 Zotero 导入正在运行，请先在文库中完成或取消，再开始同步。"
       },
       "errors": {
         "zotero_not_connected": "请先连接 Zotero。",
@@ -1205,6 +1206,7 @@
         "integration_credentials_unreadable": "无法读取已保存的凭据，请断开后重新连接 Zotero。",
         "zotero_rate_limited": "Zotero 正在限制请求，请稍后重试。",
         "zotero_auto_import_requires_researcher": "自动导入仅在研究者权限有效时可用。",
+        "zotero_operation_active": "已有另一个 Zotero 操作正在运行。",
         "zotero_unavailable": "Zotero 暂时不可用，请重试。",
         "zotero_import_failed": "Zotero 操作失败，请重试。"
       }
@@ -1212,6 +1214,7 @@
     "library": {
       "title": "从 Zotero 导入",
       "description": "从个人文库选择最多 50 篇论文。Scholens 不会修改 Zotero 中的数据。",
+      "operationActive": "已有 Zotero 操作正在运行，请先完成或取消，再开始新的导入。",
       "close": "关闭 Zotero 文库",
       "loadingConnection": "正在检查 Zotero 连接",
       "connectionError": "无法检查 Zotero 连接",
@@ -1268,6 +1271,7 @@
         "zotero_credentials_invalid": "Zotero 已撤销此连接，请重新连接。",
         "integration_credentials_unreadable": "请断开后重新连接 Zotero 以修复凭据。",
         "zotero_rate_limited": "Zotero 正在限制请求，请稍后重试。",
+        "zotero_operation_active": "已有另一个 Zotero 操作正在运行。",
         "zotero_quota_exceeded": "Scholens 论文额度已满。",
         "paper_quota_exceeded": "Scholens 论文额度已满。",
         "storage_quota_exceeded": "Scholens 存储额度已满。",
@@ -1276,14 +1280,20 @@
     },
     "operation": {
       "label": "Zotero 导入进度",
+      "loading": "正在加载 Zotero 操作",
       "status": {
         "queued": "Zotero 导入已排队",
         "running": "正在导入 Zotero 论文",
         "partial": "Zotero 导入部分完成",
         "succeeded": "Zotero 导入已受理",
         "failed": "Zotero 导入失败",
-        "cancelling": "正在取消 Zotero 导入",
         "cancelled": "Zotero 导入已取消"
+      },
+      "stage": {
+        "queued": "正在等待后台任务",
+        "fetching_library": "正在读取 Zotero 文库",
+        "syncing_annotations": "正在同步标注",
+        "importing_papers": "正在准备所选论文"
       },
       "counts": "共 {total, number} 篇，已受理 {succeeded, number} 篇，失败 {failed, number} 篇",
       "progress": "Zotero 导入进度",

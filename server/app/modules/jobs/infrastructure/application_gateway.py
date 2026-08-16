@@ -9,6 +9,7 @@ from app.modules.jobs.application.contracts import JobResponse
 from app.modules.jobs.application.jobs import (
     EnqueueJobCommand,
     EnqueuedJob,
+    OperationTransition,
     ReserveOperationCommand,
     ReservedOperation,
 )
@@ -132,21 +133,21 @@ class SqlAlchemyJobsGateway:
         *,
         operation_id: UUID,
         result: dict[str, JsonValue],
-    ) -> JobResponse:
-        job, _changed = job_repository.complete(
+    ) -> OperationTransition:
+        job, changed = job_repository.complete(
             self._db,
             job_id=operation_id,
             result=result,
         )
-        return job_response(job)
+        return OperationTransition(job=job_response(job), changed=changed)
 
-    def fail(self, *, operation_id: UUID, error_code: str) -> JobResponse:
-        job, _changed = job_repository.fail(
+    def fail(self, *, operation_id: UUID, error_code: str) -> OperationTransition:
+        job, changed = job_repository.fail(
             self._db,
             job_id=operation_id,
             error_code=error_code,
         )
-        return job_response(job)
+        return OperationTransition(job=job_response(job), changed=changed)
 
     def list(
         self,
@@ -177,6 +178,18 @@ class SqlAlchemyJobsGateway:
                 requested_by_id=requested_by_id,
             )
         )
+
+    def payload(
+        self,
+        *,
+        requested_by_id: int,
+        job_id: UUID,
+    ) -> dict[str, JsonValue]:
+        return job_repository.require_for_requester(
+            self._db,
+            job_id=job_id,
+            requested_by_id=requested_by_id,
+        ).payload
 
     def cancel(self, *, requested_by_id: int, job_id: UUID) -> JobResponse:
         job, _changed = job_repository.cancel(

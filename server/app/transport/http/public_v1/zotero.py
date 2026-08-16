@@ -251,3 +251,23 @@ def zotero_sync_operation(
             kind="sync",
         )
     )
+
+
+@zotero_router.delete(
+    "/sync-runs/{operation_id}",
+    response_model=ZoteroOperation,
+)
+def zotero_cancel_sync(
+    operation_id: UUID,
+    current_user: Actor = Depends(get_required_user),
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> ZoteroOperation:
+    return executor.command(
+        lambda capabilities: capabilities.zotero.cancel_operation(
+            actor=current_user,
+            operation_id=operation_id,
+            kind="sync",
+        )
+    )

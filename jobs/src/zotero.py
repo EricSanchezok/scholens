@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import socket
 import time
 from dataclasses import dataclass, field
@@ -20,6 +21,8 @@ IMPORTABLE_ITEM_TYPES = frozenset({"journalArticle", "conferencePaper", "preprin
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_REDIRECTS = 5
 MAX_AUTO_IMPORT_ITEMS = 50
+
+logger = logging.getLogger(__name__)
 
 
 class ZoteroJobError(RuntimeError):
@@ -40,12 +43,11 @@ class ZoteroClient:
     def __init__(self, credential: ZoteroJobCredential) -> None:
         self._credential = credential
         self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "Zotero-API-Key": credential.api_key,
-                "Zotero-API-Version": "3",
-            }
-        )
+        self._session.trust_env = False
+        self._api_headers = {
+            "Zotero-API-Key": credential.api_key,
+            "Zotero-API-Version": "3",
+        }
 
     @property
     def _base(self) -> str:
@@ -57,36 +59,73 @@ class ZoteroClient:
         *,
         params: dict[str, Any] | None = None,
         stream: bool = False,
+        allow_cross_origin_redirect: bool = False,
     ) -> requests.Response:
-        url = path if path.startswith("https://") else f"{self._base}{path}"
+        initial_url = path if path.startswith("https://") else f"{self._base}{path}"
         for attempt in range(3):
+            url = initial_url
+            request_params = params
+            redirects = 0
             try:
-                response = self._session.get(
-                    url,
-                    params=params,
-                    timeout=(10, 60),
-                    stream=stream,
-                )
+                while True:
+                    same_origin = _same_origin(url, ZOTERO_API_BASE)
+                    if not same_origin:
+                        if not allow_cross_origin_redirect:
+                            raise ZoteroJobError("zotero_unavailable")
+                        _require_public_url(url)
+                    response = self._session.get(
+                        url,
+                        params=request_params,
+                        timeout=(10, 60),
+                        stream=stream,
+                        allow_redirects=False,
+                        headers=self._api_headers if same_origin else {},
+                    )
+                    if not same_origin:
+                        _require_global_peer(response)
+                    if response.status_code not in {301, 302, 303, 307, 308}:
+                        break
+                    try:
+                        location = response.headers.get("Location")
+                        if not location or redirects >= MAX_REDIRECTS:
+                            raise ZoteroJobError("zotero_unavailable")
+                        next_url = urljoin(url, location)
+                        if (
+                            not _same_origin(next_url, url)
+                            and not allow_cross_origin_redirect
+                        ):
+                            raise ZoteroJobError("zotero_unavailable")
+                        url = next_url
+                        request_params = None
+                        redirects += 1
+                    finally:
+                        response.close()
             except requests.RequestException as exc:
                 if attempt == 2:
                     raise ZoteroJobError("zotero_unavailable") from exc
                 time.sleep(2**attempt)
                 continue
             if response.status_code in {401, 403}:
+                response.close()
                 raise ZoteroJobError(
                     "zotero_credentials_invalid",
                     invalid_credential=True,
                 )
             if response.status_code == 429:
                 if attempt == 2:
+                    response.close()
                     raise ZoteroJobError("zotero_rate_limited")
-                time.sleep(min(_safe_header_seconds(response, "Retry-After", 2), 10))
+                retry_after = min(_safe_header_seconds(response, "Retry-After", 2), 10)
+                response.close()
+                time.sleep(retry_after)
                 continue
             if response.status_code == 404:
+                response.close()
                 raise ZoteroJobError("zotero_item_not_found")
             try:
                 response.raise_for_status()
             except requests.RequestException as exc:
+                response.close()
                 raise ZoteroJobError("zotero_unavailable") from exc
             backoff = response.headers.get("Backoff")
             if backoff:
@@ -122,41 +161,52 @@ class ZoteroClient:
         )
 
     def download_attachment(self, attachment_key: str) -> bytes:
-        response = self._request(f"/items/{attachment_key}/file", stream=True)
-        return _bounded_response_bytes(response)
+        response = self._request(
+            f"/items/{attachment_key}/file",
+            stream=True,
+            allow_cross_origin_redirect=True,
+        )
+        try:
+            return _bounded_response_bytes(response)
+        finally:
+            response.close()
 
     def items_since(
         self,
         version: int,
         *,
+        start: int = 0,
+        limit: int = MAX_AUTO_IMPORT_ITEMS,
         is_active: Callable[[], bool] | None = None,
-    ) -> tuple[list[dict[str, Any]], int | None]:
-        results: list[dict[str, Any]] = []
-        start = 0
-        library_version: int | None = None
-        while True:
-            _require_active(is_active)
-            response = self._request(
-                "/items/top",
-                params={
-                    "since": version,
-                    "limit": 100,
-                    "start": start,
-                    "itemType": " || ".join(sorted(IMPORTABLE_ITEM_TYPES)),
-                },
-            )
-            library_version = _header_int(response, "Last-Modified-Version")
+    ) -> tuple[list[dict[str, Any]], int | None, bool]:
+        _require_active(is_active)
+        page_limit = min(limit, MAX_AUTO_IMPORT_ITEMS)
+        response = self._request(
+            "/items/top",
+            params={
+                "since": version,
+                "limit": page_limit,
+                "start": start,
+                "sort": "dateModified",
+                "direction": "asc",
+                "itemType": " || ".join(sorted(IMPORTABLE_ITEM_TYPES)),
+            },
+        )
+        library_version = _header_int(response, "Last-Modified-Version")
+        total = _header_int(response, "Total-Results")
+        try:
             value = response.json()
             page = (
                 [item for item in value if isinstance(item, dict)]
                 if isinstance(value, list)
                 else []
             )
-            results.extend(page)
-            if len(page) < 100:
-                break
-            start += 100
-        return results, library_version
+        finally:
+            response.close()
+        has_more = (
+            start + len(page) < total if total is not None else len(page) == page_limit
+        )
+        return page, library_version, has_more
 
     def current_library_version(self) -> int | None:
         response = self._request("/items/top", params={"limit": 1})
@@ -170,25 +220,31 @@ def import_items(
     item_keys: list[str],
     is_active: Callable[[], bool] | None = None,
 ) -> tuple[list[dict[str, Any]], int | None]:
-    client = ZoteroClient(credential)
-    _require_active(is_active)
-    raw_by_key = {
-        str(item.get("key")): item
-        for item in client.items(item_keys)
-        if item.get("key")
-    }
-    results: list[dict[str, Any]] = []
-    for item_key in item_keys:
+    uploaded_keys: list[str] = []
+    try:
+        client = ZoteroClient(credential)
         _require_active(is_active)
-        results.append(
-            _prepare_import_item(
-                task_id=task_id,
-                client=client,
-                item=raw_by_key.get(item_key),
-                item_key=item_key,
+        raw_by_key = {
+            str(item.get("key")): item
+            for item in client.items(item_keys)
+            if item.get("key")
+        }
+        results: list[dict[str, Any]] = []
+        for item_key in item_keys:
+            _require_active(is_active)
+            results.append(
+                _prepare_import_item(
+                    task_id=task_id,
+                    client=client,
+                    item=raw_by_key.get(item_key),
+                    item_key=item_key,
+                    uploaded_keys=uploaded_keys,
+                )
             )
-        )
-    return results, client.current_library_version()
+        return results, client.current_library_version()
+    except Exception:
+        _delete_uploaded_keys(uploaded_keys)
+        raise
 
 
 def sync_items(
@@ -197,7 +253,34 @@ def sync_items(
     credential: ZoteroJobCredential,
     targets: list[dict[str, Any]],
     auto_import_version: int | None,
+    auto_import_start: int = 0,
     is_active: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    uploaded_keys: list[str] = []
+    try:
+        return _sync_items(
+            task_id=task_id,
+            credential=credential,
+            targets=targets,
+            auto_import_version=auto_import_version,
+            auto_import_start=auto_import_start,
+            is_active=is_active,
+            uploaded_keys=uploaded_keys,
+        )
+    except Exception:
+        _delete_uploaded_keys(uploaded_keys)
+        raise
+
+
+def _sync_items(
+    *,
+    task_id: str,
+    credential: ZoteroJobCredential,
+    targets: list[dict[str, Any]],
+    auto_import_version: int | None,
+    auto_import_start: int,
+    is_active: Callable[[], bool] | None,
+    uploaded_keys: list[str],
 ) -> dict[str, Any]:
     client = ZoteroClient(credential)
     _require_active(is_active)
@@ -232,18 +315,18 @@ def sync_items(
 
     auto_imports: list[dict[str, Any]] = []
     library_version: int | None = None
+    auto_import_caught_up_version: int | None = None
     if auto_import_version is not None:
-        new_items, observed_version = client.items_since(
+        new_items, observed_version, has_more = client.items_since(
             auto_import_version,
+            start=auto_import_start,
+            limit=MAX_AUTO_IMPORT_ITEMS,
             is_active=is_active,
         )
-        ordered_items = sorted(new_items, key=_item_version)
-        selected_items = _bounded_version_batch(ordered_items)
-        library_version = (
-            observed_version
-            if len(selected_items) == len(ordered_items)
-            else max((_item_version(item) for item in selected_items), default=None)
-        )
+        selected_items = _bounded_version_batch(new_items)
+        library_version = observed_version
+        if not has_more:
+            auto_import_caught_up_version = observed_version
         for item in selected_items:
             _require_active(is_active)
             key = str(item.get("key") or "")
@@ -254,6 +337,7 @@ def sync_items(
                         client=client,
                         item=item,
                         item_key=key,
+                        uploaded_keys=uploaded_keys,
                     )
                 )
     return {
@@ -261,6 +345,9 @@ def sync_items(
         "failures": failures,
         "auto_imports": auto_imports,
         "library_version": library_version,
+        "auto_import_base_version": auto_import_version,
+        "auto_import_base_start": auto_import_start,
+        "auto_import_caught_up_version": auto_import_caught_up_version,
     }
 
 
@@ -270,12 +357,18 @@ def _prepare_import_item(
     client: ZoteroClient,
     item: dict[str, Any] | None,
     item_key: str,
+    uploaded_keys: list[str],
 ) -> dict[str, Any]:
     if item is None:
         return _failed_item(item_key, "zotero_item_not_found")
     data = item.get("data") or {}
     if data.get("itemType") not in IMPORTABLE_ITEM_TYPES:
-        return _failed_item(item_key, "zotero_item_not_supported")
+        return _failed_item(
+            item_key,
+            "zotero_item_not_supported",
+            version=_item_version(item),
+        )
+    object_key: str | None = None
     try:
         children = client.children(item_key)
         attachment = _stored_pdf(children)
@@ -291,6 +384,7 @@ def _prepare_import_item(
         _validate_pdf(pdf)
         object_key = f"zotero-imports/{task_id}/{item_key}.pdf"
         s3_service.upload_bytes_to_key(pdf, object_key, "application/pdf")
+        uploaded_keys.append(object_key)
         annotations = (
             [
                 {"key": value.get("key"), "data": value.get("data") or {}}
@@ -303,6 +397,7 @@ def _prepare_import_item(
         )
         return {
             "item_key": item_key,
+            "version": _item_version(item),
             "status": "ready",
             "s3_object_key": object_key,
             "metadata": _metadata(item),
@@ -321,7 +416,38 @@ def _prepare_import_item(
     except ZoteroJobError as exc:
         if exc.invalid_credential:
             raise
-        return _failed_item(item_key, exc.code, title=str(data.get("title") or ""))
+        if object_key is not None:
+            _delete_uploaded_keys([object_key])
+            uploaded_keys.remove(object_key)
+        return _failed_item(
+            item_key,
+            exc.code,
+            title=str(data.get("title") or ""),
+            version=_item_version(item),
+        )
+
+
+def _delete_uploaded_keys(object_keys: list[str]) -> None:
+    for object_key in reversed(object_keys):
+        try:
+            s3_service.delete_file(object_key)
+        except Exception:
+            logger.warning(
+                "job.zotero_import.cleanup_failed",
+                extra={"object_key": object_key},
+            )
+
+
+def discard_prepared_items(items: Iterable[dict[str, Any]]) -> None:
+    _delete_uploaded_keys(
+        [
+            object_key
+            for item in items
+            if isinstance(item, dict)
+            and isinstance((object_key := item.get("s3_object_key")), str)
+            and object_key.startswith("zotero-imports/")
+        ]
+    )
 
 
 def _annotations_json(annotations: list[dict[str, Any]]) -> str:
@@ -409,16 +535,22 @@ def _resolve_open_pdf(data: dict[str, Any]) -> tuple[bytes, str]:
     doi = str(data.get("DOI") or "").strip()
     if doi:
         candidates.append(doi if doi.startswith("http") else f"https://doi.org/{doi}")
+    transient_error: ZoteroJobError | None = None
     for candidate in candidates:
         try:
             return _fetch_public_pdf(candidate), candidate
-        except ZoteroJobError:
+        except ZoteroJobError as exc:
+            if exc.code in {"zotero_unavailable", "zotero_rate_limited"}:
+                transient_error = exc
             continue
+    if transient_error is not None:
+        raise transient_error
     raise ZoteroJobError("zotero_pdf_unavailable")
 
 
 def _fetch_public_pdf(url: str) -> bytes:
     session = requests.Session()
+    session.trust_env = False
     current = url
     for _ in range(MAX_REDIRECTS + 1):
         _require_public_url(current)
@@ -431,18 +563,25 @@ def _fetch_public_pdf(url: str) -> bytes:
                 headers={"Accept": "application/pdf"},
             )
         except requests.RequestException as exc:
-            raise ZoteroJobError("zotero_pdf_unavailable") from exc
-        if response.is_redirect or response.is_permanent_redirect:
-            location = response.headers.get("Location")
-            if not location:
-                raise ZoteroJobError("zotero_pdf_unavailable")
-            current = urljoin(current, location)
-            continue
+            raise ZoteroJobError("zotero_unavailable") from exc
         try:
+            _require_global_peer(response)
+            if response.is_redirect or response.is_permanent_redirect:
+                location = response.headers.get("Location")
+                if not location:
+                    raise ZoteroJobError("zotero_pdf_unavailable")
+                current = urljoin(current, location)
+                continue
+            if response.status_code == 429:
+                raise ZoteroJobError("zotero_rate_limited")
+            if response.status_code >= 500:
+                raise ZoteroJobError("zotero_unavailable")
             response.raise_for_status()
+            return _bounded_response_bytes(response)
         except requests.RequestException as exc:
             raise ZoteroJobError("zotero_pdf_unavailable") from exc
-        return _bounded_response_bytes(response)
+        finally:
+            response.close()
     raise ZoteroJobError("zotero_pdf_unavailable")
 
 
@@ -458,6 +597,26 @@ def _require_public_url(url: str) -> None:
         ip = ipaddress.ip_address(address[4][0])
         if not ip.is_global:
             raise ZoteroJobError("zotero_pdf_unsafe_address")
+
+
+def _require_global_peer(response: requests.Response) -> None:
+    raw = response.raw
+    connection = getattr(raw, "_connection", None) or getattr(raw, "connection", None)
+    peer_socket = getattr(connection, "sock", None)
+    if peer_socket is None:
+        original = getattr(raw, "_original_response", None)
+        file_pointer = getattr(original, "fp", None)
+        peer_socket = getattr(getattr(file_pointer, "raw", None), "_sock", None)
+    if peer_socket is None:
+        raise ZoteroJobError("zotero_pdf_unsafe_address")
+    try:
+        peer = peer_socket.getpeername()
+        address = peer[0]
+        ip = ipaddress.ip_address(address)
+    except (AttributeError, IndexError, TypeError, ValueError, OSError) as exc:
+        raise ZoteroJobError("zotero_pdf_unsafe_address") from exc
+    if not ip.is_global:
+        raise ZoteroJobError("zotero_pdf_unsafe_address")
 
 
 def _bounded_response_bytes(response: requests.Response) -> bytes:
@@ -509,10 +668,15 @@ def _page_dimensions(content: bytes) -> list[list[float | int]]:
 
 
 def _failed_item(
-    item_key: str, code: str, *, title: str | None = None
+    item_key: str,
+    code: str,
+    *,
+    title: str | None = None,
+    version: int | None = None,
 ) -> dict[str, Any]:
     return {
         "item_key": item_key,
+        "version": version,
         "status": "failed",
         "title": title or None,
         "error_code": code,
@@ -547,7 +711,21 @@ def _item_version(item: dict[str, Any]) -> int:
 
 
 def _bounded_version_batch(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if len(items) <= MAX_AUTO_IMPORT_ITEMS:
-        return items
-    boundary = _item_version(items[MAX_AUTO_IMPORT_ITEMS - 1])
-    return [item for item in items if _item_version(item) <= boundary]
+    return items[:MAX_AUTO_IMPORT_ITEMS]
+
+
+def _same_origin(left: str, right: str) -> bool:
+    def origin(url: str) -> tuple[str, str, int | None]:
+        parsed = urlsplit(url)
+        port = parsed.port
+        if port is None:
+            port = (
+                443
+                if parsed.scheme == "https"
+                else 80
+                if parsed.scheme == "http"
+                else None
+            )
+        return parsed.scheme.casefold(), (parsed.hostname or "").casefold(), port
+
+    return origin(left) == origin(right)

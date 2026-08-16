@@ -31,6 +31,8 @@ export function zoteroSettingsErrorKey(value: string) {
       return "errors.zotero_rate_limited" as const;
     case "zotero_auto_import_requires_researcher":
       return "errors.zotero_auto_import_requires_researcher" as const;
+    case "zotero_operation_active":
+      return "errors.zotero_operation_active" as const;
     case "zotero_import_failed":
       return "errors.zotero_import_failed" as const;
     default:
@@ -56,6 +58,8 @@ export function zoteroLibraryErrorKey(value: string) {
       return "errors.paper_quota_exceeded" as const;
     case "storage_quota_exceeded":
       return "errors.storage_quota_exceeded" as const;
+    case "zotero_operation_active":
+      return "errors.zotero_operation_active" as const;
     default:
       return "errors.zotero_unavailable" as const;
   }

@@ -2,6 +2,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 ZOTERO_API_BASE = "https://api.zotero.org"
 MAX_RETRIES = 3
+MAX_REDIRECTS = 5
 IMPORTABLE_ITEM_TYPES = ("journalArticle", "conferencePaper", "preprint")
 
 
@@ -26,12 +28,11 @@ class ZoteroApiClient:
         self.zotero_user_id = zotero_user_id
         self.api_key = api_key
         self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "Zotero-API-Key": api_key,
-                "Zotero-API-Version": "3",
-            }
-        )
+        self._session.trust_env = False
+        self._api_headers = {
+            "Zotero-API-Key": api_key,
+            "Zotero-API-Version": "3",
+        }
 
     @property
     def _user_base(self) -> str:
@@ -48,16 +49,40 @@ class ZoteroApiClient:
         last_error: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
-                response = self._session.request(
-                    method,
-                    url,
-                    params=params,
-                    timeout=60,
-                    allow_redirects=True,
-                    stream=stream,
-                )
+                current_url = url
+                request_params = params
+                redirects = 0
+                while True:
+                    response = self._session.request(
+                        method,
+                        current_url,
+                        params=request_params,
+                        timeout=60,
+                        allow_redirects=False,
+                        stream=stream,
+                        headers=self._api_headers,
+                    )
+                    if response.status_code not in {301, 302, 303, 307, 308}:
+                        break
+                    try:
+                        location = response.headers.get("Location")
+                        if not location or redirects >= MAX_REDIRECTS:
+                            raise requests.exceptions.TooManyRedirects(
+                                response=response
+                            )
+                        next_url = urljoin(current_url, location)
+                        if not _same_origin(next_url, ZOTERO_API_BASE):
+                            raise requests.exceptions.InvalidURL(
+                                "Zotero metadata endpoint redirected across origins",
+                                response=response,
+                            )
+                        current_url = next_url
+                        request_params = None
+                        redirects += 1
+                    finally:
+                        response.close()
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", "2"))
+                    retry_after = _safe_retry_after(response)
                     logger.warning(
                         "zotero.api.rate_limited",
                         extra={
@@ -72,6 +97,7 @@ class ZoteroApiClient:
                     last_error = requests.HTTPError(
                         f"429 Too Many Requests for url: {url}", response=response
                     )
+                    response.close()
                     time.sleep(retry_after)
                     continue
                 backoff = response.headers.get("Backoff")
@@ -93,6 +119,16 @@ class ZoteroApiClient:
                         "exception_type": type(exc).__name__,
                     },
                 )
+                if resp is not None:
+                    resp.close()
+                if isinstance(
+                    exc,
+                    (
+                        requests.exceptions.InvalidURL,
+                        requests.exceptions.TooManyRedirects,
+                    ),
+                ):
+                    raise
                 if isinstance(status, int) and 400 <= status < 500 and status != 429:
                     raise
                 if attempt < MAX_RETRIES - 1:
@@ -375,3 +411,25 @@ def _header_int(response: requests.Response, name: str) -> int | None:
         return int(value) if value is not None else None
     except ValueError:
         return None
+
+
+def _safe_retry_after(response: requests.Response) -> int:
+    value = _header_int(response, "Retry-After")
+    return min(max(value if value is not None else 2, 0), 10)
+
+
+def _same_origin(left: str, right: str) -> bool:
+    def origin(url: str) -> tuple[str, str, int | None]:
+        parsed = urlsplit(url)
+        port = parsed.port
+        if port is None:
+            port = (
+                443
+                if parsed.scheme == "https"
+                else 80
+                if parsed.scheme == "http"
+                else None
+            )
+        return parsed.scheme.casefold(), (parsed.hostname or "").casefold(), port
+
+    return origin(left) == origin(right)

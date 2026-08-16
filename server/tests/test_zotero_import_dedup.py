@@ -125,7 +125,11 @@ def test_plan_import_links_existing_and_duplicate_doi_without_title_dedup() -> N
             return_value=10,
         ),
     ):
-        plan = gateway.plan_import(actor=_actor(), items=items)
+        plan = gateway.plan_import(
+            actor=_actor(),
+            items=items,
+            credential_revision=uuid4(),
+        )
 
     assert [planned.disposition for planned in plan.items] == [
         "link_existing",
@@ -164,7 +168,11 @@ def test_plan_import_applies_remaining_capacity_only_to_new_documents() -> None:
             return_value=1,
         ),
     ):
-        plan = gateway.plan_import(actor=_actor(), items=items)
+        plan = gateway.plan_import(
+            actor=_actor(),
+            items=items,
+            credential_revision=uuid4(),
+        )
 
     assert [planned.item.item_key for planned in plan.items] == ["A"]
     assert [error.zotero_item_key for error in plan.errors] == ["B"]
@@ -275,6 +283,7 @@ async def test_import_plan_keeps_remote_io_outside_commands() -> None:
             errors=(),
         ),
         content_by_item_key={item.item_key: content},
+        credential_revision=uuid4(),
     )
 
     assert result.imported_count == 1

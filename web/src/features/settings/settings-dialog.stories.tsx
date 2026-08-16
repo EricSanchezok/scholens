@@ -529,6 +529,7 @@ export const ZoteroConnected: Story = {
         http.get(`${api}/integrations/zotero/status`, () =>
           HttpResponse.json({
             active_operation_id: null,
+            active_operation_kind: null,
             auto_import_enabled: false,
             auto_import_state: "off",
             automatic_annotation_sync: "active",
@@ -557,6 +558,76 @@ export const ZoteroConnected: Story = {
         name: "Automatically import new papers",
       }),
     ).not.toBeChecked();
+  },
+};
+
+export const ZoteroActiveSyncRecovered: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/integrations`, () =>
+          HttpResponse.json({
+            items: integrations.map((integration) =>
+              integration.provider === "zotero"
+                ? {
+                    ...integration,
+                    enabled: true,
+                    state: "connected",
+                    updated_at: "2026-08-15T08:00:00Z",
+                    verified_at: "2026-08-15T08:00:00Z",
+                  }
+                : integration,
+            ),
+          }),
+        ),
+        http.get(`${api}/integrations/zotero/status`, () =>
+          HttpResponse.json({
+            active_operation_id: "51000000-0000-4000-8000-000000000101",
+            active_operation_kind: "sync",
+            auto_import_enabled: false,
+            auto_import_state: "off",
+            automatic_annotation_sync: "active",
+            automatic_sync_eligible: true,
+            connected_at: "2026-08-15T08:00:00Z",
+            connection_state: "connected",
+            last_error_code: null,
+            last_successful_sync_at: "2026-08-16T06:30:00Z",
+          }),
+        ),
+        http.get(`${api}/integrations/zotero/sync-runs/:operationId`, () =>
+          HttpResponse.json({
+            completed_at: null,
+            counts: { failed: 0, skipped: 0, succeeded: 0, total: 2 },
+            created_at: "2026-08-16T08:00:00Z",
+            error_code: null,
+            id: "51000000-0000-4000-8000-000000000101",
+            items: [
+              { status: "running", zotero_item_key: "ITEM1" },
+              { status: "running", zotero_item_key: "ITEM2" },
+            ],
+            kind: "sync",
+            progress_code: "syncing_annotations",
+            started_at: "2026-08-16T08:00:10Z",
+            status: "running",
+          }),
+        ),
+      ],
+    },
+    nextjs: navigation("connections"),
+  },
+  play: async () => {
+    const body = within(document.body);
+    const zotero = await body.findByText("Zotero");
+    const row = zotero.closest("article");
+    await expect(row).not.toBeNull();
+    if (!row) return;
+    await expect(
+      await within(row).findByRole("button", { name: "Cancel sync" }),
+    ).toBeVisible();
+    await expect(
+      within(row).getByRole("button", { name: "Sync now" }),
+    ).toBeDisabled();
   },
 };
 

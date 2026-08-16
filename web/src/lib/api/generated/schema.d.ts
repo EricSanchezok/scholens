@@ -686,7 +686,8 @@ export interface paths {
         get: operations["zotero_sync_operation_api_v1_integrations_zotero_sync_runs__operation_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Zotero Cancel Sync */
+        delete: operations["zotero_cancel_sync_api_v1_integrations_zotero_sync_runs__operation_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4983,6 +4984,8 @@ export interface components {
         ZoteroConnectionStatus: {
             /** Active Operation Id */
             active_operation_id?: string | null;
+            /** Active Operation Kind */
+            active_operation_kind?: ("import" | "sync") | null;
             /**
              * Auto Import Enabled
              * @default false
@@ -5105,13 +5108,15 @@ export interface components {
              * @enum {string}
              */
             kind: "import" | "sync";
+            /** Progress Code */
+            progress_code?: ("queued" | "fetching_library" | "syncing_annotations" | "importing_papers") | null;
             /** Started At */
             started_at?: string | null;
             /**
              * Status
              * @enum {string}
              */
-            status: "queued" | "running" | "partial" | "succeeded" | "failed" | "cancelling" | "cancelled";
+            status: "queued" | "running" | "partial" | "succeeded" | "failed" | "cancelled";
         };
         /** ZoteroOperationCounts */
         ZoteroOperationCounts: {
@@ -6828,6 +6833,37 @@ export interface operations {
         };
     };
     zotero_sync_operation_api_v1_integrations_zotero_sync_runs__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zotero_cancel_sync_api_v1_integrations_zotero_sync_runs__operation_id__delete: {
         parameters: {
             query?: never;
             header?: never;

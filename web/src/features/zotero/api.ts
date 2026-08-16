@@ -104,7 +104,7 @@ export const zoteroQueries = {
       },
       refetchInterval: (query) =>
         query.state.data &&
-        ["queued", "running", "cancelling"].includes(query.state.data.status)
+        ["queued", "running"].includes(query.state.data.status)
           ? 1_500
           : false,
     }),
@@ -149,6 +149,15 @@ export async function startZoteroImport(itemKeys: string[]) {
 export async function cancelZoteroImport(operationId: string) {
   const { data } = await apiClient.DELETE(
     "/api/v1/integrations/zotero/imports/{operation_id}",
+    { params: { path: { operation_id: operationId } } },
+  );
+  if (!data) throw new Error("Zotero cancellation response was empty");
+  return data;
+}
+
+export async function cancelZoteroSync(operationId: string) {
+  const { data } = await apiClient.DELETE(
+    "/api/v1/integrations/zotero/sync-runs/{operation_id}",
     { params: { path: { operation_id: operationId } } },
   );
   if (!data) throw new Error("Zotero cancellation response was empty");

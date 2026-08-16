@@ -130,6 +130,7 @@
       "post"
     ],
     "/api/v1/integrations/zotero/sync-runs/{operation_id}": [
+      "delete",
       "get"
     ],
     "/api/v1/jobs": [

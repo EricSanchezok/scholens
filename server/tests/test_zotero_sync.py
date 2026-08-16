@@ -136,7 +136,9 @@ def test_apply_sync_with_empty_annotations_does_not_require_paper_content() -> N
         patch.object(gateway_module, "apply_annotation_snapshot") as apply,
     ):
         mutation = DefaultZoteroGateway(db, connections=MagicMock()).apply_sync(
-            actor=actor, batch=batch
+            actor=actor,
+            batch=batch,
+            credential_revision=uuid4(),
         )
 
     assert mutation.response.synced_papers_count == 1

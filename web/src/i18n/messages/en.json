@@ -1188,6 +1188,7 @@
       "autoImportDescription": "Starts with papers added after you enable this setting. Existing Zotero papers are not imported automatically.",
       "autoImportPaused": "This preference is preserved and will resume when Researcher access returns.",
       "syncNow": "Sync now",
+      "cancelSync": "Cancel sync",
       "disconnect": "Disconnect",
       "operation": {
         "queued": "Sync queued",
@@ -1195,8 +1196,8 @@
         "partial": "Sync completed with some items unavailable",
         "succeeded": "Sync complete",
         "failed": "Sync failed. You can try again.",
-        "cancelling": "Cancelling sync",
-        "cancelled": "Sync cancelled"
+        "cancelled": "Sync cancelled",
+        "importActive": "A Zotero import is already running. Finish or cancel it from Library before syncing."
       },
       "errors": {
         "zotero_not_connected": "Connect Zotero to continue.",
@@ -1205,6 +1206,7 @@
         "integration_credentials_unreadable": "This saved credential cannot be read. Disconnect and reconnect Zotero.",
         "zotero_rate_limited": "Zotero is limiting requests. Wait briefly and try again.",
         "zotero_auto_import_requires_researcher": "Automatic import is available while Researcher access is active.",
+        "zotero_operation_active": "Another Zotero operation is already running.",
         "zotero_unavailable": "Zotero is temporarily unavailable. Try again.",
         "zotero_import_failed": "The Zotero operation failed. Try again."
       }
@@ -1212,6 +1214,7 @@
     "library": {
       "title": "Import from Zotero",
       "description": "Select up to 50 papers from your personal library. Scholens never changes your Zotero data.",
+      "operationActive": "A Zotero operation is already running. Finish or cancel it before starting another import.",
       "close": "Close Zotero library",
       "loadingConnection": "Checking Zotero connection",
       "connectionError": "Zotero connection could not be checked",
@@ -1268,6 +1271,7 @@
         "zotero_credentials_invalid": "Zotero revoked this connection. Reconnect to continue.",
         "integration_credentials_unreadable": "Disconnect and reconnect Zotero to repair this credential.",
         "zotero_rate_limited": "Zotero is limiting requests. Wait briefly and try again.",
+        "zotero_operation_active": "Another Zotero operation is already running.",
         "zotero_quota_exceeded": "Your Scholens paper allowance is full.",
         "paper_quota_exceeded": "Your Scholens paper allowance is full.",
         "storage_quota_exceeded": "Your Scholens storage allowance is full.",
@@ -1276,14 +1280,20 @@
     },
     "operation": {
       "label": "Zotero import progress",
+      "loading": "Loading Zotero operation",
       "status": {
         "queued": "Zotero import queued",
         "running": "Importing Zotero papers",
         "partial": "Zotero import partially completed",
         "succeeded": "Zotero import accepted",
         "failed": "Zotero import failed",
-        "cancelling": "Cancelling Zotero import",
         "cancelled": "Zotero import cancelled"
+      },
+      "stage": {
+        "queued": "Waiting for a worker",
+        "fetching_library": "Reading your Zotero library",
+        "syncing_annotations": "Syncing annotations",
+        "importing_papers": "Preparing selected papers"
       },
       "counts": "{succeeded, number} of {total, number} accepted · {failed, number} failed",
       "progress": "Zotero import progress",

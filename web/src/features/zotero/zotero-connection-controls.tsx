@@ -10,6 +10,7 @@ import { Button, Switch } from "@/components/ui";
 import { ApiError } from "@/lib/api/errors";
 import {
   beginZoteroAuthorization,
+  cancelZoteroSync,
   startZoteroSync,
   updateZoteroSyncPreferences,
   zoteroKeys,
@@ -47,9 +48,14 @@ export function ZoteroConnectionControls({
       ? (searchParams.get("zotero") ?? undefined)
       : undefined,
   );
+  const activeSyncId =
+    operationId ??
+    (status.data?.active_operation_kind === "sync"
+      ? (status.data.active_operation_id ?? undefined)
+      : undefined);
   const operation = useQuery({
-    ...zoteroQueries.operation("sync", operationId ?? "pending"),
-    enabled: Boolean(operationId),
+    ...zoteroQueries.operation("sync", activeSyncId ?? "pending"),
+    enabled: Boolean(activeSyncId),
   });
   const connect = useMutation({
     mutationFn: async () => {
@@ -66,7 +72,26 @@ export function ZoteroConnectionControls({
   });
   const sync = useMutation({
     mutationFn: startZoteroSync,
-    onSuccess: (result) => setOperationId(result.id),
+    onSuccess: async (result) => {
+      setOperationId(result.id);
+      queryClient.setQueryData(zoteroKeys.operation("sync", result.id), result);
+      await queryClient.invalidateQueries({ queryKey: zoteroKeys.status() });
+    },
+    onError: async () => {
+      await queryClient.invalidateQueries({ queryKey: zoteroKeys.status() });
+    },
+  });
+  const cancel = useMutation({
+    mutationFn: () => cancelZoteroSync(activeSyncId ?? ""),
+    onSuccess: async (result) => {
+      if (activeSyncId) {
+        queryClient.setQueryData(
+          zoteroKeys.operation("sync", activeSyncId),
+          result,
+        );
+      }
+      await queryClient.invalidateQueries({ queryKey: zoteroKeys.status() });
+    },
   });
   const preferences = useMutation({
     mutationFn: updateZoteroSyncPreferences,
@@ -138,8 +163,8 @@ export function ZoteroConnectionControls({
   const syncing =
     sync.isPending ||
     operationStatus === "queued" ||
-    operationStatus === "running" ||
-    operationStatus === "cancelling";
+    operationStatus === "running";
+  const hasActiveOperation = Boolean(current?.active_operation_id);
   const canManageAutoImport = Boolean(
     current?.automatic_sync_eligible || current?.auto_import_enabled,
   );
@@ -242,12 +267,19 @@ export function ZoteroConnectionControls({
                   {t(`operation.${operation.data.status}`)}
                 </p>
               ) : null}
+              {current.active_operation_kind === "import" ? (
+                <p className="text-secondary" role="status">
+                  {t("operation.importActive")}
+                </p>
+              ) : null}
             </>
           ) : null}
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <Button
-            disabled={current?.connection_state === "invalid"}
+            disabled={
+              current?.connection_state === "invalid" || hasActiveOperation
+            }
             loading={syncing}
             onClick={() => sync.mutate()}
             size="sm"
@@ -255,16 +287,26 @@ export function ZoteroConnectionControls({
           >
             {t("syncNow")}
           </Button>
+          {activeSyncId && !terminal ? (
+            <Button
+              loading={cancel.isPending}
+              onClick={() => cancel.mutate()}
+              size="sm"
+              variant="ghost"
+            >
+              {t("cancelSync")}
+            </Button>
+          ) : null}
           <Button onClick={onDisconnect} size="sm" variant="ghost">
             {t("disconnect")}
           </Button>
         </div>
       </div>
-      {sync.isError || operation.isError ? (
+      {sync.isError || operation.isError || cancel.isError ? (
         <p className="text-danger mt-2 text-sm" role="alert">
           {t(
             zoteroSettingsErrorKey(
-              zoteroErrorCode(sync.error ?? operation.error),
+              zoteroErrorCode(sync.error ?? operation.error ?? cancel.error),
             ),
           )}
         </p>

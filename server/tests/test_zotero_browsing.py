@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import requests
 
 from app.bootstrap.workflows.zotero import ZoteroWorkflow
 from app.modules.integrations.zotero.application.contracts import ZoteroLibraryPage
@@ -64,6 +65,21 @@ def test_zotero_api_caps_pages_at_one_hundred_and_sends_server_filters() -> None
         "q": "transformer",
         "qmode": "titleCreatorYear",
     }
+
+
+def test_zotero_metadata_rejects_cross_origin_redirect_without_leaking_key() -> None:
+    redirect = MagicMock(status_code=302)
+    redirect.headers = {"Location": "https://storage.example/items.json"}
+    client = ZoteroApiClient("42", "secret")
+
+    with patch.object(client._session, "request", return_value=redirect) as request:
+        with pytest.raises(requests.exceptions.InvalidURL):
+            client.current_library_version()
+
+    assert request.call_count == 1
+    assert request.call_args.kwargs["headers"]["Zotero-API-Key"] == "secret"
+    assert redirect.close.called
+    assert client._session.trust_env is False
 
 
 def test_library_cursor_is_bound_to_owner_and_filters() -> None:

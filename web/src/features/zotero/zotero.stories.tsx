@@ -8,6 +8,7 @@ import { ZoteroOperationStatus } from "./zotero-operation-status";
 const api = "http://127.0.0.1:7301/api/v1/integrations/zotero";
 const status = {
   active_operation_id: null,
+  active_operation_kind: null,
   auto_import_enabled: false,
   auto_import_state: "off",
   automatic_annotation_sync: "active",
@@ -89,6 +90,7 @@ const connectedHandlers = [
         id: "51000000-0000-4000-8000-000000000099",
         items: [],
         kind: "import",
+        progress_code: null,
         started_at: null,
         status: "queued",
       },
@@ -349,6 +351,7 @@ export const PartialSuccess: Story = {
         started_at: "2026-08-16T08:00:10Z",
         status: "partial",
       }}
+      operationId="51000000-0000-4000-8000-000000000099"
       onComplete={fn()}
       onDismiss={fn()}
     />
@@ -371,5 +374,46 @@ export const PartialSuccess: Story = {
         ),
       ],
     },
+  },
+};
+
+export const RecoveredRunningImport: Story = {
+  render: () => (
+    <ZoteroOperationStatus
+      operationId="51000000-0000-4000-8000-000000000100"
+      onComplete={fn()}
+      onDismiss={fn()}
+    />
+  ),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get(`${api}/imports/:operationId`, () =>
+          HttpResponse.json({
+            completed_at: null,
+            counts: { failed: 0, skipped: 0, succeeded: 0, total: 2 },
+            created_at: "2026-08-16T08:00:00Z",
+            error_code: null,
+            id: "51000000-0000-4000-8000-000000000100",
+            items: [
+              { status: "running", zotero_item_key: "ITEM1" },
+              { status: "running", zotero_item_key: "ITEM2" },
+            ],
+            kind: "import",
+            progress_code: "importing_papers",
+            started_at: "2026-08-16T08:00:10Z",
+            status: "running",
+          }),
+        ),
+      ],
+    },
+  },
+  play: async () => {
+    const body = within(document.body);
+    await expect(
+      await body.findByText("Preparing selected papers"),
+    ).toBeVisible();
+    await expect(body.getByText("0 of 2 accepted · 0 failed")).toBeVisible();
+    await expect(body.queryByRole("progressbar")).not.toBeInTheDocument();
   },
 };

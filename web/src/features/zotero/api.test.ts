@@ -11,6 +11,7 @@ vi.mock("@/lib/api", () => ({ apiClient: client }));
 
 import {
   beginZoteroAuthorization,
+  cancelZoteroSync,
   startZoteroImport,
   startZoteroSync,
 } from "./api";
@@ -77,6 +78,19 @@ describe("Zotero API commands", () => {
           },
         },
       },
+    );
+  });
+
+  it("cancels a sync operation through the sync-runs contract", async () => {
+    client.DELETE.mockResolvedValue({
+      data: { id: "operation-2", kind: "sync", status: "cancelled" },
+    });
+
+    await cancelZoteroSync("operation-2");
+
+    expect(client.DELETE).toHaveBeenCalledWith(
+      "/api/v1/integrations/zotero/sync-runs/{operation_id}",
+      { params: { path: { operation_id: "operation-2" } } },
     );
   });
 });

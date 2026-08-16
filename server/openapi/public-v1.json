@@ -9102,6 +9102,21 @@
             ],
             "title": "Active Operation Id"
           },
+          "active_operation_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "import",
+                  "sync"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Operation Kind"
+          },
           "auto_import_enabled": {
             "default": false,
             "title": "Auto Import Enabled",
@@ -9432,6 +9447,23 @@
             "title": "Kind",
             "type": "string"
           },
+          "progress_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "fetching_library",
+                  "syncing_annotations",
+                  "importing_papers"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Code"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -9451,7 +9483,6 @@
               "partial",
               "succeeded",
               "failed",
-              "cancelling",
               "cancelled"
             ],
             "title": "Status",
@@ -12196,6 +12227,49 @@
       }
     },
     "/api/v1/integrations/zotero/sync-runs/{operation_id}": {
+      "delete": {
+        "operationId": "zotero_cancel_sync_api_v1_integrations_zotero_sync_runs__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Cancel Sync"
+      },
       "get": {
         "operationId": "zotero_sync_operation_api_v1_integrations_zotero_sync_runs__operation_id__get",
         "parameters": [

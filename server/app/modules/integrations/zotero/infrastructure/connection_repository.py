@@ -116,6 +116,7 @@ class ZoteroConnectionRepository:
                 "zotero_user_id": str(zotero_user_id),
                 "auto_import_enabled": False,
                 "auto_import_library_version": None,
+                "auto_import_start": 0,
                 "last_sync_library_version": None,
             },
             verified_at=now,
@@ -123,14 +124,25 @@ class ZoteroConnectionRepository:
         )
         return ConnectionUpsert(connection=record, changed=current != record)
 
-    def get_by_user_id(self, *, user_id: int) -> IntegrationRecord | None:
+    def get_by_user_id(
+        self,
+        *,
+        user_id: int,
+        lock: bool = False,
+    ) -> IntegrationRecord | None:
         return self._connections.get_owned(
             user_id=user_id,
             provider=IntegrationProvider.ZOTERO,
+            lock=lock,
         )
 
-    def credentials(self, *, user_id: int) -> tuple[str, str, UUID] | None:
-        record = self.get_by_user_id(user_id=user_id)
+    def credentials(
+        self,
+        *,
+        user_id: int,
+        lock: bool = False,
+    ) -> tuple[str, str, UUID] | None:
+        record = self.get_by_user_id(user_id=user_id, lock=lock)
         if record is None or not record.enabled:
             return None
         zotero_user_id = record.configuration.get("zotero_user_id")
@@ -148,8 +160,9 @@ class ZoteroConnectionRepository:
         *,
         user_id: int,
         revision: UUID,
+        lock: bool = False,
     ) -> bool:
-        record = self.get_by_user_id(user_id=user_id)
+        record = self.get_by_user_id(user_id=user_id, lock=lock)
         return (
             record is not None
             and record.enabled

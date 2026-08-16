@@ -39,6 +39,7 @@ from src.token_usage import collect_token_usage
 from src.utils import time_it
 from src.webhook_signing import post_signed_json
 from src.zotero import (
+    discard_prepared_items,
     ZoteroJobCredential,
     ZoteroJobError,
     import_items as import_zotero_items,
@@ -831,6 +832,7 @@ def import_zotero_items_task(
             "items": [],
         }
     if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        discard_prepared_items(payload.get("items") or [])
         raise RuntimeError("zotero_import_callback_failed")
     return payload
 
@@ -895,6 +897,13 @@ def sync_zotero_task(
                 and not isinstance(request.get("auto_import_version"), bool)
                 else None
             ),
+            auto_import_start=(
+                int(request["auto_import_start"])
+                if isinstance(request.get("auto_import_start"), int)
+                and not isinstance(request.get("auto_import_start"), bool)
+                and int(request["auto_import_start"]) >= 0
+                else 0
+            ),
             is_active=lambda: _zotero_progress(
                 progress_url,
                 "importing_papers",
@@ -919,5 +928,6 @@ def sync_zotero_task(
             "auto_imports": [],
         }
     if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        discard_prepared_items(payload.get("auto_imports") or [])
         raise RuntimeError("zotero_sync_callback_failed")
     return payload

@@ -118,6 +118,10 @@ automatic annotation sync and an automatic-import switch. Automatic import is
 off by default, starts from the current Zotero library-version checkpoint, and
 enters a visible paused state while Researcher access is absent.
 
+Import and sync share one active Zotero operation per account. Settings restores
+an active sync from the status kind and ID after refresh, retains its cancel
+control, and disables a second start while either an import or sync is active.
+
 Disconnecting prevents future browsing and sync but explicitly retains papers,
 annotations, and operation history already stored by Scholens. Invalid
 permission, revoked credentials, rate limiting, and provider unavailability

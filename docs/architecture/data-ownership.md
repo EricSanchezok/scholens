@@ -209,8 +209,10 @@ identity, summary counts, safe terminal code, and ordered item results.
 `ZoteroImportedItem` links the user's Zotero item and optional attachment to
 the canonical Document and paper-ingestion job. The Integration Connection
 configuration owns automatic-import preference and Zotero library-version
-checkpoints. Enabling automatic import records the current version; later
-automatic runs advance it only after their signed result is accepted. Zotero
+checkpoints plus the bounded secondary page position. Enabling automatic
+import records the current version; later automatic runs advance only through
+the contiguous accepted or permanently skipped prefix of a signed result.
+Transient and quota failures retain their position for retry. Zotero
 annotation keys live on the resulting Scholens annotation threads and make
 append-only application idempotent.
 

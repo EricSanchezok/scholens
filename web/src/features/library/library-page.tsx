@@ -28,7 +28,9 @@ import {
   ZoteroOperationStatus,
   clearZoteroCallbackParams,
   shouldOpenZoteroLibrary,
+  zoteroKeys,
   zoteroOAuthResultKey,
+  zoteroQueries,
   type ZoteroOperation,
 } from "@/features/zotero";
 import {
@@ -109,6 +111,12 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   );
   const [zoteroOperation, setZoteroOperation] =
     React.useState<ZoteroOperation>();
+  const zoteroStatus = useQuery(zoteroQueries.status());
+  const zoteroOperationId =
+    zoteroOperation?.id ??
+    (zoteroStatus.data?.active_operation_kind === "import"
+      ? (zoteroStatus.data.active_operation_id ?? undefined)
+      : undefined);
   const [pendingMineruRetry, setPendingMineruRetry] = React.useState<string>();
   const resumingMineruRetry = React.useRef(false);
   const runAction = React.useCallback(
@@ -369,9 +377,10 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               {t("addPapers.open")}
             </Button>
           </header>
-          {zoteroOperation ? (
+          {zoteroOperationId ? (
             <ZoteroOperationStatus
               initialOperation={zoteroOperation}
+              operationId={zoteroOperationId}
               onComplete={() => {
                 void Promise.all([
                   queryClient.invalidateQueries({
@@ -379,6 +388,9 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                   }),
                   queryClient.invalidateQueries({
                     queryKey: libraryKeys.summary(),
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: zoteroKeys.status(),
                   }),
                 ]);
               }}

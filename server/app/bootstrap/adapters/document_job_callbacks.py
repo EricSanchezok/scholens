@@ -1148,13 +1148,31 @@ def schedule_zotero_jobs(
             continue
 
         connection = db.scalar(
-            select(IntegrationConnection).where(
+            select(IntegrationConnection)
+            .where(
                 IntegrationConnection.user_id == user.id,
                 IntegrationConnection.provider == "zotero",
                 IntegrationConnection.enabled.is_(True),
             )
+            .with_for_update()
         )
         if connection is None:
+            skipped += 1
+            continue
+        active_zotero_job = next(
+            (
+                job
+                for job in job_repository.list_for_requester(
+                    db,
+                    requested_by_id=user.id,
+                    statuses=(JobStatus.PENDING, JobStatus.RUNNING),
+                )
+                if job.operation
+                in {JobOperation.ZOTERO_IMPORT.value, JobOperation.ZOTERO_SYNC.value}
+            ),
+            None,
+        )
+        if active_zotero_job is not None:
             skipped += 1
             continue
         targets = zotero_import_repository.list_syncable_by_user(
@@ -1168,6 +1186,7 @@ def schedule_zotero_jobs(
         auto_import_version = connection.configuration.get(
             "auto_import_library_version"
         )
+        auto_import_start = connection.configuration.get("auto_import_start")
         job_id = uuid.uuid4()
         job = job_repository.enqueue(
             db,
@@ -1190,6 +1209,9 @@ def schedule_zotero_jobs(
                     "auto_import_version": (
                         auto_import_version if auto_import_enabled else None
                     ),
+                    "auto_import_start": auto_import_start
+                    if auto_import_enabled
+                    else 0,
                     "credential_revision": str(connection.credential_revision),
                 },
                 task_name="sync_zotero",
@@ -1208,6 +1230,9 @@ def schedule_zotero_jobs(
                         "auto_import_version": (
                             auto_import_version if auto_import_enabled else None
                         ),
+                        "auto_import_start": auto_import_start
+                        if auto_import_enabled
+                        else 0,
                         "credential_revision": str(connection.credential_revision),
                     },
                     "webhook_url": (f"{base_url}/internal/v1/jobs/{job_id}/complete"),
