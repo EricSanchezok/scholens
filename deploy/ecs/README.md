@@ -30,8 +30,12 @@ It owns:
   scheduler DLQ;
 - a TLS- and RBAC-enabled Valkey 8 ElastiCache Serverless cache with a one-day snapshot
   retained from the `18:00` UTC daily snapshot;
-- database, application, provider, mail, billing, integration, and edge secrets;
+- database, application, provider, mail, integration, and edge secrets;
 - the alert SNS topic and persistent application/cache security groups.
+
+The content bucket expires abandoned browser upload staging objects under
+`uploads/` and temporary Zotero import handoff objects under `zotero-imports/`
+after two days; canonical `documents/` artifacts have no expiration rule.
 
 Retained resources use `DeletionPolicy: RetainExceptOnCreate` and
 `UpdateReplacePolicy: Retain`: a failed initial creation cleans up its unused resources,
@@ -242,8 +246,8 @@ does not own DNS.
 ## Secrets and database roles
 
 CloudFormation generates the database, cache, core, and edge secret containers and their
-initial random values. It creates the AI, mail, billing, and integration containers with no
-value at all, so later foundation changes cannot reset operator-owned provider credentials.
+initial random values. It creates the AI, mail, and integration containers with no value at
+all, so later foundation changes cannot reset operator-owned provider credentials.
 CloudFormation never creates PostgreSQL roles. Never copy production secret values into
 GitHub.
 
@@ -254,7 +258,6 @@ Required secret groups are:
 - `/sanchezcloud/scholens/production/cache-api` and `cache-jobs`;
 - `/sanchezcloud/scholens/production/ai`;
 - `/sanchezcloud/scholens/production/mail`;
-- `/sanchezcloud/scholens/production/billing`;
 - `/sanchezcloud/scholens/production/integrations`;
 - `/sanchezcloud/scholens/production/edge`.
 
@@ -269,7 +272,6 @@ callback, and origin token. Required JSON keys are:
 - AI: `deepseek_api_key`, `moss_api_key`, `moss_voice_id`;
 - mail: `aliyun_access_key_id`, `aliyun_access_key_secret`,
   `aliyun_account_name`;
-- billing: `stripe_api_key`, `stripe_webhook_secret`;
 - integrations: `zotero_client_key`, `zotero_client_secret`.
 
 Run this read-only preflight for each secret after writing its reviewed version (replace
@@ -285,7 +287,7 @@ jq -e --argjson required \
   <<<"$secret_json"
 ```
 
-Repeat the same shape check for core, mail, billing, and integrations. The generated
+Repeat the same shape check for core, mail, and integrations. The generated
 database secrets must contain non-empty `host`, `port`, `dbname`, `username`, and
 `password`; cache secrets must contain non-empty `username` and `password`; the edge
 secret must contain a non-empty `origin_token`. ECS injects individual JSON fields and
@@ -346,7 +348,7 @@ restricted to `main` even if it does not require a human approval.
 | --- | --- |
 | `image-publish` | `AWS_REGION`, `AWS_PUBLISH_ROLE_ARN`, `IDENTITY_READER_APP_ID`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL` |
 | `database-production` | `AWS_REGION`, `AWS_DATABASE_ROLE_ARN` |
-| `production` | `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`, `PRODUCTION_DOMAIN`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`, `PRODUCTION_CERTIFICATE_ARN`, `RDS_SECURITY_GROUP_ID`, `STRIPE_MONTHLY_PRICE_ID`, `STRIPE_YEARLY_PRICE_ID`, `POSTHOG_API_KEY` |
+| `production` | `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN`, `PRODUCTION_DOMAIN`, `PRODUCTION_API_URL`, `ACCOUNT_CENTER_URL`, `PRODUCTION_CERTIFICATE_ARN`, `RDS_SECURITY_GROUP_ID` |
 | `infrastructure-production` | `AWS_REGION`, `AWS_INFRASTRUCTURE_ROLE_ARN`, `AWS_FOUNDATION_CLOUDFORMATION_ROLE_ARN`, `AWS_GITHUB_OIDC_PROVIDER_ARN`, `PRODUCTION_DOMAIN`, `ALERT_EMAIL` |
 
 `IDENTITY_READER_PRIVATE_KEY` is the only repository dependency-reader secret. AWS access
@@ -402,7 +404,9 @@ public hostname succeeds through Cloudflare.
 8. Deploy the same SHA with `ApplicationEnabled=true`, still with the scheduler disabled.
    The release workflow immediately requires both public Cloudflare health checks to pass;
    then verify authentication, upload, document, research, callback, queue-drain,
-   billing-webhook, Zotero, source-map, alarm, and autoscaling paths.
+   billing usage, private entitlement grants, Zotero, source-map, alarm, and
+   autoscaling paths. Checkout, subscription mutation, Stripe webhook, and
+   PostHog remain intentionally absent from the first release.
 9. Enable the scheduler only after the one-shot job and maintenance queue are verified.
 
 ## Capacity and failure handling

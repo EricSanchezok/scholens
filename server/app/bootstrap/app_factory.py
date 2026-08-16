@@ -52,8 +52,7 @@ from app.transport.http.public_v1.research_generation import (
 )
 from app.transport.http.public_v1.paper_search import search_router
 from app.transport.http.public_v1.research_search import research_search_router
-from app.transport.http.public_v1.billing import subscription_router
-from app.transport.http.webhooks_v1.stripe import router as stripe_webhook_router
+from app.transport.http.public_v1.billing import usage_router
 from app.transport.http.public_v1.zotero import zotero_oauth_router, zotero_router
 from app.transport.http.public_v1.translations import (
     paper_translations_router,
@@ -69,7 +68,7 @@ from app.observability.diagnostics import create_diagnostic_snapshot_recorder
 from app.bootstrap.lifespan import app_lifespan
 from app.bootstrap.execution import (
     create_application_executor,
-    create_billing_workflow,
+    create_billing_usage_workflow,
     create_connector_tool_resolver,
     create_integration_workflow,
     create_conversation_agent_runtime,
@@ -81,7 +80,6 @@ from app.bootstrap.execution import (
     create_paper_discovery_workflow,
     create_paper_ingestion_workflow,
     create_research_generation_workflow,
-    create_stripe_webhook_processor,
     create_translation_workflow,
     create_user_openalex,
     create_workspace_tooling,
@@ -90,7 +88,6 @@ from app.bootstrap.execution import (
 from app.bootstrap.settings import (
     INTERNAL_API_PREFIX,
     PUBLIC_API_PREFIX,
-    WEBHOOK_API_PREFIX,
     AppSettings,
 )
 from app.database.admin import setup_admin
@@ -162,7 +159,7 @@ def _public_router() -> APIRouter:
     router.include_router(document_generation_router, prefix="/papers")
     router.include_router(project_generation_router, prefix="/projects")
     router.include_router(jobs_router, prefix="/jobs")
-    router.include_router(subscription_router, prefix="/billing")
+    router.include_router(usage_router, prefix="/billing")
     router.include_router(onboarding_router, prefix="/me/onboarding")
     router.include_router(translation_preferences_router, prefix="/me")
     router.include_router(
@@ -277,13 +274,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         application.state.diagnostic_snapshot_recorder,
     )
     application.state.onboarding_finisher = create_onboarding_finisher()
-    application.state.billing_workflow = create_billing_workflow(
+    application.state.billing_usage_workflow = create_billing_usage_workflow(
         executor=executor,
-        operation_factory=operation_context_factory,
-    )
-    application.state.stripe_webhook_processor = create_stripe_webhook_processor(
-        executor=executor,
-        operation_factory=operation_context_factory,
     )
     application.state.paper_ingestion_workflow = ingestion_workflow
     application.state.citation_workflow = citation_workflow
@@ -338,11 +330,6 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     application.include_router(
         _public_router(),
         prefix=PUBLIC_API_PREFIX,
-    )
-    application.include_router(
-        stripe_webhook_router,
-        prefix=WEBHOOK_API_PREFIX,
-        tags=["webhooks"],
     )
     application.include_router(
         jobs_callback_router,

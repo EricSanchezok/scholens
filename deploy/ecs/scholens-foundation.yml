@@ -137,6 +137,11 @@ Resources:
           Prefix: uploads/
           ExpirationInDays: 2
           NoncurrentVersionExpiration: {NoncurrentDays: 1}
+        - Id: ExpireStagedZoteroImports
+          Status: Enabled
+          Prefix: zotero-imports/
+          ExpirationInDays: 2
+          NoncurrentVersionExpiration: {NoncurrentDays: 1}
       OwnershipControls:
         Rules:
         - {ObjectOwnership: BucketOwnerEnforced}
@@ -357,13 +362,6 @@ Resources:
     Properties:
       Name: /sanchezcloud/scholens/production/mail
       KmsKeyId: !GetAtt ConfigurationKey.Arn
-  BillingSecret:
-    Type: AWS::SecretsManager::Secret
-    DeletionPolicy: RetainExceptOnCreate
-    UpdateReplacePolicy: Retain
-    Properties:
-      Name: /sanchezcloud/scholens/production/billing
-      KmsKeyId: !GetAtt ConfigurationKey.Arn
   IntegrationsSecret:
     Type: AWS::SecretsManager::Secret
     DeletionPolicy: RetainExceptOnCreate
@@ -413,7 +411,6 @@ Outputs:
   CoreSecretArn: {Value: !Ref CoreSecret, Export: {Name: sanchezcloud-scholens-core-secret-arn}}
   AiSecretArn: {Value: !Ref AiSecret, Export: {Name: sanchezcloud-scholens-ai-secret-arn}}
   MailSecretArn: {Value: !Ref MailSecret, Export: {Name: sanchezcloud-scholens-mail-secret-arn}}
-  BillingSecretArn: {Value: !Ref BillingSecret, Export: {Name: sanchezcloud-scholens-billing-secret-arn}}
   IntegrationsSecretArn: {Value: !Ref IntegrationsSecret, Export: {Name: sanchezcloud-scholens-integrations-secret-arn}}
   EdgeSecretArn: {Value: !Ref EdgeSecret, Export: {Name: sanchezcloud-scholens-edge-secret-arn}}
   ApiCacheSecretArn: {Value: !Ref ApiCacheSecret, Export: {Name: sanchezcloud-scholens-api-cache-secret-arn}}

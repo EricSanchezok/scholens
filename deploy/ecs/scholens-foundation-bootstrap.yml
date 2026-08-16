@@ -124,7 +124,6 @@ Resources:
             - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/core-*'
             - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/ai-*'
             - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/mail-*'
-            - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/billing-*'
             - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/integrations-*'
             - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/cache-api-*'
             - !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/sanchezcloud/scholens/production/cache-jobs-*'

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import ast
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from app.main import app
@@ -392,7 +395,50 @@ def test_only_versioned_public_routes_are_exposed() -> None:
     assert public_business_paths
     assert all(path.startswith("/api/v1/") for path in public_business_paths)
     assert not any(path.startswith("/internal/") for path in paths)
-    assert "/webhooks/v1/stripe" in paths
+    assert "/api/v1/billing/usage" in paths
+    assert (
+        not {
+            "/api/v1/billing/subscription",
+            "/api/v1/billing/checkout-sessions",
+            "/api/v1/billing/portal-sessions",
+            "/api/v1/billing/subscription/resume",
+            "/api/v1/billing/subscription/interval",
+            "/webhooks/v1/stripe",
+        }
+        & paths
+    )
+
+
+def test_first_release_boots_without_payment_or_product_analytics_config() -> None:
+    environment = os.environ.copy()
+    for name in (
+        "POSTHOG_API_KEY",
+        "STRIPE_API_KEY",
+        "STRIPE_MONTHLY_PRICE_ID",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_YEARLY_PRICE_ID",
+    ):
+        environment.pop(name, None)
+    environment["SCHOLENS_AI_DEEPSEEK_API_KEY"] = "test-key"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from app.main import app; "
+                "paths=set(app.openapi()['paths']); "
+                "assert '/api/v1/billing/usage' in paths; "
+                "assert not any('stripe' in path for path in paths)"
+            ),
+        ],
+        cwd=ROOT / "server",
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_mcp_is_mounted_outside_the_public_openapi_contract() -> None:

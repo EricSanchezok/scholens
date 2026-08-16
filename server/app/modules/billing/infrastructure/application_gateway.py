@@ -22,7 +22,7 @@ from app.modules.billing.application.ports import (
     SubscriptionWriteResult,
     UsageReader,
 )
-from app.modules.billing.infrastructure.config import YOUR_DOMAIN
+from app.modules.billing.infrastructure.config import STRIPE_API_KEY, YOUR_DOMAIN
 from app.modules.billing.infrastructure.account_locks import (
     lock_account_resource_quota,
 )
@@ -106,6 +106,11 @@ class SqlAlchemySubscriptionStore(SubscriptionStore):
 
 
 class StripePaymentProvider(PaymentProvider):
+    def __init__(self) -> None:
+        if not STRIPE_API_KEY:
+            raise RuntimeError("Stripe payment provider is not configured")
+        stripe.api_key = STRIPE_API_KEY
+
     @staticmethod
     def _subscription(value: Any) -> ProviderSubscription:
         items = value["items"]["data"] if value.get("items") else []

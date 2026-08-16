@@ -11,7 +11,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.bootstrap.cache_endpoint import cache_url_from_fields
 
 PUBLIC_API_PREFIX = "/api/v1"
-WEBHOOK_API_PREFIX = "/webhooks/v1"
 INTERNAL_API_PREFIX = "/internal/v1"
 _DEVELOPMENT_INTEGRATION_KEY = "ZGV2ZWxvcG1lbnQtaW50ZWdyYXRpb24ta2V5LTMyISE="
 _DEVELOPMENT_INVITATION_SECRET = "development-only-invitation-secret"

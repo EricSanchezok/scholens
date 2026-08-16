@@ -146,6 +146,22 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
         "NoncurrentDays": 365
     }
 
+    content = resources["ContentBucket"]["Properties"]
+    content_lifecycle = {
+        rule["Id"]: rule for rule in content["LifecycleConfiguration"]["Rules"]
+    }
+    for name, prefix in (
+        ("ExpireStagedPaperUploads", "uploads/"),
+        ("ExpireStagedZoteroImports", "zotero-imports/"),
+    ):
+        assert content_lifecycle[name] == {
+            "Id": name,
+            "Status": "Enabled",
+            "Prefix": prefix,
+            "ExpirationInDays": 2,
+            "NoncurrentVersionExpiration": {"NoncurrentDays": 1},
+        }
+
 
 def test_bucket_policies_reject_only_explicit_wrong_encryption_headers() -> None:
     resources = load_template("scholens-foundation.yml")["Resources"]
@@ -1471,7 +1487,21 @@ def test_environment_catalog_covers_code_references() -> None:
         "ECS_AGENT_URI",
         "NODE_ENV",
     }
-    assert code_variables - platform_injected_variables <= catalog_variables
+    dormant_first_release_variables = {
+        "NEXT_PUBLIC_POSTHOG_HOST",
+        "NEXT_PUBLIC_POSTHOG_KEY",
+        "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+        "POSTHOG_API_KEY",
+        "STRIPE_API_KEY",
+        "STRIPE_MONTHLY_PRICE_ID",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_YEARLY_PRICE_ID",
+    }
+    assert dormant_first_release_variables.isdisjoint(catalog_variables)
+    assert (
+        code_variables - platform_injected_variables - dormant_first_release_variables
+        <= catalog_variables
+    )
 
 
 def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
@@ -1616,7 +1646,6 @@ def test_waf_large_body_exceptions_are_path_scoped() -> None:
     assert reviewed["ExcludedRules"] == [{"Name": "SizeRestrictions_BODY"}]
     assert resources["LargeBodyPathSet"]["Properties"]["RegularExpressionList"] == [
         "^/mcp$",
-        "^/webhooks/v1/stripe$",
         "^/api/v1/conversations(?:/.*)?$",
         "^/api/v1/paper-ingestions(?:/.*)?$",
     ]
@@ -1654,8 +1683,9 @@ def test_runbook_locks_production_environment_and_secret_preflights() -> None:
     assert "all($required[];" in readme
     for generated in ("cache-api", "cache-jobs", "database", "core", "edge"):
         assert generated in readme
-    for operator_managed in ("ai", "mail", "billing", "integrations"):
+    for operator_managed in ("ai", "mail", "integrations"):
         assert operator_managed in readme
+    assert "/sanchezcloud/scholens/production/billing" not in readme
 
     first_release = readme[readme.index("## First release") :]
     disabled = first_release.index("ApplicationEnabled=false")
@@ -1670,7 +1700,8 @@ def test_runbook_locks_production_environment_and_secret_preflights() -> None:
 def test_operator_managed_secret_containers_have_no_cloudformation_value() -> None:
     resources = load_template("scholens-foundation.yml")["Resources"]
 
-    for name in ("AiSecret", "MailSecret", "BillingSecret", "IntegrationsSecret"):
+    assert "BillingSecret" not in resources
+    for name in ("AiSecret", "MailSecret", "IntegrationsSecret"):
         properties = resources[name]["Properties"]
         assert "SecretString" not in properties
         assert "GenerateSecretString" not in properties

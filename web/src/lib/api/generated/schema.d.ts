@@ -228,109 +228,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/billing/checkout-sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Checkout Session */
-        post: operations["create_checkout_session_api_v1_billing_checkout_sessions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/checkout-sessions/{session_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Session Status */
-        get: operations["session_status_api_v1_billing_checkout_sessions__session_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/portal-sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Customer Portal Session */
-        post: operations["create_customer_portal_session_api_v1_billing_portal_sessions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/subscription": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get User Subscription */
-        get: operations["get_user_subscription_api_v1_billing_subscription_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/subscription/interval": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Cancel Scheduled Change */
-        delete: operations["cancel_scheduled_change_api_v1_billing_subscription_interval_delete"];
-        options?: never;
-        head?: never;
-        /** Change Subscription Interval */
-        patch: operations["change_subscription_interval_api_v1_billing_subscription_interval_patch"];
-        trace?: never;
-    };
-    "/api/v1/billing/subscription/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resume Subscription */
-        post: operations["resume_subscription_api_v1_billing_subscription_resume_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/billing/usage": {
         parameters: {
             query?: never;
@@ -2156,25 +2053,6 @@ export interface components {
             /** New Password */
             new_password: string;
         };
-        /** CheckoutSessionResponse */
-        CheckoutSessionResponse: {
-            /** Client Secret */
-            client_secret: string | null;
-        };
-        /** CheckoutSessionStatusResponse */
-        CheckoutSessionStatusResponse: {
-            /**
-             * Backend Subscription Found
-             * @default false
-             */
-            backend_subscription_found: boolean;
-            /** Backend Subscription Status */
-            backend_subscription_status?: string | null;
-            /** Customer Email */
-            customer_email?: string | null;
-            /** Status */
-            status: string;
-        };
         /** CitationAnnotation */
         CitationAnnotation: {
             /** End Offset */
@@ -3335,18 +3213,6 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
-        /** IntervalChangeResponse */
-        IntervalChangeResponse: {
-            /** Error */
-            error?: string | null;
-            /** Message */
-            message?: string | null;
-            new_interval?: components["schemas"]["SubscriptionInterval"] | null;
-            /** Scheduled Date */
-            scheduled_date?: string | null;
-            /** Success */
-            success: boolean;
-        };
         /** JobListResponse */
         JobListResponse: {
             /** Items */
@@ -4006,11 +3872,6 @@ export interface components {
              * @enum {string}
              */
             kind: "personal";
-        };
-        /** PortalSessionResponse */
-        PortalSessionResponse: {
-            /** Url */
-            url: string;
         };
         /**
          * PreparePaperUploadRequest
@@ -4736,12 +4597,6 @@ export interface components {
              */
             text: string;
         };
-        /** ScheduledIntervalChange */
-        ScheduledIntervalChange: {
-            /** Effective Date */
-            effective_date: string | null;
-            new_interval: components["schemas"]["SubscriptionInterval"];
-        };
         /** SelectedPaperCollection */
         SelectedPaperCollection: {
             /** Document Ids */
@@ -4785,29 +4640,6 @@ export interface components {
             /** Id */
             id: string;
         };
-        /** SubscriptionActionResponse */
-        SubscriptionActionResponse: {
-            /** Action */
-            action?: string | null;
-            /** Error */
-            error?: string | null;
-            /** Message */
-            message?: string | null;
-            /**
-             * Redirect To Checkout
-             * @default false
-             */
-            redirect_to_checkout: boolean;
-            /** Subscription Id */
-            subscription_id?: string | null;
-            /** Success */
-            success: boolean;
-        };
-        /**
-         * SubscriptionInterval
-         * @enum {string}
-         */
-        SubscriptionInterval: "month" | "year";
         /** SubscriptionLimits */
         SubscriptionLimits: {
             /** Knowledge Base Size Kb */
@@ -4820,35 +4652,6 @@ export interface components {
             projects: number;
             /** Token Credits Weekly */
             token_credits_weekly: number;
-        };
-        /** SubscriptionResponse */
-        SubscriptionResponse: {
-            /**
-             * Had Subscription
-             * @default false
-             */
-            had_subscription: boolean;
-            /** Has Subscription */
-            has_subscription: boolean;
-            /**
-             * Requires Payment Update
-             * @default false
-             */
-            requires_payment_update: boolean;
-            scheduled_change?: components["schemas"]["ScheduledIntervalChange"] | null;
-            subscription?: components["schemas"]["SubscriptionSummary"] | null;
-        };
-        /** SubscriptionSummary */
-        SubscriptionSummary: {
-            /** Cancel At Period End */
-            cancel_at_period_end: boolean;
-            /** Current Period End */
-            current_period_end: string | null;
-            /** Current Period Start */
-            current_period_start: string | null;
-            interval: components["schemas"]["SubscriptionInterval"] | null;
-            /** Status */
-            status: string;
         };
         /** SubscriptionUsage */
         SubscriptionUsage: {
@@ -5889,179 +5692,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiErrorResponse"];
-                };
-            };
-        };
-    };
-    create_checkout_session_api_v1_billing_checkout_sessions_post: {
-        parameters: {
-            query: {
-                interval: components["schemas"]["SubscriptionInterval"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CheckoutSessionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    session_status_api_v1_billing_checkout_sessions__session_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CheckoutSessionStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_customer_portal_session_api_v1_billing_portal_sessions_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortalSessionResponse"];
-                };
-            };
-        };
-    };
-    get_user_subscription_api_v1_billing_subscription_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SubscriptionResponse"];
-                };
-            };
-        };
-    };
-    cancel_scheduled_change_api_v1_billing_subscription_interval_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IntervalChangeResponse"];
-                };
-            };
-        };
-    };
-    change_subscription_interval_api_v1_billing_subscription_interval_patch: {
-        parameters: {
-            query: {
-                new_interval: components["schemas"]["SubscriptionInterval"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IntervalChangeResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    resume_subscription_api_v1_billing_subscription_resume_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SubscriptionActionResponse"];
                 };
             };
         };

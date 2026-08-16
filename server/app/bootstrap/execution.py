@@ -16,7 +16,7 @@ from app.modules.access_keys.application.contracts import AuthenticatedAccessKey
 from app.modules.conversations.application.chat import ConversationChat
 from app.modules.identity.application.onboarding import FinishOnboarding
 from app.modules.billing.application.webhooks import ProcessStripeWebhook
-from app.bootstrap.workflows.billing import BillingWorkflow
+from app.bootstrap.workflows.billing import BillingUsageWorkflow, BillingWorkflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.bootstrap.workflows.pdf_postprocess import PdfPostprocessWorkflow
 from app.bootstrap.workflows.citation import CitationWorkflow
@@ -266,6 +266,13 @@ def create_billing_workflow(
         events=PostHogBillingEvents(),
         operation_factory=operation_factory,
     )
+
+
+def create_billing_usage_workflow(
+    *,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+) -> BillingUsageWorkflow:
+    return BillingUsageWorkflow(executor=executor)
 
 
 def create_stripe_webhook_processor(
