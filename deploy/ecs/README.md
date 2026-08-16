@@ -236,6 +236,9 @@ foundation adds a retained resource. ElastiCache Serverless also requires EC2 de
 actions for its managed interface endpoint; those actions are restricted to the imported
 production VPC, its two private subnets, the Scholens security group, and endpoint tagging
 during `CreateVpcEndpoint`.
+The runtime role likewise grants CloudWatch alarm lifecycle actions to the Scholens alarm
+prefix plus the single exact shared-RDS capacity alarm owned by the runtime stack; create
+and rollback-delete permissions must remain symmetric for that exception.
 
 Confirm the SNS email subscription. Later foundation changes use the protected
 `Update production foundation` workflow; `plan` creates, describes, and deletes a change

@@ -212,7 +212,11 @@ Resources:
         Version: '2012-10-17'
         Statement:
         - {Action: ['logs:CreateLogGroup', 'logs:DeleteLogGroup', 'logs:DeleteRetentionPolicy', 'logs:ListTagsForResource', 'logs:PutRetentionPolicy', 'logs:TagResource', 'logs:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*'}
-        - {Action: ['cloudwatch:DeleteAlarms', 'cloudwatch:DescribeAlarms', 'cloudwatch:ListTagsForResource', 'cloudwatch:PutMetricAlarm', 'cloudwatch:TagResource', 'cloudwatch:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:sanchezcloud-scholens-*'}
+        - Action: ['cloudwatch:DeleteAlarms', 'cloudwatch:DescribeAlarms', 'cloudwatch:ListTagsForResource', 'cloudwatch:PutMetricAlarm', 'cloudwatch:TagResource', 'cloudwatch:UntagResource']
+          Effect: Allow
+          Resource:
+          - !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:sanchezcloud-scholens-*'
+          - !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:sanchezcloud-shared-rds-connections-near-capacity'
         - {Action: ['cloudwatch:DeleteDashboards', 'cloudwatch:GetDashboard', 'cloudwatch:ListDashboards', 'cloudwatch:ListTagsForResource', 'cloudwatch:PutDashboard', 'cloudwatch:TagResource', 'cloudwatch:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:cloudwatch::${AWS::AccountId}:dashboard/SanchezCloud-Scholens'}
         - {Action: ['scheduler:CreateSchedule', 'scheduler:DeleteSchedule', 'scheduler:GetSchedule', 'scheduler:ListSchedules', 'scheduler:UpdateSchedule'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/scholens-*'}
         - {Action: ['servicediscovery:CreateService', 'servicediscovery:DeleteService', 'servicediscovery:DeleteServiceAttributes', 'servicediscovery:GetOperation', 'servicediscovery:GetServiceAttributes', 'servicediscovery:ListTagsForResource', 'servicediscovery:TagResource', 'servicediscovery:UntagResource', 'servicediscovery:UpdateService', 'servicediscovery:UpdateServiceAttributes'], Condition: {StringEqualsIfExists: {'aws:RequestTag/Product': Scholens}}, Effect: Allow, Resource: '*'}

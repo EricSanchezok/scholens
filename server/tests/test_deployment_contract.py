@@ -318,7 +318,6 @@ def test_cloudformation_role_has_current_scoped_waf_association_permissions() ->
         if action.startswith("iam:")
     }
     assert "iam:*" not in iam_actions
-
     runtime_role_names = {
         "SanchezCloudScholensApiTaskRole",
         "SanchezCloudScholensDocumentWorkerTaskRole",
@@ -431,6 +430,41 @@ def test_cloudformation_role_has_current_scoped_waf_association_permissions() ->
     }
     assert not any(action.startswith("secretsmanager:") for action in broad_actions)
     assert "iam:DeleteRolePermissionsBoundary" not in iam_actions
+
+
+def test_runtime_role_scopes_shared_rds_alarm_lifecycle_symmetrically() -> None:
+    resources = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    runtime = load_template("scholens-production.yml")
+    alarm_name = runtime["Resources"]["DatabaseConnectionsAlarm"]["Properties"][
+        "AlarmName"
+    ]
+    assert alarm_name == "sanchezcloud-shared-rds-connections-near-capacity"
+    statements = resources["RuntimeOperationsPolicy"]["Properties"]["PolicyDocument"][
+        "Statement"
+    ]
+    alarm = next(
+        item for item in statements if "cloudwatch:PutMetricAlarm" in _actions(item)
+    )
+
+    assert {
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+    } <= _actions(alarm)
+    assert alarm["Resource"] == [
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:"
+                "${AWS::AccountId}:alarm:sanchezcloud-scholens-*"
+            )
+        },
+        {
+            "Fn::Sub": (
+                "arn:${AWS::Partition}:cloudwatch:${AWS::Region}:"
+                "${AWS::AccountId}:alarm:"
+                "sanchezcloud-shared-rds-connections-near-capacity"
+            )
+        },
+    ]
 
 
 def test_foundation_and_runtime_cloudformation_roles_are_split_and_complete() -> None:
