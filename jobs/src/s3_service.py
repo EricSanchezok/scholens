@@ -2,14 +2,18 @@
 S3 service for file uploads and management.
 """
 
+from __future__ import annotations
+
 import logging
 import os
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
-from mypy_boto3_s3 import S3Client
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
 
 logger = logging.getLogger(__name__)
 

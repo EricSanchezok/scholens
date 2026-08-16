@@ -254,8 +254,8 @@ jobs:
         run: |
           docker run --rm --entrypoint /app/.venv/bin/python scholens-api:ci -c \
             "import os, pycurl; assert os.getuid() != 0; assert not os.path.exists('/usr/bin/perl')"
-          docker run --rm scholens-jobs:ci python -c \
-            "import os, ssl, grpc, onnxruntime, pycurl, pymupdf, pymupdf4llm; assert os.getuid() != 0; assert not os.path.exists('/bin/sh'); assert not os.path.exists('/usr/bin/perl'); assert not os.path.exists('/usr/local/bin/pip'); assert ssl.create_default_context().get_ca_certs()"
+          docker run --rm --env S3_BUCKET_NAME=scholens-ci scholens-jobs:ci python -c \
+            "import os, ssl, grpc, onnxruntime, pycurl, pymupdf, pymupdf4llm, src.s3_service; assert os.getuid() != 0; assert not os.path.exists('/bin/sh'); assert not os.path.exists('/usr/bin/perl'); assert not os.path.exists('/usr/local/bin/pip'); assert ssl.create_default_context().get_ca_certs()"
           docker run --rm scholens-jobs:ci celery --version
       - name: Build canonical Web image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6

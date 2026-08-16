@@ -1051,6 +1051,8 @@ Resources:
           ReadOnly: false
         StopTimeout: 120
         DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
         - ContainerName: adot
           Condition: START
         Environment:
@@ -1335,6 +1337,25 @@ Resources:
             awslogs-group:
               Ref: ApiLogGroup
             awslogs-stream-prefix: api
+      - Name: tmp-init
+        Image:
+          Ref: ApiImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
       - Name: adot
         Image:
           Ref: AdotImage
@@ -1405,6 +1426,9 @@ Resources:
         - SourceVolume: tmp
           ContainerPath: /tmp
           ReadOnly: false
+        DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
         Environment:
         - Name: ENVIRONMENT
           Value: production
@@ -1456,6 +1480,25 @@ Resources:
             awslogs-group:
               Ref: MigrationLogGroup
             awslogs-stream-prefix: migration
+      - Name: tmp-init
+        Image:
+          Ref: ApiImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
       Tags:
       - Key: System
         Value: SanchezCloud
@@ -1516,6 +1559,8 @@ Resources:
           ReadOnly: false
         StopTimeout: 120
         DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
         - ContainerName: adot
           Condition: START
         Environment:
@@ -1650,6 +1695,25 @@ Resources:
             awslogs-group:
               Ref: DocumentLogGroup
             awslogs-stream-prefix: document
+      - Name: tmp-init
+        Image:
+          Ref: JobsImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
       - Name: adot
         Image:
           Ref: AdotImage
@@ -1732,6 +1796,8 @@ Resources:
           ReadOnly: false
         StopTimeout: 120
         DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
         - ContainerName: adot
           Condition: START
         Environment:
@@ -1866,6 +1932,25 @@ Resources:
             awslogs-group:
               Ref: ResearchLogGroup
             awslogs-stream-prefix: research
+      - Name: tmp-init
+        Image:
+          Ref: JobsImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
       - Name: adot
         Image:
           Ref: AdotImage
@@ -1948,6 +2033,8 @@ Resources:
           ReadOnly: false
         StopTimeout: 120
         DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
         - ContainerName: adot
           Condition: START
         Environment:
@@ -2082,6 +2169,25 @@ Resources:
             awslogs-group:
               Ref: MaintenanceLogGroup
             awslogs-stream-prefix: maintenance
+      - Name: tmp-init
+        Image:
+          Ref: JobsImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
       - Name: adot
         Image:
           Ref: AdotImage
@@ -2154,6 +2260,9 @@ Resources:
         - SourceVolume: tmp
           ContainerPath: /tmp
           ReadOnly: false
+        DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
         Environment:
         - Name: ENVIRONMENT
           Value: production
@@ -2176,6 +2285,25 @@ Resources:
             awslogs-group:
               Ref: SchedulerLogGroup
             awslogs-stream-prefix: scheduler
+      - Name: tmp-init
+        Image:
+          Ref: JobsImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
       Tags:
       - Key: System
         Value: SanchezCloud
