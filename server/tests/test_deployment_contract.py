@@ -245,6 +245,15 @@ def test_bootstrap_roles_enforce_immutable_release_and_scoped_secrets() -> None:
         item for item in database if "ecs:DeregisterTaskDefinition" in _actions(item)
     )
     assert database_deregister_task_definition["Resource"] == "*"
+    database_migration_logs = next(
+        item for item in database if "logs:GetLogEvents" in _actions(item)
+    )
+    assert "log-stream:migration/migration/*" in str(
+        database_migration_logs["Resource"]
+    )
+    assert "log-stream:sanchezcloud/migration/*" not in str(
+        database_migration_logs["Resource"]
+    )
     assert not any(
         "secretsmanager:GetSecretValue" in _actions(item)
         and "production/edge" in str(item["Resource"])
