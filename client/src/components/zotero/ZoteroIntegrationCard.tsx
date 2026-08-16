@@ -9,7 +9,6 @@ import { isPaperUploadAtLimit, useSubscription } from "@/hooks/useSubscription";
 import { fetchFromApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Loader2, RefreshCw } from "lucide-react";
-import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -336,13 +335,7 @@ export function ZoteroIntegrationCard() {
 				<div id="zotero" className="rounded-lg border p-4 space-y-3 scroll-mt-6">
 					<div className="flex items-start justify-between gap-4">
 						<div className="space-y-1">
-							<Image
-								src="/logos/zotero_logo.svg"
-								alt="Zotero"
-								width={100}
-								height={20}
-								className="h-5 w-auto dark:brightness-0 dark:invert"
-							/>
+							<h2 className="font-semibold">Zotero</h2>
 							{!zoteroLoading && zoteroStatus?.connected && (
 								<p className="text-sm text-muted-foreground">
 									Last synced:{" "}

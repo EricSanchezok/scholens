@@ -11,7 +11,6 @@ import { PostHogProvider, ThemeProvider } from "@/lib/providers";
 import { SharePaperButton } from '@/components/SharePaperButton';
 
 import { SidebarController } from "@/components/utils/SidebarAutoCollapse";
-import Image from "next/image";
 import Link from "next/link";
 import { ManageProjectsButton } from "@/components/ManageProjectsButton";
 import { MobilePaperMenu } from "@/components/MobilePaperMenu";
@@ -29,19 +28,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
 	metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://127.0.0.1:7303"),
 	title: "Scholens",
-	description: "The fastest way to annotate and deeply understand research papers.",
-	icons: {
-		icon: "/icon.svg"
-	},
+	description: "Legacy Scholens paper reader.",
 	openGraph: {
 		title: "Scholens",
-		description: "The fastest way to annotate and deeply understand research papers.",
+		description: "Legacy Scholens paper reader.",
 		type: "website",
 	},
 	twitter: {
 		card: "summary",
 		title: "Scholens",
-		description: "The fastest way to annotate and deeply understand your research papers.",
+		description: "Legacy Scholens paper reader.",
 	},
 };
 
@@ -81,13 +77,7 @@ export default function RootLayout({
 									<header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
 										<SidebarTrigger className="-ml-1" />
 										<Separator orientation="vertical" className="mr-2 h-4" />
-										<Link href="/" className="flex flex-1 items-center gap-2 hover:opacity-80 transition-opacity">
-											<Image
-												src="/scholens.svg"
-												width={24}
-												height={24}
-												alt="Scholens Logo"
-											/>
+										<Link href="/" className="flex flex-1 items-center hover:opacity-80 transition-opacity">
 											<span className="text-sm font-semibold">Scholens</span>
 										</Link>
 									{/* Desktop buttons */}

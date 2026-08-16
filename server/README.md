@@ -306,28 +306,17 @@ authorized subset of the canonical workspace and connector tools:
 - `get_paper_content`
 - workspace management tools selected from the same catalog exposed by `/mcp`
 
-![knowledge base research diagram](./lr_research_diagram.png)
-
 Unified Conversation agent workflow:
 
-```
-+----------------+      +-------------------------------------------------+    +-------------------+
-|      User      |----->|             FastAPI Server                    |----->|        LLM        |
-+----------------+      |         (conversation_agent.py)               |      +-------------------+
-        ^             |                                                 |              ^
-        |             |  1. Run one model loop                           |              |
-        |             |     - answer directly when tools are unnecessary |              |
-        |             |     - call 0..n authorized tools                 |--------------+
-        |             |  2. Dispatch every call through Scholens         |
-        |             |     - validate arguments and permissions         |
-        |             |     - journal writes and enforce idempotency      |
-        |             |     - project safe, bounded results               |
-        |             |  3. Register validated sources incrementally      |
-        |             |  4. Stream answer and materialize citations       |--------------+
-        |             |     - expose sanitized activity only              |              |
-        |             |     - persist typed terminal trace                 |              |
-        |             +-------------------------------------------------+              |
-        |                           |                                                  |
-        +---------------------------+--------------------------------------------------+
-                              (Streamed response with citations)
+```mermaid
+flowchart LR
+    U["User"] --> API["FastAPI conversation endpoint"]
+    API --> A["Conversation agent"]
+    A <--> LLM["Configured language model"]
+    A --> T["Authorized workspace and discovery tools"]
+    T --> S["Validated, bounded results"]
+    S --> A
+    A --> C["Source registration and citation materialization"]
+    C --> R["Streamed response with sanitized activity"]
+    R --> U
 ```

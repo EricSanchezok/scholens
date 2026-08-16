@@ -605,14 +605,14 @@ export default function PricingPage() {
             {/* Support Section */}
             <div className="text-center space-y-6 pt-12 border-t border-slate-200 dark:border-slate-700">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Scholens is a product of{" "}
+                    Scholens source code is available under AGPL-3.0 on{" "}
                     <a
-                        href="https://khoj.dev"
+                        href="https://github.com/EricSanchezok/scholens"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="underline hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
                     >
-                        Khoj Inc.
+                        GitHub
                     </a>
                 </p>
                 <div className="space-y-3">

@@ -28,7 +28,6 @@ import { QuickActions } from "@/components/QuickActions";
 import { ProjectsPreview } from "@/components/ProjectsPreview";
 import { RecentPapersGrid } from "@/components/RecentPapersGrid";
 import { HomeEmptyState } from "@/components/HomeEmptyState";
-import { BlogPostToast } from "@/components/BlogPostToast";
 
 const DEFAULT_PAPER_UPLOAD_ERROR_MESSAGE = "We encountered an error processing your request. Please check the file or URL and try again.";
 
@@ -409,7 +408,7 @@ export default function Home() {
 	}
 
 	if (!user) {
-		router.push('/home');
+		router.push('/login');
 		return null;
 	}
 
@@ -421,7 +420,6 @@ export default function Home() {
 
 	return (
 		<div className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-background to-muted/20 flex flex-col">
-			<BlogPostToast />
 			<div
 				className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full rounded-xl transition-colors duration-200 ${isDragging ? 'bg-primary/5 ring-2 ring-primary ring-dashed' : ''}`}
 				onDragEnter={handleDragEnter}
@@ -485,14 +483,11 @@ export default function Home() {
 				<div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 					<div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
 						<div className="flex items-center gap-4">
-							<Link href="/blog/manifesto" className="hover:text-foreground transition-colors">
-								Manifesto
+							<Link href="/privacy" className="hover:text-foreground transition-colors">
+								Privacy
 							</Link>
-							<Link href="/blog" className="hover:text-foreground transition-colors">
-								Blog
-							</Link>
-							<Link href="/about" className="hover:text-foreground transition-colors">
-								About
+							<Link href="/tos" className="hover:text-foreground transition-colors">
+								Terms
 							</Link>
 							<a
 								href="https://github.com/EricSanchezok/scholens"
@@ -500,7 +495,7 @@ export default function Home() {
 								rel="noopener noreferrer"
 								className="hover:text-foreground transition-colors"
 							>
-								GitHub
+								Source code · AGPL-3.0
 							</a>
 						</div>
 					</div>

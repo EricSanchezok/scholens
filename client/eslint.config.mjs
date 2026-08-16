@@ -40,13 +40,6 @@ const eslintConfig = [
                 },
             ],
         },
-    },
-    {
-        files: ["src/components/BlogPostToast.tsx"],
-        rules: {
-            // This reads a static file emitted by the Next.js build, not the API.
-            "no-restricted-globals": "off",
-        },
     }
 ];
 

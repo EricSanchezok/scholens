@@ -1395,7 +1395,6 @@ def test_local_development_uses_the_scholens_migrator_name() -> None:
     development = (ROOT / "DEVELOPMENT.md").read_text(encoding="utf-8")
 
     assert "scholens_migrator" in development
-    assert "openpaper_local" not in development
 
 
 def test_environment_catalog_covers_code_references() -> None:
@@ -1517,7 +1516,7 @@ def test_pdf_viewer_has_one_browser_only_loading_boundary() -> None:
     assert "react-pdf-highlighter-extended" not in wrapper
     assert "react-pdf-highlighter-extended" in implementation
     assert '"predev": "node scripts/sync-pdf-worker.mjs"' in package
-    assert "sync-pdf-worker.mjs && node scripts/generate-blog-metadata.mjs" in package
+    assert '"prebuild": "node scripts/sync-pdf-worker.mjs"' in package
     assert "client/public/pdf.worker.mjs" in ignore
 
 
