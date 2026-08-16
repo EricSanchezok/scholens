@@ -70,14 +70,46 @@ class DocumentMetadataOverrides(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    title: str | None = Field(default=None, min_length=1, max_length=1_000)
-    authors: list[str] | None = Field(default=None, max_length=100)
-    abstract: str | None = Field(default=None, max_length=100_000)
-    institutions: list[str] | None = Field(default=None, max_length=100)
-    doi: str | None = Field(default=None, max_length=500)
-    journal: str | None = Field(default=None, max_length=1_000)
-    publisher: str | None = Field(default=None, max_length=1_000)
-    publish_date: datetime | None = None
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=1_000,
+        description="Personal replacement title; null clears the existing override.",
+    )
+    authors: list[str] | None = Field(
+        default=None,
+        max_length=100,
+        description="Personal ordered author-name replacement; null clears it.",
+    )
+    abstract: str | None = Field(
+        default=None,
+        max_length=100_000,
+        description="Personal abstract replacement; null clears it.",
+    )
+    institutions: list[str] | None = Field(
+        default=None,
+        max_length=100,
+        description="Personal ordered institution replacement; null clears it.",
+    )
+    doi: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Personal DOI replacement; null clears it.",
+    )
+    journal: str | None = Field(
+        default=None,
+        max_length=1_000,
+        description="Personal journal replacement; null clears it.",
+    )
+    publisher: str | None = Field(
+        default=None,
+        max_length=1_000,
+        description="Personal publisher replacement; null clears it.",
+    )
+    publish_date: datetime | None = Field(
+        default=None,
+        description="Personal publication timestamp replacement; null clears it.",
+    )
 
     @field_validator("authors", "institutions")
     @classmethod

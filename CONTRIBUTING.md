@@ -68,7 +68,7 @@ through the explicit procedures in `DEVELOPMENT.md`.
 The root gate runner is the canonical command interface:
 
 ```bash
-./scripts/run-gates.sh <server|jobs|shared-packages|web|client|deployment|docs|all>
+./scripts/run-gates.sh <server|mcp-connector|jobs|shared-packages|web|client|deployment|docs|all>
 ```
 
 It verifies an already prepared checkout and has no dependency-installation,

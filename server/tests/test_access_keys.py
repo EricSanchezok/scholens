@@ -289,7 +289,7 @@ def test_management_lifecycle_normalizes_permissions_and_hides_secret() -> None:
             name="  Claude Desktop  ",
             permissions=[
                 WorkspacePermission.WRITE,
-                WorkspacePermission.READ,
+                WorkspacePermission.MANAGE,
                 WorkspacePermission.READ,
                 WorkspacePermission.READ,
             ],
@@ -301,6 +301,7 @@ def test_management_lifecycle_normalizes_permissions_and_hides_secret() -> None:
     assert created.access_key.permissions == [
         WorkspacePermission.READ,
         WorkspacePermission.WRITE,
+        WorkspacePermission.MANAGE,
     ]
     assert created.access_key.expires_at == NOW + timedelta(days=30)
     assert gateway.locked_users == [7]

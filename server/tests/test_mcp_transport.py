@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.modules.access_keys.application.contracts import AuthenticatedAccessKey
 from app.shared.application import (
     Actor,
+    ApplicationExecutor,
     CredentialKind,
     CredentialRef,
     McpOrigin,
@@ -102,6 +104,7 @@ def _application(
     permissions: (
         frozenset[WorkspacePermission] | Callable[[], frozenset[WorkspacePermission]]
     ) = frozenset(WorkspacePermission),
+    executor: object | None = None,
 ) -> Starlette:
     async def authenticate(token: str) -> AuthenticatedAccessKey:
         if token != ACCESS_KEY_SECRET:
@@ -122,6 +125,7 @@ def _application(
             ToolDispatcher[ApplicationCapabilities],
             dispatcher,
         ),
+        executor=cast(ApplicationExecutor[ApplicationCapabilities] | None, executor),
         security_settings=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=["testserver"],
@@ -165,7 +169,7 @@ async def _initialize(client: AsyncClient) -> dict[str, str]:
             "id": "initialize",
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "test-client", "version": "1.0"},
             },
@@ -174,7 +178,7 @@ async def _initialize(client: AsyncClient) -> dict[str, str]:
     assert response.status_code == 200
     initialized_headers = {
         **headers,
-        "mcp-protocol-version": "2025-06-18",
+        "mcp-protocol-version": "2025-11-25",
     }
     session_id = response.headers.get("mcp-session-id")
     if session_id is not None:
@@ -238,8 +242,28 @@ async def test_mcp_lists_catalog_tools_and_dispatches_with_bound_actor() -> None
 
     tools = listed.json()["result"]["tools"]
     tool_names = {tool["name"] for tool in tools}
-    assert len(tool_names) == 32
+    tools_by_name = {tool["name"]: tool for tool in tools}
+    assert len(tool_names) == 56
     assert "finish_tool_use" not in tool_names
+    assert "search_papers" not in tool_names
+    assert tools_by_name["list_projects"]["title"] == "List Projects"
+    assert tools_by_name["list_projects"]["annotations"] == {
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+        "readOnlyHint": True,
+        "title": "List Projects",
+    }
+    assert tools_by_name["create_project"]["annotations"]["idempotentHint"] is False
+    assert tools_by_name["update_project"]["annotations"]["idempotentHint"] is True
+    assert tools_by_name["delete_project"]["annotations"]["destructiveHint"] is True
+    assert (
+        tools_by_name["prepare_paper_upload"]["annotations"]["idempotentHint"] is False
+    )
+    assert "result" in tools_by_name["get_project"]["outputSchema"]["properties"]
+    assert tools_by_name["get_project"]["inputSchema"]["properties"]["project_id"][
+        "description"
+    ]
     assert called.json()["result"]["structuredContent"]["result"] == {
         "tool": "list_projects",
         "arguments": {"limit": 10},
@@ -260,6 +284,80 @@ async def test_mcp_lists_catalog_tools_and_dispatches_with_bound_actor() -> None
     assert context.invocation_id.startswith("mcp:")
     assert len(context.invocation_id) == 68
     assert ACCESS_KEY_SECRET not in context.invocation_id
+
+
+@pytest.mark.asyncio
+async def test_mcp_advertises_bounded_scholens_resource_templates_and_projects() -> (
+    None
+):
+    project_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+    class Projects:
+        def list(self, **_arguments: object) -> object:
+            return SimpleNamespace(
+                items=[
+                    SimpleNamespace(id=project_id, title="Chain-of-thought compression")
+                ]
+            )
+
+    class Capabilities:
+        projects = Projects()
+
+    class Executor:
+        def query(self, operation: Callable[[Capabilities], Any]) -> Any:
+            return operation(Capabilities())
+
+    catalog = build_workspace_tool_catalog(
+        ingestion=cast(PaperIngestionWorkflow, object()),
+        citations=cast(CitationWorkflow, object()),
+    )
+    application = _application(
+        catalog,
+        RecordingDispatcher(),
+        executor=Executor(),
+    )
+    async with application.router.lifespan_context(application):
+        async with AsyncClient(
+            transport=ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            headers = await _initialize(client)
+            resources = await client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "list-resources",
+                    "method": "resources/list",
+                    "params": {},
+                },
+            )
+            templates = await client.post(
+                "/mcp",
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "list-resource-templates",
+                    "method": "resources/templates/list",
+                    "params": {},
+                },
+            )
+
+    resource_uris = {item["uri"] for item in resources.json()["result"]["resources"]}
+    assert resource_uris == {
+        "scholens://library",
+        "scholens://projects",
+        f"scholens://projects/{project_id}",
+    }
+    template_uris = {
+        item["uriTemplate"] for item in templates.json()["result"]["resourceTemplates"]
+    }
+    assert template_uris == {
+        "scholens://papers/{document_id}",
+        "scholens://projects/{project_id}",
+        "scholens://annotation-threads/{thread_id}",
+        "scholens://research-outputs/{item_id}",
+    }
 
 
 @pytest.mark.asyncio
@@ -291,7 +389,7 @@ async def test_mcp_tool_list_uses_access_key_permission_snapshot() -> None:
             )
 
     tool_names = {tool["name"] for tool in response.json()["result"]["tools"]}
-    assert "search_saved_papers" in tool_names
+    assert "search_scholens_knowledge" in tool_names
     assert "search_papers" not in tool_names
     assert "create_project" not in tool_names
     assert "delete_project" not in tool_names

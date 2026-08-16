@@ -40,21 +40,34 @@ class AnnotationCommentResponse(BaseModel):
 class PersonalResearchAudience(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["personal"] = "personal"
+    kind: Literal["personal"] = Field(
+        default="personal",
+        description="Keep the research item visible only to its creator.",
+    )
 
 
 class DocumentResearchAudience(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["document"] = "document"
-    document_id: UUID
+    kind: Literal["document"] = Field(
+        default="document",
+        description="Share the research item through one authorized document scope.",
+    )
+    document_id: UUID = Field(
+        description="Immutable Scholens document UUID defining the audience."
+    )
 
 
 class ProjectResearchAudience(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["project"] = "project"
-    project_id: UUID
+    kind: Literal["project"] = Field(
+        default="project",
+        description="Share the research item with current members of one Project.",
+    )
+    project_id: UUID = Field(
+        description="Immutable Scholens Project UUID defining the audience."
+    )
 
 
 ResearchAudience = Annotated[

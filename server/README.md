@@ -50,6 +50,42 @@ a second capability map, provider-specific tool wrappers, or renamed connector
 aliases. A connector tool whose native name conflicts with another exposed tool
 is omitted explicitly instead of overriding it.
 
+## Inbound Scholens MCP
+
+`/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
+fully authorized catalog exposes 56 stored-knowledge and management tools:
+paper retrieval, Project and collaborator management, personal Library and
+tags, known-source ingestion and jobs, annotation discussions, and existing
+research outputs. Narrower Access Keys see only their permitted subset.
+Internet paper discovery and research-output generation are intentionally
+absent. The in-product Conversation Agent selects 55 of the same definitions;
+only the remote upload-preparation primitive is excluded because the in-product
+Agent does not own a filesystem.
+
+Every tool publishes a title, decision-oriented description, described input
+schema, typed output schema, and truthful MCP behavior annotations. Access Keys
+may grant `read`, `write`, `manage`, and `delete`; the tool permission is only a
+coarse capability filter and every concrete resource is re-authorized against
+the current Actor. MCP resources expose bounded manifests at
+`scholens://library`, `scholens://projects`, and typed Project, paper,
+annotation-thread, and research-output URIs.
+
+External Agents should call `create_project` or `get_project` once, then store
+the returned `binding_markdown` in the research repository. Titles may change;
+the returned Project UUID and resource URI are the durable binding. Destructive
+or externally visible tools return a state-bound confirmation preview on their
+first call and execute only when the same call is repeated with the approved,
+unexpired token. Raw confirmation challenges, plaintext share bearer tokens,
+and signed upload URLs are never persisted in the invocation replay ledger.
+
+The remote upload primitive accepts only a plain filename, byte count, SHA-256,
+and optional Project UUID. It returns a short-lived checksummed object-storage
+PUT URL; the client uploads bytes directly and then calls `ingest_paper`. For a
+local path, use the official [`mcp-connector`](../mcp-connector/README.md),
+which replaces that primitive with `upload_local_paper` and never sends the
+path or the Access Key to object storage. Upload claims carry a unique lease
+token so an expired worker cannot consume or release a newer claim.
+
 ## Start the Application
 
 1. Start the jobs service (RabbitMQ + Celery worker) in a separate terminal:
@@ -215,8 +251,8 @@ inspectable progress rather than a timing store.
 There is no private delimiter. Clients may abort the request, but must not
 automatically retry this non-idempotent operation.
 
-Paper ingestion has a separate operation-scoped idempotency contract. Uploads
-and DOI/arXiv/direct-PDF sources return `202` only after the canonical Library
+Paper ingestion has a separate operation-scoped idempotency contract. Staged
+PDF uploads and DOI/arXiv/direct-PDF sources return `202` only after the canonical Library
 ingestion row, durable job, and outbox dispatch are committed. If the browser
 loses that response, it reconciles or repeats the same parameters with the same
 `Idempotency-Key`; it must not create a second operation. The Papers list
@@ -296,14 +332,12 @@ contracts described above.
 The response agent is one contextual Pydantic AI runtime with access to the
 authorized subset of the canonical workspace and connector tools:
 
-- `search_saved_papers` for papers already accessible in the current Scholens
-  Library, Project, or selected paper context
+- `search_scholens_knowledge` for papers, passages, annotations, comments, and
+  existing outputs already accessible in the selected Scholens scope
 - connector-native discovery tools such as Scholight's `search_papers` for
   finding external literature
-- `get_paper_abstract`
-- `search_paper_content`
-- `get_paper_content_range`
 - `get_paper_content`
+- `search_paper_content`
 - workspace management tools selected from the same catalog exposed by `/mcp`
 
 Unified Conversation agent workflow:

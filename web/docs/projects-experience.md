@@ -80,9 +80,11 @@ independent action target and is always discoverable on touch layouts.
   sort, visibility, and cursor semantics as Library Outputs while restricting
   the collection to one authorized Project.
 - `DELETE /api/v1/projects/{projectId}/papers/{documentId}` is attempted
-  without confirmation first. A `project_document_has_annotations` conflict
-  opens an impact dialog; only the explicit retry sends
-  `confirm_delete_annotations=true`.
+  without confirmation first. A `confirmation_required` conflict returns the
+  exact annotation impact and a short-lived state-bound token. The dialog
+  presents that impact; only the explicit retry sends the token in
+  `X-Scholens-Confirmation-Token`. A stale, changed, or reused token fails
+  without deleting anything.
 
 ## Figma and Storybook acceptance
 

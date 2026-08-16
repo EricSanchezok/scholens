@@ -45,7 +45,7 @@ AccessKeyName = Annotated[
 AccessKeyPermissions = Annotated[
     list[WorkspacePermission],
     BeforeValidator(_normalize_permissions),
-    Field(min_length=1, max_length=3),
+    Field(min_length=1, max_length=4),
 ]
 
 
@@ -109,3 +109,8 @@ class AuthenticatedAccessKey:
     access_key_id: UUID
     actor: Actor
     permissions: frozenset[WorkspacePermission]
+
+    @property
+    def can_read_workspace(self) -> bool:
+        """Whether this credential may enumerate MCP knowledge resources."""
+        return WorkspacePermission.READ in self.permissions

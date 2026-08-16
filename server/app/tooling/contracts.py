@@ -15,15 +15,43 @@ from app.shared.domain import (
     WorkspacePermission,
     normalize_workspace_permissions,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 CapabilitiesT = TypeVar("CapabilitiesT")
+PayloadT = TypeVar("PayloadT", bound=BaseModel)
 
 
 class ToolExecutionKind(StrEnum):
     QUERY = "query"
     COMMAND = "command"
     WORKFLOW = "workflow"
+
+
+class ToolConfirmationPolicy(StrEnum):
+    """Whether a tool must obtain a state-bound confirmation before execution."""
+
+    NONE = "none"
+    REQUIRED = "required"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ToolBehavior:
+    """Transport-neutral behavioral hints shown to tool-capable hosts."""
+
+    read_only: bool
+    destructive: bool = False
+    idempotent: bool = False
+    open_world: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ToolResourceLink:
+    """A stable Scholens resource made available by a tool result."""
+
+    uri: str
+    name: str
+    description: str | None = None
+    mime_type: str = "application/json"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -61,6 +89,16 @@ class ExternalSourceCandidate:
 ToolSourceCandidate: TypeAlias = DocumentSourceCandidate | ExternalSourceCandidate
 
 
+class ToolStructuredResult(BaseModel, Generic[PayloadT]):
+    """Typed structured payload shared by Agent and MCP result adapters."""
+
+    result: PayloadT
+    sources: list[ToolSourceCandidate] = Field(default_factory=list)
+    artifacts: list[dict[str, JsonValue]] = Field(default_factory=list)
+    action: dict[str, JsonValue] | None = None
+    resource_links: list[ToolResourceLink] = Field(default_factory=list)
+
+
 @dataclass(frozen=True, slots=True)
 class ToolExecutionContext:
     actor: Actor
@@ -92,6 +130,7 @@ class ToolOutcome:
     sources: tuple[ToolSourceCandidate, ...] = ()
     artifacts: list[dict[str, JsonValue]] = field(default_factory=list)
     action: dict[str, JsonValue] | None = None
+    resource_links: tuple[ToolResourceLink, ...] = ()
 
 
 ToolHandler = Callable[[CapabilitiesT, ToolExecutionContext, BaseModel], ToolOutcome]
@@ -121,6 +160,11 @@ class ToolDefinition(Generic[CapabilitiesT]):
     input_model: type[BaseModel]
     execution: ToolExecutionKind
     required_permission: WorkspacePermission
+    title: str | None = None
+    output_model: type[BaseModel] | None = None
+    behavior: ToolBehavior | None = None
+    confirmation_policy: ToolConfirmationPolicy = ToolConfirmationPolicy.NONE
+    persist_result: bool = True
     handler: ToolHandler[CapabilitiesT] | None = None
     workflow_handler: WorkflowToolHandler | None = None
     activity_subject_field: str | None = None
@@ -140,6 +184,16 @@ class ToolDefinition(Generic[CapabilitiesT]):
                 )
         if self.required_permission is None:
             raise ValueError("business tools require one workspace permission")
+        if self.behavior is not None:
+            if self.behavior.read_only != (self.execution is ToolExecutionKind.QUERY):
+                raise ValueError(
+                    f"tool {self.name} read_only behavior conflicts with execution"
+                )
+            if (
+                self.confirmation_policy is ToolConfirmationPolicy.REQUIRED
+                and self.behavior.read_only
+            ):
+                raise ValueError("read-only tools cannot require confirmation")
         if self.execution is ToolExecutionKind.WORKFLOW:
             if self.workflow_handler is None or self.handler is not None:
                 raise ValueError("workflow tools require exactly one workflow handler")

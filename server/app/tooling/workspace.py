@@ -1,1216 +1,1049 @@
-"""Canonical Scholens research-workspace tools.
+"""Canonical Agent-facing tools for long-running Scholens research workspaces.
 
-Names, schemas, descriptions, handlers, and profile membership live here once.
-Agent and MCP transports only render or dispatch this catalog.
+The catalog deliberately excludes internet paper discovery and generative product
+features. It exposes the stored-knowledge, ingestion, organization, collaboration,
+and annotation surface shared by the in-product Agent and external MCP clients.
 """
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import re
+from collections.abc import Callable
 from typing import cast
-from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
-from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.bootstrap.workflows.citation import CitationWorkflow
-from app.modules.jobs.application.contracts import JobResponse
+from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
+from app.modules.jobs.application.contracts import JobListResponse, JobResponse
 from app.modules.papers.application.contracts.documents import (
-    DocumentMetadataOverrides,
-    LibraryPaperUpdateRequest,
-)
-from app.modules.papers.application.contracts.search import (
-    PaperSearchFilters,
-    PaperSearchRequest,
-)
-from app.modules.papers.application.contracts.documents import (
+    CollectPublicPaperResponse,
+    DocumentFileUrlResponse,
+    DocumentResponse,
     LibraryPaperIngestionResponse,
+    LibraryPaperListResponse,
+    LibraryPaperResponse,
+    LibrarySummaryResponse,
+)
+from app.modules.papers.application.contracts.tags import (
+    LibraryTagAssignmentResponse,
+    LibraryTagListResponse,
+    LibraryTagResponse,
+)
+from app.modules.papers.application.upload_sessions import (
+    PreparePaperUploadRequest,
+    PreparePaperUploadResponse,
 )
 from app.modules.projects.application.contracts import (
-    AddPaperToProjectRequest,
-    CollectPaperFromProjectRequest,
-    ProjectCreateRequest,
-    ProjectUpdateRequest,
+    ProjectCollaboratorListResponse,
+    ProjectInvitationListResponse,
+    ProjectListResponse,
+    ProjectPaperCollectedResponse,
+    ProjectPaperListResponse,
+    ProjectPapersAddedResponse,
 )
-from app.modules.research.application.contracts import (
-    CreateAnnotationCommentRequest,
-    CreateAnnotationThreadRequest,
-    UpdateAnnotationCommentRequest,
-    UpdateAnnotationThreadRequest,
-)
-from app.shared.domain import (
-    AppError,
-    FailureKind,
-    JsonValue,
-    WorkspacePermission,
-)
-from app.shared.domain.enums import JobOperation, PaperStatus, RoleType
+from app.modules.research.application.contracts import ResearchItemResponse
+from app.shared.application import ApplicationExecutor
+from app.shared.domain import WorkspacePermission
+from app.tooling import workspace_contracts as wc
 from app.tooling.catalog import ToolCatalog, ToolProfile
 from app.tooling.contracts import (
-    DocumentSourceCandidate,
-    ToolExecutionContext,
+    ToolBehavior,
+    ToolConfirmationPolicy,
     ToolDefinition,
     ToolExecutionKind,
-    ToolOutcome,
+    ToolHandler,
+    WorkflowToolHandler,
 )
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, model_validator
+from app.tooling.workspace_handlers import (
+    ProjectInvitationNotifier,
+    WorkspaceToolHandlers,
+)
+from pydantic import BaseModel
 
 CONVERSATION_TOOL_PROFILE = "conversation"
 MCP_TOOL_PROFILE = "mcp"
-_JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
-def _json(value: object) -> JsonValue:
-    if isinstance(value, BaseModel):
-        value = value.model_dump(mode="json")
-    return _JSON_VALUE.validate_python(value)
+def _description(*, use: str, avoid: str, result: str, next_step: str) -> str:
+    """Build a consistent decision-oriented description without implementation detail."""
+    return (
+        f"Use when {use}. Do not use when {avoid}. Returns {result}. Next: {next_step}"
+    )
 
 
-def _document_source(
+def _tool(
     *,
-    document_id: UUID,
-    excerpt: str,
-    title: str | None = None,
-    authors: list[str] | None = None,
-    start_line: int | None = None,
-    end_line: int | None = None,
-) -> DocumentSourceCandidate:
-    locator: dict[str, JsonValue] = {}
-    if start_line is not None:
-        locator["start_line"] = start_line
-    if end_line is not None:
-        locator["end_line"] = end_line
-    return DocumentSourceCandidate(
-        document_id=document_id,
-        excerpt=excerpt,
-        title=title,
-        authors=tuple(authors or ()),
-        locator=locator or None,
+    name: str,
+    title: str,
+    description: str,
+    input_model: type[BaseModel],
+    output_model: type[BaseModel],
+    permission: WorkspacePermission,
+    handler: Callable[..., object],
+    execution: ToolExecutionKind = ToolExecutionKind.QUERY,
+    destructive: bool = False,
+    idempotent: bool | None = None,
+    open_world: bool = False,
+    confirmation: bool = False,
+    persist_result: bool = True,
+    subject: str | None = None,
+) -> ToolDefinition[ApplicationCapabilities]:
+    behavior = ToolBehavior(
+        read_only=execution is ToolExecutionKind.QUERY,
+        destructive=destructive,
+        idempotent=(
+            execution is ToolExecutionKind.QUERY if idempotent is None else idempotent
+        ),
+        open_world=open_world,
     )
-
-
-def _source_from_numbered_line(
-    *, document_id: UUID, value: str, title: str | None = None
-) -> DocumentSourceCandidate:
-    match = re.match(r"^(\d+):\s*(.*)$", value, flags=re.DOTALL)
-    if match is None:
-        return _document_source(
-            document_id=document_id,
-            excerpt=value,
+    policy = (
+        ToolConfirmationPolicy.REQUIRED if confirmation else ToolConfirmationPolicy.NONE
+    )
+    if execution is ToolExecutionKind.WORKFLOW:
+        return ToolDefinition(
+            name=name,
             title=title,
+            description=description,
+            input_model=input_model,
+            output_model=output_model,
+            execution=execution,
+            required_permission=permission,
+            behavior=behavior,
+            confirmation_policy=policy,
+            persist_result=persist_result,
+            workflow_handler=cast(WorkflowToolHandler, handler),
+            activity_subject_field=subject,
         )
-    line_number = int(match.group(1))
-    return _document_source(
-        document_id=document_id,
-        excerpt=match.group(2),
+    return ToolDefinition(
+        name=name,
         title=title,
-        start_line=line_number,
-        end_line=line_number,
+        description=description,
+        input_model=input_model,
+        output_model=output_model,
+        execution=execution,
+        required_permission=permission,
+        behavior=behavior,
+        confirmation_policy=policy,
+        persist_result=persist_result,
+        handler=cast(ToolHandler[ApplicationCapabilities], handler),
+        activity_subject_field=subject,
     )
-
-
-def _require_paper(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    document_id: UUID,
-) -> None:
-    capabilities.paper_collection_access(
-        actor=context.actor,
-        collection=context.paper_collection,
-        document_id=document_id,
-        anchor_document_id=context.anchor_document_id,
-    )
-
-
-class EmptyInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class DocumentInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    document_id: UUID
-
-
-class SearchPapersInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    query: str = Field(min_length=2, max_length=1_000)
-
-
-class SearchPaperContentInput(DocumentInput):
-    query: str = Field(min_length=1, max_length=2_000)
-
-
-class PaperContentRangeInput(DocumentInput):
-    start_line: int = Field(ge=1)
-    end_line: int = Field(ge=1)
-
-    @model_validator(mode="after")
-    def validate_range(self) -> PaperContentRangeInput:
-        if self.end_line < self.start_line:
-            raise ValueError("end_line must not precede start_line")
-        return self
-
-
-class PaperCitationInput(DocumentInput):
-    style: str = Field(default="APA", min_length=1, max_length=100)
-
-
-class ListProjectsInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    limit: int = Field(default=50, ge=1, le=100)
-
-
-class ProjectInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project_id: UUID
-
-
-class UpdateProjectInput(ProjectUpdateRequest):
-    project_id: UUID
-
-
-class AddPapersToProjectInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project_id: UUID
-    document_ids: list[UUID] = Field(min_length=1, max_length=120)
-
-
-class ProjectPaperInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project_id: UUID
-    document_id: UUID
-    confirm_delete_annotations: bool = False
-
-
-class UpdateLibraryPaperInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    document_id: UUID
-    status: PaperStatus | None = None
-    metadata_overrides: DocumentMetadataOverrides | None = None
-
-
-class CollectProjectPaperInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    source_project_id: UUID
-    document_id: UUID
-
-
-class IngestPaperFromUrlInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    url: HttpUrl
-    project_id: UUID | None = None
-
-
-class CreateAnnotationThreadInput(CreateAnnotationThreadRequest):
-    document_id: UUID
-
-
-class UpdateAnnotationThreadInput(UpdateAnnotationThreadRequest):
-    thread_id: UUID
-
-
-class DeleteAnnotationThreadInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    thread_id: UUID
-
-
-class CreateAnnotationCommentInput(CreateAnnotationCommentRequest):
-    thread_id: UUID
-
-
-class UpdateAnnotationCommentInput(UpdateAnnotationCommentRequest):
-    annotation_id: UUID
-
-
-class AnnotationInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    annotation_id: UUID
-
-
-class ListJobsInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project_id: UUID | None = None
-    document_id: UUID | None = None
-    operation: JobOperation | None = None
-    active: bool = False
-
-
-class JobInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    job_id: UUID
-
-
-def _search_saved_papers(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = SearchPapersInput.model_validate(arguments)
-    response = capabilities.paper_search(
-        actor=context.actor,
-        request=PaperSearchRequest(
-            query=parsed.query,
-            collection=context.paper_collection,
-            filters=PaperSearchFilters(),
-            limit=100,
-        ),
-    )
-    sources: list[DocumentSourceCandidate] = []
-    for item in response.items:
-        sources.extend(
-            _document_source(
-                document_id=item.document_id,
-                excerpt=snippet.text,
-                title=item.title,
-                authors=item.authors,
-                start_line=snippet.start_line,
-                end_line=snippet.end_line,
-            )
-            for snippet in item.snippets
-            if snippet.text
-        )
-    return ToolOutcome(payload=_json(response), sources=tuple(sources))
-
-
-def _get_paper(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    _require_paper(capabilities, context, parsed.document_id)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.paper_details(
-                actor=context.actor,
-                document_id=parsed.document_id,
-            )
-        )
-    )
-
-
-def _paper_content(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    document_id: UUID,
-) -> tuple[str | None, str | None, str | None]:
-    _require_paper(capabilities, context, document_id)
-    paper = capabilities.paper_content.read(
-        actor=context.actor,
-        document_id=document_id,
-    )
-    return paper.title, paper.abstract, paper.raw_content
-
-
-def _get_paper_abstract(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    title, abstract, _ = _paper_content(
-        capabilities,
-        context,
-        parsed.document_id,
-    )
-    payload = {
-        "document_id": str(parsed.document_id),
-        "title": title,
-        "abstract": abstract,
-    }
-    return ToolOutcome(
-        payload=_json(payload),
-        sources=(
-            (
-                _document_source(
-                    document_id=parsed.document_id,
-                    excerpt=abstract,
-                    title=title,
-                ),
-            )
-            if abstract
-            else ()
-        ),
-    )
-
-
-def _get_paper_content(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    title, _, content = _paper_content(
-        capabilities,
-        context,
-        parsed.document_id,
-    )
-    payload = {
-        "document_id": str(parsed.document_id),
-        "title": title,
-        "content": content,
-    }
-    return ToolOutcome(
-        payload=_json(payload),
-        sources=(
-            (
-                _document_source(
-                    document_id=parsed.document_id,
-                    excerpt=content,
-                    title=title,
-                ),
-            )
-            if content
-            else ()
-        ),
-    )
-
-
-def _search_paper_content(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = SearchPaperContentInput.model_validate(arguments)
-    _require_paper(capabilities, context, parsed.document_id)
-    matches = capabilities.paper_content.search_document(
-        actor=context.actor,
-        document_id=parsed.document_id,
-        query=parsed.query,
-    )
-    return ToolOutcome(
-        payload=_json({"document_id": str(parsed.document_id), "matches": matches}),
-        sources=tuple(
-            _source_from_numbered_line(
-                document_id=parsed.document_id,
-                value=match,
-            )
-            for match in matches
-            if match
-        ),
-    )
-
-
-def _get_paper_content_range(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = PaperContentRangeInput.model_validate(arguments)
-    title, _, content = _paper_content(
-        capabilities,
-        context,
-        parsed.document_id,
-    )
-    if not content:
-        lines: list[str] = []
-    else:
-        source_lines = content.splitlines()
-        if parsed.end_line > len(source_lines):
-            raise AppError(
-                kind=FailureKind.INVALID_ARGUMENT,
-                code="paper_content_range_invalid",
-                message="end_line exceeds paper content",
-                details={"line_count": len(source_lines)},
-            )
-        lines = [
-            f"{line_number}: {source_lines[line_number - 1]}"
-            for line_number in range(parsed.start_line, parsed.end_line + 1)
-        ]
-    return ToolOutcome(
-        payload=_json(
-            {
-                "document_id": str(parsed.document_id),
-                "title": title,
-                "start_line": parsed.start_line,
-                "end_line": parsed.end_line,
-                "lines": lines,
-            }
-        ),
-        sources=tuple(
-            _source_from_numbered_line(
-                document_id=parsed.document_id,
-                value=line,
-                title=title,
-            )
-            for line in lines
-        ),
-    )
-
-
-def _get_paper_download_url(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    _require_paper(capabilities, context, parsed.document_id)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.paper_download(
-                actor=context.actor,
-                document_id=parsed.document_id,
-            )
-        )
-    )
-
-
-def _list_projects(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = ListProjectsInput.model_validate(arguments)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.projects.list(actor=context.actor, limit=parsed.limit)
-        )
-    )
-
-
-def _get_project(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = ProjectInput.model_validate(arguments)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.projects.get(
-                actor=context.actor,
-                project_id=parsed.project_id,
-            )
-        )
-    )
-
-
-def _create_project(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    request = ProjectCreateRequest.model_validate(arguments.model_dump())
-    result = capabilities.projects.create(
-        actor=context.actor,
-        operation=context.operation,
-        request=request,
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "project_created", "project": payload},
-    )
-
-
-def _update_project(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = UpdateProjectInput.model_validate(arguments)
-    result = capabilities.projects.update(
-        actor=context.actor,
-        operation=context.operation,
-        project_id=parsed.project_id,
-        request=ProjectUpdateRequest.model_validate(
-            parsed.model_dump(exclude={"project_id"})
-        ),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "project_updated", "project": payload},
-    )
-
-
-def _delete_project(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = ProjectInput.model_validate(arguments)
-    capabilities.projects.delete(
-        actor=context.actor,
-        operation=context.operation,
-        project_id=parsed.project_id,
-    )
-    payload: dict[str, JsonValue] = {
-        "deleted": True,
-        "project_id": str(parsed.project_id),
-    }
-    return ToolOutcome(payload=payload, action=payload)
-
-
-def _list_project_papers(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = ProjectInput.model_validate(arguments)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.projects.documents(
-                actor=context.actor,
-                project_id=parsed.project_id,
-                load_urls=False,
-            )
-        )
-    )
-
-
-def _add_papers_to_project(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = AddPapersToProjectInput.model_validate(arguments)
-    result = capabilities.projects.add_documents(
-        actor=context.actor,
-        operation=context.operation,
-        project_id=parsed.project_id,
-        request=AddPaperToProjectRequest(document_ids=parsed.document_ids),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={
-            "kind": "papers_added_to_project",
-            "project_id": str(parsed.project_id),
-            "result": payload,
-        },
-    )
-
-
-def _remove_paper_from_project(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = ProjectPaperInput.model_validate(arguments)
-    capabilities.projects.remove_document(
-        actor=context.actor,
-        operation=context.operation,
-        project_id=parsed.project_id,
-        document_id=parsed.document_id,
-        confirm_delete_annotations=parsed.confirm_delete_annotations,
-    )
-    payload: dict[str, JsonValue] = {
-        "removed": True,
-        "project_id": str(parsed.project_id),
-        "document_id": str(parsed.document_id),
-    }
-    return ToolOutcome(payload=payload, action=payload)
-
-
-def _list_paper_projects(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.projects.projects_for_document(
-                actor=context.actor,
-                document_id=parsed.document_id,
-            )
-        )
-    )
-
-
-def _list_library_papers(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    del arguments
-    return ToolOutcome(
-        payload=_json(capabilities.paper_library.list(actor=context.actor))
-    )
-
-
-def _get_library_paper(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.paper_library.get(
-                actor=context.actor,
-                document_id=parsed.document_id,
-            )
-        )
-    )
-
-
-def _update_library_paper(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = UpdateLibraryPaperInput.model_validate(arguments)
-    result = capabilities.paper_library.update(
-        actor=context.actor,
-        operation=context.operation,
-        document_id=parsed.document_id,
-        request=LibraryPaperUpdateRequest(
-            status=parsed.status,
-            metadata_overrides=parsed.metadata_overrides,
-        ),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "library_paper_updated", "paper": payload},
-    )
-
-
-def _remove_library_paper(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    capabilities.paper_library.remove(
-        actor=context.actor,
-        operation=context.operation,
-        document_id=parsed.document_id,
-    )
-    payload: dict[str, JsonValue] = {
-        "removed": True,
-        "document_id": str(parsed.document_id),
-    }
-    return ToolOutcome(payload=payload, action=payload)
-
-
-def _collect_project_paper_to_library(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = CollectProjectPaperInput.model_validate(arguments)
-    result = capabilities.projects.collect_document(
-        actor=context.actor,
-        operation=context.operation,
-        request=CollectPaperFromProjectRequest(
-            source_project_id=parsed.source_project_id,
-            document_id=parsed.document_id,
-        ),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "project_paper_collected", "result": payload},
-    )
-
-
-def _list_annotation_threads(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DocumentInput.model_validate(arguments)
-    _require_paper(capabilities, context, parsed.document_id)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.research_items.list_document(
-                actor=context.actor,
-                document_id=parsed.document_id,
-                annotations_only=True,
-            )
-        )
-    )
-
-
-def _create_annotation_thread(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = CreateAnnotationThreadInput.model_validate(arguments)
-    _require_paper(capabilities, context, parsed.document_id)
-    request = CreateAnnotationThreadRequest.model_validate(
-        parsed.model_dump(exclude={"document_id"})
-    )
-    result = capabilities.research_items.create_annotation_thread(
-        actor=context.actor,
-        operation=context.operation,
-        content_role=RoleType.ASSISTANT,
-        document_id=parsed.document_id,
-        request=request,
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "annotation_thread_created", "annotation_thread": payload},
-    )
-
-
-def _update_annotation_thread(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = UpdateAnnotationThreadInput.model_validate(arguments)
-    result = capabilities.research_items.update_annotation_thread(
-        actor=context.actor,
-        operation=context.operation,
-        thread_id=parsed.thread_id,
-        request=UpdateAnnotationThreadRequest.model_validate(
-            parsed.model_dump(exclude={"thread_id"})
-        ),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "annotation_thread_updated", "annotation_thread": payload},
-    )
-
-
-def _delete_annotation_thread(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = DeleteAnnotationThreadInput.model_validate(arguments)
-    capabilities.research_items.delete_annotation_thread(
-        actor=context.actor,
-        operation=context.operation,
-        thread_id=parsed.thread_id,
-    )
-    payload: dict[str, JsonValue] = {
-        "deleted": True,
-        "thread_id": str(parsed.thread_id),
-    }
-    return ToolOutcome(payload=payload, action=payload)
-
-
-def _create_annotation_comment(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = CreateAnnotationCommentInput.model_validate(arguments)
-    result = capabilities.research_items.create_comment(
-        actor=context.actor,
-        operation=context.operation,
-        content_role=RoleType.ASSISTANT,
-        thread_id=parsed.thread_id,
-        request=CreateAnnotationCommentRequest(content=parsed.content),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "annotation_comment_created", "annotation": payload},
-    )
-
-
-def _update_annotation_comment(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = UpdateAnnotationCommentInput.model_validate(arguments)
-    result = capabilities.research_items.update_comment(
-        actor=context.actor,
-        operation=context.operation,
-        comment_id=parsed.annotation_id,
-        request=UpdateAnnotationCommentRequest(content=parsed.content),
-    )
-    payload = _json(result)
-    return ToolOutcome(
-        payload=payload,
-        action={"kind": "annotation_comment_updated", "annotation": payload},
-    )
-
-
-def _delete_annotation_comment(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = AnnotationInput.model_validate(arguments)
-    capabilities.research_items.delete_comment(
-        actor=context.actor,
-        operation=context.operation,
-        comment_id=parsed.annotation_id,
-    )
-    payload: dict[str, JsonValue] = {
-        "deleted": True,
-        "annotation_id": str(parsed.annotation_id),
-    }
-    return ToolOutcome(payload=payload, action=payload)
-
-
-def _list_jobs(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = ListJobsInput.model_validate(arguments)
-    return ToolOutcome(
-        payload=_json(
-            capabilities.jobs.list(
-                actor=context.actor,
-                project_id=parsed.project_id,
-                document_id=parsed.document_id,
-                operation=parsed.operation,
-                active=parsed.active,
-            )
-        )
-    )
-
-
-def _get_job(
-    capabilities: ApplicationCapabilities,
-    context: ToolExecutionContext,
-    arguments: BaseModel,
-) -> ToolOutcome:
-    parsed = JobInput.model_validate(arguments)
-    result: JobResponse = capabilities.jobs.get(
-        actor=context.actor,
-        job_id=parsed.job_id,
-    )
-    return ToolOutcome(payload=_json(result))
 
 
 def build_workspace_tool_catalog(
     *,
     ingestion: PaperIngestionWorkflow,
     citations: CitationWorkflow,
+    executor: ApplicationExecutor[ApplicationCapabilities] | None = None,
+    invitation_notifier: ProjectInvitationNotifier | None = None,
+    web_base_url: str = "https://scholens.local",
+    cursor_secret: str = "catalog-construction-only",
 ) -> ToolCatalog[ApplicationCapabilities]:
-    async def get_paper_citation(
-        context: ToolExecutionContext,
-        arguments: BaseModel,
-        invocation_key: str,
-    ) -> ToolOutcome:
-        del invocation_key
-        parsed = PaperCitationInput.model_validate(arguments)
-        citation = await asyncio.to_thread(
-            citations.run,
-            actor=context.actor,
-            operation=context.operation,
-            document_id=parsed.document_id,
-            style=parsed.style,
-            paper_collection=context.paper_collection,
-            anchor_document_id=context.anchor_document_id,
-        )
-        payload = cast(dict[str, JsonValue], _json(citation))
-        return ToolOutcome(payload=payload, artifacts=[payload])
-
-    async def ingest_paper_from_url(
-        context: ToolExecutionContext,
-        arguments: BaseModel,
-        invocation_key: str,
-    ) -> ToolOutcome:
-        parsed = IngestPaperFromUrlInput.model_validate(arguments)
-        idempotency_key = "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest()
-        result: LibraryPaperIngestionResponse = await ingestion.from_url(
-            actor=context.actor,
-            operation=context.operation,
-            url=str(parsed.url),
-            project_id=parsed.project_id,
-            idempotency_key=idempotency_key,
-            ip_address=context.client_ip,
-        )
-        payload = _json(result)
-        return ToolOutcome(
-            payload=payload,
-            action={"kind": "paper_ingestion_started", "result": payload},
-        )
+    handlers = WorkspaceToolHandlers(
+        executor=cast(ApplicationExecutor[ApplicationCapabilities], executor),
+        ingestion=ingestion,
+        citations=citations,
+        invitation_notifier=cast(ProjectInvitationNotifier, invitation_notifier),
+        web_base_url=web_base_url,
+        cursor_secret=cursor_secret,
+    )
+    read = WorkspacePermission.READ
+    write = WorkspacePermission.WRITE
+    manage = WorkspacePermission.MANAGE
+    delete = WorkspacePermission.DELETE
+    query = ToolExecutionKind.QUERY
+    command = ToolExecutionKind.COMMAND
+    workflow = ToolExecutionKind.WORKFLOW
+    confirmed = wc.ConfirmationAwareAction
 
     definitions = [
-        ToolDefinition(
-            name="search_saved_papers",
-            description=(
-                "Search papers already saved or accessible in the current Scholens "
-                "Library, Project, or selected paper context."
+        _tool(
+            name="search_scholens_knowledge",
+            title="Search Scholens knowledge",
+            description=_description(
+                use="you need facts or prior work already stored in Scholens",
+                avoid="you need to discover papers on the internet",
+                result="ranked paper, passage, annotation, comment, and output matches",
+                next_step="open the relevant bounded resource before citing or changing it.",
             ),
-            input_model=SearchPapersInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_search_saved_papers,
-            activity_subject_field="query",
+            input_model=wc.SearchKnowledgeInput,
+            output_model=wc.KnowledgeSearchOutput,
+            permission=read,
+            handler=handlers.search_knowledge,
+            execution=query,
+            subject="query",
         ),
-        ToolDefinition(
+        _tool(
             name="get_paper",
-            description=(
-                "Get canonical metadata for one paper in the server-bound collection."
+            title="Get paper metadata",
+            description=_description(
+                use="you know a Scholens document UUID and need canonical metadata",
+                avoid="you need full text or internet discovery",
+                result="the paper identity, metadata, processing state, and stable resource link",
+                next_step="use get_paper_content or search_paper_content for evidence.",
             ),
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_paper,
+            input_model=wc.DocumentInput,
+            output_model=DocumentResponse,
+            permission=read,
+            handler=handlers.get_paper,
         ),
-        ToolDefinition(
-            name="get_paper_abstract",
-            description="Get the abstract of one paper in the server-bound collection.",
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_paper_abstract,
-        ),
-        ToolDefinition(
+        _tool(
             name="get_paper_content",
-            description="Read the complete extracted text of one paper.",
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_paper_content,
+            title="Read bounded paper text",
+            description=_description(
+                use="you need a bounded range of extracted text from a known paper",
+                avoid="you only need metadata or do not know the document UUID",
+                result="numbered lines, a content digest, and the next line cursor",
+                next_step="continue with next_start_line or cite the returned line range.",
+            ),
+            input_model=wc.PaperContentInput,
+            output_model=wc.PaperContentOutput,
+            permission=read,
+            handler=handlers.get_paper_content,
         ),
-        ToolDefinition(
+        _tool(
             name="search_paper_content",
-            description="Search one paper's extracted text with a regular expression.",
-            input_model=SearchPaperContentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_search_paper_content,
-            activity_subject_field="query",
+            title="Search inside one paper",
+            description=_description(
+                use="you know the paper UUID and need locations matching text or a pattern",
+                avoid="you need cross-paper search",
+                result="bounded matching lines with source locators",
+                next_step="read surrounding lines with get_paper_content before concluding.",
+            ),
+            input_model=wc.SearchPaperContentInput,
+            output_model=wc.PaperContentSearchOutput,
+            permission=read,
+            handler=handlers.search_paper_content,
+            subject="query",
         ),
-        ToolDefinition(
-            name="get_paper_content_range",
-            description="Read an inclusive one-based line range from one paper.",
-            input_model=PaperContentRangeInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_paper_content_range,
-        ),
-        ToolDefinition(
+        _tool(
             name="get_paper_citation",
-            description=(
-                "Resolve bibliographic metadata for one paper and persist "
-                "recovered fields."
+            title="Read citation metadata",
+            description=_description(
+                use="you need stored bibliographic fields and their completeness",
+                avoid="you want to contact external metadata providers",
+                result="citation fields, missing required fields, and guidance",
+                next_step="call resolve_paper_citation only when important fields are missing.",
             ),
-            input_model=PaperCitationInput,
-            execution=ToolExecutionKind.WORKFLOW,
-            required_permission=WorkspacePermission.WRITE,
-            workflow_handler=get_paper_citation,
+            input_model=wc.PaperCitationInput,
+            output_model=wc.PaperCitationReadOutput,
+            permission=read,
+            handler=handlers.get_paper_citation,
         ),
-        ToolDefinition(
+        _tool(
+            name="resolve_paper_citation",
+            title="Resolve missing citation metadata",
+            description=_description(
+                use="stored citation fields are incomplete and external resolution is justified",
+                avoid="get_paper_citation reports complete metadata",
+                result="resolved fields with provenance and a stable paper resource",
+                next_step="persist the returned citation in the research document.",
+            ),
+            input_model=wc.ResolvePaperCitationInput,
+            output_model=wc.ResolvedCitationOutput,
+            permission=write,
+            handler=handlers.resolve_paper_citation,
+            execution=workflow,
+            open_world=True,
+        ),
+        _tool(
             name="get_paper_download_url",
-            description="Create a temporary download URL for one paper PDF.",
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_paper_download_url,
+            title="Get temporary paper download URL",
+            description=_description(
+                use="an authorized client needs the original PDF bytes",
+                avoid="you only need extracted text or metadata",
+                result="a short-lived authenticated download URL and expiry",
+                next_step="download promptly and never persist the temporary URL.",
+            ),
+            input_model=wc.DocumentInput,
+            output_model=DocumentFileUrlResponse,
+            permission=read,
+            handler=handlers.get_paper_download_url,
         ),
-        ToolDefinition(
+        _tool(
             name="list_projects",
-            description="List Projects accessible to the current user.",
-            input_model=ListProjectsInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_list_projects,
+            title="List Projects",
+            description=_description(
+                use="you need to find an accessible Project or its immutable UUID",
+                avoid="a repository already records the exact Project UUID",
+                result="a cursor-paginated Project list",
+                next_step="store the chosen project_id in AGENTS.md or README.",
+            ),
+            input_model=wc.ListProjectsInput,
+            output_model=ProjectListResponse,
+            permission=read,
+            handler=handlers.list_projects,
         ),
-        ToolDefinition(
+        _tool(
             name="get_project",
-            description="Get one accessible Project.",
-            input_model=ProjectInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_project,
+            title="Get Project manifest",
+            description=_description(
+                use="you know a Project UUID and need its durable research binding",
+                avoid="you are searching by title",
+                result="Project metadata, capabilities, resource URI, web URL, and binding snippet",
+                next_step="record the immutable UUID and scholens:// URI in the repository.",
+            ),
+            input_model=wc.ProjectInput,
+            output_model=wc.ProjectToolResponse,
+            permission=read,
+            handler=handlers.get_project,
         ),
-        ToolDefinition(
+        _tool(
             name="create_project",
-            description="Create a Project owned by the current user.",
-            input_model=ProjectCreateRequest,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_create_project,
+            title="Create Project",
+            description=_description(
+                use="a long-running research effort needs a new shared Scholens boundary",
+                avoid="a matching Project already exists",
+                result="the new Project manifest and repository-binding snippet",
+                next_step="write the returned UUID and resource URI into the repository guidance.",
+            ),
+            input_model=wc.CreateProjectInput,
+            output_model=wc.ProjectToolResponse,
+            permission=write,
+            handler=handlers.create_project,
+            execution=command,
         ),
-        ToolDefinition(
+        _tool(
             name="update_project",
-            description="Update the title or description of a Project.",
-            input_model=UpdateProjectInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_update_project,
+            title="Update Project",
+            description=_description(
+                use="the Project title or research description must change",
+                avoid="you are trying to change ownership or members",
+                result="the updated Project manifest",
+                next_step="refresh repository prose if it quotes changed human-readable metadata.",
+            ),
+            input_model=wc.UpdateProjectInput,
+            output_model=wc.ProjectToolResponse,
+            permission=write,
+            handler=handlers.update_project,
+            execution=command,
+            idempotent=True,
         ),
-        ToolDefinition(
+        _tool(
             name="delete_project",
-            description=(
-                "Permanently delete a Project when the user explicitly requests it."
+            title="Delete Project",
+            description=_description(
+                use="the user explicitly wants to permanently remove the entire Project",
+                avoid="the user only wants to leave, remove a paper, or archive local notes",
+                result="first an impact preview, then a completion receipt after confirmation",
+                next_step="present the preview and retry unchanged only after explicit approval.",
             ),
-            input_model=ProjectInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.DELETE,
-            handler=_delete_project,
+            input_model=wc.DeleteProjectInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.delete_project,
+            execution=command,
+            destructive=True,
+            confirmation=True,
         ),
-        ToolDefinition(
+        _tool(
             name="list_project_papers",
-            description="List papers contained in one accessible Project.",
-            input_model=ProjectInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_list_project_papers,
+            title="List Project papers",
+            description=_description(
+                use="you need the papers already associated with one Project",
+                avoid="you need internet discovery or personal-Library-only papers",
+                result="a filtered, cursor-paginated Project paper list",
+                next_step="use returned document UUIDs with paper and annotation tools.",
+            ),
+            input_model=wc.ListProjectPapersInput,
+            output_model=ProjectPaperListResponse,
+            permission=read,
+            handler=handlers.list_project_papers,
         ),
-        ToolDefinition(
+        _tool(
             name="add_papers_to_project",
-            description="Add existing accessible papers to a Project.",
-            input_model=AddPapersToProjectInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_add_papers_to_project,
+            title="Add papers to Project",
+            description=_description(
+                use="known accessible Scholens papers should join a Project",
+                avoid="the paper has not been ingested yet",
+                result="counts of newly added and already-present papers",
+                next_step="use list_project_papers to verify the Project manifest.",
+            ),
+            input_model=wc.AddPapersToProjectInput,
+            output_model=ProjectPapersAddedResponse,
+            permission=write,
+            handler=handlers.add_papers_to_project,
+            execution=command,
+            idempotent=True,
         ),
-        ToolDefinition(
+        _tool(
             name="remove_paper_from_project",
-            description="Remove a paper association from a Project.",
-            input_model=ProjectPaperInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.DELETE,
-            handler=_remove_paper_from_project,
+            title="Remove paper from Project",
+            description=_description(
+                use="a paper association and its Project-scoped research context must be removed",
+                avoid="you want to retain Project annotations or only remove a personal Library entry",
+                result="first the exact annotation impact, then a completion receipt",
+                next_step="present the preview and retry unchanged only after approval.",
+            ),
+            input_model=wc.ProjectPaperInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.remove_paper_from_project,
+            execution=command,
+            destructive=True,
+            confirmation=True,
         ),
-        ToolDefinition(
+        _tool(
             name="list_paper_projects",
-            description="List accessible Projects containing a paper.",
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_list_paper_projects,
+            title="List paper Projects",
+            description=_description(
+                use="you need every accessible Project containing a known paper",
+                avoid="you only need the paper's personal Library status",
+                result="a Project list",
+                next_step="choose an explicit Project UUID for Project-scoped work.",
+            ),
+            input_model=wc.DocumentInput,
+            output_model=ProjectListResponse,
+            permission=read,
+            handler=handlers.list_paper_projects,
         ),
-        ToolDefinition(
+        _tool(
+            name="list_project_members",
+            title="List Project members",
+            description=_description(
+                use="you need collaborator identities, roles, or permissions",
+                avoid="you need pending invitations",
+                result="visible Project collaborators and immutable user IDs",
+                next_step="use those IDs for member or ownership changes.",
+            ),
+            input_model=wc.ProjectInput,
+            output_model=ProjectCollaboratorListResponse,
+            permission=read,
+            handler=handlers.list_project_members,
+        ),
+        _tool(
+            name="list_project_invitations",
+            title="List Project invitations",
+            description=_description(
+                use="a Project manager needs pending invitation status",
+                avoid="you need accepted members",
+                result="pending invitations and their permissions",
+                next_step="resend or revoke only the specific invitation UUID.",
+            ),
+            input_model=wc.ProjectInput,
+            output_model=ProjectInvitationListResponse,
+            permission=manage,
+            handler=handlers.list_project_invitations,
+        ),
+        _tool(
+            name="create_project_invitation",
+            title="Invite Project collaborator",
+            description=_description(
+                use="the user explicitly wants to email Project access to a person",
+                avoid="the person is already a member or email delivery is not intended",
+                result="an impact preview, then invitation and delivery status",
+                next_step="confirm before the email is sent; inspect guidance if delivery fails.",
+            ),
+            input_model=wc.CreateProjectInvitationInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.create_project_invitation,
+            execution=workflow,
+            open_world=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="resend_project_invitation",
+            title="Resend Project invitation",
+            description=_description(
+                use="a specific pending invitation email must be delivered again",
+                avoid="permissions or recipient must change",
+                result="an impact preview, then refreshed invitation and delivery status",
+                next_step="confirm before sending and revoke/recreate if recipient details are wrong.",
+            ),
+            input_model=wc.InvitationInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.resend_project_invitation,
+            execution=workflow,
+            open_world=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="revoke_project_invitation",
+            title="Revoke Project invitation",
+            description=_description(
+                use="a pending invitation must stop granting future access",
+                avoid="the invitee already accepted and is now a member",
+                result="an impact preview, then a revocation receipt",
+                next_step="confirm the exact invitation UUID before retrying.",
+            ),
+            input_model=wc.InvitationInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.revoke_project_invitation,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="accept_project_invitation",
+            title="Accept Project invitation",
+            description=_description(
+                use="the current user wants to join using their own invitation token",
+                avoid="the token belongs to someone else or the user has not approved joining",
+                result="an impact preview, then the joined Project manifest",
+                next_step="confirm, then bind the returned Project UUID where appropriate.",
+            ),
+            input_model=wc.AcceptProjectInvitationInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.accept_project_invitation,
+            execution=command,
+            confirmation=True,
+        ),
+        _tool(
+            name="update_project_member",
+            title="Update Project member",
+            description=_description(
+                use="an owner's collaborator permissions must change",
+                avoid="ownership should transfer or the member should be removed",
+                result="an impact preview, then the updated membership",
+                next_step="confirm the complete replacement permission set.",
+            ),
+            input_model=wc.UpdateProjectMemberInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.update_project_member,
+            execution=command,
+            confirmation=True,
+        ),
+        _tool(
+            name="remove_project_member",
+            title="Remove Project member",
+            description=_description(
+                use="an owner explicitly wants to revoke a collaborator's Project access",
+                avoid="the current user is leaving or ownership should transfer",
+                result="an impact preview, then an access-removal receipt",
+                next_step="confirm the immutable user ID before retrying.",
+            ),
+            input_model=wc.RemoveProjectMemberInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.remove_project_member,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="leave_project",
+            title="Leave Project",
+            description=_description(
+                use="the current non-owner user explicitly wants to lose Project access",
+                avoid="the owner has not transferred ownership",
+                result="an impact preview, then a departure receipt",
+                next_step="remove obsolete repository bindings after confirmation.",
+            ),
+            input_model=wc.LeaveProjectInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.leave_project,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="transfer_project_ownership",
+            title="Transfer Project ownership",
+            description=_description(
+                use="the owner explicitly wants an existing collaborator to become owner",
+                avoid="only collaborator permissions should change",
+                result="an impact preview, then the resulting Project membership state",
+                next_step="verify the new owner ID before confirmation.",
+            ),
+            input_model=wc.TransferProjectOwnershipInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.transfer_project_ownership,
+            execution=command,
+            confirmation=True,
+        ),
+        _tool(
+            name="get_library_summary",
+            title="Get Library summary",
+            description=_description(
+                use="you need counts and attention signals for the personal Library",
+                avoid="you need individual paper records",
+                result="paper, ingestion, attention, and output counts",
+                next_step="list the relevant entity type for details.",
+            ),
+            input_model=wc.EmptyInput,
+            output_model=LibrarySummaryResponse,
+            permission=read,
+            handler=handlers.get_library_summary,
+        ),
+        _tool(
             name="list_library_papers",
-            description=(
-                "List papers explicitly saved in the current user's personal Library."
+            title="List Library papers",
+            description=_description(
+                use="you need papers explicitly saved in the current user's Library",
+                avoid="you need all Project-accessible papers or internet discovery",
+                result="a filtered cursor-paginated Library list including active ingestions",
+                next_step="use a document UUID for paper, Project, or tag operations.",
             ),
-            input_model=EmptyInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_list_library_papers,
+            input_model=wc.ListLibraryPapersInput,
+            output_model=LibraryPaperListResponse,
+            permission=read,
+            handler=handlers.list_library_papers,
         ),
-        ToolDefinition(
+        _tool(
             name="get_library_paper",
-            description="Get one personal Library entry and its metadata overrides.",
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_library_paper,
+            title="Get Library paper",
+            description=_description(
+                use="you need one personal Library entry, tags, status, and overrides",
+                avoid="the paper is only accessible through a Project",
+                result="the personal entry plus canonical document metadata",
+                next_step="update only personal fields or use get_paper for canonical data.",
+            ),
+            input_model=wc.DocumentInput,
+            output_model=LibraryPaperResponse,
+            permission=read,
+            handler=handlers.get_library_paper,
         ),
-        ToolDefinition(
+        _tool(
             name="update_library_paper",
-            description="Update a personal Library paper's status or metadata overrides.",
-            input_model=UpdateLibraryPaperInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_update_library_paper,
-        ),
-        ToolDefinition(
-            name="remove_library_paper",
-            description=(
-                "Remove a paper from the personal Library without deleting the document."
+            title="Update Library paper",
+            description=_description(
+                use="personal reading status or metadata overrides must change",
+                avoid="canonical shared metadata should change",
+                result="the updated personal Library entry",
+                next_step="read the entry again if another actor may have changed it.",
             ),
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.DELETE,
-            handler=_remove_library_paper,
+            input_model=wc.UpdateLibraryPaperInput,
+            output_model=LibraryPaperResponse,
+            permission=write,
+            handler=handlers.update_library_paper,
+            execution=command,
+            idempotent=True,
         ),
-        ToolDefinition(
+        _tool(
+            name="remove_library_papers",
+            title="Remove Library papers",
+            description=_description(
+                use="the user explicitly wants one or more personal Library entries removed",
+                avoid="Project associations or shared documents should be deleted",
+                result="an impact preview, then exact removed document UUIDs",
+                next_step="confirm the full UUID set before retrying.",
+            ),
+            input_model=wc.RemoveLibraryPapersInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.remove_library_papers,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
             name="collect_project_paper_to_library",
-            description="Save an accessible Project paper into the personal Library.",
-            input_model=CollectProjectPaperInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_collect_project_paper_to_library,
-        ),
-        ToolDefinition(
-            name="ingest_paper_from_url",
-            description="Start ingesting a PDF from an HTTP or HTTPS URL.",
-            input_model=IngestPaperFromUrlInput,
-            execution=ToolExecutionKind.WORKFLOW,
-            required_permission=WorkspacePermission.WRITE,
-            workflow_handler=ingest_paper_from_url,
-        ),
-        ToolDefinition(
-            name="list_annotation_threads",
-            description="List annotation threads and comments for one paper.",
-            input_model=DocumentInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_list_annotation_threads,
-        ),
-        ToolDefinition(
-            name="create_annotation_thread",
-            description="Create an annotation thread on one paper.",
-            input_model=CreateAnnotationThreadInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_create_annotation_thread,
-        ),
-        ToolDefinition(
-            name="update_annotation_thread",
-            description="Update an existing annotation thread.",
-            input_model=UpdateAnnotationThreadInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_update_annotation_thread,
-        ),
-        ToolDefinition(
-            name="delete_annotation_thread",
-            description=(
-                "Delete an annotation thread when the user explicitly requests it."
+            title="Collect Project paper",
+            description=_description(
+                use="a Project-accessible paper should also be saved personally",
+                avoid="the paper is already in the personal Library",
+                result="the collected document UUID",
+                next_step="use get_library_paper for personal status and tags.",
             ),
-            input_model=DeleteAnnotationThreadInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.DELETE,
-            handler=_delete_annotation_thread,
+            input_model=wc.CollectProjectPaperInput,
+            output_model=ProjectPaperCollectedResponse,
+            permission=write,
+            handler=handlers.collect_project_paper_to_library,
+            execution=command,
+            idempotent=True,
         ),
-        ToolDefinition(
-            name="create_annotation_comment",
-            description="Add a comment to an annotation thread.",
-            input_model=CreateAnnotationCommentInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_create_annotation_comment,
-        ),
-        ToolDefinition(
-            name="update_annotation_comment",
-            description="Update an annotation comment.",
-            input_model=UpdateAnnotationCommentInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.WRITE,
-            handler=_update_annotation_comment,
-        ),
-        ToolDefinition(
-            name="delete_annotation_comment",
-            description=(
-                "Delete an annotation comment when the user explicitly requests it."
+        _tool(
+            name="share_library_paper",
+            title="Share Library paper",
+            description=_description(
+                use="the user explicitly wants a public read/download link",
+                avoid="access should remain limited to Scholens collaborators",
+                result="an impact preview, then public token and web URL",
+                next_step="confirm public exposure before retrying.",
             ),
-            input_model=AnnotationInput,
-            execution=ToolExecutionKind.COMMAND,
-            required_permission=WorkspacePermission.DELETE,
-            handler=_delete_annotation_comment,
+            input_model=wc.SharedPaperInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.share_library_paper,
+            execution=command,
+            open_world=True,
+            confirmation=True,
+            persist_result=False,
         ),
-        ToolDefinition(
+        _tool(
+            name="unshare_library_paper",
+            title="Disable Library paper share",
+            description=_description(
+                use="an existing public link must stop working",
+                avoid="a Project collaborator should be removed instead",
+                result="an impact preview, then a privacy-change receipt",
+                next_step="confirm that existing external links should break.",
+            ),
+            input_model=wc.SharedPaperInput,
+            output_model=confirmed,
+            permission=manage,
+            handler=handlers.unshare_library_paper,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="collect_shared_paper",
+            title="Collect shared paper",
+            description=_description(
+                use="the current user wants a publicly shared Scholens paper in their Library",
+                avoid="the input is a general PDF URL",
+                result="the personal Library entry identity and duplicate status",
+                next_step="use get_library_paper or add_papers_to_project.",
+            ),
+            input_model=wc.CollectSharedPaperInput,
+            output_model=CollectPublicPaperResponse,
+            permission=write,
+            handler=handlers.collect_shared_paper,
+            execution=command,
+            idempotent=True,
+        ),
+        _tool(
+            name="list_library_tags",
+            title="List Library tags",
+            description=_description(
+                use="you need the current user's personal tag UUIDs and names",
+                avoid="you need Project-wide labels",
+                result="the personal Library tag list",
+                next_step="use tag UUIDs in list or replace-assignment operations.",
+            ),
+            input_model=wc.EmptyInput,
+            output_model=LibraryTagListResponse,
+            permission=read,
+            handler=handlers.list_library_tags,
+        ),
+        _tool(
+            name="create_library_tag",
+            title="Create Library tag",
+            description=_description(
+                use="a new personal organization label is needed",
+                avoid="an equivalent tag already exists",
+                result="the created tag UUID and name",
+                next_step="assign it with replace_library_paper_tags.",
+            ),
+            input_model=wc.CreateLibraryTagInput,
+            output_model=LibraryTagResponse,
+            permission=write,
+            handler=handlers.create_library_tag,
+            execution=command,
+        ),
+        _tool(
+            name="update_library_tag",
+            title="Rename Library tag",
+            description=_description(
+                use="a personal tag name must change",
+                avoid="paper assignments should change",
+                result="the renamed tag",
+                next_step="continue using the same immutable tag UUID.",
+            ),
+            input_model=wc.UpdateLibraryTagInput,
+            output_model=LibraryTagResponse,
+            permission=write,
+            handler=handlers.update_library_tag,
+            execution=command,
+            idempotent=True,
+        ),
+        _tool(
+            name="delete_library_tag",
+            title="Delete Library tag",
+            description=_description(
+                use="the user explicitly wants a personal tag removed everywhere",
+                avoid="only selected paper assignments should change",
+                result="an impact preview, then a deletion receipt",
+                next_step="confirm that every assignment should be removed.",
+            ),
+            input_model=wc.DeleteLibraryTagInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.delete_library_tag,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="replace_library_paper_tags",
+            title="Replace Library paper tags",
+            description=_description(
+                use="you know the complete desired tag set for selected Library papers",
+                avoid="you intend to add tags without replacing unspecified ones",
+                result="the number of updated papers and task status",
+                next_step="list Library papers with tag filters to verify.",
+            ),
+            input_model=wc.ReplaceLibraryPaperTagsInput,
+            output_model=LibraryTagAssignmentResponse,
+            permission=write,
+            handler=handlers.replace_library_paper_tags,
+            execution=command,
+            idempotent=True,
+        ),
+        _tool(
+            name="ingest_paper",
+            title="Ingest known paper",
+            description=_description(
+                use="you already know a DOI, arXiv ID, PDF URL, or prepared upload ID",
+                avoid="you are searching the internet for relevant papers",
+                result="a durable asynchronous ingestion identity and initial state",
+                next_step="poll get_job and then use the returned document UUID.",
+            ),
+            input_model=wc.IngestPaperInput,
+            output_model=LibraryPaperIngestionResponse,
+            permission=write,
+            handler=handlers.ingest_paper,
+            execution=workflow,
+            open_world=True,
+        ),
+        _tool(
+            name="retry_paper_ingestion",
+            title="Retry paper ingestion",
+            description=_description(
+                use="a specific failed ingestion job reports a retryable failure",
+                avoid="the job is active, completed, or requires different source data",
+                result="the restarted ingestion identity and state",
+                next_step="poll get_job using the returned job identity.",
+            ),
+            input_model=wc.RetryPaperIngestionInput,
+            output_model=LibraryPaperIngestionResponse,
+            permission=write,
+            handler=handlers.retry_paper_ingestion,
+            execution=workflow,
+            open_world=True,
+        ),
+        _tool(
+            name="cancel_paper_ingestion",
+            title="Cancel paper ingestion",
+            description=_description(
+                use="the user explicitly wants a pending or running ingestion stopped",
+                avoid="the job is completed or merely slow",
+                result="an impact preview, then a cancellation receipt",
+                next_step="confirm the exact job UUID before retrying.",
+            ),
+            input_model=wc.CancelPaperIngestionInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.cancel_paper_ingestion,
+            execution=workflow,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="prepare_paper_upload",
+            title="Prepare PDF upload",
+            description=_description(
+                use="a client can upload known PDF bytes directly to the returned URL",
+                avoid="you only have a DOI, arXiv ID, or already reachable PDF URL",
+                result="a one-file upload session, required headers, expiry, and upload_id",
+                next_step="PUT the exact bytes, then call ingest_paper with source.kind=upload.",
+            ),
+            input_model=PreparePaperUploadRequest,
+            output_model=PreparePaperUploadResponse,
+            permission=write,
+            handler=handlers.prepare_paper_upload,
+            execution=command,
+            open_world=True,
+            persist_result=False,
+        ),
+        _tool(
             name="list_jobs",
-            description="List the current user's background processing jobs.",
-            input_model=ListJobsInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_list_jobs,
+            title="List jobs",
+            description=_description(
+                use="you need asynchronous ingestion or research operation status",
+                avoid="you already know one job UUID",
+                result="filtered active or historical jobs",
+                next_step="use get_job for one exact status and actionable failure.",
+            ),
+            input_model=wc.ListJobsInput,
+            output_model=JobListResponse,
+            permission=read,
+            handler=handlers.list_jobs,
         ),
-        ToolDefinition(
+        _tool(
             name="get_job",
-            description="Get one background processing job.",
-            input_model=JobInput,
-            execution=ToolExecutionKind.QUERY,
-            required_permission=WorkspacePermission.READ,
-            handler=_get_job,
+            title="Get job",
+            description=_description(
+                use="you know a job UUID and need its exact progress or failure",
+                avoid="you are searching across jobs",
+                result="current status, progress code, result, and failure fields",
+                next_step="retry only when the reported failure is retryable.",
+            ),
+            input_model=wc.JobInput,
+            output_model=JobResponse,
+            permission=read,
+            handler=handlers.get_job,
+        ),
+        _tool(
+            name="list_annotation_threads",
+            title="List annotation threads",
+            description=_description(
+                use="you need visible discussions anchored to one paper",
+                avoid="you need generated research outputs",
+                result="bounded thread summaries and stable resource links",
+                next_step="open one thread for complete comments before replying.",
+            ),
+            input_model=wc.ListAnnotationThreadsInput,
+            output_model=wc.ThreadListOutput,
+            permission=read,
+            handler=handlers.list_annotation_threads,
+        ),
+        _tool(
+            name="get_annotation_thread",
+            title="Get annotation thread",
+            description=_description(
+                use="you know a thread UUID and need its quote, anchor, state, and comments",
+                avoid="you are searching for a thread",
+                result="the complete visible annotation thread",
+                next_step="reply, update, or cite it using the immutable thread UUID.",
+            ),
+            input_model=wc.AnnotationThreadInput,
+            output_model=ResearchItemResponse,
+            permission=read,
+            handler=handlers.get_annotation_thread,
+        ),
+        _tool(
+            name="create_annotation_thread",
+            title="Create annotation thread",
+            description=_description(
+                use="an exact stored-paper passage needs an anchored note or discussion",
+                avoid="you cannot provide exact quote text and Reader position",
+                result="the created thread and stable resource URI",
+                next_step="use the URI or thread UUID in durable research notes.",
+            ),
+            input_model=wc.CreateAnnotationThreadInput,
+            output_model=wc.ThreadActionOutput,
+            permission=write,
+            handler=handlers.create_annotation_thread,
+            execution=command,
+        ),
+        _tool(
+            name="update_annotation_thread",
+            title="Update annotation thread",
+            description=_description(
+                use="the thread color or open/resolved status must change",
+                avoid="quote text, audience, or comments should change",
+                result="the updated thread",
+                next_step="read it again when coordinating concurrent collaborators.",
+            ),
+            input_model=wc.UpdateAnnotationThreadInput,
+            output_model=wc.ThreadActionOutput,
+            permission=write,
+            handler=handlers.update_annotation_thread,
+            execution=command,
+            idempotent=True,
+        ),
+        _tool(
+            name="delete_annotation_thread",
+            title="Delete annotation thread",
+            description=_description(
+                use="the creator explicitly wants a thread and its discussion removed",
+                avoid="resolving the thread is sufficient",
+                result="an impact preview, then a deletion receipt",
+                next_step="confirm comment loss before retrying.",
+            ),
+            input_model=wc.DeleteAnnotationThreadInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.delete_annotation_thread,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="create_annotation_comment",
+            title="Reply to annotation thread",
+            description=_description(
+                use="you need to add substantive discussion to an existing thread",
+                avoid="you need a new paper anchor",
+                result="the created comment and parent thread resource",
+                next_step="use get_annotation_thread to see the full discussion.",
+            ),
+            input_model=wc.CreateAnnotationCommentInput,
+            output_model=wc.CommentActionOutput,
+            permission=write,
+            handler=handlers.create_annotation_comment,
+            execution=command,
+        ),
+        _tool(
+            name="update_annotation_comment",
+            title="Update annotation comment",
+            description=_description(
+                use="the current actor's existing comment text must be replaced",
+                avoid="you need to reply or edit another person's comment",
+                result="the updated comment and parent thread resource",
+                next_step="read the thread to verify discussion context.",
+            ),
+            input_model=wc.UpdateAnnotationCommentInput,
+            output_model=wc.CommentActionOutput,
+            permission=write,
+            handler=handlers.update_annotation_comment,
+            execution=command,
+            idempotent=True,
+        ),
+        _tool(
+            name="delete_annotation_comment",
+            title="Delete annotation comment",
+            description=_description(
+                use="the comment author explicitly wants their comment permanently removed",
+                avoid="editing the comment is sufficient",
+                result="an impact preview, then a deletion receipt",
+                next_step="confirm the exact comment preview before retrying.",
+            ),
+            input_model=wc.DeleteAnnotationCommentInput,
+            output_model=confirmed,
+            permission=delete,
+            handler=handlers.delete_annotation_comment,
+            execution=command,
+            destructive=True,
+            confirmation=True,
+        ),
+        _tool(
+            name="list_research_outputs",
+            title="List research outputs",
+            description=_description(
+                use="you need stored citations, audio overviews, or data tables",
+                avoid="you want to generate a new output or list annotations",
+                result="bounded existing outputs in an explicit scope",
+                next_step="open one output by immutable item UUID.",
+            ),
+            input_model=wc.ListResearchOutputsInput,
+            output_model=wc.ResearchOutputList,
+            permission=read,
+            handler=handlers.list_research_outputs,
+        ),
+        _tool(
+            name="get_research_output",
+            title="Get research output",
+            description=_description(
+                use="you know a stored research-output UUID and need its complete content",
+                avoid="the UUID identifies an annotation thread or you want generation",
+                result="the complete visible stored output",
+                next_step="reference its scholens:// URI in durable research notes.",
+            ),
+            input_model=wc.ResearchOutputInput,
+            output_model=ResearchItemResponse,
+            permission=read,
+            handler=handlers.get_research_output,
         ),
     ]
-    workspace_names = frozenset(definition.name for definition in definitions)
+    shared_names = frozenset(
+        definition.name
+        for definition in definitions
+        if definition.name != "prepare_paper_upload"
+    )
     return ToolCatalog(
-        definitions,
-        [
-            ToolProfile(
-                name=CONVERSATION_TOOL_PROFILE,
-                tool_names=workspace_names,
-            ),
+        definitions=definitions,
+        require_agent_metadata=True,
+        profiles=[
+            ToolProfile(name=CONVERSATION_TOOL_PROFILE, tool_names=shared_names),
             ToolProfile(
                 name=MCP_TOOL_PROFILE,
-                tool_names=workspace_names,
+                tool_names=shared_names | {"prepare_paper_upload"},
             ),
         ],
     )
+
+
+__all__ = [
+    "CONVERSATION_TOOL_PROFILE",
+    "MCP_TOOL_PROFILE",
+    "build_workspace_tool_catalog",
+]

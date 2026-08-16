@@ -34,7 +34,7 @@ class RequirePaperInCollection:
     ) -> None:
         if document_id == anchor_document_id:
             return
-        if not self._access.contains(
+        if not self.contains(
             actor=actor,
             collection=collection,
             document_id=document_id,
@@ -44,3 +44,17 @@ class RequirePaperInCollection:
                 message="This paper is not in the active conversation context",
                 kind=FailureKind.NOT_FOUND,
             )
+
+    def contains(
+        self,
+        *,
+        actor: Actor,
+        collection: PaperCollection,
+        document_id: UUID,
+    ) -> bool:
+        """Check collection membership without converting absence into an error."""
+        return self._access.contains(
+            actor=actor,
+            collection=collection,
+            document_id=document_id,
+        )

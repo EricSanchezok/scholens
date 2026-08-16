@@ -11,6 +11,7 @@ Usage: ./scripts/run-gates.sh <lane>
 
 Available lanes:
   server
+  mcp-connector
   jobs
   shared-packages
   web
@@ -66,6 +67,22 @@ run_server() {
   )
 }
 
+run_mcp_connector() {
+  local environment="$REPOSITORY_ROOT/mcp-connector/.venv/bin"
+  require_command uv
+  require_executable "$environment/ruff"
+  require_executable "$environment/mypy"
+  require_executable "$environment/pytest"
+  (
+    cd "$REPOSITORY_ROOT/mcp-connector"
+    uv lock --check
+    "$environment/ruff" format --check src tests
+    "$environment/ruff" check src tests
+    "$environment/mypy" src
+    "$environment/pytest" -q
+  )
+}
+
 run_jobs() {
   local environment="$REPOSITORY_ROOT/jobs/.venv/bin"
   require_executable "$environment/ruff"
@@ -92,6 +109,7 @@ run_shared_packages() {
   uv lock --check --directory "$REPOSITORY_ROOT/packages"
   uv lock --check --directory "$REPOSITORY_ROOT/server"
   uv lock --check --directory "$REPOSITORY_ROOT/jobs"
+  uv lock --check --directory "$REPOSITORY_ROOT/mcp-connector"
   (
     cd "$REPOSITORY_ROOT/packages"
     "$environment/ruff" format --check \
@@ -193,6 +211,7 @@ run_docs() {
 
 run_all() {
   run_server
+  run_mcp_connector
   run_jobs
   run_shared_packages
   run_web
@@ -208,6 +227,7 @@ fi
 
 case "$1" in
   server) run_server ;;
+  mcp-connector) run_mcp_connector ;;
   jobs) run_jobs ;;
   shared-packages) run_shared_packages ;;
   web) run_web ;;

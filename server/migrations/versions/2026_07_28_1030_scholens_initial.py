@@ -112,11 +112,19 @@ def upgrade() -> None:
             "permissions IN ("
             "ARRAY['read']::text[], "
             "ARRAY['write']::text[], "
+            "ARRAY['manage']::text[], "
             "ARRAY['delete']::text[], "
             "ARRAY['read','write']::text[], "
+            "ARRAY['read','manage']::text[], "
             "ARRAY['read','delete']::text[], "
+            "ARRAY['write','manage']::text[], "
             "ARRAY['write','delete']::text[], "
-            "ARRAY['read','write','delete']::text[]"
+            "ARRAY['manage','delete']::text[], "
+            "ARRAY['read','write','manage']::text[], "
+            "ARRAY['read','write','delete']::text[], "
+            "ARRAY['read','manage','delete']::text[], "
+            "ARRAY['write','manage','delete']::text[], "
+            "ARRAY['read','write','manage','delete']::text[]"
             ")",
             name="ck_access_keys_permissions",
         ),
@@ -260,6 +268,50 @@ def upgrade() -> None:
         op.f("ix_scholens_tool_invocations_operation_id"),
         "tool_invocations",
         ["operation_id"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_table(
+        "action_confirmations",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("actor_id", sa.BigInteger(), nullable=False),
+        sa.Column("credential_kind", sa.String(length=32), nullable=False),
+        sa.Column("credential_reference", sa.String(length=160), nullable=True),
+        sa.Column("action", sa.String(length=128), nullable=False),
+        sa.Column("arguments_hash", sa.CHAR(length=64), nullable=False),
+        sa.Column("state_fingerprint", sa.CHAR(length=64), nullable=False),
+        sa.Column("impact", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("token_hash", sa.CHAR(length=64), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(["actor_id"], ["auth.users.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("token_hash", name="uq_action_confirmations_token_hash"),
+        schema="scholens",
+    )
+    op.create_index(
+        op.f("ix_scholens_action_confirmations_actor_id"),
+        "action_confirmations",
+        ["actor_id"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_index(
+        "ix_action_confirmations_expiry",
+        "action_confirmations",
+        ["expires_at", "consumed_at"],
         unique=False,
         schema="scholens",
     )
@@ -440,6 +492,80 @@ def upgrade() -> None:
         op.f("ix_scholens_projects_owner_id"),
         "projects",
         ["owner_id"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_table(
+        "paper_upload_sessions",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("actor_id", sa.BigInteger(), nullable=False),
+        sa.Column("project_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("filename", sa.String(length=255), nullable=False),
+        sa.Column("size_bytes", sa.Integer(), nullable=False),
+        sa.Column("sha256", sa.String(length=64), nullable=False),
+        sa.Column("object_key", sa.String(length=512), nullable=False),
+        sa.Column(
+            "status", sa.String(length=16), server_default="prepared", nullable=False
+        ),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("lease_token", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "status IN ('prepared','claimed','consumed','failed')",
+            name="ck_paper_upload_sessions_status",
+        ),
+        sa.CheckConstraint(
+            "size_bytes > 0 AND size_bytes <= 31457280",
+            name="ck_paper_upload_sessions_size",
+        ),
+        sa.CheckConstraint(
+            "sha256 ~ '^[0-9a-f]{64}$'",
+            name="ck_paper_upload_sessions_sha256",
+        ),
+        sa.CheckConstraint(
+            "(status = 'claimed') = "
+            "(lease_expires_at IS NOT NULL AND lease_token IS NOT NULL)",
+            name="ck_paper_upload_sessions_claim_lease",
+        ),
+        sa.ForeignKeyConstraint(["actor_id"], ["auth.users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["project_id"], ["scholens.projects.id"], ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("object_key", name="uq_paper_upload_sessions_object_key"),
+        schema="scholens",
+    )
+    op.create_index(
+        op.f("ix_scholens_paper_upload_sessions_actor_id"),
+        "paper_upload_sessions",
+        ["actor_id"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_index(
+        op.f("ix_scholens_paper_upload_sessions_project_id"),
+        "paper_upload_sessions",
+        ["project_id"],
+        unique=False,
+        schema="scholens",
+    )
+    op.create_index(
+        "ix_paper_upload_sessions_expiry",
+        "paper_upload_sessions",
+        ["expires_at", "status"],
         unique=False,
         schema="scholens",
     )
@@ -788,11 +914,19 @@ def upgrade() -> None:
             "ARRAY[]::text[], "
             "ARRAY['read']::text[], "
             "ARRAY['write']::text[], "
+            "ARRAY['manage']::text[], "
             "ARRAY['delete']::text[], "
             "ARRAY['read','write']::text[], "
+            "ARRAY['read','manage']::text[], "
             "ARRAY['read','delete']::text[], "
+            "ARRAY['write','manage']::text[], "
             "ARRAY['write','delete']::text[], "
-            "ARRAY['read','write','delete']::text[]"
+            "ARRAY['manage','delete']::text[], "
+            "ARRAY['read','write','manage']::text[], "
+            "ARRAY['read','write','delete']::text[], "
+            "ARRAY['read','manage','delete']::text[], "
+            "ARRAY['write','manage','delete']::text[], "
+            "ARRAY['read','write','manage','delete']::text[]"
             ")",
             name="ck_conversations_tool_permissions",
         ),
@@ -2488,6 +2622,22 @@ def downgrade() -> None:
     op.drop_table("token_usage_events", schema="scholens")
     op.drop_table("subscriptions", schema="scholens")
     op.drop_index(
+        "ix_paper_upload_sessions_expiry",
+        table_name="paper_upload_sessions",
+        schema="scholens",
+    )
+    op.drop_index(
+        op.f("ix_scholens_paper_upload_sessions_project_id"),
+        table_name="paper_upload_sessions",
+        schema="scholens",
+    )
+    op.drop_index(
+        op.f("ix_scholens_paper_upload_sessions_actor_id"),
+        table_name="paper_upload_sessions",
+        schema="scholens",
+    )
+    op.drop_table("paper_upload_sessions", schema="scholens")
+    op.drop_index(
         op.f("ix_scholens_projects_owner_id"), table_name="projects", schema="scholens"
     )
     op.drop_table("projects", schema="scholens")
@@ -2510,6 +2660,17 @@ def downgrade() -> None:
         postgresql_using="gin",
     )
     op.drop_table("documents", schema="scholens")
+    op.drop_index(
+        "ix_action_confirmations_expiry",
+        table_name="action_confirmations",
+        schema="scholens",
+    )
+    op.drop_index(
+        op.f("ix_scholens_action_confirmations_actor_id"),
+        table_name="action_confirmations",
+        schema="scholens",
+    )
+    op.drop_table("action_confirmations", schema="scholens")
     op.drop_index(
         op.f("ix_scholens_tool_invocations_operation_id"),
         table_name="tool_invocations",

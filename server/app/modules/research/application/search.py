@@ -38,6 +38,7 @@ class ResearchSearchComment(BaseModel):
 class ResearchSearchResult(BaseModel):
     id: UUID
     document_id: UUID
+    project_id: UUID | None
     document_title: str | None
     quote_text: str
     position: ResearchPosition | None

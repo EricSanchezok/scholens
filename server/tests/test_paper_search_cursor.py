@@ -11,6 +11,7 @@ from app.bootstrap.adapters.paper_search import (
 from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
     PaperCollection,
+    PersonalLibraryPaperCollection,
     PaperSearchFilters,
     PaperSearchQuery,
     PaperSearchRequest,
@@ -188,6 +189,23 @@ def test_library_visibility_includes_personal_and_project_access() -> None:
     assert "projects" in statement
     assert "project_collaborators" in statement
     assert "owner_id" in statement
+
+
+def test_personal_library_visibility_excludes_project_membership() -> None:
+    statement = str(
+        _visibility_condition(
+            actor=_actor(),
+            collection=PersonalLibraryPaperCollection(),
+        ).compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "library_papers" in statement
+    assert "user_id = 7" in statement
+    assert "project_papers" not in statement
+    assert "project_collaborators" not in statement
 
 
 def test_library_search_compiles_with_distinct_result_and_visibility_rows() -> None:

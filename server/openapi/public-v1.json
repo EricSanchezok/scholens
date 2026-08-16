@@ -18,7 +18,7 @@
             "items": {
               "$ref": "#/components/schemas/WorkspacePermission"
             },
-            "maxItems": 3,
+            "maxItems": 4,
             "minItems": 1,
             "title": "Permissions",
             "type": "array"
@@ -195,7 +195,7 @@
                 "items": {
                   "$ref": "#/components/schemas/WorkspacePermission"
                 },
-                "maxItems": 3,
+                "maxItems": 4,
                 "minItems": 1,
                 "type": "array"
               },
@@ -864,21 +864,23 @@
       "ArxivPaperSource": {
         "additionalProperties": false,
         "properties": {
-          "kind": {
-            "const": "arxiv",
-            "title": "Kind",
-            "type": "string"
-          },
-          "value": {
+          "arxiv_id": {
+            "description": "A known arXiv identifier such as '1706.03762'. Do not put a search query or paper title here.",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Value",
+            "title": "Arxiv Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "arxiv",
+            "default": "arxiv",
+            "description": "Import one already-known paper by arXiv identifier.",
+            "title": "Kind",
             "type": "string"
           }
         },
         "required": [
-          "kind",
-          "value"
+          "arxiv_id"
         ],
         "title": "ArxivPaperSource",
         "type": "object"
@@ -1059,20 +1061,6 @@
           }
         },
         "title": "Biblio",
-        "type": "object"
-      },
-      "Body_upload_pdf_api_v1_paper_ingestions_uploads_post": {
-        "properties": {
-          "file": {
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_upload_pdf_api_v1_paper_ingestions_uploads_post",
         "type": "object"
       },
       "ChangePasswordRequest": {
@@ -3559,6 +3547,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal abstract replacement; null clears it.",
             "title": "Abstract"
           },
           "authors": {
@@ -3574,6 +3563,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal ordered author-name replacement; null clears it.",
             "title": "Authors"
           },
           "doi": {
@@ -3586,6 +3576,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal DOI replacement; null clears it.",
             "title": "Doi"
           },
           "institutions": {
@@ -3601,6 +3592,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal ordered institution replacement; null clears it.",
             "title": "Institutions"
           },
           "journal": {
@@ -3613,6 +3605,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal journal replacement; null clears it.",
             "title": "Journal"
           },
           "publish_date": {
@@ -3625,6 +3618,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal publication timestamp replacement; null clears it.",
             "title": "Publish Date"
           },
           "publisher": {
@@ -3637,6 +3631,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal publisher replacement; null clears it.",
             "title": "Publisher"
           },
           "title": {
@@ -3650,6 +3645,7 @@
                 "type": "null"
               }
             ],
+            "description": "Personal replacement title; null clears the existing override.",
             "title": "Title"
           }
         },
@@ -3963,6 +3959,7 @@
         "additionalProperties": false,
         "properties": {
           "document_id": {
+            "description": "Immutable Scholens document UUID defining the audience.",
             "format": "uuid",
             "title": "Document Id",
             "type": "string"
@@ -3970,6 +3967,7 @@
           "kind": {
             "const": "document",
             "default": "document",
+            "description": "Share the research item through one authorized document scope.",
             "title": "Kind",
             "type": "string"
           }
@@ -4212,21 +4210,23 @@
       "DoiPaperSource": {
         "additionalProperties": false,
         "properties": {
-          "kind": {
-            "const": "doi",
-            "title": "Kind",
-            "type": "string"
-          },
-          "value": {
+          "doi": {
+            "description": "A known DOI for the paper to import. Supply the canonical identifier, not a title, keywords, or a request to discover papers.",
             "maxLength": 500,
             "minLength": 1,
-            "title": "Value",
+            "title": "Doi",
+            "type": "string"
+          },
+          "kind": {
+            "const": "doi",
+            "default": "doi",
+            "description": "Import one already-known paper by DOI.",
+            "title": "Kind",
             "type": "string"
           }
         },
         "required": [
-          "kind",
-          "value"
+          "doi"
         ],
         "title": "DoiPaperSource",
         "type": "object"
@@ -6006,6 +6006,56 @@
         "title": "OpenAlexWork",
         "type": "object"
       },
+      "PaperIngestionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional immutable Scholens Project UUID that should receive the paper when ingestion succeeds. For an upload source, this must exactly match the Project bound by the upload preparation. Read it from the repository binding or a Project tool.",
+            "title": "Project Id"
+          },
+          "source": {
+            "description": "One already-known paper source. Use upload only after preparing and transferring a local PDF; Scholens does not discover papers from queries.",
+            "discriminator": {
+              "mapping": {
+                "arxiv": "#/components/schemas/ArxivPaperSource",
+                "doi": "#/components/schemas/DoiPaperSource",
+                "upload": "#/components/schemas/UploadPaperSource",
+                "url": "#/components/schemas/UrlPaperSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DoiPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/ArxivPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/UrlPaperSource"
+              },
+              {
+                "$ref": "#/components/schemas/UploadPaperSource"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "PaperIngestionRequest",
+        "type": "object"
+      },
       "PaperSearchFilters": {
         "additionalProperties": false,
         "properties": {
@@ -6019,6 +6069,7 @@
                 "type": "null"
               }
             ],
+            "description": "Optional inclusive earliest publication timestamp.",
             "title": "Published From"
           },
           "published_to": {
@@ -6031,6 +6082,7 @@
                 "type": "null"
               }
             ],
+            "description": "Optional inclusive latest publication timestamp.",
             "title": "Published To"
           }
         },
@@ -6044,6 +6096,7 @@
             "discriminator": {
               "mapping": {
                 "library": "#/components/schemas/LibraryPaperCollection",
+                "personal_library": "#/components/schemas/PersonalLibraryPaperCollection",
                 "selection": "#/components/schemas/SelectedPaperCollection"
               },
               "propertyName": "kind"
@@ -6051,6 +6104,9 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/LibraryPaperCollection"
+              },
+              {
+                "$ref": "#/components/schemas/PersonalLibraryPaperCollection"
               },
               {
                 "$ref": "#/components/schemas/SelectedPaperCollection"
@@ -6349,6 +6405,7 @@
         "additionalProperties": false,
         "properties": {
           "end_offset": {
+            "description": "Exclusive zero-based character offset after the selected quote.",
             "exclusiveMinimum": 0.0,
             "title": "End Offset",
             "type": "integer"
@@ -6356,6 +6413,7 @@
           "kind": {
             "const": "parsed_text",
             "default": "parsed_text",
+            "description": "Anchor the quote to offsets in canonical parsed paper text.",
             "title": "Kind",
             "type": "string"
           },
@@ -6369,9 +6427,11 @@
                 "type": "null"
               }
             ],
+            "description": "Optional one-based source page projection for the parsed-text span.",
             "title": "Page Number"
           },
           "start_offset": {
+            "description": "Inclusive zero-based character offset in canonical parsed text.",
             "minimum": 0.0,
             "title": "Start Offset",
             "type": "integer"
@@ -6390,15 +6450,18 @@
           "kind": {
             "const": "pdf_text",
             "default": "pdf_text",
+            "description": "Anchor the quote to visible PDF text rectangles.",
             "title": "Kind",
             "type": "string"
           },
           "page_number": {
+            "description": "One-based PDF page containing every supplied rectangle.",
             "minimum": 1.0,
             "title": "Page Number",
             "type": "integer"
           },
           "rects": {
+            "description": "Ordered normalized rectangles covering the exact selected quote.",
             "items": {
               "$ref": "#/components/schemas/PdfTextRect"
             },
@@ -6420,24 +6483,28 @@
         "description": "A PDF text rectangle normalized to the page's 0\u20131 coordinate space.",
         "properties": {
           "height": {
+            "description": "Normalized positive rectangle height within the page.",
             "exclusiveMinimum": 0.0,
             "maximum": 1.0,
             "title": "Height",
             "type": "number"
           },
           "width": {
+            "description": "Normalized positive rectangle width within the page.",
             "exclusiveMinimum": 0.0,
             "maximum": 1.0,
             "title": "Width",
             "type": "number"
           },
           "x": {
+            "description": "Normalized left coordinate from 0 at the page edge to 1.",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "X",
             "type": "number"
           },
           "y": {
+            "description": "Normalized top coordinate from 0 at the page edge to 1.",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Y",
@@ -6453,12 +6520,27 @@
         "title": "PdfTextRect",
         "type": "object"
       },
+      "PersonalLibraryPaperCollection": {
+        "additionalProperties": false,
+        "description": "Only documents explicitly saved in the actor's personal Library.",
+        "properties": {
+          "kind": {
+            "const": "personal_library",
+            "default": "personal_library",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "PersonalLibraryPaperCollection",
+        "type": "object"
+      },
       "PersonalResearchAudience": {
         "additionalProperties": false,
         "properties": {
           "kind": {
             "const": "personal",
             "default": "personal",
+            "description": "Keep the research item visible only to its creator.",
             "title": "Kind",
             "type": "string"
           }
@@ -6477,6 +6559,129 @@
           "url"
         ],
         "title": "PortalSessionResponse",
+        "type": "object"
+      },
+      "PreparePaperUploadRequest": {
+        "additionalProperties": false,
+        "description": "Metadata known locally before PDF bytes leave the user's computer.",
+        "properties": {
+          "filename": {
+            "description": "Plain local PDF filename without directory components. Paths remain on the client and must never be sent to Scholens.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional immutable destination Project UUID. Omit it for personal-Library ingestion.",
+            "title": "Project Id"
+          },
+          "sha256": {
+            "description": "Lowercase hexadecimal SHA-256 of the exact PDF bytes. Scholens verifies this before ingestion and duplicate resolution.",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "Exact local file size in bytes; the maximum is 30 MB.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 31457280.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "upload_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Existing prepared upload UUID when only its short-lived PUT URL expired. The filename, size, checksum, and Project must remain identical.",
+            "title": "Upload Id"
+          }
+        },
+        "required": [
+          "filename",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "PreparePaperUploadRequest",
+        "type": "object"
+      },
+      "PreparePaperUploadResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Exact request headers required on the PUT; do not omit or alter them.",
+            "title": "Headers",
+            "type": "object"
+          },
+          "max_bytes": {
+            "default": 31457280,
+            "description": "Maximum accepted PDF size in bytes.",
+            "title": "Max Bytes",
+            "type": "integer"
+          },
+          "method": {
+            "default": "PUT",
+            "description": "Required HTTP upload method.",
+            "title": "Method",
+            "type": "string"
+          },
+          "next_step": {
+            "default": "upload_pdf_then_call_ingest_paper_with_upload_id",
+            "description": "Machine-readable continuation instruction.",
+            "title": "Next Step",
+            "type": "string"
+          },
+          "session_expires_at": {
+            "description": "Time after which the upload_id can no longer be ingested.",
+            "format": "date-time",
+            "title": "Session Expires At",
+            "type": "string"
+          },
+          "upload_id": {
+            "description": "Durable staging UUID used by ingest_paper.",
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          },
+          "upload_url": {
+            "description": "Short-lived direct object-storage PUT URL.",
+            "title": "Upload Url",
+            "type": "string"
+          },
+          "upload_url_expires_at": {
+            "description": "Time after which a fresh upload URL must be requested.",
+            "format": "date-time",
+            "title": "Upload Url Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "upload_url",
+          "headers",
+          "upload_url_expires_at",
+          "session_expires_at"
+        ],
+        "title": "PreparePaperUploadResponse",
         "type": "object"
       },
       "PrimaryLocation": {
@@ -7365,10 +7570,12 @@
           "kind": {
             "const": "project",
             "default": "project",
+            "description": "Share the research item with current members of one Project.",
             "title": "Kind",
             "type": "string"
           },
           "project_id": {
+            "description": "Immutable Scholens Project UUID defining the audience.",
             "format": "uuid",
             "title": "Project Id",
             "type": "string"
@@ -8061,6 +8268,18 @@
             ],
             "title": "Position"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "quote_text": {
             "title": "Quote Text",
             "type": "string"
@@ -8073,6 +8292,7 @@
         "required": [
           "id",
           "document_id",
+          "project_id",
           "document_title",
           "quote_text",
           "position",
@@ -8812,48 +9032,27 @@
         "title": "UpdateProfileBody",
         "type": "object"
       },
-      "UploadFromSourceRequest": {
+      "UploadPaperSource": {
         "additionalProperties": false,
         "properties": {
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
+          "kind": {
+            "const": "upload",
+            "default": "upload",
+            "description": "Ingest bytes already transferred through a prepared upload session.",
+            "title": "Kind",
+            "type": "string"
           },
-          "source": {
-            "discriminator": {
-              "mapping": {
-                "arxiv": "#/components/schemas/ArxivPaperSource",
-                "doi": "#/components/schemas/DoiPaperSource",
-                "url": "#/components/schemas/UrlPaperSource"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/DoiPaperSource"
-              },
-              {
-                "$ref": "#/components/schemas/ArxivPaperSource"
-              },
-              {
-                "$ref": "#/components/schemas/UrlPaperSource"
-              }
-            ],
-            "title": "Source"
+          "upload_id": {
+            "description": "The upload session UUID returned by prepare_paper_upload after the PDF bytes were uploaded with the supplied URL and headers.",
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
           }
         },
         "required": [
-          "source"
+          "upload_id"
         ],
-        "title": "UploadFromSourceRequest",
+        "title": "UploadPaperSource",
         "type": "object"
       },
       "UrlPaperSource": {
@@ -8861,19 +9060,21 @@
         "properties": {
           "kind": {
             "const": "url",
+            "default": "url",
+            "description": "Import one already-known reachable HTTP(S) paper source.",
             "title": "Kind",
             "type": "string"
           },
-          "value": {
+          "url": {
+            "description": "The already-known HTTP(S) URL of a PDF or supported paper source. This imports the URL; it does not search the internet.",
             "maxLength": 2048,
             "minLength": 1,
-            "title": "Value",
+            "title": "Url",
             "type": "string"
           }
         },
         "required": [
-          "kind",
-          "value"
+          "url"
         ],
         "title": "UrlPaperSource",
         "type": "object"
@@ -9067,6 +9268,7 @@
         "enum": [
           "read",
           "write",
+          "manage",
           "delete"
         ],
         "title": "WorkspacePermission",
@@ -13614,7 +13816,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UploadFromSourceRequest"
+                "$ref": "#/components/schemas/PaperIngestionRequest"
               }
             }
           },
@@ -13652,60 +13854,23 @@
     },
     "/api/v1/paper-ingestions/uploads": {
       "post": {
-        "operationId": "upload_pdf_api_v1_paper_ingestions_uploads_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "project_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Project Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
-            }
-          }
-        ],
+        "operationId": "prepare_pdf_upload_api_v1_paper_ingestions_uploads_post",
         "requestBody": {
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_upload_pdf_api_v1_paper_ingestions_uploads_post"
+                "$ref": "#/components/schemas/PreparePaperUploadRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "202": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LibraryPaperIngestionResponse"
+                  "$ref": "#/components/schemas/PreparePaperUploadResponse"
                 }
               }
             },
@@ -13727,7 +13892,7 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Upload Pdf"
+        "summary": "Prepare Pdf Upload"
       }
     },
     "/api/v1/paper-ingestions/{job_id}": {
@@ -15880,13 +16045,23 @@
             }
           },
           {
-            "in": "query",
-            "name": "confirm_delete_annotations",
+            "description": "Short-lived token returned by the first removal attempt. Retry with unchanged path parameters only after the user approves its impact.",
+            "in": "header",
+            "name": "X-Scholens-Confirmation-Token",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Confirm Delete Annotations",
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Short-lived token returned by the first removal attempt. Retry with unchanged path parameters only after the user approves its impact.",
+              "title": "X-Scholens-Confirmation-Token"
             }
           }
         ],

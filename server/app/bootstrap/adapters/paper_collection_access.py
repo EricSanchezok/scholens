@@ -8,9 +8,11 @@ from app.modules.papers.application.collection_access import PaperCollectionAcce
 from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
     PaperCollection,
+    PersonalLibraryPaperCollection,
     SelectedPaperCollection,
 )
 from app.modules.papers.infrastructure.access import get_document_access
+from app.modules.papers.infrastructure.models import LibraryPaper
 from app.modules.projects.infrastructure.access import get_project_access
 from app.modules.projects.infrastructure.models import ProjectPaper
 from app.shared.application import Actor
@@ -40,6 +42,16 @@ class SqlPaperCollectionAccess(PaperCollectionAccessPort):
             return False
         if isinstance(collection, LibraryPaperCollection):
             return True
+        if isinstance(collection, PersonalLibraryPaperCollection):
+            return (
+                self._session.scalar(
+                    select(LibraryPaper.document_id).where(
+                        LibraryPaper.document_id == document_id,
+                        LibraryPaper.user_id == actor.id,
+                    )
+                )
+                is not None
+            )
         assert isinstance(collection, SelectedPaperCollection)
         if document_id in collection.document_ids:
             return True

@@ -56,6 +56,12 @@ class ResearchItemChange[T]:
 
 
 class ResearchItemGateway(Protocol):
+    def get_item(self, *, user_id: int, item_id: UUID) -> ResearchItemResponse: ...
+
+    def get_comment(
+        self, *, user_id: int, comment_id: UUID
+    ) -> AnnotationCommentResponse: ...
+
     def list_document(
         self,
         *,
@@ -145,6 +151,14 @@ class ResearchItems:
     ) -> None:
         self._gateway = gateway
         self._journal = journal
+
+    def get_item(self, *, actor: Actor, item_id: UUID) -> ResearchItemResponse:
+        return self._gateway.get_item(user_id=actor.id, item_id=item_id)
+
+    def get_comment(
+        self, *, actor: Actor, comment_id: UUID
+    ) -> AnnotationCommentResponse:
+        return self._gateway.get_comment(user_id=actor.id, comment_id=comment_id)
 
     def list_document(
         self,

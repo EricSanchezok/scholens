@@ -35,16 +35,15 @@ import {
   SelectValue,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
-import type { components } from "@/lib/api/generated/schema";
 import { ApiError } from "@/lib/api/errors";
+import type { KnownPaperSource } from "../api";
 import type { PreparedPaperUpload } from "../use-paper-ingestions";
 
-type Source = components["schemas"]["UploadFromSourceRequest"]["source"];
-type SourceKind = Source["kind"];
+type SourceKind = KnownPaperSource["kind"];
 
 type QueuedFile = PreparedPaperUpload & { errorCode?: "fileTooLarge" };
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
 async function fileContentDigest(file: File) {
   if (file.size > MAX_FILE_BYTES) {
@@ -75,7 +74,7 @@ export function AddPapersDialog({
   onSubmitSource: (input: {
     idempotencyKey: string;
     signal: AbortSignal;
-    source: Source;
+    source: KnownPaperSource;
   }) => Promise<unknown>;
   onUploadFiles: (files: PreparedPaperUpload[]) => void;
   open: boolean;

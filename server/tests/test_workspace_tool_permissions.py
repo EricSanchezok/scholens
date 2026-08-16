@@ -144,14 +144,18 @@ def test_workspace_permission_normalization(
 
 
 def test_workspace_permissions_always_serialize_in_canonical_order() -> None:
-    assert ordered_workspace_permissions(["delete", "write", "read", "write"]) == [
+    assert ordered_workspace_permissions(
+        ["delete", "manage", "write", "read", "write"]
+    ) == [
         WorkspacePermission.READ,
         WorkspacePermission.WRITE,
+        WorkspacePermission.MANAGE,
         WorkspacePermission.DELETE,
     ]
     assert WORKSPACE_PERMISSION_ORDER == (
         WorkspacePermission.READ,
         WorkspacePermission.WRITE,
+        WorkspacePermission.MANAGE,
         WorkspacePermission.DELETE,
     )
 
@@ -347,40 +351,65 @@ async def test_dispatcher_hides_unknown_profile_external_and_unauthorized_tools(
 def test_workspace_tool_permission_mapping_is_exact() -> None:
     expected = {
         WorkspacePermission.READ: {
-            "search_saved_papers",
+            "search_scholens_knowledge",
             "get_paper",
-            "get_paper_abstract",
             "get_paper_content",
             "search_paper_content",
-            "get_paper_content_range",
+            "get_paper_citation",
             "get_paper_download_url",
             "list_projects",
             "get_project",
             "list_project_papers",
             "list_paper_projects",
+            "list_project_members",
+            "get_library_summary",
             "list_library_papers",
             "get_library_paper",
+            "list_library_tags",
             "list_annotation_threads",
+            "get_annotation_thread",
             "list_jobs",
             "get_job",
+            "list_research_outputs",
+            "get_research_output",
         },
         WorkspacePermission.WRITE: {
-            "get_paper_citation",
+            "resolve_paper_citation",
             "create_project",
             "update_project",
             "add_papers_to_project",
             "update_library_paper",
             "collect_project_paper_to_library",
-            "ingest_paper_from_url",
+            "collect_shared_paper",
+            "create_library_tag",
+            "update_library_tag",
+            "replace_library_paper_tags",
+            "ingest_paper",
+            "retry_paper_ingestion",
             "create_annotation_thread",
             "update_annotation_thread",
             "create_annotation_comment",
             "update_annotation_comment",
         },
+        WorkspacePermission.MANAGE: {
+            "list_project_invitations",
+            "create_project_invitation",
+            "resend_project_invitation",
+            "revoke_project_invitation",
+            "accept_project_invitation",
+            "update_project_member",
+            "share_library_paper",
+            "unshare_library_paper",
+            "remove_project_member",
+            "leave_project",
+            "transfer_project_ownership",
+        },
         WorkspacePermission.DELETE: {
             "delete_project",
             "remove_paper_from_project",
-            "remove_library_paper",
+            "remove_library_papers",
+            "delete_library_tag",
+            "cancel_paper_ingestion",
             "delete_annotation_thread",
             "delete_annotation_comment",
         },
@@ -415,7 +444,7 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
     )
     assert {
         definition.name for definition in catalog.definitions_for(full_mcp_access)
-    } == set().union(*expected.values())
+    } == set().union(*expected.values(), {"prepare_paper_upload"})
 
 
 def test_conversation_permission_contracts_normalize_and_allow_empty() -> None:

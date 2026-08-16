@@ -122,7 +122,7 @@ Resources:
           AllowedMethods: [GET, HEAD, PUT, POST]
           AllowedOrigins:
           - !Sub https://${ProductionDomain}
-          ExposedHeaders: [ETag]
+          ExposedHeaders: [ETag, x-amz-checksum-sha256]
           MaxAge: 3600
       LifecycleConfiguration:
         Rules:
@@ -132,6 +132,11 @@ Resources:
         - Id: ExpireNoncurrentVersions
           Status: Enabled
           NoncurrentVersionExpiration: {NoncurrentDays: 30}
+        - Id: ExpireStagedPaperUploads
+          Status: Enabled
+          Prefix: uploads/
+          ExpirationInDays: 2
+          NoncurrentVersionExpiration: {NoncurrentDays: 1}
       OwnershipControls:
         Rules:
         - {ObjectOwnership: BucketOwnerEnforced}

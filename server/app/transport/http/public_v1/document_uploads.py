@@ -2,27 +2,29 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 from uuid import UUID
 
 from app.bootstrap.execution import get_paper_ingestion_workflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
-from app.modules.papers.domain import MAX_PDF_BYTES, MAX_PDF_SIZE_MB
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
-from app.modules.papers.application.contracts.uploads import UploadFromSourceRequest
-from app.shared.application import Actor, OperationContext
-from app.shared.domain import AppError, FailureKind
+from app.modules.papers.application.contracts.uploads import PaperIngestionRequest
+from app.modules.papers.application.upload_sessions import (
+    PreparePaperUploadRequest,
+    PreparePaperUploadResponse,
+)
+from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.execution import get_application_executor
+from app.shared.application import Actor, ApplicationExecutor, OperationContext
 from app.transport.client_ip import http_client_ip
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, File, Header, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Header, Request, Response
 
-logger = logging.getLogger(__name__)
 document_upload_router = APIRouter()
 
 IdempotencyHeader = Annotated[
@@ -37,18 +39,36 @@ IdempotencyHeader = Annotated[
     status_code=202,
 )
 async def upload_pdf_from_source(
-    payload: UploadFromSourceRequest,
+    payload: PaperIngestionRequest,
     request: Request,
     idempotency_key: IdempotencyHeader = None,
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
     ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
 ) -> LibraryPaperIngestionResponse:
+    if payload.source.kind == "upload":
+        return await ingestion.from_upload_session(
+            actor=current_user,
+            operation=operation,
+            upload_id=payload.source.upload_id,
+            project_id=payload.project_id,
+            idempotency_key=idempotency_key,
+            ip_address=http_client_ip(request),
+        )
+    value = (
+        payload.source.doi
+        if payload.source.kind == "doi"
+        else (
+            payload.source.arxiv_id
+            if payload.source.kind == "arxiv"
+            else payload.source.url
+        )
+    )
     return await ingestion.from_source(
         actor=current_user,
         operation=operation,
         kind=payload.source.kind,
-        value=payload.source.value,
+        value=value,
         project_id=payload.project_id,
         idempotency_key=idempotency_key,
         ip_address=http_client_ip(request),
@@ -57,64 +77,21 @@ async def upload_pdf_from_source(
 
 @document_upload_router.post(
     "/uploads",
-    response_model=LibraryPaperIngestionResponse,
-    status_code=202,
+    response_model=PreparePaperUploadResponse,
+    status_code=201,
 )
-async def upload_pdf(
-    request: Request,
-    file: UploadFile = File(...),
-    idempotency_key: IdempotencyHeader = None,
+def prepare_pdf_upload(
+    payload: PreparePaperUploadRequest,
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
     current_user: Actor = Depends(get_required_user),
-    operation: OperationContext = Depends(get_required_operation),
-    ingestion: PaperIngestionWorkflow = Depends(get_paper_ingestion_workflow),
-    project_id: UUID | None = None,
-) -> LibraryPaperIngestionResponse:
-    max_bytes = MAX_PDF_BYTES
-    declared_size = request.headers.get("content-length")
-    if declared_size and (
-        not declared_size.isdigit() or int(declared_size) > max_bytes + 1024 * 1024
-    ):
-        raise AppError(
-            code="upload_too_large",
-            message=f"File too large (max {MAX_PDF_SIZE_MB}MB)",
-            kind=FailureKind.PAYLOAD_TOO_LARGE,
+) -> PreparePaperUploadResponse:
+    return executor.command(
+        lambda capabilities: capabilities.paper_uploads.prepare(
+            actor=current_user,
+            request=payload,
         )
-    if file.content_type not in {"application/pdf", "application/octet-stream"}:
-        raise AppError(
-            code="invalid_pdf_content_type",
-            message="Uploaded file must use a PDF content type",
-            kind=FailureKind.INVALID_ARGUMENT,
-        )
-
-    try:
-        chunks: list[bytes] = []
-        total = 0
-        while chunk := await file.read(65_536):
-            total += len(chunk)
-            if total > max_bytes:
-                raise AppError(
-                    code="upload_too_large",
-                    message=f"File too large (max {MAX_PDF_SIZE_MB}MB)",
-                    kind=FailureKind.PAYLOAD_TOO_LARGE,
-                )
-            chunks.append(chunk)
-        content = b"".join(chunks)
-    except (OSError, RuntimeError):
-        logger.exception("paper_upload.read_failed")
-        raise AppError(
-            code="upload_read_failed",
-            message="The uploaded file could not be read",
-            kind=FailureKind.INVALID_ARGUMENT,
-        ) from None
-
-    return await ingestion.from_bytes(
-        actor=current_user,
-        operation=operation,
-        content=content,
-        filename=file.filename,
-        project_id=project_id,
-        idempotency_key=idempotency_key,
-        ip_address=http_client_ip(request),
     )
 
 

@@ -1197,6 +1197,7 @@
       "permission": {
         "read": "Read",
         "write": "Write",
+        "manage": "Manage",
         "delete": "Delete"
       },
       "permissionError": "Select at least one permission.",

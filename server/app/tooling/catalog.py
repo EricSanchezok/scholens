@@ -13,6 +13,38 @@ from app.tooling.contracts import (
 CapabilitiesT = TypeVar("CapabilitiesT")
 
 
+def _undocumented_input_properties(schema: dict[str, object]) -> list[str]:
+    """Find undocumented parameters at every nested JSON-schema object boundary."""
+    missing: set[str] = set()
+
+    def visit(value: object, path: tuple[str, ...]) -> None:
+        if isinstance(value, list):
+            for item in value:
+                visit(item, path)
+            return
+        if not isinstance(value, dict):
+            return
+        properties = value.get("properties")
+        if isinstance(properties, dict):
+            for name, property_schema in properties.items():
+                if (
+                    isinstance(name, str)
+                    and isinstance(property_schema, dict)
+                    and not property_schema.get("description")
+                ):
+                    missing.add(".".join((*path, name)))
+                visit(property_schema, (*path, str(name)))
+        definitions = value.get("$defs")
+        if isinstance(definitions, dict):
+            for name, definition_schema in definitions.items():
+                visit(definition_schema, (*path, f"$defs.{name}"))
+        for key in ("allOf", "anyOf", "oneOf", "items"):
+            visit(value.get(key), path)
+
+    visit(schema, ())
+    return sorted(missing)
+
+
 @dataclass(frozen=True, slots=True)
 class ToolProfile:
     name: str
@@ -24,6 +56,8 @@ class ToolCatalog(Generic[CapabilitiesT]):
         self,
         definitions: list[ToolDefinition[CapabilitiesT]],
         profiles: list[ToolProfile],
+        *,
+        require_agent_metadata: bool = False,
     ) -> None:
         self._definitions: dict[str, ToolDefinition[CapabilitiesT]] = {}
         for definition in definitions:
@@ -31,11 +65,27 @@ class ToolCatalog(Generic[CapabilitiesT]):
                 raise ValueError(f"duplicate tool definition: {definition.name}")
             if not definition.description.strip():
                 raise ValueError(f"tool {definition.name} requires a description")
+            if require_agent_metadata:
+                if not definition.title or not definition.title.strip():
+                    raise ValueError(f"tool {definition.name} requires a title")
+                if definition.output_model is None:
+                    raise ValueError(
+                        f"tool {definition.name} requires an output schema"
+                    )
+                if definition.behavior is None:
+                    raise ValueError(f"tool {definition.name} requires behavior hints")
             schema = definition.input_model.model_json_schema()
             if schema.get("type") != "object":
                 raise ValueError(
                     f"tool {definition.name} input schema must be an object"
                 )
+            if require_agent_metadata:
+                missing_descriptions = _undocumented_input_properties(schema)
+                if missing_descriptions:
+                    raise ValueError(
+                        f"tool {definition.name} input properties require descriptions: "
+                        f"{', '.join(missing_descriptions)}"
+                    )
             self._definitions[definition.name] = definition
         self._profiles: dict[str, ToolProfile] = {}
         for profile in profiles:

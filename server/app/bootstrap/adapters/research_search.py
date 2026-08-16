@@ -87,6 +87,7 @@ class SqlResearchSearch:
                 ResearchSearchResult(
                     id=item.id,
                     document_id=item.target_document_id,
+                    project_id=item.audience_project_id,
                     document_title=(
                         item.target_document.title
                         if item.target_document is not None

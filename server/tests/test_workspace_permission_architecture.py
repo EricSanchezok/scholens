@@ -132,6 +132,6 @@ def test_mcp_transport_has_no_static_allowlist_or_permission_branching() -> None
                 child.value
                 for child in ast.walk(node.test)
                 if isinstance(child, ast.Constant)
-                and child.value in {"read", "write", "delete"}
+                and child.value in {"read", "write", "manage", "delete"}
             }
             assert permission_literals == set()

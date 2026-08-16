@@ -227,48 +227,6 @@ def test_project_paper_batch_rejects_partial_library_matches(
     db.commit.assert_not_called()
 
 
-def test_project_paper_removal_requires_annotation_deletion_confirmation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    db = MagicMock(spec=Session)
-    project_id = uuid.uuid4()
-    document_id = uuid.uuid4()
-    project_paper = ProjectPaper(
-        project_id=project_id,
-        document_id=document_id,
-        added_by_id=1,
-    )
-    scalars = MagicMock()
-    scalars.first.return_value = project_paper
-    db.scalars.return_value = scalars
-    db.scalar.side_effect = [2, 5]
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.project_documents.require_project_permission",
-        lambda *_args, **_kwargs: None,
-    )
-
-    with pytest.raises(AppError) as exc_info:
-        project_document_repository.remove_by_paper_and_project(
-            db,
-            document_id=document_id,
-            project_id=project_id,
-            user=Actor(
-                id=1,
-                email="owner@example.com",
-                status="active",
-                email_verified=True,
-            ),
-            origin_operation_id=uuid.uuid4(),
-            correlation_id=uuid.uuid4(),
-            confirm_delete_annotations=False,
-        )
-
-    assert exc_info.value.code == "project_document_has_annotations"
-    assert exc_info.value.details == {"thread_count": 2, "comment_count": 5}
-    db.delete.assert_not_called()
-    assert not db.execute.called
-
-
 def test_project_paper_confirm_deletes_only_matching_project_threads() -> None:
     project_id = uuid.uuid4()
     document_id = uuid.uuid4()

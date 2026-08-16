@@ -29,8 +29,10 @@ from app.shared.domain import (
 from app.tooling import (
     DocumentSourceCandidate,
     ToolAccess,
+    ToolBehavior,
     ToolExecutionContext,
     ToolCatalog,
+    ToolConfirmationPolicy,
     ToolDefinition,
     ToolDispatcher,
     ToolExecutionKind,
@@ -43,7 +45,7 @@ from app.tooling.workspace import (
     MCP_TOOL_PROFILE,
     build_workspace_tool_catalog,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ResultT = TypeVar("ResultT")
 
@@ -209,6 +211,35 @@ def test_profiles_are_independent_and_validate_references() -> None:
         )
 
 
+def test_agent_metadata_requires_descriptions_on_nested_input_fields() -> None:
+    class NestedInput(BaseModel):
+        undocumented: str
+
+    class RootInput(BaseModel):
+        nested: NestedInput = Field(description="Nested input boundary.")
+
+    with pytest.raises(ValueError, match=r"\$defs\.NestedInput\.undocumented"):
+        ToolCatalog(
+            [
+                ToolDefinition[Capabilities](
+                    name="nested_tool",
+                    title="Nested tool",
+                    description="Exercise nested schema validation.",
+                    input_model=RootInput,
+                    output_model=Arguments,
+                    behavior=ToolBehavior(read_only=True, idempotent=True),
+                    execution=ToolExecutionKind.QUERY,
+                    required_permission=WorkspacePermission.READ,
+                    handler=lambda capabilities, context, arguments: ToolOutcome(
+                        payload={"value": "ok"}
+                    ),
+                )
+            ],
+            [ToolProfile(name="mcp", tool_names=frozenset({"nested_tool"}))],
+            require_agent_metadata=True,
+        )
+
+
 @pytest.mark.asyncio
 async def test_dispatcher_maps_unknown_tools_and_invalid_arguments() -> None:
     definition = ToolDefinition[Capabilities](
@@ -327,6 +358,106 @@ async def test_command_dispatch_is_persistently_replayed() -> None:
     assert capabilities.writes == 1
 
 
+@pytest.mark.asyncio
+async def test_confirmation_preview_is_never_written_to_the_invocation_ledger() -> None:
+    class ConfirmedArguments(BaseModel):
+        confirmation_token: str | None = None
+
+    raw_token = "secret-confirmation-token-that-must-not-be-stored"
+    definition = ToolDefinition[Capabilities](
+        name="confirmed_tool",
+        description="confirmed write",
+        input_model=ConfirmedArguments,
+        execution=ToolExecutionKind.COMMAND,
+        required_permission=WorkspacePermission.MANAGE,
+        confirmation_policy=ToolConfirmationPolicy.REQUIRED,
+        handler=lambda capabilities, context, arguments: ToolOutcome(
+            payload={"confirmation_token": raw_token}
+        ),
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation", tool_names=frozenset({"confirmed_tool"})
+                )
+            ],
+        ),
+        executor=Executor(capabilities),
+    )
+
+    outcome = await dispatcher.dispatch(
+        name="confirmed_tool",
+        raw_arguments={},
+        context=_context(),
+        access=_access(),
+    )
+
+    assert outcome.payload == {"confirmation_token": raw_token}
+    assert capabilities.tool_invocations.items == {}
+
+
+@pytest.mark.asyncio
+async def test_transient_command_result_is_never_persisted_or_replayed() -> None:
+    def transient_write(
+        capabilities: Capabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        del context, arguments
+        capabilities.writes += 1
+        return ToolOutcome(
+            payload={"signed_url": f"https://upload/{capabilities.writes}"}
+        )
+
+    definition = ToolDefinition[Capabilities](
+        name="transient_tool",
+        description="transient write",
+        input_model=Arguments,
+        execution=ToolExecutionKind.COMMAND,
+        required_permission=WorkspacePermission.WRITE,
+        persist_result=False,
+        handler=transient_write,
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation", tool_names=frozenset({"transient_tool"})
+                )
+            ],
+        ),
+        executor=Executor(capabilities),
+    )
+    context = _context()
+
+    first = await dispatcher.dispatch(
+        name="transient_tool",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access(),
+    )
+    capabilities.tool_invocations.items[
+        (context.actor.id, f"{context.invocation_id}:transient_tool")
+    ] = ("transient_tool", "intentionally-wrong-hash", {"signed_url": "stale"})
+    second = await dispatcher.dispatch(
+        name="transient_tool",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access(),
+    )
+
+    assert first.payload != second.payload
+    assert capabilities.writes == 2
+    assert list(capabilities.tool_invocations.items.values()) == [
+        ("transient_tool", "intentionally-wrong-hash", {"signed_url": "stale"})
+    ]
+
+
 def test_workspace_profiles_share_one_canonical_definition_set() -> None:
     catalog = build_workspace_tool_catalog(
         ingestion=MagicMock(spec=PaperIngestionWorkflow),
@@ -337,13 +468,14 @@ def test_workspace_profiles_share_one_canonical_definition_set() -> None:
     conversation_by_name = {tool.name: tool for tool in conversation}
     mcp_by_name = {tool.name: tool for tool in mcp}
 
-    assert set(conversation_by_name) == set(mcp_by_name)
+    assert set(mcp_by_name) - set(conversation_by_name) == {"prepare_paper_upload"}
     assert "STOP" not in conversation_by_name
     assert "read_file" not in conversation_by_name
-    assert len(mcp_by_name) == 32
-    assert mcp_by_name["get_paper_citation"].execution is ToolExecutionKind.WORKFLOW
-    for name, mcp_tool in mcp_by_name.items():
-        conversation_tool = conversation_by_name[name]
+    assert len(conversation_by_name) == 55
+    assert len(mcp_by_name) == 56
+    assert mcp_by_name["resolve_paper_citation"].execution is ToolExecutionKind.WORKFLOW
+    for name, conversation_tool in conversation_by_name.items():
+        mcp_tool = mcp_by_name[name]
         assert conversation_tool is mcp_tool
         assert (
             conversation_tool.input_model.model_json_schema()

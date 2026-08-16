@@ -51,12 +51,14 @@ export async function addProjectPapers(
 export async function removeProjectPaper(
   projectId: string,
   documentId: string,
-  confirmDeleteAnnotations = false,
+  confirmationToken?: string,
 ) {
   await apiClient.DELETE("/api/v1/projects/{project_id}/papers/{document_id}", {
+    headers: confirmationToken
+      ? { "X-Scholens-Confirmation-Token": confirmationToken }
+      : undefined,
     params: {
       path: { document_id: documentId, project_id: projectId },
-      query: { confirm_delete_annotations: confirmDeleteAnnotations },
     },
   });
 }

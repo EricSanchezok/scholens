@@ -136,7 +136,7 @@ Do not edit generated files directly. Change their source and regenerate them.
 Run checks proportional to the change through the side-effect-free root runner:
 
 ```bash
-./scripts/run-gates.sh <server|jobs|shared-packages|web|client|deployment|docs|all>
+./scripts/run-gates.sh <server|mcp-connector|jobs|shared-packages|web|client|deployment|docs|all>
 ```
 
 The runner verifies an already provisioned checkout. It never installs

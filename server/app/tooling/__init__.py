@@ -6,11 +6,15 @@ from .contracts import (
     ExternalSourceCandidate,
     ExternalSourceProvenance,
     ToolAccess,
+    ToolBehavior,
+    ToolConfirmationPolicy,
     ToolExecutionContext,
     ToolDefinition,
     ToolExecutionKind,
     ToolOutcome,
+    ToolResourceLink,
     ToolSourceCandidate,
+    ToolStructuredResult,
 )
 from .dispatcher import ToolDispatcher
 
@@ -19,12 +23,16 @@ __all__ = [
     "ExternalSourceCandidate",
     "ExternalSourceProvenance",
     "ToolAccess",
+    "ToolBehavior",
     "ToolCatalog",
     "ToolDefinition",
+    "ToolConfirmationPolicy",
     "ToolDispatcher",
     "ToolExecutionContext",
     "ToolExecutionKind",
     "ToolOutcome",
+    "ToolResourceLink",
     "ToolProfile",
     "ToolSourceCandidate",
+    "ToolStructuredResult",
 ]
