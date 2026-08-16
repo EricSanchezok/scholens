@@ -294,7 +294,7 @@ Resources:
           - {Action: ['s3:GetObject', 's3:PutObject'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/migrations/*'}
           - {Action: 's3:ListBucket', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}'}
           - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
-          - {Action: 'logs:GetLogEvents', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/migration:log-stream:sanchezcloud/migration/*'}
+          - {Action: 'logs:GetLogEvents', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/migration:log-stream:migration/migration/*'}
   InfrastructureDeployRole:
     Type: AWS::IAM::Role
     DeletionPolicy: RetainExceptOnCreate
