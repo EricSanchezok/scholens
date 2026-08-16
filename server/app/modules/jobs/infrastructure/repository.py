@@ -16,6 +16,7 @@ from app.database.models import (
 from app.shared.domain import JsonValue
 from app.shared.domain import AppError, FailureKind
 from app.modules.jobs.domain import (
+    DEFAULT_CALLBACK_LEASE,
     DEFAULT_JOB_LEASE,
     can_complete_job,
     can_fail_job,
@@ -283,6 +284,84 @@ class JobRepository:
         )
 
     @staticmethod
+    def claim_callback(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        requested_by_id: int,
+        lease: timedelta = DEFAULT_CALLBACK_LEASE,
+    ) -> tuple[DurableJob, uuid.UUID | None, bool]:
+        """Atomically reserve terminal callback processing for one consumer."""
+        now = datetime.now(UTC)
+        job = db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == requested_by_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if not can_complete_job(JobStatus(job.status)):
+            return job, None, False
+        if (
+            job.callback_lease_id is not None
+            and job.callback_lease_expires_at is not None
+            and job.callback_lease_expires_at > now
+        ):
+            return job, None, False
+        claim_id = uuid.uuid4()
+        lease_expires_at = now + lease
+        job.callback_lease_id = claim_id
+        job.callback_lease_expires_at = lease_expires_at
+        job.lease_expires_at = lease_expires_at
+        db.flush()
+        return job, claim_id, True
+
+    @staticmethod
+    def heartbeat_callback(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        requested_by_id: int,
+        claim_id: uuid.UUID,
+        lease: timedelta = DEFAULT_CALLBACK_LEASE,
+    ) -> bool:
+        """Renew an unexpired callback claim while its owner is still processing."""
+        now = datetime.now(UTC)
+        job = db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == requested_by_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if (
+            not can_complete_job(JobStatus(job.status))
+            or job.callback_lease_id != claim_id
+            or job.callback_lease_expires_at is None
+            or job.callback_lease_expires_at <= now
+        ):
+            return False
+        lease_expires_at = now + lease
+        job.callback_lease_expires_at = lease_expires_at
+        job.lease_expires_at = lease_expires_at
+        db.flush()
+        return True
+
+    @staticmethod
     def recover_expired_leases(db: Session, *, limit: int) -> int:
         """Return abandoned jobs to the outbox without creating a second job."""
         now = datetime.now(UTC)
@@ -308,6 +387,8 @@ class JobRepository:
                 raise RuntimeError("selected_job_is_not_recoverable")
             job.status = JobStatus.PENDING.value
             job.lease_expires_at = None
+            job.callback_lease_id = None
+            job.callback_lease_expires_at = None
             job.progress_code = "queued"
             if job.dispatch is None:
                 raise RuntimeError("running_job_without_dispatch")
@@ -342,6 +423,39 @@ class JobRepository:
         job.error_code = None
         job.completed_at = datetime.now(UTC)
         job.lease_expires_at = None
+        job.callback_lease_id = None
+        job.callback_lease_expires_at = None
+        db.flush()
+        return job, True
+
+    @staticmethod
+    def complete_claimed(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        claim_id: uuid.UUID,
+        result: dict[str, JsonValue] | None,
+    ) -> tuple[DurableJob, bool]:
+        job = db.scalar(
+            select(DurableJob).where(DurableJob.id == job_id).with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if job.callback_lease_id != claim_id or not can_complete_job(
+            JobStatus(job.status)
+        ):
+            return job, False
+        job.status = JobStatus.COMPLETED.value
+        job.result = result
+        job.error_code = None
+        job.completed_at = datetime.now(UTC)
+        job.lease_expires_at = None
+        job.callback_lease_id = None
+        job.callback_lease_expires_at = None
         db.flush()
         return job, True
 
@@ -369,6 +483,70 @@ class JobRepository:
         job.error_code = error_code
         job.completed_at = datetime.now(UTC)
         job.lease_expires_at = None
+        job.callback_lease_id = None
+        job.callback_lease_expires_at = None
+        db.flush()
+        return job, True
+
+    @staticmethod
+    def fail_claimed(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        claim_id: uuid.UUID,
+        error_code: str,
+        result: dict[str, JsonValue] | None = None,
+    ) -> tuple[DurableJob, bool]:
+        job = db.scalar(
+            select(DurableJob).where(DurableJob.id == job_id).with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if job.callback_lease_id != claim_id or not can_fail_job(JobStatus(job.status)):
+            return job, False
+        job.status = JobStatus.FAILED.value
+        job.result = result
+        job.error_code = error_code
+        job.completed_at = datetime.now(UTC)
+        job.lease_expires_at = None
+        job.callback_lease_id = None
+        job.callback_lease_expires_at = None
+        db.flush()
+        return job, True
+
+    @staticmethod
+    def cancel(
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+        requested_by_id: int,
+    ) -> tuple[DurableJob, bool]:
+        job = db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.requested_by_id == requested_by_id,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        if JobStatus(job.status) not in {JobStatus.PENDING, JobStatus.RUNNING}:
+            return job, False
+        job.status = JobStatus.CANCELLED.value
+        job.completed_at = datetime.now(UTC)
+        job.lease_expires_at = None
+        job.callback_lease_id = None
+        job.callback_lease_expires_at = None
+        job.progress_code = None
         db.flush()
         return job, True
 

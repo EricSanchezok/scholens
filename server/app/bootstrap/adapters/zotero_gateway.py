@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from app.bootstrap.adapters.zotero_annotations import apply_annotation_snapshot
@@ -15,27 +16,26 @@ from app.modules.billing.infrastructure.quotas import (
     get_remaining_paper_upload_slots,
 )
 from app.modules.integrations.zotero.application.contracts import (
+    ZoteroConnectionStatus,
     ZoteroImportError,
     ZoteroImportItemResult,
-    ZoteroImportStatusItem,
-    ZoteroImportStatusListResponse,
     ZoteroLibraryItem,
-    ZoteroLibraryResponse,
-    ZoteroStatusResponse,
+    ZoteroLibraryPage,
+    ZoteroSyncPreferencesRequest,
     ZoteroSyncResponse,
 )
 from app.modules.integrations.zotero.infrastructure.connection_repository import (
-    zotero_connection_repository,
+    ZoteroConnectionRepository,
 )
 from app.modules.integrations.zotero.infrastructure.import_repository import (
     zotero_import_repository,
 )
 from app.modules.integrations.zotero.application.zotero import (
     PreparedZoteroCallback,
-    PreparedZoteroPostprocess,
     PageDimensions,
     ZoteroAccessToken,
     ZoteroAttachmentSnapshot,
+    ZoteroAutoImportCursor,
     ZoteroConnectionChange,
     ZoteroCredentials,
     ZoteroImportMutation,
@@ -44,86 +44,94 @@ from app.modules.integrations.zotero.application.zotero import (
     ZoteroItemMutation,
     ZoteroItemSnapshot,
     ZoteroLibrarySnapshot,
-    ZoteroPostprocessResult,
     ZoteroRequestToken,
     ZoteroSyncBatch,
     ZoteroSyncMutation,
     ZoteroSyncTarget,
 )
-from app.modules.jobs.infrastructure.repository import job_repository
 from app.modules.papers.application.contracts.documents import DocumentUpdate
 from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.papers.infrastructure.tag_repository import library_tag_repository
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain import JsonValue
-from app.shared.domain.enums import JobOperation, JobStatus
 from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 _ANNOTATIONS = TypeAdapter(list[dict[str, JsonValue]])
+_PERMANENT_SYNC_SOURCE_ERRORS = frozenset(
+    {"zotero_item_not_found", "zotero_attachment_not_found"}
+)
+
+
+def _library_import_state(
+    item: object | None,
+) -> Literal["available", "imported", "in_progress", "failed"]:
+    if item is None:
+        return "available"
+    status = getattr(item, "status", None)
+    if status == ZoteroImportStatus.COMPLETED:
+        return "imported"
+    if status in {ZoteroImportStatus.PENDING, ZoteroImportStatus.PROCESSING}:
+        return "in_progress"
+    return "failed"
 
 
 class DefaultZoteroGateway:
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        connections: ZoteroConnectionRepository,
+    ) -> None:
         self._db = db
+        self._connections = connections
 
     def save_oauth_request(
         self,
         *,
         user_id: int,
         request_token: ZoteroRequestToken,
+        return_path: str,
+        intent: str,
         correlation_id: UUID,
         origin_operation_id: UUID,
     ) -> None:
-        zotero_connection_repository.delete_pending_for_user(
-            db=self._db,
-            user_id=user_id,
-        )
-        zotero_connection_repository.create_pending(
-            db=self._db,
+        self._connections.create_pending(
             user_id=user_id,
             oauth_token=request_token.token,
             oauth_token_secret=request_token.secret,
+            return_path=return_path,
+            intent=intent,
             correlation_id=correlation_id,
             origin_operation_id=origin_operation_id,
         )
 
-    def oauth_callback(
+    def consume_oauth_callback(
         self,
         *,
         oauth_token: str,
     ) -> PreparedZoteroCallback | None:
-        pending = zotero_connection_repository.get_pending_by_token(
-            db=self._db,
-            oauth_token=oauth_token,
-        )
+        pending = self._connections.get_pending_by_token(oauth_token=oauth_token)
         if pending is None or pending.user_id is None:
             return None
         expires_at = pending.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=UTC)
-        return PreparedZoteroCallback(
+        callback = PreparedZoteroCallback(
             user_id=pending.user_id,
             request_token=ZoteroRequestToken(
                 token=oauth_token,
-                secret=pending.oauth_token_secret,
+                secret=self._connections.pending_secret(pending=pending),
             ),
             expires_at=expires_at,
             correlation_id=pending.correlation_id,
             origin_operation_id=pending.origin_operation_id,
+            return_path=pending.return_path,
+            intent=pending.intent,
         )
-
-    def _discard_oauth_callback(self, *, oauth_token: str) -> None:
-        pending = zotero_connection_repository.get_pending_by_token(
-            db=self._db,
-            oauth_token=oauth_token,
-        )
-        if pending is not None:
-            zotero_connection_repository.delete_pending(
-                db=self._db,
-                pending=pending,
-            )
+        self._connections.delete_pending(pending=pending)
+        return callback
 
     def save_connection(
         self,
@@ -131,52 +139,126 @@ class DefaultZoteroGateway:
         callback: PreparedZoteroCallback,
         access_token: ZoteroAccessToken,
     ) -> ZoteroConnectionChange:
-        upsert = zotero_connection_repository.upsert_connection(
-            db=self._db,
+        upsert = self._connections.upsert_connection(
             user_id=callback.user_id,
             zotero_user_id=access_token.user_id,
             api_key=access_token.api_key,
-        )
-        self._discard_oauth_callback(
-            oauth_token=callback.request_token.token,
+            now=datetime.now(UTC),
         )
         return ZoteroConnectionChange(
-            connection_id=upsert.connection.id,
+            connection_revision=upsert.connection.credential_revision,
             changed=upsert.changed,
         )
 
-    def status(self, *, user_id: int) -> ZoteroStatusResponse:
-        connection = zotero_connection_repository.get_by_user_id(
-            db=self._db,
-            user_id=user_id,
-        )
+    def status(self, *, actor: Actor) -> ZoteroConnectionStatus:
+        connection = self._connections.get_by_user_id(user_id=actor.id)
         if connection is None:
-            return ZoteroStatusResponse(connected=False)
-        return ZoteroStatusResponse(
-            connected=True,
-            connected_at=connection.created_at,
-            last_synced_at=zotero_import_repository.get_max_last_synced_at(
-                self._db,
-                user_id=user_id,
-            ),
+            return ZoteroConnectionStatus(
+                connection_state="disconnected",
+                automatic_annotation_sync="off",
+            )
+        try:
+            credentials_readable = (
+                self._connections.credentials(user_id=actor.id) is not None
+            )
+        except ValueError:
+            credentials_readable = False
+        eligible = can_user_auto_sync_zotero(self._db, actor)
+        enabled = connection.configuration.get("auto_import_enabled") is True
+        last_error_code = (
+            connection.last_error_code
+            if credentials_readable
+            else "integration_credentials_unreadable"
         )
+        return ZoteroConnectionStatus(
+            connection_state=("invalid" if last_error_code else "connected"),
+            connected_at=connection.created_at,
+            last_successful_sync_at=(
+                datetime.fromisoformat(str(connection.configuration["last_sync_at"]))
+                if connection.configuration.get("last_sync_at")
+                else zotero_import_repository.get_max_last_synced_at(
+                    self._db,
+                    user_id=actor.id,
+                )
+            ),
+            automatic_sync_eligible=eligible,
+            automatic_annotation_sync="active" if eligible else "off",
+            auto_import_enabled=enabled,
+            auto_import_state=("active" if eligible else "paused")
+            if enabled
+            else "off",
+            last_error_code=last_error_code,
+        )
+
+    def credential_revision_is_current(
+        self,
+        *,
+        user_id: int,
+        revision: UUID,
+    ) -> bool:
+        return self._connections.credential_revision_is_current(
+            user_id=user_id,
+            revision=revision,
+        )
+
+    def set_sync_preferences(
+        self,
+        *,
+        actor: Actor,
+        request: ZoteroSyncPreferencesRequest,
+        library_version: int | None,
+    ) -> ZoteroConnectionStatus:
+        connection = self._connections.get_by_user_id(user_id=actor.id)
+        if connection is None:
+            raise AppError(
+                code="zotero_not_connected",
+                message="Zotero is not connected",
+                kind=FailureKind.CONFLICT,
+            )
+        if request.auto_import_enabled and not can_user_auto_sync_zotero(
+            self._db, actor
+        ):
+            raise AppError(
+                code="zotero_auto_import_requires_researcher",
+                message="Automatic Zotero import requires Researcher access",
+                kind=FailureKind.PERMISSION_DENIED,
+            )
+        configuration = dict(connection.configuration)
+        configuration["auto_import_enabled"] = request.auto_import_enabled
+        if request.auto_import_enabled:
+            if library_version is None:
+                raise AppError(
+                    code="zotero_unavailable",
+                    message="The Zotero library checkpoint is unavailable",
+                    kind=FailureKind.DEPENDENCY_FAILURE,
+                    retryable=True,
+                )
+            configuration["auto_import_library_version"] = library_version
+            configuration["auto_import_start"] = 0
+        self._connections.update_configuration(
+            user_id=actor.id,
+            configuration=configuration,
+            now=datetime.now(UTC),
+        )
+        return self.status(actor=actor)
 
     def disconnect(self, *, user_id: int) -> UUID | None:
-        return zotero_connection_repository.delete_by_user_id(
-            db=self._db,
-            user_id=user_id,
-        )
+        return self._connections.delete_by_user_id(user_id=user_id)
 
-    def credentials(self, *, user_id: int) -> ZoteroCredentials | None:
-        connection = zotero_connection_repository.get_by_user_id(
-            self._db,
-            user_id=user_id,
-        )
-        if connection is None:
+    def credentials(
+        self,
+        *,
+        user_id: int,
+        lock: bool = False,
+    ) -> ZoteroCredentials | None:
+        resolved = self._connections.credentials(user_id=user_id, lock=lock)
+        if resolved is None:
             return None
+        zotero_user_id, api_key, revision = resolved
         return ZoteroCredentials(
-            user_id=str(connection.zotero_user_id),
-            api_key=str(connection.api_key),
+            user_id=zotero_user_id,
+            api_key=api_key,
+            revision=revision,
         )
 
     def library(
@@ -184,12 +266,14 @@ class DefaultZoteroGateway:
         *,
         actor: Actor,
         snapshot: ZoteroLibrarySnapshot,
-    ) -> ZoteroLibraryResponse:
-        imported_keys = zotero_import_repository.completed_item_keys(
+    ) -> ZoteroLibraryPage:
+        imported_rows = zotero_import_repository.list_by_item_keys(
             self._db,
             user_id=actor.id,
+            item_keys=[item.item_key for item in snapshot.items],
         )
-        return ZoteroLibraryResponse(
+        imported_by_key = {row.zotero_item_key: row for row, _title in imported_rows}
+        return ZoteroLibraryPage(
             items=[
                 ZoteroLibraryItem(
                     zotero_item_key=item.item_key,
@@ -200,13 +284,27 @@ class DefaultZoteroGateway:
                     venue=item.venue,
                     date_added=item.date_added,
                     tags=list(item.tags),
-                    collections=list(item.collections),
-                    already_imported=item.item_key in imported_keys,
-                    has_pdf_attachment=item.has_pdf_attachment,
-                    has_metadata=item.has_metadata,
+                    collection_keys=list(item.collection_keys),
+                    import_state=_library_import_state(
+                        imported_by_key.get(item.item_key)
+                    ),
+                    source_availability=(
+                        "stored_pdf"
+                        if item.has_pdf_attachment
+                        else "resolvable_source"
+                        if item.has_resolvable_source
+                        else "unavailable"
+                    ),
                 )
                 for item in snapshot.items
             ],
+            previous_cursor=str(max(0, snapshot.start - snapshot.limit))
+            if snapshot.start > 0
+            else None,
+            next_cursor=str(snapshot.start + snapshot.limit)
+            if snapshot.start + len(snapshot.items) < snapshot.total_count
+            else None,
+            total_count=snapshot.total_count,
             remaining_slots=get_remaining_paper_upload_slots(
                 self._db,
                 actor,
@@ -218,19 +316,27 @@ class DefaultZoteroGateway:
         *,
         actor: Actor,
         items: tuple[ZoteroItemSnapshot, ...],
+        credential_revision: UUID,
     ) -> ZoteroImportPlan:
-        can_upload, upload_error = can_user_upload_paper(self._db, actor)
+        self._require_current_revision(
+            user_id=actor.id,
+            credential_revision=credential_revision,
+        )
+        can_upload, _upload_error = can_user_upload_paper(self._db, actor)
         remaining = (
             get_remaining_paper_upload_slots(self._db, actor) if can_upload else 0
         )
         plans: list[ZoteroImportPlanItem] = []
         errors: list[ZoteroImportError] = []
+        skipped_item_keys: list[str] = []
         skipped = 0
         claimed_doi: dict[str, str] = {}
         candidate_count = 0
 
         for item in items:
             if not item.has_metadata:
+                skipped_item_keys.append(item.item_key)
+                skipped += 1
                 continue
             existing = zotero_import_repository.get_by_item_key(
                 self._db,
@@ -249,6 +355,7 @@ class DefaultZoteroGateway:
                 is not None
             ):
                 skipped += 1
+                skipped_item_keys.append(item.item_key)
                 continue
 
             doi = normalize_doi(item.doi)
@@ -285,7 +392,7 @@ class DefaultZoteroGateway:
                 errors.append(
                     ZoteroImportError(
                         zotero_item_key=item.item_key,
-                        error=upload_error or "Upload limit",
+                        error="zotero_quota_exceeded",
                     )
                 )
                 continue
@@ -298,6 +405,7 @@ class DefaultZoteroGateway:
             items=tuple(plans),
             skipped_already_imported=skipped,
             errors=tuple(errors),
+            skipped_item_keys=tuple(skipped_item_keys),
         )
 
     def reserve_import_item(
@@ -306,7 +414,12 @@ class DefaultZoteroGateway:
         user_id: int,
         item_key: str,
         upload_job_id: UUID,
+        credential_revision: UUID,
     ) -> UUID:
+        self._require_current_revision(
+            user_id=user_id,
+            credential_revision=credential_revision,
+        )
         existing = zotero_import_repository.get_by_item_key(
             self._db,
             user_id=user_id,
@@ -341,7 +454,12 @@ class DefaultZoteroGateway:
         item_key: str,
         upload_job_id: UUID | None,
         error_code: str,
+        credential_revision: UUID,
     ) -> ZoteroItemMutation:
+        self._require_current_revision(
+            user_id=user_id,
+            credential_revision=credential_revision,
+        )
         imported_item = (
             zotero_import_repository.get_by_upload_job_id(
                 self._db,
@@ -398,7 +516,12 @@ class DefaultZoteroGateway:
         document_id: UUID,
         reused_document: bool,
         page_dimensions: PageDimensions,
+        credential_revision: UUID,
     ) -> ZoteroImportMutation:
+        self._require_current_revision(
+            user_id=actor.id,
+            credential_revision=credential_revision,
+        )
         imported_item = zotero_import_repository.get_by_upload_job_id(
             self._db,
             upload_job_id=upload_job_id,
@@ -428,6 +551,8 @@ class DefaultZoteroGateway:
             document_id=document_id,
             upload_job_id=upload_job_id,
             annotations_payload=annotations or None,
+            zotero_item_version=item.version,
+            zotero_attachment_version=attachment.version,
         )
         completed = reused_document
         changed = finalized.changed
@@ -470,7 +595,12 @@ class DefaultZoteroGateway:
         attachment: ZoteroAttachmentSnapshot,
         document_id: UUID,
         page_dimensions: PageDimensions,
+        credential_revision: UUID,
     ) -> ZoteroImportMutation:
+        self._require_current_revision(
+            user_id=actor.id,
+            credential_revision=credential_revision,
+        )
         document = document_repository.find_accessible(
             self._db,
             document_id=document_id,
@@ -518,6 +648,8 @@ class DefaultZoteroGateway:
             annotations_payload=annotations or None,
             status=ZoteroImportStatus.COMPLETED,
             last_synced_at=datetime.now(timezone.utc),
+            zotero_item_version=item.version,
+            zotero_attachment_version=attachment.version,
         )
         if annotations:
             apply_annotation_snapshot(
@@ -544,7 +676,12 @@ class DefaultZoteroGateway:
         *,
         user_id: int,
         limit: int,
+        credential_revision: UUID,
     ) -> tuple[ZoteroSyncTarget, ...]:
+        self._require_current_revision(
+            user_id=user_id,
+            credential_revision=credential_revision,
+        )
         return tuple(
             ZoteroSyncTarget(
                 imported_item_id=row.id,
@@ -568,11 +705,33 @@ class DefaultZoteroGateway:
         *,
         actor: Actor,
         batch: ZoteroSyncBatch,
+        credential_revision: UUID,
     ) -> ZoteroSyncMutation:
+        self._require_current_revision(
+            user_id=actor.id,
+            credential_revision=credential_revision,
+        )
         synced_documents: set[UUID] = set()
         changed_documents: set[UUID] = set()
         new_annotations = 0
         synced_at = datetime.now(timezone.utc)
+        for failure in batch.failures:
+            imported_item = zotero_import_repository.get_by_item_key(
+                self._db,
+                user_id=actor.id,
+                zotero_item_key=failure.item_key,
+            )
+            if imported_item is None:
+                continue
+            zotero_import_repository.update_after_sync_failure(
+                self._db,
+                item=imported_item,
+                error_code=failure.error_code,
+                attempted_at=synced_at,
+                source_unavailable=(
+                    failure.error_code in _PERMANENT_SYNC_SOURCE_ERRORS
+                ),
+            )
         for update in batch.updates:
             target = update.target
             imported_item = zotero_import_repository.get_by_item_key(
@@ -623,48 +782,80 @@ class DefaultZoteroGateway:
             changed_document_ids=tuple(sorted(changed_documents, key=str)),
         )
 
-    def auto_import_since(self, *, user_id: int) -> datetime | None:
-        return zotero_import_repository.get_auto_import_since(
-            self._db,
-            user_id=user_id,
+    def auto_import_cursor(self, *, user_id: int) -> ZoteroAutoImportCursor | None:
+        connection = self._connections.get_by_user_id(user_id=user_id)
+        if (
+            connection is None
+            or connection.configuration.get("auto_import_enabled") is not True
+        ):
+            return None
+        version = connection.configuration.get("auto_import_library_version")
+        if not isinstance(version, int) or isinstance(version, bool):
+            return None
+        start = connection.configuration.get("auto_import_start")
+        return ZoteroAutoImportCursor(
+            library_version=version,
+            start=(
+                start
+                if isinstance(start, int) and not isinstance(start, bool) and start >= 0
+                else 0
+            ),
         )
 
-    def imports(
+    def advance_sync_checkpoint(
         self,
         *,
         user_id: int,
-        item_keys: list[str] | None,
-    ) -> ZoteroImportStatusListResponse:
-        rows = (
-            zotero_import_repository.list_by_item_keys(
-                self._db,
+        credential_revision: UUID,
+        library_version: int | None,
+        auto_import_cursor: ZoteroAutoImportCursor | None,
+    ) -> bool:
+        try:
+            self._require_current_revision(
                 user_id=user_id,
-                item_keys=item_keys,
+                credential_revision=credential_revision,
             )
-            if item_keys
-            else zotero_import_repository.list_recent_by_user(
-                self._db,
-                user_id=user_id,
+        except AppError as exc:
+            if exc.code == "zotero_credentials_rotated":
+                return False
+            raise
+        connection = self._connections.get_by_user_id(user_id=user_id, lock=True)
+        assert connection is not None
+        configuration = dict(connection.configuration)
+        configuration["last_sync_at"] = datetime.now(UTC).isoformat()
+        if library_version is not None:
+            configuration["last_sync_library_version"] = library_version
+        if (
+            auto_import_cursor is not None
+            and configuration.get("auto_import_enabled") is True
+        ):
+            configuration["auto_import_library_version"] = (
+                auto_import_cursor.library_version
             )
+            configuration["auto_import_start"] = auto_import_cursor.start
+        self._connections.update_configuration(
+            user_id=user_id,
+            configuration=configuration,
+            now=datetime.now(UTC),
         )
-        return ZoteroImportStatusListResponse(
-            items=[
-                ZoteroImportStatusItem(
-                    zotero_item_key=row.zotero_item_key,
-                    document_id=str(row.document_id) if row.document_id else None,
-                    upload_job_id=(
-                        str(row.upload_job_id) if row.upload_job_id else None
-                    ),
-                    import_source=row.import_source,
-                    status=row.status,
-                    title=title,
-                    error_message=row.error_message,
-                    created_at=row.created_at,
-                    last_synced_at=row.last_synced_at,
-                )
-                for row, title in rows
-            ]
-        )
+        return True
+
+    def _require_current_revision(
+        self,
+        *,
+        user_id: int,
+        credential_revision: UUID,
+    ) -> None:
+        if not self._connections.credential_revision_is_current(
+            user_id=user_id,
+            revision=credential_revision,
+            lock=True,
+        ):
+            raise AppError(
+                code="zotero_credentials_rotated",
+                message="The Zotero connection changed before this result was applied",
+                kind=FailureKind.CONFLICT,
+            )
 
     def _apply_metadata(
         self,
@@ -727,99 +918,3 @@ class DefaultZoteroGateway:
             import_source=attachment.import_source,
             title=item.title or None,
         )
-
-    def prepare_postprocess(
-        self,
-        *,
-        actor: Actor | None,
-        job_id: UUID,
-        callback_task_id: UUID,
-    ) -> PreparedZoteroPostprocess:
-        job = job_repository.require(self._db, job_id=job_id)
-        if (
-            job.operation != JobOperation.ZOTERO_POSTPROCESS.value
-            or callback_task_id != job_id
-        ):
-            raise AppError(
-                code="job_callback_mismatch",
-                message="Job callback does not match",
-                kind=FailureKind.CONFLICT,
-            )
-        if JobStatus(job.status) in {
-            JobStatus.COMPLETED,
-            JobStatus.FAILED,
-            JobStatus.CANCELLED,
-        }:
-            return PreparedZoteroPostprocess(
-                job_id=job_id,
-                credentials=None,
-                disposition="already_completed",
-            )
-        actor_id = actor.id if actor is not None else None
-        if actor_id != job.requested_by_id:
-            raise AppError(
-                code="job_owner_mismatch",
-                message="Job ownership could not be verified",
-                kind=FailureKind.PERMISSION_DENIED,
-            )
-        if actor is None:
-            return PreparedZoteroPostprocess(
-                job_id=job_id,
-                credentials=None,
-                disposition="skip",
-                skip_reason="user_not_found",
-            )
-        connection = zotero_connection_repository.get_by_user_id(
-            self._db,
-            user_id=actor.id,
-        )
-        if not can_user_auto_sync_zotero(self._db, actor) or connection is None:
-            return PreparedZoteroPostprocess(
-                job_id=job_id,
-                credentials=None,
-                disposition="skip",
-                skip_reason="not_eligible_or_disconnected",
-            )
-        return PreparedZoteroPostprocess(
-            job_id=job_id,
-            credentials=ZoteroCredentials(
-                user_id=str(connection.zotero_user_id),
-                api_key=str(connection.api_key),
-            ),
-            disposition="run",
-        )
-
-    def complete_postprocess(
-        self,
-        *,
-        job_id: UUID,
-        result: ZoteroPostprocessResult,
-    ) -> bool:
-        _job, changed = job_repository.complete(
-            self._db,
-            job_id=job_id,
-            result={
-                "synced_papers_count": result.synced_papers_count,
-                "new_annotations_count": result.new_annotations_count,
-                "auto_imported_count": result.auto_imported_count,
-                **(
-                    {"skipped": result.skipped_reason}
-                    if result.skipped_reason is not None
-                    else {}
-                ),
-            },
-        )
-        return changed
-
-    def fail_postprocess(
-        self,
-        *,
-        job_id: UUID,
-        error_code: str,
-    ) -> bool:
-        _job, changed = job_repository.fail(
-            self._db,
-            job_id=job_id,
-            error_code=error_code,
-        )
-        return changed

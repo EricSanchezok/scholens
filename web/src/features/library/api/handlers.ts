@@ -14,6 +14,20 @@ import {
 const api = "http://127.0.0.1:7301/api/v1";
 
 const populatedHandlers = [
+  http.get(`${api}/integrations/zotero/status`, () =>
+    HttpResponse.json({
+      active_operation_id: null,
+      active_operation_kind: null,
+      auto_import_enabled: false,
+      auto_import_state: "off",
+      automatic_annotation_sync: "off",
+      automatic_sync_eligible: false,
+      connected_at: null,
+      connection_state: "disconnected",
+      last_error_code: null,
+      last_successful_sync_at: null,
+    }),
+  ),
   http.get(`${api}/conversations`, () =>
     HttpResponse.json({ items: libraryConversations, next_cursor: null }),
   ),

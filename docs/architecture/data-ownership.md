@@ -181,9 +181,13 @@ and single-flight coordination.
 
 `IntegrationConnection` is user-owned Scholens data. It records one provider,
 enabled state, encrypted credential payload, non-secret display metadata,
-credential revision, verification outcome, and lifecycle timestamps. The
-Server is the sole persistence and decryption authority. Public projections
-never return a stored secret, and Jobs has no process-level MinerU token.
+provider configuration, credential revision, verification outcome, and
+lifecycle timestamps. The Server is the sole persistence and decryption
+authority. Public projections never return a stored secret, and Jobs has no
+process-level MinerU token or Zotero API key. Zotero's OAuth-issued API key is
+the long-lived credential in this same store; its request-token secret is
+encrypted separately in a short-lived `ZoteroOAuthPending` row that is consumed
+once. Neither credential belongs to the `auth` schema.
 
 A DurableJob stores the owning user, but neither the plaintext credential nor a
 credential revision. After the worker has claimed that eligible job, it may
@@ -199,6 +203,60 @@ Disconnecting or replacing a connection does not rewrite immutable job
 history. A retry creates or resumes a new eligible attempt against the current
 credential revision. Pre-release schema evolution is reset-first: the removed
 connector tables and routes have no compatibility facade or dual-write path.
+
+`ZoteroOperation` owns one accepted import or sync request, its idempotency
+identity, summary counts, safe terminal code, and ordered item results.
+Its DurableJob also owns a short-lived callback lease distinct from the worker
+lease. Server must atomically acquire that lease before applying provider
+outcomes; terminal, cancelled, concurrent, and replayed callbacks own no product
+side effects. The claim is renewable while the callback consumes a batch one
+PDF at a time. Server owns the 12-minute processing bound and 30-second
+heartbeat, Jobs waits up to 13 minutes, and the claim remains exclusive for 15
+minutes. These values are a shared service-neutral contract, not queue policy.
+The same package owns the 12 MiB exact-body ceiling and the 4 MiB automatic-import
+reserve. Jobs owns incremental result admission and immediate cleanup of staging
+that was never handed to Server; Server owns defensive validation before mutation.
+Sync targets omitted because the annotation projection is full have no attempted
+state change, and automatic-import cursor ownership never advances beyond the
+returned resolved prefix.
+`ZoteroImportedItem` links the user's Zotero item and optional attachment to
+the canonical Document and paper-ingestion job. It separately records
+`last_sync_attempted_at`, successful `last_synced_at`, annotation-source status,
+and a stable last error. Failed attempts advance only the fairness marker;
+provider-confirmed missing items or attachments become `source_unavailable`
+without deleting the local Document or existing annotations. The Integration
+Connection
+configuration owns automatic-import preference and Zotero library-version
+checkpoints plus the bounded secondary page position. Enabling automatic
+import records the current version; later automatic runs advance only through
+the contiguous accepted or permanently skipped prefix of a signed result.
+Transient and quota failures retain their position for retry. Zotero
+annotation keys live on the resulting Scholens annotation threads and make
+append-only application idempotent.
+
+Disconnecting Zotero removes future credential availability and scheduled
+access. It does not delete `ZoteroOperation`, `ZoteroImportedItem`, Documents,
+Library memberships, or annotation threads already created through the
+integration. Jobs may retrieve the current Zotero API key only for a claimed,
+owner- and operation-scoped Zotero job. The key and revision follow the same
+payload, logging, callback, and stale-failure restrictions as MinerU.
+
+Jobs owns private `zotero-imports/` staging until a delivery has a definite
+Server outcome. It may delete staging after controlled provider failure or
+cooperative cancellation before delivery. Once delivery begins, Server may be
+reading the object; an HTTP timeout or connection failure is therefore
+ambiguous and preserves staging. Server deletes it after a definite claimed
+result, and the bucket's two-day lifecycle owns crash and ambiguous-delivery
+cleanup.
+
+Server owns canonical `documents/{sha256}/source.pdf` objects. Callback import
+holds only one downloaded PDF at a time. If cancellation interrupts a
+thread-backed canonical upload, Server tracks the still-running task until it
+settles without extending the callback processing bound. If cancellation wins
+before the matching Document transaction, the content-addressed object is
+retry-safe but may be unreferenced. Only reference-aware Server
+document-storage reconciliation may reclaim it; neither Jobs nor the Zotero
+staging cleanup path may delete canonical document content.
 
 `DocumentReflow`, its ordered `DocumentReflowBlock` rows, and
 `DocumentReflowAsset` rows are derived from the Document's canonical parser

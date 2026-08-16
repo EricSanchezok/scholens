@@ -82,6 +82,71 @@ render Markdown, source spans, presentation status, source fingerprint, parser
 revision, and warnings return through the signed callback. Server remains the
 persistence authority.
 
+## Zotero import and synchronization
+
+Zotero work is read-only and begins only from a Server-owned DurableJob. The
+task payload contains owner, operation, requested Zotero item keys, signed
+credential/progress/callback URLs, and non-secret policy. After claiming the
+job, the worker retrieves the current API key and Zotero user ID from the
+signed, job-scoped Server endpoint. It never persists that key or includes it
+in Celery payloads, callbacks, logs, exceptions, or telemetry.
+
+An import fetches supported personal-library items, resolves a stored PDF or a
+bounded trustworthy source, validates the download as a safe PDF, uploads it to
+temporary private S3 storage, and reports each result independently. Server
+then creates the ordinary paper-ingestion lifecycle with Zotero metadata as
+the authority. One bad item therefore yields a partial operation instead of
+rolling back accepted papers. Provider rate limits use bounded retry delay;
+credential replacement, disconnect, and cancellation are checked at expensive
+boundaries. Every Zotero provider session ignores environment proxies and has an
+explicit context-managed close on success and failure; public PDF
+redirects are revalidated against the connected peer address, and a Zotero API
+key is never forwarded across origins. Controlled provider failures and
+cooperative cancellation before callback delivery remove temporary
+`zotero-imports/` objects. An HTTP timeout, connection loss, or 5xx after
+delivery begins has an unknown Server outcome, so Jobs must retain those
+objects; Server removes them after definite completion, while the bucket's
+two-day lifecycle is the crash and ambiguous-delivery fallback.
+Worker inputs and provider outputs must use canonical eight-character Zotero
+item, attachment, collection, and annotation keys. Metadata and annotation
+snapshots are bounded before callback delivery so a provider-controlled library
+cannot amplify an internal callback without limit.
+
+Jobs enforces the shared 12 MiB callback ceiling while it builds a result, not
+only immediately before HTTP delivery. Manual import retains one small stable
+`zotero_callback_budget_exceeded` result for every requested key it cannot fit,
+stops further provider reads, and deletes any just-prepared staging object that
+was not admitted to the callback. Sync reads annotation targets only until its
+bounded projection is full, leaving later targets absent so Server does not
+advance their attempt time and they remain first in the next fair scheduling
+window. When automatic import is active, 4 MiB is reserved from the annotation
+projection for that work. Automatic items are admitted one at a time; a first
+item that does not fit is deleted from staging, the provider page is left
+uncaught-up, and Server can advance only through the prefix actually returned.
+The exact compact UTF-8 JSON body is checked again before signing and sending.
+
+The shared completion contract gives Server a 12-minute processing bound,
+Jobs a 13-minute HTTP timeout, and the Server claim a renewable 15-minute
+lease with a 30-second heartbeat. This ordering lets a healthy Server return a
+stable timeout before Jobs abandons the request, while an active callback
+cannot be recovered by a second replica. Jobs never deletes staging merely
+because its own HTTP wait elapsed.
+
+A sync fetches new annotations for papers already imported into Scholens and
+returns their Zotero annotation keys for idempotent append-only application.
+Automatic Researcher runs may additionally request items modified after the
+Server-provided library-version checkpoint. Each run reads at most 50 later
+items from a stable ascending provider page and returns both its bounded page
+position and the observed final version. Server alone advances the recoverable
+checkpoint through the contiguous success/permanent-skip prefix; transient or
+quota failures remain eligible on the next run. The worker does not infer
+eligibility, enable auto import, or own the checkpoint. Group
+Libraries, annotation deletion/overwrite, and writes to Zotero are outside the
+worker contract.
+Annotation-target failures retain their stable error code. Missing attachment
+responses are distinguished from transient failures so Server can stop polling
+an unavailable source without pretending that annotations synchronized.
+
 ## Code layout
 
 ```text
@@ -93,6 +158,7 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
+├── zotero.py        # Read-only Zotero import, PDF validation, and incremental sync
 ├── reflow.py        # MinerU content-list normalization and continuous AST
 ├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py

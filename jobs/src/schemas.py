@@ -14,10 +14,14 @@ class JobIntegrationCredentialResponse(BaseModel):
     credential_revision: str = Field(min_length=1, max_length=128)
 
 
+class ZoteroJobCredentialResponse(JobIntegrationCredentialResponse):
+    zotero_user_id: str = Field(min_length=1, max_length=64)
+
+
 class IntegrationUseEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["mineru"] = "mineru"
+    provider: Literal["mineru", "zotero"] = "mineru"
     credential_revision: str = Field(min_length=1, max_length=128)
     outcome: Literal["verified", "invalid", "failed"]
     error_code: str | None = Field(default=None, min_length=1, max_length=128)

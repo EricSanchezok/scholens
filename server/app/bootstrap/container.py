@@ -665,10 +665,25 @@ def build_paper_topics(*, db: Session) -> PaperTopics:
     return PaperTopics(SqlAlchemyPaperTopics(db))
 
 
-def build_zotero(*, db: Session, journal: OperationJournal) -> Zotero:
+def build_zotero(
+    *,
+    db: Session,
+    credential_encryption_key: str,
+    journal: OperationJournal,
+) -> Zotero:
+    from app.modules.integrations.zotero.infrastructure.connection_repository import (
+        ZoteroConnectionRepository,
+    )
+
+    connections = ZoteroConnectionRepository(
+        db,
+        cipher=AesGcmIntegrationCredentialCipher(credential_encryption_key),
+    )
+    jobs = SqlAlchemyJobsGateway(db)
     return Zotero(
-        gateway=DefaultZoteroGateway(db),
+        gateway=DefaultZoteroGateway(db, connections=connections),
         capacity=BillingZoteroImportCapacity(db),
-        idempotency=SqlAlchemyJobsGateway(db),
+        idempotency=jobs,
+        jobs=jobs,
         journal=journal,
     )

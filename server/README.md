@@ -282,6 +282,76 @@ without substituting an MCP or general web-search result. A catalog `404` or a
 work with no open PDF retains the existing source-unavailable/not-found
 semantics.
 
+Zotero is a separate read-only integration under
+`/api/v1/integrations/zotero`. `POST .../oauth/authorizations` starts a
+short-lived OAuth session for a validated local return path and `manage` or
+`import` intent. The callback consumes its encrypted request-token secret once,
+verifies `/keys/current`, and accepts only a personal-library API key with
+read-only library, files, and notes access and no Group Library access. Status,
+preferences, collections, library items, import operations, and sync runs use
+stable public DTOs; raw provider exceptions and credentials are never public.
+
+Collection and library browsing perform remote I/O outside an application
+transaction, enforce Zotero's 100-item page ceiling, and bind opaque cursors to
+the user and complete query. Each provider call owns and explicitly closes its
+HTTP session on both success and failure. Collection cursors remain available
+beyond the first page. PDF availability is determined from complete, bounded
+child pages for only the currently visible items; a safety-limit hit fails
+explicitly instead of reporting an unscanned PDF as unavailable. Import and
+sync mutations only commit a
+`ZoteroOperation`, DurableJob, and dispatch outbox before returning `202`.
+The connection row is locked during acceptance, so each user has at most one
+active Zotero import or sync; status returns its kind and ID for refresh-safe
+polling and cancellation.
+Workers retrieve a current revision-scoped API key through the signed internal
+API, then return item-level signed callbacks. The Server creates standard paper
+ingestions, applies annotations idempotently by Zotero annotation key, and
+ignores late credential failures or callbacks from a disconnected/replaced
+revision. Disconnecting retains imported papers, annotations, and operation
+history.
+Before processing a callback, Server atomically claims an expiring callback
+lease. Terminal, cancelled, concurrent, and replayed deliveries make no
+connection, paper, annotation, journal, or storage mutation. Canonical
+eight-character Zotero keys and bounded metadata/annotation callback payloads
+are enforced at both public and internal boundaries.
+The aggregate callback ceiling is the shared 12 MiB compact-JSON contract.
+Jobs stops constructing manual or sync results before that bound; Server still
+validates it before any product mutation. Annotation-budget exhaustion leaves
+unreported sync targets unattempted, while a reserved automatic-import share
+prevents a large annotation front page from starving prospective imports.
+Import callbacks plan deduplication and quota decisions before downloading any
+staged content, then consume one PDF at a time. A 50-paper operation therefore
+holds at most one 30 MiB provider PDF payload in the API process. The callback
+renews its 15-minute claim every 30 seconds, has a 12-minute processing bound,
+and rechecks the claim after download, after ingestion-capacity acquisition,
+and before each persistent mutation. Claim loss releases an acquired permit
+without uploading or accepting that paper.
+
+Server deletes `zotero-imports/` staging only after a callback has a definite,
+owned result. Processing timeout, request cancellation, lease loss, or an
+unknown HTTP delivery outcome preserves staging for retry or the bucket's
+two-day lifecycle. A canonical `documents/{sha256}/source.pdf` upload cannot
+stop its underlying thread when the callback is cancelled. Server retains an
+explicit task reference until that write settles without delaying the callback
+processing bound or treating the write as cleaned up. A completed but
+unreferenced content-addressed write is safe to reuse; reclamation belongs to
+reference-aware Server document storage reconciliation, never eager callback
+cleanup that could delete another ingestion's source.
+
+A manual sync inspects only already imported papers. Researcher scheduling
+automatically syncs their annotations and may also import later Zotero items
+when the user has explicitly enabled auto import. Enabling it records the
+current Zotero library version. Incremental work persists a bounded secondary
+page position, processes no more than 50 items per run, and advances only
+through a contiguous prefix of accepted or permanently skipped items. Rate
+limits, temporary downloads, and quota failures are retried rather than being
+skipped by the checkpoint.
+Loss of Researcher access pauses the preference without clearing it.
+Annotation scheduling orders by the last attempt so failed targets cannot
+starve later papers. Failures update attempt time but never successful-sync
+time; confirmed missing remote items or attachments disable future automatic
+annotation polling for that link while retaining the local paper.
+
 The PDF completion callback persists extracted metadata, generated summary,
 and summary citations on the canonical `Document`. Ingestion never creates a
 Conversation, Turn, or Response. A paper-scoped conversation begins only from

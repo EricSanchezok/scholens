@@ -142,6 +142,32 @@ product grants independent so future charging does not require a schema or
 ownership rewrite. During the first release only product grants are issued: an
 internal grant never pretends that a payment occurred.
 
+## Zotero is a read-only personal-library bridge
+
+Scholens may connect to a user's personal Zotero library as a one-way import
+source. The connection never writes to Zotero and does not expose Group
+Libraries. The first supported paper types are journal articles, conference
+papers, and preprints.
+
+Every account may browse Zotero, import selected papers manually, and run a
+manual annotation sync for papers it already imported. A manual sync never
+silently expands the Scholens Library. Researcher additionally receives
+scheduled annotation sync and may explicitly enable automatic import for
+papers added to Zotero in the future. Automatic import is off by default and
+starts from the library version observed when it is enabled, so existing
+Zotero papers are not backfilled unexpectedly.
+An account has at most one active Zotero import or sync. Its durable status is
+restored after refresh, and automatic-import progress never advances beyond a
+temporary provider, download, or Scholens quota failure.
+
+Losing Researcher access pauses automatic behavior without discarding the
+preference or imported research; restoring access resumes it. Disconnecting
+Zotero prevents future browsing and synchronization but preserves papers,
+annotations, and audit history already accepted by Scholens. Zotero
+annotations are append-only in Scholens by their stable Zotero annotation key:
+the integration does not delete or overwrite Scholens annotations and never
+syncs them back to Zotero.
+
 ## Reading transformations preserve the paper as source of truth
 
 Translation and reading reflow are derived views of an authorized paper. They

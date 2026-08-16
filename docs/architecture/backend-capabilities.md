@@ -139,11 +139,14 @@ retaining a session for the life of a conversation.
 
 ## User-owned integrations
 
-`GET|PUT|DELETE /api/v1/me/integrations/{provider}` is the one public
-connection contract for MinerU, OpenAlex, and optional MCP providers. Responses expose
-status, revision, verification information, and a masked secret hint, never the
-credential. Scholight remains built in. The superseded connector CRUD surface
-and shared MinerU environment credential do not exist.
+`GET /api/v1/me/integrations` is the unified connection inventory. Credential
+providers, including MinerU, OpenAlex, and optional MCP providers, use
+`PUT|DELETE /api/v1/me/integrations/{provider}`. Zotero is an OAuth
+`reference_manager` and deliberately uses its dedicated authorization and
+disconnect endpoints. Responses expose status, revision, verification
+information, and non-secret metadata, never the credential. Scholight remains
+built in. The superseded connector CRUD surface, shared MinerU environment
+credential, and independent plaintext Zotero connection do not exist.
 
 OpenAlex is a user-owned search-category connection but is not an MCP
 connector. Server fixes its endpoint to `https://api.openalex.org`, verifies a
@@ -176,6 +179,13 @@ payloads, callbacks, operation journals, logs, or telemetry. Callback outcomes
 are revision-bound, preventing an old attempt from marking a replacement token
 invalid.
 
+Zotero's OAuth request-token secret is encrypted in a separate short-lived,
+one-time row. Its callback accepts only the original local return path and
+verifies the issued long-lived API key before storing it in
+`IntegrationConnection`. Jobs receives that key only through the same claimed,
+owner-, operation-, provider-, and revision-scoped internal boundary. Generic
+credential writes are rejected for OAuth providers.
+
 Provider failures preserve stable product meaning. Missing credentials request
 the MinerU integration; authentication failures mark only the matching revision
 invalid; rate limits and provider unavailability remain retryable; insufficient
@@ -191,6 +201,71 @@ direct PDF URL paths do not read the connection. Citation hydration is
 Crossref-first: a complete Crossref result performs no OpenAlex credential
 read, partial results merge only missing OpenAlex fields, and no connection
 leaves the partial Crossref result usable.
+
+## Zotero asynchronous data flow
+
+Zotero browsing is a Server workflow: it decrypts the current connection for a
+single remote call outside a database transaction, enforces personal-library
+item types and Zotero's 100-item page ceiling, then returns a signed cursor
+bound to owner, search, collection, type, sort, and limit. Library items expose
+only stable metadata, current import state, and `stored_pdf`,
+`resolvable_source`, or `unavailable` source availability.
+Web follows the independent collection cursor beyond the first 100 collections.
+For source availability, Server queries complete attachment pages only for the
+currently visible papers. A per-paper safety limit produces a stable dependency
+failure instead of silently treating the unscanned remainder as no PDF.
+
+Import and sync acceptance are short application commands. They enforce
+connection, quota, ownership, idempotency, and concurrency; then commit one
+`ZoteroOperation`, DurableJob, and outbox row and return `202`. The broker
+acceptance transaction locks the user's connection, so import and sync share a
+single active-operation slot. Status projects the active kind and ID without
+exposing the generic job payload.
+The task payload contains no API key. After the worker claims the operation, it obtains
+the current revision-scoped credential, performs Zotero reads and PDF
+validation, and sends idempotent signed progress and item callbacks. Server
+alone creates normal paper-ingestion jobs or appends annotation threads. An
+operation may finish partially, and cooperative cancellation is terminal even
+when a provider response arrives later.
+Both services explicitly close each Zotero HTTP session on normal and exceptional
+paths; the public-PDF resolver does the same across redirect and SSRF rejection
+paths.
+Each terminal callback first atomically claims an expiring callback-processing
+lease. A terminal, cancelled, concurrent, or replayed callback exits before
+provider-outcome recording or any import, annotation, journal, or storage
+mutation. Callback keys, staging paths, metadata, annotation content, and total
+serialized size are validated against bounded internal contracts.
+Jobs incrementally enforces the shared 12 MiB compact-JSON budget before a
+provider-controlled batch can accumulate in memory and validates the exact body
+again before delivery. Sync reserves 4 MiB for automatic imports; annotation
+targets beyond its projection are not reported or marked attempted. Manual
+imports preserve a small stable failure for each requested key that cannot fit,
+and an unreported prepared staging object is removed immediately. A truncated
+automatic page remains uncaught-up, so its cursor advances only through the
+returned resolved prefix.
+The renewable claim uses a 30-second heartbeat and 15-minute lease around a
+12-minute Server processing bound; Jobs waits 13 minutes for the signed HTTP
+result. Import planning precedes any staged download, and Server consumes one
+PDF at a time with claim checks after download and capacity acquisition. A lost
+claim releases the capacity permit before upload. Ambiguous delivery timeout or
+request cancellation preserves `zotero-imports/` staging for retry and the
+two-day lifecycle instead of racing a Server reader.
+
+Manual sync includes only already imported Zotero items. Scheduled sync is
+eligible only for Researcher and uses Zotero library/item versions for
+incremental annotation work. Automatic import is a separate default-off
+preference: enabling it snapshots the current library version, scheduled work
+requests a bounded 50-item ascending page, and Server persists a secondary
+position only through the contiguous success/permanent-skip prefix. Temporary
+provider, download, or quota failures stop advancement and are retried. Losing
+Researcher pauses both automatic behaviors without clearing
+the preference. Disconnecting removes future access but not imported Documents,
+Library memberships, annotations, operations, or journal records.
+Annotation targets are fairly ordered by the last attempt, so a failed first
+500 cannot starve later papers. Every success or failure updates the attempt
+time; only success updates `last_synced_at`. Missing Zotero items or attachments
+move that link to `source_unavailable` and out of automatic annotation polling
+while preserving Scholens data.
 
 ## Authentication, permission, and operation provenance
 

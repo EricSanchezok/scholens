@@ -52,7 +52,10 @@ from app.modules.identity.application.onboarding import SaveOnboarding
 from app.modules.integrations.zotero.application.zotero import Zotero
 from app.modules.jobs.application.callbacks import JobCallbacks
 from app.modules.jobs.application.jobs import Jobs
-from app.modules.jobs.application.contracts import JobIntegrationCredentialResponse
+from app.modules.jobs.application.contracts import (
+    JobIntegrationCredentialResponse,
+    ZoteroJobCredentialResponse,
+)
 from app.modules.integrations.connections.domain import IntegrationProvider
 from pydantic import SecretStr
 from uuid import UUID
@@ -86,6 +89,8 @@ from app.modules.operation_journal.infrastructure import (
 from app.modules.translations.application import Translations
 from app.modules.reflows.application import DocumentReflows
 from app.shared.infrastructure import SystemClock
+from app.shared.domain import AppError, FailureKind
+from app.shared.domain.enums import JobOperation
 
 
 class ApplicationCapabilities:
@@ -273,6 +278,28 @@ class ApplicationCapabilities:
             credential_revision=credential.revision,
         )
 
+    def job_zotero_credential(
+        self,
+        *,
+        job_id: UUID,
+    ) -> ZoteroJobCredentialResponse:
+        scope = self.job_callbacks.integration_credential_scope(job_id=job_id)
+        if scope.operation not in {
+            JobOperation.ZOTERO_IMPORT,
+            JobOperation.ZOTERO_SYNC,
+        }:
+            raise AppError(
+                code="job_integration_credential_forbidden",
+                message="This job cannot access Zotero credentials",
+                kind=FailureKind.PERMISSION_DENIED,
+            )
+        credential = self.zotero.job_credentials(user_id=scope.requested_by_id)
+        return ZoteroJobCredentialResponse(
+            credential=SecretStr(credential.api_key),
+            credential_revision=credential.revision,
+            zotero_user_id=credential.user_id,
+        )
+
     @cached_property
     def research_generation(self) -> ResearchGeneration:
         return build_research_generation(
@@ -301,7 +328,13 @@ class ApplicationCapabilities:
 
     @cached_property
     def zotero(self) -> Zotero:
-        return build_zotero(db=self._session, journal=self._journal)
+        return build_zotero(
+            db=self._session,
+            credential_encryption_key=(
+                self._settings.integration_credential_encryption_key
+            ),
+            journal=self._journal,
+        )
 
     @cached_property
     def translations(self) -> Translations:

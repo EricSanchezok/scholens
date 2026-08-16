@@ -14,10 +14,19 @@ import en from "../src/i18n/messages/en.json";
 import zhCN from "../src/i18n/messages/zh-CN.json";
 import { QueryProvider } from "../src/lib/query/query-provider";
 import { billingHandlers } from "./msw/billing-handlers";
-import { foundationHandler } from "./msw/handlers";
+import {
+  foundationHandler,
+  zoteroCollectionsHandler,
+  zoteroLibraryItemsHandler,
+  zoteroStatusHandler,
+} from "./msw/handlers";
 import "../src/styles/globals.css";
 
-initialize({ onUnhandledRequest: "error" }, billingHandlers.success);
+initialize({ onUnhandledRequest: "error" }, [
+  ...billingHandlers.success,
+  zoteroCollectionsHandler,
+  zoteroLibraryItemsHandler,
+]);
 
 const messages = { en, "zh-CN": zhCN } as const;
 const isStorybookTest =
@@ -155,7 +164,7 @@ const preview: Preview = {
     a11y: { test: "error" },
     controls: { expanded: true },
     layout: "fullscreen",
-    msw: { handlers: [foundationHandler] },
+    msw: { handlers: [foundationHandler, zoteroStatusHandler] },
     viewport: {
       options: {
         desktop: {

@@ -267,6 +267,9 @@
       "sourcePending": "正在验证来源",
       "cancelSource": "取消",
       "connectOpenAlex": "连接 OpenAlex",
+      "zoteroTitle": "Zotero 文库",
+      "zoteroDescription": "以只读方式浏览你的个人 Zotero 文库，并导入所选论文。",
+      "browseZotero": "浏览 Zotero",
       "errors": {
         "openAlexRequired": "需要先连接你自己的 OpenAlex API Key，才能通过此 DOI 解析开放 PDF；当前 DOI 已保留。",
         "openAlexInvalid": "你的 OpenAlex API Key 已失效，请在“连接”中更换，然后重新提交此 DOI。",
@@ -1160,6 +1163,162 @@
     "retryDescription": "请检查网络后重试。",
     "retryDescriptionWithRequest": "请检查网络后重试。请求 ID：{requestId}"
   },
+  "Zotero": {
+    "oauth": {
+      "result": {
+        "connected": "Zotero 已连接。",
+        "zotero_oauth_expired": "本次 Zotero 授权已过期，请重新连接。",
+        "zotero_oauth_exchange_failed": "Zotero 未能完成授权，请重新连接。",
+        "zotero_permissions_insufficient": "Zotero 未授予个人文库、笔记和文件所需的只读权限。",
+        "zotero_rate_limited": "Zotero 正在限制授权请求，请稍后重试。",
+        "zotero_unavailable": "授权时暂时无法连接 Zotero，请重试。",
+        "zotero_connection_failed": "无法保存 Zotero 连接，请重试。"
+      }
+    },
+    "settings": {
+      "connect": "连接 Zotero",
+      "connected": "已连接",
+      "connectedAt": "连接于 {date}",
+      "loading": "正在加载 Zotero 连接",
+      "lastSync": "上次同步于 {date}",
+      "neverSynced": "尚未同步",
+      "automaticAnnotationsActive": "研究者版会自动同步新增标注。",
+      "manualMode": "基础版可手动导入论文和同步标注。",
+      "autoImport": "自动导入新增论文",
+      "autoImportDescription": "只从开启后新增的论文开始，不会自动回溯现有 Zotero 文库。",
+      "autoImportPaused": "此偏好已保留，恢复研究者权限后将继续执行。",
+      "syncNow": "立即同步",
+      "cancelSync": "取消同步",
+      "disconnect": "断开连接",
+      "operation": {
+        "queued": "同步已排队",
+        "running": "正在同步标注",
+        "partial": "同步完成，部分条目不可用",
+        "succeeded": "同步完成",
+        "failed": "同步失败，可以重试。",
+        "cancelled": "同步已取消",
+        "importActive": "已有 Zotero 导入正在运行，请先在文库中完成或取消，再开始同步。"
+      },
+      "errors": {
+        "zotero_not_connected": "请先连接 Zotero。",
+        "zotero_permissions_insufficient": "请重新连接 Zotero，并授予个人文库、笔记和文件的只读权限。",
+        "zotero_credentials_invalid": "Zotero 已撤销此凭据，请重新连接。",
+        "integration_credentials_unreadable": "无法读取已保存的凭据，请断开后重新连接 Zotero。",
+        "zotero_rate_limited": "Zotero 正在限制请求，请稍后重试。",
+        "zotero_auto_import_requires_researcher": "自动导入仅在研究者权限有效时可用。",
+        "zotero_operation_active": "已有另一个 Zotero 操作正在运行。",
+        "zotero_unavailable": "Zotero 暂时不可用，请重试。",
+        "zotero_import_failed": "Zotero 操作失败，请重试。"
+      }
+    },
+    "library": {
+      "title": "从 Zotero 导入",
+      "description": "从个人文库选择最多 50 篇论文。Scholens 不会修改 Zotero 中的数据。",
+      "operationActive": "已有 Zotero 操作正在运行，请先完成或取消，再开始新的导入。",
+      "close": "关闭 Zotero 文库",
+      "loadingConnection": "正在检查 Zotero 连接",
+      "connectionError": "无法检查 Zotero 连接",
+      "connectTitle": "连接你的 Zotero 文库",
+      "connectDescription": "授权仅为只读，并仅限个人文库、笔记和已存储文件；不会访问群组文库。",
+      "connect": "连接 Zotero",
+      "search": "搜索 Zotero 论文",
+      "collection": "收藏夹",
+      "allCollections": "全部收藏夹",
+      "loadMoreCollections": "加载更多收藏夹",
+      "type": "论文类型",
+      "types": {
+        "all": "全部支持的类型",
+        "journalArticle": "期刊论文",
+        "conferencePaper": "会议论文",
+        "preprint": "预印本"
+      },
+      "sort": {
+        "label": "排序 Zotero 论文",
+        "modified_desc": "最近修改",
+        "added_desc": "最近添加",
+        "published_desc": "最近发表",
+        "title_asc": "标题 A–Z",
+        "creator_asc": "作者 A–Z"
+      },
+      "loading": "正在加载 Zotero 论文",
+      "loadError": "无法加载 Zotero 论文",
+      "retry": "重试",
+      "emptyTitle": "未找到 Zotero 论文",
+      "emptyDescription": "请调整搜索、收藏夹或论文类型。",
+      "untitled": "无标题论文",
+      "unknownAuthors": "未知作者",
+      "unknownDate": "日期未知",
+      "metadata": "{authors} · {date}",
+      "availability": {
+        "stored_pdf": "已有存储的 PDF",
+        "resolvable_source": "将解析开放来源",
+        "unavailable": "没有可导入的 PDF 或开放来源"
+      },
+      "importState": {
+        "available": "可导入",
+        "imported": "已导入",
+        "in_progress": "正在导入",
+        "failed": "此前导入失败，请从文库条目重试"
+      },
+      "selection": "已选择 {count, number} / {limit, number}",
+      "zeroQuota": "论文额度已满，已有论文不受影响。",
+      "previous": "上一页",
+      "next": "下一页",
+      "cancel": "取消",
+      "import": "导入 {count, number} 篇论文",
+      "errors": {
+        "zotero_not_connected": "请先连接 Zotero 以浏览文库。",
+        "zotero_permissions_insufficient": "请重新连接 Zotero 并授予所需的只读权限。",
+        "zotero_credentials_invalid": "Zotero 已撤销此连接，请重新连接。",
+        "integration_credentials_unreadable": "请断开后重新连接 Zotero 以修复凭据。",
+        "zotero_rate_limited": "Zotero 正在限制请求，请稍后重试。",
+        "zotero_operation_active": "已有另一个 Zotero 操作正在运行。",
+        "zotero_quota_exceeded": "Scholens 论文额度已满。",
+        "paper_quota_exceeded": "Scholens 论文额度已满。",
+        "storage_quota_exceeded": "Scholens 存储额度已满。",
+        "zotero_unavailable": "Zotero 暂时不可用，请重试。"
+      }
+    },
+    "operation": {
+      "label": "Zotero 导入进度",
+      "loading": "正在加载 Zotero 操作",
+      "status": {
+        "queued": "Zotero 导入已排队",
+        "running": "正在导入 Zotero 论文",
+        "partial": "Zotero 导入部分完成",
+        "succeeded": "Zotero 导入已受理",
+        "failed": "Zotero 导入失败",
+        "cancelled": "Zotero 导入已取消"
+      },
+      "stage": {
+        "queued": "正在等待后台任务",
+        "fetching_library": "正在读取 Zotero 文库",
+        "syncing_annotations": "正在同步标注",
+        "importing_papers": "正在准备所选论文"
+      },
+      "counts": "共 {total, number} 篇，已受理 {succeeded, number} 篇，失败 {failed, number} 篇",
+      "progress": "Zotero 导入进度",
+      "cancel": "取消导入",
+      "dismiss": "关闭",
+      "itemFailed": "{title}：{error}",
+      "errors": {
+        "zotero_item_not_found": "此条目已不在 Zotero 中。",
+        "zotero_item_not_supported": "暂不支持此 Zotero 条目类型。",
+        "zotero_pdf_unavailable": "没有可读取的 PDF 或开放来源。",
+        "zotero_pdf_encrypted": "暂不支持加密 PDF。",
+        "zotero_pdf_too_large": "此 PDF 超过 50 MB。",
+        "zotero_pdf_unsafe_address": "此来源地址不被允许。",
+        "zotero_rate_limited": "Zotero 限制了此次请求。",
+        "zotero_credentials_invalid": "Zotero 连接已失效。",
+        "zotero_credentials_rotated": "处理前连接已发生变更。",
+        "zotero_operation_cancelled": "导入已取消。",
+        "zotero_callback_processing_timeout": "Scholens 未能在时限内完成这批 Zotero 操作，请重试导入或同步。",
+        "zotero_callback_budget_exceeded": "这批论文包含的 Zotero 标注数据过多，请减少导入数量后重试。",
+        "zotero_import_failed": "无法导入此论文。",
+        "zotero_operation_failed": "Zotero 操作失败，请重试。"
+      }
+    }
+  },
   "Settings": {
     "title": "设置",
     "description": "管理你的 Scholens 账户与研究工作流。",
@@ -1295,7 +1454,8 @@
         "tavily": "Tavily",
         "exa": "Exa",
         "firecrawl": "Firecrawl",
-        "openalex": "OpenAlex"
+        "openalex": "OpenAlex",
+        "zotero": "Zotero"
       },
       "providerDescription": {
         "scholight": "内置学术发现服务。",
@@ -1304,7 +1464,8 @@
         "tavily": "用于研究溯源的网页搜索。",
         "exa": "语义网页搜索。",
         "firecrawl": "研究来源的网页内容提取。",
-        "openalex": "DOI 解析、外部论文搜索、作者作品与引用图谱。"
+        "openalex": "DOI 解析、外部论文搜索、作者作品与引用图谱。",
+        "zotero": "以只读方式导入个人 Zotero 文库并同步标注。"
       },
       "state": {
         "connected": "已连接",
@@ -1335,7 +1496,8 @@
       "mineruSaveError": "无法保存此 MinerU Token，请检查后重试；系统会在首次使用时完成验证。",
       "verifyError": "无法保存此连接，请检查凭据后重试。",
       "disconnectTitle": "断开服务连接？",
-      "disconnectDescription": "新任务将无法使用 {provider}。运行中的任务会继续使用其已绑定的凭据版本。"
+      "disconnectDescription": "新任务将无法使用 {provider}。运行中的任务会继续使用其已绑定的凭据版本。",
+      "zoteroDisconnectDescription": "Scholens 将停止访问 Zotero 并取消后续同步；已经导入 Scholens 的论文和标注会保留。"
     },
     "translation": {
       "title": "翻译",

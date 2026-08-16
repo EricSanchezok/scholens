@@ -46,6 +46,11 @@ import {
   type IntegrationProvider,
 } from "@/features/integrations";
 import {
+  disconnectZotero,
+  ZoteroConnectionControls,
+  zoteroKeys,
+} from "@/features/zotero";
+import {
   SettingsCard,
   SettingsCardBody,
   SettingsPanelHeader,
@@ -213,12 +218,16 @@ export function ConnectionsPanel() {
       }),
   });
   const disconnectMutation = useMutation({
-    mutationFn: disconnectIntegration,
+    mutationFn: (provider: IntegrationProvider) =>
+      provider === "zotero"
+        ? disconnectZotero()
+        : disconnectIntegration(provider),
     onSuccess: () => {
       setDisconnecting(undefined);
-      void queryClient.invalidateQueries({
-        queryKey: integrationKeys.current(),
-      });
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: integrationKeys.current() }),
+        queryClient.invalidateQueries({ queryKey: zoteroKeys.all }),
+      ]);
     },
   });
 
@@ -275,6 +284,11 @@ export function ConnectionsPanel() {
                         >
                           {t("connections.builtIn")}
                         </SettingsStatus>
+                      ) : integration.provider === "zotero" ? (
+                        <ZoteroConnectionControls
+                          connected={connected}
+                          onDisconnect={() => setDisconnecting(integration)}
+                        />
                       ) : (
                         <div className="flex items-center gap-2">
                           {connected && integration.state !== "invalid" ? (
@@ -337,11 +351,13 @@ export function ConnectionsPanel() {
             {t("connections.disconnectTitle")}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("connections.disconnectDescription", {
-              provider: disconnecting
-                ? t(`connections.provider.${disconnecting.provider}`)
-                : "",
-            })}
+            {disconnecting?.provider === "zotero"
+              ? t("connections.zoteroDisconnectDescription")
+              : t("connections.disconnectDescription", {
+                  provider: disconnecting
+                    ? t(`connections.provider.${disconnecting.provider}`)
+                    : "",
+                })}
           </AlertDialogDescription>
           {disconnectMutation.isError ? (
             <p className="text-danger mt-4 text-sm" role="alert">

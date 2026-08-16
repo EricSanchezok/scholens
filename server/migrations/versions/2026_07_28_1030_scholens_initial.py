@@ -200,7 +200,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex')",
+            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex', 'zotero')",
             name="ck_integration_connections_provider",
         ),
         sa.ForeignKeyConstraint(
@@ -805,36 +805,15 @@ def upgrade() -> None:
         schema="scholens",
     )
     op.create_table(
-        "zotero_connections",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("user_id", sa.BigInteger(), nullable=False),
-        sa.Column("zotero_user_id", sa.String(), nullable=False),
-        sa.Column("api_key", sa.String(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["user_id"], ["auth.users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id"),
-        schema="scholens",
-    )
-    op.create_table(
         "zotero_oauth_pending",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.BigInteger(), nullable=False),
         sa.Column("correlation_id", sa.UUID(), nullable=False),
         sa.Column("origin_operation_id", sa.UUID(), nullable=False),
         sa.Column("oauth_token", sa.String(), nullable=False),
-        sa.Column("oauth_token_secret", sa.String(), nullable=False),
+        sa.Column("oauth_token_secret_ciphertext", sa.String(), nullable=False),
+        sa.Column("return_path", sa.String(length=2048), nullable=False),
+        sa.Column("intent", sa.String(length=16), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "created_at",
@@ -1052,6 +1031,10 @@ def upgrade() -> None:
         sa.Column("attempt_count", sa.Integer(), server_default="0", nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("callback_lease_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "callback_lease_expires_at", sa.DateTime(timezone=True), nullable=True
+        ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
@@ -1068,6 +1051,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
             name="ck_jobs_status",
+        ),
+        sa.CheckConstraint(
+            "(callback_lease_id IS NULL) = (callback_lease_expires_at IS NULL)",
+            name="ck_jobs_callback_lease_pair",
         ),
         sa.ForeignKeyConstraint(
             ["document_id"], ["scholens.documents.id"], ondelete="SET NULL"
@@ -2114,6 +2101,16 @@ def upgrade() -> None:
         ),
         sa.Column("error_message", sa.String(), nullable=True),
         sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_sync_attempted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "annotation_sync_status",
+            sa.String(length=24),
+            server_default="active",
+            nullable=False,
+        ),
+        sa.Column("last_sync_error_code", sa.String(length=128), nullable=True),
+        sa.Column("zotero_item_version", sa.Integer(), nullable=True),
+        sa.Column("zotero_attachment_version", sa.Integer(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -2134,6 +2131,10 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["user_id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint(
+            "annotation_sync_status IN ('active', 'source_unavailable')",
+            name="ck_zotero_imported_items_annotation_sync_status",
+        ),
         sa.UniqueConstraint(
             "user_id", "zotero_item_key", name="uq_zotero_import_user_item"
         ),
@@ -2648,7 +2649,6 @@ def downgrade() -> None:
         schema="scholens",
     )
     op.drop_table("zotero_oauth_pending", schema="scholens")
-    op.drop_table("zotero_connections", schema="scholens")
     op.drop_index(
         op.f("ix_scholens_translation_results_document_id"),
         table_name="translation_results",

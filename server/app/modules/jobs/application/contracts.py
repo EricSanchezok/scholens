@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
+
+from scholens_job_contracts import MAX_ZOTERO_CALLBACK_BYTES
 
 from app.shared.domain import JsonValue
 from app.modules.papers.application.contracts.extraction import ResponseCitation
@@ -36,6 +40,10 @@ class JobIntegrationCredentialResponse(BaseModel):
         return credential.get_secret_value()
 
 
+class ZoteroJobCredentialResponse(JobIntegrationCredentialResponse):
+    zotero_user_id: str = Field(min_length=1, max_length=64)
+
+
 class ActionableJobFailure(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +61,9 @@ class JobProgressRequest(BaseModel):
         "extracting_metadata",
         "indexing",
         "finalizing",
+        "fetching_library",
+        "syncing_annotations",
+        "importing_papers",
     ]
 
 
@@ -93,10 +104,183 @@ class TokenUsageEventPayload(BaseModel):
 class IntegrationUseEventPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["mineru"]
+    provider: Literal["mineru", "zotero"]
     credential_revision: UUID
     outcome: Literal["verified", "invalid", "failed"]
     error_code: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+ZoteroKey = Annotated[str, Field(pattern=r"^[A-Z0-9]{8}$")]
+BoundedZoteroText = Annotated[str, Field(max_length=2_000)]
+MAX_ZOTERO_ANNOTATIONS_BYTES = 2 * 1024 * 1024
+_ZOTERO_KEY = re.compile(r"^[A-Z0-9]{8}$")
+
+
+class ZoteroWorkerMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: ZoteroKey
+    title: BoundedZoteroText
+    authors: list[Annotated[str, Field(max_length=512)]] = Field(
+        default_factory=list,
+        max_length=100,
+    )
+    abstract: str | None = Field(default=None, max_length=200_000)
+    publish_date: str | None = Field(default=None, max_length=128)
+    doi: str | None = Field(default=None, max_length=512)
+    tags: list[Annotated[str, Field(max_length=512)]] = Field(
+        default_factory=list,
+        max_length=100,
+    )
+    date_added: str | None = Field(default=None, max_length=64)
+    item_type: Literal["journalArticle", "conferencePaper", "preprint"]
+    venue: str | None = Field(default=None, max_length=2_000)
+    collection_keys: list[ZoteroKey] = Field(default_factory=list, max_length=100)
+    has_pdf_attachment: bool = False
+    has_resolvable_source: bool = False
+    has_metadata: bool = True
+    version: int | None = None
+
+
+class ZoteroWorkerAttachment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: ZoteroKey
+    import_source: Literal["pdf_attachment", "url"]
+    attachment_key: ZoteroKey | None = None
+    source_url: str | None = Field(default=None, max_length=2_048)
+    annotations_json: str = Field(max_length=MAX_ZOTERO_ANNOTATIONS_BYTES)
+    version: int | None = None
+
+    @field_validator("annotations_json")
+    @classmethod
+    def validate_annotations(cls, value: str) -> str:
+        return _validate_annotations_json(value)
+
+
+class ZoteroWorkerImportItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: ZoteroKey
+    version: int | None = None
+    status: Literal["ready", "failed"]
+    title: str | None = Field(default=None, max_length=2_000)
+    error_code: str | None = Field(default=None, max_length=128)
+    s3_object_key: str | None = Field(default=None, max_length=512)
+    metadata: ZoteroWorkerMetadata | None = None
+    attachment: ZoteroWorkerAttachment | None = None
+    page_dimensions: list[tuple[int, float, float]] = Field(
+        default_factory=list,
+        max_length=10_000,
+    )
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "ZoteroWorkerImportItem":
+        if self.status == "ready" and (
+            not self.s3_object_key or self.metadata is None or self.attachment is None
+        ):
+            raise ValueError("ready Zotero import item is incomplete")
+        if self.status == "failed" and not self.error_code:
+            raise ValueError("failed Zotero import item requires an error code")
+        if self.metadata is not None and self.metadata.item_key != self.item_key:
+            raise ValueError("Zotero metadata item key does not match")
+        if self.attachment is not None and self.attachment.item_key != self.item_key:
+            raise ValueError("Zotero attachment item key does not match")
+        return self
+
+
+class ZoteroWorkerSyncUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: ZoteroKey
+    attachment_key: ZoteroKey
+    annotations_json: str = Field(max_length=MAX_ZOTERO_ANNOTATIONS_BYTES)
+
+    @field_validator("annotations_json")
+    @classmethod
+    def validate_annotations(cls, value: str) -> str:
+        return _validate_annotations_json(value)
+
+
+class ZoteroWorkerFailure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_key: ZoteroKey
+    error_code: str = Field(min_length=1, max_length=128)
+
+
+class ZoteroImportWebhookData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    operation: Literal["import"]
+    credential_revision: UUID
+    credential_outcome: Literal["verified", "invalid", "failed"]
+    error_code: str | None = Field(default=None, max_length=128)
+    items: list[ZoteroWorkerImportItem] = Field(max_length=50)
+    library_version: int | None = None
+
+    @model_validator(mode="after")
+    def validate_callback_size(self) -> "ZoteroImportWebhookData":
+        _validate_zotero_staging_keys(self.task_id, self.items)
+        if len(self.model_dump_json().encode()) > MAX_ZOTERO_CALLBACK_BYTES:
+            raise ValueError("Zotero callback payload is too large")
+        return self
+
+
+class ZoteroSyncWebhookData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    operation: Literal["sync"]
+    credential_revision: UUID
+    credential_outcome: Literal["verified", "invalid", "failed"]
+    error_code: str | None = Field(default=None, max_length=128)
+    updates: list[ZoteroWorkerSyncUpdate] = Field(default_factory=list, max_length=500)
+    failures: list[ZoteroWorkerFailure] = Field(default_factory=list, max_length=500)
+    auto_imports: list[ZoteroWorkerImportItem] = Field(
+        default_factory=list, max_length=50
+    )
+    library_version: int | None = None
+    auto_import_base_version: int | None = None
+    auto_import_base_start: int = Field(default=0, ge=0)
+    auto_import_caught_up_version: int | None = None
+
+    @model_validator(mode="after")
+    def validate_callback_size(self) -> "ZoteroSyncWebhookData":
+        _validate_zotero_staging_keys(self.task_id, self.auto_imports)
+        if len(self.model_dump_json().encode()) > MAX_ZOTERO_CALLBACK_BYTES:
+            raise ValueError("Zotero callback payload is too large")
+        return self
+
+
+def _validate_zotero_staging_keys(
+    task_id: UUID,
+    items: list[ZoteroWorkerImportItem],
+) -> None:
+    for item in items:
+        if item.status != "ready":
+            continue
+        expected = f"zotero-imports/{task_id}/{item.item_key}.pdf"
+        if item.s3_object_key != expected:
+            raise ValueError("Zotero staging object key does not match callback")
+
+
+def _validate_annotations_json(value: str) -> str:
+    try:
+        annotations = json.loads(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Zotero annotations must be valid JSON") from exc
+    if not isinstance(annotations, list) or len(annotations) > 10_000:
+        raise ValueError("Zotero annotations exceed the supported item count")
+    for annotation in annotations:
+        if (
+            not isinstance(annotation, dict)
+            or _ZOTERO_KEY.fullmatch(str(annotation.get("key") or "")) is None
+            or not isinstance(annotation.get("data"), dict)
+        ):
+            raise ValueError("Zotero annotation payload is invalid")
+    return value
 
 
 class PDFProcessingResult(BaseModel):

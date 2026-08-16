@@ -1,6 +1,12 @@
 import { delay, http, HttpResponse } from "msw";
 
 const apiUrl = "http://127.0.0.1:7301/api/v1/foundation-check";
+const zoteroStatusUrl =
+  "http://127.0.0.1:7301/api/v1/integrations/zotero/status";
+const zoteroCollectionsUrl =
+  "http://127.0.0.1:7301/api/v1/integrations/zotero/collections";
+const zoteroLibraryItemsUrl =
+  "http://127.0.0.1:7301/api/v1/integrations/zotero/library-items";
 
 export const foundationHandler = http.get(apiUrl, async ({ request }) => {
   const scenario = new URL(request.url).searchParams.get("scenario") ?? "";
@@ -22,6 +28,41 @@ export const foundationHandler = http.get(apiUrl, async ({ request }) => {
     items: data === "empty" ? [] : [{ id: "1", title: "Foundation item" }],
   });
 });
+
+export const zoteroStatusHandler = http.get(zoteroStatusUrl, () =>
+  HttpResponse.json({
+    active_operation_id: null,
+    active_operation_kind: null,
+    auto_import_enabled: false,
+    auto_import_state: "off",
+    automatic_annotation_sync: "off",
+    automatic_sync_eligible: false,
+    connected_at: null,
+    connection_state: "disconnected",
+    last_error_code: null,
+    last_successful_sync_at: null,
+  }),
+);
+
+export const zoteroCollectionsHandler = http.get(zoteroCollectionsUrl, () =>
+  HttpResponse.json({
+    items: [],
+    next_cursor: null,
+    previous_cursor: null,
+    total_count: 0,
+  }),
+);
+
+export const zoteroLibraryItemsHandler = http.get(zoteroLibraryItemsUrl, () =>
+  HttpResponse.json({
+    items: [],
+    max_batch_size: 50,
+    next_cursor: null,
+    previous_cursor: null,
+    remaining_slots: 50,
+    total_count: 0,
+  }),
+);
 
 export const successHandlers = [
   http.get(apiUrl, () =>

@@ -25,11 +25,16 @@ from app.bootstrap.workflows.research_generation import ResearchGenerationWorkfl
 from app.bootstrap.workflows.translation import TranslationWorkflow
 from app.bootstrap.workflows.integrations import IntegrationWorkflow
 from app.bootstrap.workflows.zotero import (
-    ZoteroPostprocessWorkflow,
+    ZoteroBackgroundWorkflow,
     ZoteroWorkflow,
 )
 from app.bootstrap.adapters.job_completion_processor import JobCompletionProcessor
-from app.shared.application import ApplicationExecutor, OperationContextFactory
+from app.shared.application import (
+    ApplicationExecutor,
+    OperationContextFactory,
+    SignedCursorCodec,
+)
+from app.shared.domain import FailureKind
 from app.shared.infrastructure import SqlAlchemyApplicationExecutor, SystemClock
 from app.tooling import ToolCatalog, ToolDispatcher
 from app.transport.mcp.server import (
@@ -365,6 +370,7 @@ def create_translation_workflow(
 def create_zotero_workflow(
     executor: ApplicationExecutor[ApplicationCapabilities],
     operation_factory: OperationContextFactory,
+    settings: AppSettings,
 ) -> ZoteroWorkflow:
     from app.bootstrap.adapters.zotero_operations import DefaultZoteroOperations
 
@@ -372,6 +378,12 @@ def create_zotero_workflow(
         executor=executor,
         operations=DefaultZoteroOperations(),
         operation_factory=operation_factory,
+        cursors=SignedCursorCodec(
+            settings.paper_search_cursor_secret,
+            revision="zotero-library-v1",
+            error_code="zotero_cursor_invalid",
+            error_kind=FailureKind.INVALID_ARGUMENT,
+        ),
     )
 
 
@@ -401,7 +413,7 @@ def create_job_completion_processor(
             provider=CitationMetadataProvider(connector_tools, openalex),
             operation_factory=operation_factory,
         ),
-        zotero_postprocess=ZoteroPostprocessWorkflow(
+        zotero_background=ZoteroBackgroundWorkflow(
             executor=executor,
             operations=DefaultZoteroOperations(),
             operation_factory=operation_factory,

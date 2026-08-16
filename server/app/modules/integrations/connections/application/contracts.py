@@ -8,7 +8,8 @@ from typing import Literal
 from app.modules.integrations.connections.domain import IntegrationProvider
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-IntegrationCategory = Literal["built_in", "parsing", "search"]
+IntegrationCategory = Literal["built_in", "parsing", "search", "reference_manager"]
+IntegrationConnectionMethod = Literal["built_in", "credential", "oauth"]
 IntegrationConnectionState = Literal[
     "disconnected",
     "connected_unverified",
@@ -21,6 +22,7 @@ IntegrationConnectionState = Literal[
 class IntegrationConnectionResponse(BaseModel):
     provider: IntegrationProvider
     category: IntegrationCategory
+    connection_method: IntegrationConnectionMethod
     managed: bool
     state: IntegrationConnectionState
     enabled: bool

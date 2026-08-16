@@ -152,7 +152,7 @@ def test_integration_lifecycle_keeps_credentials_server_side() -> None:
     operation = MagicMock(spec=OperationContext)
 
     initial = integrations.list(actor=actor)
-    assert len(initial.items) == 7
+    assert len(initial.items) == 8
     assert initial.items[0].provider is IntegrationProvider.SCHOLIGHT
     assert initial.items[1].provider is IntegrationProvider.MINERU
     assert initial.items[1].state == "disconnected"

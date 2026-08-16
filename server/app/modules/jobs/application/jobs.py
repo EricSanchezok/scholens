@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import UUID
 
@@ -51,9 +51,23 @@ class ReservedOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationTransition:
+    job: JobResponse
+    changed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class OperationClaim:
+    job: JobResponse
+    claim_id: UUID | None
+    acquired: bool
+
+
+@dataclass(frozen=True, slots=True)
 class EnqueuedJob:
     job: JobResponse
     created: bool
+    payload: dict[str, JsonValue] = field(default_factory=dict)
 
 
 class JobCommandPort(Protocol):
@@ -65,14 +79,36 @@ class JobCommandPort(Protocol):
 class IdempotentOperationPort(Protocol):
     def reserve(self, *, command: ReserveOperationCommand) -> ReservedOperation: ...
 
+    def claim_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+    ) -> OperationClaim: ...
+
+    def heartbeat_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+        claim_id: UUID,
+    ) -> bool: ...
+
     def complete(
         self,
         *,
         operation_id: UUID,
+        claim_id: UUID,
         result: dict[str, JsonValue],
-    ) -> JobResponse: ...
+    ) -> OperationTransition: ...
 
-    def fail(self, *, operation_id: UUID, error_code: str) -> JobResponse: ...
+    def fail(
+        self,
+        *,
+        operation_id: UUID,
+        claim_id: UUID,
+        error_code: str,
+    ) -> OperationTransition: ...
 
 
 class JobQueryPort(Protocol):

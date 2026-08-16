@@ -59,8 +59,10 @@ the version of the network service they are using.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.
   A secret is never recoverable after the creation acknowledgement is closed.
 - Connections owns built-in and user-configured provider status. Scholight is
-  built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the shared
-  integration feature and public `/me/integrations` contract.
+  built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the
+  shared integration inventory and public `/me/integrations` contract. Zotero
+  appears in that same inventory as a `reference_manager` connection, but its
+  credential is established only through the dedicated read-only OAuth flow.
 - Translation uses the same translation-preference feature as Reader. It does
   not duplicate server state or couple paper language to interface locale.
 
@@ -99,6 +101,32 @@ Add Papers preserves the DOI for an explicit resubmission; the Web does not
 retry secretly after connection. Rate limiting and provider unavailability
 remain separate retry-later messages.
 
+## Zotero connection contract
+
+Zotero connects a user's personal library with read-only files and notes
+permission. Settings begins OAuth with a validated in-product return path and a
+`manage` intent; the callback returns only to that path and exposes one stable
+localized result code. Group Libraries and write access are rejected. The
+OAuth-issued API key is never shown, pasted into a form, or returned through a
+public status response.
+
+The connected state shows connection time, the most recent successful sync,
+Sync now, and Disconnect. Sync now creates a background operation for new
+annotations on papers already imported into Scholens; it never imports another
+paper. Basic accounts remain in this manual mode. Researcher accounts also see
+automatic annotation sync and an automatic-import switch. Automatic import is
+off by default, starts from the current Zotero library-version checkpoint, and
+enters a visible paused state while Researcher access is absent.
+
+Import and sync share one active Zotero operation per account. Settings restores
+an active sync from the status kind and ID after refresh, retains its cancel
+control, and disables a second start while either an import or sync is active.
+
+Disconnecting prevents future browsing and sync but explicitly retains papers,
+annotations, and operation history already stored by Scholens. Invalid
+permission, revoked credentials, rate limiting, and provider unavailability
+remain distinct recoverable states rather than raw Zotero diagnostics.
+
 ## State and component ownership
 
 Settings panels compose product feature slices; they do not handwrite backend
@@ -120,8 +148,12 @@ source-code link, and the exact Settings/Account/Usage URL writes. Usage covers
 the per-Project paper limit, correct English/Chinese
 KiB-derived storage display, and UTC-negative date-only formatting.
 Connection stories include connected, not connected, invalid, replacement,
-OpenAlex key-link, and OpenAlex invalid behavior. Access Key stories include
-empty, populated, create, edit, revoke,
+OpenAlex key-link, and OpenAlex invalid behavior.
+`Features/Settings/Dialog/ZoteroConnected` is the executable Zotero management
+state and covers connection metadata, manual sync, automatic-import preference,
+and disconnect confirmation; the Zotero feature stories own its slow,
+disconnected, invalid-permission, rate-limit, narrow, localized, and Dark
+variants. Access Key stories include empty, populated, create, edit, revoke,
 and one-time secret states. The shared Dialog responsive-full story verifies
 the mobile shell independently.
 

@@ -4347,9 +4347,19 @@
             "enum": [
               "built_in",
               "parsing",
-              "search"
+              "search",
+              "reference_manager"
             ],
             "title": "Category",
+            "type": "string"
+          },
+          "connection_method": {
+            "enum": [
+              "built_in",
+              "credential",
+              "oauth"
+            ],
+            "title": "Connection Method",
             "type": "string"
           },
           "enabled": {
@@ -4425,6 +4435,7 @@
         "required": [
           "provider",
           "category",
+          "connection_method",
           "managed",
           "state",
           "enabled"
@@ -4456,7 +4467,8 @@
           "tavily",
           "exa",
           "firecrawl",
-          "openalex"
+          "openalex",
+          "zotero"
         ],
         "title": "IntegrationProvider",
         "type": "string"
@@ -4510,7 +4522,7 @@
           "audio_generate",
           "data_table_generate",
           "zotero_import",
-          "zotero_postprocess",
+          "zotero_sync",
           "document_gc",
           "storage_delete"
         ],
@@ -9002,247 +9014,30 @@
         "title": "WorkspacePermission",
         "type": "string"
       },
-      "ZoteroConnectResponse": {
+      "ZoteroCollection": {
         "properties": {
-          "auth_url": {
-            "title": "Auth Url",
+          "key": {
+            "pattern": "^[A-Z0-9]{8}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
             "type": "string"
           }
         },
         "required": [
-          "auth_url"
+          "key",
+          "name"
         ],
-        "title": "ZoteroConnectResponse",
+        "title": "ZoteroCollection",
         "type": "object"
       },
-      "ZoteroImportError": {
-        "properties": {
-          "error": {
-            "title": "Error",
-            "type": "string"
-          },
-          "zotero_item_key": {
-            "title": "Zotero Item Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "zotero_item_key",
-          "error"
-        ],
-        "title": "ZoteroImportError",
-        "type": "object"
-      },
-      "ZoteroImportItemResult": {
-        "properties": {
-          "document_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Document Id"
-          },
-          "import_source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Import Source"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "upload_job_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upload Job Id"
-          },
-          "zotero_item_key": {
-            "title": "Zotero Item Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "zotero_item_key"
-        ],
-        "title": "ZoteroImportItemResult",
-        "type": "object"
-      },
-      "ZoteroImportRequest": {
-        "properties": {
-          "item_keys": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 50,
-            "minItems": 1,
-            "title": "Item Keys",
-            "type": "array"
-          }
-        },
-        "required": [
-          "item_keys"
-        ],
-        "title": "ZoteroImportRequest",
-        "type": "object"
-      },
-      "ZoteroImportResponse": {
-        "properties": {
-          "errors": {
-            "items": {
-              "$ref": "#/components/schemas/ZoteroImportError"
-            },
-            "title": "Errors",
-            "type": "array"
-          },
-          "imported": {
-            "items": {
-              "$ref": "#/components/schemas/ZoteroImportItemResult"
-            },
-            "title": "Imported",
-            "type": "array"
-          },
-          "imported_count": {
-            "title": "Imported Count",
-            "type": "integer"
-          },
-          "imported_via_url": {
-            "title": "Imported Via Url",
-            "type": "integer"
-          },
-          "skipped_already_imported": {
-            "title": "Skipped Already Imported",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "imported",
-          "imported_count",
-          "imported_via_url",
-          "skipped_already_imported",
-          "errors"
-        ],
-        "title": "ZoteroImportResponse",
-        "type": "object"
-      },
-      "ZoteroImportStatusItem": {
-        "properties": {
-          "created_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "document_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Document Id"
-          },
-          "error_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error Message"
-          },
-          "import_source": {
-            "title": "Import Source",
-            "type": "string"
-          },
-          "last_synced_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Synced At"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "upload_job_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upload Job Id"
-          },
-          "zotero_item_key": {
-            "title": "Zotero Item Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "zotero_item_key",
-          "import_source",
-          "status"
-        ],
-        "title": "ZoteroImportStatusItem",
-        "type": "object"
-      },
-      "ZoteroImportStatusListResponse": {
+      "ZoteroCollectionPage": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ZoteroImportStatusItem"
+              "$ref": "#/components/schemas/ZoteroCollection"
             },
             "title": "Items",
             "type": "array"
@@ -9257,20 +9052,175 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
           }
         },
         "required": [
-          "items"
+          "items",
+          "total_count"
         ],
-        "title": "ZoteroImportStatusListResponse",
+        "title": "ZoteroCollectionPage",
+        "type": "object"
+      },
+      "ZoteroConnectResponse": {
+        "properties": {
+          "auth_url": {
+            "title": "Auth Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_url"
+        ],
+        "title": "ZoteroConnectResponse",
+        "type": "object"
+      },
+      "ZoteroConnectionStatus": {
+        "properties": {
+          "active_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Operation Id"
+          },
+          "active_operation_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "import",
+                  "sync"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Operation Kind"
+          },
+          "auto_import_enabled": {
+            "default": false,
+            "title": "Auto Import Enabled",
+            "type": "boolean"
+          },
+          "auto_import_state": {
+            "default": "off",
+            "enum": [
+              "active",
+              "off",
+              "paused"
+            ],
+            "title": "Auto Import State",
+            "type": "string"
+          },
+          "automatic_annotation_sync": {
+            "enum": [
+              "active",
+              "off",
+              "paused"
+            ],
+            "title": "Automatic Annotation Sync",
+            "type": "string"
+          },
+          "automatic_sync_eligible": {
+            "default": false,
+            "title": "Automatic Sync Eligible",
+            "type": "boolean"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At"
+          },
+          "connection_state": {
+            "enum": [
+              "disconnected",
+              "connected",
+              "invalid"
+            ],
+            "title": "Connection State",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_successful_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Successful Sync At"
+          }
+        },
+        "required": [
+          "connection_state",
+          "automatic_annotation_sync"
+        ],
+        "title": "ZoteroConnectionStatus",
+        "type": "object"
+      },
+      "ZoteroImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "item_keys": {
+            "items": {
+              "pattern": "^[A-Z0-9]{8}$",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Item Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_keys"
+        ],
+        "title": "ZoteroImportRequest",
         "type": "object"
       },
       "ZoteroLibraryItem": {
         "properties": {
-          "already_imported": {
-            "title": "Already Imported",
-            "type": "boolean"
-          },
           "authors": {
             "items": {
               "type": "string"
@@ -9278,11 +9228,12 @@
             "title": "Authors",
             "type": "array"
           },
-          "collections": {
+          "collection_keys": {
             "items": {
+              "pattern": "^[A-Z0-9]{8}$",
               "type": "string"
             },
-            "title": "Collections",
+            "title": "Collection Keys",
             "type": "array"
           },
           "date": {
@@ -9307,18 +9258,27 @@
             ],
             "title": "Date Added"
           },
-          "has_metadata": {
-            "default": true,
-            "title": "Has Metadata",
-            "type": "boolean"
-          },
-          "has_pdf_attachment": {
-            "default": false,
-            "title": "Has Pdf Attachment",
-            "type": "boolean"
+          "import_state": {
+            "enum": [
+              "available",
+              "imported",
+              "in_progress",
+              "failed"
+            ],
+            "title": "Import State",
+            "type": "string"
           },
           "item_type": {
             "title": "Item Type",
+            "type": "string"
+          },
+          "source_availability": {
+            "enum": [
+              "stored_pdf",
+              "resolvable_source",
+              "unavailable"
+            ],
+            "title": "Source Availability",
             "type": "string"
           },
           "tags": {
@@ -9344,6 +9304,7 @@
             "title": "Venue"
           },
           "zotero_item_key": {
+            "pattern": "^[A-Z0-9]{8}$",
             "title": "Zotero Item Key",
             "type": "string"
           }
@@ -9353,12 +9314,13 @@
           "title",
           "authors",
           "item_type",
-          "already_imported"
+          "import_state",
+          "source_availability"
         ],
         "title": "ZoteroLibraryItem",
         "type": "object"
       },
-      "ZoteroLibraryResponse": {
+      "ZoteroLibraryPage": {
         "properties": {
           "items": {
             "items": {
@@ -9366,6 +9328,11 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "max_batch_size": {
+            "default": 50,
+            "title": "Max Batch Size",
+            "type": "integer"
           },
           "next_cursor": {
             "anyOf": [
@@ -9378,71 +9345,280 @@
             ],
             "title": "Next Cursor"
           },
+          "previous_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Cursor"
+          },
           "remaining_slots": {
             "title": "Remaining Slots",
+            "type": "integer"
+          },
+          "total_count": {
+            "title": "Total Count",
             "type": "integer"
           }
         },
         "required": [
           "items",
+          "total_count",
           "remaining_slots"
         ],
-        "title": "ZoteroLibraryResponse",
+        "title": "ZoteroLibraryPage",
         "type": "object"
       },
-      "ZoteroStatusResponse": {
+      "ZoteroOAuthAuthorizationRequest": {
+        "additionalProperties": false,
         "properties": {
-          "connected": {
-            "title": "Connected",
+          "intent": {
+            "default": "manage",
+            "enum": [
+              "manage",
+              "import"
+            ],
+            "title": "Intent",
+            "type": "string"
+          },
+          "return_path": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Return Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "return_path"
+        ],
+        "title": "ZoteroOAuthAuthorizationRequest",
+        "type": "object"
+      },
+      "ZoteroOperation": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ZoteroOperationCounts"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ZoteroOperationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "import",
+              "sync"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "progress_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "fetching_library",
+                  "syncing_annotations",
+                  "importing_papers"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress Code"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "partial",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "counts",
+          "created_at"
+        ],
+        "title": "ZoteroOperation",
+        "type": "object"
+      },
+      "ZoteroOperationCounts": {
+        "properties": {
+          "failed": {
+            "minimum": 0.0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "skipped": {
+            "minimum": 0.0,
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "succeeded": {
+            "minimum": 0.0,
+            "title": "Succeeded",
+            "type": "integer"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "succeeded",
+          "failed",
+          "skipped"
+        ],
+        "title": "ZoteroOperationCounts",
+        "type": "object"
+      },
+      "ZoteroOperationItem": {
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "ingestion_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingestion Job Id"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "accepted",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "zotero_item_key": {
+            "pattern": "^[A-Z0-9]{8}$",
+            "title": "Zotero Item Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zotero_item_key",
+          "status"
+        ],
+        "title": "ZoteroOperationItem",
+        "type": "object"
+      },
+      "ZoteroSyncPreferencesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_import_enabled": {
+            "title": "Auto Import Enabled",
             "type": "boolean"
-          },
-          "connected_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Connected At"
-          },
-          "last_synced_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Synced At"
           }
         },
         "required": [
-          "connected"
+          "auto_import_enabled"
         ],
-        "title": "ZoteroStatusResponse",
-        "type": "object"
-      },
-      "ZoteroSyncResponse": {
-        "properties": {
-          "new_annotations_count": {
-            "title": "New Annotations Count",
-            "type": "integer"
-          },
-          "synced_papers_count": {
-            "title": "Synced Papers Count",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "synced_papers_count",
-          "new_annotations_count"
-        ],
-        "title": "ZoteroSyncResponse",
+        "title": "ZoteroSyncPreferencesRequest",
         "type": "object"
       }
     },
@@ -11503,64 +11679,37 @@
         "summary": "Get Topics"
       }
     },
-    "/api/v1/integrations/zotero/connection": {
-      "delete": {
-        "operationId": "zotero_disconnect_api_v1_integrations_zotero_connection_delete",
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Zotero Disconnect"
-      },
+    "/api/v1/integrations/zotero/collections": {
       "get": {
-        "operationId": "zotero_status_api_v1_integrations_zotero_connection_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ZoteroStatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "summary": "Zotero Status"
-      }
-    },
-    "/api/v1/integrations/zotero/imports": {
-      "get": {
-        "operationId": "zotero_import_status_list_api_v1_integrations_zotero_imports_get",
+        "operationId": "zotero_collections_api_v1_integrations_zotero_collections_get",
         "parameters": [
           {
             "in": "query",
-            "name": "item_keys",
+            "name": "cursor",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
+                  "maxLength": 2048,
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Item Keys"
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],
@@ -11569,7 +11718,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ZoteroImportStatusListResponse"
+                  "$ref": "#/components/schemas/ZoteroCollectionPage"
                 }
               }
             },
@@ -11591,26 +11740,38 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Zotero Import Status List"
-      },
+        "summary": "Zotero Collections"
+      }
+    },
+    "/api/v1/integrations/zotero/connection": {
+      "delete": {
+        "operationId": "zotero_disconnect_api_v1_integrations_zotero_connection_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Disconnect"
+      }
+    },
+    "/api/v1/integrations/zotero/imports": {
       "post": {
         "operationId": "zotero_import_api_v1_integrations_zotero_imports_post",
         "parameters": [
           {
             "in": "header",
-            "name": "idempotency-key",
-            "required": false,
+            "name": "Idempotency-Key",
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 128,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Idempotency-Key"
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
             }
           }
         ],
@@ -11629,7 +11790,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ZoteroImportResponse"
+                  "$ref": "#/components/schemas/ZoteroOperation"
                 }
               }
             },
@@ -11654,19 +11815,212 @@
         "summary": "Zotero Import"
       }
     },
-    "/api/v1/integrations/zotero/library-items": {
-      "get": {
-        "operationId": "zotero_library_api_v1_integrations_zotero_library_items_get",
+    "/api/v1/integrations/zotero/imports/{operation_id}": {
+      "delete": {
+        "operationId": "zotero_cancel_import_api_v1_integrations_zotero_imports__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ZoteroLibraryResponse"
+                  "$ref": "#/components/schemas/ZoteroOperation"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Cancel Import"
+      },
+      "get": {
+        "operationId": "zotero_import_operation_api_v1_integrations_zotero_imports__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Import Operation"
+      }
+    },
+    "/api/v1/integrations/zotero/library-items": {
+      "get": {
+        "operationId": "zotero_library_api_v1_integrations_zotero_library_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 240,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "collection_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 8,
+                  "minLength": 8,
+                  "pattern": "^[A-Z0-9]{8}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Collection Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "item_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(journalArticle|conferencePaper|preprint)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "modified_desc",
+              "pattern": "^(modified_desc|added_desc|published_desc|title_asc|creator_asc)$",
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroLibraryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -11675,6 +12029,52 @@
           }
         ],
         "summary": "Zotero Library"
+      }
+    },
+    "/api/v1/integrations/zotero/oauth/authorizations": {
+      "post": {
+        "operationId": "zotero_connect_api_v1_integrations_zotero_oauth_authorizations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZoteroOAuthAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Connect",
+        "tags": [
+          "zotero"
+        ]
       }
     },
     "/api/v1/integrations/zotero/oauth/callback": {
@@ -11701,7 +12101,7 @@
           }
         ],
         "responses": {
-          "307": {
+          "302": {
             "description": "Successful Response"
           },
           "422": {
@@ -11721,15 +12121,15 @@
         ]
       }
     },
-    "/api/v1/integrations/zotero/oauth/connect": {
+    "/api/v1/integrations/zotero/status": {
       "get": {
-        "operationId": "zotero_connect_api_v1_integrations_zotero_oauth_connect_get",
+        "operationId": "zotero_status_api_v1_integrations_zotero_status_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ZoteroConnectResponse"
+                  "$ref": "#/components/schemas/ZoteroConnectionStatus"
                 }
               }
             },
@@ -11741,25 +12141,88 @@
             "BearerAuth": []
           }
         ],
-        "summary": "Zotero Connect",
-        "tags": [
-          "zotero"
-        ]
+        "summary": "Zotero Status"
+      }
+    },
+    "/api/v1/integrations/zotero/sync-preferences": {
+      "put": {
+        "operationId": "zotero_sync_preferences_api_v1_integrations_zotero_sync_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZoteroSyncPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroConnectionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Sync Preferences"
       }
     },
     "/api/v1/integrations/zotero/sync-runs": {
       "post": {
         "operationId": "zotero_sync_api_v1_integrations_zotero_sync_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ZoteroSyncResponse"
+                  "$ref": "#/components/schemas/ZoteroOperation"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -11768,6 +12231,94 @@
           }
         ],
         "summary": "Zotero Sync"
+      }
+    },
+    "/api/v1/integrations/zotero/sync-runs/{operation_id}": {
+      "delete": {
+        "operationId": "zotero_cancel_sync_api_v1_integrations_zotero_sync_runs__operation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Cancel Sync"
+      },
+      "get": {
+        "operationId": "zotero_sync_operation_api_v1_integrations_zotero_sync_runs__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoteroOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Zotero Sync Operation"
       }
     },
     "/api/v1/jobs": {

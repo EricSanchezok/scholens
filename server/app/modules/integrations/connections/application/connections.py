@@ -19,6 +19,7 @@ from app.modules.integrations.connections.application.ports import (
     UnreadableIntegrationCredential,
 )
 from app.modules.integrations.connections.domain import (
+    CREDENTIAL_INTEGRATION_PROVIDERS,
     MCP_CONNECTOR_PROVIDERS,
     USER_MANAGED_INTEGRATION_PROVIDERS,
     IntegrationProvider,
@@ -41,6 +42,7 @@ _INVALID_CREDENTIAL_CODES = frozenset(
         "integration_credentials_invalid",
         "mineru_credential_invalid",
         "openalex_credential_invalid",
+        "zotero_credentials_invalid",
     }
 )
 
@@ -73,6 +75,7 @@ class Integrations:
             IntegrationConnectionResponse(
                 provider=IntegrationProvider.SCHOLIGHT,
                 category="built_in",
+                connection_method="built_in",
                 managed=True,
                 state=built_in_state,
                 enabled=self._scholight_configured,
@@ -102,7 +105,7 @@ class Integrations:
         credential: str,
         verified: bool,
     ) -> IntegrationConnectionResponse:
-        _require_user_managed(provider)
+        _require_credential_managed(provider)
         now = self._clock.now()
         record = self._gateway.upsert(
             user_id=actor.id,
@@ -135,7 +138,7 @@ class Integrations:
         verified: bool,
         expected_credential_revision: UUID | None = None,
     ) -> IntegrationConnectionResponse:
-        _require_user_managed(provider)
+        _require_credential_managed(provider)
         current = self._gateway.get_owned(
             user_id=actor.id,
             provider=provider,
@@ -177,7 +180,7 @@ class Integrations:
         operation: OperationContext,
         provider: IntegrationProvider,
     ) -> None:
-        _require_user_managed(provider)
+        _require_credential_managed(provider)
         current = self._gateway.get_owned(
             user_id=actor.id,
             provider=provider,
@@ -438,8 +441,24 @@ def _require_user_managed(provider: IntegrationProvider) -> None:
         )
 
 
-def _category(provider: IntegrationProvider) -> Literal["parsing", "search"]:
-    return "parsing" if provider is IntegrationProvider.MINERU else "search"
+def _require_credential_managed(provider: IntegrationProvider) -> None:
+    _require_user_managed(provider)
+    if provider not in CREDENTIAL_INTEGRATION_PROVIDERS:
+        raise AppError(
+            code="integration_oauth_required",
+            message="This integration must be connected through OAuth",
+            kind=FailureKind.CONFLICT,
+        )
+
+
+def _category(
+    provider: IntegrationProvider,
+) -> Literal["parsing", "search", "reference_manager"]:
+    if provider is IntegrationProvider.MINERU:
+        return "parsing"
+    if provider is IntegrationProvider.ZOTERO:
+        return "reference_manager"
+    return "search"
 
 
 def _response(
@@ -452,6 +471,9 @@ def _response(
         return IntegrationConnectionResponse(
             provider=provider,
             category=_category(provider),
+            connection_method=(
+                "oauth" if provider is IntegrationProvider.ZOTERO else "credential"
+            ),
             managed=False,
             state="disconnected",
             enabled=False,
@@ -470,6 +492,9 @@ def _response(
     return IntegrationConnectionResponse(
         provider=provider,
         category=_category(provider),
+        connection_method=(
+            "oauth" if provider is IntegrationProvider.ZOTERO else "credential"
+        ),
         managed=False,
         state=state,
         enabled=record.enabled,

@@ -18,7 +18,6 @@ from app.database.models import (
     Subscription,
     AuthUser,
     UserProfile,
-    ZoteroConnection,
     ZoteroImportedItem,
     ZoteroOAuthPending,
 )
@@ -241,22 +240,6 @@ class ProjectInvitationAdmin(ReadOnlyModelView, model=ProjectInvitation):
     ]
 
 
-class ZoteroConnectionAdmin(ReadOnlyModelView, model=ZoteroConnection):
-    name = "Zotero Connection"
-    name_plural = "Zotero Connections"
-    icon = "fa-solid fa-plug"
-    # api_key is intentionally omitted to avoid exposing the secret.
-    column_list = [
-        ZoteroConnection.id,
-        ZoteroConnection.user_id,
-        ZoteroConnection.zotero_user_id,
-    ]
-    column_searchable_list = [
-        ZoteroConnection.user_id,
-        ZoteroConnection.zotero_user_id,
-    ]
-
-
 class ZoteroImportedItemAdmin(ReadOnlyModelView, model=ZoteroImportedItem):
     name = "Zotero Imported Item"
     name_plural = "Zotero Imported Items"
@@ -339,6 +322,5 @@ def setup_admin(app: FastAPI) -> None:
     admin.add_view(AccountPlanGrantAdmin)
     admin.add_view(AccountQuotaOverrideAdmin)
     admin.add_view(DurableJobAdmin)
-    admin.add_view(ZoteroConnectionAdmin)
     admin.add_view(ZoteroImportedItemAdmin)
     admin.add_view(ZoteroOAuthPendingAdmin)

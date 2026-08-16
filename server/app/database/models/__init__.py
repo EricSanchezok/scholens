@@ -19,6 +19,7 @@ from app.shared.domain.enums import (
     SubscriptionPlan,
     SubscriptionStatus,
     StripeWebhookEventStatus,
+    ZoteroAnnotationSyncStatus,
     ZoteroImportSource,
     ZoteroImportStatus,
 )
@@ -37,7 +38,6 @@ from app.modules.jobs.infrastructure.models import (
     JobsWebhookNonce,
 )
 from app.modules.integrations.zotero.infrastructure.models import (
-    ZoteroConnection,
     ZoteroImportedItem,
     ZoteroOAuthPending,
 )
@@ -155,9 +155,9 @@ __all__ = [
     "TranslationPreference",
     "TranslationResult",
     "UserProfile",
-    "ZoteroConnection",
     "ZoteroImportSource",
     "ZoteroImportStatus",
+    "ZoteroAnnotationSyncStatus",
     "ZoteroImportedItem",
     "ZoteroOAuthPending",
 ]

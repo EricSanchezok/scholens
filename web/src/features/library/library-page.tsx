@@ -24,6 +24,16 @@ import { integrationQueries } from "@/features/integrations";
 import { useSettingsNavigation } from "@/features/settings";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
+  ZoteroLibraryDialog,
+  ZoteroOperationStatus,
+  clearZoteroCallbackParams,
+  shouldOpenZoteroLibrary,
+  zoteroKeys,
+  zoteroOAuthResultKey,
+  zoteroQueries,
+  type ZoteroOperation,
+} from "@/features/zotero";
+import {
   createLibraryTag,
   deleteLibraryTag,
   getPaperDownloadUrl,
@@ -86,6 +96,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const t = useTranslations("Library");
+  const zoteroT = useTranslations("Zotero.oauth");
   const { signOut } = useAuthSession();
   const { setSection: setSettingsSection } = useSettingsNavigation();
   const parsed = React.useMemo(
@@ -95,6 +106,17 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [zoteroOpen, setZoteroOpen] = React.useState(() =>
+    shouldOpenZoteroLibrary(searchParams.toString()),
+  );
+  const [zoteroOperation, setZoteroOperation] =
+    React.useState<ZoteroOperation>();
+  const zoteroStatus = useQuery(zoteroQueries.status());
+  const zoteroOperationId =
+    zoteroOperation?.id ??
+    (zoteroStatus.data?.active_operation_kind === "import"
+      ? (zoteroStatus.data.active_operation_id ?? undefined)
+      : undefined);
   const [pendingMineruRetry, setPendingMineruRetry] = React.useState<string>();
   const resumingMineruRetry = React.useRef(false);
   const runAction = React.useCallback(
@@ -118,6 +140,24 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     },
     [parsed, router],
   );
+
+  React.useEffect(() => {
+    const intent = searchParams.get("zotero_intent");
+    const state = searchParams.get("zotero");
+    if (intent !== "import" && searchParams.get("zotero_import") !== "1") {
+      return;
+    }
+    if (state && state !== "connected") {
+      toast.notify({ title: zoteroT(zoteroOAuthResultKey(state)) });
+    }
+    if (state) {
+      const next = clearZoteroCallbackParams(searchParams.toString());
+      const query = next.toString();
+      router.replace((query ? `/library?${query}` : "/library") as Route, {
+        scroll: false,
+      });
+    }
+  }, [router, searchParams, toast, zoteroT]);
 
   const conversationsQuery = useQuery(libraryQueries.conversations());
   const summaryQuery = useQuery(libraryQueries.summary());
@@ -337,6 +377,26 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               {t("addPapers.open")}
             </Button>
           </header>
+          {zoteroOperationId ? (
+            <ZoteroOperationStatus
+              initialOperation={zoteroOperation}
+              operationId={zoteroOperationId}
+              onComplete={() => {
+                void Promise.all([
+                  queryClient.invalidateQueries({
+                    queryKey: [...libraryKeys.all, "papers"],
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: libraryKeys.summary(),
+                  }),
+                  queryClient.invalidateQueries({
+                    queryKey: zoteroKeys.status(),
+                  }),
+                ]);
+              }}
+              onDismiss={() => setZoteroOperation(undefined)}
+            />
+          ) : null}
           <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
             <PapersView
               attentionCount={summaryQuery.data?.attention_count ?? 0}
@@ -435,10 +495,16 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
 
       <AddPapersDialog
         onConnectOpenAlex={() => setSettingsSection("connections")}
+        onBrowseZotero={() => setZoteroOpen(true)}
         onOpenChange={setAddOpen}
         onSubmitSource={ingestion.submitSource}
         onUploadFiles={ingestion.startUploads}
         open={addOpen}
+      />
+      <ZoteroLibraryDialog
+        onImportAccepted={setZoteroOperation}
+        onOpenChange={setZoteroOpen}
+        open={zoteroOpen}
       />
     </WorkspaceShell>
   );

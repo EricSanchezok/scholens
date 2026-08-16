@@ -10,11 +10,11 @@ from app.bootstrap.adapters.upload_repository import (
     upload_reservation_repository,
 )
 from app.modules.identity.infrastructure.users import user_repository
-from app.modules.integrations.zotero.infrastructure.connection_repository import (
-    zotero_connection_repository,
-)
 from app.modules.integrations.zotero.infrastructure.import_repository import (
     zotero_import_repository,
+)
+from app.modules.integrations.connections.infrastructure.models import (
+    IntegrationConnection,
 )
 from app.database.database import engine
 from app.database.models import (
@@ -1147,24 +1147,101 @@ def schedule_zotero_jobs(
             skipped += 1
             continue
 
-        if not zotero_connection_repository.get_by_user_id(db, user_id=user.id):
+        connection = db.scalar(
+            select(IntegrationConnection)
+            .where(
+                IntegrationConnection.user_id == user.id,
+                IntegrationConnection.provider == "zotero",
+                IntegrationConnection.enabled.is_(True),
+            )
+            .with_for_update()
+        )
+        if connection is None:
             skipped += 1
             continue
+        active_zotero_job = next(
+            (
+                job
+                for job in job_repository.list_for_requester(
+                    db,
+                    requested_by_id=user.id,
+                    statuses=(JobStatus.PENDING, JobStatus.RUNNING),
+                )
+                if job.operation
+                in {JobOperation.ZOTERO_IMPORT.value, JobOperation.ZOTERO_SYNC.value}
+            ),
+            None,
+        )
+        if active_zotero_job is not None:
+            skipped += 1
+            continue
+        targets = zotero_import_repository.list_syncable_by_user(
+            db,
+            user_id=user.id,
+            limit=500,
+        )
+        auto_import_enabled = (
+            connection.configuration.get("auto_import_enabled") is True
+        )
+        auto_import_version = connection.configuration.get(
+            "auto_import_library_version"
+        )
+        auto_import_start = connection.configuration.get("auto_import_start")
         job_id = uuid.uuid4()
         job = job_repository.enqueue(
             db,
             request=EnqueueJob(
-                operation=JobOperation.ZOTERO_POSTPROCESS,
+                operation=JobOperation.ZOTERO_SYNC,
                 requested_by_id=user.id,
                 correlation_id=correlation_id,
                 origin_operation_id=origin_operation_id,
-                idempotency_key=f"zotero-postprocess:{user.id}:{window}",
-                payload={"threshold_seconds": threshold_seconds},
-                task_name="postprocess_zotero",
+                idempotency_key=f"zotero-sync:{user.id}:scheduled:{window}",
+                payload={
+                    "targets": [
+                        {
+                            "item_key": target.zotero_item_key,
+                            "attachment_key": target.zotero_attachment_key,
+                        }
+                        for target in targets
+                        if target.zotero_attachment_key
+                    ],
+                    "automatic": True,
+                    "auto_import_version": (
+                        auto_import_version if auto_import_enabled else None
+                    ),
+                    "auto_import_start": auto_import_start
+                    if auto_import_enabled
+                    else 0,
+                    "credential_revision": str(connection.credential_revision),
+                },
+                task_name="sync_zotero",
                 queue=JobQueue.MAINTENANCE,
                 task_kwargs={
-                    "callback_url": (f"{base_url}/internal/v1/jobs/{job_id}/complete"),
+                    "request": {
+                        "targets": [
+                            {
+                                "item_key": target.zotero_item_key,
+                                "attachment_key": target.zotero_attachment_key,
+                            }
+                            for target in targets
+                            if target.zotero_attachment_key
+                        ],
+                        "automatic": True,
+                        "auto_import_version": (
+                            auto_import_version if auto_import_enabled else None
+                        ),
+                        "auto_import_start": auto_import_start
+                        if auto_import_enabled
+                        else 0,
+                        "credential_revision": str(connection.credential_revision),
+                    },
+                    "webhook_url": (f"{base_url}/internal/v1/jobs/{job_id}/complete"),
                     "claim_url": f"{base_url}/internal/v1/jobs/{job_id}/claim",
+                    "credential_url": (
+                        f"{base_url}/internal/v1/jobs/{job_id}"
+                        "/integration-credentials/zotero"
+                    ),
+                    "progress_url": (f"{base_url}/internal/v1/jobs/{job_id}/progress"),
                 },
                 job_id=job_id,
             ),

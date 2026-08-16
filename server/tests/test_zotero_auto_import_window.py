@@ -1,22 +1,18 @@
-"""Zotero automatic-import window behavior on the unified workflow."""
+"""Zotero version-checkpoint and entitlement behavior."""
 
-from __future__ import annotations
-
-from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
-from app.bootstrap.adapters.zotero_operations import DefaultZoteroOperations
-from app.bootstrap.workflows.zotero import ZoteroPostprocessWorkflow
-from app.modules.integrations.zotero.application.zotero import (
-    ZoteroCredentials,
-    ZoteroImportPlan,
-    ZoteroItemSnapshot,
-    ZoteroLibrarySnapshot,
+from app.bootstrap.adapters.zotero_gateway import DefaultZoteroGateway
+from app.modules.integrations.zotero.application.zotero import ZoteroAutoImportCursor
+from app.modules.integrations.zotero.application.contracts import (
+    ZoteroSyncPreferencesRequest,
 )
-from app.shared.application import Actor, OperationContextFactory
+from app.shared.application import Actor
+from app.shared.domain import AppError
 
 
 def _actor() -> Actor:
@@ -28,100 +24,111 @@ def _actor() -> Actor:
     )
 
 
-def _item(key: str, date_added: str) -> ZoteroItemSnapshot:
-    return ZoteroItemSnapshot(
-        item_key=key,
-        title=key,
-        authors=(),
-        abstract=None,
-        publish_date=None,
-        doi=None,
-        tags=(),
-        date_added=date_added,
-        item_type="journalArticle",
-        venue=None,
-        collections=(),
-        has_pdf_attachment=True,
-        has_metadata=True,
+def _connection(*, auto_import_enabled: bool = False):
+    return SimpleNamespace(
+        configuration={
+            "auto_import_enabled": auto_import_enabled,
+            "auto_import_library_version": 100 if auto_import_enabled else None,
+        },
+        created_at=None,
+        credential_revision=uuid4(),
+        last_error_code=None,
     )
 
 
-class _Executor:
-    def __init__(self, capabilities: object) -> None:
-        self.capabilities = capabilities
+def test_enabling_auto_import_records_current_library_version() -> None:
+    connection = _connection()
+    connections = MagicMock()
+    connections.get_by_user_id.return_value = connection
+    connections.credential_revision_is_current.side_effect = (
+        lambda *, revision, **_kwargs: revision == connection.credential_revision
+    )
+    connections.credentials.return_value = (
+        "42",
+        "secret",
+        connection.credential_revision,
+    )
+    connections.update_configuration.side_effect = lambda **kwargs: setattr(
+        connection, "configuration", kwargs["configuration"]
+    )
+    gateway = DefaultZoteroGateway(MagicMock(), connections=connections)
 
-    def query(self, operation):  # type: ignore[no-untyped-def]
-        return operation(self.capabilities)
-
-    def command(self, operation):  # type: ignore[no-untyped-def]
-        return operation(self.capabilities)
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("2024-06-01T10:15:30Z", datetime(2024, 6, 1, 10, 15, 30, tzinfo=UTC)),
-        ("not-a-date", None),
-        (None, None),
-    ],
-)
-def test_parse_date_added(value: str | None, expected: datetime | None) -> None:
-    assert DefaultZoteroOperations.parse_date_added(value) == expected
-
-
-@pytest.mark.asyncio
-async def test_auto_import_only_plans_items_at_or_after_cutoff() -> None:
-    since = datetime(2025, 6, 1, tzinfo=UTC)
-    zotero = MagicMock()
-    zotero.auto_import_since.return_value = since
-    captured: list[tuple[str, ...]] = []
-
-    def plan_import(*, items, **_kwargs):  # type: ignore[no-untyped-def]
-        captured.append(tuple(item.item_key for item in items))
-        return ZoteroImportPlan(items=(), skipped_already_imported=0, errors=())
-
-    zotero.plan_import.side_effect = plan_import
-    operations = MagicMock(spec=DefaultZoteroOperations)
-    operations.fetch_library.return_value = ZoteroLibrarySnapshot(
-        items=(
-            _item("OLD", "2020-01-01T00:00:00Z"),
-            _item("NEW", "2025-07-01T00:00:00Z"),
-            _item("INVALID", "not-a-date"),
+    with (
+        patch(
+            "app.bootstrap.adapters.zotero_gateway.can_user_auto_sync_zotero",
+            return_value=True,
+        ),
+        patch(
+            "app.bootstrap.adapters.zotero_gateway.zotero_import_repository.get_max_last_synced_at",
+            return_value=None,
+        ),
+    ):
+        status = gateway.set_sync_preferences(
+            actor=_actor(),
+            request=ZoteroSyncPreferencesRequest(auto_import_enabled=True),
+            library_version=321,
         )
+
+    configuration = connections.update_configuration.call_args.kwargs["configuration"]
+    assert configuration["auto_import_enabled"] is True
+    assert configuration["auto_import_library_version"] == 321
+    assert status.auto_import_state == "active"
+
+
+def test_basic_cannot_enable_auto_import() -> None:
+    connection = _connection()
+    connections = MagicMock()
+    connections.get_by_user_id.return_value = connection
+    gateway = DefaultZoteroGateway(MagicMock(), connections=connections)
+
+    with patch(
+        "app.bootstrap.adapters.zotero_gateway.can_user_auto_sync_zotero",
+        return_value=False,
+    ):
+        with pytest.raises(AppError) as raised:
+            gateway.set_sync_preferences(
+                actor=_actor(),
+                request=ZoteroSyncPreferencesRequest(auto_import_enabled=True),
+                library_version=321,
+            )
+
+    assert raised.value.code == "zotero_auto_import_requires_researcher"
+    connections.update_configuration.assert_not_called()
+
+
+def test_checkpoint_advances_only_for_matching_credential_revision() -> None:
+    connection = _connection(auto_import_enabled=True)
+    connections = MagicMock()
+    connections.get_by_user_id.return_value = connection
+    connections.credential_revision_is_current.side_effect = (
+        lambda *, revision, **_kwargs: revision == connection.credential_revision
     )
-    operations.parse_date_added.side_effect = DefaultZoteroOperations.parse_date_added
-    workflow = ZoteroPostprocessWorkflow(
-        executor=_Executor(SimpleNamespace(zotero=zotero)),  # type: ignore[arg-type]
-        operations=operations,
-        operation_factory=OperationContextFactory(),
+    gateway = DefaultZoteroGateway(MagicMock(), connections=connections)
+
+    assert not gateway.advance_sync_checkpoint(
+        user_id=7,
+        credential_revision=uuid4(),
+        library_version=500,
+        auto_import_cursor=ZoteroAutoImportCursor(library_version=500),
     )
+    connections.update_configuration.assert_not_called()
 
-    count = await workflow._auto_import(
-        actor=_actor(),
-        operation=MagicMock(),
-        credentials=ZoteroCredentials(user_id="remote", api_key="secret"),
+    assert gateway.advance_sync_checkpoint(
+        user_id=7,
+        credential_revision=connection.credential_revision,
+        library_version=500,
+        auto_import_cursor=ZoteroAutoImportCursor(
+            library_version=500,
+            start=50,
+        ),
     )
-
-    assert count == 0
-    assert captured == [("NEW",)]
-
-
-@pytest.mark.asyncio
-async def test_auto_import_without_prior_completed_import_avoids_remote_io() -> None:
-    zotero = MagicMock()
-    zotero.auto_import_since.return_value = None
-    operations = MagicMock(spec=DefaultZoteroOperations)
-    workflow = ZoteroPostprocessWorkflow(
-        executor=_Executor(SimpleNamespace(zotero=zotero)),  # type: ignore[arg-type]
-        operations=operations,
-        operation_factory=OperationContextFactory(),
+    configuration = connections.update_configuration.call_args.kwargs["configuration"]
+    assert configuration["last_sync_library_version"] == 500
+    assert configuration["auto_import_library_version"] == 500
+    assert configuration["auto_import_start"] == 50
+    assert "last_sync_at" in configuration
+    connections.credential_revision_is_current.assert_called_with(
+        user_id=7,
+        revision=connection.credential_revision,
+        lock=True,
     )
-
-    count = await workflow._auto_import(
-        actor=_actor(),
-        operation=MagicMock(),
-        credentials=ZoteroCredentials(user_id="remote", api_key="secret"),
-    )
-
-    assert count == 0
-    operations.fetch_library.assert_not_called()

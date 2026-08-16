@@ -4,13 +4,21 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, UniqueConstraint, UUID
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    UUID,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.domain import JsonValue
 from app.shared.infrastructure.persistence import Base
-from app.shared.domain.enums import ZoteroImportStatus
+from app.shared.domain.enums import ZoteroAnnotationSyncStatus, ZoteroImportStatus
 
 if TYPE_CHECKING:
     from app.modules.identity.infrastructure.models import AuthUser
@@ -26,7 +34,9 @@ class ZoteroOAuthPending(Base):
         BigInteger, ForeignKey("auth.users.id", ondelete="CASCADE"), nullable=False
     )
     oauth_token: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    oauth_token_secret: Mapped[str] = mapped_column(String, nullable=False)
+    oauth_token_secret_ciphertext: Mapped[str] = mapped_column(String, nullable=False)
+    return_path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    intent: Mapped[str] = mapped_column(String(16), nullable=False)
     correlation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         nullable=False,
@@ -41,26 +51,6 @@ class ZoteroOAuthPending(Base):
 
     user: Mapped["AuthUser"] = relationship(
         "AuthUser", back_populates="zotero_oauth_pending"
-    )
-
-
-class ZoteroConnection(Base):
-    __tablename__ = "zotero_connections"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("auth.users.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
-    zotero_user_id: Mapped[str] = mapped_column(String, nullable=False)
-    api_key: Mapped[str] = mapped_column(String, nullable=False)
-
-    user: Mapped["AuthUser"] = relationship(
-        "AuthUser", back_populates="zotero_connection"
     )
 
 
@@ -97,8 +87,27 @@ class ZoteroImportedItem(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    last_sync_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    annotation_sync_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ZoteroAnnotationSyncStatus.ACTIVE.value,
+        server_default=ZoteroAnnotationSyncStatus.ACTIVE.value,
+    )
+    last_sync_error_code: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+    zotero_item_version: Mapped[int | None] = mapped_column(nullable=True)
+    zotero_attachment_version: Mapped[int | None] = mapped_column(nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "annotation_sync_status IN ('active', 'source_unavailable')",
+            name="ck_zotero_imported_items_annotation_sync_status",
+        ),
         UniqueConstraint(
             "user_id", "zotero_item_key", name="uq_zotero_import_user_item"
         ),

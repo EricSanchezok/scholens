@@ -504,6 +504,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/zotero/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Zotero Collections */
+        get: operations["zotero_collections_api_v1_integrations_zotero_collections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/zotero/connection": {
         parameters: {
             query?: never;
@@ -511,8 +528,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Zotero Status */
-        get: operations["zotero_status_api_v1_integrations_zotero_connection_get"];
+        get?: never;
         put?: never;
         post?: never;
         /** Zotero Disconnect */
@@ -529,12 +545,29 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Zotero Import Status List */
-        get: operations["zotero_import_status_list_api_v1_integrations_zotero_imports_get"];
+        get?: never;
         put?: never;
         /** Zotero Import */
         post: operations["zotero_import_api_v1_integrations_zotero_imports_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/zotero/imports/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Zotero Import Operation */
+        get: operations["zotero_import_operation_api_v1_integrations_zotero_imports__operation_id__get"];
+        put?: never;
+        post?: never;
+        /** Zotero Cancel Import */
+        delete: operations["zotero_cancel_import_api_v1_integrations_zotero_imports__operation_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -551,6 +584,23 @@ export interface paths {
         get: operations["zotero_library_api_v1_integrations_zotero_library_items_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/zotero/oauth/authorizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Zotero Connect */
+        post: operations["zotero_connect_api_v1_integrations_zotero_oauth_authorizations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -574,16 +624,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/integrations/zotero/oauth/connect": {
+    "/api/v1/integrations/zotero/status": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Zotero Connect */
-        get: operations["zotero_connect_api_v1_integrations_zotero_oauth_connect_get"];
+        /** Zotero Status */
+        get: operations["zotero_status_api_v1_integrations_zotero_status_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/zotero/sync-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Zotero Sync Preferences */
+        put: operations["zotero_sync_preferences_api_v1_integrations_zotero_sync_preferences_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -603,6 +670,24 @@ export interface paths {
         /** Zotero Sync */
         post: operations["zotero_sync_api_v1_integrations_zotero_sync_runs_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/zotero/sync-runs/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Zotero Sync Operation */
+        get: operations["zotero_sync_operation_api_v1_integrations_zotero_sync_runs__operation_id__get"];
+        put?: never;
+        post?: never;
+        /** Zotero Cancel Sync */
+        delete: operations["zotero_cancel_sync_api_v1_integrations_zotero_sync_runs__operation_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3178,7 +3263,12 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "built_in" | "parsing" | "search";
+            category: "built_in" | "parsing" | "search" | "reference_manager";
+            /**
+             * Connection Method
+             * @enum {string}
+             */
+            connection_method: "built_in" | "credential" | "oauth";
             /** Enabled */
             enabled: boolean;
             /** Last Error Code */
@@ -3207,7 +3297,7 @@ export interface components {
          * IntegrationProvider
          * @enum {string}
          */
-        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex";
+        IntegrationProvider: "scholight" | "mineru" | "anysearch" | "tavily" | "exa" | "firecrawl" | "openalex" | "zotero";
         /** IntegrationUpdateRequest */
         IntegrationUpdateRequest: {
             /** Enabled */
@@ -3224,7 +3314,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_postprocess" | "document_gc" | "storage_delete";
+        JobOperation: "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -4867,101 +4957,95 @@ export interface components {
          * @enum {string}
          */
         WorkspacePermission: "read" | "write" | "manage" | "delete";
+        /** ZoteroCollection */
+        ZoteroCollection: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+        };
+        /** ZoteroCollectionPage */
+        ZoteroCollectionPage: {
+            /** Items */
+            items: components["schemas"]["ZoteroCollection"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
+            /** Total Count */
+            total_count: number;
+        };
         /** ZoteroConnectResponse */
         ZoteroConnectResponse: {
             /** Auth Url */
             auth_url: string;
         };
-        /** ZoteroImportError */
-        ZoteroImportError: {
-            /** Error */
-            error: string;
-            /** Zotero Item Key */
-            zotero_item_key: string;
-        };
-        /** ZoteroImportItemResult */
-        ZoteroImportItemResult: {
-            /** Document Id */
-            document_id?: string | null;
-            /** Import Source */
-            import_source?: string | null;
-            /** Title */
-            title?: string | null;
-            /** Upload Job Id */
-            upload_job_id?: string | null;
-            /** Zotero Item Key */
-            zotero_item_key: string;
+        /** ZoteroConnectionStatus */
+        ZoteroConnectionStatus: {
+            /** Active Operation Id */
+            active_operation_id?: string | null;
+            /** Active Operation Kind */
+            active_operation_kind?: ("import" | "sync") | null;
+            /**
+             * Auto Import Enabled
+             * @default false
+             */
+            auto_import_enabled: boolean;
+            /**
+             * Auto Import State
+             * @default off
+             * @enum {string}
+             */
+            auto_import_state: "active" | "off" | "paused";
+            /**
+             * Automatic Annotation Sync
+             * @enum {string}
+             */
+            automatic_annotation_sync: "active" | "off" | "paused";
+            /**
+             * Automatic Sync Eligible
+             * @default false
+             */
+            automatic_sync_eligible: boolean;
+            /** Connected At */
+            connected_at?: string | null;
+            /**
+             * Connection State
+             * @enum {string}
+             */
+            connection_state: "disconnected" | "connected" | "invalid";
+            /** Last Error Code */
+            last_error_code?: string | null;
+            /** Last Successful Sync At */
+            last_successful_sync_at?: string | null;
         };
         /** ZoteroImportRequest */
         ZoteroImportRequest: {
             /** Item Keys */
             item_keys: string[];
         };
-        /** ZoteroImportResponse */
-        ZoteroImportResponse: {
-            /** Errors */
-            errors: components["schemas"]["ZoteroImportError"][];
-            /** Imported */
-            imported: components["schemas"]["ZoteroImportItemResult"][];
-            /** Imported Count */
-            imported_count: number;
-            /** Imported Via Url */
-            imported_via_url: number;
-            /** Skipped Already Imported */
-            skipped_already_imported: number;
-        };
-        /** ZoteroImportStatusItem */
-        ZoteroImportStatusItem: {
-            /** Created At */
-            created_at?: string | null;
-            /** Document Id */
-            document_id?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Import Source */
-            import_source: string;
-            /** Last Synced At */
-            last_synced_at?: string | null;
-            /** Status */
-            status: string;
-            /** Title */
-            title?: string | null;
-            /** Upload Job Id */
-            upload_job_id?: string | null;
-            /** Zotero Item Key */
-            zotero_item_key: string;
-        };
-        /** ZoteroImportStatusListResponse */
-        ZoteroImportStatusListResponse: {
-            /** Items */
-            items: components["schemas"]["ZoteroImportStatusItem"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
-        };
         /** ZoteroLibraryItem */
         ZoteroLibraryItem: {
-            /** Already Imported */
-            already_imported: boolean;
             /** Authors */
             authors: string[];
-            /** Collections */
-            collections?: string[];
+            /** Collection Keys */
+            collection_keys?: string[];
             /** Date */
             date?: string | null;
             /** Date Added */
             date_added?: string | null;
             /**
-             * Has Metadata
-             * @default true
+             * Import State
+             * @enum {string}
              */
-            has_metadata: boolean;
-            /**
-             * Has Pdf Attachment
-             * @default false
-             */
-            has_pdf_attachment: boolean;
+            import_state: "available" | "imported" | "in_progress" | "failed";
             /** Item Type */
             item_type: string;
+            /**
+             * Source Availability
+             * @enum {string}
+             */
+            source_availability: "stored_pdf" | "resolvable_source" | "unavailable";
             /** Tags */
             tags?: string[];
             /** Title */
@@ -4971,30 +5055,102 @@ export interface components {
             /** Zotero Item Key */
             zotero_item_key: string;
         };
-        /** ZoteroLibraryResponse */
-        ZoteroLibraryResponse: {
+        /** ZoteroLibraryPage */
+        ZoteroLibraryPage: {
             /** Items */
             items: components["schemas"]["ZoteroLibraryItem"][];
+            /**
+             * Max Batch Size
+             * @default 50
+             */
+            max_batch_size: number;
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Previous Cursor */
+            previous_cursor?: string | null;
             /** Remaining Slots */
             remaining_slots: number;
+            /** Total Count */
+            total_count: number;
         };
-        /** ZoteroStatusResponse */
-        ZoteroStatusResponse: {
-            /** Connected */
-            connected: boolean;
-            /** Connected At */
-            connected_at?: string | null;
-            /** Last Synced At */
-            last_synced_at?: string | null;
+        /** ZoteroOAuthAuthorizationRequest */
+        ZoteroOAuthAuthorizationRequest: {
+            /**
+             * Intent
+             * @default manage
+             * @enum {string}
+             */
+            intent: "manage" | "import";
+            /** Return Path */
+            return_path: string;
         };
-        /** ZoteroSyncResponse */
-        ZoteroSyncResponse: {
-            /** New Annotations Count */
-            new_annotations_count: number;
-            /** Synced Papers Count */
-            synced_papers_count: number;
+        /** ZoteroOperation */
+        ZoteroOperation: {
+            /** Completed At */
+            completed_at?: string | null;
+            counts: components["schemas"]["ZoteroOperationCounts"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items?: components["schemas"]["ZoteroOperationItem"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "import" | "sync";
+            /** Progress Code */
+            progress_code?: ("queued" | "fetching_library" | "syncing_annotations" | "importing_papers") | null;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "partial" | "succeeded" | "failed" | "cancelled";
+        };
+        /** ZoteroOperationCounts */
+        ZoteroOperationCounts: {
+            /** Failed */
+            failed: number;
+            /** Skipped */
+            skipped: number;
+            /** Succeeded */
+            succeeded: number;
+            /** Total */
+            total: number;
+        };
+        /** ZoteroOperationItem */
+        ZoteroOperationItem: {
+            /** Document Id */
+            document_id?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /** Ingestion Job Id */
+            ingestion_job_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "accepted" | "failed" | "cancelled";
+            /** Title */
+            title?: string | null;
+            /** Zotero Item Key */
+            zotero_item_key: string;
+        };
+        /** ZoteroSyncPreferencesRequest */
+        ZoteroSyncPreferencesRequest: {
+            /** Auto Import Enabled */
+            auto_import_enabled: boolean;
         };
     };
     responses: never;
@@ -6346,9 +6502,12 @@ export interface operations {
             };
         };
     };
-    zotero_status_api_v1_integrations_zotero_connection_get: {
+    zotero_collections_api_v1_integrations_zotero_collections_get: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6361,7 +6520,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ZoteroStatusResponse"];
+                    "application/json": components["schemas"]["ZoteroCollectionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6384,42 +6552,11 @@ export interface operations {
             };
         };
     };
-    zotero_import_status_list_api_v1_integrations_zotero_imports_get: {
-        parameters: {
-            query?: {
-                item_keys?: string[] | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZoteroImportStatusListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     zotero_import_api_v1_integrations_zotero_imports_post: {
         parameters: {
             query?: never;
-            header?: {
-                "idempotency-key"?: string | null;
+            header: {
+                "Idempotency-Key": string;
             };
             path?: never;
             cookie?: never;
@@ -6436,7 +6573,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ZoteroImportResponse"];
+                    "application/json": components["schemas"]["ZoteroOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zotero_import_operation_api_v1_integrations_zotero_imports__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zotero_cancel_import_api_v1_integrations_zotero_imports__operation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroOperation"];
                 };
             };
             /** @description Validation Error */
@@ -6452,7 +6651,14 @@ export interface operations {
     };
     zotero_library_api_v1_integrations_zotero_library_items_get: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string | null;
+                query?: string | null;
+                collection_key?: string | null;
+                item_type?: string | null;
+                sort?: string;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6465,7 +6671,49 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ZoteroLibraryResponse"];
+                    "application/json": components["schemas"]["ZoteroLibraryPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zotero_connect_api_v1_integrations_zotero_oauth_authorizations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoteroOAuthAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroConnectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6483,7 +6731,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            307: {
+            302: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6500,7 +6748,7 @@ export interface operations {
             };
         };
     };
-    zotero_connect_api_v1_integrations_zotero_oauth_connect_get: {
+    zotero_status_api_v1_integrations_zotero_status_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6515,7 +6763,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ZoteroConnectResponse"];
+                    "application/json": components["schemas"]["ZoteroConnectionStatus"];
+                };
+            };
+        };
+    };
+    zotero_sync_preferences_api_v1_integrations_zotero_sync_preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoteroSyncPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroConnectionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -6523,7 +6804,9 @@ export interface operations {
     zotero_sync_api_v1_integrations_zotero_sync_runs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6535,7 +6818,78 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ZoteroSyncResponse"];
+                    "application/json": components["schemas"]["ZoteroOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zotero_sync_operation_api_v1_integrations_zotero_sync_runs__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zotero_cancel_sync_api_v1_integrations_zotero_sync_runs__operation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoteroOperation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

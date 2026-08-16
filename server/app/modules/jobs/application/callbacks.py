@@ -187,6 +187,8 @@ class JobCallbacks:
         if scope.operation not in {
             JobOperation.PDF_PROCESS,
             JobOperation.DOCUMENT_REFLOW,
+            JobOperation.ZOTERO_IMPORT,
+            JobOperation.ZOTERO_SYNC,
         }:
             raise AppError(
                 code="job_integration_credential_forbidden",

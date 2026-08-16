@@ -296,6 +296,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     application.state.zotero_workflow = create_zotero_workflow(
         executor,
         operation_context_factory,
+        runtime_settings,
     )
     application.state.job_completion_processor = create_job_completion_processor(
         executor,

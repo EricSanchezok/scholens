@@ -28,7 +28,6 @@ if TYPE_CHECKING:
         ResearchItem,
     )
     from app.modules.integrations.zotero.infrastructure.models import (
-        ZoteroConnection,
         ZoteroImportedItem,
         ZoteroOAuthPending,
     )
@@ -107,12 +106,6 @@ class AuthUser(Base):
     zotero_oauth_pending: Mapped[list["ZoteroOAuthPending"]] = relationship(
         "ZoteroOAuthPending",
         back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    zotero_connection: Mapped["ZoteroConnection | None"] = relationship(
-        "ZoteroConnection",
-        back_populates="user",
-        uselist=False,
         cascade="all, delete-orphan",
     )
     zotero_imported_items: Mapped[list["ZoteroImportedItem"]] = relationship(

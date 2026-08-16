@@ -56,6 +56,7 @@ change what the accepted record decided.
 - [ADR 0022: Immutable ECS release boundary](./0022-immutable-ecs-release-boundary.md)
 - [ADR 0023: Agent-native Scholens knowledge boundary](./0023-agent-native-scholens-mcp.md)
 - [ADR 0024: Shared Aliyun account and durable product email](./0024-shared-aliyun-account-and-durable-product-email.md)
+- [ADR 0025: Read-only Zotero integration across Server and Jobs](./0025-read-only-zotero-integration.md)
 
 ## Template
 

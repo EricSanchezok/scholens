@@ -9,6 +9,8 @@ from app.modules.jobs.application.contracts import JobResponse
 from app.modules.jobs.application.jobs import (
     EnqueueJobCommand,
     EnqueuedJob,
+    OperationClaim,
+    OperationTransition,
     ReserveOperationCommand,
     ReservedOperation,
 )
@@ -74,6 +76,20 @@ class SqlAlchemyJobsGateway:
                         if command.operation is JobOperation.DOCUMENT_REFLOW
                         else {}
                     ),
+                    **(
+                        {
+                            "credential_url": (
+                                f"{base_url}/internal/v1/jobs/{command.job_id}"
+                                "/integration-credentials/zotero"
+                            ),
+                            "progress_url": (
+                                f"{base_url}/internal/v1/jobs/{command.job_id}/progress"
+                            ),
+                        }
+                        if command.operation
+                        in {JobOperation.ZOTERO_IMPORT, JobOperation.ZOTERO_SYNC}
+                        else {}
+                    ),
                 },
                 job_id=command.job_id,
             ),
@@ -81,6 +97,7 @@ class SqlAlchemyJobsGateway:
         return EnqueuedJob(
             job=job_response(persisted.job),
             created=persisted.created,
+            payload=persisted.job.payload,
         )
 
     def reserve(self, *, command: ReserveOperationCommand) -> ReservedOperation:
@@ -116,22 +133,62 @@ class SqlAlchemyJobsGateway:
         self,
         *,
         operation_id: UUID,
+        claim_id: UUID,
         result: dict[str, JsonValue],
-    ) -> JobResponse:
-        job, _changed = job_repository.complete(
+    ) -> OperationTransition:
+        job, changed = job_repository.complete_claimed(
             self._db,
             job_id=operation_id,
+            claim_id=claim_id,
             result=result,
         )
-        return job_response(job)
+        return OperationTransition(job=job_response(job), changed=changed)
 
-    def fail(self, *, operation_id: UUID, error_code: str) -> JobResponse:
-        job, _changed = job_repository.fail(
+    def claim_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+    ) -> OperationClaim:
+        job, claim_id, acquired = job_repository.claim_callback(
             self._db,
             job_id=operation_id,
+            requested_by_id=requested_by_id,
+        )
+        return OperationClaim(
+            job=job_response(job),
+            claim_id=claim_id,
+            acquired=acquired,
+        )
+
+    def heartbeat_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+        claim_id: UUID,
+    ) -> bool:
+        return job_repository.heartbeat_callback(
+            self._db,
+            job_id=operation_id,
+            requested_by_id=requested_by_id,
+            claim_id=claim_id,
+        )
+
+    def fail(
+        self,
+        *,
+        operation_id: UUID,
+        claim_id: UUID,
+        error_code: str,
+    ) -> OperationTransition:
+        job, changed = job_repository.fail_claimed(
+            self._db,
+            job_id=operation_id,
+            claim_id=claim_id,
             error_code=error_code,
         )
-        return job_response(job)
+        return OperationTransition(job=job_response(job), changed=changed)
 
     def list(
         self,
@@ -162,3 +219,23 @@ class SqlAlchemyJobsGateway:
                 requested_by_id=requested_by_id,
             )
         )
+
+    def payload(
+        self,
+        *,
+        requested_by_id: int,
+        job_id: UUID,
+    ) -> dict[str, JsonValue]:
+        return job_repository.require_for_requester(
+            self._db,
+            job_id=job_id,
+            requested_by_id=requested_by_id,
+        ).payload
+
+    def cancel(self, *, requested_by_id: int, job_id: UUID) -> JobResponse:
+        job, _changed = job_repository.cancel(
+            self._db,
+            job_id=job_id,
+            requested_by_id=requested_by_id,
+        )
+        return job_response(job)

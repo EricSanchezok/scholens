@@ -8,7 +8,10 @@ from uuid import UUID
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor
 from app.modules.jobs.application.authentication import VerifiedJobCallback
-from app.modules.jobs.application.contracts import JobIntegrationCredentialResponse
+from app.modules.jobs.application.contracts import (
+    JobIntegrationCredentialResponse,
+    ZoteroJobCredentialResponse,
+)
 from app.shared.application import ApplicationExecutor
 from app.transport.http.internal_v1.authentication import verify_jobs_webhook
 from fastapi import APIRouter, Depends
@@ -29,4 +32,20 @@ def get_mineru_credential(
 ) -> JobIntegrationCredentialResponse:
     return executor.query(
         lambda capabilities: capabilities.job_mineru_credential(job_id=job_id)
+    )
+
+
+@credentials_router.post(
+    "/jobs/{job_id}/integration-credentials/zotero",
+    response_model=ZoteroJobCredentialResponse,
+)
+def get_zotero_credential(
+    job_id: UUID,
+    _verified: Annotated[VerifiedJobCallback, Depends(verify_jobs_webhook)],
+    executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
+        get_application_executor
+    ),
+) -> ZoteroJobCredentialResponse:
+    return executor.query(
+        lambda capabilities: capabilities.job_zotero_credential(job_id=job_id)
     )

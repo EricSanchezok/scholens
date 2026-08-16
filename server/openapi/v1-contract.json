@@ -98,25 +98,40 @@
     "/api/v1/discovery/topics": [
       "get"
     ],
-    "/api/v1/integrations/zotero/connection": [
-      "delete",
+    "/api/v1/integrations/zotero/collections": [
       "get"
     ],
+    "/api/v1/integrations/zotero/connection": [
+      "delete"
+    ],
     "/api/v1/integrations/zotero/imports": [
-      "get",
       "post"
+    ],
+    "/api/v1/integrations/zotero/imports/{operation_id}": [
+      "delete",
+      "get"
     ],
     "/api/v1/integrations/zotero/library-items": [
       "get"
     ],
+    "/api/v1/integrations/zotero/oauth/authorizations": [
+      "post"
+    ],
     "/api/v1/integrations/zotero/oauth/callback": [
       "get"
     ],
-    "/api/v1/integrations/zotero/oauth/connect": [
+    "/api/v1/integrations/zotero/status": [
       "get"
+    ],
+    "/api/v1/integrations/zotero/sync-preferences": [
+      "put"
     ],
     "/api/v1/integrations/zotero/sync-runs": [
       "post"
+    ],
+    "/api/v1/integrations/zotero/sync-runs/{operation_id}": [
+      "delete",
+      "get"
     ],
     "/api/v1/jobs": [
       "get"

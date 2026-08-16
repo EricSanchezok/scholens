@@ -267,6 +267,9 @@
       "sourcePending": "Validating source",
       "cancelSource": "Cancel",
       "connectOpenAlex": "Connect OpenAlex",
+      "zoteroTitle": "Zotero library",
+      "zoteroDescription": "Browse your personal Zotero library and import selected papers with read-only access.",
+      "browseZotero": "Browse Zotero",
       "errors": {
         "openAlexRequired": "Connect your OpenAlex API key to resolve an open PDF from this DOI. Your DOI is preserved.",
         "openAlexInvalid": "Your OpenAlex API key is no longer valid. Replace it in Connections, then submit this DOI again.",
@@ -1160,6 +1163,162 @@
     "retryDescription": "Check your connection and try again.",
     "retryDescriptionWithRequest": "Check your connection and try again. Request ID: {requestId}"
   },
+  "Zotero": {
+    "oauth": {
+      "result": {
+        "connected": "Zotero is connected.",
+        "zotero_oauth_expired": "This Zotero authorization expired. Start the connection again.",
+        "zotero_oauth_exchange_failed": "Zotero could not complete authorization. Try connecting again.",
+        "zotero_permissions_insufficient": "Zotero did not grant the required read-only library, note, and file permissions.",
+        "zotero_rate_limited": "Zotero is limiting authorization requests. Wait briefly and try again.",
+        "zotero_unavailable": "Zotero could not be reached during authorization. Try again.",
+        "zotero_connection_failed": "The Zotero connection could not be saved. Try again."
+      }
+    },
+    "settings": {
+      "connect": "Connect Zotero",
+      "connected": "Connected",
+      "connectedAt": "Connected {date}",
+      "loading": "Loading Zotero connection",
+      "lastSync": "Last synced {date}",
+      "neverSynced": "Not synced yet",
+      "automaticAnnotationsActive": "New annotations sync automatically on the Researcher plan.",
+      "manualMode": "Manual paper import and annotation sync are available on Basic.",
+      "autoImport": "Automatically import new papers",
+      "autoImportDescription": "Starts with papers added after you enable this setting. Existing Zotero papers are not imported automatically.",
+      "autoImportPaused": "This preference is preserved and will resume when Researcher access returns.",
+      "syncNow": "Sync now",
+      "cancelSync": "Cancel sync",
+      "disconnect": "Disconnect",
+      "operation": {
+        "queued": "Sync queued",
+        "running": "Syncing annotations",
+        "partial": "Sync completed with some items unavailable",
+        "succeeded": "Sync complete",
+        "failed": "Sync failed. You can try again.",
+        "cancelled": "Sync cancelled",
+        "importActive": "A Zotero import is already running. Finish or cancel it from Library before syncing."
+      },
+      "errors": {
+        "zotero_not_connected": "Connect Zotero to continue.",
+        "zotero_permissions_insufficient": "Reconnect Zotero and grant read access to your personal library, notes, and files.",
+        "zotero_credentials_invalid": "Zotero revoked this credential. Reconnect to continue.",
+        "integration_credentials_unreadable": "This saved credential cannot be read. Disconnect and reconnect Zotero.",
+        "zotero_rate_limited": "Zotero is limiting requests. Wait briefly and try again.",
+        "zotero_auto_import_requires_researcher": "Automatic import is available while Researcher access is active.",
+        "zotero_operation_active": "Another Zotero operation is already running.",
+        "zotero_unavailable": "Zotero is temporarily unavailable. Try again.",
+        "zotero_import_failed": "The Zotero operation failed. Try again."
+      }
+    },
+    "library": {
+      "title": "Import from Zotero",
+      "description": "Select up to 50 papers from your personal library. Scholens never changes your Zotero data.",
+      "operationActive": "A Zotero operation is already running. Finish or cancel it before starting another import.",
+      "close": "Close Zotero library",
+      "loadingConnection": "Checking Zotero connection",
+      "connectionError": "Zotero connection could not be checked",
+      "connectTitle": "Connect your Zotero library",
+      "connectDescription": "Authorization is read-only and limited to your personal library, notes, and stored files. Group libraries are not accessed.",
+      "connect": "Connect Zotero",
+      "search": "Search Zotero papers",
+      "collection": "Collection",
+      "allCollections": "All collections",
+      "loadMoreCollections": "Load more collections",
+      "type": "Paper type",
+      "types": {
+        "all": "All supported types",
+        "journalArticle": "Journal articles",
+        "conferencePaper": "Conference papers",
+        "preprint": "Preprints"
+      },
+      "sort": {
+        "label": "Sort Zotero papers",
+        "modified_desc": "Recently modified",
+        "added_desc": "Recently added",
+        "published_desc": "Newest published",
+        "title_asc": "Title A–Z",
+        "creator_asc": "Author A–Z"
+      },
+      "loading": "Loading Zotero papers",
+      "loadError": "Zotero papers could not be loaded",
+      "retry": "Try again",
+      "emptyTitle": "No Zotero papers found",
+      "emptyDescription": "Adjust the search, collection, or paper type.",
+      "untitled": "Untitled paper",
+      "unknownAuthors": "Unknown authors",
+      "unknownDate": "Date unknown",
+      "metadata": "{authors} · {date}",
+      "availability": {
+        "stored_pdf": "Stored PDF available",
+        "resolvable_source": "Open source will be resolved",
+        "unavailable": "No importable PDF or open source"
+      },
+      "importState": {
+        "available": "Available",
+        "imported": "Already imported",
+        "in_progress": "Import in progress",
+        "failed": "Previous import failed; retry from its Library row"
+      },
+      "selection": "{count, number} of {limit, number} selected",
+      "zeroQuota": "Your paper allowance is full. Existing papers remain available.",
+      "previous": "Previous",
+      "next": "Next",
+      "cancel": "Cancel",
+      "import": "Import {count, plural, one {# paper} other {# papers}}",
+      "errors": {
+        "zotero_not_connected": "Connect Zotero to browse your library.",
+        "zotero_permissions_insufficient": "Reconnect Zotero and grant the required read-only permissions.",
+        "zotero_credentials_invalid": "Zotero revoked this connection. Reconnect to continue.",
+        "integration_credentials_unreadable": "Disconnect and reconnect Zotero to repair this credential.",
+        "zotero_rate_limited": "Zotero is limiting requests. Wait briefly and try again.",
+        "zotero_operation_active": "Another Zotero operation is already running.",
+        "zotero_quota_exceeded": "Your Scholens paper allowance is full.",
+        "paper_quota_exceeded": "Your Scholens paper allowance is full.",
+        "storage_quota_exceeded": "Your Scholens storage allowance is full.",
+        "zotero_unavailable": "Zotero is temporarily unavailable. Try again."
+      }
+    },
+    "operation": {
+      "label": "Zotero import progress",
+      "loading": "Loading Zotero operation",
+      "status": {
+        "queued": "Zotero import queued",
+        "running": "Importing Zotero papers",
+        "partial": "Zotero import partially completed",
+        "succeeded": "Zotero import accepted",
+        "failed": "Zotero import failed",
+        "cancelled": "Zotero import cancelled"
+      },
+      "stage": {
+        "queued": "Waiting for a worker",
+        "fetching_library": "Reading your Zotero library",
+        "syncing_annotations": "Syncing annotations",
+        "importing_papers": "Preparing selected papers"
+      },
+      "counts": "{succeeded, number} of {total, number} accepted · {failed, number} failed",
+      "progress": "Zotero import progress",
+      "cancel": "Cancel import",
+      "dismiss": "Dismiss",
+      "itemFailed": "{title}: {error}",
+      "errors": {
+        "zotero_item_not_found": "This item no longer exists in Zotero.",
+        "zotero_item_not_supported": "This Zotero item type is not supported.",
+        "zotero_pdf_unavailable": "No readable PDF or open source was available.",
+        "zotero_pdf_encrypted": "Encrypted PDFs are not supported.",
+        "zotero_pdf_too_large": "This PDF is larger than 50 MB.",
+        "zotero_pdf_unsafe_address": "The source address is not allowed.",
+        "zotero_rate_limited": "Zotero limited the request.",
+        "zotero_credentials_invalid": "The Zotero connection is no longer valid.",
+        "zotero_credentials_rotated": "The connection changed before this item was processed.",
+        "zotero_operation_cancelled": "The import was cancelled.",
+        "zotero_callback_processing_timeout": "Scholens took too long to finish this Zotero batch. Try the import or sync again.",
+        "zotero_callback_budget_exceeded": "This batch contains too much Zotero annotation data. Import fewer papers and try again.",
+        "zotero_import_failed": "This paper could not be imported.",
+        "zotero_operation_failed": "The Zotero operation failed. Try again."
+      }
+    }
+  },
   "Settings": {
     "title": "Settings",
     "description": "Manage your Scholens account and research workflow.",
@@ -1295,7 +1454,8 @@
         "tavily": "Tavily",
         "exa": "Exa",
         "firecrawl": "Firecrawl",
-        "openalex": "OpenAlex"
+        "openalex": "OpenAlex",
+        "zotero": "Zotero"
       },
       "providerDescription": {
         "scholight": "Built-in scholarly discovery.",
@@ -1304,7 +1464,8 @@
         "tavily": "Web search for grounded research.",
         "exa": "Semantic web search.",
         "firecrawl": "Web extraction for research sources.",
-        "openalex": "DOI resolution, external paper search, author works, and citation graphs."
+        "openalex": "DOI resolution, external paper search, author works, and citation graphs.",
+        "zotero": "Read-only import and annotation sync for your personal Zotero library."
       },
       "state": {
         "connected": "Connected",
@@ -1335,7 +1496,8 @@
       "mineruSaveError": "This MinerU token could not be saved. Check it and try again; verification happens on first use.",
       "verifyError": "This connection could not be saved. Check the credential and try again.",
       "disconnectTitle": "Disconnect service?",
-      "disconnectDescription": "{provider} will no longer be available to new jobs. Running jobs keep their credential revision."
+      "disconnectDescription": "{provider} will no longer be available to new jobs. Running jobs keep their credential revision.",
+      "zoteroDisconnectDescription": "Scholens will stop accessing Zotero and cancel future syncs. Papers and annotations already imported into Scholens are retained."
     },
     "translation": {
       "title": "Translation",
