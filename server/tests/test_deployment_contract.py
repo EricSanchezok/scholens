@@ -237,6 +237,16 @@ def test_bootstrap_roles_enforce_immutable_release_and_scoped_secrets() -> None:
     assert "cloudformation/*" in str(production_put["Resource"])
     database_put = next(item for item in database if "s3:PutObject" in _actions(item))
     assert "migrations/*" in str(database_put["Resource"])
+    database_describe_task_definition = next(
+        item for item in database if "ecs:DescribeTaskDefinition" in _actions(item)
+    )
+    assert database_describe_task_definition["Resource"] == "*"
+    database_deregister_task_definition = next(
+        item for item in database if "ecs:DeregisterTaskDefinition" in _actions(item)
+    )
+    assert "task-definition/sanchezcloud-scholens-migration:*" in str(
+        database_deregister_task_definition["Resource"]
+    )
     assert not any(
         "secretsmanager:GetSecretValue" in _actions(item)
         and "production/edge" in str(item["Resource"])
