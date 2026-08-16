@@ -20,6 +20,7 @@ from src.schemas import (
     DocumentReflowRequest,
     IntegrationUseEvent,
     JobIntegrationCredentialResponse,
+    ZoteroJobCredentialResponse,
     ResearchDataTableResult,
 )
 from src.audio import generate_audio
@@ -37,6 +38,12 @@ from src.s3_service import s3_service
 from src.token_usage import collect_token_usage
 from src.utils import time_it
 from src.webhook_signing import post_signed_json
+from src.zotero import (
+    ZoteroJobCredential,
+    ZoteroJobError,
+    import_items as import_zotero_items,
+    sync_items as sync_zotero_items,
+)
 from src.schemas import AudioOverviewRequest
 
 logger = logging.getLogger(__name__)
@@ -245,6 +252,34 @@ def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
         token=payload.credential.get_secret_value(),
         revision=payload.credential_revision,
     )
+
+
+def _fetch_zotero_credential(credential_url: str) -> ZoteroJobCredential:
+    try:
+        response = post_signed_json(credential_url, {}, timeout=30)
+        response.raise_for_status()
+        payload = ZoteroJobCredentialResponse.model_validate(response.json())
+    except (requests.RequestException, TypeError, ValueError) as exc:
+        raise ZoteroJobError("zotero_unavailable") from exc
+    return ZoteroJobCredential(
+        user_id=payload.zotero_user_id,
+        api_key=payload.credential.get_secret_value(),
+        revision=payload.credential_revision,
+    )
+
+
+def _zotero_progress(progress_url: str, code: str) -> bool:
+    try:
+        response = post_signed_json(
+            progress_url,
+            {"progress_code": code},
+            timeout=JOB_PROGRESS_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return bool(response.json().get("claimed"))
+    except requests.RequestException:
+        logger.warning("zotero.progress.delivery_failed", exc_info=True)
+        return True
 
 
 @dataclass
@@ -729,16 +764,160 @@ def health_check(self):
         }
 
 
-@celery_app.task(bind=True, name="postprocess_zotero")
-def postprocess_zotero_task(
+@celery_app.task(bind=True, name="import_zotero_items")
+def import_zotero_items_task(
     self,
-    callback_url: str,
-    claim_url: str | None = None,
+    request: dict[str, Any],
+    webhook_url: str,
+    claim_url: str,
+    credential_url: str,
+    progress_url: str,
 ) -> dict[str, Any]:
     task_id = self.request.id
     if not _claim_job(claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
-    payload = {"task_id": task_id}
-    if not _deliver_webhook(callback_url, payload, task_id=task_id):
-        raise RuntimeError("zotero_postprocess_callback_failed")
-    return {**payload, "status": "completed"}
+    expected_revision = str(request.get("credential_revision") or "")
+    try:
+        credential = _fetch_zotero_credential(credential_url)
+    except ZoteroJobError as exc:
+        payload = {
+            "task_id": task_id,
+            "operation": "import",
+            "credential_revision": expected_revision,
+            "credential_outcome": "failed",
+            "error_code": exc.code,
+            "items": [],
+        }
+        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+            raise RuntimeError("zotero_import_callback_failed")
+        return payload
+    if expected_revision != credential.revision:
+        payload = {
+            "task_id": task_id,
+            "operation": "import",
+            "credential_revision": expected_revision,
+            "credential_outcome": "failed",
+            "error_code": "zotero_credentials_rotated",
+            "items": [],
+        }
+        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+            raise RuntimeError("zotero_import_callback_failed")
+        return payload
+    if not _zotero_progress(progress_url, "fetching_library"):
+        return {"task_id": task_id, "status": "cancelled"}
+    try:
+        item_keys = [str(value) for value in request.get("item_keys") or []]
+        items, library_version = import_zotero_items(
+            task_id=task_id,
+            credential=credential,
+            item_keys=item_keys,
+            is_active=lambda: _zotero_progress(progress_url, "importing_papers"),
+        )
+        payload = {
+            "task_id": task_id,
+            "operation": "import",
+            "credential_revision": credential.revision,
+            "credential_outcome": "verified",
+            "items": items,
+            "library_version": library_version,
+        }
+    except ZoteroJobError as exc:
+        payload = {
+            "task_id": task_id,
+            "operation": "import",
+            "credential_revision": credential.revision,
+            "credential_outcome": "invalid" if exc.invalid_credential else "failed",
+            "error_code": exc.code,
+            "items": [],
+        }
+    if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        raise RuntimeError("zotero_import_callback_failed")
+    return payload
+
+
+@celery_app.task(bind=True, name="sync_zotero")
+def sync_zotero_task(
+    self,
+    request: dict[str, Any],
+    webhook_url: str,
+    claim_url: str,
+    credential_url: str,
+    progress_url: str,
+) -> dict[str, Any]:
+    task_id = self.request.id
+    if not _claim_job(claim_url, task_id=task_id):
+        return {"task_id": task_id, "status": "duplicate"}
+    expected_revision = str(request.get("credential_revision") or "")
+    try:
+        credential = _fetch_zotero_credential(credential_url)
+    except ZoteroJobError as exc:
+        payload = {
+            "task_id": task_id,
+            "operation": "sync",
+            "credential_revision": expected_revision,
+            "credential_outcome": "failed",
+            "error_code": exc.code,
+            "updates": [],
+            "failures": [],
+            "auto_imports": [],
+        }
+        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+            raise RuntimeError("zotero_sync_callback_failed")
+        return payload
+    if expected_revision != credential.revision:
+        payload = {
+            "task_id": task_id,
+            "operation": "sync",
+            "credential_revision": expected_revision,
+            "credential_outcome": "failed",
+            "error_code": "zotero_credentials_rotated",
+            "updates": [],
+            "failures": [],
+            "auto_imports": [],
+        }
+        if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+            raise RuntimeError("zotero_sync_callback_failed")
+        return payload
+    if not _zotero_progress(progress_url, "syncing_annotations"):
+        return {"task_id": task_id, "status": "cancelled"}
+    try:
+        result = sync_zotero_items(
+            task_id=task_id,
+            credential=credential,
+            targets=[
+                value
+                for value in request.get("targets") or []
+                if isinstance(value, dict)
+            ],
+            auto_import_version=(
+                int(request["auto_import_version"])
+                if isinstance(request.get("auto_import_version"), int)
+                and not isinstance(request.get("auto_import_version"), bool)
+                else None
+            ),
+            is_active=lambda: _zotero_progress(
+                progress_url,
+                "importing_papers",
+            ),
+        )
+        payload = {
+            "task_id": task_id,
+            "operation": "sync",
+            "credential_revision": credential.revision,
+            "credential_outcome": "verified",
+            **result,
+        }
+    except ZoteroJobError as exc:
+        payload = {
+            "task_id": task_id,
+            "operation": "sync",
+            "credential_revision": credential.revision,
+            "credential_outcome": "invalid" if exc.invalid_credential else "failed",
+            "error_code": exc.code,
+            "updates": [],
+            "failures": [],
+            "auto_imports": [],
+        }
+    if not _deliver_webhook(webhook_url, payload, task_id=task_id):
+        raise RuntimeError("zotero_sync_callback_failed")
+    return payload
