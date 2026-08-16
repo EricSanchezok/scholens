@@ -884,6 +884,34 @@ def test_api_scaling_respects_the_shared_rds_connection_budget() -> None:
     assert parameters["RdsConnectionAlarmThreshold"]["Default"] == 75
 
 
+def test_api_mail_secret_contract_contains_only_aliyun_credentials() -> None:
+    template = load_template("scholens-production.yml")
+    container = template["Resources"]["ApiTaskDefinition"]["Properties"][
+        "ContainerDefinitions"
+    ][0]
+
+    mail_secrets: dict[str, str] = {}
+    for item in container["Secrets"]:
+        substitution, variables = item["ValueFrom"]["Fn::Sub"]
+        if variables["Secret"].get("Fn::ImportValue") != (
+            "sanchezcloud-scholens-mail-secret-arn"
+        ):
+            continue
+        mail_secrets[item["Name"]] = substitution
+
+    assert mail_secrets == {
+        "SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID": "${Secret}:aliyun_access_key_id::",
+        "SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET": (
+            "${Secret}:aliyun_access_key_secret::"
+        ),
+        "SCHOLENS_ALIYUN_DM_ACCOUNT_NAME": "${Secret}:aliyun_account_name::",
+    }
+
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    assert environment["SCHOLENS_ALIYUN_DM_FROM_ALIAS"] == "Scholens"
+    assert environment["SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS"] == "true"
+
+
 def test_python_images_copy_shared_packages_before_locked_sync() -> None:
     for dockerfile_path in (
         ROOT / "server" / "Dockerfile",
@@ -1317,11 +1345,11 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "AUTH_JWT_SECRET",
         "AUTH_ACCOUNT_LOCKOUT_THRESHOLD",
         "AUTH_ACCOUNT_LOCKOUT_DURATION_MINUTES",
-        "AUTH_ALIYUN_DM_ACCESS_KEY_ID",
-        "AUTH_ALIYUN_DM_ACCESS_KEY_SECRET",
-        "AUTH_ALIYUN_DM_ACCOUNT_NAME",
-        "AUTH_ALIYUN_DM_FROM_ALIAS",
-        "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS",
+        "SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID",
+        "SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET",
+        "SCHOLENS_ALIYUN_DM_ACCOUNT_NAME",
+        "SCHOLENS_ALIYUN_DM_FROM_ALIAS",
+        "SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS",
         "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_URL",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
@@ -1332,6 +1360,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "MOSS_MAX_AUDIO_BYTES",
         "JOBS_WEBHOOK_SIGNING_SECRET",
         "PAPER_SEARCH_CURSOR_SECRET",
+        "PROJECT_INVITATION_TOKEN_SECRET",
         "NEXT_PUBLIC_API_URL",
     ):
         assert f"{variable}=" in catalog
@@ -1339,7 +1368,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
     assert not (ROOT / "server" / ".env.example").exists()
     for variable in (
         "AUTH_ACCOUNT_LOCKOUT_THRESHOLD",
-        "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS",
+        "SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS",
         "INTEGRATION_CREDENTIAL_ENCRYPTION_KEY",
         "SCHOLIGHT_MCP_DELEGATION_JWT_SECRET",
         "SCHOLENS_AI_DEEPSEEK_API_KEY",
@@ -1347,6 +1376,7 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "MOSS_MAX_AUDIO_BYTES",
         "JOBS_WEBHOOK_SIGNING_SECRET",
         "PAPER_SEARCH_CURSOR_SECRET",
+        "PROJECT_INVITATION_TOKEN_SECRET",
     ):
         assert f"Name: {variable}" in runtime
     assert "NEXT_PUBLIC_ACCOUNT_CENTER_URL" not in runtime
@@ -1364,6 +1394,17 @@ def test_environment_catalog_matches_shared_identity_conventions() -> None:
         "SCHOLENS_DEEPSEEK_API_KEY",
         "SCHOLIGHT_ACCESS_KEY",
         "JOBS_INTERNAL_SECRET",
+        "AUTH_PUBLIC_WEB_URL",
+        "AUTH_ALIYUN_DM_ACCESS_KEY_ID",
+        "AUTH_ALIYUN_DM_ACCESS_KEY_SECRET",
+        "AUTH_ALIYUN_DM_ACCOUNT_NAME",
+        "AUTH_ALIYUN_DM_FROM_ALIAS",
+        "AUTH_ALIYUN_DM_REPLY_TO_ADDRESS",
+        "RESEND_API_KEY",
+        "RESEND_FROM_ADDRESS",
+        "RESEND_REPLY_TO_ADDRESS",
+        "PROFILE_NOTIFICATION_EMAIL",
+        "SOURCE_REPOSITORY_URL",
     ):
         assert (
             re.search(
@@ -1470,7 +1511,13 @@ def test_global_discovery_surfaces_are_absent_from_client_sources() -> None:
             ROOT / "client" / "src" / "app" / "sitemap.ts",
             ROOT / "client" / "src" / "components" / "QuickActions.tsx",
             ROOT / "client" / "src" / "components" / "sidebar" / "navItems.ts",
-            ROOT / "server" / "app" / "helpers" / "templates" / "project_invite.html",
+            ROOT
+            / "server"
+            / "app"
+            / "modules"
+            / "projects"
+            / "infrastructure"
+            / "invitation_email.py",
         )
     )
     for removed_identifier in (

@@ -1087,9 +1087,6 @@ Resources:
         - Name: CLIENT_DOMAIN
           Value:
             Fn::Sub: https://${DomainName}
-        - Name: AUTH_PUBLIC_WEB_URL
-          Value:
-            Fn::Sub: https://${DomainName}
         - Name: AUTH_PG_SSL_ROOT_CERT
           Value: /etc/ssl/certs/global-bundle.pem
         - Name: AUTH_PG_POOL_MIN_SIZE
@@ -1104,9 +1101,9 @@ Resources:
           Value: '5'
         - Name: AUTH_ACCOUNT_LOCKOUT_DURATION_MINUTES
           Value: '15'
-        - Name: AUTH_ALIYUN_DM_FROM_ALIAS
+        - Name: SCHOLENS_ALIYUN_DM_FROM_ALIAS
           Value: Scholens
-        - Name: AUTH_ALIYUN_DM_REPLY_TO_ADDRESS
+        - Name: SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS
           Value: 'true'
         - Name: PAPER_SEARCH_BACKEND
           Value: postgres_fts
@@ -1197,8 +1194,6 @@ Resources:
           Value:
             Fn::Sub:
               https://${DomainName}/api/v1/integrations/zotero/oauth/callback
-        - Name: SOURCE_REPOSITORY_URL
-          Value: https://github.com/EricSanchezok/scholens
         - Name: POSTHOG_API_KEY
           Value:
             Ref: PostHogApiKey
@@ -1268,6 +1263,12 @@ Resources:
             - '${Secret}:paper_search_cursor_secret::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: PROJECT_INVITATION_TOKEN_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:project_invitation_token_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
         - Name: JOBS_WEBHOOK_SIGNING_SECRET
           ValueFrom:
             Fn::Sub:
@@ -1298,46 +1299,22 @@ Resources:
             - '${Secret}:deepseek_api_key::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
-        - Name: AUTH_ALIYUN_DM_ACCESS_KEY_ID
+        - Name: SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID
           ValueFrom:
             Fn::Sub:
             - '${Secret}:aliyun_access_key_id::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: AUTH_ALIYUN_DM_ACCESS_KEY_SECRET
+        - Name: SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET
           ValueFrom:
             Fn::Sub:
             - '${Secret}:aliyun_access_key_secret::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: AUTH_ALIYUN_DM_ACCOUNT_NAME
+        - Name: SCHOLENS_ALIYUN_DM_ACCOUNT_NAME
           ValueFrom:
             Fn::Sub:
             - '${Secret}:aliyun_account_name::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: RESEND_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:resend_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: RESEND_FROM_ADDRESS
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:resend_from_address::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: RESEND_REPLY_TO_ADDRESS
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:resend_reply_to_address::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: PROFILE_NOTIFICATION_EMAIL
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:profile_notification_email::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
         - Name: STRIPE_API_KEY

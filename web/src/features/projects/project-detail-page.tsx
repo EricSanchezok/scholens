@@ -42,6 +42,7 @@ import {
 import { Icon } from "@/design-system/icons/icon";
 import {
   AddIcon,
+  AccountIcon,
   AudioIcon,
   BackIcon,
   CitationIcon,
@@ -81,6 +82,7 @@ import {
   updateProject,
 } from "./api";
 import { AddProjectPapersDialog } from "./components/add-project-papers-dialog";
+import { ManageProjectCollaboratorsDialog } from "./components/manage-project-collaborators-dialog";
 import { ProjectFormDialog } from "./components/project-form-dialog";
 import { useProjectDesktopLayout } from "./hooks/use-project-desktop-layout";
 import {
@@ -342,12 +344,14 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
 
 function ProjectManageMenu({
   onAddPapers,
+  onManageCollaborators,
   onDelete,
   onEdit,
   onLeave,
   project,
 }: {
   onAddPapers: () => void;
+  onManageCollaborators: () => void;
   onDelete: () => void;
   onEdit: () => void;
   onLeave: () => void;
@@ -358,6 +362,9 @@ function ProjectManageMenu({
     project.capabilities.edit_project ||
     project.capabilities.delete ||
     project.capabilities.leave;
+  const hasWorkspaceAction =
+    project.capabilities.manage_papers ||
+    project.capabilities.manage_collaborators;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -370,7 +377,13 @@ function ProjectManageMenu({
             {t("detail.papers.add")}
           </DropdownMenuItem>
         ) : null}
-        {project.capabilities.manage_papers && hasProjectAction ? (
+        {project.capabilities.manage_collaborators ? (
+          <DropdownMenuItem onSelect={onManageCollaborators}>
+            <Icon glyph={AccountIcon} size={16} />
+            {t("collaborators.manage")}
+          </DropdownMenuItem>
+        ) : null}
+        {hasWorkspaceAction && hasProjectAction ? (
           <DropdownMenuSeparator />
         ) : null}
         {project.capabilities.edit_project ? (
@@ -421,6 +434,7 @@ export function ProjectDetailWorkspace({
   const [signingOut, setSigningOut] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [addPapersOpen, setAddPapersOpen] = React.useState(false);
+  const [collaboratorsOpen, setCollaboratorsOpen] = React.useState(false);
   const [paperRemoval, setPaperRemoval] =
     React.useState<PaperRemovalImpact | null>(null);
   const paperRemovalTriggerRef = React.useRef<HTMLButtonElement | null>(null);
@@ -644,6 +658,7 @@ export function ProjectDetailWorkspace({
             onDelete={() => setDestructive("delete")}
             onEdit={() => setEditOpen(true)}
             onLeave={() => setDestructive("leave")}
+            onManageCollaborators={() => setCollaboratorsOpen(true)}
             project={project}
           />
           <IconButton
@@ -733,6 +748,7 @@ export function ProjectDetailWorkspace({
                   onDelete={() => setDestructive("delete")}
                   onEdit={() => setEditOpen(true)}
                   onLeave={() => setDestructive("leave")}
+                  onManageCollaborators={() => setCollaboratorsOpen(true)}
                   project={project}
                 />
                 <IconButton
@@ -1158,6 +1174,14 @@ export function ProjectDetailWorkspace({
         onSubmit={(documentIds) => addPapersMutation.mutateAsync(documentIds)}
         open={addPapersOpen}
       />
+      {project.capabilities.manage_collaborators ? (
+        <ManageProjectCollaboratorsDialog
+          actorId={actor.id}
+          onOpenChange={setCollaboratorsOpen}
+          open={collaboratorsOpen}
+          project={project}
+        />
+      ) : null}
       <AlertDialog
         onOpenChange={(open) => !open && setDestructive(null)}
         open={Boolean(destructive)}

@@ -31,6 +31,10 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
+from app.shared.infrastructure.email_settings import (
+    ScholensEmailSettings,
+    email_settings,
+)
 
 logger = logging.getLogger(__name__)
 SCHOLENS_AUTH_CLIENT_ID = "scholens"
@@ -55,12 +59,6 @@ class AuthRuntimeSettings(BaseSettings):
     pg_ssl_root_cert: str = ""
     pg_pool_min_size: int = 2
     pg_pool_max_size: int = 10
-    aliyun_dm_access_key_id: str = ""
-    aliyun_dm_access_key_secret: str = ""
-    aliyun_dm_account_name: str = ""
-    aliyun_dm_from_alias: str = "Scholens"
-    aliyun_dm_reply_to_address: bool = True
-    public_web_url: str = "http://127.0.0.1:7300"
 
 
 settings = AuthRuntimeSettings()
@@ -109,24 +107,29 @@ auth_db = AsyncpgUserDatabase(pool_factory=get_auth_pool)
 
 
 def build_auth_email_sender(
-    runtime_settings: AuthRuntimeSettings,
+    mail_settings: ScholensEmailSettings,
+    *,
+    client_domain: str,
 ) -> AliyunDirectMailSender | None:
-    if not runtime_settings.aliyun_dm_account_name:
+    if not mail_settings.configured:
         return None
-    public_web_url = runtime_settings.public_web_url.rstrip("/")
+    public_web_url = client_domain.rstrip("/")
     return AliyunDirectMailSender(
-        access_key_id=runtime_settings.aliyun_dm_access_key_id,
-        access_key_secret=runtime_settings.aliyun_dm_access_key_secret,
-        account_name=runtime_settings.aliyun_dm_account_name,
+        access_key_id=mail_settings.scholens_aliyun_dm_access_key_id,
+        access_key_secret=mail_settings.scholens_aliyun_dm_access_key_secret,
+        account_name=mail_settings.scholens_aliyun_dm_account_name,
         verification_url=f"{public_web_url}/login?mode=verify",
         password_reset_url=f"{public_web_url}/login?mode=reset",
-        from_alias=runtime_settings.aliyun_dm_from_alias,
+        from_alias=mail_settings.scholens_aliyun_dm_from_alias,
         brand="Scholens",
-        reply_to_address=runtime_settings.aliyun_dm_reply_to_address,
+        reply_to_address=mail_settings.scholens_aliyun_dm_reply_to_address,
     )
 
 
-email_sender = build_auth_email_sender(settings)
+email_sender = build_auth_email_sender(
+    email_settings,
+    client_domain=os.getenv("CLIENT_DOMAIN", "http://127.0.0.1:7300"),
+)
 
 auth_manager = UserManager(db=auth_db, email_sender=email_sender, config=auth_config)
 _unchecked_identity_user = cast(
@@ -219,21 +222,13 @@ identity_user_router = get_user_router(
 async def auth_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     global _auth_pool
 
-    if os.getenv("ENVIRONMENT", "development").lower() == "production":
+    production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+    email_settings.validate_configuration(required=production)
+    if production:
         if settings.jwt_secret == _DEVELOPMENT_JWT_SECRET:
             raise RuntimeError("AUTH_JWT_SECRET must be set in production")
         if len(settings.jwt_secret.encode("utf-8")) < 32:
             raise RuntimeError("AUTH_JWT_SECRET must contain at least 32 UTF-8 bytes")
-        email_values = (
-            settings.aliyun_dm_access_key_id,
-            settings.aliyun_dm_access_key_secret,
-            settings.aliyun_dm_account_name,
-        )
-        if not all(email_values):
-            raise RuntimeError(
-                "Aliyun DirectMail credentials are required for production registration"
-            )
-
     database_url = make_url(settings.database_url)
     _auth_pool = await create_pool(
         host=database_url.host or "localhost",

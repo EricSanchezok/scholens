@@ -84,23 +84,27 @@ Bucket 的保留策略清理数据。
 
 ## 2. Aliyun DirectMail
 
-Scholens 本地注册、重置密码与修改邮箱流程直接使用 Aliyun DirectMail，不配置
-Mailpit。可以复用 Scholight 所在的 Aliyun DirectMail 账号，但发信地址必须已在
-控制台验证，发件人别名和回调 URL 必须保持 Scholens 专属。
+Scholens 本地注册、重置密码、修改邮箱与项目邀请直接使用 Aliyun DirectMail，
+不配置 Mailpit。可以复用 Scholight 所在的 Aliyun DirectMail 账号，但发信地址
+必须已在控制台验证，发件人别名和链接必须保持 Scholens 专属。身份模板由
+`sanchezcloud-identity` 所有，项目邀请由 Server 的持久化投递 supervisor 所有。
 
 把凭据只写入忽略的 `server/.env`：
 
 ```dotenv
-AUTH_ALIYUN_DM_ACCESS_KEY_ID=
-AUTH_ALIYUN_DM_ACCESS_KEY_SECRET=
-AUTH_ALIYUN_DM_ACCOUNT_NAME=
-AUTH_ALIYUN_DM_FROM_ALIAS=Scholens
-AUTH_ALIYUN_DM_REPLY_TO_ADDRESS=true
-AUTH_PUBLIC_WEB_URL=http://127.0.0.1:7300
+SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID=
+SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET=
+SCHOLENS_ALIYUN_DM_ACCOUNT_NAME=
+SCHOLENS_ALIYUN_DM_FROM_ALIAS=Scholens
+SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS=true
+CLIENT_DOMAIN=http://127.0.0.1:7300
+PROJECT_INVITATION_TOKEN_SECRET=development-only-invitation-secret
 ```
 
 前端显示“请检查邮箱”不代表供应商已经接受邮件；调试时还要查看 Server 日志中的
-DirectMail 请求结果。不要把密钥写入 `web/.env.local`、截图、Issue 或 Git。
+DirectMail 请求结果。项目邀请 API 只提交 `pending` 记录；Server 在短租约下异步
+发送并公开 `sent` 或 `failed`。不要把密钥写入 `web/.env.local`、截图、Issue 或
+Git。
 
 ## 3. MinerU
 

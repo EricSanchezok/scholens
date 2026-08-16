@@ -94,6 +94,28 @@ command: complete
 failure -> command: fail/release
 ```
 
+Project invitation email is the Server-owned durable form of this pattern. The
+create and manual-resend commands commit an invitation with `pending` delivery
+state and return immediately. An API-lifespan supervisor claims bounded batches
+with `FOR UPDATE SKIP LOCKED`, performs Aliyun DirectMail I/O outside the
+transaction, then records `sent`, a retry time with exponential backoff, or
+terminal `failed`. Expired leases are recoverable across replicas. Provider
+exceptions are reduced to low-cardinality safe codes; recipient addresses,
+message bodies, signed tokens, and raw provider errors never enter logs or
+metrics.
+
+The provider boundary is intentionally at-least-once: a process may stop after
+Aliyun accepts a message but before Scholens commits `sent`. A recovered attempt
+can therefore send the same revision again. The duplicate carries the same
+short-lived link, and acceptance still consumes the invitation once; the system
+does not claim impossible exactly-once delivery from an external mail API.
+
+The product sender is provider-neutral and asynchronous. Aliyun is its current
+adapter, with SDK retries disabled and bounded connection/read timeouts.
+Identity email continues through the distinct `sanchezcloud-identity` sender;
+the two interfaces share only the `SCHOLENS_ALIYUN_DM_*` account configuration
+and `CLIENT_DOMAIN`.
+
 Document reflow follows the durable form of this rule. It begins only when the
 user explicitly creates an attempt. Server preflights the user's enabled MinerU
 connection, commits the reflow artifact, DurableJob, and dispatch outbox

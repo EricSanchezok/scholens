@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -44,12 +42,6 @@ INVITATION_TTL = timedelta(days=7)
 
 
 @dataclass(frozen=True, slots=True)
-class CreatedInvitation:
-    invitation: ProjectInvitation
-    raw_token: str
-
-
-@dataclass(frozen=True, slots=True)
 class AcceptedInvitation:
     collaborator: ProjectCollaborator
     invitation_id: uuid.UUID
@@ -74,10 +66,6 @@ class ProjectDeletionJobs:
 
 def _normalized_email(email: str) -> str:
     return email.strip().casefold()
-
-
-def _token_hash(raw_token: str) -> str:
-    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
 def _permission_set(value: ProjectPermissionSet) -> ProjectPermissions:
@@ -409,7 +397,7 @@ class ProjectRepository:
         actor_id: int,
         email: str,
         requested: ProjectPermissionSet,
-    ) -> CreatedInvitation:
+    ) -> ProjectInvitation:
         actor = require_project_permission(
             db,
             project_id=project_id,
@@ -462,23 +450,27 @@ class ProjectRepository:
         if pending is not None:
             require_grant_subset(actor.facts, _invitation_permissions(pending))
             pending.revoked_at = now
+            pending.delivery_lease_id = None
+            pending.delivery_lease_expires_at = None
             db.flush()
 
-        raw_token = secrets.token_urlsafe(32)
         invitation = ProjectInvitation(
             project_id=project_id,
             email=normalized_email,
-            token_hash=_token_hash(raw_token),
+            token_revision=1,
             invited_by_id=actor_id,
             can_edit_project=requested.edit_project,
             can_manage_papers=requested.manage_papers,
             can_manage_collaborators=requested.manage_collaborators,
             expires_at=now + INVITATION_TTL,
+            delivery_status="pending",
+            delivery_attempt_count=0,
+            delivery_next_attempt_at=now,
         )
         db.add(invitation)
         db.flush()
         db.refresh(invitation)
-        return CreatedInvitation(invitation=invitation, raw_token=raw_token)
+        return invitation
 
     def list_project_invitations(
         self, db: Session, *, project_id: uuid.UUID, actor_id: int
@@ -521,12 +513,17 @@ class ProjectRepository:
             or invitation.accepted_at is not None
             or invitation.revoked_at is not None
             or invitation.expires_at <= now
-            or invitation.email != _normalized_email(email)
         ):
             raise AppError(
                 code="project_invitation_invalid",
                 message="Invitation is invalid or expired",
                 kind=FailureKind.NOT_FOUND,
+            )
+        if invitation.email != _normalized_email(email):
+            raise AppError(
+                code="project_invitation_recipient_mismatch",
+                message="Sign in with the account that received this invitation",
+                kind=FailureKind.PERMISSION_DENIED,
             )
         project = db.get(Project, invitation.project_id)
         if project is None:
@@ -566,6 +563,8 @@ class ProjectRepository:
         )
         if existing is not None:
             invitation.accepted_at = now
+            invitation.delivery_lease_id = None
+            invitation.delivery_lease_expires_at = None
             db.flush()
             return existing
 
@@ -577,17 +576,28 @@ class ProjectRepository:
             can_manage_collaborators=invitation.can_manage_collaborators,
         )
         invitation.accepted_at = now
+        invitation.delivery_lease_id = None
+        invitation.delivery_lease_expires_at = None
         db.add(collaborator)
         db.flush()
         db.refresh(collaborator)
         return collaborator
 
-    def accept_invitation_token(
-        self, db: Session, *, raw_token: str, user_id: int, email: str
+    def accept_invitation(
+        self,
+        db: Session,
+        *,
+        invitation_id: uuid.UUID,
+        token_revision: int,
+        user_id: int,
+        email: str,
     ) -> AcceptedInvitation:
         invitation = db.scalar(
             select(ProjectInvitation)
-            .where(ProjectInvitation.token_hash == _token_hash(raw_token))
+            .where(
+                ProjectInvitation.id == invitation_id,
+                ProjectInvitation.token_revision == token_revision,
+            )
             .with_for_update()
         )
         collaborator = self._accept_invitation(
@@ -633,6 +643,8 @@ class ProjectRepository:
         if invitation.revoked_at is not None:
             return False
         invitation.revoked_at = datetime.now(timezone.utc)
+        invitation.delivery_lease_id = None
+        invitation.delivery_lease_expires_at = None
         db.flush()
         return True
 
@@ -643,7 +655,7 @@ class ProjectRepository:
         project_id: uuid.UUID,
         invitation_id: uuid.UUID,
         actor_id: int,
-    ) -> CreatedInvitation:
+    ) -> ProjectInvitation:
         actor = require_project_permission(
             db,
             project_id=project_id,
@@ -667,23 +679,26 @@ class ProjectRepository:
                 kind=FailureKind.NOT_FOUND,
             )
         require_grant_subset(actor.facts, _invitation_permissions(invitation))
-        invitation.revoked_at = datetime.now(timezone.utc)
+        if invitation.delivery_status == "pending":
+            raise AppError(
+                code="project_invitation_delivery_pending",
+                message="Invitation delivery is already pending",
+                kind=FailureKind.CONFLICT,
+            )
+        now = datetime.now(timezone.utc)
+        invitation.token_revision += 1
+        invitation.invited_by_id = actor_id
+        invitation.expires_at = now + INVITATION_TTL
+        invitation.delivery_status = "pending"
+        invitation.delivery_attempt_count = 0
+        invitation.delivery_next_attempt_at = now
+        invitation.delivery_lease_id = None
+        invitation.delivery_lease_expires_at = None
+        invitation.delivery_failure_code = None
+        invitation.delivered_at = None
         db.flush()
-        raw_token = secrets.token_urlsafe(32)
-        replacement = ProjectInvitation(
-            project_id=project_id,
-            email=invitation.email,
-            token_hash=_token_hash(raw_token),
-            invited_by_id=actor_id,
-            can_edit_project=invitation.can_edit_project,
-            can_manage_papers=invitation.can_manage_papers,
-            can_manage_collaborators=invitation.can_manage_collaborators,
-            expires_at=datetime.now(timezone.utc) + INVITATION_TTL,
-        )
-        db.add(replacement)
-        db.flush()
-        db.refresh(replacement)
-        return CreatedInvitation(invitation=replacement, raw_token=raw_token)
+        db.refresh(invitation)
+        return invitation
 
 
 project_repository = ProjectRepository()

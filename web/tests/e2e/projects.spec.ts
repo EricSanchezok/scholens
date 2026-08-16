@@ -4,7 +4,9 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   projectConversationFixtures,
   projectFixtures,
+  projectInvitationFixtures,
   projectLibraryPaperFixtures,
+  projectMemberFixtures,
   projectOutputFixtures,
   projectPaperFixtures,
 } from "../../src/features/projects/api/fixtures";
@@ -27,6 +29,7 @@ async function mockProjects(page: Page) {
   await mockBillingUsage(page);
   let activeProject = projectFixtures[0]!;
   let paperRemoved = false;
+  let invitations = [...projectInvitationFixtures];
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -95,6 +98,12 @@ async function mockProjects(page: Page) {
       }),
     }),
   );
+  await page.route(`${apiPattern}/project-invitations/**`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ project_id: activeProject.id }),
+    }),
+  );
   await page.route(`${apiPattern}/projects**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -113,6 +122,60 @@ async function mockProjects(page: Page) {
         status: 201,
         contentType: "application/json",
         body: JSON.stringify(activeProject),
+      });
+    }
+    if (path.endsWith("/members") && request.method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: projectMemberFixtures,
+          next_cursor: null,
+        }),
+      });
+    }
+    if (path.endsWith("/invitations") && request.method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ items: invitations, next_cursor: null }),
+      });
+    }
+    if (path.endsWith("/invitations") && request.method() === "POST") {
+      const body = request.postDataJSON() as {
+        email: string;
+        edit_project: boolean;
+        manage_collaborators: boolean;
+        manage_papers: boolean;
+      };
+      const invitation = {
+        ...projectInvitationFixtures[0]!,
+        email: body.email,
+        id: "60000000-0000-4000-8000-000000000099",
+        permissions: {
+          edit_project: body.edit_project,
+          manage_collaborators: body.manage_collaborators,
+          manage_papers: body.manage_papers,
+        },
+      };
+      invitations = [invitation, ...invitations];
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(invitation),
+      });
+    }
+    if (path.endsWith("/resend") && request.method() === "POST") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(projectInvitationFixtures[0]),
+      });
+    }
+    if (path.includes("/members/") && request.method() === "PATCH") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...projectMemberFixtures[1],
+          permissions: request.postDataJSON(),
+        }),
       });
     }
     if (request.method() === "PATCH") {
@@ -305,6 +368,59 @@ test("supports the Projects critical journey", async ({ page }) => {
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("invites a collaborator and accepts the emailed link", async ({
+  page,
+}) => {
+  await page.goto(`/projects/${projectFixtures[0]!.id}`);
+  await page.getByRole("button", { name: "Manage project" }).click();
+  await page.getByRole("menuitem", { name: "Manage collaborators" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Manage collaborators" });
+  const inviteRegion = dialog.getByRole("region", {
+    name: "Invite a collaborator",
+  });
+  await inviteRegion.getByLabel("Email address").fill("new@example.com");
+  await inviteRegion.getByRole("checkbox", { name: "Edit project" }).check();
+  const invitationRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith("/invitations"),
+  );
+  await dialog.getByRole("button", { name: "Send invitation" }).click();
+  expect((await invitationRequest).postDataJSON()).toEqual({
+    edit_project: true,
+    email: "new@example.com",
+    manage_collaborators: false,
+    manage_papers: false,
+  });
+  await expect(dialog.getByText("new@example.com")).toBeVisible();
+
+  await page.goto("/project-invitations/signed.invitation-token");
+  await expect(page).toHaveURL(`/projects/${projectFixtures[0]!.id}`);
+  await expect(
+    page.getByRole("heading", { name: projectFixtures[0]!.title }),
+  ).toBeVisible();
+});
+
+test("preserves an anonymous invitation return path", async ({ page }) => {
+  await page.unroute(`${apiPattern}/auth/refresh`);
+  await page.route(`${apiPattern}/auth/refresh`, (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "auth_session_missing",
+        message: "Missing",
+      }),
+    }),
+  );
+
+  await page.goto("/project-invitations/signed.invitation-token");
+
+  await expect(page).toHaveURL(
+    /\/login\?returnTo=%2Fproject-invitations%2Fsigned.invitation-token/,
+  );
 });
 
 const activeProjectId = "20000000-0000-4000-8000-000000000099";

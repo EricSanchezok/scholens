@@ -14,6 +14,7 @@ PUBLIC_API_PREFIX = "/api/v1"
 WEBHOOK_API_PREFIX = "/webhooks/v1"
 INTERNAL_API_PREFIX = "/internal/v1"
 _DEVELOPMENT_INTEGRATION_KEY = "ZGV2ZWxvcG1lbnQtaW50ZWdyYXRpb24ta2V5LTMyISE="
+_DEVELOPMENT_INVITATION_SECRET = "development-only-invitation-secret"
 
 
 class AppSettings(BaseSettings):
@@ -33,6 +34,20 @@ class AppSettings(BaseSettings):
     paper_search_cursor_secret: str = Field(
         default="development-only-search-cursor-secret",
         min_length=32,
+    )
+    project_invitation_token_secret: str = Field(
+        default=_DEVELOPMENT_INVITATION_SECRET,
+        min_length=32,
+    )
+    project_invitation_delivery_interval_seconds: float = Field(
+        default=1,
+        ge=0.1,
+        le=60,
+    )
+    project_invitation_delivery_lease_seconds: float = Field(
+        default=45,
+        ge=40,
+        le=3_600,
     )
     cache_url: str | None = None
     cache_host: str | None = None
@@ -83,6 +98,13 @@ class AppSettings(BaseSettings):
             == "development-only-search-cursor-secret"
         ):
             raise ValueError("PAPER_SEARCH_CURSOR_SECRET is required in production")
+        if (
+            self.environment.casefold() == "production"
+            and self.project_invitation_token_secret == _DEVELOPMENT_INVITATION_SECRET
+        ):
+            raise ValueError(
+                "PROJECT_INVITATION_TOKEN_SECRET is required in production"
+            )
         if (
             self.environment.casefold() == "production"
             and self.integration_credential_encryption_key

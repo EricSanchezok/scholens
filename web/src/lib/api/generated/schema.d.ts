@@ -4198,6 +4198,14 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** ProjectInvitationAcceptedResponse */
+        ProjectInvitationAcceptedResponse: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectInvitationCreateRequest */
         ProjectInvitationCreateRequest: {
             /**
@@ -4221,6 +4229,11 @@ export interface components {
              */
             manage_papers: boolean;
         };
+        /**
+         * ProjectInvitationDeliveryStatus
+         * @enum {string}
+         */
+        ProjectInvitationDeliveryStatus: "pending" | "sent" | "failed";
         /** ProjectInvitationListResponse */
         ProjectInvitationListResponse: {
             /** Items */
@@ -4235,6 +4248,9 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            delivery_status: components["schemas"]["ProjectInvitationDeliveryStatus"];
             /**
              * Email
              * Format: email
@@ -8486,11 +8502,13 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ProjectInvitationAcceptedResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

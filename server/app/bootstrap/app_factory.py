@@ -7,6 +7,7 @@ silently changed by individual business modules.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from app.transport.http.public_v1.auth import (
     admin_router,
@@ -94,8 +95,16 @@ from app.bootstrap.settings import (
 )
 from app.database.admin import setup_admin
 from app.database.database import SessionLocal
+from app.modules.notifications.infrastructure import AliyunTransactionalEmailSender
+from app.modules.projects.application.invitation_tokens import (
+    ProjectInvitationTokenCodec,
+)
+from app.modules.projects.infrastructure.invitation_delivery import (
+    ProjectInvitationDeliverySupervisor,
+)
 from app.shared.domain import AppError
 from app.shared.application import OperationContextFactory
+from app.shared.infrastructure.email_settings import email_settings
 from app.transport.http.errors import (
     app_error_handler,
     http_error_handler,
@@ -181,6 +190,29 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         },
     )
     application.state.settings = runtime_settings
+    email_settings.validate_configuration(
+        required=runtime_settings.environment.casefold() == "production"
+    )
+    application.state.project_invitation_delivery_supervisor = None
+    if email_settings.configured:
+        application.state.project_invitation_delivery_supervisor = ProjectInvitationDeliverySupervisor(
+            session_factory=SessionLocal,
+            sender=AliyunTransactionalEmailSender(
+                access_key_id=email_settings.scholens_aliyun_dm_access_key_id,
+                access_key_secret=email_settings.scholens_aliyun_dm_access_key_secret,
+                account_name=email_settings.scholens_aliyun_dm_account_name,
+                from_alias=email_settings.scholens_aliyun_dm_from_alias,
+                reply_to_address=email_settings.scholens_aliyun_dm_reply_to_address,
+            ),
+            token_codec=ProjectInvitationTokenCodec(
+                runtime_settings.project_invitation_token_secret
+            ),
+            client_domain=runtime_settings.client_domain,
+            idle_seconds=runtime_settings.project_invitation_delivery_interval_seconds,
+            delivery_lease=timedelta(
+                seconds=runtime_settings.project_invitation_delivery_lease_seconds
+            ),
+        )
     application.state.diagnostic_snapshot_recorder = (
         create_diagnostic_snapshot_recorder(runtime_settings)
     )

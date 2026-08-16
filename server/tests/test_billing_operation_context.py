@@ -197,7 +197,6 @@ def test_checkout_provider_and_telemetry_run_outside_executor_operation() -> Non
         executor=executor,  # type: ignore[arg-type]
         payments=payments,
         events=events,
-        notifier=MagicMock(),
         operation_factory=OperationContextFactory(),
     )
 

@@ -97,7 +97,7 @@ the superseded names.
 | `CELERY_BROKER_URL`, `CACHE_URL`                                                                  | server + jobs                                                   |
 | `WEBHOOK_BASE_URL`                                                                                | jobs                                                            |
 | `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                          |
-| `AUTH_ALIYUN_DM_ACCESS_KEY_ID`, `AUTH_ALIYUN_DM_ACCESS_KEY_SECRET`, `AUTH_ALIYUN_DM_ACCOUNT_NAME` | server; verification/reset mail                                 |
+| `SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID`, `SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET`, `SCHOLENS_ALIYUN_DM_ACCOUNT_NAME` | server; identity and Project invitation mail                    |
 | `CLIENT_DOMAIN`                                                                                   | server canonical URL (`http://127.0.0.1:7300`)                  |
 | `CLIENT_ALLOWED_ORIGINS`                                                                          | server (`http://127.0.0.1:7300,http://127.0.0.1:7303`)          |
 | `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                             |
@@ -163,8 +163,10 @@ Unless `AUTH_DATABASE_URL` is explicitly set, both sanchezcloud-identity and Sch
 - Scholens and Scholight deliberately use different JWT secrets and
   `client_id` values even though they share `auth.users`.
 - Products may use the same Aliyun DirectMail account, while keeping sender
-  aliases and action URLs product-specific. Scholens local authentication sends
-  real mail through Aliyun; there is no Mailpit profile.
+  aliases and action URLs product-specific. Scholens authentication and durable
+  Project invitations send real mail through Aliyun; there is no Mailpit profile.
+  Both use `CLIENT_DOMAIN` for Scholens links and the `SCHOLENS_ALIYUN_DM_*`
+  settings; no identity-prefixed mail configuration exists.
 - Scholens local development uses a dedicated remote dev S3 bucket with
   least-privilege development credentials. Leave `AWS_ENDPOINT_URL_S3` empty
   for AWS S3 and never point local credentials at a production bucket.

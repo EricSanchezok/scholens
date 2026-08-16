@@ -33,10 +33,6 @@ class DisplayNameWriter(Protocol):
     async def set_display_name(self, *, user_id: int, display_name: str) -> None: ...
 
 
-class OnboardingNotifier(Protocol):
-    def notify(self, onboarding: OnboardingResponse) -> None: ...
-
-
 class OnboardingEventRecorder(Protocol):
     def completed(
         self,
@@ -82,11 +78,9 @@ class FinishOnboarding:
         self,
         *,
         display_names: DisplayNameWriter,
-        notifier: OnboardingNotifier,
         events: OnboardingEventRecorder,
     ) -> None:
         self._display_names = display_names
-        self._notifier = notifier
         self._events = events
 
     async def execute(
@@ -101,7 +95,6 @@ class FinishOnboarding:
                 user_id=actor.id,
                 display_name=request.name,
             )
-        self._notifier.notify(onboarding)
         self._events.completed(
             user_id=actor.id,
             properties={

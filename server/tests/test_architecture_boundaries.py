@@ -51,6 +51,17 @@ def _runtime_imports(path: Path) -> set[str]:
     return modules
 
 
+def test_email_provider_settings_have_one_shared_source() -> None:
+    canonical = APP_ROOT / "shared" / "infrastructure" / "email_settings.py"
+    duplicate = (
+        APP_ROOT / "modules" / "notifications" / "infrastructure" / "settings.py"
+    )
+
+    assert canonical.exists()
+    assert not duplicate.exists()
+    assert "client_domain" not in canonical.read_text(encoding="utf-8")
+
+
 def test_domain_and_application_contracts_are_framework_independent() -> None:
     forbidden_roots = {
         "fastapi",
@@ -263,6 +274,7 @@ def test_explicit_commits_are_limited_to_owned_background_transactions() -> None
         "modules/jobs/infrastructure/research_callbacks.py",
         "modules/billing/infrastructure/stripe_webhook_ledger.py",
         "modules/jobs/infrastructure/dispatcher.py",
+        "modules/projects/infrastructure/invitation_delivery.py",
     }
     violations: list[str] = []
     transaction_roots = (

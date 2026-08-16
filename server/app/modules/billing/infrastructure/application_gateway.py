@@ -1,4 +1,4 @@
-"""Concrete SQLAlchemy, Stripe, telemetry, and email billing adapters."""
+"""Concrete SQLAlchemy, Stripe, and telemetry billing adapters."""
 
 from __future__ import annotations
 
@@ -7,25 +7,18 @@ from typing import Any
 
 import stripe
 from app.database.product_analytics import track_event
-from app.helpers.email import notify_converted_billing_interval
 from app.modules.billing.application.contracts import UsagePeriod, UsageResponse
 from app.modules.billing.application.ports import (
     BillingEvent,
     BillingEvents,
-    BillingIssueNotification,
-    BillingNotification,
-    BillingNotifier,
     BillingPaymentFailed,
     BillingProviderUnavailable,
-    CancellationConfirmedNotification,
-    IntervalChangeScheduledNotification,
     PaymentProvider,
     ProviderCheckoutSession,
     ProviderSchedule,
     ProviderSubscription,
     SubscriptionRecord,
     SubscriptionStore,
-    SubscriptionWelcomeNotification,
     SubscriptionWriteResult,
     UsageReader,
 )
@@ -344,42 +337,3 @@ class PostHogBillingEvents(BillingEvents):
             properties=dict(event.properties),
             user_id=str(event.actor_id) if event.actor_id is not None else None,
         )
-
-
-class EmailBillingNotifier(BillingNotifier):
-    def send(self, notification: BillingNotification) -> None:
-        if isinstance(notification, IntervalChangeScheduledNotification):
-            notify_converted_billing_interval(
-                email=notification.email,
-                new_interval=notification.new_interval,
-                name=notification.display_name,
-            )
-            return
-        if isinstance(notification, SubscriptionWelcomeNotification):
-            from app.helpers.email import send_subscription_welcome_email
-
-            send_subscription_welcome_email(notification.email)
-            return
-        if isinstance(notification, CancellationConfirmedNotification):
-            from app.helpers.email import send_confirmation_cancellation_email
-
-            first_name = (
-                notification.display_name.split(" ")[0]
-                if notification.display_name
-                else None
-            )
-            send_confirmation_cancellation_email(
-                to_email=notification.email,
-                name=first_name,
-            )
-            return
-        if isinstance(notification, BillingIssueNotification):
-            from app.helpers.email import notify_billing_issue
-
-            notify_billing_issue(
-                notification.email,
-                notification.issue,
-                notification.display_name,
-            )
-            return
-        raise TypeError(f"Unsupported billing notification: {type(notification)!r}")

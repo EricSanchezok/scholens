@@ -64,7 +64,6 @@ def _workflow(
     billing: MagicMock | None = None,
     identity: MagicMock | None = None,
     events: MagicMock | None = None,
-    notifier: MagicMock | None = None,
 ) -> tuple[StripeWebhookWorkflow, _Executor]:
     billing = billing or MagicMock()
     billing.webhook_owner_id.return_value = 7
@@ -79,7 +78,6 @@ def _workflow(
         engine=MagicMock(),
         operation_factory=OperationContextFactory(),
         events=events or MagicMock(),
-        notifier=notifier or MagicMock(),
         webhook_secret="whsec_test",
     )
     return workflow, executor
@@ -237,14 +235,11 @@ async def test_verified_event_uses_safe_provenance_and_post_commit_effects() -> 
     billing.webhook_owner_id.return_value = 7
     billing.apply_webhook.return_value = BillingWebhookResult(changed=True)
     events = MagicMock()
-    notifier = MagicMock()
     workflow, executor = _workflow(
         billing=billing,
         events=events,
-        notifier=notifier,
     )
     events.record.side_effect = lambda _event: assert_not_active(executor)
-    notifier.send.side_effect = lambda _notification: assert_not_active(executor)
     workflow._claim = MagicMock(  # type: ignore[method-assign]
         return_value=WebhookClaim(
             should_process=True,
@@ -297,7 +292,6 @@ async def test_verified_event_uses_safe_provenance_and_post_commit_effects() -> 
     assert operation.credential.kind is CredentialKind.PROVIDER_SIGNATURE
     workflow._complete.assert_called_once_with(event_id="evt_created")
     events.record.assert_called_once()
-    notifier.send.assert_called_once()
 
 
 def assert_not_active(executor: _Executor) -> None:

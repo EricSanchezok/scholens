@@ -346,11 +346,81 @@ def _invitation(
         id=uuid.uuid4(),
         project_id=project_id,
         email=email,
-        token_hash="a" * 64,
+        token_revision=1,
         invited_by_id=invited_by_id,
         can_manage_papers=True,
         expires_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
+
+
+def _owner_access(project: Project, *, user_id: int = 1) -> ProjectAccess:
+    return ProjectAccess(
+        project=project,
+        user_id=user_id,
+        is_owner=True,
+        collaborator=None,
+        permissions=ProjectPermissions.all(),
+    )
+
+
+def test_invitation_creation_queues_delivery_in_the_same_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = Project(id=uuid.uuid4(), owner_id=1, title="Project")
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [None, None]
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.project_repository.require_project_permission",
+        lambda *_args, **_kwargs: _owner_access(project),
+    )
+
+    created = project_repository.create_invitation(
+        db,
+        project_id=project.id,
+        actor_id=1,
+        email=" Collaborator@Example.com ",
+        requested=ProjectInvitationCreateRequest(email="collaborator@example.com"),
+    )
+
+    assert created.email == "collaborator@example.com"
+    assert created.delivery_status == "pending"
+    assert created.delivery_attempt_count == 0
+    assert created.delivery_next_attempt_at is not None
+    db.add.assert_called_once_with(created)
+    db.commit.assert_not_called()
+
+
+def test_manual_resend_reuses_invitation_and_increments_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = Project(id=uuid.uuid4(), owner_id=1, title="Project")
+    invitation = _invitation(project_id=project.id)
+    invitation.delivery_status = "failed"
+    invitation.delivery_attempt_count = 8
+    invitation.delivery_failure_code = "provider_rejected"
+    invitation.delivered_at = datetime.now(timezone.utc)
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = invitation
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.project_repository.require_project_permission",
+        lambda *_args, **_kwargs: _owner_access(project),
+    )
+
+    resent = project_repository.resend_invitation(
+        db,
+        project_id=project.id,
+        invitation_id=invitation.id,
+        actor_id=1,
+    )
+
+    assert resent is invitation
+    assert invitation.token_revision == 2
+    assert invitation.delivery_status == "pending"
+    assert invitation.delivery_attempt_count == 0
+    assert invitation.delivery_failure_code is None
+    assert invitation.delivered_at is None
+    db.add.assert_not_called()
+    db.commit.assert_not_called()
 
 
 def test_invitation_revalidates_inviter_before_accepting_existing_member(
@@ -395,7 +465,6 @@ def test_invitation_revalidates_inviter_before_accepting_existing_member(
             ),
             "collaborator@example.com",
         ),
-        (lambda _invitation: None, "another@example.com"),
     ],
 )
 def test_invalid_invitation_states_fail_without_side_effects(
@@ -421,6 +490,22 @@ def test_invalid_invitation_states_fail_without_side_effects(
     db.commit.assert_not_called()
 
 
+def test_invitation_recipient_mismatch_has_a_stable_non_disclosing_error() -> None:
+    invitation = _invitation(project_id=uuid.uuid4())
+    db = MagicMock(spec=Session)
+
+    with pytest.raises(AppError) as exc_info:
+        project_repository._accept_invitation(
+            db,
+            invitation=invitation,
+            user_id=2,
+            email="another@example.com",
+        )
+
+    assert exc_info.value.code == "project_invitation_recipient_mismatch"
+    assert invitation.email not in exc_info.value.message
+
+
 def test_project_api_exposes_capabilities_and_invitation_lifecycle() -> None:
     paths = app.openapi()["paths"]
 
@@ -435,7 +520,18 @@ def test_project_api_exposes_capabilities_and_invitation_lifecycle() -> None:
     assert "/api/v1/project-invitations/token/{token}/accept" not in paths
     assert not any("role" in path for path in paths if "project" in path)
 
+    accept_response = paths["/api/v1/project-invitations/{token}/accept"]["post"][
+        "responses"
+    ]["200"]["content"]["application/json"]["schema"]
+    assert accept_response["$ref"].endswith("ProjectInvitationAcceptedResponse")
+
     schemas = app.openapi()["components"]["schemas"]
+    assert set(schemas["ProjectInvitationAcceptedResponse"]["properties"]) == {
+        "project_id"
+    }
+    assert {"delivery_status", "delivered_at"} <= set(
+        schemas["ProjectInvitationResponse"]["properties"]
+    )
     project_fields = schemas["ProjectResponse"]["properties"]
     assert {"num_papers", "num_conversations", "num_outputs", "activity_at"} <= set(
         project_fields

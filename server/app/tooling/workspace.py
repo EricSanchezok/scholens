@@ -53,10 +53,7 @@ from app.tooling.contracts import (
     ToolHandler,
     WorkflowToolHandler,
 )
-from app.tooling.workspace_handlers import (
-    ProjectInvitationNotifier,
-    WorkspaceToolHandlers,
-)
+from app.tooling.workspace_handlers import WorkspaceToolHandlers
 from pydantic import BaseModel
 
 CONVERSATION_TOOL_PROFILE = "conversation"
@@ -134,7 +131,6 @@ def build_workspace_tool_catalog(
     ingestion: PaperIngestionWorkflow,
     citations: CitationWorkflow,
     executor: ApplicationExecutor[ApplicationCapabilities] | None = None,
-    invitation_notifier: ProjectInvitationNotifier | None = None,
     web_base_url: str = "https://scholens.local",
     cursor_secret: str = "catalog-construction-only",
 ) -> ToolCatalog[ApplicationCapabilities]:
@@ -142,7 +138,6 @@ def build_workspace_tool_catalog(
         executor=cast(ApplicationExecutor[ApplicationCapabilities], executor),
         ingestion=ingestion,
         citations=citations,
-        invitation_notifier=cast(ProjectInvitationNotifier, invitation_notifier),
         web_base_url=web_base_url,
         cursor_secret=cursor_secret,
     )
@@ -431,7 +426,7 @@ def build_workspace_tool_catalog(
                 use="the user explicitly wants to email Project access to a person",
                 avoid="the person is already a member or email delivery is not intended",
                 result="an impact preview, then invitation and delivery status",
-                next_step="confirm before the email is sent; inspect guidance if delivery fails.",
+                next_step="confirm before queueing, then inspect delivery status.",
             ),
             input_model=wc.CreateProjectInvitationInput,
             output_model=confirmed,
@@ -445,10 +440,10 @@ def build_workspace_tool_catalog(
             name="resend_project_invitation",
             title="Resend Project invitation",
             description=_description(
-                use="a specific pending invitation email must be delivered again",
+                use="a specific sent or failed invitation must be queued again",
                 avoid="permissions or recipient must change",
                 result="an impact preview, then refreshed invitation and delivery status",
-                next_step="confirm before sending and revoke/recreate if recipient details are wrong.",
+                next_step="confirm before queueing and revoke/recreate if recipient details are wrong.",
             ),
             input_model=wc.InvitationInput,
             output_model=confirmed,

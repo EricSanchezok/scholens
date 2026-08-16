@@ -55,6 +55,7 @@ change what the accepted record decided.
 - [ADR 0021: Semantic Web motion system](./0021-web-motion-system.md)
 - [ADR 0022: Immutable ECS release boundary](./0022-immutable-ecs-release-boundary.md)
 - [ADR 0023: Agent-native Scholens knowledge boundary](./0023-agent-native-scholens-mcp.md)
+- [ADR 0024: Shared Aliyun account and durable product email](./0024-shared-aliyun-account-and-durable-product-email.md)
 
 ## Template
 

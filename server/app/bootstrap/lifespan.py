@@ -23,11 +23,20 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
             run_job_dispatcher(stop_dispatcher),
             name="jobs-outbox-dispatcher",
         )
+        invitation_delivery = None
+        supervisor = application.state.project_invitation_delivery_supervisor
+        if supervisor is not None:
+            invitation_delivery = asyncio.create_task(
+                supervisor.run(stop_dispatcher),
+                name="project-invitation-email-delivery",
+            )
         try:
             yield
         finally:
             stop_dispatcher.set()
             await dispatcher
+            if invitation_delivery is not None:
+                await invitation_delivery
             close_diagnostic_snapshot_recorder(
                 application.state.diagnostic_snapshot_recorder
             )

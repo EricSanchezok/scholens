@@ -24,11 +24,8 @@ from app.modules.billing.application.contracts import (
 from app.modules.billing.application.ports import (
     BillingEvent,
     BillingEvents,
-    BillingNotification,
-    BillingNotifier,
     BillingPaymentFailed,
     BillingProviderUnavailable,
-    IntervalChangeScheduledNotification,
     PaymentProvider,
 )
 from app.shared.application import (
@@ -55,13 +52,11 @@ class BillingWorkflow:
         executor: ApplicationExecutor[ApplicationCapabilities],
         payments: PaymentProvider,
         events: BillingEvents,
-        notifier: BillingNotifier,
         operation_factory: OperationContextFactory,
     ) -> None:
         self._executor = executor
         self._payments = payments
         self._events = events
-        self._notifier = notifier
         self._operation_factory = operation_factory
 
     def create_checkout(
@@ -402,13 +397,6 @@ class BillingWorkflow:
                 },
             )
         )
-        self._notify(
-            IntervalChangeScheduledNotification(
-                email=actor.email,
-                display_name=actor.display_name,
-                new_interval=new_interval.value,
-            )
-        )
         return IntervalChangeResponse(
             success=True,
             message=(
@@ -478,12 +466,6 @@ class BillingWorkflow:
             self._events.record(event)
         except Exception:
             logger.warning("billing.product_analytics.delivery_failed", exc_info=True)
-
-    def _notify(self, notification: BillingNotification) -> None:
-        try:
-            self._notifier.send(notification)
-        except Exception:
-            logger.warning("billing.notification.delivery_failed", exc_info=True)
 
     @staticmethod
     def _checkout_redirect(error: str) -> SubscriptionActionResponse:

@@ -12,11 +12,6 @@ from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
 from app.modules.billing.application.ports import (
     BillingEvent,
     BillingEvents,
-    BillingIssueNotification,
-    BillingNotification,
-    BillingNotifier,
-    CancellationConfirmedNotification,
-    SubscriptionWelcomeNotification,
 )
 from app.modules.billing.application.webhook_contracts import (
     BillingWebhookChange,
@@ -99,7 +94,6 @@ class StripeWebhookWorkflow:
         engine: Engine,
         operation_factory: OperationContextFactory,
         events: BillingEvents,
-        notifier: BillingNotifier,
         webhook_secret: str | None,
     ) -> None:
         self._executor = executor
@@ -107,7 +101,6 @@ class StripeWebhookWorkflow:
         self._engine = engine
         self._operation_factory = operation_factory
         self._events = events
-        self._notifier = notifier
         self._webhook_secret = webhook_secret
 
     async def process(
@@ -452,61 +445,11 @@ class StripeWebhookWorkflow:
                 )
             )
 
-        if event_type == "customer.subscription.created" and result.changed:
-            self._notify(
-                SubscriptionWelcomeNotification(
-                    email=actor.email,
-                    display_name=actor.display_name,
-                )
-            )
-        elif (
-            event_type == "customer.subscription.updated"
-            and result.cancellation_newly_scheduled
-        ):
-            self._notify(
-                CancellationConfirmedNotification(
-                    email=actor.email,
-                    display_name=actor.display_name,
-                )
-            )
-        elif event_type in {
-            "invoice.payment_failed",
-            "invoice.payment_action_required",
-            "customer.subscription.past_due",
-        }:
-            messages = {
-                "invoice.payment_failed": (
-                    "Payment failed for your subscription. "
-                    "Please update your payment method"
-                ),
-                "invoice.payment_action_required": (
-                    "Payment action required for your subscription. "
-                    "Please complete the required action."
-                ),
-                "customer.subscription.past_due": (
-                    "Your subscription is past due. Please update your payment "
-                    "method to avoid service interruption."
-                ),
-            }
-            self._notify(
-                BillingIssueNotification(
-                    email=actor.email,
-                    display_name=actor.display_name,
-                    issue=messages[event_type],
-                )
-            )
-
     def _record(self, event: BillingEvent) -> None:
         try:
             self._events.record(event)
         except Exception:
             logger.warning("stripe.webhook.product_analytics_failed", exc_info=True)
-
-    def _notify(self, notification: BillingNotification) -> None:
-        try:
-            self._notifier.send(notification)
-        except Exception:
-            logger.warning("stripe.webhook.notification_failed", exc_info=True)
 
 
 def _get(value: Any, key: str, default: Any = None) -> Any:

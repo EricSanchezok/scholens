@@ -49,7 +49,6 @@ from app.modules.identity.application.onboarding import (
 )
 from app.modules.identity.infrastructure.onboarding_adapters import (
     CloudAuthDisplayNameWriter,
-    EmailOnboardingNotifier,
     PostHogOnboardingEventRecorder,
     SqlAlchemyOnboardingWriter,
 )
@@ -93,7 +92,6 @@ from app.bootstrap.adapters.library_removal import (
 from app.bootstrap.adapters.document_gc import schedule_document_gc
 from app.modules.projects.application.projects import Projects
 from app.bootstrap.adapters.project_gateway import (
-    EmailProjectInvitationNotifier,
     SqlAlchemyProjectGateway,
 )
 from app.modules.research.application.items import ResearchItems
@@ -297,7 +295,6 @@ def build_save_onboarding(
 def build_finish_onboarding() -> FinishOnboarding:
     return FinishOnboarding(
         display_names=CloudAuthDisplayNameWriter(),
-        notifier=EmailOnboardingNotifier(),
         events=PostHogOnboardingEventRecorder(),
     )
 
@@ -434,10 +431,21 @@ def build_citation_metadata(
 
 
 def build_projects(
-    *, db: Session, cursor_secret: str, journal: OperationJournal
+    *,
+    db: Session,
+    cursor_secret: str,
+    invitation_token_secret: str,
+    journal: OperationJournal,
 ) -> Projects:
+    from app.modules.projects.application.invitation_tokens import (
+        ProjectInvitationTokenCodec,
+    )
+
     return Projects(
-        gateway=SqlAlchemyProjectGateway(db),
+        gateway=SqlAlchemyProjectGateway(
+            db,
+            invitation_tokens=ProjectInvitationTokenCodec(invitation_token_secret),
+        ),
         capacity=BillingProjectCapacity(db),
         signer=S3PaperDownloadSigner(),
         cursors=SignedCursorCodec(
@@ -448,10 +456,6 @@ def build_projects(
         ),
         journal=journal,
     )
-
-
-def build_project_invitation_notifier() -> EmailProjectInvitationNotifier:
-    return EmailProjectInvitationNotifier()
 
 
 def build_research_items(*, db: Session, journal: OperationJournal) -> ResearchItems:

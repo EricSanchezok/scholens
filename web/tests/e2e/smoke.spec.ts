@@ -498,6 +498,7 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
   await expect(
     page.getByRole("textbox", { name: "Ask a follow-up" }),
   ).toBeVisible();
+  await expect(dock.getByTestId("mobile-tab-bar")).toBeVisible();
   const dockBefore = await dock.boundingBox();
   expect(
     await main.evaluate(

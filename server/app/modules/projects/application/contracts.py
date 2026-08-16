@@ -21,6 +21,12 @@ class ProjectPaperSort(StrEnum):
     PUBLISHED_DESC = "published_desc"
 
 
+class ProjectInvitationDeliveryStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 class ProjectPermissionSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -145,6 +151,12 @@ class ProjectInvitationResponse(BaseModel):
     permissions: ProjectPermissionSet
     expires_at: datetime
     created_at: datetime
+    delivery_status: ProjectInvitationDeliveryStatus
+    delivered_at: datetime | None
+
+
+class ProjectInvitationAcceptedResponse(BaseModel):
+    project_id: UUID
 
 
 class ProjectInvitationListResponse(BaseModel):

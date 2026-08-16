@@ -839,12 +839,6 @@ class ConfirmationAwareAction(RootModel[ConfirmationChallenge | CompletedAction]
     pass
 
 
-class InvitationDeliveryOutput(BaseModel):
-    invitation: dict[str, JsonValue]
-    email_delivery: Literal["sent", "failed"]
-    guidance: str | None = None
-
-
 class CommentActionOutput(BaseModel):
     comment: AnnotationCommentResponse
     resource_uri: str

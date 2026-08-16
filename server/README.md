@@ -143,11 +143,14 @@ The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
 enabled.
 
 The ordinary Scholens local environment uses an isolated remote dev S3 bucket
-and Aliyun DirectMail for real verification and password-reset messages. It
-does not require Mailpit or MinIO. Keep both providers' credentials in the
-ignored `server/.env`; Jobs receives the same dev S3 settings through its own
-ignored `jobs/.env`. Production RDS, S3, and mail resources must never be used
-by local startup.
+and Aliyun DirectMail for real verification, password-reset, and durable Project
+invitation messages. It does not require Mailpit or MinIO. Identity owns its
+security templates; the Server owns provider-neutral product email and leases
+pending invitation delivery from `scholens.project_invitations`. Both use the
+same `SCHOLENS_ALIYUN_DM_*` account configuration and `CLIENT_DOMAIN`. Keep
+provider credentials in the ignored `server/.env`; Jobs receives the same dev
+S3 settings through its own ignored `jobs/.env`. Production RDS, S3, and mail
+resources must never be used by local startup.
 
 ## API Documentation
 

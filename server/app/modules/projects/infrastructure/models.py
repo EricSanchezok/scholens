@@ -8,8 +8,10 @@ from sqlalchemy import (
     UUID,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     Index,
     String,
     Text,
@@ -110,12 +112,38 @@ class ProjectCollaborator(Base):
 
 
 class ProjectInvitation(Base):
-    """A short-lived invitation; only the random token hash is persisted."""
+    """A short-lived invitation that also owns its durable delivery state."""
 
     __tablename__ = "project_invitations"
     __table_args__ = (
+        CheckConstraint(
+            "token_revision >= 1",
+            name="ck_project_invitations_token_revision",
+        ),
+        CheckConstraint(
+            "delivery_status IN ('pending', 'sent', 'failed')",
+            name="ck_project_invitations_delivery_status",
+        ),
+        CheckConstraint(
+            "delivery_attempt_count >= 0",
+            name="ck_project_invitations_delivery_attempt_count",
+        ),
+        CheckConstraint(
+            "(delivery_lease_id IS NULL) = (delivery_lease_expires_at IS NULL)",
+            name="ck_project_invitations_delivery_lease_pair",
+        ),
+        CheckConstraint(
+            "delivery_status = 'pending' OR "
+            "(delivery_lease_id IS NULL AND delivery_lease_expires_at IS NULL)",
+            name="ck_project_invitations_terminal_without_lease",
+        ),
         Index("ix_project_invitations_project_email", "project_id", "email"),
-        Index("ix_project_invitations_token_hash", "token_hash", unique=True),
+        Index(
+            "ix_project_invitations_delivery_claim",
+            "delivery_status",
+            "delivery_next_attempt_at",
+            "delivery_lease_expires_at",
+        ),
         Index(
             "uq_project_invitations_pending_project_email",
             "project_id",
@@ -134,7 +162,9 @@ class ProjectInvitation(Base):
         nullable=False,
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     invited_by_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("auth.users.id", ondelete="CASCADE"),
@@ -156,6 +186,25 @@ class ProjectInvitation(Base):
         DateTime(timezone=True), nullable=True
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    delivery_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    delivery_attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    delivery_next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    delivery_lease_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    delivery_lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    delivery_failure_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
