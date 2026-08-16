@@ -1707,6 +1707,27 @@ def test_operator_managed_secret_containers_have_no_cloudformation_value() -> No
         assert "GenerateSecretString" not in properties
 
 
+def test_core_secret_seed_shape_stays_frozen() -> None:
+    template = load_template("scholens-foundation.yml")
+    generated = template["Resources"]["CoreSecret"]["Properties"][
+        "GenerateSecretString"
+    ]
+    seed = json.loads(generated["SecretStringTemplate"])
+
+    assert seed == {
+        "admin_session_secret": "",
+        "paper_search_cursor_secret": "",
+        "jobs_webhook_signing_secret": "",
+        "integration_credential_encryption_key": "",
+    }
+    assert "project_invitation_token_secret" not in seed
+
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+    assert "CoreSecret.GenerateSecretString" in readme
+    assert "frozen first-stack seed" in readme
+    assert "can replace the operator-owned `AWSCURRENT` value" in readme
+
+
 def test_edge_rotation_version_lookup_never_reads_the_secret_value() -> None:
     readme = (ECS / "README.md").read_text(encoding="utf-8")
     start = readme.index(

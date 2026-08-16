@@ -274,6 +274,13 @@ callback, and origin token. Required JSON keys are:
   `aliyun_account_name`;
 - integrations: `zotero_client_key`, `zotero_client_secret`.
 
+`CoreSecret.GenerateSecretString` is only the frozen first-stack seed and deliberately
+does not enumerate keys added after the foundation was first created. Never add a new
+runtime key to that CloudFormation property: changing it creates a new secret version and
+can replace the operator-owned `AWSCURRENT` value. Add or rotate core keys by reading the
+current JSON, writing one complete reviewed secret version, and then running the shape
+check below. Provider containers are empty CloudFormation resources for the same reason.
+
 Run this read-only preflight for each secret after writing its reviewed version (replace
 the sample key array for that container); it rejects missing, non-string, and empty values:
 
