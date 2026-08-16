@@ -305,12 +305,20 @@ def test_cloudformation_role_has_current_scoped_waf_association_permissions() ->
         "wafv2:ListResourcesForWebACL",
     }
     web_acl = next(item for item in statements if web_acl_actions <= _actions(item))
-    assert {
+    assert web_acl["Resource"] == {
         "Fn::Sub": (
             "arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:"
-            "regional/webacl/sanchezcloud-scholens/*"
+            "regional/webacl/*/*"
         )
-    } in web_acl["Resource"]
+    }
+    disassociation = next(
+        item for item in statements if "wafv2:DisassociateWebACL" in _actions(item)
+    )
+    assert disassociation == {
+        "Action": "wafv2:DisassociateWebACL",
+        "Effect": "Allow",
+        "Resource": "*",
+    }
     iam_actions = {
         action
         for statement in statements
