@@ -266,10 +266,35 @@ jobs:
           file: web/Dockerfile
           target: runtime
           push: false
+          load: true
+          tags: scholens-web:ci
           build-args: |
             RELEASE_SHA=${{ steps.image-revision.outputs.sha }}
             NEXT_PUBLIC_API_URL=https://scholens.example.invalid
             NEXT_PUBLIC_ACCOUNT_CENTER_URL=https://account.example.invalid
+      - name: Verify canonical Web runtime loopback health
+        run: |
+          web_container=$(docker run --detach \
+            --env HOSTNAME=ecs-task-hostname \
+            scholens-web:ci)
+          cleanup() {
+            docker rm --force "$web_container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          healthy=false
+          for _ in {1..20}; do
+            if docker exec "$web_container" \
+              wget -q -O /dev/null http://127.0.0.1:3000/healthz; then
+              healthy=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$healthy" != true ]]; then
+            docker logs "$web_container"
+            exit 1
+          fi
       - name: Verify independent migrations with least-privilege roles
         env:
           PGPASSWORD: migration-test-password
