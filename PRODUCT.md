@@ -115,8 +115,11 @@ current resource state. A changed or replayed confirmation must fail safely.
 
 The promotional Basic plan is intentionally useful enough for a researcher to
 build a real working library instead of merely evaluating an upload screen.
-Researcher is the high-comfort plan used by paying customers and internal team
-members. Current product limits are:
+Researcher is the high-comfort plan intended for future paid access and current
+internal team members. The first public release does not mount checkout,
+customer-portal, subscription-mutation, or payment-webhook routes; operators
+grant expiring Researcher access through the audited private CLI. Current
+product limits are:
 
 | Plan       | Papers | Storage | Projects | Papers per Project | Weekly Token Credits | Zotero auto-sync |
 | ---------- | -----: | ------: | -------: | -----------------: | -------------------: | ---------------- |
@@ -134,10 +137,10 @@ remains readable and may remove resources, but cannot add another paper or
 Project or begin AI work beyond its current Token Credit limit. Token windows
 reset on Monday UTC and continue to use provider-reported raw total tokens.
 
-Researcher access may come from a paid subscription or an explicitly expiring
-product grant. Those records are independent: an internal grant never pretends
-that a payment occurred, and losing a grant never downgrades an otherwise
-active paid Researcher.
+The entitlement resolver keeps paid subscriptions and explicitly expiring
+product grants independent so future charging does not require a schema or
+ownership rewrite. During the first release only product grants are issued: an
+internal grant never pretends that a payment occurred.
 
 ## Reading transformations preserve the paper as source of truth
 

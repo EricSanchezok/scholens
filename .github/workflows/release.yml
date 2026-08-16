@@ -195,9 +195,6 @@ jobs:
           CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
           APPLICATION_ENABLED: ${{ inputs.application_enabled }}
           SCHEDULER_STATE: ${{ inputs.scheduler_state }}
-          STRIPE_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MONTHLY_PRICE_ID }}
-          STRIPE_YEARLY_PRICE_ID: ${{ vars.STRIPE_YEARLY_PRICE_ID }}
-          POSTHOG_API_KEY: ${{ vars.POSTHOG_API_KEY }}
           EDGE_SECRET_VERSION_ID: ${{ inputs.edge_secret_version_id }}
           EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
         run: |
@@ -223,9 +220,6 @@ jobs:
               EdgeSecretPreviousVersionId) parameter_overrides+=("EdgeSecretPreviousVersionId=$EDGE_SECRET_PREVIOUS_VERSION_ID") ;;
               ApplicationEnabled) parameter_overrides+=("ApplicationEnabled=$APPLICATION_ENABLED") ;;
               SchedulerState) parameter_overrides+=("SchedulerState=$SCHEDULER_STATE") ;;
-              StripeMonthlyPriceId) parameter_overrides+=("StripeMonthlyPriceId=$STRIPE_MONTHLY_PRICE_ID") ;;
-              StripeYearlyPriceId) parameter_overrides+=("StripeYearlyPriceId=$STRIPE_YEARLY_PRICE_ID") ;;
-              PostHogApiKey) parameter_overrides+=("PostHogApiKey=$POSTHOG_API_KEY") ;;
             esac
           done
           aws cloudformation deploy \
@@ -288,9 +282,6 @@ jobs:
           CERTIFICATE_ARN: ${{ vars.PRODUCTION_CERTIFICATE_ARN }}
           RDS_SECURITY_GROUP_ID: ${{ vars.RDS_SECURITY_GROUP_ID }}
           CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
-          STRIPE_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MONTHLY_PRICE_ID }}
-          STRIPE_YEARLY_PRICE_ID: ${{ vars.STRIPE_YEARLY_PRICE_ID }}
-          POSTHOG_API_KEY: ${{ vars.POSTHOG_API_KEY }}
           EDGE_SECRET_VERSION_ID: ${{ inputs.edge_secret_version_id }}
           EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
         run: |
@@ -359,9 +350,6 @@ jobs:
               EdgeSecretPreviousVersionId) parameter_overrides+=("EdgeSecretPreviousVersionId=$EDGE_SECRET_PREVIOUS_VERSION_ID") ;;
               ApplicationEnabled) parameter_overrides+=("ApplicationEnabled=$recovery_enabled") ;;
               SchedulerState) parameter_overrides+=("SchedulerState=$recovery_scheduler") ;;
-              StripeMonthlyPriceId) parameter_overrides+=("StripeMonthlyPriceId=$STRIPE_MONTHLY_PRICE_ID") ;;
-              StripeYearlyPriceId) parameter_overrides+=("StripeYearlyPriceId=$STRIPE_YEARLY_PRICE_ID") ;;
-              PostHogApiKey) parameter_overrides+=("PostHogApiKey=$POSTHOG_API_KEY") ;;
             esac
           done
           aws cloudformation deploy \

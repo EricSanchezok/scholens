@@ -1,4 +1,4 @@
-"""Short-transaction orchestration for Stripe-backed account billing."""
+"""Account usage reads and dormant Stripe billing orchestration."""
 
 from __future__ import annotations
 
@@ -41,6 +41,22 @@ if TYPE_CHECKING:
     from app.bootstrap.capabilities import ApplicationCapabilities
 
 logger = logging.getLogger(__name__)
+
+
+class BillingUsageWorkflow:
+    """Expose effective-plan usage without initializing a payment provider."""
+
+    def __init__(
+        self,
+        *,
+        executor: ApplicationExecutor[ApplicationCapabilities],
+    ) -> None:
+        self._executor = executor
+
+    def get_usage(self, actor: Actor, period: UsagePeriod) -> UsageResponse:
+        return self._executor.query(
+            lambda capabilities: capabilities.billing.get_usage(actor, period)
+        )
 
 
 class BillingWorkflow:

@@ -22,14 +22,15 @@ HTTP / Agent / MCP / job callback
           domain policy + ports
                  |
                  v
- infrastructure adapters (PostgreSQL, S3, Stripe, Zotero, jobs, LLM)
+ infrastructure adapters (PostgreSQL, S3, Zotero, jobs, LLM; dormant Stripe)
 ```
 
 ## Stable contracts
 
-The browser-facing API is mounted once at `/api/v1`. Provider callbacks are
-under `/webhooks/v1`, and worker-only operations are under `/internal/v1`.
-Production routing deliberately does not expose `/internal/v1`.
+The browser-facing API is mounted once at `/api/v1`. A future provider callback
+must live under `/webhooks/v1`, but the first release mounts no public provider
+webhook. Worker-only operations are under `/internal/v1`, which production
+routing deliberately does not expose.
 
 Public resources use canonical identifiers:
 
@@ -130,10 +131,11 @@ replaces the artifact's ordered blocks and assets. Reflow failure, including
 an isolated missing-asset degradation, remains independent from PDF ingestion
 success.
 
-Chat streaming, paper ingestion, Research generation, onboarding, Stripe, and
-Zotero import/sync follow this shape. Agent and MCP paper tools obtain a fresh
-short operation for every tool call rather than retaining a session for the
-life of a conversation.
+Chat streaming, paper ingestion, Research generation, onboarding, and Zotero
+import/sync follow this shape. The dormant Stripe implementation follows the
+same boundary but is not composed into the first-release application. Agent and
+MCP paper tools obtain a fresh short operation for every tool call rather than
+retaining a session for the life of a conversation.
 
 ## User-owned integrations
 
@@ -411,11 +413,12 @@ builds typed provenance, selects a profile, and delegates to
 `ToolDispatcher`.
 
 Only progress-owning infrastructure may commit independently. The executable
-architecture whitelist contains narrow technical ledgers and dispatchers such
-as the Stripe webhook ledger and durable Jobs outbox. They reserve progress in
-a short transaction, perform external I/O with no Session, and finalize in
-another short transaction. Product workflows, including Zotero, citation
-recovery, discovery, document postprocessing, and billing, use
+architecture whitelist contains the durable Jobs outbox and the dormant Stripe
+webhook ledger; the latter is retained with its payment code but has no mounted
+route or runtime credentials. Such components reserve progress in a short
+transaction, perform external I/O with no Session, and finalize in another
+short transaction. Product workflows, including Zotero, citation recovery,
+discovery, document postprocessing, and billing usage, use
 `ApplicationExecutor` stages; repositories themselves never commit.
 
 Domain concepts have one canonical type name. Compatibility assignments such
@@ -527,6 +530,14 @@ is persisted and returned in KiB; public fields therefore use the explicit
 must convert those quantities from KiB rather than treating them as bytes.
 `period_end` is the inclusive final day of the selected window, not a timestamp
 or the next reset instant.
+
+This is the only mounted billing HTTP route in the first release. Checkout,
+customer portal, subscription refresh/mutation, and Stripe webhook code remains
+dormant and is not composed into FastAPI; production therefore injects no
+Stripe or PostHog configuration. Researcher access is granted and revoked only
+through the audited private CLI. Re-enabling public charging requires a later
+review that restores the provider boundary, runtime secrets, edge scope, and
+end-to-end tests together.
 
 Account paper and storage usage is the unique union of completed Documents in
 the personal Library and Projects owned by that account. A repeated Document

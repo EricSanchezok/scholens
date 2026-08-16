@@ -43,15 +43,6 @@ Parameters:
     AllowedValues:
     - DISABLED
     - ENABLED
-  StripeMonthlyPriceId:
-    Type: String
-    Default: ''
-  StripeYearlyPriceId:
-    Type: String
-    Default: ''
-  PostHogApiKey:
-    Type: String
-    Default: ''
   WebRequestsPerTarget:
     Type: Number
     Default: 600
@@ -322,7 +313,6 @@ Resources:
       Scope: REGIONAL
       RegularExpressionList:
       - ^/mcp$
-      - ^/webhooks/v1/stripe$
       - ^/api/v1/conversations(?:/.*)?$
       - ^/api/v1/paper-ingestions(?:/.*)?$
       Tags:
@@ -1184,19 +1174,10 @@ Resources:
           Value: '300000'
         - Name: SCHOLIGHT_MCP_URL
           Value: https://scholight.sanchezcloud.net/api/mcp
-        - Name: STRIPE_MONTHLY_PRICE_ID
-          Value:
-            Ref: StripeMonthlyPriceId
-        - Name: STRIPE_YEARLY_PRICE_ID
-          Value:
-            Ref: StripeYearlyPriceId
         - Name: ZOTERO_REDIRECT_URI
           Value:
             Fn::Sub:
               https://${DomainName}/api/v1/integrations/zotero/oauth/callback
-        - Name: POSTHOG_API_KEY
-          Value:
-            Ref: PostHogApiKey
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
@@ -1317,18 +1298,6 @@ Resources:
             - '${Secret}:aliyun_account_name::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-mail-secret-arn
-        - Name: STRIPE_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:stripe_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-billing-secret-arn
-        - Name: STRIPE_WEBHOOK_SECRET
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:stripe_webhook_secret::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-billing-secret-arn
         - Name: ZOTERO_CLIENT_KEY
           ValueFrom:
             Fn::Sub:
@@ -1624,9 +1593,6 @@ Resources:
           Value: '2'
         - Name: SCHOLENS_AI_MAX_INPUT_CHARS
           Value: '300000'
-        - Name: POSTHOG_API_KEY
-          Value:
-            Ref: PostHogApiKey
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
@@ -1843,9 +1809,6 @@ Resources:
           Value: '2'
         - Name: SCHOLENS_AI_MAX_INPUT_CHARS
           Value: '300000'
-        - Name: POSTHOG_API_KEY
-          Value:
-            Ref: PostHogApiKey
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
@@ -2062,9 +2025,6 @@ Resources:
           Value: '2'
         - Name: SCHOLENS_AI_MAX_INPUT_CHARS
           Value: '300000'
-        - Name: POSTHOG_API_KEY
-          Value:
-            Ref: PostHogApiKey
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET

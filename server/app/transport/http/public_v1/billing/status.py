@@ -1,4 +1,4 @@
-from app.bootstrap.workflows.billing import BillingWorkflow
+from app.bootstrap.workflows.billing import BillingUsageWorkflow, BillingWorkflow
 from app.modules.billing.application.contracts import (
     SubscriptionResponse,
     UsagePeriod,
@@ -9,13 +9,17 @@ from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from app.transport.http.public_v1.billing.dependencies import get_billing_workflow
+from app.transport.http.public_v1.billing.dependencies import (
+    get_billing_usage_workflow,
+    get_billing_workflow,
+)
 from fastapi import APIRouter, Depends
 
-router = APIRouter()
+subscription_status_router = APIRouter()
+usage_router = APIRouter()
 
 
-@router.get("/subscription", response_model=SubscriptionResponse)
+@subscription_status_router.get("/subscription", response_model=SubscriptionResponse)
 def get_user_subscription(
     workflow: BillingWorkflow = Depends(get_billing_workflow),
     current_user: Actor = Depends(get_required_user),
@@ -27,10 +31,10 @@ def get_user_subscription(
     )
 
 
-@router.get("/usage", response_model=UsageResponse)
+@usage_router.get("/usage", response_model=UsageResponse)
 def get_user_usage(
     period: UsagePeriod = UsagePeriod.CURRENT_WEEK,
-    workflow: BillingWorkflow = Depends(get_billing_workflow),
+    workflow: BillingUsageWorkflow = Depends(get_billing_usage_workflow),
     current_user: Actor = Depends(get_required_user),
 ) -> UsageResponse:
     return workflow.get_usage(current_user, period)

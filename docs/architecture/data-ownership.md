@@ -28,7 +28,9 @@ product schema.
   `scholens.*`.
 - `subscriptions` records payment state only. Internal Researcher access lives
   in `account_plan_grants`, and temporary numerical test limits live in
-  `account_quota_overrides`; neither table mutates or impersonates Stripe.
+  `account_quota_overrides`; neither table mutates or impersonates Stripe. The
+  first release does not expose a payment mutation or webhook route, so only
+  audited private CLI grants create new Researcher access.
 
 ## Project invitation and email ownership
 

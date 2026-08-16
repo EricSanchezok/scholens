@@ -103,8 +103,9 @@ the superseded names.
 | `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                             |
 | `NEXT_PUBLIC_ACCOUNT_CENTER_URL`                                                                  | web; optional Account Center override (`http://127.0.0.1:7100`) |
 
-MOSS Voice is required only for audio overviews. Zotero, Stripe, email, PostHog,
-and admin variables are grouped in the root `.env.example`.
+MOSS Voice is required only for audio overviews. Zotero and admin variables are
+grouped in the root `.env.example`. Public charging and PostHog are intentionally
+disabled for the first release and have no ordinary runtime configuration.
 
 Settings → Account defaults to the canonical
 `https://myaccount.sanchezcloud.net` destination. Set
