@@ -108,8 +108,10 @@ service/resource discovery (`Describe*`, selected `List*`, Cloud Map reads), KMS
 and `ListAliases`, Secrets Manager
 `GetRandomPassword`, service-linked-role creation with an exact service condition,
 ECS/ELB/Application Auto Scaling creation and registration, Cloud Map service creation with
-a product request-tag condition, CloudWatch alarm discovery, and the documented WAF/ALB
-association read or disassociation calls. Creating or updating the Scholens Web ACL also
+a product request-tag condition, CloudWatch alarm discovery, and WAF disassociation as
+required by the AWS WAF authorization model. WAF association and association reads are
+limited to the account's regional Web ACL namespace, while the paired ALB actions remain
+limited to the named Scholens load balancer. Creating or updating the Scholens Web ACL also
 allows those two write actions against the regional managed-rule-set namespace because AWS
 WAF authorizes managed rule references as part of the Web ACL request; no other WAF action
 is granted on that namespace. Deployment contract tests keep broad IAM, KMS, S3, Secrets
