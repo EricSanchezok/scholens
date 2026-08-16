@@ -74,7 +74,7 @@ or cluster.
 | Image | Workloads | Notes |
 | --- | --- | --- |
 | `sanchezcloud-scholens-web` | canonical `web/` Next.js standalone server | Public values are baked at build time; browser source maps are removed from the image and stored privately. |
-| `sanchezcloud-scholens-api` | API and one-off product migration | The entrypoint composes an escaped RDS URL from independent secret fields and enforces `verify-full` TLS. |
+| `sanchezcloud-scholens-api` | API and one-off product migration | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. |
 | `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. |
 
 The API runtime uses a digest-pinned Alpine Python image. The Jobs image builds its

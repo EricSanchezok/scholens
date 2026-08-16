@@ -109,6 +109,8 @@ jobs:
             --started-by "github-${GITHUB_RUN_ID}" \
             --query 'tasks[0].taskArn' --output text)
           test "$task_arn" != None
+          task_id=${task_arn##*/}
+          expected_log_stream="migration/migration/${task_id}"
           deadline=$((SECONDS + 3600))
           status=UNKNOWN
           while (( SECONDS < deadline )); do
@@ -151,7 +153,10 @@ jobs:
             --cluster sanchezcloud-production --tasks "$task_arn" \
             --query 'tasks[0].containers[?name==`migration`].logStreamName|[0]' \
             --output text)
-          [[ "$log_stream" == sanchezcloud/migration/* ]]
+          if [[ -z "$log_stream" || "$log_stream" == None ]]; then
+            log_stream=$expected_log_stream
+          fi
+          test "$log_stream" = "$expected_log_stream"
           for attempt in {1..12}; do
             mapfile -t proofs < <(aws logs get-log-events \
               --log-group-name /sanchezcloud/scholens/migration \
