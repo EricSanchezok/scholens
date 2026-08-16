@@ -63,6 +63,7 @@ const providerLinks: Partial<Record<IntegrationProvider, string>> = {
   tavily: "https://app.tavily.com/home",
   exa: "https://dashboard.exa.ai/api-keys",
   firecrawl: "https://www.firecrawl.dev/app/api-keys",
+  openalex: "https://openalex.org/settings/api",
 };
 
 function toneForState(state: Integration["state"]) {
@@ -124,20 +125,30 @@ function CredentialDialog({
           </DialogHeader>
           <DialogBody className="grid gap-4">
             <Field invalid={Boolean(form.formState.errors.credential)}>
-              <FieldLabel>{t("connections.accessToken")}</FieldLabel>
+              <FieldLabel>
+                {integration.provider === "openalex"
+                  ? t("connections.apiKey")
+                  : t("connections.accessToken")}
+              </FieldLabel>
               <FieldControl>
                 <PasswordInput
                   autoComplete="off"
                   autoFocus
                   hidePasswordLabel={t("connections.hideToken")}
-                  placeholder={t("connections.tokenPlaceholder")}
+                  placeholder={
+                    integration.provider === "openalex"
+                      ? t("connections.apiKeyPlaceholder")
+                      : t("connections.tokenPlaceholder")
+                  }
                   showPasswordLabel={t("connections.showToken")}
                   {...form.register("credential")}
                 />
               </FieldControl>
               <FieldMessage>
                 {form.formState.errors.credential
-                  ? t("connections.tokenError")
+                  ? integration.provider === "openalex"
+                    ? t("connections.apiKeyError")
+                    : t("connections.tokenError")
                   : undefined}
               </FieldMessage>
             </Field>
@@ -151,7 +162,9 @@ function CredentialDialog({
                 <Icon glyph={LinkIcon} size={16} />
                 {integration.provider === "mineru"
                   ? t("connections.getMineruToken")
-                  : t("connections.getCredential")}
+                  : integration.provider === "openalex"
+                    ? t("connections.getOpenAlexKey")
+                    : t("connections.getCredential")}
               </LinkButton>
             ) : null}
             {mutation.isError ? (

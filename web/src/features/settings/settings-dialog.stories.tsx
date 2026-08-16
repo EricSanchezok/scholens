@@ -46,15 +46,17 @@ const integrations = [
     updated_at: null,
     verified_at: null,
   },
-  ...(["anysearch", "tavily", "exa", "firecrawl"] as const).map((provider) => ({
-    category: "search",
-    enabled: false,
-    managed: false,
-    provider,
-    state: "disconnected",
-    updated_at: null,
-    verified_at: null,
-  })),
+  ...(["anysearch", "tavily", "exa", "firecrawl", "openalex"] as const).map(
+    (provider) => ({
+      category: "search",
+      enabled: false,
+      managed: false,
+      provider,
+      state: "disconnected",
+      updated_at: null,
+      verified_at: null,
+    }),
+  ),
 ];
 
 const settingsHandlers = [
@@ -308,6 +310,149 @@ export const Connections: Story = {
   },
 };
 
+export const OpenAlexConnection: Story = {
+  parameters: { nextjs: navigation("connections") },
+  play: async () => {
+    const body = within(document.body);
+    const openalex = await body.findByText("OpenAlex");
+    const row = openalex.closest("article");
+    await expect(row).not.toBeNull();
+    await userEvent.click(
+      within(row as HTMLElement).getByRole("button", { name: "Connect" }),
+    );
+    const dialogs = await body.findAllByRole("dialog");
+    const credentialDialog = dialogs.at(-1)!;
+    await expect(
+      within(credentialDialog).getByRole("link", {
+        name: "Get an OpenAlex API key",
+      }),
+    ).toHaveAttribute("href", "https://openalex.org/settings/api");
+    await expect(
+      within(credentialDialog).getByLabelText("API key"),
+    ).toBeVisible();
+  },
+};
+
+export const ConnectedOpenAlexConnection: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/integrations`, () =>
+          HttpResponse.json({
+            items: integrations.map((integration) =>
+              integration.provider === "openalex"
+                ? {
+                    ...integration,
+                    enabled: true,
+                    state: "connected",
+                    updated_at: "2026-08-15T08:00:00Z",
+                    verified_at: "2026-08-15T08:00:00Z",
+                  }
+                : integration,
+            ),
+          }),
+        ),
+      ],
+    },
+    nextjs: navigation("connections"),
+  },
+  play: async () => {
+    const body = within(document.body);
+    const openalex = await body.findByText("OpenAlex");
+    const row = openalex.closest("article");
+    await expect(row).not.toBeNull();
+    await expect(
+      within(row as HTMLElement).getByText("Connected"),
+    ).toBeVisible();
+    await expect(
+      within(row as HTMLElement).getByRole("switch", {
+        name: "Enable OpenAlex",
+      }),
+    ).toBeChecked();
+  },
+};
+
+export const DisabledOpenAlexConnection: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/integrations`, () =>
+          HttpResponse.json({
+            items: integrations.map((integration) =>
+              integration.provider === "openalex"
+                ? {
+                    ...integration,
+                    enabled: false,
+                    state: "disabled",
+                    updated_at: "2026-08-15T08:00:00Z",
+                    verified_at: "2026-08-15T08:00:00Z",
+                  }
+                : integration,
+            ),
+          }),
+        ),
+      ],
+    },
+    nextjs: navigation("connections"),
+  },
+  play: async () => {
+    const body = within(document.body);
+    const openalex = await body.findByText("OpenAlex");
+    const row = openalex.closest("article");
+    await expect(row).not.toBeNull();
+    await expect(
+      within(row as HTMLElement).getByText("Disabled"),
+    ).toBeVisible();
+    await expect(
+      within(row as HTMLElement).getByRole("switch", {
+        name: "Enable OpenAlex",
+      }),
+    ).not.toBeChecked();
+  },
+};
+
+export const InvalidOpenAlexConnection: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/integrations`, () =>
+          HttpResponse.json({
+            items: integrations.map((integration) =>
+              integration.provider === "openalex"
+                ? {
+                    ...integration,
+                    enabled: true,
+                    last_error_code: "openalex_credential_invalid",
+                    state: "invalid",
+                    updated_at: "2026-08-15T08:00:00Z",
+                  }
+                : integration,
+            ),
+          }),
+        ),
+      ],
+    },
+    nextjs: navigation("connections"),
+  },
+  play: async () => {
+    const body = within(document.body);
+    const openalex = await body.findByText("OpenAlex");
+    const row = openalex.closest("article");
+    await expect(row).not.toBeNull();
+    await expect(
+      within(row as HTMLElement).getByText("Needs attention"),
+    ).toBeVisible();
+    await expect(
+      within(row as HTMLElement).getByRole("button", {
+        name: "Replace credential",
+      }),
+    ).toBeVisible();
+  },
+};
+
 export const InvalidConnection: Story = {
   parameters: {
     msw: {
@@ -342,7 +487,7 @@ export const InvalidConnection: Story = {
     ).toBeVisible();
     await expect(
       within(row as HTMLElement).getByRole("button", {
-        name: "Replace token",
+        name: "Replace credential",
       }),
     ).toBeVisible();
   },

@@ -64,6 +64,8 @@ _DEFAULTS: dict[AIProfileName, tuple[str, AIThinkingMode, AIThinkingEffort]] = {
     ),
 }
 
+_SUPPORTED_PROVIDERS = frozenset({"anthropic", "deepseek", "google", "moonshotai"})
+
 
 @dataclass(frozen=True, slots=True)
 class AIProfile:
@@ -134,6 +136,10 @@ def resolve_profile(
     if not separator or not provider or not model_id:
         raise ProviderConfigurationError(
             f"{prefix}_MODEL must use the provider:model format"
+        )
+    if provider not in _SUPPORTED_PROVIDERS:
+        raise ProviderConfigurationError(
+            f"Unsupported AI provider {provider!r} for {prefix}_MODEL"
         )
     try:
         thinking = AIThinkingMode(
@@ -224,11 +230,10 @@ def _http_client(profile: AIProfile) -> httpx.AsyncClient:
 def _provider(profile: AIProfile) -> Any:
     api_key = _require_api_key(profile)
     base_url = os.getenv(_provider_environment_key(profile.provider, "BASE_URL"))
-    if profile.provider in {"deepseek", "openai"}:
+    if profile.provider == "deepseek":
         from pydantic_ai.providers.deepseek import DeepSeekProvider
-        from pydantic_ai.providers.openai import OpenAIProvider
 
-        if profile.provider == "deepseek" and base_url is None:
+        if base_url is None:
             base_url = "https://api.deepseek.com"
         client = AsyncOpenAI(
             api_key=api_key,
@@ -236,9 +241,7 @@ def _provider(profile: AIProfile) -> Any:
             timeout=profile.request_timeout_seconds,
             max_retries=profile.max_retries,
         )
-        if profile.provider == "deepseek":
-            return DeepSeekProvider(openai_client=client)
-        return OpenAIProvider(openai_client=client)
+        return DeepSeekProvider(openai_client=client)
     if profile.provider == "moonshotai":
         from pydantic_ai.providers.moonshotai import MoonshotAIProvider
 

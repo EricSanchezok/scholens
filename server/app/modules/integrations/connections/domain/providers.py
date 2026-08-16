@@ -12,10 +12,11 @@ class IntegrationProvider(StrEnum):
     TAVILY = "tavily"
     EXA = "exa"
     FIRECRAWL = "firecrawl"
+    OPENALEX = "openalex"
 
 
 BUILT_IN_INTEGRATION = IntegrationProvider.SCHOLIGHT
-SEARCH_CONNECTOR_PROVIDERS = (
+MCP_CONNECTOR_PROVIDERS = (
     IntegrationProvider.ANYSEARCH,
     IntegrationProvider.TAVILY,
     IntegrationProvider.EXA,
@@ -23,5 +24,6 @@ SEARCH_CONNECTOR_PROVIDERS = (
 )
 USER_MANAGED_INTEGRATION_PROVIDERS = (
     IntegrationProvider.MINERU,
-    *SEARCH_CONNECTOR_PROVIDERS,
+    *MCP_CONNECTOR_PROVIDERS,
+    IntegrationProvider.OPENALEX,
 )

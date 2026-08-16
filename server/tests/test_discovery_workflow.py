@@ -152,11 +152,13 @@ class _ExternalDiscovery:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         preparation: tuple[str, str | None],
     ) -> DiscoveryPaperListResponse:
         assert not self._executor.active
         assert actor.id == 7
+        assert operation.initiated_by is OperationInitiator.USER
         assert client_ip == "127.0.0.1"
         assert preparation == ("graph learning", None)
         return DiscoveryPaperListResponse(items=[])
@@ -175,6 +177,7 @@ class _ExternalDiscovery:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         preparation: tuple[str, str | None],
     ) -> DiscoveryPaperListResponse:
@@ -185,6 +188,7 @@ class _ExternalDiscovery:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         preparation: DiscoveryMatchPreparation,
     ) -> DiscoveryMatchResult:
@@ -217,6 +221,7 @@ async def test_search_performs_no_application_transaction() -> None:
 
     result = await workflow.search(
         actor=_actor(),
+        operation=_operation(),
         client_ip="127.0.0.1",
         query="graph learning",
         cursor=None,

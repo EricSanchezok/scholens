@@ -200,7 +200,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(
-            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl')",
+            "provider IN ('mineru', 'anysearch', 'tavily', 'exa', 'firecrawl', 'openalex')",
             name="ck_integration_connections_provider",
         ),
         sa.ForeignKeyConstraint(

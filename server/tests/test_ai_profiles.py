@@ -30,7 +30,7 @@ def test_profile_revision_changes_with_model_and_thinking_policy() -> None:
     baseline = resolve_profile(AIProfileName.STANDARD, environment={})
     changed_model = resolve_profile(
         AIProfileName.STANDARD,
-        environment={"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
+        environment={"SCHOLENS_AI_STANDARD_MODEL": "google:gemini-2.5-pro"},
     )
     changed_thinking = resolve_profile(
         AIProfileName.STANDARD,
@@ -57,6 +57,11 @@ def test_profile_rejects_ambiguous_model_and_invalid_thinking_pair() -> None:
                 "SCHOLENS_AI_TRANSLATION_THINKING": "disabled",
                 "SCHOLENS_AI_TRANSLATION_THINKING_EFFORT": "high",
             },
+        )
+    with pytest.raises(ProviderConfigurationError, match="Unsupported AI provider"):
+        resolve_profile(
+            AIProfileName.STANDARD,
+            environment={"SCHOLENS_AI_STANDARD_MODEL": "openai:gpt-5-mini"},
         )
 
 

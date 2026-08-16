@@ -19,6 +19,12 @@ Profile model identifiers always use `provider:model`. Server and Jobs are the
 current consumers. New providers must be added as an explicit adapter rather
 than silently treated as OpenAI-compatible.
 
+OpenAI Platform is not a supported provider and `openai:*` identifiers are
+rejected. The `openai` Python SDK remains a runtime dependency because the
+DeepSeek adapter deliberately uses its OpenAI-compatible client against the
+fixed default `https://api.deepseek.com` endpoint; this does not require or
+consume an OpenAI API key.
+
 The package is typed and ships `py.typed`. Its direct tests live in `tests/`
 and run through the shared package workspace documented in
 [`../README.md`](../README.md).

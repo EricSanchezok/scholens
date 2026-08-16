@@ -1298,18 +1298,6 @@ Resources:
             - '${Secret}:deepseek_api_key::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
-        - Name: SCHOLENS_AI_OPENAI_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:openai_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
-        - Name: OPENALEX_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:openalex_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: AUTH_ALIYUN_DM_ACCESS_KEY_ID
           ValueFrom:
             Fn::Sub:
@@ -1699,12 +1687,6 @@ Resources:
             - '${Secret}:deepseek_api_key::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
-        - Name: SCHOLENS_AI_OPENAI_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:openai_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: MOSS_API_KEY
           ValueFrom:
             Fn::Sub:
@@ -1924,12 +1906,6 @@ Resources:
             - '${Secret}:deepseek_api_key::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
-        - Name: SCHOLENS_AI_OPENAI_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:openai_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: MOSS_API_KEY
           ValueFrom:
             Fn::Sub:
@@ -2147,12 +2123,6 @@ Resources:
           ValueFrom:
             Fn::Sub:
             - '${Secret}:deepseek_api_key::'
-            - Secret:
-                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
-        - Name: SCHOLENS_AI_OPENAI_API_KEY
-          ValueFrom:
-            Fn::Sub:
-            - '${Secret}:openai_api_key::'
             - Secret:
                 Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
         - Name: MOSS_API_KEY

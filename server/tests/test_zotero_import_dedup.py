@@ -12,7 +12,7 @@ from app.bootstrap.adapters import zotero_gateway as gateway_module
 from app.bootstrap.adapters.zotero_gateway import DefaultZoteroGateway
 from app.bootstrap.workflows.zotero import _execute_import_plan
 from app.database.models import ZoteroImportSource
-from app.helpers.paper_search import normalize_doi
+from app.modules.papers.domain import normalize_doi
 from app.modules.integrations.zotero.application.contracts import (
     ZoteroImportItemResult,
 )

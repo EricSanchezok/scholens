@@ -116,10 +116,20 @@ life of a conversation.
 ## User-owned integrations
 
 `GET|PUT|DELETE /api/v1/me/integrations/{provider}` is the one public
-connection contract for MinerU and optional MCP providers. Responses expose
+connection contract for MinerU, OpenAlex, and optional MCP providers. Responses expose
 status, revision, verification information, and a masked secret hint, never the
 credential. Scholight remains built in. The superseded connector CRUD surface
 and shared MinerU environment credential do not exist.
+
+OpenAlex is a user-owned search-category connection but is not an MCP
+connector. Server fixes its endpoint to `https://api.openalex.org`, verifies a
+saved or re-enabled key against `/rate-limit`, and calls the official REST API
+for DOI/PDF resolution, external search, author works, and citation graphs.
+Each request reads the current actor's key and revision in a short query,
+performs provider I/O outside the transaction, and writes usage or invalidation
+only when that revision is still current. The key is sent only as the required
+`api_key` query parameter and is excluded from URLs in logs, exceptions,
+telemetry, journals, DTOs, and object representations.
 
 Connector MCP tools retain the native names returned by their owning server;
 Scholens does not add provider prefixes or maintain aliases. Resolution is
@@ -147,6 +157,16 @@ the MinerU integration; authentication failures mark only the matching revision
 invalid; rate limits and provider unavailability remain retryable; insufficient
 content and unsafe archives are distinct non-generic terminal results. Public
 projections retain only bounded safe codes and messages.
+
+OpenAlex exposes the parallel stable failures
+`openalex_credential_required`, `openalex_credential_invalid`,
+`openalex_rate_limited`, and `openalex_unavailable`; a work-level `404` retains
+not-found meaning. DOI import validates the DOI before opening the credential
+boundary and uses only OpenAlex-provided open PDF locations. Upload, arXiv, and
+direct PDF URL paths do not read the connection. Citation hydration is
+Crossref-first: a complete Crossref result performs no OpenAlex credential
+read, partial results merge only missing OpenAlex fields, and no connection
+leaves the partial Crossref result usable.
 
 ## Authentication, permission, and operation provenance
 

@@ -115,9 +115,12 @@ Scholens discovers remote model tools through MCP. Scholight is the built-in
 provider: `SCHOLIGHT_MCP_URL` selects its fixed endpoint and
 `SCHOLIGHT_MCP_DELEGATION_JWT_SECRET` signs a fresh 60-second delegation for the
 current user. AnySearch, Tavily, Exa, and Firecrawl are connected per user in
-Settings; MinerU is connected there as well. All user-owned credentials are
-encrypted with `INTEGRATION_CREDENTIAL_ENCRYPTION_KEY` and are released to a
-worker only for a claimed, owner-scoped job.
+Settings; MinerU and OpenAlex are connected there as well. OpenAlex uses the
+official fixed REST endpoint rather than MCP, and its key is never a local or
+production environment variable. All user-owned credentials are encrypted with
+`INTEGRATION_CREDENTIAL_ENCRYPTION_KEY`; job credentials are released only for
+a claimed, owner-scoped job, while OpenAlex is resolved for the current actor's
+Server request.
 
 For an opt-in local-to-local integration check, start Scholight on its documented
 loopback API port, set the ignored Scholens `server/.env` value to
@@ -166,7 +169,7 @@ Unless `AUTH_DATABASE_URL` is explicitly set, both sanchezcloud-identity and Sch
   least-privilege development credentials. Leave `AWS_ENDPOINT_URL_S3` empty
   for AWS S3 and never point local credentials at a production bucket.
 - Remote model/search providers (DeepSeek, MinerU, MOSS Voice, Scholight MCP,
-  and user-configured MCP connectors) are opt-in. Use them only when the feature
+  OpenAlex, and user-configured MCP connectors) are opt-in. Use them only when the feature
   under test requires them and never commit their credentials.
 
 ## First-time setup

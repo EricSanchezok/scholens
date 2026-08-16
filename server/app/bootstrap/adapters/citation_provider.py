@@ -4,16 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
-from app.helpers.paper_search import extract_doi_from_url, get_doi, get_enriched_data
 from app.helpers.parser import parse_publication_date
 from app.llm.citation_recovery import MetadataRecoveryAgent
 from app.modules.integrations.connectors.infrastructure.mcp import ConnectorToolResolver
 from app.modules.papers.application.citations import CitationMetadataPatch
 from app.modules.papers.application.contracts.citation import CitationStep
+from app.modules.papers.application.contracts.discovery import EnrichedData
+from app.modules.papers.domain import normalize_doi
 from app.modules.papers.domain.citations import CitationFields
-from app.shared.application import Actor
-from app.shared.domain import JsonValue
+from app.modules.papers.infrastructure.crossref import CrossrefClient
+from app.shared.application import Actor, OperationContext
+from app.shared.domain import AppError, JsonValue
+
+if TYPE_CHECKING:
+    from app.bootstrap.adapters.openalex import UserOpenAlex
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,29 +30,70 @@ class CitationProviderResult:
 
 
 class CitationMetadataProvider:
-    def __init__(self, connector_tools: ConnectorToolResolver) -> None:
+    def __init__(
+        self,
+        connector_tools: ConnectorToolResolver,
+        openalex: UserOpenAlex,
+        crossref: CrossrefClient | None = None,
+    ) -> None:
         self._recovery = MetadataRecoveryAgent(connector_tools)
+        self._openalex = openalex
+        self._crossref = crossref or CrossrefClient()
 
     def deterministic(
         self,
         *,
+        actor: Actor,
+        operation: OperationContext,
         fields: CitationFields,
     ) -> CitationProviderResult:
         doi = fields.doi
         if not doi and fields.title:
-            doi = get_doi(fields.title, fields.authors or None)
+            doi = self._crossref.find_doi(
+                title=fields.title,
+                authors=fields.authors or None,
+            )
 
         journal = fields.journal
         publisher = fields.publisher
         publish_date = fields.publish_date
-        if doi and (not journal or not publisher):
-            enriched = get_enriched_data(doi)
-            if enriched is not None:
-                journal = journal or enriched.journal
-                publisher = publisher or enriched.publisher
-                if not publish_date and enriched.publication_date:
-                    parsed = parse_publication_date(enriched.publication_date)
-                    publish_date = parsed.isoformat() if parsed is not None else None
+        if doi and (not journal or not publisher or not publish_date):
+            journal, publisher, publish_date = _merge_enriched(
+                enriched=self._crossref.enriched_data(doi=doi),
+                journal=journal,
+                publisher=publisher,
+                publish_date=publish_date,
+            )
+
+        if not doi and fields.title:
+            try:
+                doi = self._openalex.resolve_doi_sync(
+                    actor=actor,
+                    operation=operation,
+                    title=fields.title,
+                    authors=fields.authors or None,
+                )
+            except AppError as exc:
+                if not _is_skippable_openalex_error(exc):
+                    raise
+
+        if doi and (not journal or not publisher or not publish_date):
+            try:
+                enriched = self._openalex.enriched_data_sync(
+                    actor=actor,
+                    operation=operation,
+                    doi=doi,
+                )
+            except AppError as exc:
+                if not _is_skippable_openalex_error(exc):
+                    raise
+            else:
+                journal, publisher, publish_date = _merge_enriched(
+                    enriched=enriched,
+                    journal=journal,
+                    publisher=publisher,
+                    publish_date=publish_date,
+                )
 
         filled: dict[str, object] = {
             field_name: value
@@ -93,11 +140,7 @@ class CitationMetadataProvider:
             )
 
         doi_value = findings.get("doi")
-        doi = (
-            extract_doi_from_url(str(doi_value)) or str(doi_value)
-            if doi_value
-            else None
-        )
+        doi = normalize_doi(str(doi_value)) if doi_value else None
         publish_date_value = findings.get("publish_date")
         parsed_date = (
             parse_publication_date(str(publish_date_value))
@@ -143,6 +186,33 @@ class CitationMetadataProvider:
 
 def _optional_string(value: object) -> str | None:
     return str(value) if value else None
+
+
+def _merge_enriched(
+    *,
+    enriched: EnrichedData | None,
+    journal: str | None,
+    publisher: str | None,
+    publish_date: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    if enriched is None:
+        return journal, publisher, publish_date
+    enriched_journal = enriched.journal
+    enriched_publisher = enriched.publisher
+    publication_date = enriched.publication_date
+    if not publish_date and publication_date:
+        parsed = parse_publication_date(str(publication_date))
+        publish_date = parsed.isoformat() if parsed is not None else None
+    return journal or enriched_journal, publisher or enriched_publisher, publish_date
+
+
+def _is_skippable_openalex_error(exc: AppError) -> bool:
+    return exc.code in {
+        "openalex_credential_required",
+        "openalex_credential_invalid",
+        "openalex_rate_limited",
+        "openalex_unavailable",
+    }
 
 
 __all__ = ["CitationMetadataProvider", "CitationProviderResult"]

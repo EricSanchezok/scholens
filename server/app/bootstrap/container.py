@@ -69,11 +69,11 @@ from app.modules.papers.infrastructure.tag_gateway import (
 )
 from app.modules.papers.application.discovery import (
     DiscoverPapers,
+    ExternalPaperCatalog,
     ExternalPaperDiscovery,
 )
 from app.modules.papers.infrastructure.discovery import (
     AiExternalDiscoveryRateLimiter,
-    OpenAlexPaperCatalog,
     PostHogDiscoveryEventRecorder,
     SqlDiscoveryDocumentGateway,
 )
@@ -265,8 +265,11 @@ def build_pdf_url_source() -> SafePdfUrlSource:
     return SafePdfUrlSource()
 
 
-def build_paper_source_resolver() -> DefaultPaperSourceResolver:
-    return DefaultPaperSourceResolver()
+def build_paper_source_resolver(*, openalex: object) -> DefaultPaperSourceResolver:
+    from app.bootstrap.adapters.openalex import UserOpenAlex
+
+    assert isinstance(openalex, UserOpenAlex)
+    return DefaultPaperSourceResolver(openalex=openalex)
 
 
 def build_research_search(
@@ -352,9 +355,10 @@ def build_paper_discovery(
 def build_external_paper_discovery(
     *,
     cursor_secret: str,
+    catalog: ExternalPaperCatalog,
 ) -> ExternalPaperDiscovery:
     return ExternalPaperDiscovery(
-        catalog=OpenAlexPaperCatalog(),
+        catalog=catalog,
         rate_limiter=AiExternalDiscoveryRateLimiter(),
         events=PostHogDiscoveryEventRecorder(),
         cursors=SignedCursorCodec(

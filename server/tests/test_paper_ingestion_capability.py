@@ -24,7 +24,7 @@ from app.shared.application import (
     OperationInitiator,
     RequestReference,
 )
-from app.shared.domain import AppError
+from app.shared.domain import AppError, FailureKind
 
 
 def _actor() -> Actor:
@@ -197,39 +197,163 @@ def test_retry_revalidates_persisted_pdf_without_http_rate_charge() -> None:
 async def test_paper_source_resolver_normalizes_arxiv_sources(
     value: str, expected_id: str
 ) -> None:
-    resolver = DefaultPaperSourceResolver()
+    openalex = MagicMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
 
-    assert await resolver.resolve(kind="arxiv", value=value) == (
-        f"https://arxiv.org/pdf/{expected_id}"
-    )
+    assert await resolver.resolve(
+        actor=_actor(),
+        operation=_operation(),
+        kind="arxiv",
+        value=value,
+    ) == (f"https://arxiv.org/pdf/{expected_id}")
+    openalex.find_by_doi.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_paper_source_resolver_uses_openalex_pdf_for_doi() -> None:
-    resolver = DefaultPaperSourceResolver()
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
     work = MagicMock()
+    work.best_oa_location = None
     work.primary_location.pdf_url = "https://papers.example/paper.pdf"
+    openalex.find_by_doi.return_value = work
+    actor = _actor()
+    operation = _operation()
 
-    with patch(
-        "app.bootstrap.adapters.paper_ingestion.get_work_by_doi",
-        return_value=work,
-    ) as lookup:
-        resolved = await resolver.resolve(
-            kind="doi", value="https://doi.org/10.1000/example"
-        )
+    resolved = await resolver.resolve(
+        actor=actor,
+        operation=operation,
+        kind="doi",
+        value="https://doi.org/10.1000/example",
+    )
 
     assert resolved == "https://papers.example/paper.pdf"
-    lookup.assert_called_once_with("10.1000/example")
+    openalex.find_by_doi.assert_awaited_once_with(
+        actor=actor,
+        operation=operation,
+        doi="10.1000/example",
+    )
+
+
+@pytest.mark.asyncio
+async def test_paper_source_resolver_prefers_best_openalex_oa_location() -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+    work = MagicMock()
+    work.best_oa_location.pdf_url = "https://repository.example/paper.pdf"
+    work.primary_location.pdf_url = "https://publisher.example/paper.pdf"
+    openalex.find_by_doi.return_value = work
+
+    resolved = await resolver.resolve(
+        actor=_actor(),
+        operation=_operation(),
+        kind="doi",
+        value="10.1000/example",
+    )
+
+    assert resolved == "https://repository.example/paper.pdf"
+
+
+@pytest.mark.asyncio
+async def test_invalid_doi_is_rejected_before_openalex_access() -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+
+    with pytest.raises(AppError) as raised:
+        await resolver.resolve(
+            actor=_actor(),
+            operation=_operation(),
+            kind="doi",
+            value="not-a-doi",
+        )
+
+    assert raised.value.code == "paper_source_pdf_unavailable"
+    openalex.find_by_doi.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_openalex_connection_is_preserved_for_doi_action() -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock(
+        side_effect=AppError(
+            code="openalex_credential_required",
+            message="OpenAlex connection required",
+            kind=FailureKind.CONFLICT,
+            retryable=True,
+            details={"required_integration": "openalex"},
+        )
+    )
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+
+    with pytest.raises(AppError) as raised:
+        await resolver.resolve(
+            actor=_actor(),
+            operation=_operation(),
+            kind="doi",
+            value="10.1000/example",
+        )
+
+    assert raised.value.code == "openalex_credential_required"
+    assert raised.value.details == {"required_integration": "openalex"}
+
+
+@pytest.mark.asyncio
+async def test_openalex_work_without_open_pdf_is_unavailable() -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock(
+        return_value=MagicMock(
+            best_oa_location=None,
+            primary_location=None,
+            open_access=None,
+        )
+    )
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+
+    with pytest.raises(AppError) as raised:
+        await resolver.resolve(
+            actor=_actor(),
+            operation=_operation(),
+            kind="doi",
+            value="10.1000/example",
+        )
+
+    assert raised.value.code == "paper_source_pdf_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_direct_pdf_url_bypasses_openalex() -> None:
+    openalex = MagicMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+
+    result = await resolver.resolve(
+        actor=_actor(),
+        operation=_operation(),
+        kind="url",
+        value="https://papers.example/paper.pdf",
+    )
+
+    assert result == "https://papers.example/paper.pdf"
+    openalex.find_by_doi.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_paper_source_resolver_rejects_non_arxiv_hosts() -> None:
-    resolver = DefaultPaperSourceResolver()
+    openalex = MagicMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
 
     with pytest.raises(AppError) as raised:
-        await resolver.resolve(kind="arxiv", value="https://example.com/abs/2401.01234")
+        await resolver.resolve(
+            actor=_actor(),
+            operation=_operation(),
+            kind="arxiv",
+            value="https://example.com/abs/2401.01234",
+        )
 
     assert raised.value.code == "paper_source_pdf_unavailable"
+    openalex.find_by_doi.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@ from uuid import UUID
 
 from app.bootstrap.adapters.zotero_annotations import apply_annotation_snapshot
 from app.database.models import Document, ZoteroImportSource, ZoteroImportStatus
-from app.helpers.paper_search import normalize_doi
+from app.modules.papers.domain import normalize_doi
 from app.modules.billing.infrastructure.quotas import (
     can_user_auto_sync_zotero,
     can_user_upload_paper,

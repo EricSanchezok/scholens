@@ -6,7 +6,7 @@ import asyncio
 import re
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
@@ -28,7 +28,6 @@ from app.helpers.ai_limits import (
     enforce_rate_limit,
     release_concurrency_by_id,
 )
-from app.helpers.paper_search import get_work_by_doi, normalize_doi
 from app.helpers.parser import validate_pdf_content, validate_url_and_fetch_pdf
 from app.modules.jobs.infrastructure.repository import job_repository
 from app.modules.papers.application.contracts.documents import (
@@ -39,11 +38,14 @@ from app.modules.papers.application.ingestion import (
     FetchedPdf,
     RetrySource,
 )
-from app.modules.papers.domain import content_sha256
-from app.shared.application import Actor
+from app.modules.papers.domain import content_sha256, normalize_doi
+from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from app.bootstrap.adapters.openalex import UserOpenAlex
 
 
 class DefaultPdfInputValidator:
@@ -113,7 +115,17 @@ class DefaultPaperSourceResolver:
         re.IGNORECASE,
     )
 
-    async def resolve(self, *, kind: str, value: str) -> str:
+    def __init__(self, *, openalex: UserOpenAlex) -> None:
+        self._openalex = openalex
+
+    async def resolve(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        kind: str,
+        value: str,
+    ) -> str:
         normalized = value.strip()
         if kind == "url":
             parsed = urlparse(normalized)
@@ -129,10 +141,15 @@ class DefaultPaperSourceResolver:
             doi = normalize_doi(normalized)
             if doi is None:
                 self._raise_unavailable()
-            work = await asyncio.to_thread(get_work_by_doi, doi)
+            work = await self._openalex.find_by_doi(
+                actor=actor,
+                operation=operation,
+                doi=doi,
+            )
             if work is None:
                 self._raise_unavailable()
             candidates = (
+                work.best_oa_location.pdf_url if work.best_oa_location else None,
                 work.primary_location.pdf_url if work.primary_location else None,
                 work.open_access.oa_url if work.open_access else None,
             )

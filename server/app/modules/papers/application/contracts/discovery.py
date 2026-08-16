@@ -113,6 +113,7 @@ class OpenAlexWork(BaseOpenAlexModel):
     open_access: OpenAccess | None = None
     keywords: list[Keyword] | None = None
     primary_location: PrimaryLocation | None = None
+    best_oa_location: PrimaryLocation | None = None
     biblio: Biblio | None = None
     topics: list[Topic] | None = None
     authorships: list[Authorship] | None = None
@@ -168,14 +169,6 @@ class OpenAlexCitationGraph(BaseModel):
     center: OpenAlexWork
     cites: OpenAlexResponse
     cited_by: OpenAlexResponse
-
-
-class OpenAlexFilter(BaseModel):
-    authors: list[str] | None = None
-    institutions: list[str] | None = None
-    only_oa: bool = False
-    from_publication_date: str | None = None
-    min_cited_by_count: int | None = None
 
 
 class EnrichedData(BaseModel):

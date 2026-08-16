@@ -152,7 +152,7 @@ def test_integration_lifecycle_keeps_credentials_server_side() -> None:
     operation = MagicMock(spec=OperationContext)
 
     initial = integrations.list(actor=actor)
-    assert len(initial.items) == 6
+    assert len(initial.items) == 7
     assert initial.items[0].provider is IntegrationProvider.SCHOLIGHT
     assert initial.items[1].provider is IntegrationProvider.MINERU
     assert initial.items[1].state == "disconnected"
@@ -200,6 +200,39 @@ def test_search_connection_can_be_marked_verified_at_save() -> None:
 
     assert result.state == "connected"
     assert result.verified_at == NOW
+
+
+def test_openalex_connection_is_user_owned_and_never_listed_as_mcp_credential() -> None:
+    gateway = _Gateway()
+    integrations = _integrations(gateway)
+    operation = MagicMock(spec=OperationContext)
+    first = _actor(7)
+    second = _actor(8)
+
+    connected = integrations.connect(
+        actor=first,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        credential="private-openalex-key",
+        verified=True,
+    )
+
+    assert connected.state == "connected"
+    assert "private-openalex-key" not in connected.model_dump_json()
+    assert (
+        integrations.credential(
+            actor=first,
+            provider=IntegrationProvider.OPENALEX,
+        ).secret
+        == "private-openalex-key"
+    )
+    with pytest.raises(AppError) as raised:
+        integrations.credential(
+            actor=second,
+            provider=IntegrationProvider.OPENALEX,
+        )
+    assert raised.value.code == "openalex_credential_required"
+    assert integrations.enabled_connector_credentials(actor=first) == ()
 
 
 def test_unreadable_connector_credential_is_reported_without_ciphertext() -> None:
@@ -267,23 +300,101 @@ def test_stale_provider_outcome_cannot_mutate_replaced_credential() -> None:
     integrations.connect(
         actor=actor,
         operation=operation,
-        provider=IntegrationProvider.MINERU,
-        credential="private-mineru-token",
-        verified=False,
+        provider=IntegrationProvider.OPENALEX,
+        credential="private-openalex-key",
+        verified=True,
     )
-    current = gateway.records[(actor.id, IntegrationProvider.MINERU)]
+    current = gateway.records[(actor.id, IntegrationProvider.OPENALEX)]
 
     changed = integrations.record_outcome(
         actor=actor,
         operation=operation,
-        provider=IntegrationProvider.MINERU,
+        provider=IntegrationProvider.OPENALEX,
         credential_revision=uuid4(),
         outcome="invalid",
-        error_code="mineru_credential_invalid",
+        error_code="openalex_credential_invalid",
     )
 
     assert changed is False
-    assert gateway.records[(actor.id, IntegrationProvider.MINERU)] == current
+    assert gateway.records[(actor.id, IntegrationProvider.OPENALEX)] == current
+
+
+def test_stale_probe_cannot_reenable_replaced_credential() -> None:
+    gateway = _Gateway()
+    integrations = _integrations(gateway)
+    actor = _actor()
+    operation = MagicMock(spec=OperationContext)
+    integrations.connect(
+        actor=actor,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        credential="old-openalex-key",
+        verified=True,
+    )
+    stale_revision = gateway.records[
+        (actor.id, IntegrationProvider.OPENALEX)
+    ].credential_revision
+    integrations.connect(
+        actor=actor,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        credential="replacement-openalex-key",
+        verified=True,
+    )
+    integrations.set_enabled(
+        actor=actor,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        enabled=False,
+        verified=False,
+    )
+    current = gateway.records[(actor.id, IntegrationProvider.OPENALEX)]
+
+    result = integrations.set_enabled(
+        actor=actor,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        enabled=True,
+        verified=True,
+        expected_credential_revision=stale_revision,
+    )
+
+    assert result.enabled is False
+    assert gateway.records[(actor.id, IntegrationProvider.OPENALEX)] == current
+
+
+def test_invalid_openalex_revision_is_blocked_before_decryption() -> None:
+    gateway = _Gateway()
+    integrations = _integrations(gateway)
+    actor = _actor()
+    operation = MagicMock(spec=OperationContext)
+    integrations.connect(
+        actor=actor,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        credential="private-openalex-key",
+        verified=True,
+    )
+    revision = gateway.records[
+        (actor.id, IntegrationProvider.OPENALEX)
+    ].credential_revision
+    integrations.record_outcome(
+        actor=actor,
+        operation=operation,
+        provider=IntegrationProvider.OPENALEX,
+        credential_revision=revision,
+        outcome="invalid",
+        error_code="openalex_credential_invalid",
+    )
+
+    with pytest.raises(AppError) as raised:
+        integrations.credential(
+            actor=actor,
+            provider=IntegrationProvider.OPENALEX,
+        )
+
+    assert raised.value.code == "openalex_credential_invalid"
+    assert raised.value.details == {"required_integration": "openalex"}
 
 
 def test_current_provider_outcome_marks_connection_verified_or_invalid() -> None:

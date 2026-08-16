@@ -37,6 +37,7 @@ class PaperDiscoveryWorkflow:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         query: str,
         cursor: str | None,
@@ -48,6 +49,7 @@ class PaperDiscoveryWorkflow:
         )
         return await self._external.search(
             actor=actor,
+            operation=operation,
             client_ip=client_ip,
             preparation=preparation,
         )
@@ -56,6 +58,7 @@ class PaperDiscoveryWorkflow:
         self,
         *,
         actor: Actor,
+        operation: OperationContext,
         client_ip: str,
         author_id: str,
         cursor: str | None,
@@ -67,6 +70,7 @@ class PaperDiscoveryWorkflow:
         )
         return await self._external.author_works(
             actor=actor,
+            operation=operation,
             client_ip=client_ip,
             preparation=preparation,
         )
@@ -89,6 +93,7 @@ class PaperDiscoveryWorkflow:
         )
         result = await self._external.fetch_match(
             actor=actor,
+            operation=operation,
             client_ip=client_ip,
             preparation=preparation,
         )

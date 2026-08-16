@@ -111,7 +111,11 @@ class CitationWorkflow:
             )
 
         try:
-            deterministic = self._provider.deterministic(fields=fields)
+            deterministic = self._provider.deterministic(
+                actor=actor,
+                operation=operation,
+                fields=fields,
+            )
         except Exception:
             logger.exception(
                 "citation.metadata_lookup.failed",

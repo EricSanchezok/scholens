@@ -19,7 +19,7 @@ from app.modules.integrations.connections.application.ports import (
     UnreadableIntegrationCredential,
 )
 from app.modules.integrations.connections.domain import (
-    SEARCH_CONNECTOR_PROVIDERS,
+    MCP_CONNECTOR_PROVIDERS,
     USER_MANAGED_INTEGRATION_PROVIDERS,
     IntegrationProvider,
 )
@@ -37,7 +37,11 @@ INTEGRATION_INVALID = OperationAction("integration.invalid")
 
 IntegrationOutcome = Literal["verified", "invalid", "failed"]
 _INVALID_CREDENTIAL_CODES = frozenset(
-    {"mineru_credential_invalid", "integration_credentials_invalid"}
+    {
+        "integration_credentials_invalid",
+        "mineru_credential_invalid",
+        "openalex_credential_invalid",
+    }
 )
 
 
@@ -129,6 +133,7 @@ class Integrations:
         provider: IntegrationProvider,
         enabled: bool,
         verified: bool,
+        expected_credential_revision: UUID | None = None,
     ) -> IntegrationConnectionResponse:
         _require_user_managed(provider)
         current = self._gateway.get_owned(
@@ -142,6 +147,11 @@ class Integrations:
                 message="Integration is not connected",
                 kind=FailureKind.CONFLICT,
             )
+        if (
+            expected_credential_revision is not None
+            and current.credential_revision != expected_credential_revision
+        ):
+            return _response(provider, current)
         if current.enabled == enabled:
             return _response(provider, current)
         now = self._clock.now()
@@ -207,9 +217,30 @@ class Integrations:
         record = self._gateway.get_owned(user_id=user_id, provider=provider)
         if record is None or (require_enabled and not record.enabled):
             raise AppError(
-                code="integration_not_connected",
+                code=(
+                    "openalex_credential_required"
+                    if provider is IntegrationProvider.OPENALEX
+                    else "integration_not_connected"
+                ),
                 message="Integration is not connected and enabled",
                 kind=FailureKind.CONFLICT,
+                retryable=provider is IntegrationProvider.OPENALEX,
+                details=(
+                    {"required_integration": provider.value}
+                    if provider is IntegrationProvider.OPENALEX
+                    else None
+                ),
+            )
+        if (
+            provider is IntegrationProvider.OPENALEX
+            and record.last_error_code in _INVALID_CREDENTIAL_CODES
+        ):
+            raise AppError(
+                code="openalex_credential_invalid",
+                message="The connected OpenAlex credential must be replaced",
+                kind=FailureKind.UNPROCESSABLE,
+                retryable=True,
+                details={"required_integration": provider.value},
             )
         try:
             secret = self._cipher.decrypt(
@@ -222,6 +253,14 @@ class Integrations:
                 raise AppError(
                     code="mineru_credential_invalid",
                     message="The connected MinerU credential must be replaced",
+                    kind=FailureKind.UNPROCESSABLE,
+                    retryable=True,
+                    details={"required_integration": provider.value},
+                ) from None
+            if provider is IntegrationProvider.OPENALEX:
+                raise AppError(
+                    code="openalex_credential_invalid",
+                    message="The connected OpenAlex credential must be replaced",
                     kind=FailureKind.UNPROCESSABLE,
                     retryable=True,
                     details={"required_integration": provider.value},
@@ -250,7 +289,11 @@ class Integrations:
                 code=(
                     "mineru_credential_required"
                     if provider is IntegrationProvider.MINERU
-                    else "integration_not_connected"
+                    else (
+                        "openalex_credential_required"
+                        if provider is IntegrationProvider.OPENALEX
+                        else "integration_not_connected"
+                    )
                 ),
                 message="A connected integration credential is required",
                 kind=FailureKind.CONFLICT,
@@ -262,7 +305,11 @@ class Integrations:
                 code=(
                     "mineru_credential_invalid"
                     if provider is IntegrationProvider.MINERU
-                    else "integration_credentials_invalid"
+                    else (
+                        "openalex_credential_invalid"
+                        if provider is IntegrationProvider.OPENALEX
+                        else "integration_credentials_invalid"
+                    )
                 ),
                 message="The connected integration credential is invalid",
                 kind=FailureKind.UNPROCESSABLE,
@@ -296,7 +343,7 @@ class Integrations:
         actor: Actor,
     ) -> tuple[IntegrationCredentialState, ...]:
         result: list[IntegrationCredentialState] = []
-        for provider in SEARCH_CONNECTOR_PROVIDERS:
+        for provider in MCP_CONNECTOR_PROVIDERS:
             record = self._gateway.get_owned(user_id=actor.id, provider=provider)
             if record is None or not record.enabled:
                 continue
@@ -332,6 +379,11 @@ class Integrations:
         _require_user_managed(provider)
         now = self._clock.now()
         invalid = outcome == "invalid" or error_code in _INVALID_CREDENTIAL_CODES
+        current = self._gateway.get_owned(user_id=actor.id, provider=provider)
+        if current is None or current.credential_revision != credential_revision:
+            return False
+        was_invalid = current.last_error_code in _INVALID_CREDENTIAL_CODES
+        was_verified = current.verified_at is not None and not was_invalid
         record = self._gateway.record_outcome(
             user_id=actor.id,
             provider=provider,
@@ -340,17 +392,17 @@ class Integrations:
             last_used_at=now,
             last_error_code=(error_code or "integration_credentials_invalid")
             if invalid
-            else None,
+            else error_code,
         )
         if record is None:
             return False
-        if outcome == "verified" or invalid:
+        became_verified = outcome == "verified" and not was_verified
+        became_invalid = invalid and not was_invalid
+        if became_verified or became_invalid:
             self._record_action(
                 actor=actor,
                 operation=operation,
-                action=INTEGRATION_VERIFIED
-                if outcome == "verified"
-                else INTEGRATION_INVALID,
+                action=INTEGRATION_VERIFIED if became_verified else INTEGRATION_INVALID,
                 provider=provider,
             )
         return True

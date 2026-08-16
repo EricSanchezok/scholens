@@ -265,8 +265,7 @@ callback, and origin token. Required JSON keys are:
 
 - core: `auth_jwt_secret`, `admin_session_secret`, `paper_search_cursor_secret`,
   `jobs_webhook_signing_secret`, `integration_credential_encryption_key`;
-- AI: `deepseek_api_key`, `openai_api_key`, `openalex_api_key`, `moss_api_key`,
-  `moss_voice_id`;
+- AI: `deepseek_api_key`, `moss_api_key`, `moss_voice_id`;
 - mail: `aliyun_access_key_id`, `aliyun_access_key_secret`, `aliyun_account_name`,
   `resend_api_key`, `resend_from_address`, `resend_reply_to_address`,
   `profile_notification_email`;
@@ -281,7 +280,7 @@ secret_json=$(aws secretsmanager get-secret-value \
   --secret-id /sanchezcloud/scholens/production/ai \
   --query SecretString --output text)
 jq -e --argjson required \
-  '["deepseek_api_key","openai_api_key","openalex_api_key","moss_api_key","moss_voice_id"]' \
+  '["deepseek_api_key","moss_api_key","moss_voice_id"]' \
   '. as $doc | all($required[]; . as $key | ($doc[$key] | type == "string" and length > 0))' \
   <<<"$secret_json"
 ```
