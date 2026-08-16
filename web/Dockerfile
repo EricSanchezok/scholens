@@ -34,7 +34,10 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1
-CMD ["node", "server.js"]
+# Docker and ECS inject their own HOSTNAME at container start, overriding the
+# image ENV. Pin the Next.js bind address for the child process so the loopback
+# health check and awsvpc target can both reach the standalone server.
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
 
 FROM scratch AS source-maps
 COPY --from=build /tmp/scholens-source-maps/ /

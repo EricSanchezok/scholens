@@ -83,6 +83,12 @@ glibc-only Linux wheels, then copies CPython and the application into a digest-p
 non-root distroless runtime. Both runtime images omit Perl and build toolchains; do not
 replace the Jobs runtime with Alpine or add a shell solely to make its dependencies fit.
 
+The Web image pins the standalone Next.js child process to `0.0.0.0` at container start.
+Docker and ECS inject a per-container `HOSTNAME`, so a Dockerfile `ENV HOSTNAME=0.0.0.0`
+alone is not a runtime guarantee. CI must start the built image and reach `/healthz` over
+container loopback; otherwise ECS would repeatedly replace an externally reachable task
+whose container health check cannot connect to its own server.
+
 Every read-only, non-root Python workload mounts task-scoped ephemeral storage at `/tmp`.
 A short-lived initializer from the workload's same digest runs without secrets, drops all
 Linux capabilities, changes only that mounted directory to mode `01777`, and must succeed
