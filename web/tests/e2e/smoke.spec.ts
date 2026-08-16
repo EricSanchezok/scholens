@@ -499,7 +499,12 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
     page.getByRole("textbox", { name: "Ask a follow-up" }),
   ).toBeVisible();
   await expect(dock.getByTestId("mobile-tab-bar")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
   const dockBefore = await dock.boundingBox();
+  expect(dockBefore).not.toBeNull();
+  expect(Math.round((dockBefore?.y ?? 0) + (dockBefore?.height ?? 0))).toBe(
+    844,
+  );
   expect(
     await main.evaluate(
       (element) => element.scrollHeight > element.clientHeight,
@@ -523,11 +528,24 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
     name: "Jump to the latest response",
   });
   await expect(jumpToLatest).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await dock.boundingBox();
+      return {
+        bottom: Math.round((box?.y ?? 0) + (box?.height ?? 0)),
+        height: Math.round(box?.height ?? 0),
+        keyboardOpen: await dock.getAttribute("data-keyboard-open"),
+      };
+    })
+    .toEqual({
+      bottom: 844,
+      height: Math.round(dockBefore?.height ?? 0),
+      keyboardOpen: null,
+    });
   const [dockAfter, mainAfter] = await Promise.all([
     dock.boundingBox(),
     main.boundingBox(),
   ]);
-  expect(dockAfter?.y).toBe(dockBefore?.y);
   expect((mainAfter?.y ?? 0) + (mainAfter?.height ?? 0)).toBeLessThanOrEqual(
     dockAfter?.y ?? 0,
   );
