@@ -83,6 +83,13 @@ glibc-only Linux wheels, then copies CPython and the application into a digest-p
 non-root distroless runtime. Both runtime images omit Perl and build toolchains; do not
 replace the Jobs runtime with Alpine or add a shell solely to make its dependencies fit.
 
+Every read-only, non-root Python workload mounts task-scoped ephemeral storage at `/tmp`.
+A short-lived initializer from the workload's same digest runs without secrets, drops all
+Linux capabilities, changes only that mounted directory to mode `01777`, and must succeed
+before the workload starts. The initializer is the only root container and exits before
+application code runs; do not make the long-lived API, migration, worker, or scheduler
+container root merely to obtain writable temporary storage.
+
 The pinned ADOT sidecar sends traces to X-Ray and metrics to CloudWatch. Application and
 worker task roles are separate; the execution role can pull images and inject only the
 reviewed secrets.

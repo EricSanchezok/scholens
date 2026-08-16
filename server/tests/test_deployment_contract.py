@@ -951,6 +951,50 @@ def test_python_runtime_images_keep_their_hardened_runtime_contract() -> None:
     assert "not os.path.exists('/usr/local/bin/pip')" in workflow
 
 
+def test_read_only_python_tasks_initialize_writable_temporary_storage() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    workloads = {
+        "ApiTaskDefinition": ("api", "ApiImage"),
+        "MigrationTaskDefinition": ("migration", "ApiImage"),
+        "DocumentWorkerTaskDefinition": ("document-worker", "JobsImage"),
+        "ResearchWorkerTaskDefinition": ("research-worker", "JobsImage"),
+        "MaintenanceWorkerTaskDefinition": ("maintenance-worker", "JobsImage"),
+        "SchedulerTaskDefinition": ("scheduler", "JobsImage"),
+    }
+
+    for resource_name, (workload_name, image_parameter) in workloads.items():
+        properties = resources[resource_name]["Properties"]
+        assert properties["Volumes"] == [{"Name": "tmp"}]
+        containers = {
+            container["Name"]: container
+            for container in properties["ContainerDefinitions"]
+        }
+        workload = containers[workload_name]
+        initializer = containers["tmp-init"]
+
+        assert {
+            "ContainerName": "tmp-init",
+            "Condition": "SUCCESS",
+        } in workload["DependsOn"]
+        assert initializer == {
+            "Name": "tmp-init",
+            "Image": {"Ref": image_parameter},
+            "Essential": False,
+            "User": "0",
+            "EntryPoint": ["/usr/local/bin/python", "-c"],
+            "Command": ["from pathlib import Path; Path('/tmp').chmod(0o1777)"],
+            "ReadonlyRootFilesystem": True,
+            "LinuxParameters": {"Capabilities": {"Drop": ["ALL"]}},
+            "MountPoints": [
+                {
+                    "SourceVolume": "tmp",
+                    "ContainerPath": "/tmp",
+                    "ReadOnly": False,
+                }
+            ],
+        }
+
+
 def test_workers_use_sqs_without_a_result_backend_or_beat() -> None:
     jobs = (ROOT / "jobs" / "src" / "celery_app.py").read_text(encoding="utf-8")
     runtime = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
