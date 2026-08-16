@@ -802,6 +802,29 @@ def test_runtime_uses_private_fargate_services_and_digest_images() -> None:
         assert "@sha256:" in content
 
 
+def test_python_runtime_images_keep_their_hardened_runtime_contract() -> None:
+    server = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
+    jobs = (ROOT / "jobs" / "Dockerfile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert re.search(
+        r"ARG PYTHON_IMAGE=python:3\.12\.\d+-alpine3\.23@sha256:[0-9a-f]{64}",
+        server,
+    )
+    assert re.search(
+        r"ARG RUNTIME_IMAGE=gcr\.io/distroless/python3-debian12:nonroot"
+        r"@sha256:[0-9a-f]{64}",
+        jobs,
+    )
+    assert "COPY --from=python-runtime /usr/local/ /usr/local/" in jobs
+    assert "ENTRYPOINT []" in jobs
+    assert "USER nonroot:nonroot" in jobs
+    assert "Verify hardened Python runtimes" in workflow
+    assert "not os.path.exists('/usr/bin/perl')" in workflow
+    assert "not os.path.exists('/bin/sh')" in workflow
+    assert "not os.path.exists('/usr/local/bin/pip')" in workflow
+
+
 def test_workers_use_sqs_without_a_result_backend_or_beat() -> None:
     jobs = (ROOT / "jobs" / "src" / "celery_app.py").read_text(encoding="utf-8")
     runtime = (ECS / "scholens-production.yml").read_text(encoding="utf-8")
