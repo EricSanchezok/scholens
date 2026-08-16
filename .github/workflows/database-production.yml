@@ -81,6 +81,7 @@ jobs:
           echo "task_definition=$task_definition" >> "$GITHUB_OUTPUT"
       - name: Run migration once and inspect its exit code
         env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
           TASK_DEFINITION: ${{ steps.task.outputs.task_definition }}
         run: |
           # JMESPath and jq programs are literal expressions.
@@ -101,11 +102,14 @@ jobs:
           network=$(jq -cn \
             --arg subnet1 "$subnet_1" --arg subnet2 "$subnet_2" --arg sg "$task_sg" \
             '{awsvpcConfiguration:{subnets:[$subnet1,$subnet2],securityGroups:[$sg],assignPublicIp:"DISABLED"}}')
+          overrides=$(jq -cn --arg release_sha "$RELEASE_SHA" \
+            '{containerOverrides:[{name:"migration",environment:[{name:"RELEASE_SHA",value:$release_sha}]}]}')
           task_arn=$(aws ecs run-task \
             --cluster sanchezcloud-production \
             --launch-type FARGATE \
             --task-definition "$TASK_DEFINITION" \
             --network-configuration "$network" \
+            --overrides "$overrides" \
             --started-by "github-${GITHUB_RUN_ID}" \
             --query 'tasks[0].taskArn' --output text)
           test "$task_arn" != None

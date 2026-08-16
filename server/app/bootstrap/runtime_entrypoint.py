@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from urllib.parse import quote
@@ -50,6 +51,13 @@ def _identity_database_url(database_url: str) -> str:
     return "postgresql://" + database_url.removeprefix(sqlalchemy_scheme)
 
 
+def _release_sha() -> str:
+    release_sha = os.getenv("RELEASE_SHA", "")
+    if re.fullmatch(r"[0-9a-f]{40}", release_sha) is None:
+        raise RuntimeError("missing or invalid release SHA")
+    return release_sha
+
+
 def main() -> int:
     command = sys.argv[1] if len(sys.argv) > 1 else "api"
     database_url = _database_url()
@@ -59,6 +67,7 @@ def main() -> int:
     if command == "api":
         executable = ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]
     elif command == "migrate":
+        release_sha = _release_sha()
         migration = subprocess.run(
             ["scholens", "db", "upgrade", "--yes", "--json"],
             check=True,
@@ -87,7 +96,7 @@ def main() -> int:
             )
         proof = {
             "contract_version": 1,
-            "release_sha": os.environ["RELEASE_SHA"],
+            "release_sha": release_sha,
             "scholens": {
                 "current_revisions": payload["current_revisions"],
                 "expected_revisions": payload["expected_revisions"],

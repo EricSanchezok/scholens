@@ -135,7 +135,8 @@ CI and deployment use four workflows:
    Web image and private source-map index from one BuildKit graph, conditionally writes
    every content-addressed map, and writes one immutable `releases/<sha>/manifest.json`.
 3. `Run protected product migration` clones only the reviewed migration task definition,
-   replaces its API image with the selected manifest digest, runs it once, checks the
+   replaces its API image with the selected manifest digest, injects the exact release
+   SHA, runs it once, checks the
    unique Scholens head and exact Identity schema proof, writes an immutable per-release
    migration attestation plus the versioned current database contract, and deregisters the
    candidate revision.
