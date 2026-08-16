@@ -359,8 +359,8 @@ ordinary proxied request path Cloudflare generates the single
 value sent to the origin;
 [Request Header Transform Rules](https://developers.cloudflare.com/rules/transform/request-header-modification/#important-remarks)
 cannot set that header and must not remove it. Do not attach a Worker or Snippet that can
-derive it from mutable `x-real-ip`,
-and keep Pseudo IPv4 disabled unless its deliberate IPv6-loss tradeoff is separately
+derive it from mutable `x-real-ip`; keep Pseudo IPv4 disabled unless its deliberate
+IPv6-loss tradeoff is separately
 reviewed. The application disables Uvicorn proxy-header rewriting, verifies the raw peer
 against the imported production VPC CIDR, then uses that canonical
 `CF-Connecting-IP` value for request logs and all application rate limits. Missing,
