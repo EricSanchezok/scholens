@@ -164,6 +164,7 @@ class ToolDefinition(Generic[CapabilitiesT]):
     output_model: type[BaseModel] | None = None
     behavior: ToolBehavior | None = None
     confirmation_policy: ToolConfirmationPolicy = ToolConfirmationPolicy.NONE
+    persist_result: bool = True
     handler: ToolHandler[CapabilitiesT] | None = None
     workflow_handler: WorkflowToolHandler | None = None
     activity_subject_field: str | None = None

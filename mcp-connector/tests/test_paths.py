@@ -13,6 +13,8 @@ from scholens_mcp_connector.cli import (
     local_tool_surface,
     resolve_local_pdf,
     upload_local_paper,
+    validate_remote_url,
+    validate_upload_url,
 )
 
 
@@ -48,6 +50,40 @@ def test_rejects_non_pdf_signature(tmp_path: Path) -> None:
     paper.write_bytes(b"not a pdf")
     with pytest.raises(LocalUploadError, match="signature"):
         resolve_local_pdf(str(paper), [tmp_path])
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://scholens.example/mcp",
+        "http://localhost:7301/mcp",
+        "http://127.0.0.1:7301/mcp",
+        "http://[::1]:7301/mcp",
+    ],
+)
+def test_remote_url_requires_https_except_for_loopback(url: str) -> None:
+    assert validate_remote_url(url) == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://scholens.example/mcp",
+        "https://token@scholens.example/mcp",
+        "https://scholens.example/mcp?access_key=secret",
+        "https://scholens.example/mcp#fragment",
+    ],
+)
+def test_rejects_unsafe_remote_urls(url: str) -> None:
+    with pytest.raises(LocalUploadError):
+        validate_remote_url(url)
+
+
+def test_upload_url_allows_https_presigning_query_but_rejects_remote_http() -> None:
+    url = "https://uploads.example.test/source.pdf?X-Amz-Signature=opaque"
+    assert validate_upload_url(url) == url
+    with pytest.raises(LocalUploadError, match="HTTPS"):
+        validate_upload_url("http://uploads.example.test/source.pdf")
 
 
 def test_local_upload_tool_preserves_ingestion_output_and_truthful_hints() -> None:

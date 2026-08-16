@@ -157,6 +157,8 @@ class PaperIngestionWorkflow:
                 upload_id=upload_id,
             )
         )
+        lease_token = record.lease_token
+        assert lease_token is not None
         try:
             if record.project_id != project_id:
                 raise AppError(
@@ -220,6 +222,7 @@ class PaperIngestionWorkflow:
                 lambda capabilities: capabilities.paper_uploads.consume(
                     actor=actor,
                     upload_id=upload_id,
+                    lease_token=lease_token,
                 )
             )
         except AppError as exc:
@@ -232,6 +235,7 @@ class PaperIngestionWorkflow:
                 lambda capabilities: capabilities.paper_uploads.release(
                     actor=actor,
                     upload_id=upload_id,
+                    lease_token=lease_token,
                     failed=failed,
                 )
             )
@@ -241,6 +245,7 @@ class PaperIngestionWorkflow:
                 lambda capabilities: capabilities.paper_uploads.release(
                     actor=actor,
                     upload_id=upload_id,
+                    lease_token=lease_token,
                     failed=False,
                 )
             )

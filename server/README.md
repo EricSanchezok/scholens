@@ -75,14 +75,16 @@ the returned `binding_markdown` in the research repository. Titles may change;
 the returned Project UUID and resource URI are the durable binding. Destructive
 or externally visible tools return a state-bound confirmation preview on their
 first call and execute only when the same call is repeated with the approved,
-unexpired token.
+unexpired token. Raw confirmation challenges, plaintext share bearer tokens,
+and signed upload URLs are never persisted in the invocation replay ledger.
 
 The remote upload primitive accepts only a plain filename, byte count, SHA-256,
 and optional Project UUID. It returns a short-lived checksummed object-storage
 PUT URL; the client uploads bytes directly and then calls `ingest_paper`. For a
 local path, use the official [`mcp-connector`](../mcp-connector/README.md),
 which replaces that primitive with `upload_local_paper` and never sends the
-path or the Access Key to object storage.
+path or the Access Key to object storage. Upload claims carry a unique lease
+token so an expired worker cannot consume or release a newer claim.
 
 ## Start the Application
 

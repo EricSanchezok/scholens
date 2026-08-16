@@ -275,6 +275,7 @@ async def test_upload_session_rejects_a_different_ingestion_project() -> None:
             status="claimed",
             expires_at=MagicMock(),
             lease_expires_at=MagicMock(),
+            lease_token=uuid4(),
         ),
         None,
     ]

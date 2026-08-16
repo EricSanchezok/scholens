@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import ipaddress
 import json
 import os
 import sys
@@ -26,6 +27,8 @@ from pydantic import AnyUrl
 MAX_PDF_BYTES = 30 * 1024 * 1024
 PREPARE_TOOL = "prepare_paper_upload"
 LOCAL_UPLOAD_TOOL = "upload_local_paper"
+_REMOTE_URL_MAX_LENGTH = 2048
+_UPLOAD_URL_MAX_LENGTH = 8192
 
 ListToolsHandler = Callable[[], Awaitable[list[types.Tool]]]
 CallToolHandler = Callable[[str, dict[str, object]], Awaitable[types.CallToolResult]]
@@ -42,6 +45,71 @@ class RemoteToolSession(Protocol):
     async def call_tool(
         self, name: str, arguments: dict[str, object]
     ) -> types.CallToolResult: ...
+
+
+def _is_loopback_host(hostname: str) -> bool:
+    if hostname.casefold() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_https_url(
+    raw_url: str,
+    *,
+    purpose: str,
+    max_length: int,
+    allow_query: bool,
+) -> str:
+    """Require TLS except for explicit loopback-only local development."""
+    if (
+        not raw_url
+        or raw_url != raw_url.strip()
+        or len(raw_url) > max_length
+        or any(ord(character) < 32 for character in raw_url)
+    ):
+        raise LocalUploadError(f"{purpose} URL is malformed")
+    try:
+        parsed = urlparse(raw_url)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise LocalUploadError(f"{purpose} URL is malformed") from exc
+    if (
+        hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or (parsed.query and not allow_query)
+    ):
+        raise LocalUploadError(f"{purpose} URL is malformed")
+    if parsed.scheme == "https":
+        return raw_url
+    if parsed.scheme == "http" and _is_loopback_host(hostname):
+        return raw_url
+    raise LocalUploadError(
+        f"{purpose} URL must use HTTPS; HTTP is allowed only for loopback development"
+    )
+
+
+def validate_remote_url(raw_url: str) -> str:
+    return _validate_https_url(
+        raw_url,
+        purpose="Scholens MCP",
+        max_length=_REMOTE_URL_MAX_LENGTH,
+        allow_query=False,
+    )
+
+
+def validate_upload_url(raw_url: str) -> str:
+    return _validate_https_url(
+        raw_url,
+        purpose="Object upload",
+        max_length=_UPLOAD_URL_MAX_LENGTH,
+        allow_query=True,
+    )
 
 
 def _file_root(uri: AnyUrl) -> Path | None:
@@ -337,7 +405,7 @@ async def upload_local_paper(
     ):
         raise RuntimeError("Scholens returned invalid upload preparation")
     upload_response = await upload_http.put(
-        upload_url,
+        validate_upload_url(upload_url),
         headers=cast(dict[str, str], upload_headers),
         content=content,
     )
@@ -366,6 +434,7 @@ async def upload_local_paper(
 
 
 async def _run(*, remote_url: str, access_key: str, roots: Sequence[Path]) -> None:
+    remote_url = validate_remote_url(remote_url)
     remote_http = httpx.AsyncClient(
         headers={"Authorization": f"Bearer {access_key}"},
         timeout=httpx.Timeout(60),

@@ -509,6 +509,7 @@ def upgrade() -> None:
         ),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("lease_token", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("consumed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
@@ -533,6 +534,11 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "sha256 ~ '^[0-9a-f]{64}$'",
             name="ck_paper_upload_sessions_sha256",
+        ),
+        sa.CheckConstraint(
+            "(status = 'claimed') = "
+            "(lease_expires_at IS NOT NULL AND lease_token IS NOT NULL)",
+            name="ck_paper_upload_sessions_claim_lease",
         ),
         sa.ForeignKeyConstraint(["actor_id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(

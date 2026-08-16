@@ -32,6 +32,7 @@ from app.tooling import (
     ToolBehavior,
     ToolExecutionContext,
     ToolCatalog,
+    ToolConfirmationPolicy,
     ToolDefinition,
     ToolDispatcher,
     ToolExecutionKind,
@@ -355,6 +356,106 @@ async def test_command_dispatch_is_persistently_replayed() -> None:
         )
     assert conflict.value.code == "tool_invocation_conflict"
     assert capabilities.writes == 1
+
+
+@pytest.mark.asyncio
+async def test_confirmation_preview_is_never_written_to_the_invocation_ledger() -> None:
+    class ConfirmedArguments(BaseModel):
+        confirmation_token: str | None = None
+
+    raw_token = "secret-confirmation-token-that-must-not-be-stored"
+    definition = ToolDefinition[Capabilities](
+        name="confirmed_tool",
+        description="confirmed write",
+        input_model=ConfirmedArguments,
+        execution=ToolExecutionKind.COMMAND,
+        required_permission=WorkspacePermission.MANAGE,
+        confirmation_policy=ToolConfirmationPolicy.REQUIRED,
+        handler=lambda capabilities, context, arguments: ToolOutcome(
+            payload={"confirmation_token": raw_token}
+        ),
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation", tool_names=frozenset({"confirmed_tool"})
+                )
+            ],
+        ),
+        executor=Executor(capabilities),
+    )
+
+    outcome = await dispatcher.dispatch(
+        name="confirmed_tool",
+        raw_arguments={},
+        context=_context(),
+        access=_access(),
+    )
+
+    assert outcome.payload == {"confirmation_token": raw_token}
+    assert capabilities.tool_invocations.items == {}
+
+
+@pytest.mark.asyncio
+async def test_transient_command_result_is_never_persisted_or_replayed() -> None:
+    def transient_write(
+        capabilities: Capabilities,
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+    ) -> ToolOutcome:
+        del context, arguments
+        capabilities.writes += 1
+        return ToolOutcome(
+            payload={"signed_url": f"https://upload/{capabilities.writes}"}
+        )
+
+    definition = ToolDefinition[Capabilities](
+        name="transient_tool",
+        description="transient write",
+        input_model=Arguments,
+        execution=ToolExecutionKind.COMMAND,
+        required_permission=WorkspacePermission.WRITE,
+        persist_result=False,
+        handler=transient_write,
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [
+                ToolProfile(
+                    name="conversation", tool_names=frozenset({"transient_tool"})
+                )
+            ],
+        ),
+        executor=Executor(capabilities),
+    )
+    context = _context()
+
+    first = await dispatcher.dispatch(
+        name="transient_tool",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access(),
+    )
+    capabilities.tool_invocations.items[
+        (context.actor.id, f"{context.invocation_id}:transient_tool")
+    ] = ("transient_tool", "intentionally-wrong-hash", {"signed_url": "stale"})
+    second = await dispatcher.dispatch(
+        name="transient_tool",
+        raw_arguments={"value": "same"},
+        context=context,
+        access=_access(),
+    )
+
+    assert first.payload != second.payload
+    assert capabilities.writes == 2
+    assert list(capabilities.tool_invocations.items.values()) == [
+        ("transient_tool", "intentionally-wrong-hash", {"signed_url": "stale"})
+    ]
 
 
 def test_workspace_profiles_share_one_canonical_definition_set() -> None:

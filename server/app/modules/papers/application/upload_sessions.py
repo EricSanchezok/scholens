@@ -114,6 +114,7 @@ class PaperUploadRecord:
     status: str
     expires_at: datetime
     lease_expires_at: datetime | None
+    lease_token: UUID | None
 
 
 class PaperUploadGateway(Protocol):
@@ -133,20 +134,31 @@ class PaperUploadGateway(Protocol):
         *,
         actor: Actor,
         upload_id: UUID,
+        lease_token: UUID,
         lease_expires_at: datetime,
         now: datetime,
     ) -> PaperUploadRecord: ...
 
-    def consume(self, *, actor: Actor, upload_id: UUID, now: datetime) -> None: ...
+    def consume(
+        self,
+        *,
+        actor: Actor,
+        upload_id: UUID,
+        lease_token: UUID,
+        now: datetime,
+    ) -> None: ...
 
     def release(
         self,
         *,
         actor: Actor,
         upload_id: UUID,
+        lease_token: UUID,
         now: datetime,
         failed: bool,
     ) -> None: ...
+
+    def delete_expired(self, *, now: datetime, limit: int) -> int: ...
 
 
 class PaperUploadStore(Protocol):
@@ -189,6 +201,7 @@ class PaperUploadSessions:
             expires_at=now + UPLOAD_SESSION_TTL,
             now=now,
         )
+        self._gateway.delete_expired(now=now, limit=100)
         checksum = base64.b64encode(bytes.fromhex(record.sha256)).decode()
         try:
             url, headers = self._store.sign_put(
@@ -216,17 +229,31 @@ class PaperUploadSessions:
         return self._gateway.claim(
             actor=actor,
             upload_id=upload_id,
+            lease_token=uuid4(),
             lease_expires_at=now + UPLOAD_CLAIM_TTL,
             now=now,
         )
 
-    def consume(self, *, actor: Actor, upload_id: UUID) -> None:
-        self._gateway.consume(actor=actor, upload_id=upload_id, now=self._clock.now())
+    def consume(self, *, actor: Actor, upload_id: UUID, lease_token: UUID) -> None:
+        self._gateway.consume(
+            actor=actor,
+            upload_id=upload_id,
+            lease_token=lease_token,
+            now=self._clock.now(),
+        )
 
-    def release(self, *, actor: Actor, upload_id: UUID, failed: bool) -> None:
+    def release(
+        self,
+        *,
+        actor: Actor,
+        upload_id: UUID,
+        lease_token: UUID,
+        failed: bool,
+    ) -> None:
         self._gateway.release(
             actor=actor,
             upload_id=upload_id,
+            lease_token=lease_token,
             now=self._clock.now(),
             failed=failed,
         )

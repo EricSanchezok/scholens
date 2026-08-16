@@ -35,13 +35,18 @@ execution kind, behavioral annotations, and decision-oriented description.
 Expose bounded MCP resources for durable Scholens objects. Add a distinct
 `manage` Access Key permission for collaboration and public-sharing operations.
 Require state-bound, expiring, single-use confirmation for destructive,
-externally visible, and access-changing operations.
+externally visible, and access-changing operations. Persist replay results only
+when their contents are safe for durable storage; confirmation challenges,
+plaintext public bearer tokens, and signed upload URLs remain transient.
 
 Use a two-stage direct-upload protocol for PDF bytes. The hosted server creates
 a checksummed staging session and signed PUT URL. Browsers upload directly. The
 official local stdio bridge replaces the remote preparation primitive with one
 path-aware tool that reads only files beneath explicit MCP roots, uploads bytes
 without forwarding the Scholens credential, and calls the same ingestion tool.
+Remote MCP and object-upload URLs require HTTPS outside loopback development.
+Each ingestion claim carries a generation-specific lease token, preventing a
+stale operation from consuming or releasing a newer claim.
 
 ## Alternatives considered
 
@@ -73,9 +78,9 @@ The catalog and tool count become reviewed contracts. Adding a model-visible
 capability requires metadata, permission, typed result, tests, and a decision
 about whether it belongs to both profiles. Risky actions require a two-call UI
 or Agent interaction. Direct upload introduces temporary database rows, bucket
-lifecycle rules, checksum verification, and a separately packaged local
-connector, but it does not introduce a second ingestion path or require inbound
-client networking.
+lifecycle rules, bounded expired-row cleanup, checksum verification, and a
+separately packaged local connector, but it does not introduce a second
+ingestion path or require inbound client networking.
 
 ## Validation
 
@@ -84,8 +89,9 @@ client networking.
 - MCP protocol tests verify structured output, behavior hints, resources, and
   reauthorization.
 - Confirmation tests verify actor/credential/argument/state binding, expiry,
-  hashing, and single use.
+  hashing, single use, and omission of raw challenges from replay storage.
 - Upload and local-connector tests verify root confinement, symlink rejection,
-  metadata/checksum flow, byte transfer, and absence of credential forwarding.
+  metadata/checksum flow, lease ownership, URL policy, byte transfer, and
+  absence of credential forwarding.
 - `./scripts/run-gates.sh server`, `mcp-connector`, `web`, `deployment`, and
   `docs` own the affected deterministic checks.

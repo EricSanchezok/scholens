@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    delete,
     select,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -41,6 +42,11 @@ class PaperUploadSession(Base):
         CheckConstraint(
             "sha256 ~ '^[0-9a-f]{64}$'",
             name="ck_paper_upload_sessions_sha256",
+        ),
+        CheckConstraint(
+            "(status = 'claimed') = "
+            "(lease_expires_at IS NOT NULL AND lease_token IS NOT NULL)",
+            name="ck_paper_upload_sessions_claim_lease",
         ),
     )
 
@@ -69,6 +75,9 @@ class PaperUploadSession(Base):
     )
     lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    lease_token: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -141,6 +150,7 @@ class SqlPaperUploadGateway:
                 )
             model.status = "prepared"
             model.lease_expires_at = None
+            model.lease_token = None
             model.updated_at = now
             return _record(model)
         model = PaperUploadSession(
@@ -165,6 +175,7 @@ class SqlPaperUploadGateway:
         *,
         actor: Actor,
         upload_id: uuid.UUID,
+        lease_token: uuid.UUID,
         lease_expires_at: datetime,
         now: datetime,
     ) -> PaperUploadRecord:
@@ -201,22 +212,36 @@ class SqlPaperUploadGateway:
         if model.project_id is not None:
             self._require_project_upload(model.project_id, actor.id)
         model.status = "claimed"
+        model.lease_token = lease_token
         model.lease_expires_at = lease_expires_at
         model.updated_at = now
         self._db.flush()
         return _record(model)
 
-    def consume(self, *, actor: Actor, upload_id: uuid.UUID, now: datetime) -> None:
+    def consume(
+        self,
+        *,
+        actor: Actor,
+        upload_id: uuid.UUID,
+        lease_token: uuid.UUID,
+        now: datetime,
+    ) -> None:
         model = self._owned(upload_id, actor.id, for_update=True)
-        if model.status != "claimed":
+        if (
+            model.status != "claimed"
+            or model.lease_token != lease_token
+            or model.lease_expires_at is None
+            or model.lease_expires_at <= now
+        ):
             raise AppError(
-                code="paper_upload_not_claimed",
-                message="The upload session is not active",
+                code="paper_upload_lease_lost",
+                message="The upload session claim is no longer owned by this operation",
                 kind=FailureKind.CONFLICT,
             )
         model.status = "consumed"
         model.consumed_at = now
         model.lease_expires_at = None
+        model.lease_token = None
         model.updated_at = now
         self._db.flush()
 
@@ -225,16 +250,41 @@ class SqlPaperUploadGateway:
         *,
         actor: Actor,
         upload_id: uuid.UUID,
+        lease_token: uuid.UUID,
         now: datetime,
         failed: bool,
     ) -> None:
         model = self._owned(upload_id, actor.id, for_update=True)
-        if model.status != "claimed":
+        if (
+            model.status != "claimed"
+            or model.lease_token != lease_token
+            or model.lease_expires_at is None
+            or model.lease_expires_at <= now
+        ):
             return
         model.status = "failed" if failed else "prepared"
         model.lease_expires_at = None
+        model.lease_token = None
         model.updated_at = now
         self._db.flush()
+
+    def delete_expired(self, *, now: datetime, limit: int) -> int:
+        expired_ids = tuple(
+            self._db.scalars(
+                select(PaperUploadSession.id)
+                .where(PaperUploadSession.expires_at <= now)
+                .order_by(PaperUploadSession.expires_at)
+                .limit(limit)
+            )
+        )
+        if not expired_ids:
+            return 0
+        self._db.execute(
+            delete(PaperUploadSession)
+            .where(PaperUploadSession.id.in_(expired_ids))
+            .execution_options(synchronize_session=False)
+        )
+        return len(expired_ids)
 
     def _owned(
         self, upload_id: uuid.UUID, actor_id: int, *, for_update: bool
@@ -267,6 +317,7 @@ def _record(model: PaperUploadSession) -> PaperUploadRecord:
         status=model.status,
         expires_at=model.expires_at,
         lease_expires_at=model.lease_expires_at,
+        lease_token=model.lease_token,
     )
 
 

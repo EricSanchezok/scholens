@@ -228,11 +228,14 @@ Library, annotation, job, invitation, or output access; an Access Key never
 grants a resource the user could not otherwise reach.
 
 State-changing invocations support a caller-stable idempotency key and retain a
-completed invocation result. Destructive, public-sharing, email-delivery, and
-access-control tools use a two-call confirmation protocol. The first call
-commits only a bounded impact preview and opaque token. The token is stored as
-a hash, expires after ten minutes, is single-use, and binds actor, credential,
-tool action, normalized business arguments, and a live-state fingerprint.
+completed invocation result when that result is safe for durable replay.
+Destructive, public-sharing, email-delivery, and access-control tools use a
+two-call confirmation protocol. The first call commits only a bounded impact
+preview and opaque token. The token is stored as a hash, expires after ten
+minutes, is single-use, and binds actor, credential, tool action, normalized
+business arguments, and a live-state fingerprint. Raw confirmation challenges,
+plaintext public bearer tokens, and signed upload URLs are never copied into the
+invocation ledger.
 
 MCP resource links make durable objects addressable without forcing an Agent
 to repeat discovery calls. Static resources expose Library and Project
@@ -346,13 +349,15 @@ After commit, the first streamed event is `start`, so every later error belongs
 to the persisted active leaf and remains safely retryable after refresh.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
-`ApplicationExecutor` operation. Query tools never commit. Command tools commit
-their business change and completed invocation ledger row atomically. Workflow
-tools use an explicit external-I/O workflow and then persist the completed
-result. Conversation write invocation identities include conversation, turn,
-tool-call arguments, and tool name; MCP identities use the authenticated token
-session and JSON-RPC request identity. Replays return the persisted result, and
-conflicting argument reuse returns `tool_invocation_conflict`.
+`ApplicationExecutor` operation. Query tools never commit. Replay-safe command
+tools commit their business change and completed invocation ledger row
+atomically. Workflow tools use an explicit external-I/O workflow and then
+persist replay-safe completed results. Confirmation previews and definitions
+whose results contain bearer or short-lived credentials execute without a
+replay row. Conversation write invocation identities include conversation,
+turn, tool-call arguments, and tool name; MCP identities use the authenticated
+token session and JSON-RPC request identity. Replays return the persisted
+result, and conflicting argument reuse returns `tool_invocation_conflict`.
 
 The inbound Streamable HTTP MCP endpoint is `/mcp`, outside the public OpenAPI
 surface. Every request requires a Scholens AccessKey in the Bearer header.
@@ -427,11 +432,13 @@ filename, exact byte count, SHA-256, and optional Project. Server returns a
 15-minute S3 PUT URL signed for PDF content type and checksum. The client sends
 bytes directly to object storage; Server credentials and Scholens Access Keys
 are never attached to that request. Ingestion claims the session for five
-minutes, rechecks Project access, verifies stored size and the S3 checksum,
-downloads and hashes the bounded bytes again, and then enters the canonical
-byte-ingestion path. Success consumes the session and removes its staging
-object; validation failure makes it non-reusable, transient failure releases
-it for retry, and bucket lifecycle removes abandoned staging objects.
+minutes with a generation-specific lease token, rechecks Project access,
+verifies stored size and the S3 checksum, downloads and hashes the bounded bytes
+again, and then enters the canonical byte-ingestion path. A stale worker cannot
+consume or release a newer claim. Success consumes the session and removes its
+staging object; validation failure makes it non-reusable, transient failure
+releases it for retry, bounded request-time cleanup removes expired database
+rows, and bucket lifecycle removes abandoned staging objects.
 
 The official local stdio connector obtains filesystem roots from the MCP host
 or explicit `--allowed-root` values. It resolves real paths, rejects ambiguous
@@ -439,7 +446,9 @@ relative names and symlink escapes, requires a regular `.pdf` with a PDF
 signature and a maximum size of 30 MB, and sends the remote service only the
 plain filename, size, checksum, and bytes. It uses separate HTTP clients for
 authenticated MCP and unauthenticated object upload, preventing credential
-forwarding. If transfer completes but the ingestion response is uncertain, the
+forwarding. Both URLs require HTTPS except for explicit loopback development;
+redirects and embedded URL credentials are rejected. If transfer completes but
+the ingestion response is uncertain, the
 bridge returns the original upload UUID and exact `ingest_paper` arguments so
 the Agent replays only that final step without changing the idempotency
 identity. No inbound port or public client IP is required.

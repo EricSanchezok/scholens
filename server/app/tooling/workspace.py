@@ -84,6 +84,7 @@ def _tool(
     idempotent: bool | None = None,
     open_world: bool = False,
     confirmation: bool = False,
+    persist_result: bool = True,
     subject: str | None = None,
 ) -> ToolDefinition[ApplicationCapabilities]:
     behavior = ToolBehavior(
@@ -108,6 +109,7 @@ def _tool(
             required_permission=permission,
             behavior=behavior,
             confirmation_policy=policy,
+            persist_result=persist_result,
             workflow_handler=cast(WorkflowToolHandler, handler),
             activity_subject_field=subject,
         )
@@ -121,6 +123,7 @@ def _tool(
         required_permission=permission,
         behavior=behavior,
         confirmation_policy=policy,
+        persist_result=persist_result,
         handler=cast(ToolHandler[ApplicationCapabilities], handler),
         activity_subject_field=subject,
     )
@@ -515,7 +518,7 @@ def build_workspace_tool_catalog(
             ),
             input_model=wc.RemoveProjectMemberInput,
             output_model=confirmed,
-            permission=delete,
+            permission=manage,
             handler=handlers.remove_project_member,
             execution=command,
             destructive=True,
@@ -532,7 +535,7 @@ def build_workspace_tool_catalog(
             ),
             input_model=wc.LeaveProjectInput,
             output_model=confirmed,
-            permission=delete,
+            permission=manage,
             handler=handlers.leave_project,
             execution=command,
             destructive=True,
@@ -549,7 +552,7 @@ def build_workspace_tool_catalog(
             ),
             input_model=wc.TransferProjectOwnershipInput,
             output_model=confirmed,
-            permission=delete,
+            permission=manage,
             handler=handlers.transfer_project_ownership,
             execution=command,
             confirmation=True,
@@ -661,6 +664,7 @@ def build_workspace_tool_catalog(
             execution=command,
             open_world=True,
             confirmation=True,
+            persist_result=False,
         ),
         _tool(
             name="unshare_library_paper",
@@ -837,6 +841,7 @@ def build_workspace_tool_catalog(
             handler=handlers.prepare_paper_upload,
             execution=command,
             open_world=True,
+            persist_result=False,
         ),
         _tool(
             name="list_jobs",

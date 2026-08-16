@@ -73,7 +73,9 @@ returned job UUID.
 The authenticated MCP connection and object-storage PUT use separate HTTP
 clients. The Scholens Access Key is never attached to the upload request. The
 connector opens no listening socket, so NAT and the absence of a public IP do
-not affect it.
+not affect it. Both endpoints must use HTTPS; plain HTTP is accepted only for
+an explicit loopback host during local development. Redirects, URL credentials,
+and fragments are rejected before any Access Key or PDF bytes are sent.
 
 For a retry after an uncertain response, reuse the same non-secret
 `idempotency_key`. If the PDF transfer completed but Scholens did not confirm

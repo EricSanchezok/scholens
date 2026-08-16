@@ -139,6 +139,18 @@ def _invocation_key(
     return f"{context.invocation_id}:{definition.name}"
 
 
+def _should_persist_result(
+    definition: ToolDefinition[CapabilitiesT], arguments: BaseModel
+) -> bool:
+    """Keep bearer credentials and pre-execution challenges out of replay storage."""
+    if not definition.persist_result:
+        return False
+    return not (
+        definition.confirmation_policy.value == "required"
+        and getattr(arguments, "confirmation_token", None) is None
+    )
+
+
 class ToolDispatcher(Generic[CapabilitiesT]):
     def __init__(
         self,
@@ -254,15 +266,18 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 context=context,
                 arguments=arguments,
             )
-            replay = await asyncio.to_thread(
-                self._executor.query,
-                lambda capabilities: capabilities.tool_invocations.replay(
-                    actor_id=context.actor.id,
-                    invocation_key=invocation_key,
-                    tool_name=name,
-                    arguments_hash=fingerprint,
-                ),
-            )
+            persist_result = _should_persist_result(definition, arguments)
+            replay = None
+            if persist_result:
+                replay = await asyncio.to_thread(
+                    self._executor.query,
+                    lambda capabilities: capabilities.tool_invocations.replay(
+                        actor_id=context.actor.id,
+                        invocation_key=invocation_key,
+                        tool_name=name,
+                        arguments_hash=fingerprint,
+                    ),
+                )
             if replay is not None:
                 return _validate_outcome(definition, _restore_outcome(replay))
             outcome = await workflow_handler(
@@ -271,17 +286,18 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 invocation_key,
             )
             outcome = _validate_outcome(definition, outcome)
-            await asyncio.to_thread(
-                self._executor.command,
-                lambda capabilities: capabilities.tool_invocations.complete(
-                    actor_id=context.actor.id,
-                    operation_id=context.operation.trace.operation_id,
-                    invocation_key=invocation_key,
-                    tool_name=name,
-                    arguments_hash=fingerprint,
-                    result=_persisted_outcome(outcome),
-                ),
-            )
+            if persist_result:
+                await asyncio.to_thread(
+                    self._executor.command,
+                    lambda capabilities: capabilities.tool_invocations.complete(
+                        actor_id=context.actor.id,
+                        operation_id=context.operation.trace.operation_id,
+                        invocation_key=invocation_key,
+                        tool_name=name,
+                        arguments_hash=fingerprint,
+                        result=_persisted_outcome(outcome),
+                    ),
+                )
             return outcome
 
         assert definition.execution is ToolExecutionKind.COMMAND
@@ -292,28 +308,32 @@ class ToolDispatcher(Generic[CapabilitiesT]):
             context=context,
             arguments=arguments,
         )
+        persist_result = _should_persist_result(definition, arguments)
 
         def execute(capabilities: CapabilitiesT) -> ToolOutcome:
-            replay = capabilities.tool_invocations.replay(
-                actor_id=context.actor.id,
-                invocation_key=invocation_key,
-                tool_name=name,
-                arguments_hash=fingerprint,
-            )
+            replay = None
+            if persist_result:
+                replay = capabilities.tool_invocations.replay(
+                    actor_id=context.actor.id,
+                    invocation_key=invocation_key,
+                    tool_name=name,
+                    arguments_hash=fingerprint,
+                )
             if replay is not None:
                 return _validate_outcome(definition, _restore_outcome(replay))
             outcome = _validate_outcome(
                 definition,
                 command_handler(capabilities, context, arguments),
             )
-            capabilities.tool_invocations.complete(
-                actor_id=context.actor.id,
-                operation_id=context.operation.trace.operation_id,
-                invocation_key=invocation_key,
-                tool_name=name,
-                arguments_hash=fingerprint,
-                result=_persisted_outcome(outcome),
-            )
+            if persist_result:
+                capabilities.tool_invocations.complete(
+                    actor_id=context.actor.id,
+                    operation_id=context.operation.trace.operation_id,
+                    invocation_key=invocation_key,
+                    tool_name=name,
+                    arguments_hash=fingerprint,
+                    result=_persisted_outcome(outcome),
+                )
             return outcome
 
         return await asyncio.to_thread(self._executor.command, execute)
