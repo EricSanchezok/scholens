@@ -107,8 +107,11 @@ create operation has no resource ARN yet: service/resource discovery (`Describe*
 `GetRandomPassword`, service-linked-role creation with an exact service condition,
 ECS/ELB/Application Auto Scaling creation and registration, Cloud Map service creation with
 a product request-tag condition, CloudWatch alarm discovery, and the documented WAF/ALB
-association read or disassociation calls. Deployment contract tests keep broad IAM, KMS,
-S3, Secrets Manager, and ECR administration from returning.
+association read or disassociation calls. Creating or updating the Scholens Web ACL also
+allows those two write actions against the regional managed-rule-set namespace because AWS
+WAF authorizes managed rule references as part of the Web ACL request; no other WAF action
+is granted on that namespace. Deployment contract tests keep broad IAM, KMS, S3, Secrets
+Manager, and ECR administration from returning.
 
 `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_ACCOUNT_CENTER_URL` are immutable Web build-time
 values recorded in the release manifest; neither is mutable ECS runtime configuration.
