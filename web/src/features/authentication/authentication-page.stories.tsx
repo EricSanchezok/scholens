@@ -66,6 +66,9 @@ export const SignIn: Story = {
       "autocomplete",
       "email",
     );
+    await expect(
+      canvas.getByRole("link", { name: "Source code · AGPL-3.0" }),
+    ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
   },
 };
 
@@ -243,6 +246,11 @@ export const SimplifiedChinese: Story = {
   play: async ({ canvasElement }) => {
     await expect(
       await within(canvasElement).findByRole("heading", { name: "欢迎回来" }),
+    ).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole("link", {
+        name: "源代码 · AGPL-3.0",
+      }),
     ).toBeVisible();
   },
 };

@@ -6,8 +6,9 @@ Owners: Scholens
 
 ## Problem
 
-Scholens inherited an unreleased EC2 and Docker Compose path from OpenPaper. It
-did not match the shared SanchezCloud AWS account, the Scholight production
+Scholens inherited an unreleased EC2 and Docker Compose path from its upstream
+implementation. It did not match the shared SanchezCloud AWS account, the
+Scholight production
 conventions, or Scholens' actual Web, API, and asynchronous workloads. Mutable
 image tags, rebuild-at-deploy behavior, broad operator credentials, colocated
 migrations, and host-level workers would make a first release difficult to

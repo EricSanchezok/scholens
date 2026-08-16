@@ -21,7 +21,7 @@ PROFILE_NOTIFICATION_EMAIL = os.getenv(
     "PROFILE_NOTIFICATION_EMAIL", REPLY_TO_DEFAULT_EMAIL
 )
 SOURCE_REPOSITORY_URL = os.getenv(
-    "SOURCE_REPOSITORY_URL", "https://github.com/khoj-ai/openpaper"
+    "SOURCE_REPOSITORY_URL", "https://github.com/EricSanchezok/scholens"
 )
 DEFAULT_FROM = f"{BRAND_NAME} <{DEFAULT_FROM_ADDRESS}>"
 
@@ -37,10 +37,6 @@ def load_email_template(template_name: str) -> str:
             return (
                 file.read()
                 .replace("{{client_domain}}", CLIENT_DOMAIN.rstrip("/"))
-                .replace(
-                    "{{brand_logo_url}}",
-                    f"{CLIENT_DOMAIN.rstrip('/')}/scholens.svg",
-                )
                 .replace("{{source_repository_url}}", SOURCE_REPOSITORY_URL)
             )
     except FileNotFoundError:

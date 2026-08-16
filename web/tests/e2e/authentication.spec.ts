@@ -31,6 +31,14 @@ test("renders the sign-in entry accessibly and normalizes an invalid mode", asyn
     "autocomplete",
     "email",
   );
+  const sourceLink = page.getByRole("link", {
+    name: "Source code · AGPL-3.0",
+  });
+  await expect(sourceLink).toHaveAttribute(
+    "href",
+    "https://github.com/EricSanchezok/scholens",
+  );
+  await expect(sourceLink).toHaveAttribute("target", "_blank");
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
 });
@@ -151,4 +159,7 @@ test("uses the Simplified Chinese authentication dictionary", async ({
   ]);
   await page.goto("/login");
   await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "源代码 · AGPL-3.0" }),
+  ).toBeVisible();
 });

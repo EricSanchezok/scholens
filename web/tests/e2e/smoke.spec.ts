@@ -74,6 +74,9 @@ test("account menu exposes live usage and direct Settings destinations", async (
   await expect(menu.getByText("Researcher")).toBeVisible();
   await expect(menu.getByText("24M / 100M")).toBeVisible();
   await expect(menu.getByText("Credits reset on Aug 17, 2026")).toBeVisible();
+  await expect(
+    menu.getByRole("menuitem", { name: "Source code · AGPL-3.0" }),
+  ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
 
   await menu.getByRole("menuitem", { name: "Account" }).click();
   await expect(page).toHaveURL(/\?settings=account$/);

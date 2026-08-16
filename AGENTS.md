@@ -11,6 +11,7 @@ Always read the documents relevant to the task before editing:
 | Area                                            | Required reading                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | Product behavior or terminology                 | [`PRODUCT.md`](./PRODUCT.md)                                                               |
+| Documentation map and ownership                 | [`docs/README.md`](./docs/README.md)                                                       |
 | Branch, commit, PR, and review workflow         | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                     |
 | Local services, ports, environment, or commands | [`DEVELOPMENT.md`](./DEVELOPMENT.md)                                                       |
 | Replacement frontend (`web/`)                   | [`web/docs/README.md`](./web/docs/README.md) and its task-specific guide                   |

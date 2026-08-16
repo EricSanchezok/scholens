@@ -4,6 +4,7 @@ import {
   AccountIcon,
   CollapseRailIcon,
   ExpandRailIcon,
+  LinkIcon,
   SignOutIcon,
   MenuIcon,
   SettingsIcon,
@@ -47,6 +48,7 @@ import {
   type CurrentBillingUsageSummary,
 } from "@/features/settings";
 import type { components } from "@/lib/api/generated/schema";
+import { SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import {
   AskIcon,
@@ -387,6 +389,17 @@ function AccountMenu({
         >
           <Icon glyph={UsageIcon} size={16} tone="secondary" />
           {t("account.usageSettings")}
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a
+            className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+            href={SOURCE_REPOSITORY_URL}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon glyph={LinkIcon} size={16} tone="secondary" />
+            {t("account.sourceCode")}
+          </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

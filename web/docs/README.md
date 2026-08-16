@@ -18,26 +18,24 @@ runtime behavior, accessibility, data contracts, and component APIs.
 
 ## Guides
 
-| Guide                                                                           | Read it when                                                           |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [Frontend change governance](./frontend-governance.md)                          | Adding, changing, or deleting a page, module, component, or token      |
-| [Architecture](./architecture.md)                                               | Adding a route, feature slice, provider, shared state, or dependency   |
-| [Component development](./component-development.md)                             | Creating or importing a component                                      |
-| [Design tokens](./design-tokens.md)                                             | Changing color, spacing, radius, theme, or Figma variables             |
-| [Motion system](./motion.md)                                                    | Designing animation, transitions, layout continuity, or reduced motion |
-| [Internationalization](./internationalization.md)                               | Adding UI copy, locale behavior, formatting, or another language       |
-| [Authentication foundation](./authentication-foundation.md)                     | Building auth UI, session behavior, responsive auth layout, or mocks   |
-| [Home experience](./home-experience.md)                                         | Changing the Home shell, composer, recents, or conversation stream     |
-| [Library experience](./library-experience.md)                                   | Changing Papers, Outputs, import, filtering, or Library actions        |
-| [Reader experience](./reader-experience.md)                                     | Changing PDF reading, paper conversations, annotations, or details     |
-| [Projects experience](./projects-experience.md)                                 | Changing Projects lists, details, papers, outputs, or Project chat     |
-| [Settings experience](./settings-experience.md)                                 | Changing account panels, usage, keys, connections, or preferences      |
-| [API development](./api-development.md)                                         | Changing a backend contract or adding a request/query                  |
-| [Testing](./testing.md)                                                         | Choosing test scope or adding a network/interaction state              |
-| [New feature checklist](./new-feature-checklist.md)                             | Starting and finishing every product feature                           |
-| [Architecture decisions](../../docs/decisions/README.md)                        | Deliberately changing a foundational repository or frontend rule       |
-| [Governance audit](./audits/2026-08-04-frontend-governance-audit.md)            | Reviewing the baseline risks and completed remediation                 |
-| [Conversation harness audit](./audits/2026-08-08-conversation-harness-audit.md) | Reviewing ordered-stream invariants and completed cleanup              |
+| Guide                                                       | Read it when                                                           |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [Frontend change governance](./frontend-governance.md)      | Adding, changing, or deleting a page, module, component, or token      |
+| [Architecture](./architecture.md)                           | Adding a route, feature slice, provider, shared state, or dependency   |
+| [Component development](./component-development.md)         | Creating or importing a component                                      |
+| [Design tokens](./design-tokens.md)                         | Changing color, spacing, radius, theme, or Figma variables             |
+| [Motion system](./motion.md)                                | Designing animation, transitions, layout continuity, or reduced motion |
+| [Internationalization](./internationalization.md)           | Adding UI copy, locale behavior, formatting, or another language       |
+| [Authentication foundation](./authentication-foundation.md) | Building auth UI, session behavior, responsive auth layout, or mocks   |
+| [Home experience](./home-experience.md)                     | Changing the Home shell, composer, recents, or conversation stream     |
+| [Library experience](./library-experience.md)               | Changing Papers, Outputs, import, filtering, or Library actions        |
+| [Reader experience](./reader-experience.md)                 | Changing PDF reading, paper conversations, annotations, or details     |
+| [Projects experience](./projects-experience.md)             | Changing Projects lists, details, papers, outputs, or Project chat     |
+| [Settings experience](./settings-experience.md)             | Changing account panels, usage, keys, connections, or preferences      |
+| [API development](./api-development.md)                     | Changing a backend contract or adding a request/query                  |
+| [Testing](./testing.md)                                     | Choosing test scope or adding a network/interaction state              |
+| [New feature checklist](./new-feature-checklist.md)         | Starting and finishing every product feature                           |
+| [Architecture decisions](../../docs/decisions/README.md)    | Deliberately changing a foundational repository or frontend rule       |
 
 ## Maintenance rule
 

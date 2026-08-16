@@ -73,6 +73,7 @@
       "settings": "设置",
       "accountSettings": "账户",
       "usageSettings": "用量",
+      "sourceCode": "源代码 · AGPL-3.0",
       "signOut": "退出登录",
       "signingOut": "正在退出…"
     }
@@ -814,6 +815,7 @@
   },
   "Authentication": {
     "brand": "Scholens",
+    "sourceCode": "源代码 · AGPL-3.0",
     "a11y": {
       "showPassword": "显示密码",
       "hidePassword": "隐藏密码"

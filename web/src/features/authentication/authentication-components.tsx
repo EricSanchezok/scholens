@@ -3,8 +3,11 @@ import {
   EmailIcon,
   WarningIcon,
 } from "@/design-system/icons/semantic-icons";
+import { useTranslations } from "next-intl";
 
+import { keyboardFocusRing } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
+import { SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import { AuthViewport } from "./auth-surface";
 
@@ -13,12 +16,26 @@ export function AuthenticationShell({
 }: {
   children: React.ReactNode;
 }) {
+  const t = useTranslations("Authentication");
   return (
     <AuthViewport className="relative lg:items-center">
       <div className="pointer-events-none fixed top-[max(1.5rem,env(safe-area-inset-top))] left-4 text-lg font-semibold sm:left-8 lg:left-12">
         Scholens
       </div>
-      <div className="w-full pt-20 sm:pt-12">{children}</div>
+      <div className="grid w-full gap-8 pt-20 sm:pt-12">
+        {children}
+        <a
+          className={cn(
+            "text-secondary hover:text-foreground mx-auto rounded-[var(--radius-sm)] text-sm",
+            keyboardFocusRing,
+          )}
+          href={SOURCE_REPOSITORY_URL}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {t("sourceCode")}
+        </a>
+      </div>
     </AuthViewport>
   );
 }
