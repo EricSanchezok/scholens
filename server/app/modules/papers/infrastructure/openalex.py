@@ -27,6 +27,10 @@ _REQUEST_TIMEOUT_SECONDS = 10.0
 _RETRY_DELAY_SECONDS = 0.25
 
 
+class _UnsafeOpenAlexRedirect(httpx.TransportError):
+    """A deterministic origin-policy failure that must not be retried."""
+
+
 class OpenAlexApiClient:
     """Small typed client whose API key never escapes the request boundary."""
 
@@ -114,12 +118,19 @@ class OpenAlexApiClient:
         work_id: str,
     ) -> OpenAlexCitationGraph:
         normalized_id = work_id.rstrip("/").rsplit("/", maxsplit=1)[-1]
-        center_payload, cites_payload, cited_by_payload = await asyncio.gather(
-            self._get(
-                f"/works/{quote(normalized_id, safe='')}",
-                api_key=api_key,
-                not_found_ok=True,
-            ),
+        center_payload = await self._get(
+            f"/works/{quote(normalized_id, safe='')}",
+            api_key=api_key,
+            not_found_ok=True,
+        )
+        center = self._work(center_payload)
+        if center is None:
+            raise AppError(
+                code="openalex_paper_not_found",
+                message="OpenAlex could not find this paper",
+                kind=FailureKind.NOT_FOUND,
+            )
+        cited_by_payload, cites_payload = await asyncio.gather(
             self._get(
                 "/works",
                 api_key=api_key,
@@ -139,13 +150,6 @@ class OpenAlexApiClient:
                 },
             ),
         )
-        center = self._work(center_payload)
-        if center is None:
-            raise AppError(
-                code="openalex_paper_not_found",
-                message="OpenAlex could not find this paper",
-                kind=FailureKind.NOT_FOUND,
-            )
         return OpenAlexCitationGraph(
             center=center,
             cites=self._response(cites_payload),
@@ -218,6 +222,8 @@ class OpenAlexApiClient:
             for attempt in range(_MAX_ATTEMPTS):
                 try:
                     response = await client.get(path, params=request_params)
+                except _UnsafeOpenAlexRedirect:
+                    self._unavailable("unsafe_redirect")
                 except (httpx.TimeoutException, httpx.TransportError):
                     if attempt < _MAX_ATTEMPTS - 1:
                         await self._backoff(attempt)
@@ -241,7 +247,7 @@ class OpenAlexApiClient:
                         retryable=True,
                         details={"required_integration": "openalex"},
                     )
-                if response.status_code in {403, 429}:
+                if response.status_code == 429:
                     raise AppError(
                         code="openalex_rate_limited",
                         message="OpenAlex is rate limiting this account",
@@ -311,6 +317,15 @@ class _CredentialTransport(httpx.AsyncBaseTransport):
         self._transport = transport or httpx.AsyncHTTPTransport()
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if (
+            request.url.scheme != "https"
+            or request.url.host != "api.openalex.org"
+            or request.url.port not in {None, 443}
+        ):
+            raise _UnsafeOpenAlexRedirect(
+                "OpenAlex redirected to a disallowed origin",
+                request=request,
+            )
         provider_request = httpx.Request(
             method=request.method,
             url=request.url.copy_add_param("api_key", self._api_key),

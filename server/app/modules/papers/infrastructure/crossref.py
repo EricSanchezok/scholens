@@ -31,8 +31,11 @@ class CrossrefClient:
             )
             response.raise_for_status()
             payload = response.json()
-        except (requests.RequestException, ValueError):
-            logger.warning("crossref.doi_lookup.failed", exc_info=True)
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "crossref.doi_lookup.failed",
+                extra={"exception_type": type(exc).__name__},
+            )
             return None
         message = payload.get("message") if isinstance(payload, Mapping) else None
         items = message.get("items") if isinstance(message, Mapping) else None
@@ -64,8 +67,11 @@ class CrossrefClient:
                 return None
             response.raise_for_status()
             payload = response.json()
-        except (requests.RequestException, ValueError):
-            logger.warning("crossref.enrichment.failed", exc_info=True)
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "crossref.enrichment.failed",
+                extra={"exception_type": type(exc).__name__},
+            )
             return None
         message = payload.get("message") if isinstance(payload, Mapping) else None
         if not isinstance(message, Mapping):

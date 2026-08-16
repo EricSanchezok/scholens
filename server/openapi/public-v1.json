@@ -5867,6 +5867,16 @@
             ],
             "title": "Authorships"
           },
+          "best_oa_location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrimaryLocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "biblio": {
             "anyOf": [
               {

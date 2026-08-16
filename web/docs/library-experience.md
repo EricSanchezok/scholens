@@ -113,7 +113,7 @@ terminal state. Progress heartbeats and Server-owned deadlines prevent an
 indefinite processing row. Cancellation is optimistic in the interface and
 cooperative in the worker: a late callback cannot restore a cancelled row.
 
-Add papers accepts multiple PDF files up to 50 MB each and processes at most
+Add papers accepts multiple PDF files up to 30 MB each and processes at most
 three uploads concurrently. A queued file may be removed before upload, and an
 in-flight file may be cancelled independently. DOI, arXiv, and direct PDF URL
 are discriminated source submissions with inline validation and one visible

@@ -3766,6 +3766,7 @@ export interface components {
             } | null;
             /** Authorships */
             authorships?: components["schemas"]["Authorship"][] | null;
+            best_oa_location?: components["schemas"]["PrimaryLocation"] | null;
             biblio?: components["schemas"]["Biblio"] | null;
             /** Cited By Count */
             cited_by_count?: number | null;

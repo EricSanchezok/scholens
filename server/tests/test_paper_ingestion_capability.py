@@ -215,6 +215,7 @@ async def test_paper_source_resolver_uses_openalex_pdf_for_doi() -> None:
     openalex.find_by_doi = AsyncMock()
     resolver = DefaultPaperSourceResolver(openalex=openalex)
     work = MagicMock()
+    work.best_oa_location = None
     work.primary_location.pdf_url = "https://papers.example/paper.pdf"
     openalex.find_by_doi.return_value = work
     actor = _actor()
@@ -233,6 +234,26 @@ async def test_paper_source_resolver_uses_openalex_pdf_for_doi() -> None:
         operation=operation,
         doi="10.1000/example",
     )
+
+
+@pytest.mark.asyncio
+async def test_paper_source_resolver_prefers_best_openalex_oa_location() -> None:
+    openalex = MagicMock()
+    openalex.find_by_doi = AsyncMock()
+    resolver = DefaultPaperSourceResolver(openalex=openalex)
+    work = MagicMock()
+    work.best_oa_location.pdf_url = "https://repository.example/paper.pdf"
+    work.primary_location.pdf_url = "https://publisher.example/paper.pdf"
+    openalex.find_by_doi.return_value = work
+
+    resolved = await resolver.resolve(
+        actor=_actor(),
+        operation=_operation(),
+        kind="doi",
+        value="10.1000/example",
+    )
+
+    assert resolved == "https://repository.example/paper.pdf"
 
 
 @pytest.mark.asyncio
@@ -283,7 +304,11 @@ async def test_missing_openalex_connection_is_preserved_for_doi_action() -> None
 async def test_openalex_work_without_open_pdf_is_unavailable() -> None:
     openalex = MagicMock()
     openalex.find_by_doi = AsyncMock(
-        return_value=MagicMock(primary_location=None, open_access=None)
+        return_value=MagicMock(
+            best_oa_location=None,
+            primary_location=None,
+            open_access=None,
+        )
     )
     resolver = DefaultPaperSourceResolver(openalex=openalex)
 

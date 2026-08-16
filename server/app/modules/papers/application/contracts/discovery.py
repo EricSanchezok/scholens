@@ -113,6 +113,7 @@ class OpenAlexWork(BaseOpenAlexModel):
     open_access: OpenAccess | None = None
     keywords: list[Keyword] | None = None
     primary_location: PrimaryLocation | None = None
+    best_oa_location: PrimaryLocation | None = None
     biblio: Biblio | None = None
     topics: list[Topic] | None = None
     authorships: list[Authorship] | None = None

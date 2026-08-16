@@ -149,6 +149,7 @@ class DefaultPaperSourceResolver:
             if work is None:
                 self._raise_unavailable()
             candidates = (
+                work.best_oa_location.pdf_url if work.best_oa_location else None,
                 work.primary_location.pdf_url if work.primary_location else None,
                 work.open_access.oa_url if work.open_access else None,
             )
