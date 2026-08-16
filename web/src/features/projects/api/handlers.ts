@@ -102,15 +102,18 @@ const populated = [
   http.delete(
     `${api}/projects/:projectId/papers/:documentId`,
     ({ request }) => {
-      const confirmed =
-        new URL(request.url).searchParams.get("confirm_delete_annotations") ===
-        "true";
+      const confirmed = request.headers.has("X-Scholens-Confirmation-Token");
       return confirmed
         ? new HttpResponse(null, { status: 204 })
         : HttpResponse.json(
             {
-              code: "project_document_has_annotations",
-              details: { comment_count: 5, thread_count: 2 },
+              code: "confirmation_required",
+              details: {
+                comment_count: 5,
+                confirmation_token:
+                  "test-confirmation-token-with-at-least-32-characters",
+                thread_count: 2,
+              },
               kind: "conflict",
               message: "Confirm annotation deletion",
               retryable: false,

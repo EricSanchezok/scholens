@@ -243,11 +243,19 @@ class Conversation(Base):
             "ARRAY[]::text[], "
             "ARRAY['read']::text[], "
             "ARRAY['write']::text[], "
+            "ARRAY['manage']::text[], "
             "ARRAY['delete']::text[], "
             "ARRAY['read','write']::text[], "
+            "ARRAY['read','manage']::text[], "
             "ARRAY['read','delete']::text[], "
+            "ARRAY['write','manage']::text[], "
             "ARRAY['write','delete']::text[], "
-            "ARRAY['read','write','delete']::text[]"
+            "ARRAY['manage','delete']::text[], "
+            "ARRAY['read','write','manage']::text[], "
+            "ARRAY['read','write','delete']::text[], "
+            "ARRAY['read','manage','delete']::text[], "
+            "ARRAY['write','manage','delete']::text[], "
+            "ARRAY['read','write','manage','delete']::text[]"
             ")",
             name="ck_conversations_tool_permissions",
         ),

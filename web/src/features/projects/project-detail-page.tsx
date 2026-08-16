@@ -280,6 +280,7 @@ function ProjectPaperRow({
 
 type PaperRemovalImpact = {
   commentCount: number;
+  confirmationToken: string;
   paper: ProjectPaper;
   threadCount: number;
 };
@@ -288,10 +289,7 @@ function paperRemovalImpact(
   error: unknown,
   paper: ProjectPaper,
 ): PaperRemovalImpact | undefined {
-  if (
-    !(error instanceof ApiError) ||
-    error.code !== "project_document_has_annotations"
-  ) {
+  if (!(error instanceof ApiError) || error.code !== "confirmation_required") {
     return undefined;
   }
   const response =
@@ -305,6 +303,10 @@ function paperRemovalImpact(
   return {
     commentCount:
       typeof details?.comment_count === "number" ? details.comment_count : 0,
+    confirmationToken:
+      typeof details?.confirmation_token === "string"
+        ? details.confirmation_token
+        : "",
     paper,
     threadCount:
       typeof details?.thread_count === "number" ? details.thread_count : 0,
@@ -489,12 +491,12 @@ export function ProjectDetailWorkspace({
   });
   const removePaperMutation = useMutation({
     mutationFn: ({
-      confirmDeleteAnnotations,
+      confirmationToken,
       documentId,
     }: {
-      confirmDeleteAnnotations: boolean;
+      confirmationToken?: string;
       documentId: string;
-    }) => removeProjectPaper(projectId, documentId, confirmDeleteAnnotations),
+    }) => removeProjectPaper(projectId, documentId, confirmationToken),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({
@@ -535,7 +537,6 @@ export function ProjectDetailWorkspace({
   async function requestPaperRemoval(paper: ProjectPaper) {
     try {
       await removePaperMutation.mutateAsync({
-        confirmDeleteAnnotations: false,
         documentId: paper.document_id,
       });
       toast.notify({ title: t("detail.papers.removed") });
@@ -550,7 +551,7 @@ export function ProjectDetailWorkspace({
     if (!paperRemoval) return;
     try {
       await removePaperMutation.mutateAsync({
-        confirmDeleteAnnotations: true,
+        confirmationToken: paperRemoval.confirmationToken,
         documentId: paperRemoval.paper.document_id,
       });
       setPaperRemoval(null);

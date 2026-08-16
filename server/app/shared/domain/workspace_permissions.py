@@ -7,12 +7,14 @@ from enum import StrEnum
 class WorkspacePermission(StrEnum):
     READ = "read"
     WRITE = "write"
+    MANAGE = "manage"
     DELETE = "delete"
 
 
 WORKSPACE_PERMISSION_ORDER = (
     WorkspacePermission.READ,
     WorkspacePermission.WRITE,
+    WorkspacePermission.MANAGE,
     WorkspacePermission.DELETE,
 )
 

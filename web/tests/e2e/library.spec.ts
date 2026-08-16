@@ -127,27 +127,49 @@ async function mockLibrary(page: Page) {
     }
     if (pathname.endsWith("/paper-ingestions/uploads")) {
       return route.fulfill({
-        status: 202,
+        status: 201,
         contentType: "application/json",
         body: JSON.stringify({
-          ...processingIngestion,
-          display_name: "local-paper.pdf",
-          id: "00000000-0000-4000-8000-000000000090",
-          source_kind: "upload",
-          stage: "queued",
-          state: "queued",
+          headers: {
+            "content-type": "application/pdf",
+            "x-amz-checksum-sha256": "test-checksum",
+          },
+          max_bytes: 31_457_280,
+          method: "PUT",
+          next_step: "upload_pdf_then_call_ingest_paper_with_upload_id",
+          session_expires_at: "2026-08-17T02:00:00Z",
+          upload_id: "00000000-0000-4000-8000-000000000088",
+          upload_url: "http://127.0.0.1:7301/mock-paper-upload",
+          upload_url_expires_at: "2026-08-16T02:15:00Z",
         }),
       });
     }
     if (pathname.endsWith("/paper-ingestions/sources")) {
+      const body = request.postDataJSON() as {
+        source: { kind: string };
+      };
       return route.fulfill({
         status: 202,
         contentType: "application/json",
-        body: JSON.stringify(processingIngestion),
+        body: JSON.stringify(
+          body.source.kind === "upload"
+            ? {
+                ...processingIngestion,
+                display_name: "local-paper.pdf",
+                id: "00000000-0000-4000-8000-000000000090",
+                source_kind: "upload",
+                stage: "queued",
+                state: "queued",
+              }
+            : processingIngestion,
+        ),
       });
     }
     return route.fallback();
   });
+  await page.route("**/mock-paper-upload", (route) =>
+    route.fulfill({ status: 200 }),
+  );
 }
 
 test.beforeEach(async ({ page }) => {
@@ -228,7 +250,7 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   );
   await dialog.getByRole("button", { name: "Add source" }).click();
   expect((await sourceRequest).postDataJSON()).toEqual({
-    source: { kind: "doi", value: "10.48550/arXiv.1706.03762" },
+    source: { doi: "10.48550/arXiv.1706.03762", kind: "doi" },
   });
   await expect(dialog).toHaveCount(0);
   const papersTable = page.getByRole("table");
@@ -267,14 +289,42 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
     .getByRole("button", { name: "Remove remove-before-upload.pdf" })
     .click();
 
-  const uploadRequest = page.waitForRequest(
+  const prepareRequest = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       request.url().endsWith("/api/v1/paper-ingestions/uploads"),
   );
+  const uploadRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "PUT" &&
+      request.url().endsWith("/mock-paper-upload"),
+  );
+  const ingestionRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/api/v1/paper-ingestions/sources"),
+  );
   await dialog.getByRole("button", { name: "Upload 1 file" }).click();
-  const acceptedRequest = await uploadRequest;
+  const preparedRequest = await prepareRequest;
+  const preparedBody = preparedRequest.postDataJSON() as {
+    filename: string;
+    sha256: string;
+    size_bytes: number;
+  };
+  expect(preparedBody.filename).toBe("local-paper.pdf");
+  expect(preparedBody.size_bytes).toBe(Buffer.byteLength("%PDF-1.7\n%%EOF"));
+  expect(preparedBody.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const transferRequest = await uploadRequest;
+  expect(transferRequest.headers()["authorization"]).toBeUndefined();
+  expect(transferRequest.headers()["content-type"]).toBe("application/pdf");
+  const acceptedRequest = await ingestionRequest;
   expect(acceptedRequest.headers()["idempotency-key"]).toBeTruthy();
+  expect(acceptedRequest.postDataJSON()).toEqual({
+    source: {
+      kind: "upload",
+      upload_id: "00000000-0000-4000-8000-000000000088",
+    },
+  });
   await expect(dialog).toHaveCount(0);
   const papersTable = page.getByRole("table");
   await expect(papersTable.getByText("local-paper.pdf")).toBeVisible();

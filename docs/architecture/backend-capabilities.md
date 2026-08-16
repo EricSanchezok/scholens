@@ -124,11 +124,15 @@ and shared MinerU environment credential do not exist.
 Connector MCP tools retain the native names returned by their owning server;
 Scholens does not add provider prefixes or maintain aliases. Resolution is
 deterministic and rejects a later tool whose name is already reserved or exposed.
-The canonical Scholens tool `search_saved_papers` searches papers already
-accessible in the current Library, Project, or selected-paper context, while
+The canonical Scholens tool `search_scholens_knowledge` searches papers,
+passages, annotations, comments, and existing outputs already accessible in an
+explicit Library, Project, paper, or all-accessible scope, while
 Scholight's native `search_papers` searches for external literature. This naming
 keeps stored-corpus retrieval distinct from discovery without introducing a
-second connector contract.
+second connector contract. Library scope is exact personal membership and
+excludes Project-only annotations and outputs; Project scope is exactly one
+Project; paper scope includes personal context plus at most the explicitly
+selected Project; all-accessible scope spans every currently authorized source.
 
 Server encrypts integration credentials at rest with the deployment-owned
 `INTEGRATION_CREDENTIAL_ENCRYPTION_KEY`. A worker can decrypt nothing itself:
@@ -188,6 +192,54 @@ Every model-visible research workspace tool is defined once in
 description, Pydantic input model, execution kind, and application handler.
 Independent Conversation and MCP profiles select definitions from the same
 catalog; transports never copy schemas or handlers.
+
+The catalog is designed around a Project as the durable knowledge boundary for
+an external research repository. `create_project` and `get_project` return its
+immutable UUID, `scholens://` URI, Web URL, and ready-to-paste binding Markdown.
+Every later call accepts immutable IDs rather than guessing from titles.
+
+The current shared profile contains 55 tools. With all four workspace
+permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 56
+total. The local stdio bridge hides that transport primitive and supplies
+`upload_local_paper`, so it also presents 56 tools to a fully authorized key;
+narrower keys see only their authorized subset. The surface covers:
+
+| Capability                                                   | Remote tools | Boundary                                                 |
+| ------------------------------------------------------------ | -----------: | -------------------------------------------------------- |
+| Stored paper search, bounded content, citation, and download |            7 | No internet discovery                                    |
+| Projects, papers, membership, invitations, and ownership     |           19 | Resource authorization after coarse Access Key filtering |
+| Personal Library, sharing, and tags                          |           14 | Library state remains user-owned                         |
+| Known-source ingestion, upload preparation, and jobs         |            6 | Asynchronous acceptance and stable idempotency           |
+| Annotation threads and comments                              |            8 | Personal or one-Project audience                         |
+| Existing research outputs                                    |            2 | Read-only; no generation tool                            |
+
+Agent-facing catalog validation requires a human-readable title, typed output,
+behavior annotations, decision-oriented description, and a description on
+every top-level input field. Descriptions state when to use a tool, when not to
+use it, what it returns, and the intended next step. Query, command, and
+external-I/O workflow kinds remain explicit. MCP `readOnlyHint`,
+`destructiveHint`, `idempotentHint`, and `openWorldHint` reflect actual behavior
+rather than transport method names.
+
+`read`, `write`, `manage`, and `delete` Access Key permissions expose only the
+relevant subset. `manage` separates collaboration and public-sharing authority
+from ordinary content writes. Each handler still rechecks Project, paper,
+Library, annotation, job, invitation, or output access; an Access Key never
+grants a resource the user could not otherwise reach.
+
+State-changing invocations support a caller-stable idempotency key and retain a
+completed invocation result. Destructive, public-sharing, email-delivery, and
+access-control tools use a two-call confirmation protocol. The first call
+commits only a bounded impact preview and opaque token. The token is stored as
+a hash, expires after ten minutes, is single-use, and binds actor, credential,
+tool action, normalized business arguments, and a live-state fingerprint.
+
+MCP resource links make durable objects addressable without forcing an Agent
+to repeat discovery calls. Static resources expose Library and Project
+manifests; templates expose Project, paper, annotation-thread, and existing
+research-output records. Reads are re-authorized and bounded to 200,000
+characters, with a continuation-tool instruction when a representation is too
+large.
 
 ## Single conversation agent
 
@@ -369,7 +421,30 @@ user, collection, filters, sort, and limit. Paper sources enter through the disc
 retried by creating a new durable job from the persisted source, never by
 mutating the failed history row.
 
-PDF uploads and source imports share one atomic acceptance boundary. A `202`
+PDF uploads and source imports share one atomic acceptance boundary. A local or
+browser client first creates a 24-hour `PaperUploadSession` using only a plain
+filename, exact byte count, SHA-256, and optional Project. Server returns a
+15-minute S3 PUT URL signed for PDF content type and checksum. The client sends
+bytes directly to object storage; Server credentials and Scholens Access Keys
+are never attached to that request. Ingestion claims the session for five
+minutes, rechecks Project access, verifies stored size and the S3 checksum,
+downloads and hashes the bounded bytes again, and then enters the canonical
+byte-ingestion path. Success consumes the session and removes its staging
+object; validation failure makes it non-reusable, transient failure releases
+it for retry, and bucket lifecycle removes abandoned staging objects.
+
+The official local stdio connector obtains filesystem roots from the MCP host
+or explicit `--allowed-root` values. It resolves real paths, rejects ambiguous
+relative names and symlink escapes, requires a regular `.pdf` with a PDF
+signature and a maximum size of 30 MB, and sends the remote service only the
+plain filename, size, checksum, and bytes. It uses separate HTTP clients for
+authenticated MCP and unauthenticated object upload, preventing credential
+forwarding. If transfer completes but the ingestion response is uncertain, the
+bridge returns the original upload UUID and exact `ingest_paper` arguments so
+the Agent replays only that final step without changing the idempotency
+identity. No inbound port or public client IP is required.
+
+After staging, a `202`
 means the personal membership, source reference, durable job, and dispatch
 outbox record are committed and the ingestion is already visible through the
 Papers list union. The response is the canonical ingestion projection rather

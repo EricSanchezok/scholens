@@ -1,9 +1,15 @@
 """HTTP adapter for documents held by Projects."""
 
+from typing import Annotated
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.execution import get_application_executor
+from app.modules.action_confirmations.application import confirmation_digest
+from app.modules.action_confirmations.contracts import (
+    ActionImpact,
+    ConfirmationChallenge,
+)
 from app.modules.projects.application.contracts import (
     AddPaperToProjectRequest,
     CollectPaperFromProjectRequest,
@@ -17,13 +23,14 @@ from app.modules.projects.application.contracts import (
     ProjectPendingUploadsResponse,
 )
 from app.modules.papers.application.contracts.documents import LibraryOutputSort
+from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ResearchItemKind
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 
 project_papers_router = APIRouter()
 paper_projects_router = APIRouter()
@@ -200,20 +207,102 @@ def get_projects_from_document_id(
 def remove_paper_from_project(
     project_id: UUID,
     document_id: UUID,
-    confirm_delete_annotations: bool = False,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
     operation: OperationContext = Depends(get_required_operation),
+    confirmation_token: Annotated[
+        str | None,
+        Header(
+            alias="X-Scholens-Confirmation-Token",
+            min_length=32,
+            max_length=256,
+            description=(
+                "Short-lived token returned by the first removal attempt. Retry with "
+                "unchanged path parameters only after the user approves its impact."
+            ),
+        ),
+    ] = None,
 ) -> Response:
-    executor.command(
-        lambda capabilities: capabilities.projects.remove_document(
+    def execute(
+        capabilities: ApplicationCapabilities,
+    ) -> tuple[ConfirmationChallenge, int, int] | None:
+        project = capabilities.projects.get(
+            actor=current_user,
+            project_id=project_id,
+        )
+        items = capabilities.research_items.list_document(
+            actor=current_user,
+            document_id=document_id,
+            project_id=project_id,
+        ).items
+        threads = [
+            item
+            for item in items
+            if item.kind is ResearchItemKind.ANNOTATION_THREAD
+            and getattr(item.audience, "project_id", None) == project_id
+        ]
+        comment_count = sum(
+            len(item.annotation_thread.comments)
+            for item in threads
+            if item.annotation_thread is not None
+        )
+        arguments_hash = confirmation_digest(
+            {"project_id": str(project_id), "document_id": str(document_id)}
+        )
+        state = {"project": project, "threads": threads}
+        state_fingerprint = confirmation_digest(state)
+        if confirmation_token is None:
+            return (
+                capabilities.action_confirmations.issue(
+                    actor=current_user,
+                    operation=operation,
+                    action="remove_paper_from_project",
+                    arguments_hash=arguments_hash,
+                    state_fingerprint=state_fingerprint,
+                    impact=ActionImpact(
+                        title="Remove paper from Project",
+                        summary=f"Remove this paper from '{project.title}'.",
+                        consequences=[
+                            f"Delete {len(threads)} Project annotation threads and "
+                            f"{comment_count} comments anchored to this paper."
+                        ],
+                        affected_resources=[
+                            f"project:{project_id}",
+                            f"document:{document_id}",
+                        ],
+                    ),
+                ),
+                len(threads),
+                comment_count,
+            )
+        capabilities.action_confirmations.consume(
+            actor=current_user,
+            operation=operation,
+            token=confirmation_token,
+            action="remove_paper_from_project",
+            arguments_hash=arguments_hash,
+            state_fingerprint=state_fingerprint,
+        )
+        capabilities.projects.remove_document(
             actor=current_user,
             operation=operation,
             project_id=project_id,
             document_id=document_id,
-            confirm_delete_annotations=confirm_delete_annotations,
         )
-    )
+        return None
+
+    preview = executor.command(execute)
+    if preview is not None:
+        challenge, thread_count, comment_count = preview
+        details = challenge.model_dump(mode="json")
+        details["thread_count"] = thread_count
+        details["comment_count"] = comment_count
+        raise AppError(
+            code="confirmation_required",
+            message="User confirmation is required before removing this Project paper",
+            kind=FailureKind.CONFLICT,
+            details=details,
+        )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

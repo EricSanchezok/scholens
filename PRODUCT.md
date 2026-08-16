@@ -66,6 +66,35 @@ the complete selected suffix, sources, worklog, and authorized context for that
 alternative. The interface may present one path at a time, but refresh and
 other conversation surfaces must agree on which path is active.
 
+## Projects are durable knowledge boundaries for external research agents
+
+A Scholens Project may be the paper knowledge base for research that lasts
+months in an external Agent workspace or Git repository. The repository should
+bind to the Project by immutable UUID and `scholens://` resource URI in durable
+guidance such as `AGENTS.md` or `README.md`; a mutable title is useful context,
+not identity. Returning that ready-to-paste binding is part of creating or
+reading a Project, not a convention every Agent must reinvent.
+
+The Scholens MCP surface exists to ingest already-known papers and manage the
+resulting knowledge: Projects, Library membership, paper content, annotations,
+comments, collaborators, jobs, and existing research outputs. It deliberately
+does not discover literature on the internet or generate new research outputs.
+External Agents remain free to choose their own search and reasoning tools,
+while Scholens remains the durable, permission-aware system of record. The
+in-product Agent uses the same capability definitions so the two surfaces do
+not develop conflicting semantics.
+
+Known DOI, arXiv, and HTTP(S) sources can be imported directly. A local Agent
+may also upload a PDF from an explicitly exposed filesystem root through the
+official local bridge; the local path never leaves the computer. After
+ingestion, the same paper can be searched and cited by an Agent or opened in
+the Scholens Web Reader for deep human reading and collaboration.
+
+Agent autonomy does not remove user control. Public sharing, invitations,
+access changes, and destructive actions require a bounded impact preview and a
+short-lived confirmation tied to the actor, credential, exact arguments, and
+current resource state. A changed or replayed confirmation must fail safely.
+
 ## Plans should support a complete research workflow
 
 The promotional Basic plan is intentionally useful enough for a researcher to
@@ -73,10 +102,10 @@ build a real working library instead of merely evaluating an upload screen.
 Researcher is the high-comfort plan used by paying customers and internal team
 members. Current product limits are:
 
-| Plan | Papers | Storage | Projects | Papers per Project | Weekly Token Credits | Zotero auto-sync |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Basic | 300 | 5 GiB | 10 | 300 | 30,000,000 | No |
-| Researcher | 5,000 | 100 GiB | 100 | 5,000 | 300,000,000 | Yes |
+| Plan       | Papers | Storage | Projects | Papers per Project | Weekly Token Credits | Zotero auto-sync |
+| ---------- | -----: | ------: | -------: | -----------------: | -------------------: | ---------------- |
+| Basic      |    300 |   5 GiB |       10 |                300 |           30,000,000 | No               |
+| Researcher |  5,000 | 100 GiB |      100 |              5,000 |          300,000,000 | Yes              |
 
 Paper count and storage are account-level unique-document quantities. A paper
 in a personal Library and any number of Projects owned by the same person is

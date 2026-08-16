@@ -18,6 +18,14 @@ class LibraryPaperCollection(BaseModel):
     kind: Literal["library"] = "library"
 
 
+class PersonalLibraryPaperCollection(BaseModel):
+    """Only documents explicitly saved in the actor's personal Library."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["personal_library"] = "personal_library"
+
+
 class SelectedPaperCollection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -40,7 +48,7 @@ class SelectedPaperCollection(BaseModel):
 
 
 PaperCollection = Annotated[
-    LibraryPaperCollection | SelectedPaperCollection,
+    LibraryPaperCollection | PersonalLibraryPaperCollection | SelectedPaperCollection,
     Field(discriminator="kind"),
 ]
 
@@ -53,8 +61,14 @@ class PaperSearchSort(StrEnum):
 class PaperSearchFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    published_from: datetime | None = None
-    published_to: datetime | None = None
+    published_from: datetime | None = Field(
+        default=None,
+        description="Optional inclusive earliest publication timestamp.",
+    )
+    published_to: datetime | None = Field(
+        default=None,
+        description="Optional inclusive latest publication timestamp.",
+    )
 
     @model_validator(mode="after")
     def validate_date_range(self) -> PaperSearchFilters:

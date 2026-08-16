@@ -56,6 +56,7 @@ from app.modules.papers.infrastructure.models import (
     PaperTag,
     UploadReservation,
 )
+from app.modules.papers.infrastructure.upload_sessions import PaperUploadSession
 from app.modules.billing.infrastructure.usage_models import (
     TokenUsageEvent,
     TokenWeeklyUsage,
@@ -81,6 +82,7 @@ from app.modules.billing.infrastructure.models import (
     Subscription,
 )
 from app.database.models.tool_invocation import ToolInvocation
+from app.database.models.action_confirmation import ActionConfirmation
 from app.modules.translations.infrastructure.models import (
     TranslationPreference,
     TranslationResult,
@@ -93,6 +95,7 @@ from app.modules.reflows.infrastructure.models import (
 __all__ = [
     "AuthUser",
     "AccessKey",
+    "ActionConfirmation",
     "AnnotationColor",
     "AnnotationThreadStatus",
     "AccountPlanGrant",
@@ -125,6 +128,7 @@ __all__ = [
     "DocumentReflowBlock",
     "PaperStatus",
     "PaperTag",
+    "PaperUploadSession",
     "UploadReservation",
     "Project",
     "ProjectCollaborator",

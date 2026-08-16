@@ -126,8 +126,7 @@ async function mockProjects(page: Page) {
       });
     }
     if (request.method() === "DELETE" && path.includes("/papers/")) {
-      const confirmed =
-        url.searchParams.get("confirm_delete_annotations") === "true";
+      const confirmed = request.headers()["x-scholens-confirmation-token"];
       if (confirmed) {
         paperRemoved = true;
         return route.fulfill({ status: 204 });
@@ -136,8 +135,13 @@ async function mockProjects(page: Page) {
         status: 409,
         contentType: "application/json",
         body: JSON.stringify({
-          code: "project_document_has_annotations",
-          details: { comment_count: 5, thread_count: 2 },
+          code: "confirmation_required",
+          details: {
+            comment_count: 5,
+            confirmation_token:
+              "test-confirmation-token-with-at-least-32-characters",
+            thread_count: 2,
+          },
           kind: "conflict",
           message: "Confirm annotation deletion",
           retryable: false,
@@ -277,7 +281,8 @@ test("supports the Projects critical journey", async ({ page }) => {
     return (
       request.method() === "DELETE" &&
       url.pathname.includes("/papers/") &&
-      url.searchParams.get("confirm_delete_annotations") === "true"
+      request.headers()["x-scholens-confirmation-token"] ===
+        "test-confirmation-token-with-at-least-32-characters"
     );
   });
   await impactDialog

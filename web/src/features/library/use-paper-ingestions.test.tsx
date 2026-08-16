@@ -137,6 +137,7 @@ describe("usePaperIngestions", () => {
     await waitFor(() => expect(api.uploadPaperFile).toHaveBeenCalledTimes(1));
     expect(api.uploadPaperFile).toHaveBeenCalledWith(
       first.file,
+      first.contentDigest,
       expect.objectContaining({ idempotencyKey: first.idempotencyKey }),
     );
   });
@@ -181,6 +182,7 @@ describe("usePaperIngestions", () => {
     api.uploadPaperFile.mockImplementation(
       (
         file: File,
+        _contentDigest: string,
         options: { idempotencyKey: string; signal: AbortSignal },
       ) => {
         if (!first) return Promise.resolve(accepted("server-race", file.name));
@@ -202,8 +204,8 @@ describe("usePaperIngestions", () => {
 
     expect(result.current.rows).toEqual([]);
     await waitFor(() => expect(api.uploadPaperFile).toHaveBeenCalledTimes(2));
-    expect(api.uploadPaperFile.mock.calls[0]?.[1].idempotencyKey).toBe("key-1");
-    expect(api.uploadPaperFile.mock.calls[1]?.[1].idempotencyKey).toBe("key-1");
+    expect(api.uploadPaperFile.mock.calls[0]?.[2].idempotencyKey).toBe("key-1");
+    expect(api.uploadPaperFile.mock.calls[1]?.[2].idempotencyKey).toBe("key-1");
     await waitFor(() =>
       expect(api.cancelPaperIngestion).toHaveBeenCalledWith(
         "server-race",

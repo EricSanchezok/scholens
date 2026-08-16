@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterable
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
@@ -30,6 +31,15 @@ S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME")
 DOCUMENT_PREFIX = "documents"
 RESEARCH_PREFIX = "research"
 DEFAULT_SIGNED_URL_TTL_SECONDS = 900
+STAGING_UPLOAD_PREFIX = "uploads"
+
+
+@dataclass(frozen=True, slots=True)
+class StagingObjectMetadata:
+    size_bytes: int
+    checksum_sha256: str | None
+    etag: str
+    version_id: str | None
 
 
 def _s3_addressing_style() -> Literal["auto", "virtual", "path"]:
@@ -214,6 +224,108 @@ class S3Service:
         if content_length is None:
             raise RuntimeError("s3_content_length_missing")
         return int(content_length)
+
+    def staging_object_metadata(self, object_key: str) -> StagingObjectMetadata:
+        """Return size, checksum, and immutable identity for a staged upload."""
+        try:
+            response = self.s3_client.head_object(
+                Bucket=self._require_bucket(),
+                Key=object_key,
+                ChecksumMode="ENABLED",
+            )
+        except ClientError as exc:
+            error_code = str(exc.response.get("Error", {}).get("Code", ""))
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                raise FileNotFoundError("staged_upload_not_found") from exc
+            logger.exception("s3.staging_object.head_failed")
+            raise RuntimeError("s3_head_failed") from exc
+        size = response.get("ContentLength")
+        if size is None:
+            raise RuntimeError("s3_content_length_missing")
+        checksum = response.get("ChecksumSHA256")
+        etag = response.get("ETag")
+        if not isinstance(etag, str) or not etag:
+            raise RuntimeError("s3_staging_etag_missing")
+        version_id = response.get("VersionId")
+        return StagingObjectMetadata(
+            size_bytes=int(size),
+            checksum_sha256=str(checksum) if checksum is not None else None,
+            etag=etag,
+            version_id=str(version_id) if version_id is not None else None,
+        )
+
+    def download_staging_bytes(
+        self,
+        object_key: str,
+        *,
+        metadata: StagingObjectMetadata,
+        max_bytes: int,
+    ) -> bytes:
+        """Read the exact HEAD-validated object version through a hard byte limit."""
+        try:
+            if metadata.version_id is not None:
+                response = self.s3_client.get_object(
+                    Bucket=self._require_bucket(),
+                    Key=object_key,
+                    IfMatch=metadata.etag,
+                    VersionId=metadata.version_id,
+                )
+            else:
+                response = self.s3_client.get_object(
+                    Bucket=self._require_bucket(),
+                    Key=object_key,
+                    IfMatch=metadata.etag,
+                )
+            body = response.get("Body")
+            if body is None:
+                raise RuntimeError("s3_object_body_missing")
+            data = body.read(max_bytes + 1)
+            if not isinstance(data, bytes):
+                raise TypeError("s3_object_body_invalid")
+            if len(data) > max_bytes:
+                raise RuntimeError("s3_staging_object_too_large")
+            return data
+        except ClientError as exc:
+            logger.exception("s3.staging_object.download_failed")
+            raise RuntimeError("s3_staging_download_failed") from exc
+
+    def sign_put(
+        self,
+        *,
+        object_key: str,
+        size_bytes: int,
+        checksum_sha256_base64: str,
+        expires_in_seconds: int,
+    ) -> tuple[str, dict[str, str]]:
+        """Sign a checksummed staged PDF PUT without exposing AWS credentials.
+
+        S3 verifies the signed checksum during transfer. The declared byte length is
+        verified from object metadata before ingestion because browser PUT requests
+        cannot reliably set a signed Content-Length header.
+        """
+        if not object_key.startswith(f"{STAGING_UPLOAD_PREFIX}/"):
+            raise ValueError("staging_upload_key_required")
+        if size_bytes <= 0:
+            raise ValueError("staging_upload_size_invalid")
+        headers = {
+            "content-type": "application/pdf",
+            "x-amz-checksum-sha256": checksum_sha256_base64,
+        }
+        try:
+            url = self.s3_client.generate_presigned_url(
+                "put_object",
+                Params={
+                    "Bucket": self._require_bucket(),
+                    "Key": object_key,
+                    "ContentType": headers["content-type"],
+                    "ChecksumSHA256": checksum_sha256_base64,
+                },
+                ExpiresIn=expires_in_seconds,
+            )
+        except ClientError as exc:
+            logger.exception("s3.staging_object.sign_failed")
+            raise RuntimeError("s3_signing_failed") from exc
+        return str(url), headers
 
     def generate_presigned_url(
         self,

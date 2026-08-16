@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "scholens-mcp-connector"
+version = "0.1.0"
+description = "Local stdio bridge for Scholens MCP with secure PDF path upload"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28,<1",
+  "mcp>=1.28,<2",
+  "pydantic>=2.10,<3",
+]
+
+[project.scripts]
+scholens-mcp = "scholens_mcp_connector.cli:main"
+
+[dependency-groups]
+dev = ["mypy>=1.14", "pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.5"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scholens_mcp_connector"]
+
+[tool.mypy]
+strict = true
+
+[tool.ruff]
+line-length = 88

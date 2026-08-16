@@ -23,14 +23,14 @@ add automatic port fallback or borrow a port from Account Center (`7100-7199`)
 or Scholight (`7200-7299`). Container-internal production ports are not part of
 this host-port contract.
 
-| Service           | Host port | Start                                          |
-| ----------------- | --------- | ---------------------------------------------- |
-| Web (canonical)   | 7300      | `pnpm dev` in `web/`                           |
+| Service           | Host port | Start                                                   |
+| ----------------- | --------- | ------------------------------------------------------- |
+| Web (canonical)   | 7300      | `pnpm dev` in `web/`                                    |
 | Server API        | 7301      | `uv run --frozen --no-sync scholens serve` in `server/` |
-| Jobs API          | 7302      | `uv run --frozen --no-sync start` in `jobs/`   |
-| Legacy client     | 7303      | `corepack yarn dev` in `client/`               |
-| Storybook         | 7306      | `pnpm storybook` in `web/`                     |
-| Flower (optional) | 7307      | `./scripts/start_flower.sh`                    |
+| Jobs API          | 7302      | `uv run --frozen --no-sync start` in `jobs/`            |
+| Legacy client     | 7303      | `corepack yarn dev` in `client/`                        |
+| Storybook         | 7306      | `pnpm storybook` in `web/`                              |
+| Flower (optional) | 7307      | `./scripts/start_flower.sh`                             |
 
 Shared local infrastructure uses ports outside all product blocks:
 
@@ -66,13 +66,13 @@ touch server/.env jobs/.env web/.env.local client/.env.local
 The root file is a committed catalog, not a runtime file. Each process reads
 the private file in its own working directory:
 
-| Runtime file        | Owned configuration                                     |
-| ------------------- | ------------------------------------------------------- |
-| `server/.env`       | Database, sanchezcloud-identity, MOSS, API integrations |
-| `jobs/.env`         | MinerU, background processing, webhook delivery         |
+| Runtime file        | Owned configuration                                        |
+| ------------------- | ---------------------------------------------------------- |
+| `server/.env`       | Database, sanchezcloud-identity, MOSS, API integrations    |
+| `jobs/.env`         | MinerU, background processing, webhook delivery            |
 | Both Python files   | S3, AI profiles, broker/cache URLs, webhook signing secret |
-| `web/.env.local`    | canonical `NEXT_PUBLIC_*` browser configuration         |
-| `client/.env.local` | legacy comparison client configuration                  |
+| `web/.env.local`    | canonical `NEXT_PUBLIC_*` browser configuration            |
+| `client/.env.local` | legacy comparison client configuration                     |
 
 Do not copy Python-service credentials into `client/.env.local`. Next.js only
 exposes `NEXT_PUBLIC_*` values to browser code, but keeping secrets out of the
@@ -124,10 +124,25 @@ loopback API port, set the ignored Scholens `server/.env` value to
 `SCHOLIGHT_MCP_URL=http://127.0.0.1:7201/mcp`, and configure the same delegation
 secret in both services. Keep each product on its own schema in the shared local
 PostgreSQL database. A complete smoke test must confirm that the Conversation
-agent sees both Scholens `search_saved_papers` and Scholight `search_papers`, can
+agent sees both Scholens `search_scholens_knowledge` and Scholight `search_papers`, can
 invoke the latter through Scholight, and reports no `connector_tool_name_conflict`.
 Do not commit local secrets or replace the production runtime endpoint while
 performing this check.
+
+Inbound MCP is a separate direction: external Agents authenticate to the
+Server's `/mcp` endpoint with a Scholens Access Key. To test local PDF paths,
+provision the official bridge explicitly and run its isolated gate:
+
+```bash
+uv sync --directory mcp-connector
+./scripts/run-gates.sh mcp-connector
+```
+
+Configure the host as documented in
+[`mcp-connector/README.md`](./mcp-connector/README.md). Prefer
+`SCHOLENS_ACCESS_KEY` in the host's secret environment and expose only the
+research repository as an MCP root (or `--allowed-root`). The bridge is stdio,
+opens no inbound port, and works on a computer without a public IP.
 
 **Jobs tip:** set `ZOTERO_SYNC_INTERVAL_SECONDS=60` in `jobs/.env` when testing Celery Beat locally.
 
@@ -219,15 +234,15 @@ Storybook, and Flower are opt-in profiles.
 
 Use separate terminals:
 
-| Profile | Directory       | Command                                                                      |
-| ------- | --------------- | ---------------------------------------------------------------------------- |
-| Infra   | repository root | `docker compose -f jobs/compose.local.yaml up -d redis` — AI limits on 56379 |
+| Profile | Directory       | Command                                                                          |
+| ------- | --------------- | -------------------------------------------------------------------------------- |
+| Infra   | repository root | `docker compose -f jobs/compose.local.yaml up -d redis` — AI limits on 56379     |
 | Default | `server/`       | `uv run --frozen --no-sync scholens serve` — validate local PostgreSQL; API 7301 |
-| Default | `web/`          | `pnpm dev` — canonical web on 7300                                           |
-| Jobs    | `jobs/`         | `uv run --frozen --no-sync start` — broker, worker, Beat, and API 7302       |
-| Legacy  | `client/`       | `corepack yarn dev` — comparison UI on 7303                                  |
-| UI      | `web/`          | `pnpm storybook` — isolated components on 7306, no Server required           |
-| Observe | `jobs/`         | `./scripts/start_flower.sh` — Flower on 7307 after RabbitMQ is available     |
+| Default | `web/`          | `pnpm dev` — canonical web on 7300                                               |
+| Jobs    | `jobs/`         | `uv run --frozen --no-sync start` — broker, worker, Beat, and API 7302           |
+| Legacy  | `client/`       | `corepack yarn dev` — comparison UI on 7303                                      |
+| UI      | `web/`          | `pnpm storybook` — isolated components on 7306, no Server required               |
+| Observe | `jobs/`         | `./scripts/start_flower.sh` — Flower on 7307 after RabbitMQ is available         |
 
 The Web development server writes its disposable Next.js output to
 `web/.next-dev/`; production verification writes to `web/.next/`. Keeping the

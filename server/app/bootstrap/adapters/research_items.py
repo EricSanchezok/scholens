@@ -40,6 +40,30 @@ class SqlAlchemyResearchItemGateway:
             raise TypeError("expected ResearchItem")
         return research_repository.serialize(self._db, item=item, user_id=user_id)
 
+    def get_item(self, *, user_id: int, item_id: UUID) -> ResearchItemResponse:
+        return self._serialize(
+            item=research_repository.require_visible(
+                self._db,
+                item_id=item_id,
+                user_id=user_id,
+            ),
+            user_id=user_id,
+        )
+
+    def get_comment(
+        self, *, user_id: int, comment_id: UUID
+    ) -> AnnotationCommentResponse:
+        comment = research_repository.require_owned_comment(
+            self._db,
+            comment_id=comment_id,
+            user_id=user_id,
+        )
+        return research_repository.serialize_comment(
+            comment,
+            user_id=user_id,
+            has_audience_access=True,
+        )
+
     def list_document(
         self,
         *,

@@ -1,7 +1,10 @@
-import type { components } from "@/lib/api/generated/schema";
 import { apiClient } from "@/lib/api";
+import { ApiError } from "@/lib/api/errors";
 
-type PaperSource = components["schemas"]["UploadFromSourceRequest"]["source"];
+export type KnownPaperSource =
+  | { kind: "doi"; value: string }
+  | { kind: "arxiv"; value: string }
+  | { kind: "url"; value: string };
 
 type IngestionRequestOptions = {
   idempotencyKey: string;
@@ -10,29 +13,60 @@ type IngestionRequestOptions = {
 
 export async function uploadPaperFile(
   file: File,
+  contentDigest: string,
   { idempotencyKey, signal }: IngestionRequestOptions,
 ) {
-  const { data } = await apiClient.POST("/api/v1/paper-ingestions/uploads", {
-    body: { file: file as unknown as string },
-    bodySerializer: () => {
-      const form = new FormData();
-      form.append("file", file);
-      return form;
+  const { data: prepared } = await apiClient.POST(
+    "/api/v1/paper-ingestions/uploads",
+    {
+      body: {
+        filename: file.name,
+        sha256: contentDigest,
+        size_bytes: file.size,
+      },
+      signal,
     },
-    headers: { "Idempotency-Key": idempotencyKey },
-    params: { query: {} },
+  );
+  if (!prepared) throw new Error("Paper upload preparation was empty");
+  const transferred = await fetch(prepared.upload_url, {
+    body: file,
+    headers: prepared.headers,
+    method: prepared.method,
     signal,
   });
-  if (!data) throw new Error("Paper upload response was empty");
-  return data;
+  if (!transferred.ok) {
+    throw new ApiError(
+      "The PDF could not be transferred to secure staging",
+      transferred.status,
+      "paper_upload_transfer_failed",
+    );
+  }
+  const { data: ingestion } = await apiClient.POST(
+    "/api/v1/paper-ingestions/sources",
+    {
+      body: {
+        source: { kind: "upload", upload_id: prepared.upload_id },
+      },
+      headers: { "Idempotency-Key": idempotencyKey },
+      signal,
+    },
+  );
+  if (!ingestion) throw new Error("Paper ingestion response was empty");
+  return ingestion;
 }
 
 export async function uploadPaperSource(
-  source: PaperSource,
+  source: KnownPaperSource,
   { idempotencyKey, signal }: IngestionRequestOptions,
 ) {
+  const normalized =
+    source.kind === "doi"
+      ? { kind: source.kind, doi: source.value }
+      : source.kind === "arxiv"
+        ? { kind: source.kind, arxiv_id: source.value }
+        : { kind: source.kind, url: source.value };
   const { data } = await apiClient.POST("/api/v1/paper-ingestions/sources", {
-    body: { source },
+    body: { source: normalized },
     headers: { "Idempotency-Key": idempotencyKey },
     signal,
   });

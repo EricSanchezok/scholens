@@ -50,7 +50,7 @@ import {
   SettingsStatus,
 } from "./settings-layout";
 
-const permissions = ["read", "write", "delete"] as const;
+const permissions = ["read", "write", "manage", "delete"] as const;
 const accessKeySchema = z.object({
   name: z.string().trim().min(1).max(120),
   expiration: z.enum(["7_days", "30_days", "90_days", "never"]),

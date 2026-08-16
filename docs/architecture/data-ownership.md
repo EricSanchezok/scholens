@@ -9,7 +9,7 @@ This document defines the Scholens-specific database and deployment contract.
 | Owner                   | Responsibilities                                                                                                                                                                                | PostgreSQL ownership                                                                                                            | Explicitly excluded                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `sanchezcloud-identity` | Email identity, passwords, verification, global account status, lockout, public Account ID, shared avatar references, connected clients, security events, audience tokens, and refresh families | `auth.users`, `auth.refresh_tokens`, `auth.user_clients`, `auth.user_avatars`, `auth.security_events`, `auth.schema_migrations` | Product roles, blocks, subscriptions, quotas, usage, documents, projects |
-| Scholens                | Documents, projects, collaboration, product profile/admin/block state, paid subscriptions, product plan grants, quota overrides, integration connections, and usage                              | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
+| Scholens                | Documents, projects, collaboration, product profile/admin/block state, paid subscriptions, product plan grants, quota overrides, integration connections, and usage                             | `scholens.*` including `scholens.schema_migrations`                                                                             | Identity migrations, Scholight state, and Scholight Zilliz collections   |
 
 Both schemas share the `sanchezcloud` database but have independent owners and migration
 ledgers. `public` contains no application tables. Scholens rows may reference the internal
@@ -110,6 +110,21 @@ It never deletes Project-audience threads or another user's annotations.
 against that owner; deletion cascades only its Library Paper assignments.
 Library Paper tag edits are exact-set replacements, so clearing the final tag
 does not require a separate compatibility endpoint.
+
+`PaperUploadSession` owns temporary direct-upload intent before a Document
+exists: actor, optional Project, plain filename, declared size and SHA-256,
+private staging object key, expiry, and ingestion lease state. It never stores
+a client filesystem path. A consumed session cannot be reused, and abandoned
+objects are also bounded by the content bucket lifecycle. The canonical
+Document and Library/Project memberships remain owned by the normal ingestion
+transaction; staging is not a second paper record.
+
+`ActionConfirmation` owns only short-lived authorization to perform one risky
+action. It stores a token hash, actor and credential binding, action and
+argument digests, live-state fingerprint, bounded impact, expiry, and consumed
+time. It does not own the target Project, paper, membership, share, invitation,
+job, or annotation. Target services remain authoritative and are re-read before
+the confirmation is consumed.
 
 Library Outputs do not introduce another persistence model. They are a
 permission-filtered read projection of Scholens-owned `ResearchItem` rows and

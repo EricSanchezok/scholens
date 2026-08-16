@@ -6,6 +6,7 @@ from functools import cached_property
 
 from app.bootstrap.container import (
     build_access_keys,
+    build_action_confirmations,
     build_integrations,
     build_billing,
     build_entitlement_admin,
@@ -23,6 +24,7 @@ from app.bootstrap.container import (
     build_paper_discovery,
     build_paper_download,
     build_paper_ingestion,
+    build_paper_upload_sessions,
     build_paper_library,
     build_passage_maintenance,
     build_paper_search,
@@ -41,6 +43,7 @@ from app.bootstrap.adapters.tool_invocations import SqlAlchemyToolInvocationGate
 from app.modules.billing.application.billing import Billing
 from app.modules.billing.application.entitlement_admin import EntitlementAdmin
 from app.modules.access_keys.application.access_keys import AccessKeys
+from app.modules.action_confirmations.application import ActionConfirmations
 from app.modules.integrations.connections.application import Integrations
 from app.modules.conversations.application.chat import ConversationChatData
 from app.modules.conversations.application.conversations import Conversations
@@ -60,6 +63,7 @@ from app.modules.papers.application.details import GetPaperDetails
 from app.modules.papers.application.discovery import DiscoverPapers
 from app.modules.papers.application.downloads import GetPaperDownload
 from app.modules.papers.application.ingestion import IngestPaper
+from app.modules.papers.application.upload_sessions import PaperUploadSessions
 from app.modules.papers.application.library import PaperLibrary
 from app.modules.papers.application.maintenance import PassageMaintenance
 from app.modules.papers.application.search import (
@@ -106,6 +110,10 @@ class ApplicationCapabilities:
             cursor_secret=self._settings.paper_search_cursor_secret,
             journal=self._journal,
         )
+
+    @cached_property
+    def action_confirmations(self) -> ActionConfirmations:
+        return build_action_confirmations(db=self._session)
 
     @cached_property
     def integrations(self) -> Integrations:
@@ -159,6 +167,10 @@ class ApplicationCapabilities:
     @cached_property
     def paper_ingestion(self) -> IngestPaper:
         return build_paper_ingestion(db=self._session, journal=self._journal)
+
+    @cached_property
+    def paper_uploads(self) -> PaperUploadSessions:
+        return build_paper_upload_sessions(db=self._session)
 
     @cached_property
     def passage_maintenance(self) -> PassageMaintenance:

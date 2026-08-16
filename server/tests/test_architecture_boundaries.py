@@ -436,7 +436,6 @@ def test_public_openapi_surface_matches_reviewed_v1_contract() -> None:
 def test_mutation_status_and_idempotency_contracts_are_stable() -> None:
     paths = app.openapi()["paths"]
     async_mutations = {
-        "/api/v1/paper-ingestions/uploads",
         "/api/v1/paper-ingestions/sources",
         "/api/v1/paper-ingestions/{job_id}/retries",
         "/api/v1/integrations/zotero/imports",
@@ -456,6 +455,7 @@ def test_mutation_status_and_idempotency_contracts_are_stable() -> None:
         "/api/v1/projects",
         "/api/v1/projects/{project_id}/papers",
         "/api/v1/projects/{project_id}/invitations",
+        "/api/v1/paper-ingestions/uploads",
     }
     empty_deletions = {
         "/api/v1/conversations/{conversation_id}",

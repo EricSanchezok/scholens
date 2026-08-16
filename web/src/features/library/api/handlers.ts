@@ -45,7 +45,26 @@ const populatedHandlers = [
     }),
   ),
   http.post(`${api}/paper-ingestions/uploads`, () =>
-    HttpResponse.json(processingIngestion, { status: 202 }),
+    HttpResponse.json(
+      {
+        headers: {
+          "content-type": "application/pdf",
+          "x-amz-checksum-sha256": "test-checksum",
+        },
+        max_bytes: 31_457_280,
+        method: "PUT",
+        next_step: "upload_pdf_then_call_ingest_paper_with_upload_id",
+        session_expires_at: "2026-08-17T02:00:00Z",
+        upload_id: "00000000-0000-4000-8000-000000000088",
+        upload_url: "http://127.0.0.1:7301/mock-paper-upload",
+        upload_url_expires_at: "2026-08-16T02:15:00Z",
+      },
+      { status: 201 },
+    ),
+  ),
+  http.put(
+    `${api.replace("/api/v1", "")}/mock-paper-upload`,
+    () => new HttpResponse(null, { status: 200 }),
   ),
   http.post(`${api}/paper-ingestions/sources`, () =>
     HttpResponse.json(processingIngestion, { status: 202 }),

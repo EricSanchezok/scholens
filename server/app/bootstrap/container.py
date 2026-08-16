@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from functools import partial
 from typing import Literal
+from uuid import UUID
 
 from app.modules.papers.application.search import PaperSearchAccessPort, PaperSearchPort
 from app.modules.papers.application.collection_access import PaperCollectionAccessPort
@@ -21,6 +22,8 @@ from app.modules.papers.application.downloads import GetPaperDownload
 from app.modules.papers.infrastructure.downloads import S3PaperDownloadSigner
 from app.helpers.s3 import DEFAULT_SIGNED_URL_TTL_SECONDS
 from app.modules.papers.application.ingestion import IngestPaper
+from app.modules.papers.application.upload_sessions import PaperUploadSessions
+from app.modules.papers.infrastructure.upload_sessions import SqlPaperUploadGateway
 from app.bootstrap.adapters.paper_ingestion import (
     DefaultPaperSourceResolver,
     DefaultPaperIngestionLimits,
@@ -160,10 +163,19 @@ from app.bootstrap.adapters.billing_capacity import (
     BillingZoteroImportCapacity,
 )
 from sqlalchemy.orm import Session
+from app.modules.action_confirmations.application import ActionConfirmations
+from app.modules.action_confirmations.infrastructure import ActionConfirmationRepository
 
 optional_identity_user_dependency = (
     sanchezcloud_identity_adapter.get_optional_identity_user
 )
+
+
+def build_action_confirmations(*, db: Session) -> ActionConfirmations:
+    return ActionConfirmations(
+        repository=ActionConfirmationRepository(db),
+        clock=SystemClock(),
+    )
 
 
 def build_paper_search(
@@ -218,6 +230,28 @@ def build_paper_ingestion(*, db: Session, journal: OperationJournal) -> IngestPa
         limits=DefaultPaperIngestionLimits(),
         gateway=SqlPaperIngestionGateway(db),
         journal=journal,
+    )
+
+
+def build_paper_upload_sessions(*, db: Session) -> PaperUploadSessions:
+    from app.helpers.s3 import s3_service
+    from app.modules.projects.infrastructure.access import require_project_permission
+
+    def require_project_upload(project_id: UUID, user_id: int) -> None:
+        require_project_permission(
+            db,
+            project_id=project_id,
+            user_id=user_id,
+            permission="manage_papers",
+        )
+
+    return PaperUploadSessions(
+        gateway=SqlPaperUploadGateway(
+            db,
+            require_project_upload=require_project_upload,
+        ),
+        store=s3_service,
+        clock=SystemClock(),
     )
 
 

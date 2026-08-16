@@ -9,6 +9,7 @@ import {
   cancelPaperIngestion,
   libraryKeys,
   retryPaperIngestion,
+  type KnownPaperSource,
   uploadPaperFile,
   uploadPaperSource,
 } from "./api";
@@ -16,7 +17,7 @@ import {
 type Ingestion = components["schemas"]["LibraryPaperIngestionResponse"];
 type LibraryEntry =
   components["schemas"]["LibraryPaperListResponse"]["items"][number];
-type Source = components["schemas"]["UploadFromSourceRequest"]["source"];
+type Source = KnownPaperSource;
 
 export type PreparedPaperUpload = {
   contentDigest: string;
@@ -51,6 +52,7 @@ export type PaperIngestionRow = {
 };
 
 type LocalUpload = PaperIngestionRow & {
+  contentDigest: string;
   file: File;
   idempotencyKey: string;
 };
@@ -137,7 +139,7 @@ export function usePaperIngestions(
         CANCELLATION_RECONCILIATION_TIMEOUT_MS,
       );
       try {
-        const accepted = await uploadPaperFile(item.file, {
+        const accepted = await uploadPaperFile(item.file, item.contentDigest, {
           idempotencyKey: item.idempotencyKey,
           signal: controller.signal,
         });
@@ -223,7 +225,7 @@ export function usePaperIngestions(
         ),
       );
       try {
-        const accepted = await uploadPaperFile(item.file, {
+        const accepted = await uploadPaperFile(item.file, item.contentDigest, {
           idempotencyKey: item.idempotencyKey,
           signal: controller.signal,
         });
@@ -273,6 +275,7 @@ export function usePaperIngestions(
       const createdAt = new Date().toISOString();
       const next: LocalUpload[] = distinctUploads.map((upload, index) => ({
         createdAt,
+        contentDigest: upload.contentDigest,
         displayName: upload.file.name,
         file: upload.file,
         id: upload.id,

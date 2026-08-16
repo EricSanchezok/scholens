@@ -149,15 +149,21 @@ def create_workspace_tooling(
     executor: ApplicationExecutor[ApplicationCapabilities],
     ingestion: PaperIngestionWorkflow,
     citations: CitationWorkflow,
+    settings: AppSettings,
 ) -> tuple[
     ToolCatalog[ApplicationCapabilities],
     ToolDispatcher[ApplicationCapabilities],
 ]:
+    from app.bootstrap.container import build_project_invitation_notifier
     from app.tooling.workspace import build_workspace_tool_catalog
 
     catalog = build_workspace_tool_catalog(
+        executor=executor,
         ingestion=ingestion,
         citations=citations,
+        invitation_notifier=build_project_invitation_notifier(),
+        web_base_url=settings.client_domain,
+        cursor_secret=settings.paper_search_cursor_secret,
     )
     return catalog, ToolDispatcher(catalog=catalog, executor=executor)
 
@@ -208,6 +214,7 @@ def create_mcp_transport(
     return build_mcp_transport(
         catalog=catalog,
         dispatcher=dispatcher,
+        executor=executor,
         security_settings=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=allowed_hosts,

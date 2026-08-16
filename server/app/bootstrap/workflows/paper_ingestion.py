@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import logging
 from pathlib import PurePosixPath
 from typing import Protocol
@@ -17,7 +19,7 @@ from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
 from app.modules.papers.application.ingestion import PdfUrlSource, PreparedPaperInput
-from app.modules.papers.domain import content_sha256
+from app.modules.papers.domain import MAX_PDF_BYTES, content_sha256
 from app.shared.application import (
     Actor,
     ApplicationExecutor,
@@ -137,6 +139,118 @@ class PaperIngestionWorkflow:
             project_id=project_id,
             idempotency_key=idempotency_key,
         )
+
+    async def from_upload_session(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        upload_id: UUID,
+        project_id: UUID | None,
+        idempotency_key: str | None,
+        ip_address: str,
+    ) -> LibraryPaperIngestionResponse:
+        """Validate staged bytes and ingest them through the canonical byte path."""
+        record = self._executor.command(
+            lambda capabilities: capabilities.paper_uploads.claim(
+                actor=actor,
+                upload_id=upload_id,
+            )
+        )
+        try:
+            if record.project_id != project_id:
+                raise AppError(
+                    code="paper_upload_project_mismatch",
+                    message=(
+                        "The ingestion Project must match the Project bound when the "
+                        "upload was prepared"
+                    ),
+                    kind=FailureKind.CONFLICT,
+                )
+            try:
+                staging_metadata = await asyncio.to_thread(
+                    s3_service.staging_object_metadata,
+                    record.object_key,
+                )
+            except FileNotFoundError as exc:
+                raise AppError(
+                    code="paper_upload_not_completed",
+                    message="No PDF bytes were uploaded for this upload session",
+                    kind=FailureKind.CONFLICT,
+                ) from exc
+            if staging_metadata.size_bytes != record.size_bytes:
+                raise AppError(
+                    code="paper_upload_size_mismatch",
+                    message="The uploaded PDF size does not match the prepared file",
+                    kind=FailureKind.UNPROCESSABLE,
+                    details={
+                        "expected_size_bytes": record.size_bytes,
+                        "actual_size_bytes": staging_metadata.size_bytes,
+                    },
+                )
+            expected_checksum = base64.b64encode(bytes.fromhex(record.sha256)).decode()
+            if staging_metadata.checksum_sha256 != expected_checksum:
+                raise AppError(
+                    code="paper_upload_checksum_mismatch",
+                    message="The uploaded PDF checksum does not match the prepared file",
+                    kind=FailureKind.UNPROCESSABLE,
+                )
+            content = await asyncio.to_thread(
+                s3_service.download_staging_bytes,
+                record.object_key,
+                metadata=staging_metadata,
+                max_bytes=MAX_PDF_BYTES,
+            )
+            if hashlib.sha256(content).hexdigest() != record.sha256:
+                raise AppError(
+                    code="paper_upload_checksum_mismatch",
+                    message="The downloaded PDF checksum does not match the prepared file",
+                    kind=FailureKind.UNPROCESSABLE,
+                )
+            result = await self.from_bytes(
+                actor=actor,
+                operation=operation,
+                content=content,
+                filename=record.filename,
+                project_id=record.project_id,
+                idempotency_key=idempotency_key or f"upload-session:{upload_id}",
+                ip_address=ip_address,
+            )
+            self._executor.command(
+                lambda capabilities: capabilities.paper_uploads.consume(
+                    actor=actor,
+                    upload_id=upload_id,
+                )
+            )
+        except AppError as exc:
+            failed = exc.kind in {
+                FailureKind.INVALID_ARGUMENT,
+                FailureKind.PAYLOAD_TOO_LARGE,
+                FailureKind.UNPROCESSABLE,
+            }
+            self._executor.command(
+                lambda capabilities: capabilities.paper_uploads.release(
+                    actor=actor,
+                    upload_id=upload_id,
+                    failed=failed,
+                )
+            )
+            raise
+        except Exception as exc:
+            self._executor.command(
+                lambda capabilities: capabilities.paper_uploads.release(
+                    actor=actor,
+                    upload_id=upload_id,
+                    failed=False,
+                )
+            )
+            raise AppError(
+                code="paper_upload_unavailable",
+                message="The staged PDF could not be read",
+                kind=FailureKind.UNAVAILABLE,
+            ) from exc
+        await asyncio.to_thread(s3_service.delete_file, record.object_key)
+        return result
 
     async def retry(
         self,

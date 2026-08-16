@@ -1073,8 +1073,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload Pdf */
-        post: operations["upload_pdf_api_v1_paper_ingestions_uploads_post"];
+        /** Prepare Pdf Upload */
+        post: operations["prepare_pdf_upload_api_v1_paper_ingestions_uploads_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2096,12 +2096,15 @@ export interface components {
         /** ArxivPaperSource */
         ArxivPaperSource: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * Arxiv Id
+             * @description A known arXiv identifier such as '1706.03762'. Do not put a search query or paper title here.
+             */
+            arxiv_id: string;
+            /**
+             * @description Import one already-known paper by arXiv identifier. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "arxiv";
-            /** Value */
-            value: string;
         };
         /** AudioOverviewContent */
         AudioOverviewContent: {
@@ -2145,11 +2148,6 @@ export interface components {
             last_page?: string | null;
             /** Volume */
             volume?: string | null;
-        };
-        /** Body_upload_pdf_api_v1_paper_ingestions_uploads_post */
-        Body_upload_pdf_api_v1_paper_ingestions_uploads_post: {
-            /** File */
-            file: string;
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -3021,21 +3019,45 @@ export interface components {
          * @description The only canonical metadata fields a Library owner may override.
          */
         DocumentMetadataOverrides: {
-            /** Abstract */
+            /**
+             * Abstract
+             * @description Personal abstract replacement; null clears it.
+             */
             abstract?: string | null;
-            /** Authors */
+            /**
+             * Authors
+             * @description Personal ordered author-name replacement; null clears it.
+             */
             authors?: string[] | null;
-            /** Doi */
+            /**
+             * Doi
+             * @description Personal DOI replacement; null clears it.
+             */
             doi?: string | null;
-            /** Institutions */
+            /**
+             * Institutions
+             * @description Personal ordered institution replacement; null clears it.
+             */
             institutions?: string[] | null;
-            /** Journal */
+            /**
+             * Journal
+             * @description Personal journal replacement; null clears it.
+             */
             journal?: string | null;
-            /** Publish Date */
+            /**
+             * Publish Date
+             * @description Personal publication timestamp replacement; null clears it.
+             */
             publish_date?: string | null;
-            /** Publisher */
+            /**
+             * Publisher
+             * @description Personal publisher replacement; null clears it.
+             */
             publisher?: string | null;
-            /** Title */
+            /**
+             * Title
+             * @description Personal replacement title; null clears the existing override.
+             */
             title?: string | null;
         };
         /**
@@ -3135,10 +3157,11 @@ export interface components {
             /**
              * Document Id
              * Format: uuid
+             * @description Immutable Scholens document UUID defining the audience.
              */
             document_id: string;
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Share the research item through one authorized document scope. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "document";
@@ -3199,12 +3222,15 @@ export interface components {
         /** DoiPaperSource */
         DoiPaperSource: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * Doi
+             * @description A known DOI for the paper to import. Supply the canonical identifier, not a title, keywords, or a request to discover papers.
+             */
+            doi: string;
+            /**
+             * @description Import one already-known paper by DOI. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "doi";
-            /** Value */
-            value: string;
         };
         /** ExternalAnswerSource */
         ExternalAnswerSource: {
@@ -3764,17 +3790,36 @@ export interface components {
             /** Type */
             type?: string | null;
         };
+        /** PaperIngestionRequest */
+        PaperIngestionRequest: {
+            /**
+             * Project Id
+             * @description Optional immutable Scholens Project UUID that should receive the paper when ingestion succeeds. For an upload source, this must exactly match the Project bound by the upload preparation. Read it from the repository binding or a Project tool.
+             */
+            project_id?: string | null;
+            /**
+             * Source
+             * @description One already-known paper source. Use upload only after preparing and transferring a local PDF; Scholens does not discover papers from queries.
+             */
+            source: components["schemas"]["DoiPaperSource"] | components["schemas"]["ArxivPaperSource"] | components["schemas"]["UrlPaperSource"] | components["schemas"]["UploadPaperSource"];
+        };
         /** PaperSearchFilters */
         PaperSearchFilters: {
-            /** Published From */
+            /**
+             * Published From
+             * @description Optional inclusive earliest publication timestamp.
+             */
             published_from?: string | null;
-            /** Published To */
+            /**
+             * Published To
+             * @description Optional inclusive latest publication timestamp.
+             */
             published_to?: string | null;
         };
         /** PaperSearchRequest */
         PaperSearchRequest: {
             /** Collection */
-            collection?: components["schemas"]["LibraryPaperCollection"] | components["schemas"]["SelectedPaperCollection"];
+            collection?: components["schemas"]["LibraryPaperCollection"] | components["schemas"]["PersonalLibraryPaperCollection"] | components["schemas"]["SelectedPaperCollection"];
             /** Cursor */
             cursor?: string | null;
             filters?: components["schemas"]["PaperSearchFilters"];
@@ -3877,28 +3922,43 @@ export interface components {
         PaperStatus: "todo" | "reading" | "completed";
         /** ParsedTextPosition */
         ParsedTextPosition: {
-            /** End Offset */
+            /**
+             * End Offset
+             * @description Exclusive zero-based character offset after the selected quote.
+             */
             end_offset: number;
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Anchor the quote to offsets in canonical parsed paper text. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "parsed_text";
-            /** Page Number */
+            /**
+             * Page Number
+             * @description Optional one-based source page projection for the parsed-text span.
+             */
             page_number?: number | null;
-            /** Start Offset */
+            /**
+             * Start Offset
+             * @description Inclusive zero-based character offset in canonical parsed text.
+             */
             start_offset: number;
         };
         /** PdfTextPosition */
         PdfTextPosition: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Anchor the quote to visible PDF text rectangles. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "pdf_text";
-            /** Page Number */
+            /**
+             * Page Number
+             * @description One-based PDF page containing every supplied rectangle.
+             */
             page_number: number;
-            /** Rects */
+            /**
+             * Rects
+             * @description Ordered normalized rectangles covering the exact selected quote.
+             */
             rects: components["schemas"]["PdfTextRect"][];
         };
         /**
@@ -3906,19 +3966,42 @@ export interface components {
          * @description A PDF text rectangle normalized to the page's 0–1 coordinate space.
          */
         PdfTextRect: {
-            /** Height */
+            /**
+             * Height
+             * @description Normalized positive rectangle height within the page.
+             */
             height: number;
-            /** Width */
+            /**
+             * Width
+             * @description Normalized positive rectangle width within the page.
+             */
             width: number;
-            /** X */
+            /**
+             * X
+             * @description Normalized left coordinate from 0 at the page edge to 1.
+             */
             x: number;
-            /** Y */
+            /**
+             * Y
+             * @description Normalized top coordinate from 0 at the page edge to 1.
+             */
             y: number;
+        };
+        /**
+         * PersonalLibraryPaperCollection
+         * @description Only documents explicitly saved in the actor's personal Library.
+         */
+        PersonalLibraryPaperCollection: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "personal_library";
         };
         /** PersonalResearchAudience */
         PersonalResearchAudience: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Keep the research item visible only to its creator. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "personal";
@@ -3927,6 +4010,88 @@ export interface components {
         PortalSessionResponse: {
             /** Url */
             url: string;
+        };
+        /**
+         * PreparePaperUploadRequest
+         * @description Metadata known locally before PDF bytes leave the user's computer.
+         */
+        PreparePaperUploadRequest: {
+            /**
+             * Filename
+             * @description Plain local PDF filename without directory components. Paths remain on the client and must never be sent to Scholens.
+             */
+            filename: string;
+            /**
+             * Project Id
+             * @description Optional immutable destination Project UUID. Omit it for personal-Library ingestion.
+             */
+            project_id?: string | null;
+            /**
+             * Sha256
+             * @description Lowercase hexadecimal SHA-256 of the exact PDF bytes. Scholens verifies this before ingestion and duplicate resolution.
+             */
+            sha256: string;
+            /**
+             * Size Bytes
+             * @description Exact local file size in bytes; the maximum is 30 MB.
+             */
+            size_bytes: number;
+            /**
+             * Upload Id
+             * @description Existing prepared upload UUID when only its short-lived PUT URL expired. The filename, size, checksum, and Project must remain identical.
+             */
+            upload_id?: string | null;
+        };
+        /** PreparePaperUploadResponse */
+        PreparePaperUploadResponse: {
+            /**
+             * Headers
+             * @description Exact request headers required on the PUT; do not omit or alter them.
+             */
+            headers: {
+                [key: string]: string;
+            };
+            /**
+             * Max Bytes
+             * @description Maximum accepted PDF size in bytes.
+             * @default 31457280
+             */
+            max_bytes: number;
+            /**
+             * Method
+             * @description Required HTTP upload method.
+             * @default PUT
+             */
+            method: string;
+            /**
+             * Next Step
+             * @description Machine-readable continuation instruction.
+             * @default upload_pdf_then_call_ingest_paper_with_upload_id
+             */
+            next_step: string;
+            /**
+             * Session Expires At
+             * Format: date-time
+             * @description Time after which the upload_id can no longer be ingested.
+             */
+            session_expires_at: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             * @description Durable staging UUID used by ingest_paper.
+             */
+            upload_id: string;
+            /**
+             * Upload Url
+             * @description Short-lived direct object-storage PUT URL.
+             */
+            upload_url: string;
+            /**
+             * Upload Url Expires At
+             * Format: date-time
+             * @description Time after which a fresh upload URL must be requested.
+             */
+            upload_url_expires_at: string;
         };
         /** PrimaryLocation */
         PrimaryLocation: {
@@ -4262,13 +4427,14 @@ export interface components {
         /** ProjectResearchAudience */
         ProjectResearchAudience: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Share the research item with current members of one Project. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "project";
             /**
              * Project Id
              * Format: uuid
+             * @description Immutable Scholens Project UUID defining the audience.
              */
             project_id: string;
         };
@@ -4517,6 +4683,8 @@ export interface components {
             matching_comments: components["schemas"]["ResearchSearchComment"][];
             /** Position */
             position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
+            /** Project Id */
+            project_id: string | null;
             /** Quote Text */
             quote_text: string;
             /** Role */
@@ -4770,22 +4938,32 @@ export interface components {
             /** Display Name */
             display_name?: string | null;
         };
-        /** UploadFromSourceRequest */
-        UploadFromSourceRequest: {
-            /** Project Id */
-            project_id?: string | null;
-            /** Source */
-            source: components["schemas"]["DoiPaperSource"] | components["schemas"]["ArxivPaperSource"] | components["schemas"]["UrlPaperSource"];
+        /** UploadPaperSource */
+        UploadPaperSource: {
+            /**
+             * @description Ingest bytes already transferred through a prepared upload session. (enum property replaced by openapi-typescript)
+             * @enum {string}
+             */
+            kind: "upload";
+            /**
+             * Upload Id
+             * Format: uuid
+             * @description The upload session UUID returned by prepare_paper_upload after the PDF bytes were uploaded with the supplied URL and headers.
+             */
+            upload_id: string;
         };
         /** UrlPaperSource */
         UrlPaperSource: {
             /**
-             * @description discriminator enum property added by openapi-typescript
+             * @description Import one already-known reachable HTTP(S) paper source. (enum property replaced by openapi-typescript)
              * @enum {string}
              */
             kind: "url";
-            /** Value */
-            value: string;
+            /**
+             * Url
+             * @description The already-known HTTP(S) URL of a PDF or supported paper source. This imports the URL; it does not search the internet.
+             */
+            url: string;
         };
         /**
          * UsagePeriod
@@ -4868,7 +5046,7 @@ export interface components {
          * WorkspacePermission
          * @enum {string}
          */
-        WorkspacePermission: "read" | "write" | "delete";
+        WorkspacePermission: "read" | "write" | "manage" | "delete";
         /** ZoteroConnectResponse */
         ZoteroConnectResponse: {
             /** Auth Url */
@@ -7710,7 +7888,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UploadFromSourceRequest"];
+                "application/json": components["schemas"]["PaperIngestionRequest"];
             };
         };
         responses: {
@@ -7734,30 +7912,26 @@ export interface operations {
             };
         };
     };
-    upload_pdf_api_v1_paper_ingestions_uploads_post: {
+    prepare_pdf_upload_api_v1_paper_ingestions_uploads_post: {
         parameters: {
-            query?: {
-                project_id?: string | null;
-            };
-            header?: {
-                "Idempotency-Key"?: string | null;
-            };
+            query?: never;
+            header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_upload_pdf_api_v1_paper_ingestions_uploads_post"];
+                "application/json": components["schemas"]["PreparePaperUploadRequest"];
             };
         };
         responses: {
             /** @description Successful Response */
-            202: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LibraryPaperIngestionResponse"];
+                    "application/json": components["schemas"]["PreparePaperUploadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8960,10 +9134,11 @@ export interface operations {
     };
     remove_paper_from_project_api_v1_projects__project_id__papers__document_id__delete: {
         parameters: {
-            query?: {
-                confirm_delete_annotations?: boolean;
+            query?: never;
+            header?: {
+                /** @description Short-lived token returned by the first removal attempt. Retry with unchanged path parameters only after the user approves its impact. */
+                "X-Scholens-Confirmation-Token"?: string | null;
             };
-            header?: never;
             path: {
                 project_id: string;
                 document_id: string;

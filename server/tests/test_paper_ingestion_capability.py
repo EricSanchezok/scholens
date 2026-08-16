@@ -9,10 +9,12 @@ from app.bootstrap.adapters.paper_ingestion import (
     DefaultPaperSourceResolver,
     SafePdfUrlSource,
 )
+from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
 from app.modules.papers.application.ingestion import AcceptedIngestion, IngestPaper
+from app.modules.papers.application.upload_sessions import PaperUploadRecord
 from app.shared.application import (
     Actor,
     CredentialKind,
@@ -255,6 +257,47 @@ async def test_safe_pdf_source_preserves_actionable_error_codes(
             await SafePdfUrlSource().fetch(url="https://papers.example/paper.pdf")
 
     assert raised.value.code == expected_code
+
+
+@pytest.mark.asyncio
+async def test_upload_session_rejects_a_different_ingestion_project() -> None:
+    executor = MagicMock()
+    prepared_project_id = uuid4()
+    executor.command.side_effect = [
+        PaperUploadRecord(
+            id=uuid4(),
+            actor_id=_actor().id,
+            project_id=prepared_project_id,
+            filename="paper.pdf",
+            size_bytes=12,
+            sha256="01" * 32,
+            object_key="uploads/7/session/source.pdf",
+            status="claimed",
+            expires_at=MagicMock(),
+            lease_expires_at=MagicMock(),
+        ),
+        None,
+    ]
+    workflow = PaperIngestionWorkflow(
+        executor=executor,
+        url_source=MagicMock(),
+        source_resolver=MagicMock(),
+        operation_factory=OperationContextFactory(),
+        jobs=MagicMock(),
+    )
+
+    with pytest.raises(AppError) as raised:
+        await workflow.from_upload_session(
+            actor=_actor(),
+            operation=_operation(),
+            upload_id=uuid4(),
+            project_id=uuid4(),
+            idempotency_key=None,
+            ip_address="127.0.0.1",
+        )
+
+    assert raised.value.code == "paper_upload_project_mismatch"
+    assert executor.command.call_count == 2
 
 
 def test_cancel_journals_only_when_gateway_changes_state() -> None:

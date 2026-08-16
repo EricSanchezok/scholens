@@ -1197,6 +1197,7 @@
       "permission": {
         "read": "读取",
         "write": "写入",
+        "manage": "管理",
         "delete": "删除"
       },
       "permissionError": "至少选择一项权限。",

@@ -209,6 +209,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         executor=executor,
         ingestion=ingestion_workflow,
         citations=citation_workflow,
+        settings=runtime_settings,
     )
     conversation_runtime = create_conversation_agent_runtime(
         catalog=tool_catalog,

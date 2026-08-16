@@ -11,6 +11,7 @@ from app.modules.papers.application.contracts.search import (
     PaperSearchResponse,
     PaperSearchResult,
     LibraryPaperCollection,
+    PersonalLibraryPaperCollection,
     SelectedPaperCollection,
     PaperSearchSnippet,
     PaperSearchSort,
@@ -35,10 +36,21 @@ from sqlalchemy.orm import Session, aliased
 def _visibility_condition(
     *,
     actor: Actor,
-    collection: LibraryPaperCollection | SelectedPaperCollection,
+    collection: (
+        LibraryPaperCollection
+        | PersonalLibraryPaperCollection
+        | SelectedPaperCollection
+    ),
 ) -> ColumnElement[bool]:
     if isinstance(collection, LibraryPaperCollection):
         return accessible_document_condition(user_id=actor.id)
+    if isinstance(collection, PersonalLibraryPaperCollection):
+        return exists(
+            select(LibraryPaper.document_id).where(
+                LibraryPaper.document_id == Document.id,
+                LibraryPaper.user_id == actor.id,
+            )
+        )
     conditions: list[ColumnElement[bool]] = []
     if collection.document_ids:
         conditions.append(Document.id.in_(collection.document_ids))

@@ -54,6 +54,7 @@ change what the accepted record decided.
 - [ADR 0020: Separate paid subscriptions from product-granted entitlements](./0020-separate-paid-and-product-entitlements.md)
 - [ADR 0021: Semantic Web motion system](./0021-web-motion-system.md)
 - [ADR 0022: Immutable ECS release boundary](./0022-immutable-ecs-release-boundary.md)
+- [ADR 0023: Agent-native Scholens knowledge boundary](./0023-agent-native-scholens-mcp.md)
 
 ## Template
 

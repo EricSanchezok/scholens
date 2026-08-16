@@ -862,7 +862,6 @@ class SqlAlchemyProjectGateway:
         document_id: UUID,
         origin_operation_id: UUID,
         correlation_id: UUID,
-        confirm_delete_annotations: bool,
     ) -> ProjectPaperRemoval:
         scheduled = project_document_repository.remove_by_paper_and_project(
             self._db,
@@ -871,7 +870,6 @@ class SqlAlchemyProjectGateway:
             user=actor,
             origin_operation_id=origin_operation_id,
             correlation_id=correlation_id,
-            confirm_delete_annotations=confirm_delete_annotations,
         )
         return ProjectPaperRemoval(
             created_gc_job_id=(

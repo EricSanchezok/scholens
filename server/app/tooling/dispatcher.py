@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from dataclasses import replace
 from time import monotonic
 from typing import Generic, Protocol, TypeVar, cast
 
@@ -17,7 +18,9 @@ from app.tooling.contracts import (
     ToolExecutionKind,
     ToolHandler,
     ToolOutcome,
+    ToolResourceLink,
     ToolSourceCandidate,
+    ToolDefinition,
 )
 from app.tooling.invocations import ToolInvocationGateway
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
@@ -32,6 +35,7 @@ class _PersistedToolOutcome(BaseModel):
     sources: tuple[ToolSourceCandidate, ...] = ()
     artifacts: list[dict[str, JsonValue]] = Field(default_factory=list)
     action: dict[str, JsonValue] | None = None
+    resource_links: list[dict[str, JsonValue]] = Field(default_factory=list)
 
 
 def _persisted_outcome(outcome: ToolOutcome) -> JsonValue:
@@ -41,6 +45,15 @@ def _persisted_outcome(outcome: ToolOutcome) -> JsonValue:
             sources=outcome.sources,
             artifacts=outcome.artifacts,
             action=outcome.action,
+            resource_links=[
+                {
+                    "uri": link.uri,
+                    "name": link.name,
+                    "description": link.description,
+                    "mime_type": link.mime_type,
+                }
+                for link in outcome.resource_links
+            ],
         ).model_dump(mode="json")
     )
 
@@ -59,6 +72,40 @@ def _restore_outcome(value: JsonValue) -> ToolOutcome:
         sources=persisted.sources,
         artifacts=persisted.artifacts,
         action=persisted.action,
+        resource_links=tuple(
+            ToolResourceLink(
+                uri=str(link["uri"]),
+                name=str(link["name"]),
+                description=(
+                    str(link["description"])
+                    if link.get("description") is not None
+                    else None
+                ),
+                mime_type=str(link.get("mime_type", "application/json")),
+            )
+            for link in persisted.resource_links
+        ),
+    )
+
+
+def _validate_outcome(
+    definition: ToolDefinition[CapabilitiesT],
+    outcome: ToolOutcome,
+) -> ToolOutcome:
+    if definition.output_model is None:
+        return outcome
+    try:
+        payload = definition.output_model.model_validate(outcome.payload)
+    except ValidationError as exc:
+        raise AppError(
+            kind=FailureKind.INTERNAL,
+            code="tool_result_invalid",
+            message="The tool produced an invalid result",
+            details={"tool": definition.name},
+        ) from exc
+    return replace(
+        outcome,
+        payload=_JSON_VALUE.validate_python(payload.model_dump(mode="json")),
     )
 
 
@@ -74,6 +121,22 @@ def _arguments_hash(arguments: BaseModel) -> str:
         sort_keys=True,
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _invocation_key(
+    *,
+    definition: ToolDefinition[CapabilitiesT],
+    context: ToolExecutionContext,
+    arguments: BaseModel,
+) -> str:
+    semantic_key = getattr(arguments, "idempotency_key", None)
+    confirmation_token = getattr(arguments, "confirmation_token", None)
+    if semantic_key and (
+        definition.confirmation_policy.value == "none" or confirmation_token
+    ):
+        digest = hashlib.sha256(str(semantic_key).encode()).hexdigest()
+        return f"semantic:{definition.name}:{digest}"
+    return f"{context.invocation_id}:{definition.name}"
 
 
 class ToolDispatcher(Generic[CapabilitiesT]):
@@ -177,15 +240,20 @@ class ToolDispatcher(Generic[CapabilitiesT]):
             ) from exc
         if definition.execution is ToolExecutionKind.QUERY:
             handler = cast(ToolHandler[CapabilitiesT], definition.handler)
-            return await asyncio.to_thread(
+            outcome = await asyncio.to_thread(
                 self._executor.query,
                 lambda capabilities: handler(capabilities, context, arguments),
             )
+            return _validate_outcome(definition, outcome)
         if definition.execution is ToolExecutionKind.WORKFLOW:
             workflow_handler = definition.workflow_handler
             assert workflow_handler is not None
             fingerprint = _arguments_hash(arguments)
-            invocation_key = f"{context.invocation_id}:{name}"
+            invocation_key = _invocation_key(
+                definition=definition,
+                context=context,
+                arguments=arguments,
+            )
             replay = await asyncio.to_thread(
                 self._executor.query,
                 lambda capabilities: capabilities.tool_invocations.replay(
@@ -196,12 +264,13 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 ),
             )
             if replay is not None:
-                return _restore_outcome(replay)
+                return _validate_outcome(definition, _restore_outcome(replay))
             outcome = await workflow_handler(
                 context,
                 arguments,
                 invocation_key,
             )
+            outcome = _validate_outcome(definition, outcome)
             await asyncio.to_thread(
                 self._executor.command,
                 lambda capabilities: capabilities.tool_invocations.complete(
@@ -218,7 +287,11 @@ class ToolDispatcher(Generic[CapabilitiesT]):
         assert definition.execution is ToolExecutionKind.COMMAND
         command_handler = cast(ToolHandler[CapabilitiesT], definition.handler)
         fingerprint = _arguments_hash(arguments)
-        invocation_key = f"{context.invocation_id}:{name}"
+        invocation_key = _invocation_key(
+            definition=definition,
+            context=context,
+            arguments=arguments,
+        )
 
         def execute(capabilities: CapabilitiesT) -> ToolOutcome:
             replay = capabilities.tool_invocations.replay(
@@ -228,8 +301,11 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 arguments_hash=fingerprint,
             )
             if replay is not None:
-                return _restore_outcome(replay)
-            outcome = command_handler(capabilities, context, arguments)
+                return _validate_outcome(definition, _restore_outcome(replay))
+            outcome = _validate_outcome(
+                definition,
+                command_handler(capabilities, context, arguments),
+            )
             capabilities.tool_invocations.complete(
                 actor_id=context.actor.id,
                 operation_id=context.operation.trace.operation_id,
