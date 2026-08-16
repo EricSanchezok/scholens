@@ -886,7 +886,10 @@ def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
     assert "verify-database-contract" in workflows["release.yml"]
     assert "migrations/current.json" in workflows["release.yml"]
     assert "Capture previous immutable deployment" in workflows["release.yml"]
-    assert "Restore previous release after failed smoke" in workflows["release.yml"]
+    assert (
+        "Restore safe release after candidate verification failure"
+        in workflows["release.yml"]
+    )
     assert "recovery_enabled=false" in workflows["release.yml"]
     assert "recovery_scheduler=DISABLED" in workflows["release.yml"]
     assert "push-by-digest=true" in workflows["publish.yml"]
@@ -920,6 +923,37 @@ def test_release_uses_current_control_plane_for_candidate_and_rollback_data() ->
     assert "recovery_template=release-source/deploy/ecs/scholens-production.yml" in (
         workflow
     )
+
+
+def test_release_recovers_after_stabilization_or_smoke_failure() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    deploy = workflow.index("Deploy digest-qualified ECS release")
+    stabilize = workflow.index("Wait for services to stabilize")
+    smoke = workflow.index("Verify public deployment")
+    recover = workflow.index(
+        "Restore safe release after candidate verification failure"
+    )
+    assert deploy < stabilize < smoke < recover
+    assert "continue-on-error: true" not in workflow[deploy:stabilize]
+    assert re.search(
+        r"- name: Wait for services to stabilize\n"
+        r"\s+id: stabilize\n"
+        r"\s+continue-on-error: true",
+        workflow,
+    )
+    assert (
+        "if: steps.stabilize.outcome == 'success' && "
+        "inputs.application_enabled == 'true'"
+    ) in workflow
+    recovery_condition = (
+        "if: steps.stabilize.outcome == 'failure' || steps.smoke.outcome == 'failure'"
+    )
+    assert workflow.count(recovery_condition) == 2
+    assert "candidate-verification-recovery" in workflow
+    assert "Automatic candidate verification recovery" in workflow
 
 
 def test_publish_is_retry_safe_at_every_immutable_commit_boundary() -> None:
@@ -1398,6 +1432,15 @@ def test_runbook_locks_production_environment_and_secret_preflights() -> None:
         assert generated in readme
     for operator_managed in ("ai", "mail", "billing", "integrations"):
         assert operator_managed in readme
+
+    first_release = readme[readme.index("## First release") :]
+    disabled = first_release.index("ApplicationEnabled=false")
+    migration = first_release.index("Run protected product migration")
+    cloudflare = first_release.index("Point the proxied Cloudflare CNAME")
+    enabled = first_release.index("ApplicationEnabled=true")
+    scheduler = first_release.index("Enable the scheduler")
+    assert disabled < migration < cloudflare < enabled < scheduler
+    assert "immediately requires both public Cloudflare health checks" in first_release
 
 
 def test_operator_managed_secret_containers_have_no_cloudformation_value() -> None:

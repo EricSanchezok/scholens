@@ -113,8 +113,9 @@ CI and deployment use four workflows:
 4. `Deploy immutable release` verifies the manifest against the checked-out source,
    rechecks live digest-bound ECR results and the current database contract, deploys the
    runtime stack through its CloudFormation service role, waits for all ECS services, and
-   checks Web and API health through Cloudflare. A failed smoke test automatically restores
-   the prior database-compatible immutable release or disables the failed candidate.
+   checks Web and API health through Cloudflare. Failed ECS stabilization or an external
+   smoke test automatically restores the prior database-compatible immutable release or
+   disables the failed candidate.
 
 The release workflow keeps its verifier and orchestration scripts on the trusted workflow
 `main` SHA. Candidate and rollback commits are checked out only as data in separate
@@ -338,17 +339,24 @@ public hostname succeeds through Cloudflare.
 2. Create the administrator-owned bootstrap and foundation stacks in the documented order,
    confirm SNS, fill all required secrets, create database roles/grants, and validate the
    ACM certificate.
-3. Configure the four GitHub environments and Cloudflare origin rule.
+3. Configure the four GitHub environments. Prepare and review the Cloudflare origin-header
+   rule and Managed Transform, but do not point the production CNAME before the disabled
+   runtime stack exposes its ALB hostname.
 4. Let `Publish immutable release` create the first manifest.
 5. Run `Deploy immutable release` for that SHA with `ApplicationEnabled=false` and
    `SchedulerState=DISABLED`, supplying the reviewed edge-secret version IDs. This creates
    the reviewed migration task while every service remains at zero.
 6. Run `Run protected product migration` for the same SHA, then rerun
    `database-bootstrap.sql` as the database owner to refresh runtime grants.
-7. Deploy the same SHA with `ApplicationEnabled=true`, still with the scheduler disabled.
-8. Point the proxied Cloudflare CNAME at the ALB and pass Web, authentication, upload,
-   document, research, callback, queue-drain, billing-webhook, Zotero, source-map, alarm,
-   and autoscaling checks.
+7. Point the proxied Cloudflare CNAME at the disabled runtime's `LoadBalancerDnsName`,
+   enable the reviewed origin-header rule and Managed Transform, confirm DNS is proxied,
+   and verify direct ALB requests without the origin header are denied. Services remain at
+   zero during this boundary change, so do not expect the public health endpoints to pass
+   yet.
+8. Deploy the same SHA with `ApplicationEnabled=true`, still with the scheduler disabled.
+   The release workflow immediately requires both public Cloudflare health checks to pass;
+   then verify authentication, upload, document, research, callback, queue-drain,
+   billing-webhook, Zotero, source-map, alarm, and autoscaling paths.
 9. Enable the scheduler only after the one-shot job and maintenance queue are verified.
 
 ## Capacity and failure handling
@@ -373,8 +381,8 @@ public hostname succeeds through Cloudflare.
 - Queue DLQs, oldest-message age, ALB 5xx, and unhealthy target alarms publish to the
   Scholens SNS topic.
 - ECS services use deployment circuit-breaker rollback. A failed database task does not
-  change application services. A failed smoke check is still a failed release even if the
-  CloudFormation stack stabilized.
+  change application services. A candidate that fails ECS stabilization or an external
+  smoke check enters automatic recovery and remains a failed release after recovery.
 - Never delete a retained resource, release manifest, or digest during incident response.
 
 Local verification is side-effect free:

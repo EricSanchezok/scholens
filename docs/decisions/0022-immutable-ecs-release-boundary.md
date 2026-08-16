@@ -52,9 +52,10 @@ stack values without executing their historical release scripts.
 Migration success writes an immutable per-release attestation and a versioned
 current database contract. Release, database, and foundation workflows share
 one production control-plane concurrency group, so the checked current proof
-cannot change between verification and deployment. Rollback or smoke recovery
-may restore an older app only when its migration and Identity contracts still
-match the current database; otherwise the candidate is disabled at zero.
+cannot change between verification and deployment. Rollback or automatic
+candidate-verification recovery may restore an older app only when its migration
+and Identity contracts still match the current database; otherwise the candidate
+is disabled at zero.
 
 The public proxy contract keeps Uvicorn from consuming forwarding headers.
 Application middleware verifies the original peer against the imported VPC

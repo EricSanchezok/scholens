@@ -223,6 +223,8 @@ jobs:
             --stack-name sanchezcloud-scholens-production \
             --enable-termination-protection
       - name: Wait for services to stabilize
+        id: stabilize
+        continue-on-error: true
         run: |
           # JMESPath uses literal backticks.
           # shellcheck disable=SC2016
@@ -237,7 +239,7 @@ jobs:
       - name: Verify public deployment
         id: smoke
         continue-on-error: true
-        if: inputs.application_enabled == 'true'
+        if: steps.stabilize.outcome == 'success' && inputs.application_enabled == 'true'
         env:
           PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
         run: |
@@ -255,8 +257,8 @@ jobs:
           }
           retry "https://${PRODUCTION_DOMAIN}/healthz"
           retry "https://${PRODUCTION_DOMAIN}/api/v1/healthz"
-      - name: Restore previous release after failed smoke
-        if: steps.smoke.outcome == 'failure'
+      - name: Restore safe release after candidate verification failure
+        if: steps.stabilize.outcome == 'failure' || steps.smoke.outcome == 'failure'
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           RELEASE_SHA: ${{ inputs.release_sha }}
@@ -348,7 +350,7 @@ jobs:
             --stack-name sanchezcloud-scholens-production \
             --template-file "$recovery_template" \
             --s3-bucket "$bucket" \
-            --s3-prefix "cloudformation/${recovery_sha}/smoke-recovery" \
+            --s3-prefix "cloudformation/${recovery_sha}/candidate-verification-recovery" \
             --role-arn "$CLOUDFORMATION_ROLE_ARN" \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
@@ -367,16 +369,16 @@ jobs:
             --cluster sanchezcloud-production \
             --services "${services[@]}"
           {
-            echo "### Automatic smoke recovery"
+            echo "### Automatic candidate verification recovery"
             echo "- Failed candidate: \`${RELEASE_SHA}\`"
             echo "- Restored release: \`${recovery_sha}\`"
             echo "- Application: \`${recovery_enabled}\`"
             echo "- Scheduler: \`${recovery_scheduler}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Fail the rejected release after recovery
-        if: steps.smoke.outcome == 'failure'
+        if: steps.stabilize.outcome == 'failure' || steps.smoke.outcome == 'failure'
         run: |
-          echo "Candidate smoke checks failed; recovery completed." >&2
+          echo "Candidate stabilization or smoke verification failed; recovery completed." >&2
           exit 1
       - name: Record release operation
         run: |
