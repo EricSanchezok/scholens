@@ -353,12 +353,18 @@ Create a proxied CNAME for `scholens.sanchezcloud.net` pointing to the runtime s
 `LoadBalancerDnsName`. Configure Cloudflare to send `x-scholens-origin` with the
 `origin_token` value from the edge secret. Do not expose that value to browser code.
 
-Use Full (strict) TLS, preserve the `Host` header, and keep proxying enabled. Configure a
-Cloudflare Managed Transform or equivalent reviewed rule to overwrite
-`CF-Connecting-IP`; never preserve a client-supplied value. The application disables
-Uvicorn proxy-header rewriting, verifies the raw peer against the imported production VPC
-CIDR, then uses the single canonical `CF-Connecting-IP` value for request logs and all
-application rate limits. Missing, repeated, malformed, or untrusted headers fail closed.
+Use Full (strict) TLS, preserve the `Host` header, and keep proxying enabled. On the
+ordinary proxied request path Cloudflare generates the single
+[`CF-Connecting-IP`](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip)
+value sent to the origin;
+[Request Header Transform Rules](https://developers.cloudflare.com/rules/transform/request-header-modification/#important-remarks)
+cannot set that header and must not remove it. Do not attach a Worker or Snippet that can
+derive it from mutable `x-real-ip`,
+and keep Pseudo IPv4 disabled unless its deliberate IPv6-loss tradeoff is separately
+reviewed. The application disables Uvicorn proxy-header rewriting, verifies the raw peer
+against the imported production VPC CIDR, then uses that canonical
+`CF-Connecting-IP` value for request logs and all application rate limits. Missing,
+repeated, malformed, or untrusted headers fail closed.
 
 The WAF blocks requests that bypass Cloudflare or omit the origin header, then applies AWS
 managed common-threat/IP-reputation rules and a `CF-Connecting-IP` rate limit. Sampled
