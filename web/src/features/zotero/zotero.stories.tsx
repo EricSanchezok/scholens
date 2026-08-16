@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { delay, http, HttpResponse } from "msw";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 
 import { ZoteroLibraryDialog } from "./zotero-library-dialog";
 import { ZoteroOperationStatus } from "./zotero-operation-status";
@@ -139,7 +139,7 @@ export const Populated: Story = {
       body.getByRole("button", { name: "Import 1 paper" }),
     ).toBeEnabled();
     await userEvent.click(body.getByRole("button", { name: "Import 1 paper" }));
-    await expect(args.onImportAccepted).toHaveBeenCalled();
+    await waitFor(() => expect(args.onImportAccepted).toHaveBeenCalled());
   },
 };
 
