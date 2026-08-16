@@ -244,9 +244,7 @@ def test_bootstrap_roles_enforce_immutable_release_and_scoped_secrets() -> None:
     database_deregister_task_definition = next(
         item for item in database if "ecs:DeregisterTaskDefinition" in _actions(item)
     )
-    assert "task-definition/sanchezcloud-scholens-migration:*" in str(
-        database_deregister_task_definition["Resource"]
-    )
+    assert database_deregister_task_definition["Resource"] == "*"
     assert not any(
         "secretsmanager:GetSecretValue" in _actions(item)
         and "production/edge" in str(item["Resource"])
@@ -1377,6 +1375,8 @@ def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None
     assert "stoppedReason:stoppedReason" in workflow
     assert "reason:reason" in workflow
     assert "logStreamName:logStreamName" in workflow
+    assert 'expected_log_stream="migration/migration/${task_id}"' in workflow
+    assert 'test "$log_stream" = "$expected_log_stream"' in workflow
     assert "sanchezcloud-scholens-application-sg-id" in workflow
     assert "TaskSecurityGroupId" not in workflow
 

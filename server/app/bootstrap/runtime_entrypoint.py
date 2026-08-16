@@ -43,11 +43,19 @@ def _database_url() -> str:
     )
 
 
+def _identity_database_url(database_url: str) -> str:
+    sqlalchemy_scheme = "postgresql+psycopg2://"
+    if not database_url.startswith(sqlalchemy_scheme):
+        raise RuntimeError("unsupported application database URL scheme")
+    return "postgresql://" + database_url.removeprefix(sqlalchemy_scheme)
+
+
 def main() -> int:
     command = sys.argv[1] if len(sys.argv) > 1 else "api"
     database_url = _database_url()
+    identity_database_url = _identity_database_url(database_url)
     os.environ["DATABASE_URL"] = database_url
-    os.environ.setdefault("AUTH_DATABASE_URL", database_url)
+    os.environ["AUTH_DATABASE_URL"] = identity_database_url
     if command == "api":
         executable = ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]
     elif command == "migrate":
@@ -60,23 +68,12 @@ def main() -> int:
         payload = json.loads(migration.stdout)
         if payload.get("up_to_date") is not True:
             raise RuntimeError("Scholens migration did not converge")
-        subprocess.run(
-            [
-                "sanchezcloud-identity",
-                "check-schema",
-                "--database-url",
-                database_url,
-            ],
-            check=True,
-        )
+        # Identity reads its asyncpg URL from the environment so credentials never
+        # enter the process argument list or a CalledProcessError representation.
+        subprocess.run(["sanchezcloud-identity", "check-schema"], check=True)
         installed = int(
             subprocess.run(
-                [
-                    "sanchezcloud-identity",
-                    "schema-version",
-                    "--database-url",
-                    database_url,
-                ],
+                ["sanchezcloud-identity", "schema-version"],
                 check=True,
                 capture_output=True,
                 text=True,

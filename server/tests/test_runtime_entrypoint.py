@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-import pytest
-
 import json
+import os
 import subprocess
 
-from app.bootstrap.runtime_entrypoint import _database_url, main
+import pytest
+
+from app.bootstrap.runtime_entrypoint import (
+    _database_url,
+    _identity_database_url,
+    main,
+)
 
 
 def test_database_url_escapes_credentials_and_requires_tls(monkeypatch) -> None:
@@ -19,6 +24,20 @@ def test_database_url_escapes_credentials_and_requires_tls(monkeypatch) -> None:
         "postgresql+psycopg2://scholens%20app:secret%2Fvalue@"
         "db.example.invalid:5432/sanchezcloud"
         "?sslmode=verify-full&sslrootcert=/etc/ssl/certs/global-bundle.pem"
+    )
+
+
+def test_identity_database_url_uses_asyncpg_scheme_without_changing_parameters() -> (
+    None
+):
+    application_url = (
+        "postgresql+psycopg2://scholens%20app:secret%2Fvalue@"
+        "db.example.invalid:5432/sanchezcloud"
+        "?sslmode=verify-full&sslrootcert=/etc/ssl/certs/global-bundle.pem"
+    )
+
+    assert _identity_database_url(application_url) == application_url.replace(
+        "postgresql+psycopg2://", "postgresql://", 1
     )
 
 
@@ -95,7 +114,21 @@ def test_migration_fails_when_identity_ledger_is_not_exact(
             subprocess.CompletedProcess([], 0, stdout="0\n"),
         )
     )
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: next(results))
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return next(results)
+
+    monkeypatch.setattr(subprocess, "run", run)
 
     with pytest.raises(RuntimeError, match="exactly match"):
         main()
+
+    assert commands == [
+        ["scholens", "db", "upgrade", "--yes", "--json"],
+        ["sanchezcloud-identity", "check-schema"],
+        ["sanchezcloud-identity", "schema-version"],
+    ]
+    assert "secret" not in repr(commands)
+    assert os.environ["AUTH_DATABASE_URL"].startswith("postgresql://")
