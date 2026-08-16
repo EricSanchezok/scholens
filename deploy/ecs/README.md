@@ -28,7 +28,8 @@ It owns:
 - retained KMS keys and private, versioned release, content, and diagnostic S3 buckets;
 - retained SQS queues `document`, `research`, and `maintenance`, their DLQs, and the
   scheduler DLQ;
-- a TLS- and RBAC-enabled Valkey 8 ElastiCache Serverless cache;
+- a TLS- and RBAC-enabled Valkey 8 ElastiCache Serverless cache with a one-day snapshot
+  retained from the `18:00` UTC daily snapshot;
 - database, application, provider, mail, billing, integration, and edge secrets;
 - the alert SNS topic and persistent application/cache security groups.
 

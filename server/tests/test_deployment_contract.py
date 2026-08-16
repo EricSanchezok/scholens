@@ -128,6 +128,8 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
     cache = resources["Cache"]["Properties"]
     assert cache["Engine"] == "valkey"
     assert cache["UserGroupId"] == {"Ref": "CacheUserGroup"}
+    assert cache["DailySnapshotTime"] == "18:00"
+    assert re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", cache["DailySnapshotTime"])
 
     release = resources["ReleaseBucket"]["Properties"]
     assert release["ObjectLockEnabled"] is True
