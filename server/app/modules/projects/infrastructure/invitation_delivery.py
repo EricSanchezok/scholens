@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -23,6 +22,7 @@ from app.modules.projects.application.invitation_tokens import (
 )
 from app.modules.projects.infrastructure.invitation_email import (
     build_project_invitation_email,
+    public_base_url,
 )
 from app.modules.projects.infrastructure.models import ProjectInvitation
 from scholens_observability import add_counter, instrumented_span, record_histogram
@@ -30,14 +30,10 @@ from scholens_observability import add_counter, instrumented_span, record_histog
 logger = logging.getLogger(__name__)
 
 DELIVERY_BATCH_SIZE = 20
-DELIVERY_IDLE_SECONDS = float(
-    os.getenv("PROJECT_INVITATION_DELIVERY_INTERVAL_SECONDS", "1")
-)
 DELIVERY_MAX_ATTEMPTS = 8
 DELIVERY_MAX_BACKOFF_SECONDS = 3_600
-DELIVERY_LEASE = timedelta(
-    seconds=float(os.getenv("PROJECT_INVITATION_DELIVERY_LEASE_SECONDS", "45"))
-)
+DEFAULT_DELIVERY_IDLE_SECONDS = 1.0
+DEFAULT_DELIVERY_LEASE = timedelta(seconds=45)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +132,7 @@ class ProjectInvitationDeliveryRepository:
                     token_revision=invitation.token_revision,
                     lease_id=lease_id,
                     attempt_count=invitation.delivery_attempt_count,
-                    enqueued_at=invitation.delivery_next_attempt_at,
+                    enqueued_at=invitation.created_at,
                     recipient_email=invitation.email,
                     inviter_name=(
                         invitation.invited_by.display_name
@@ -240,11 +236,19 @@ class ProjectInvitationDeliverySupervisor:
         sender: TransactionalEmailSender,
         token_codec: ProjectInvitationTokenCodec,
         client_domain: str,
+        idle_seconds: float = DEFAULT_DELIVERY_IDLE_SECONDS,
+        delivery_lease: timedelta = DEFAULT_DELIVERY_LEASE,
     ) -> None:
+        if idle_seconds <= 0:
+            raise ValueError("invitation delivery interval must be positive")
+        if delivery_lease < timedelta(seconds=40):
+            raise ValueError("invitation delivery lease must exceed provider timeouts")
         self._session_factory = session_factory
         self._sender = sender
         self._token_codec = token_codec
-        self._client_domain = client_domain
+        self._client_domain = public_base_url(client_domain)
+        self._idle_seconds = idle_seconds
+        self._delivery_lease = delivery_lease
 
     def _reserve(self, *, limit: int) -> tuple[ReservedProjectInvitationDelivery, ...]:
         now = datetime.now(UTC)
@@ -256,7 +260,7 @@ class ProjectInvitationDeliverySupervisor:
             deliveries = project_invitation_delivery_repository.reserve(
                 db,
                 now=now,
-                lease=DELIVERY_LEASE,
+                lease=self._delivery_lease,
                 limit=limit,
             )
             db.commit()
@@ -386,7 +390,7 @@ class ProjectInvitationDeliverySupervisor:
             if sent:
                 continue
             try:
-                await asyncio.wait_for(stop.wait(), timeout=DELIVERY_IDLE_SECONDS)
+                await asyncio.wait_for(stop.wait(), timeout=self._idle_seconds)
             except TimeoutError:
                 pass
 

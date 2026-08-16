@@ -211,6 +211,20 @@ def test_mail_settings_require_aliyun_credentials_in_production() -> None:
         mail_settings.validate_configuration(required=True)
 
 
+def test_mail_settings_reject_surrounding_credential_whitespace() -> None:
+    from app.shared.infrastructure.email_settings import ScholensEmailSettings
+
+    mail_settings = ScholensEmailSettings(
+        _env_file=None,
+        scholens_aliyun_dm_access_key_id=" key-id",
+        scholens_aliyun_dm_access_key_secret="key-secret",
+        scholens_aliyun_dm_account_name="sender@example.com",
+    )
+
+    with pytest.raises(RuntimeError, match="surrounding whitespace"):
+        mail_settings.validate_configuration(required=False)
+
+
 @pytest.mark.asyncio
 async def test_access_token_requires_active_scholens_session() -> None:
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="access")

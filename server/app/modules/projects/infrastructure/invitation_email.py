@@ -8,11 +8,23 @@ from urllib.parse import quote, urlsplit
 from app.modules.notifications.application import TransactionalEmailMessage
 
 
-def _public_base_url(value: str) -> str:
+def public_base_url(value: str) -> str:
     base = value.strip().rstrip("/")
     parsed = urlsplit(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("CLIENT_DOMAIN must be an absolute HTTP(S) URL")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("CLIENT_DOMAIN contains an invalid port") from exc
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        raise ValueError("CLIENT_DOMAIN must be an HTTP(S) origin without a path")
     return base
 
 
@@ -24,17 +36,17 @@ def build_project_invitation_email(
     client_domain: str,
 ) -> TransactionalEmailMessage:
     """Build equivalent HTML and text bodies without interpolating unsafe markup."""
-    base = _public_base_url(client_domain)
+    base = public_base_url(client_domain)
     action_url = f"{base}/project-invitations/{quote(invitation_token, safe='.-_~')}"
     safe_url = html.escape(action_url, quote=True)
     inviter = (
-        inviter_name.replace("\r", " ").replace("\n", " ").strip()[:160]
+        inviter_name.replace("\r", " ").replace("\n", " ").strip()[:64]
         or "A Scholens collaborator"
     )
     title = project_title.strip()[:240] or "Untitled project"
     safe_inviter = html.escape(inviter, quote=True)
     safe_title = html.escape(title, quote=True)
-    subject = f"{inviter} invited you to a Scholens project"
+    subject = f"{inviter} invited you to a Scholens project"[:100]
     html_body = f"""<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
@@ -68,4 +80,4 @@ def build_project_invitation_email(
     )
 
 
-__all__ = ["build_project_invitation_email"]
+__all__ = ["build_project_invitation_email", "public_base_url"]

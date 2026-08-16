@@ -54,11 +54,18 @@ task-completion mail, and billing email ports are removed rather than adapted.
 
 The mail secret contains only Aliyun credentials, while alias/reply policy stays
 in task configuration and the invitation signing key stays in the core secret.
-API replicas can recover delivery independently without duplicate processing of
-one attempt. The Web can show truthful pending, sent, and failed states and offer
-manual recovery. Future product messages may reuse the provider-neutral sender,
-but each durable workflow must define its own user intent, persistence, and retry
-contract; this decision does not create a speculative generic notification queue.
+API replicas prevent overlapping claims while a lease is valid and can recover
+delivery after process failure. The external call remains at-least-once because
+a process can stop after Aliyun accepts mail but before `sent` commits; a
+recovered attempt may send the same short-lived revision again. The Web can show
+truthful pending, sent, and failed states and offer manual recovery. Future
+product messages may reuse the provider-neutral sender, but each durable workflow
+must define its own user intent, persistence, and retry contract; this decision
+does not create a speculative generic notification queue.
+Delivery interval and lease configuration is validated at process startup; the
+lease must exceed the provider connection and read timeout budget. Message
+composition also enforces Aliyun's sender-alias and conservative 100-character
+subject limits before a provider call.
 
 ## Validation
 

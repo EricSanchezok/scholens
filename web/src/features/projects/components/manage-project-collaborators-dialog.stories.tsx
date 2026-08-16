@@ -1,11 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { http, HttpResponse } from "msw";
-import { expect, userEvent, within } from "storybook/test";
+import { delay, http, HttpResponse } from "msw";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { actor, authHandlers } from "../../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
 import { resetRefreshForTests } from "@/lib/api";
-import { projectFixtures, projectMemberFixtures } from "../api/fixtures";
+import {
+  projectFixtures,
+  projectInvitationFixtures,
+  projectMemberFixtures,
+} from "../api/fixtures";
 import { projectHandlers } from "../api/handlers";
 import { ManageProjectCollaboratorsDialog } from "./manage-project-collaborators-dialog";
 
@@ -82,7 +86,47 @@ export const InviteAndPermissions: Story = {
     await userEvent.click(
       within(dialog).getByRole("button", { name: "Send invitation" }),
     );
-    await expect(email).toHaveValue("");
+    await waitFor(() => expect(email).toHaveValue(""));
+  },
+};
+
+export const MutuallyExclusiveRowActions: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.post(
+          `${api}/projects/:projectId/invitations/:invitationId/resend`,
+          async ({ params }) => {
+            await delay(500);
+            return HttpResponse.json({
+              ...projectInvitationFixtures[1],
+              id: params.invitationId,
+            });
+          },
+        ),
+        ...projectHandlers.populated,
+      ],
+    },
+  },
+  play: async () => {
+    const dialog = await within(document.body).findByRole("dialog", {
+      name: "Manage collaborators",
+    });
+    const email = await within(dialog).findByText("delivered@example.com");
+    const row = email.closest("article");
+    if (!row) throw new Error("Invitation row is missing");
+    const resend = within(row).getByRole("button", {
+      name: "Send a new link",
+    });
+    const revoke = within(row).getByRole("button", { name: "Revoke" });
+
+    await userEvent.click(resend);
+    await waitFor(() => {
+      expect(resend).toBeDisabled();
+      expect(revoke).toBeDisabled();
+    });
+    await waitFor(() => expect(revoke).toBeEnabled(), { timeout: 2_000 });
   },
 };
 

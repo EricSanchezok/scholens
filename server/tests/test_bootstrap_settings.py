@@ -89,6 +89,21 @@ def test_cors_allowed_origins_defaults_to_canonical_client_domain() -> None:
     assert settings.cors_allowed_origins == ["http://localhost:3000"]
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("project_invitation_delivery_interval_seconds", 0),
+        ("project_invitation_delivery_lease_seconds", 39),
+    ],
+)
+def test_invitation_delivery_settings_reject_unsafe_timing(
+    field: str,
+    value: float,
+) -> None:
+    with pytest.raises(ValidationError):
+        AppSettings(**{field: value})
+
+
 @pytest.mark.parametrize("trusted_proxy_cidr", [None, "not-a-cidr"])
 def test_production_cloudflare_trust_requires_a_valid_proxy_cidr(
     trusted_proxy_cidr: str | None,

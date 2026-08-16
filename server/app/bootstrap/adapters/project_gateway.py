@@ -102,12 +102,10 @@ class SqlAlchemyProjectGateway:
         self,
         db: Session,
         *,
-        invitation_tokens: ProjectInvitationTokenCodec | None = None,
+        invitation_tokens: ProjectInvitationTokenCodec,
     ) -> None:
         self._db = db
-        self._invitation_tokens = invitation_tokens or ProjectInvitationTokenCodec(
-            "development-only-invitation-secret"
-        )
+        self._invitation_tokens = invitation_tokens
 
     def _project(self, project: Project, *, user_id: int) -> ProjectResponse:
         return project_response(
@@ -544,14 +542,14 @@ class SqlAlchemyProjectGateway:
         project_id: UUID,
         request: ProjectInvitationCreateRequest,
     ) -> ProjectInvitationResponse:
-        created = project_repository.create_invitation(
+        invitation = project_repository.create_invitation(
             self._db,
             project_id=project_id,
             actor_id=actor_id,
             email=str(request.email),
             requested=request,
         )
-        return self._invitation(created.invitation.id)
+        return self._invitation(invitation.id)
 
     def resend_invitation(
         self,
@@ -560,13 +558,13 @@ class SqlAlchemyProjectGateway:
         project_id: UUID,
         invitation_id: UUID,
     ) -> ProjectInvitationResponse:
-        resent = project_repository.resend_invitation(
+        invitation = project_repository.resend_invitation(
             self._db,
             project_id=project_id,
             invitation_id=invitation_id,
             actor_id=actor_id,
         )
-        return self._invitation(resent.invitation.id)
+        return self._invitation(invitation.id)
 
     def revoke_invitation(
         self,

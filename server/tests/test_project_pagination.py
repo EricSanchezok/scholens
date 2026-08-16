@@ -6,6 +6,9 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.bootstrap.adapters.project_gateway import SqlAlchemyProjectGateway
+from app.modules.projects.application.invitation_tokens import (
+    ProjectInvitationTokenCodec,
+)
 from app.modules.projects.application.contracts import ProjectResponse, ProjectSort
 from app.modules.projects.application.projects import (
     ProjectPage,
@@ -122,7 +125,12 @@ def test_project_list_uses_one_aggregate_projection_query() -> None:
     db.scalar.return_value = 0
     db.execute.return_value.all.return_value = []
 
-    page = SqlAlchemyProjectGateway(db).list_projects(
+    page = SqlAlchemyProjectGateway(
+        db,
+        invitation_tokens=ProjectInvitationTokenCodec(
+            "project-pagination-test-secret-32-bytes"
+        ),
+    ).list_projects(
         user_id=7,
         query="retrieval",
         sort=ProjectSort.ACTIVITY_DESC,

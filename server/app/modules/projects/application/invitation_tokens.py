@@ -10,6 +10,9 @@ import json
 from dataclasses import dataclass
 from uuid import UUID
 
+MAX_PROJECT_INVITATION_TOKEN_LENGTH = 512
+MAX_PROJECT_INVITATION_PAYLOAD_LENGTH = 128
+
 
 @dataclass(frozen=True, slots=True)
 class DecodedProjectInvitationToken:
@@ -38,6 +41,8 @@ class ProjectInvitationTokenCodec:
         return decoded
 
     def encode(self, *, invitation_id: UUID, revision: int) -> str:
+        if isinstance(revision, bool) or revision < 1:
+            raise ValueError("invitation token revision must be a positive integer")
         payload = json.dumps(
             {"id": str(invitation_id), "revision": revision},
             separators=(",", ":"),
@@ -47,16 +52,30 @@ class ProjectInvitationTokenCodec:
         return f"{self._encode(payload)}.{self._encode(signature)}"
 
     def decode(self, token: str) -> DecodedProjectInvitationToken | None:
+        if not token or len(token) > MAX_PROJECT_INVITATION_TOKEN_LENGTH:
+            return None
         try:
             payload_value, signature_value = token.split(".", maxsplit=1)
+            if not payload_value or not signature_value or "." in signature_value:
+                return None
             payload = self._decode(payload_value)
             signature = self._decode(signature_value)
+            if (
+                len(payload) > MAX_PROJECT_INVITATION_PAYLOAD_LENGTH
+                or len(signature) != hashlib.sha256().digest_size
+            ):
+                return None
             expected = hmac.new(self._secret, payload, hashlib.sha256).digest()
             if not hmac.compare_digest(signature, expected):
                 return None
             value = json.loads(payload)
+            if not isinstance(value, dict) or set(value) != {"id", "revision"}:
+                return None
             invitation_id = UUID(str(value["id"]))
-            revision = int(value["revision"])
+            revision_value = value["revision"]
+            if isinstance(revision_value, bool) or not isinstance(revision_value, int):
+                return None
+            revision = revision_value
             if revision < 1:
                 return None
         except (
@@ -73,4 +92,8 @@ class ProjectInvitationTokenCodec:
         )
 
 
-__all__ = ["DecodedProjectInvitationToken", "ProjectInvitationTokenCodec"]
+__all__ = [
+    "DecodedProjectInvitationToken",
+    "MAX_PROJECT_INVITATION_TOKEN_LENGTH",
+    "ProjectInvitationTokenCodec",
+]

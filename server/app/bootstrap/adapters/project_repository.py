@@ -42,11 +42,6 @@ INVITATION_TTL = timedelta(days=7)
 
 
 @dataclass(frozen=True, slots=True)
-class CreatedInvitation:
-    invitation: ProjectInvitation
-
-
-@dataclass(frozen=True, slots=True)
 class AcceptedInvitation:
     collaborator: ProjectCollaborator
     invitation_id: uuid.UUID
@@ -402,7 +397,7 @@ class ProjectRepository:
         actor_id: int,
         email: str,
         requested: ProjectPermissionSet,
-    ) -> CreatedInvitation:
+    ) -> ProjectInvitation:
         actor = require_project_permission(
             db,
             project_id=project_id,
@@ -475,7 +470,7 @@ class ProjectRepository:
         db.add(invitation)
         db.flush()
         db.refresh(invitation)
-        return CreatedInvitation(invitation=invitation)
+        return invitation
 
     def list_project_invitations(
         self, db: Session, *, project_id: uuid.UUID, actor_id: int
@@ -660,7 +655,7 @@ class ProjectRepository:
         project_id: uuid.UUID,
         invitation_id: uuid.UUID,
         actor_id: int,
-    ) -> CreatedInvitation:
+    ) -> ProjectInvitation:
         actor = require_project_permission(
             db,
             project_id=project_id,
@@ -703,7 +698,7 @@ class ProjectRepository:
         invitation.delivered_at = None
         db.flush()
         db.refresh(invitation)
-        return CreatedInvitation(invitation=invitation)
+        return invitation
 
 
 project_repository = ProjectRepository()

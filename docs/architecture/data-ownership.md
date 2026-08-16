@@ -46,6 +46,8 @@ link becomes invalid. Accepting still revalidates expiry, recipient identity,
 and the inviter's current authority. Identity verification and password-reset
 templates remain owned by `sanchezcloud-identity`; both interfaces may share one
 Aliyun DirectMail account without sharing application contracts or tables.
+Database checks constrain token revisions, delivery states, attempts, and lease
+pairs so corrupted rows cannot silently enter the dispatcher.
 
 ## Database roles and migration order
 

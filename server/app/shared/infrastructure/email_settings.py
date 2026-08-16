@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ScholensEmailSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    scholens_aliyun_dm_access_key_id: str = ""
-    scholens_aliyun_dm_access_key_secret: str = ""
-    scholens_aliyun_dm_account_name: str = ""
-    scholens_aliyun_dm_from_alias: str = "Scholens"
+    scholens_aliyun_dm_access_key_id: str = Field(default="", max_length=128)
+    scholens_aliyun_dm_access_key_secret: str = Field(default="", max_length=256)
+    scholens_aliyun_dm_account_name: str = Field(default="", max_length=320)
+    scholens_aliyun_dm_from_alias: str = Field(
+        default="Scholens",
+        min_length=1,
+        max_length=15,
+    )
     scholens_aliyun_dm_reply_to_address: bool = True
 
     @property
@@ -27,6 +32,10 @@ class ScholensEmailSettings(BaseSettings):
         )
 
     def validate_configuration(self, *, required: bool) -> None:
+        if any(value and value != value.strip() for value in self._credential_values):
+            raise RuntimeError(
+                "SCHOLENS_ALIYUN_DM credentials must not contain surrounding whitespace"
+            )
         configured_count = sum(bool(value) for value in self._credential_values)
         if configured_count not in {0, len(self._credential_values)}:
             raise RuntimeError(

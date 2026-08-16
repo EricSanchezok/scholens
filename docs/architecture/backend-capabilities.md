@@ -104,6 +104,12 @@ exceptions are reduced to low-cardinality safe codes; recipient addresses,
 message bodies, signed tokens, and raw provider errors never enter logs or
 metrics.
 
+The provider boundary is intentionally at-least-once: a process may stop after
+Aliyun accepts a message but before Scholens commits `sent`. A recovered attempt
+can therefore send the same revision again. The duplicate carries the same
+short-lived link, and acceptance still consumes the invitation once; the system
+does not claim impossible exactly-once delivery from an external mail API.
+
 The product sender is provider-neutral and asynchronous. Aliyun is its current
 adapter, with SDK retries disabled and bounded connection/read timeouts.
 Identity email continues through the distinct `sanchezcloud-identity` sender;

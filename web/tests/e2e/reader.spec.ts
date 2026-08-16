@@ -1397,7 +1397,12 @@ test("keeps full translation in the toolbar and renders traceable bilingual refl
       exact: true,
     }),
   ).toHaveCount(0);
-  await expect(page.locator('[data-reflow-kind="table"] table')).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Evidence source" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("columnheader", { name: "证据来源" }),
+  ).toBeVisible();
 });
 
 test("keeps the reflow outline action stable while headings load", async ({

@@ -39,6 +39,16 @@ class AppSettings(BaseSettings):
         default=_DEVELOPMENT_INVITATION_SECRET,
         min_length=32,
     )
+    project_invitation_delivery_interval_seconds: float = Field(
+        default=1,
+        ge=0.1,
+        le=60,
+    )
+    project_invitation_delivery_lease_seconds: float = Field(
+        default=45,
+        ge=40,
+        le=3_600,
+    )
     cache_url: str | None = None
     cache_host: str | None = None
     cache_port: int = Field(default=6379, ge=1, le=65535)

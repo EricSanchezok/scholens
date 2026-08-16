@@ -1488,6 +1488,27 @@ def upgrade() -> None:
         ),
         sa.Column("delivery_failure_code", sa.String(length=80), nullable=True),
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "token_revision >= 1",
+            name="ck_project_invitations_token_revision",
+        ),
+        sa.CheckConstraint(
+            "delivery_status IN ('pending', 'sent', 'failed')",
+            name="ck_project_invitations_delivery_status",
+        ),
+        sa.CheckConstraint(
+            "delivery_attempt_count >= 0",
+            name="ck_project_invitations_delivery_attempt_count",
+        ),
+        sa.CheckConstraint(
+            "(delivery_lease_id IS NULL) = (delivery_lease_expires_at IS NULL)",
+            name="ck_project_invitations_delivery_lease_pair",
+        ),
+        sa.CheckConstraint(
+            "delivery_status = 'pending' OR "
+            "(delivery_lease_id IS NULL AND delivery_lease_expires_at IS NULL)",
+            name="ck_project_invitations_terminal_without_lease",
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

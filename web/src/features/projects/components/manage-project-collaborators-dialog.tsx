@@ -173,10 +173,14 @@ function MemberRow({
         <>
           <PermissionFields
             disabled={{
-              edit_project: immutable || !actorPermissions.edit_project,
+              edit_project:
+                immutable || action !== null || !actorPermissions.edit_project,
               manage_collaborators:
-                immutable || !actorPermissions.manage_collaborators,
-              manage_papers: immutable || !actorPermissions.manage_papers,
+                immutable ||
+                action !== null ||
+                !actorPermissions.manage_collaborators,
+              manage_papers:
+                immutable || action !== null || !actorPermissions.manage_papers,
             }}
             onChange={setPermissions}
             value={permissions}
@@ -184,7 +188,7 @@ function MemberRow({
           {!immutable ? (
             <div className="flex flex-wrap gap-2">
               <Button
-                disabled={!changed}
+                disabled={!changed || action !== null}
                 loading={action === "save"}
                 onClick={() => void run("save")}
                 size="sm"
@@ -194,6 +198,7 @@ function MemberRow({
                 {t("savePermissions")}
               </Button>
               <Button
+                disabled={action !== null}
                 loading={action === "remove"}
                 onClick={() => void run("remove")}
                 size="sm"
@@ -288,6 +293,7 @@ function InvitationRow({
       <div className="flex flex-wrap gap-2">
         {invitation.delivery_status !== "pending" ? (
           <Button
+            disabled={action !== null}
             loading={action === "resend"}
             onClick={() => void run("resend")}
             size="sm"
@@ -298,6 +304,7 @@ function InvitationRow({
           </Button>
         ) : null}
         <Button
+          disabled={action !== null}
           loading={action === "revoke"}
           onClick={() => void run("revoke")}
           size="sm"
@@ -422,7 +429,7 @@ export function ManageProjectCollaboratorsDialog({
                   <MemberRow
                     actorId={actorId}
                     actorPermissions={actorPermissions}
-                    key={member.user_id}
+                    key={`${member.user_id}:${member.permissions.edit_project}:${member.permissions.manage_papers}:${member.permissions.manage_collaborators}`}
                     member={member}
                     onRemove={async (userId) => {
                       await removeProjectMember(project.id, userId);

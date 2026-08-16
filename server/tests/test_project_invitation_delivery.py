@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -47,6 +50,36 @@ def test_invitation_token_is_tamper_evident_and_revisioned() -> None:
     assert decoded_second.revision == 2
     assert codec.decode(f"{first[:-1]}x") is None
     assert codec.decode("not-a-token") is None
+    assert codec.decode("x" * 513) is None
+    with pytest.raises(ValueError, match="positive integer"):
+        codec.encode(invitation_id=invitation_id, revision=0)
+
+
+def test_invitation_token_rejects_an_extra_segment() -> None:
+    codec = ProjectInvitationTokenCodec(TOKEN_SECRET)
+    invitation_id = uuid4()
+    valid = codec.encode(invitation_id=invitation_id, revision=1)
+    payload_value, signature_value = valid.split(".")
+
+    assert codec.decode(f"{payload_value}.{signature_value}.extra") is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"id": str(uuid4()), "revision": True},
+        {"id": str(uuid4()), "revision": 1, "unexpected": "field"},
+    ],
+)
+def test_invitation_token_rejects_noncanonical_signed_payload(
+    payload: dict[str, object],
+) -> None:
+    codec = ProjectInvitationTokenCodec(TOKEN_SECRET)
+    raw_payload = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    signature = hmac.new(TOKEN_SECRET.encode(), raw_payload, hashlib.sha256).digest()
+    token = f"{codec._encode(raw_payload)}.{codec._encode(signature)}"
+
+    assert codec.decode(token) is None
 
 
 def test_project_invitation_email_escapes_content_and_has_equivalent_text() -> None:
@@ -73,6 +106,14 @@ def test_project_invitation_email_escapes_content_and_has_equivalent_text() -> N
     assert "\r" not in sanitized.subject
     assert "\n" not in sanitized.subject
 
+    bounded = build_project_invitation_email(
+        inviter_name="A" * 500,
+        project_title="Project",
+        invitation_token="signed.token",
+        client_domain="https://scholens.example",
+    )
+    assert len(bounded.subject) <= 100
+
 
 def test_project_invitation_email_rejects_relative_client_domain() -> None:
     with pytest.raises(ValueError, match="CLIENT_DOMAIN"):
@@ -81,6 +122,27 @@ def test_project_invitation_email_rejects_relative_client_domain() -> None:
             project_title="Project",
             invitation_token="signed.token",
             client_domain="/relative",
+        )
+
+
+@pytest.mark.parametrize(
+    "client_domain",
+    [
+        "https://user:secret@scholens.example",
+        "https://scholens.example/product",
+        "https://scholens.example?source=email",
+        "https://scholens.example:invalid",
+    ],
+)
+def test_project_invitation_email_rejects_non_origin_client_domain(
+    client_domain: str,
+) -> None:
+    with pytest.raises(ValueError, match="CLIENT_DOMAIN"):
+        build_project_invitation_email(
+            inviter_name="Admin",
+            project_title="Project",
+            invitation_token="signed.token",
+            client_domain=client_domain,
         )
 
 
@@ -341,3 +403,14 @@ async def test_supervisor_persists_retry_without_leaking_provider_detail() -> No
 
     assert await supervisor.deliver_once() == 0
     supervisor._fail.assert_called_once_with(delivery, error)
+
+
+def test_supervisor_rejects_a_lease_shorter_than_provider_timeouts() -> None:
+    with pytest.raises(ValueError, match="exceed provider timeouts"):
+        ProjectInvitationDeliverySupervisor(
+            session_factory=MagicMock(),
+            sender=_Sender(),
+            token_codec=ProjectInvitationTokenCodec(TOKEN_SECRET),
+            client_domain="https://scholens.example",
+            delivery_lease=timedelta(seconds=39),
+        )

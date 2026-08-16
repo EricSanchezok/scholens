@@ -8,6 +8,7 @@ from sqlalchemy import (
     UUID,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -115,6 +116,27 @@ class ProjectInvitation(Base):
 
     __tablename__ = "project_invitations"
     __table_args__ = (
+        CheckConstraint(
+            "token_revision >= 1",
+            name="ck_project_invitations_token_revision",
+        ),
+        CheckConstraint(
+            "delivery_status IN ('pending', 'sent', 'failed')",
+            name="ck_project_invitations_delivery_status",
+        ),
+        CheckConstraint(
+            "delivery_attempt_count >= 0",
+            name="ck_project_invitations_delivery_attempt_count",
+        ),
+        CheckConstraint(
+            "(delivery_lease_id IS NULL) = (delivery_lease_expires_at IS NULL)",
+            name="ck_project_invitations_delivery_lease_pair",
+        ),
+        CheckConstraint(
+            "delivery_status = 'pending' OR "
+            "(delivery_lease_id IS NULL AND delivery_lease_expires_at IS NULL)",
+            name="ck_project_invitations_terminal_without_lease",
+        ),
         Index("ix_project_invitations_project_email", "project_id", "email"),
         Index(
             "ix_project_invitations_delivery_claim",

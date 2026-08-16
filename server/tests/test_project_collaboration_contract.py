@@ -382,11 +382,11 @@ def test_invitation_creation_queues_delivery_in_the_same_transaction(
         requested=ProjectInvitationCreateRequest(email="collaborator@example.com"),
     )
 
-    assert created.invitation.email == "collaborator@example.com"
-    assert created.invitation.delivery_status == "pending"
-    assert created.invitation.delivery_attempt_count == 0
-    assert created.invitation.delivery_next_attempt_at is not None
-    db.add.assert_called_once_with(created.invitation)
+    assert created.email == "collaborator@example.com"
+    assert created.delivery_status == "pending"
+    assert created.delivery_attempt_count == 0
+    assert created.delivery_next_attempt_at is not None
+    db.add.assert_called_once_with(created)
     db.commit.assert_not_called()
 
 
@@ -413,7 +413,7 @@ def test_manual_resend_reuses_invitation_and_increments_revision(
         actor_id=1,
     )
 
-    assert resent.invitation is invitation
+    assert resent is invitation
     assert invitation.token_revision == 2
     assert invitation.delivery_status == "pending"
     assert invitation.delivery_attempt_count == 0
