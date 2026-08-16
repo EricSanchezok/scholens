@@ -51,6 +51,19 @@ Zotero item, attachment, collection, and annotation keys are accepted only in
 their canonical eight-character uppercase form. Internal callback item counts,
 metadata fields, annotations, staging paths, and aggregate serialized size are
 bounded before product mutations run.
+Provider HTTP clients are short-lived context-managed resources. Server browsing
+and verification, Jobs import/sync, and public-PDF resolution close their sessions
+on success and failure instead of delegating connection-pool cleanup to garbage
+collection.
+
+The aggregate callback contract is 12 MiB of the exact compact UTF-8 body. Jobs
+applies it incrementally so it never accumulates hundreds of near-limit annotation
+snapshots before Server can reject them. Sync reserves 4 MiB for automatic imports;
+annotation candidates beyond the remaining projection stay unattempted for fair
+next-run scheduling. Manual import returns a stable small result for every requested
+key that does not fit. Any prepared automatic or manual staging object not admitted
+to the callback is deleted immediately, and automatic-import checkpoints advance
+only through the admitted, resolved prefix.
 
 Jobs performs read-only item, file, and annotation requests, validates PDFs,
 and uploads accepted sources to temporary private storage. Its signed item

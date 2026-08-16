@@ -89,6 +89,8 @@ export function zoteroOperationErrorKey(value: string) {
       return "errors.zotero_operation_cancelled" as const;
     case "zotero_callback_processing_timeout":
       return "errors.zotero_callback_processing_timeout" as const;
+    case "zotero_callback_budget_exceeded":
+      return "errors.zotero_callback_budget_exceeded" as const;
     case "zotero_import_failed":
       return "errors.zotero_import_failed" as const;
     default:

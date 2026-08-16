@@ -41,8 +41,10 @@ from src.webhook_signing import post_signed_json
 from src.zotero import (
     ZoteroJobCredential,
     ZoteroJobError,
+    discard_unsubmitted_items,
     import_items as import_zotero_items,
     sync_items as sync_zotero_items,
+    validate_zotero_callback_payload,
 )
 from scholens_job_contracts import ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS
 from src.schemas import AudioOverviewRequest
@@ -146,6 +148,7 @@ class ProgressReporter:
             self._post_progress()
 
     def _post_progress(self) -> None:
+        response: requests.Response | None = None
         try:
             response = post_signed_json(
                 self._progress_url,
@@ -161,6 +164,9 @@ class ProgressReporter:
                 exc_info=True,
                 extra={"job_id": self._task_id},
             )
+        finally:
+            if response is not None:
+                response.close()
 
 
 def _deliver_webhook(
@@ -190,6 +196,18 @@ def _deliver_zotero_webhook(
     *,
     task_id: str,
 ) -> bool:
+    try:
+        validate_zotero_callback_payload(payload)
+    except ZoteroJobError:
+        discard_unsubmitted_items(
+            [
+                item
+                for field in ("items", "auto_imports")
+                for item in payload.get(field) or []
+                if isinstance(item, dict)
+            ]
+        )
+        raise
     return _deliver_webhook(
         webhook_url,
         payload,
@@ -201,6 +219,7 @@ def _deliver_zotero_webhook(
 def _claim_job(claim_url: str | None, *, task_id: str) -> bool:
     if claim_url is None:
         return True
+    response: requests.Response | None = None
     try:
         response = post_signed_json(claim_url, {}, timeout=30)
         response.raise_for_status()
@@ -211,6 +230,9 @@ def _claim_job(claim_url: str | None, *, task_id: str) -> bool:
     except requests.RequestException:
         logger.exception("job.claim.failed", extra={"job_id": task_id})
         raise
+    finally:
+        if response is not None:
+            response.close()
 
 
 def _log_data_table_progress(task_id: str, status: str) -> None:
@@ -222,6 +244,7 @@ def _log_data_table_progress(task_id: str, status: str) -> None:
 
 
 def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
+    response: requests.Response | None = None
     try:
         response = post_signed_json(credential_url, {}, timeout=30)
     except requests.RequestException as exc:
@@ -231,56 +254,63 @@ def _fetch_mineru_credential(credential_url: str) -> MinerUCredential:
             phase="credential",
             exception_type=type(exc).__name__,
         ) from exc
-    if response.status_code >= 400:
-        try:
-            code = str(response.json().get("code") or "")
-        except (TypeError, ValueError):
-            code = ""
-        if code in {"mineru_credential_required", "integration_not_connected"}:
-            raise ParserConfigurationError(
-                "A MinerU credential is required",
-                error_code="mineru_credential_required",
-                phase="credential",
-                http_status=response.status_code,
-            )
-        if code in {
-            "mineru_credential_invalid",
-            "integration_credentials_unreadable",
-        }:
-            raise ParserConfigurationError(
-                "The MinerU credential is invalid",
-                error_code="mineru_credential_invalid",
-                phase="credential",
-                http_status=response.status_code,
-            )
-        raise ParserTransientError(
-            "Could not obtain the job-scoped MinerU credential",
-            error_code="mineru_unavailable",
-            phase="credential",
-            http_status=response.status_code,
-        )
     try:
-        payload = JobIntegrationCredentialResponse.model_validate(response.json())
-    except (TypeError, ValueError) as exc:
-        raise ParserTransientError(
-            "The job-scoped MinerU credential response is invalid",
-            error_code="mineru_unavailable",
-            phase="credential",
-            exception_type=type(exc).__name__,
-        ) from exc
-    return MinerUCredential(
-        token=payload.credential.get_secret_value(),
-        revision=payload.credential_revision,
-    )
+        if response.status_code >= 400:
+            try:
+                code = str(response.json().get("code") or "")
+            except (TypeError, ValueError):
+                code = ""
+            if code in {"mineru_credential_required", "integration_not_connected"}:
+                raise ParserConfigurationError(
+                    "A MinerU credential is required",
+                    error_code="mineru_credential_required",
+                    phase="credential",
+                    http_status=response.status_code,
+                )
+            if code in {
+                "mineru_credential_invalid",
+                "integration_credentials_unreadable",
+            }:
+                raise ParserConfigurationError(
+                    "The MinerU credential is invalid",
+                    error_code="mineru_credential_invalid",
+                    phase="credential",
+                    http_status=response.status_code,
+                )
+            raise ParserTransientError(
+                "Could not obtain the job-scoped MinerU credential",
+                error_code="mineru_unavailable",
+                phase="credential",
+                http_status=response.status_code,
+            )
+        try:
+            payload = JobIntegrationCredentialResponse.model_validate(response.json())
+        except (TypeError, ValueError) as exc:
+            raise ParserTransientError(
+                "The job-scoped MinerU credential response is invalid",
+                error_code="mineru_unavailable",
+                phase="credential",
+                exception_type=type(exc).__name__,
+            ) from exc
+        return MinerUCredential(
+            token=payload.credential.get_secret_value(),
+            revision=payload.credential_revision,
+        )
+    finally:
+        response.close()
 
 
 def _fetch_zotero_credential(credential_url: str) -> ZoteroJobCredential:
+    response: requests.Response | None = None
     try:
         response = post_signed_json(credential_url, {}, timeout=30)
         response.raise_for_status()
         payload = ZoteroJobCredentialResponse.model_validate(response.json())
     except (requests.RequestException, TypeError, ValueError) as exc:
         raise ZoteroJobError("zotero_unavailable") from exc
+    finally:
+        if response is not None:
+            response.close()
     return ZoteroJobCredential(
         user_id=payload.zotero_user_id,
         api_key=payload.credential.get_secret_value(),
@@ -289,6 +319,7 @@ def _fetch_zotero_credential(credential_url: str) -> ZoteroJobCredential:
 
 
 def _zotero_progress(progress_url: str, code: str) -> bool:
+    response: requests.Response | None = None
     try:
         response = post_signed_json(
             progress_url,
@@ -300,6 +331,9 @@ def _zotero_progress(progress_url: str, code: str) -> bool:
     except requests.RequestException:
         logger.warning("zotero.progress.delivery_failed", exc_info=True)
         return True
+    finally:
+        if response is not None:
+            response.close()
 
 
 @dataclass
@@ -838,6 +872,7 @@ def import_zotero_items_task(
             "operation": "import",
             "credential_revision": credential.revision,
             "credential_outcome": "verified",
+            "error_code": None,
             "items": items,
             "library_version": library_version,
         }
@@ -932,6 +967,7 @@ def sync_zotero_task(
             "operation": "sync",
             "credential_revision": credential.revision,
             "credential_outcome": "verified",
+            "error_code": None,
             **result,
         }
     except ZoteroJobError as exc:

@@ -423,6 +423,61 @@ export const PartialSuccess: Story = {
   },
 };
 
+export const ManualBatchBudgetExceeded: Story = {
+  render: () => (
+    <ZoteroOperationStatus
+      initialOperation={{
+        completed_at: "2026-08-16T08:02:00Z",
+        counts: { failed: 1, skipped: 0, succeeded: 5, total: 6 },
+        created_at: "2026-08-16T08:00:00Z",
+        error_code: null,
+        id: "51000000-0000-4000-8000-000000000103",
+        items: [
+          {
+            error_code: "zotero_callback_budget_exceeded",
+            status: "failed",
+            title: "Large annotated paper",
+            zotero_item_key: "LARGE001",
+          },
+        ],
+        kind: "import",
+        started_at: "2026-08-16T08:00:10Z",
+        status: "partial",
+      }}
+      operationId="51000000-0000-4000-8000-000000000103"
+      onComplete={fn()}
+      onDismiss={fn()}
+    />
+  ),
+  parameters: {
+    msw: {
+      handlers: [
+        http.get(`${api}/imports/:operationId`, () =>
+          HttpResponse.json({
+            completed_at: "2026-08-16T08:02:00Z",
+            counts: { failed: 1, skipped: 0, succeeded: 5, total: 6 },
+            created_at: "2026-08-16T08:00:00Z",
+            error_code: null,
+            id: "51000000-0000-4000-8000-000000000103",
+            items: [],
+            kind: "import",
+            started_at: "2026-08-16T08:00:10Z",
+            status: "partial",
+          }),
+        ),
+      ],
+    },
+  },
+  play: async () => {
+    const body = within(document.body);
+    await expect(
+      await body.findByText(
+        "Large annotated paper: This batch contains too much Zotero annotation data. Import fewer papers and try again.",
+      ),
+    ).toBeVisible();
+  },
+};
+
 export const FailedCallbackTimeout: Story = {
   render: () => (
     <ZoteroOperationStatus

@@ -98,7 +98,8 @@ then creates the ordinary paper-ingestion lifecycle with Zotero metadata as
 the authority. One bad item therefore yields a partial operation instead of
 rolling back accepted papers. Provider rate limits use bounded retry delay;
 credential replacement, disconnect, and cancellation are checked at expensive
-boundaries. Every outbound session ignores environment proxies; public PDF
+boundaries. Every Zotero provider session ignores environment proxies and has an
+explicit context-managed close on success and failure; public PDF
 redirects are revalidated against the connected peer address, and a Zotero API
 key is never forwarded across origins. Controlled provider failures and
 cooperative cancellation before callback delivery remove temporary
@@ -110,6 +111,19 @@ Worker inputs and provider outputs must use canonical eight-character Zotero
 item, attachment, collection, and annotation keys. Metadata and annotation
 snapshots are bounded before callback delivery so a provider-controlled library
 cannot amplify an internal callback without limit.
+
+Jobs enforces the shared 12 MiB callback ceiling while it builds a result, not
+only immediately before HTTP delivery. Manual import retains one small stable
+`zotero_callback_budget_exceeded` result for every requested key it cannot fit,
+stops further provider reads, and deletes any just-prepared staging object that
+was not admitted to the callback. Sync reads annotation targets only until its
+bounded projection is full, leaving later targets absent so Server does not
+advance their attempt time and they remain first in the next fair scheduling
+window. When automatic import is active, 4 MiB is reserved from the annotation
+projection for that work. Automatic items are admitted one at a time; a first
+item that does not fit is deleted from staging, the provider page is left
+uncaught-up, and Server can advance only through the prefix actually returned.
+The exact compact UTF-8 JSON body is checked again before signing and sending.
 
 The shared completion contract gives Server a 12-minute processing bound,
 Jobs a 13-minute HTTP timeout, and the Server claim a renewable 15-minute

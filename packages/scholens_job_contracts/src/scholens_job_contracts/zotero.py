@@ -1,6 +1,8 @@
-"""Service-neutral timing contract for signed Zotero completion callbacks."""
+"""Service-neutral timing and size contract for Zotero completion callbacks."""
 
 ZOTERO_CALLBACK_HEARTBEAT_SECONDS = 30
 ZOTERO_CALLBACK_PROCESSING_TIMEOUT_SECONDS = 12 * 60
 ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS = 13 * 60
 ZOTERO_CALLBACK_LEASE_SECONDS = 15 * 60
+MAX_ZOTERO_CALLBACK_BYTES = 12 * 1024 * 1024
+ZOTERO_SYNC_AUTO_IMPORT_RESERVE_BYTES = 4 * 1024 * 1024

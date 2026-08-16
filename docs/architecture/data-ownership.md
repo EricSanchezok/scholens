@@ -213,6 +213,12 @@ side effects. The claim is renewable while the callback consumes a batch one
 PDF at a time. Server owns the 12-minute processing bound and 30-second
 heartbeat, Jobs waits up to 13 minutes, and the claim remains exclusive for 15
 minutes. These values are a shared service-neutral contract, not queue policy.
+The same package owns the 12 MiB exact-body ceiling and the 4 MiB automatic-import
+reserve. Jobs owns incremental result admission and immediate cleanup of staging
+that was never handed to Server; Server owns defensive validation before mutation.
+Sync targets omitted because the annotation projection is full have no attempted
+state change, and automatic-import cursor ownership never advances beyond the
+returned resolved prefix.
 `ZoteroImportedItem` links the user's Zotero item and optional attachment to
 the canonical Document and paper-ingestion job. It separately records
 `last_sync_attempted_at`, successful `last_synced_at`, annotation-source status,

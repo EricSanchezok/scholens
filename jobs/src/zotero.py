@@ -14,8 +14,13 @@ from urllib.parse import urljoin, urlsplit
 
 import pymupdf
 import requests
+from scholens_job_contracts import (
+    MAX_ZOTERO_CALLBACK_BYTES,
+    ZOTERO_SYNC_AUTO_IMPORT_RESERVE_BYTES,
+)
 
 from src.s3_service import s3_service
+from src.webhook_signing import encode_json_body
 
 ZOTERO_API_BASE = "https://api.zotero.org"
 IMPORTABLE_ITEM_TYPES = frozenset({"journalArticle", "conferencePaper", "preprint"})
@@ -24,6 +29,7 @@ MAX_REDIRECTS = 5
 MAX_AUTO_IMPORT_ITEMS = 50
 MAX_ANNOTATIONS_BYTES = 2 * 1024 * 1024
 ZOTERO_KEY = re.compile(r"^[A-Z0-9]{8}$")
+_MAX_VERSION_SENTINEL = 2**63 - 1
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +57,15 @@ class ZoteroClient:
             "Zotero-API-Key": credential.api_key,
             "Zotero-API-Version": "3",
         }
+
+    def close(self) -> None:
+        self._session.close()
+
+    def __enter__(self) -> ZoteroClient:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
 
     @property
     def _base(self) -> str:
@@ -85,7 +100,11 @@ class ZoteroClient:
                         headers=self._api_headers if same_origin else {},
                     )
                     if not same_origin:
-                        _require_global_peer(response)
+                        try:
+                            _require_global_peer(response)
+                        except ZoteroJobError:
+                            response.close()
+                            raise
                     if response.status_code not in {301, 302, 303, 307, 308}:
                         break
                     try:
@@ -146,7 +165,10 @@ class ZoteroClient:
             "/items",
             params={"itemKey": ",".join(keys), "limit": min(len(keys), 50)},
         )
-        value = response.json()
+        try:
+            value = response.json()
+        finally:
+            response.close()
         return (
             [item for item in value if isinstance(item, dict)]
             if isinstance(value, list)
@@ -159,7 +181,10 @@ class ZoteroClient:
             f"/items/{item_key}/children",
             params={"limit": 100},
         )
-        value = response.json()
+        try:
+            value = response.json()
+        finally:
+            response.close()
         return (
             [item for item in value if isinstance(item, dict)]
             if isinstance(value, list)
@@ -217,7 +242,95 @@ class ZoteroClient:
 
     def current_library_version(self) -> int | None:
         response = self._request("/items/top", params={"limit": 1})
-        return _header_int(response, "Last-Modified-Version")
+        try:
+            return _header_int(response, "Last-Modified-Version")
+        finally:
+            response.close()
+
+
+def zotero_callback_payload_size(payload: dict[str, Any]) -> int:
+    """Return the exact UTF-8 body size used by the signed JSON transport."""
+    return len(encode_json_body(payload))
+
+
+def validate_zotero_callback_payload(payload: dict[str, Any]) -> None:
+    if zotero_callback_payload_size(payload) > MAX_ZOTERO_CALLBACK_BYTES:
+        raise ZoteroJobError("zotero_callback_budget_exceeded")
+
+
+def discard_unsubmitted_items(items: Iterable[dict[str, Any]]) -> None:
+    _delete_uploaded_keys(
+        [
+            object_key
+            for item in items
+            if isinstance(item, dict)
+            and isinstance((object_key := item.get("s3_object_key")), str)
+            and object_key.startswith("zotero-imports/")
+        ]
+    )
+
+
+def _array_growth(encoded_sum: int, count: int) -> int:
+    return encoded_sum + max(0, count - 1)
+
+
+def _import_callback_base_size(
+    *,
+    task_id: str,
+    credential_revision: str,
+) -> int:
+    return zotero_callback_payload_size(
+        {
+            "task_id": task_id,
+            "operation": "import",
+            "credential_revision": credential_revision,
+            "credential_outcome": "verified",
+            "error_code": None,
+            "items": [],
+            "library_version": _MAX_VERSION_SENTINEL,
+        }
+    )
+
+
+def _sync_callback_base_size(
+    *,
+    task_id: str,
+    credential_revision: str,
+    auto_import_version: int | None,
+    auto_import_start: int,
+) -> int:
+    auto_import_active = auto_import_version is not None
+    return zotero_callback_payload_size(
+        {
+            "task_id": task_id,
+            "operation": "sync",
+            "credential_revision": credential_revision,
+            "credential_outcome": "verified",
+            "error_code": None,
+            "updates": [],
+            "failures": [],
+            "auto_imports": [],
+            "library_version": (_MAX_VERSION_SENTINEL if auto_import_active else None),
+            "auto_import_base_version": auto_import_version,
+            "auto_import_base_start": auto_import_start,
+            "auto_import_caught_up_version": (
+                _MAX_VERSION_SENTINEL if auto_import_active else None
+            ),
+        }
+    )
+
+
+def _discard_prepared_item(
+    item: dict[str, Any],
+    *,
+    uploaded_keys: list[str],
+) -> None:
+    object_key = item.get("s3_object_key")
+    if not isinstance(object_key, str) or not object_key.startswith("zotero-imports/"):
+        return
+    _delete_uploaded_keys([object_key])
+    if object_key in uploaded_keys:
+        uploaded_keys.remove(object_key)
 
 
 def import_items(
@@ -231,26 +344,54 @@ def import_items(
     try:
         for item_key in item_keys:
             _require_zotero_key(item_key)
-        client = ZoteroClient(credential)
-        _require_active(is_active)
-        raw_by_key = {
-            str(item.get("key")): item
-            for item in client.items(item_keys)
-            if item.get("key")
-        }
-        results: list[dict[str, Any]] = []
-        for item_key in item_keys:
+        budget_errors = [
+            _failed_item(item_key, "zotero_callback_budget_exceeded")
+            for item_key in item_keys
+        ]
+        error_sizes = [zotero_callback_payload_size(error) for error in budget_errors]
+        error_suffix_sizes = [0] * (len(item_keys) + 1)
+        for index in range(len(item_keys) - 1, -1, -1):
+            error_suffix_sizes[index] = (
+                error_suffix_sizes[index + 1] + error_sizes[index]
+            )
+        callback_base_size = _import_callback_base_size(
+            task_id=task_id,
+            credential_revision=credential.revision,
+        )
+        callback_commas = max(0, len(item_keys) - 1)
+        with ZoteroClient(credential) as client:
             _require_active(is_active)
-            results.append(
-                _prepare_import_item(
+            raw_by_key = {
+                str(item.get("key")): item
+                for item in client.items(item_keys)
+                if item.get("key")
+            }
+            results: list[dict[str, Any]] = []
+            encoded_results_size = 0
+            for index, item_key in enumerate(item_keys):
+                _require_active(is_active)
+                prepared = _prepare_import_item(
                     task_id=task_id,
                     client=client,
                     item=raw_by_key.get(item_key),
                     item_key=item_key,
                     uploaded_keys=uploaded_keys,
                 )
-            )
-        return results, client.current_library_version()
+                prepared_size = zotero_callback_payload_size(prepared)
+                projected_size = (
+                    callback_base_size
+                    + encoded_results_size
+                    + prepared_size
+                    + error_suffix_sizes[index + 1]
+                    + callback_commas
+                )
+                if projected_size > MAX_ZOTERO_CALLBACK_BYTES:
+                    _discard_prepared_item(prepared, uploaded_keys=uploaded_keys)
+                    results.extend(budget_errors[index:])
+                    break
+                results.append(prepared)
+                encoded_results_size += prepared_size
+            return results, client.current_library_version()
     except Exception:
         _delete_uploaded_keys(uploaded_keys)
         raise
@@ -291,13 +432,47 @@ def _sync_items(
     is_active: Callable[[], bool] | None,
     uploaded_keys: list[str],
 ) -> dict[str, Any]:
-    client = ZoteroClient(credential)
+    with ZoteroClient(credential) as client:
+        return _sync_items_with_client(
+            task_id=task_id,
+            client=client,
+            credential_revision=credential.revision,
+            targets=targets,
+            auto_import_version=auto_import_version,
+            auto_import_start=auto_import_start,
+            is_active=is_active,
+            uploaded_keys=uploaded_keys,
+        )
+
+
+def _sync_items_with_client(
+    *,
+    task_id: str,
+    client: ZoteroClient,
+    credential_revision: str,
+    targets: list[dict[str, Any]],
+    auto_import_version: int | None,
+    auto_import_start: int,
+    is_active: Callable[[], bool] | None,
+    uploaded_keys: list[str],
+) -> dict[str, Any]:
     for target in targets:
         _require_zotero_key(str(target.get("item_key") or ""))
         _require_zotero_key(str(target.get("attachment_key") or ""))
     _require_active(is_active)
     updates: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
+    callback_base_size = _sync_callback_base_size(
+        task_id=task_id,
+        credential_revision=credential_revision,
+        auto_import_version=auto_import_version,
+        auto_import_start=auto_import_start,
+    )
+    annotation_budget = MAX_ZOTERO_CALLBACK_BYTES - (
+        ZOTERO_SYNC_AUTO_IMPORT_RESERVE_BYTES if auto_import_version is not None else 0
+    )
+    encoded_updates_size = 0
+    encoded_failures_size = 0
     for index, target in enumerate(targets):
         if index % 10 == 0:
             _require_active(is_active)
@@ -315,31 +490,67 @@ def _sync_items(
         except ZoteroJobError as exc:
             if exc.invalid_credential:
                 raise
-            failures.append(
-                {
-                    "item_key": item_key,
-                    "error_code": (
-                        "zotero_attachment_not_found"
-                        if exc.code == "zotero_item_not_found"
-                        else exc.code
-                    ),
-                }
+            candidate_failure = {
+                "item_key": item_key,
+                "error_code": (
+                    "zotero_attachment_not_found"
+                    if exc.code == "zotero_item_not_found"
+                    else exc.code
+                ),
+            }
+            candidate_size = zotero_callback_payload_size(candidate_failure)
+            projected_size = (
+                callback_base_size
+                + _array_growth(encoded_updates_size, len(updates))
+                + _array_growth(
+                    encoded_failures_size + candidate_size,
+                    len(failures) + 1,
+                )
             )
+            if projected_size > annotation_budget:
+                break
+            failures.append(candidate_failure)
+            encoded_failures_size += candidate_size
             continue
         try:
             annotations_json = _annotations_json(annotations)
         except ZoteroJobError as exc:
-            failures.append({"item_key": item_key, "error_code": exc.code})
+            candidate_failure = {"item_key": item_key, "error_code": exc.code}
+            candidate_size = zotero_callback_payload_size(candidate_failure)
+            projected_size = (
+                callback_base_size
+                + _array_growth(encoded_updates_size, len(updates))
+                + _array_growth(
+                    encoded_failures_size + candidate_size,
+                    len(failures) + 1,
+                )
+            )
+            if projected_size > annotation_budget:
+                break
+            failures.append(candidate_failure)
+            encoded_failures_size += candidate_size
             continue
-        updates.append(
-            {
-                "item_key": item_key,
-                "attachment_key": attachment_key,
-                "annotations_json": annotations_json,
-            }
+        candidate_update = {
+            "item_key": item_key,
+            "attachment_key": attachment_key,
+            "annotations_json": annotations_json,
+        }
+        candidate_size = zotero_callback_payload_size(candidate_update)
+        projected_size = (
+            callback_base_size
+            + _array_growth(
+                encoded_updates_size + candidate_size,
+                len(updates) + 1,
+            )
+            + _array_growth(encoded_failures_size, len(failures))
         )
+        if projected_size > annotation_budget:
+            break
+        updates.append(candidate_update)
+        encoded_updates_size += candidate_size
 
     auto_imports: list[dict[str, Any]] = []
+    encoded_auto_imports_size = 0
     library_version: int | None = None
     auto_import_caught_up_version: int | None = None
     if auto_import_version is not None:
@@ -351,21 +562,38 @@ def _sync_items(
         )
         selected_items = _bounded_version_batch(new_items)
         library_version = observed_version
-        if not has_more:
-            auto_import_caught_up_version = observed_version
+        auto_import_truncated = False
         for item in selected_items:
             _require_active(is_active)
             key = str(item.get("key") or "")
-            if key:
-                auto_imports.append(
-                    _prepare_import_item(
-                        task_id=task_id,
-                        client=client,
-                        item=item,
-                        item_key=key,
-                        uploaded_keys=uploaded_keys,
-                    )
+            if not key:
+                auto_import_truncated = True
+                break
+            prepared = _prepare_import_item(
+                task_id=task_id,
+                client=client,
+                item=item,
+                item_key=key,
+                uploaded_keys=uploaded_keys,
+            )
+            prepared_size = zotero_callback_payload_size(prepared)
+            projected_size = (
+                callback_base_size
+                + _array_growth(encoded_updates_size, len(updates))
+                + _array_growth(encoded_failures_size, len(failures))
+                + _array_growth(
+                    encoded_auto_imports_size + prepared_size,
+                    len(auto_imports) + 1,
                 )
+            )
+            if projected_size > MAX_ZOTERO_CALLBACK_BYTES:
+                _discard_prepared_item(prepared, uploaded_keys=uploaded_keys)
+                auto_import_truncated = True
+                break
+            auto_imports.append(prepared)
+            encoded_auto_imports_size += prepared_size
+        if not has_more and not auto_import_truncated:
+            auto_import_caught_up_version = observed_version
     return {
         "updates": updates,
         "failures": failures,
@@ -608,39 +836,39 @@ def _resolve_open_pdf(data: dict[str, Any]) -> tuple[bytes, str]:
 
 
 def _fetch_public_pdf(url: str) -> bytes:
-    session = requests.Session()
-    session.trust_env = False
-    current = url
-    for _ in range(MAX_REDIRECTS + 1):
-        _require_public_url(current)
-        try:
-            response = session.get(
-                current,
-                timeout=(10, 60),
-                stream=True,
-                allow_redirects=False,
-                headers={"Accept": "application/pdf"},
-            )
-        except requests.RequestException as exc:
-            raise ZoteroJobError("zotero_unavailable") from exc
-        try:
-            _require_global_peer(response)
-            if response.is_redirect or response.is_permanent_redirect:
-                location = response.headers.get("Location")
-                if not location:
-                    raise ZoteroJobError("zotero_pdf_unavailable")
-                current = urljoin(current, location)
-                continue
-            if response.status_code == 429:
-                raise ZoteroJobError("zotero_rate_limited")
-            if response.status_code >= 500:
-                raise ZoteroJobError("zotero_unavailable")
-            response.raise_for_status()
-            return _bounded_response_bytes(response)
-        except requests.RequestException as exc:
-            raise ZoteroJobError("zotero_pdf_unavailable") from exc
-        finally:
-            response.close()
+    with requests.Session() as session:
+        session.trust_env = False
+        current = url
+        for _ in range(MAX_REDIRECTS + 1):
+            _require_public_url(current)
+            try:
+                response = session.get(
+                    current,
+                    timeout=(10, 60),
+                    stream=True,
+                    allow_redirects=False,
+                    headers={"Accept": "application/pdf"},
+                )
+            except requests.RequestException as exc:
+                raise ZoteroJobError("zotero_unavailable") from exc
+            try:
+                _require_global_peer(response)
+                if response.is_redirect or response.is_permanent_redirect:
+                    location = response.headers.get("Location")
+                    if not location:
+                        raise ZoteroJobError("zotero_pdf_unavailable")
+                    current = urljoin(current, location)
+                    continue
+                if response.status_code == 429:
+                    raise ZoteroJobError("zotero_rate_limited")
+                if response.status_code >= 500:
+                    raise ZoteroJobError("zotero_unavailable")
+                response.raise_for_status()
+                return _bounded_response_bytes(response)
+            except requests.RequestException as exc:
+                raise ZoteroJobError("zotero_pdf_unavailable") from exc
+            finally:
+                response.close()
     raise ZoteroJobError("zotero_pdf_unavailable")
 
 

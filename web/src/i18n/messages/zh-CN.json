@@ -1313,6 +1313,7 @@
         "zotero_credentials_rotated": "处理前连接已发生变更。",
         "zotero_operation_cancelled": "导入已取消。",
         "zotero_callback_processing_timeout": "Scholens 未能在时限内完成这批 Zotero 操作，请重试导入或同步。",
+        "zotero_callback_budget_exceeded": "这批论文包含的 Zotero 标注数据过多，请减少导入数量后重试。",
         "zotero_import_failed": "无法导入此论文。",
         "zotero_operation_failed": "Zotero 操作失败，请重试。"
       }

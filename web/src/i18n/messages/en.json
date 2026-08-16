@@ -1313,6 +1313,7 @@
         "zotero_credentials_rotated": "The connection changed before this item was processed.",
         "zotero_operation_cancelled": "The import was cancelled.",
         "zotero_callback_processing_timeout": "Scholens took too long to finish this Zotero batch. Try the import or sync again.",
+        "zotero_callback_budget_exceeded": "This batch contains too much Zotero annotation data. Import fewer papers and try again.",
         "zotero_import_failed": "This paper could not be imported.",
         "zotero_operation_failed": "The Zotero operation failed. Try again."
       }

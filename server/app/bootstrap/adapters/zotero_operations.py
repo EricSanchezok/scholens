@@ -152,10 +152,11 @@ class DefaultZoteroOperations:
         )
 
     def verify_access_token(self, *, access_token: ZoteroAccessToken) -> bool:
-        info = ZoteroApiClient(
+        with ZoteroApiClient(
             zotero_user_id=access_token.user_id,
             api_key=access_token.api_key,
-        ).key_info()
+        ) as client:
+            info = client.key_info()
         if str(info.get("userID") or "") != access_token.user_id:
             return False
         access = info.get("access")
@@ -183,20 +184,20 @@ class DefaultZoteroOperations:
         sort: str = "dateModified",
         direction: str = "desc",
     ) -> ZoteroLibrarySnapshot:
-        client = self._client(credentials)
-        page = client.get_top_importable_items_page(
-            limit=limit,
-            start=start,
-            query=query,
-            collection_key=collection_key,
-            item_type=item_type,
-            sort=sort,
-            direction=direction,
-        )
-        visible_item_keys = [
-            str(item.get("key") or "") for item in page.items if item.get("key")
-        ]
-        pdf_parent_keys = client.get_stored_pdf_parent_keys(visible_item_keys)
+        with self._client(credentials) as client:
+            page = client.get_top_importable_items_page(
+                limit=limit,
+                start=start,
+                query=query,
+                collection_key=collection_key,
+                item_type=item_type,
+                sort=sort,
+                direction=direction,
+            )
+            visible_item_keys = [
+                str(item.get("key") or "") for item in page.items if item.get("key")
+            ]
+            pdf_parent_keys = client.get_stored_pdf_parent_keys(visible_item_keys)
         return ZoteroLibrarySnapshot(
             items=tuple(
                 _snapshot(
@@ -219,10 +220,11 @@ class DefaultZoteroOperations:
         limit: int,
         start: int,
     ) -> ZoteroCollectionSnapshotPage:
-        page = self._client(credentials).get_collections_page(
-            limit=limit,
-            start=start,
-        )
+        with self._client(credentials) as client:
+            page = client.get_collections_page(
+                limit=limit,
+                start=start,
+            )
         return ZoteroCollectionSnapshotPage(
             items=tuple(
                 ZoteroCollectionSnapshot(
@@ -239,7 +241,8 @@ class DefaultZoteroOperations:
         )
 
     def current_library_version(self, *, credentials: ZoteroCredentials) -> int | None:
-        return self._client(credentials).current_library_version()
+        with self._client(credentials) as client:
+            return client.current_library_version()
 
     async def fetch_page_dimensions(self, *, source_key: str | None) -> PageDimensions:
         if not source_key:

@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
+from scholens_job_contracts import MAX_ZOTERO_CALLBACK_BYTES
+
 from app.shared.domain import JsonValue
 from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.modules.papers.application.contracts.extraction import PaperMetadataExtraction
@@ -111,7 +113,6 @@ class IntegrationUseEventPayload(BaseModel):
 ZoteroKey = Annotated[str, Field(pattern=r"^[A-Z0-9]{8}$")]
 BoundedZoteroText = Annotated[str, Field(max_length=2_000)]
 MAX_ZOTERO_ANNOTATIONS_BYTES = 2 * 1024 * 1024
-MAX_ZOTERO_CALLBACK_BYTES = 12 * 1024 * 1024
 _ZOTERO_KEY = re.compile(r"^[A-Z0-9]{8}$")
 
 

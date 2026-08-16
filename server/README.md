@@ -293,11 +293,12 @@ stable public DTOs; raw provider exceptions and credentials are never public.
 
 Collection and library browsing perform remote I/O outside an application
 transaction, enforce Zotero's 100-item page ceiling, and bind opaque cursors to
-the user and complete query. Collection cursors remain available beyond the
-first page. PDF availability is determined from complete, bounded child pages
-for only the currently visible items; a safety-limit hit fails explicitly
-instead of reporting an unscanned PDF as unavailable. Import and sync mutations
-only commit a
+the user and complete query. Each provider call owns and explicitly closes its
+HTTP session on both success and failure. Collection cursors remain available
+beyond the first page. PDF availability is determined from complete, bounded
+child pages for only the currently visible items; a safety-limit hit fails
+explicitly instead of reporting an unscanned PDF as unavailable. Import and
+sync mutations only commit a
 `ZoteroOperation`, DurableJob, and dispatch outbox before returning `202`.
 The connection row is locked during acceptance, so each user has at most one
 active Zotero import or sync; status returns its kind and ID for refresh-safe
@@ -313,6 +314,11 @@ lease. Terminal, cancelled, concurrent, and replayed deliveries make no
 connection, paper, annotation, journal, or storage mutation. Canonical
 eight-character Zotero keys and bounded metadata/annotation callback payloads
 are enforced at both public and internal boundaries.
+The aggregate callback ceiling is the shared 12 MiB compact-JSON contract.
+Jobs stops constructing manual or sync results before that bound; Server still
+validates it before any product mutation. Annotation-budget exhaustion leaves
+unreported sync targets unattempted, while a reserved automatic-import share
+prevents a large annotation front page from starving prospective imports.
 Import callbacks plan deduplication and quota decisions before downloading any
 staged content, then consume one PDF at a time. A 50-paper operation therefore
 holds at most one 30 MiB provider PDF payload in the API process. The callback

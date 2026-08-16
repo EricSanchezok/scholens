@@ -227,11 +227,22 @@ validation, and sends idempotent signed progress and item callbacks. Server
 alone creates normal paper-ingestion jobs or appends annotation threads. An
 operation may finish partially, and cooperative cancellation is terminal even
 when a provider response arrives later.
+Both services explicitly close each Zotero HTTP session on normal and exceptional
+paths; the public-PDF resolver does the same across redirect and SSRF rejection
+paths.
 Each terminal callback first atomically claims an expiring callback-processing
 lease. A terminal, cancelled, concurrent, or replayed callback exits before
 provider-outcome recording or any import, annotation, journal, or storage
 mutation. Callback keys, staging paths, metadata, annotation content, and total
 serialized size are validated against bounded internal contracts.
+Jobs incrementally enforces the shared 12 MiB compact-JSON budget before a
+provider-controlled batch can accumulate in memory and validates the exact body
+again before delivery. Sync reserves 4 MiB for automatic imports; annotation
+targets beyond its projection are not reported or marked attempted. Manual
+imports preserve a small stable failure for each requested key that cannot fit,
+and an unreported prepared staging object is removed immediately. A truncated
+automatic page remains uncaught-up, so its cursor advances only through the
+returned resolved prefix.
 The renewable claim uses a 30-second heartbeat and 15-minute lease around a
 12-minute Server processing bound; Jobs waits 13 minutes for the signed HTTP
 result. Import planning precedes any staged download, and Server consumes one

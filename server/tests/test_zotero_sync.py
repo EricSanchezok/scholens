@@ -261,3 +261,48 @@ def test_apply_sync_consumes_provider_failures_as_attempts() -> None:
     assert update_failure.call_count == 500
     assert update_failure.call_args_list[0].kwargs["source_unavailable"] is True
     assert update_failure.call_args_list[1].kwargs["source_unavailable"] is False
+
+
+def test_apply_sync_does_not_advance_targets_omitted_by_worker_budget() -> None:
+    scheduled_keys = [f"I{index:07d}" for index in range(500)]
+    returned_keys = scheduled_keys[:4]
+    imported_by_key = {
+        item_key: SimpleNamespace(id=uuid4(), zotero_item_key=item_key)
+        for item_key in returned_keys
+    }
+    callback = ZoteroSyncBatch(
+        updates=(),
+        failures=tuple(
+            ZoteroSyncFailure(
+                item_key=item_key,
+                error_code="zotero_rate_limited",
+            )
+            for item_key in returned_keys
+        ),
+    )
+
+    with (
+        patch.object(
+            gateway_module.zotero_import_repository,
+            "get_by_item_key",
+            side_effect=lambda _db, *, user_id, zotero_item_key: imported_by_key[
+                zotero_item_key
+            ],
+        ) as get_item,
+        patch.object(
+            gateway_module.zotero_import_repository,
+            "update_after_sync_failure",
+        ) as update_failure,
+    ):
+        DefaultZoteroGateway(MagicMock(), connections=MagicMock()).apply_sync(
+            actor=_actor(),
+            batch=callback,
+            credential_revision=uuid4(),
+        )
+
+    assert get_item.call_count == len(returned_keys)
+    assert update_failure.call_count == len(returned_keys)
+    assert {
+        call.kwargs["item"].zotero_item_key for call in update_failure.call_args_list
+    } == set(returned_keys)
+    assert set(scheduled_keys[len(returned_keys) :]).isdisjoint(returned_keys)

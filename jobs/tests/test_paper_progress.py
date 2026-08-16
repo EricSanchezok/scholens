@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
+from src.pdf.models import ParserTransientError
 from src.tasks import (
     JOB_PROGRESS_TIMEOUT_SECONDS,
     JobCancelled,
@@ -52,6 +53,26 @@ def test_job_scoped_credential_never_enters_repr_or_callback_events(
             "error_code": None,
         }
     ]
+    response.close.assert_called_once_with()
+
+
+def test_job_scoped_credential_closes_response_after_invalid_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = MagicMock(status_code=200)
+    response.json.return_value = {}
+    monkeypatch.setattr(
+        "src.tasks.post_signed_json",
+        MagicMock(return_value=response),
+    )
+
+    with pytest.raises(ParserTransientError) as raised:
+        _fetch_mineru_credential(
+            "https://server.example/internal/jobs/job-1/credential"
+        )
+
+    assert getattr(raised.value, "error_code", None) == "mineru_unavailable"
+    response.close.assert_called_once_with()
 
 
 @pytest.mark.parametrize(
@@ -76,7 +97,8 @@ def test_pdf_failure_code_preserves_the_failed_lifecycle_stage(
 def test_progress_reporter_normalizes_stage_and_uses_short_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    post = MagicMock(return_value=_response())
+    response = _response()
+    post = MagicMock(return_value=response)
     monkeypatch.setattr("src.tasks.post_signed_json", post)
     reporter = ProgressReporter(
         task_id="job-1",
@@ -90,6 +112,7 @@ def test_progress_reporter_normalizes_stage_and_uses_short_timeout(
         {"progress_code": "extracting_metadata"},
         timeout=JOB_PROGRESS_TIMEOUT_SECONDS,
     )
+    response.close.assert_called_once_with()
 
 
 def test_progress_reporter_prioritizes_terminal_stage_over_processing_text(
@@ -138,3 +161,22 @@ def test_progress_delivery_outage_does_not_fail_pdf_processing(
 
     reporter.update("Downloading PDF from S3")
     reporter.check_cancelled()
+
+
+def test_progress_reporter_closes_http_error_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = _response()
+    response.raise_for_status.side_effect = requests.HTTPError("unavailable")
+    monkeypatch.setattr(
+        "src.tasks.post_signed_json",
+        MagicMock(return_value=response),
+    )
+    reporter = ProgressReporter(
+        task_id="job-4",
+        progress_url="https://server.example/jobs/job-4/progress",
+    )
+
+    reporter.update("Downloading PDF from S3")
+
+    response.close.assert_called_once_with()

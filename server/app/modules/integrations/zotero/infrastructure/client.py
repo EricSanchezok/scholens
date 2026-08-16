@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import re
 import time
@@ -40,6 +42,15 @@ class ZoteroApiClient:
             "Zotero-API-Key": api_key,
             "Zotero-API-Version": "3",
         }
+
+    def close(self) -> None:
+        self._session.close()
+
+    def __enter__(self) -> ZoteroApiClient:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
 
     @property
     def _user_base(self) -> str:

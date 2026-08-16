@@ -10,11 +10,15 @@ from app.bootstrap.adapters.zotero_operations import DefaultZoteroOperations
 from app.bootstrap.workflows.zotero import ZoteroWorkflow
 from app.modules.integrations.zotero.application.contracts import ZoteroLibraryPage
 from app.modules.integrations.zotero.application.zotero import (
+    ZoteroAccessToken,
     ZoteroCredentials,
     ZoteroItemSnapshot,
     ZoteroLibrarySnapshot,
 )
-from app.modules.integrations.zotero.infrastructure.client import ZoteroApiClient
+from app.modules.integrations.zotero.infrastructure.client import (
+    ZoteroApiClient,
+    ZoteroApiPage,
+)
 from app.modules.integrations.zotero.infrastructure.client import (
     ZoteroAttachmentScanLimitError,
 )
@@ -29,6 +33,102 @@ def _actor() -> Actor:
         status="active",
         email_verified=True,
     )
+
+
+@pytest.mark.parametrize("raise_inside", [False, True])
+def test_zotero_api_client_context_closes_session(raise_inside: bool) -> None:
+    session = MagicMock()
+    with patch(
+        "app.modules.integrations.zotero.infrastructure.client.requests.Session",
+        return_value=session,
+    ):
+        client = ZoteroApiClient("42", "secret")
+        if raise_inside:
+            with pytest.raises(RuntimeError, match="provider failed"):
+                with client:
+                    raise RuntimeError("provider failed")
+        else:
+            with client:
+                pass
+
+    session.close.assert_called_once_with()
+
+
+def test_default_operations_close_all_api_clients_on_success() -> None:
+    operations = DefaultZoteroOperations()
+    credentials = ZoteroCredentials(
+        user_id="42",
+        api_key="secret",
+        revision=uuid4(),
+    )
+    verify_client = MagicMock()
+    verify_client.__enter__.return_value = verify_client
+    verify_client.key_info.return_value = {
+        "userID": "42",
+        "access": {
+            "user": {"library": True, "notes": True, "files": True},
+            "groups": {},
+        },
+    }
+    library_client = MagicMock()
+    library_client.__enter__.return_value = library_client
+    library_client.get_top_importable_items_page.return_value = ZoteroApiPage(
+        items=(), total_count=0, library_version=7
+    )
+    library_client.get_stored_pdf_parent_keys.return_value = set()
+    collections_client = MagicMock()
+    collections_client.__enter__.return_value = collections_client
+    collections_client.get_collections_page.return_value = ZoteroApiPage(
+        items=(), total_count=0, library_version=7
+    )
+    version_client = MagicMock()
+    version_client.__enter__.return_value = version_client
+    version_client.current_library_version.return_value = 7
+
+    with patch(
+        "app.bootstrap.adapters.zotero_operations.ZoteroApiClient",
+        return_value=verify_client,
+    ):
+        assert operations.verify_access_token(
+            access_token=ZoteroAccessToken(user_id="42", api_key="secret")
+        )
+    with patch.object(
+        operations,
+        "_client",
+        side_effect=[library_client, collections_client, version_client],
+    ):
+        operations.fetch_library(credentials=credentials)
+        operations.fetch_collections(credentials=credentials, limit=100, start=0)
+        assert operations.current_library_version(credentials=credentials) == 7
+
+    for client in (
+        verify_client,
+        library_client,
+        collections_client,
+        version_client,
+    ):
+        client.__exit__.assert_called_once()
+
+
+def test_default_operations_close_api_client_on_provider_failure() -> None:
+    operations = DefaultZoteroOperations()
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.get_top_importable_items_page.side_effect = RuntimeError("provider failed")
+
+    with (
+        patch.object(operations, "_client", return_value=client),
+        pytest.raises(RuntimeError, match="provider failed"),
+    ):
+        operations.fetch_library(
+            credentials=ZoteroCredentials(
+                user_id="42",
+                api_key="secret",
+                revision=uuid4(),
+            )
+        )
+
+    client.__exit__.assert_called_once()
 
 
 class _Executor:

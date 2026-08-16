@@ -27,11 +27,7 @@ def post_signed_json(
     *,
     timeout: float,
 ) -> requests.Response:
-    body = (
-        json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
-        if payload is not None
-        else b""
-    )
+    body = encode_json_body(payload)
     timestamp = str(int(time.time()))
     nonce = str(uuid.uuid4())
     parsed = urlsplit(url)
@@ -49,4 +45,12 @@ def post_signed_json(
             "X-Jobs-Nonce": nonce,
             "X-Jobs-Signature": signature,
         },
+    )
+
+
+def encode_json_body(payload: dict[str, Any] | None) -> bytes:
+    return (
+        json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+        if payload is not None
+        else b""
     )
