@@ -97,7 +97,7 @@ export const ContextPicker: Story = {
     await expect(body.getByRole("searchbox")).toBeVisible();
     await userEvent.type(body.getByRole("searchbox"), "RAG");
     await expect(
-      body.getByRole("checkbox", { name: /RAG evaluation/ }),
+      await body.findByRole("checkbox", { name: /RAG evaluation/ }),
     ).toBeVisible();
   },
 };
