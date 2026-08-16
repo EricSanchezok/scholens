@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
@@ -70,13 +75,17 @@ export function ZoteroLibraryDialog({
   const [selected, setSelected] = React.useState<string[]>([]);
   const status = useQuery({ ...zoteroQueries.status(), enabled: open });
   const connected = status.data?.connection_state === "connected";
-  const collections = useQuery({
+  const collections = useInfiniteQuery({
     ...zoteroQueries.collections(),
     enabled: open && connected,
   });
   const effectiveFilters = React.useMemo(
     () => ({ ...filters, query: debouncedQuery }),
     [debouncedQuery, filters],
+  );
+  const collectionItems = React.useMemo(
+    () => collections.data?.pages.flatMap((page) => page.items) ?? [],
+    [collections.data],
   );
   const library = useQuery({
     ...zoteroQueries.library(effectiveFilters),
@@ -190,26 +199,39 @@ export function ZoteroLibraryDialog({
                   placeholder={t("search")}
                   value={query}
                 />
-                <Select
-                  onValueChange={(value) =>
-                    updateFilters({
-                      collectionKey: value === "all" ? undefined : value,
-                    })
-                  }
-                  value={filters.collectionKey ?? "all"}
-                >
-                  <SelectTrigger aria-label={t("collection")}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("allCollections")}</SelectItem>
-                    {collections.data?.items.map((collection) => (
-                      <SelectItem key={collection.key} value={collection.key}>
-                        {collection.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="grid gap-1.5">
+                  <Select
+                    onValueChange={(value) =>
+                      updateFilters({
+                        collectionKey: value === "all" ? undefined : value,
+                      })
+                    }
+                    value={filters.collectionKey ?? "all"}
+                  >
+                    <SelectTrigger aria-label={t("collection")}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("allCollections")}</SelectItem>
+                      {collectionItems.map((collection) => (
+                        <SelectItem key={collection.key} value={collection.key}>
+                          {collection.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {collections.hasNextPage ? (
+                    <Button
+                      className="justify-self-start"
+                      loading={collections.isFetchingNextPage}
+                      onClick={() => void collections.fetchNextPage()}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      {t("loadMoreCollections")}
+                    </Button>
+                  ) : null}
+                </div>
                 <Select
                   onValueChange={(value) =>
                     updateFilters({

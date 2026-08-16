@@ -64,6 +64,66 @@ def test_failed_job_is_terminal_and_cannot_complete_later() -> None:
     db.flush.assert_not_called()
 
 
+def test_callback_claim_excludes_concurrent_and_terminal_replays() -> None:
+    job = _job(status=JobStatus.RUNNING)
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = job
+
+    returned, claim_id, acquired = job_repository.claim_callback(
+        db,
+        job_id=job.id,
+        requested_by_id=7,
+    )
+
+    assert returned is job
+    assert acquired is True
+    assert claim_id is not None
+    assert job.callback_lease_id == claim_id
+
+    _returned, concurrent_id, concurrent_acquired = job_repository.claim_callback(
+        db,
+        job_id=job.id,
+        requested_by_id=7,
+    )
+    assert concurrent_acquired is False
+    assert concurrent_id is None
+
+    completed, changed = job_repository.complete_claimed(
+        db,
+        job_id=job.id,
+        claim_id=claim_id,
+        result={"items": []},
+    )
+    assert changed is True
+    assert completed.status == JobStatus.COMPLETED.value
+
+    _returned, replay_id, replay_acquired = job_repository.claim_callback(
+        db,
+        job_id=job.id,
+        requested_by_id=7,
+    )
+    assert replay_acquired is False
+    assert replay_id is None
+
+
+def test_callback_terminal_transition_requires_own_claim() -> None:
+    job = _job(status=JobStatus.RUNNING)
+    job.callback_lease_id = uuid4()
+    job.callback_lease_expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = job
+
+    _returned, changed = job_repository.complete_claimed(
+        db,
+        job_id=job.id,
+        claim_id=uuid4(),
+        result={"late": True},
+    )
+
+    assert changed is False
+    assert job.status == JobStatus.RUNNING.value
+
+
 def test_expired_worker_lease_requeues_the_existing_dispatch() -> None:
     job = _job(status=JobStatus.RUNNING)
     job.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)

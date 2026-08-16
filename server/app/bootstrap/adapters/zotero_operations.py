@@ -190,7 +190,10 @@ class DefaultZoteroOperations:
             sort=sort,
             direction=direction,
         )
-        pdf_parent_keys = client.get_pdf_parent_item_keys()
+        visible_item_keys = [
+            str(item.get("key") or "") for item in page.items if item.get("key")
+        ]
+        pdf_parent_keys = client.get_stored_pdf_parent_keys(visible_item_keys)
         return ZoteroLibrarySnapshot(
             items=tuple(
                 _snapshot(

@@ -13,6 +13,9 @@ from app.modules.integrations.zotero.application.zotero import (
     ZoteroLibrarySnapshot,
 )
 from app.modules.integrations.zotero.infrastructure.client import ZoteroApiClient
+from app.modules.integrations.zotero.infrastructure.client import (
+    ZoteroAttachmentScanLimitError,
+)
 from app.shared.application import Actor, OperationContextFactory, SignedCursorCodec
 from app.shared.domain import AppError
 
@@ -80,6 +83,76 @@ def test_zotero_metadata_rejects_cross_origin_redirect_without_leaking_key() -> 
     assert request.call_args.kwargs["headers"]["Zotero-API-Key"] == "secret"
     assert redirect.close.called
     assert client._session.trust_env is False
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [("invalid", 0), ("999999", 10), ("-50", 0)],
+)
+def test_zotero_api_safely_caps_provider_backoff(
+    header: str,
+    expected: int,
+) -> None:
+    response = MagicMock(status_code=200)
+    response.headers = {"Backoff": header}
+    response.raise_for_status.return_value = None
+    client = ZoteroApiClient("42", "secret")
+
+    with (
+        patch.object(client._session, "request", return_value=response),
+        patch(
+            "app.modules.integrations.zotero.infrastructure.client.time.sleep"
+        ) as sleep,
+    ):
+        returned = client._request("GET", "https://api.zotero.org/keys/current")
+
+    assert returned is response
+    sleep.assert_called_once_with(expected)
+
+
+def test_visible_item_attachment_lookup_fails_instead_of_truncating() -> None:
+    response = MagicMock()
+    response.headers = {"Total-Results": "101"}
+    response.json.return_value = [
+        {"data": {"itemType": "attachment", "linkMode": "linked_url"}}
+        for _ in range(100)
+    ]
+    client = ZoteroApiClient("42", "secret")
+
+    with patch.object(client, "_request", return_value=response) as request:
+        with pytest.raises(ZoteroAttachmentScanLimitError):
+            client.get_stored_pdf_parent_keys(
+                ["ITEM0001"],
+                max_children_per_item=100,
+            )
+
+    assert "/items/ITEM0001/children" in request.call_args.args[1]
+    response.close.assert_called_once_with()
+
+
+def test_visible_item_attachment_lookup_classifies_only_requested_page() -> None:
+    response = MagicMock()
+    response.headers = {"Total-Results": "1"}
+    response.json.return_value = [
+        {
+            "data": {
+                "contentType": "application/pdf",
+                "itemType": "attachment",
+                "linkMode": "imported_file",
+            }
+        }
+    ]
+    client = ZoteroApiClient("42", "secret")
+
+    with patch.object(client, "_request", return_value=response) as request:
+        parents = client.get_stored_pdf_parent_keys(["ITEM0001"])
+
+    assert parents == {"ITEM0001"}
+    assert request.call_args.kwargs["params"] == {
+        "itemType": "attachment",
+        "limit": 100,
+        "start": 0,
+    }
 
 
 def test_library_cursor_is_bound_to_owner_and_filters() -> None:

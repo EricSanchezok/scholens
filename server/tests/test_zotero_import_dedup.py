@@ -97,10 +97,10 @@ def test_plan_import_links_existing_and_duplicate_doi_without_title_dedup() -> N
     gateway = DefaultZoteroGateway(MagicMock(), connections=MagicMock())
     items = (
         _item("EXISTING", doi="10.1000/existing"),
-        _item("FIRST", doi="10.1000/new"),
-        _item("SECOND", doi="https://doi.org/10.1000/new"),
-        _item("NO-DOI"),
-        _item("NO-DOI-2"),
+        _item("FIRST001", doi="10.1000/new"),
+        _item("SECOND01", doi="https://doi.org/10.1000/new"),
+        _item("NODOI001"),
+        _item("NODOI002"),
     )
 
     with (
@@ -139,14 +139,14 @@ def test_plan_import_links_existing_and_duplicate_doi_without_title_dedup() -> N
         "import",
     ]
     assert plan.items[0].document_id == existing_document.id
-    assert plan.items[2].source_item_key == "FIRST"
+    assert plan.items[2].source_item_key == "FIRST001"
     assert plan.skipped_already_imported == 2
     assert plan.errors == ()
 
 
 def test_plan_import_applies_remaining_capacity_only_to_new_documents() -> None:
     gateway = DefaultZoteroGateway(MagicMock(), connections=MagicMock())
-    items = (_item("A"), _item("B"))
+    items = (_item("ITEM0001"), _item("ITEM0002"))
 
     with (
         patch.object(
@@ -174,8 +174,8 @@ def test_plan_import_applies_remaining_capacity_only_to_new_documents() -> None:
             credential_revision=uuid4(),
         )
 
-    assert [planned.item.item_key for planned in plan.items] == ["A"]
-    assert [error.zotero_item_key for error in plan.errors] == ["B"]
+    assert [planned.item.item_key for planned in plan.items] == ["ITEM0001"]
+    assert [error.zotero_item_key for error in plan.errors] == ["ITEM0002"]
 
 
 class _StageExecutor:
@@ -204,11 +204,11 @@ class _StageExecutor:
 async def test_import_plan_keeps_remote_io_outside_commands() -> None:
     events: list[str] = []
     actor = _actor()
-    item = _item("ITEM")
+    item = _item("ITEM0001")
     attachment = ZoteroAttachmentSnapshot(
         item_key=item.item_key,
         import_source=ZoteroImportSource.PDF_ATTACHMENT,
-        attachment_key="ATTACHMENT",
+        attachment_key="ATTACH01",
         source_url=None,
         annotations_json="[]",
     )

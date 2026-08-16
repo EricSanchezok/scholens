@@ -37,6 +37,7 @@ from app.modules.integrations.zotero.application.zotero import (
     ZoteroLibrarySnapshot,
     ZoteroRequestToken,
     ZoteroSyncBatch,
+    ZoteroSyncFailure,
     ZoteroSyncUpdate,
 )
 from app.modules.jobs.application.contracts import (
@@ -471,6 +472,15 @@ class ZoteroBackgroundWorkflow:
                 message="Zotero job callback does not match",
                 kind=FailureKind.CONFLICT,
             )
+        claim = self._executor.command(
+            lambda capabilities: capabilities.zotero.claim_background_operation(
+                actor=actor,
+                operation_id=job_id,
+            )
+        )
+        if not claim.acquired or claim.claim_id is None:
+            return {"accepted": False}
+        claim_id = claim.claim_id
         outcome_operation = self._operation_factory.child(
             operation,
             initiated_by=OperationInitiator.SYSTEM,
@@ -487,6 +497,7 @@ class ZoteroBackgroundWorkflow:
                     actor=actor,
                     operation=outcome_operation,
                     operation_id=job_id,
+                    claim_id=claim_id,
                     error_code="zotero_credentials_rotated",
                 )
             )
@@ -507,6 +518,7 @@ class ZoteroBackgroundWorkflow:
                     actor=actor,
                     operation=outcome_operation,
                     operation_id=job_id,
+                    claim_id=claim_id,
                     error_code=callback.error_code or "zotero_unavailable",
                 )
             )
@@ -533,6 +545,7 @@ class ZoteroBackgroundWorkflow:
                     actor=actor,
                     operation=outcome_operation,
                     operation_id=job_id,
+                    claim_id=claim_id,
                     error_code="zotero_credentials_rotated",
                 )
             )
@@ -542,6 +555,7 @@ class ZoteroBackgroundWorkflow:
                 actor=actor,
                 operation=outcome_operation,
                 operation_id=job_id,
+                claim_id=claim_id,
                 result=result,
             )
         )
@@ -692,8 +706,12 @@ class ZoteroBackgroundWorkflow:
                 operation=operation,
                 batch=ZoteroSyncBatch(
                     updates=tuple(updates),
-                    failed_item_keys=tuple(
-                        failure.item_key for failure in callback.failures
+                    failures=tuple(
+                        ZoteroSyncFailure(
+                            item_key=failure.item_key,
+                            error_code=failure.error_code,
+                        )
+                        for failure in callback.failures
                     ),
                 ),
                 credential_revision=callback.credential_revision,

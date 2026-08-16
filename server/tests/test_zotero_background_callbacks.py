@@ -3,13 +3,19 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from app.bootstrap.workflows.zotero import (
     ZoteroBackgroundWorkflow,
     _recoverable_auto_import_cursor,
 )
 from app.modules.integrations.zotero.application.zotero import ZoteroImportPlan
-from app.modules.jobs.application.contracts import ZoteroSyncWebhookData
+from app.modules.integrations.zotero.application.contracts import ZoteroImportRequest
+from app.modules.jobs.application.contracts import (
+    MAX_ZOTERO_ANNOTATIONS_BYTES,
+    ZoteroImportWebhookData,
+    ZoteroSyncWebhookData,
+)
 from app.shared.application import (
     Actor,
     CredentialKind,
@@ -39,6 +45,67 @@ def _operation():
     )
 
 
+@pytest.mark.parametrize(
+    "item_key",
+    ["../ITEM1", "item0001", "ITEM001", "ITEM00001", "ITEM/001"],
+)
+def test_public_import_rejects_path_shaped_or_non_zotero_keys(
+    item_key: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        ZoteroImportRequest(item_keys=[item_key])
+
+
+def test_internal_callback_binds_keys_and_staging_path_to_task() -> None:
+    task_id = uuid4()
+    payload = {
+        "task_id": str(task_id),
+        "operation": "import",
+        "credential_revision": str(uuid4()),
+        "credential_outcome": "verified",
+        "items": [
+            {
+                "item_key": "ITEM0001",
+                "status": "ready",
+                "s3_object_key": f"zotero-imports/{task_id}/../ITEM0001.pdf",
+                "metadata": {
+                    "item_key": "ITEM0001",
+                    "title": "Paper",
+                    "item_type": "journalArticle",
+                },
+                "attachment": {
+                    "item_key": "ITEM0001",
+                    "attachment_key": "ATTACH01",
+                    "import_source": "pdf_attachment",
+                    "annotations_json": "[]",
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        ZoteroImportWebhookData.model_validate(payload)
+
+
+def test_internal_callback_caps_annotation_content() -> None:
+    payload = {
+        "task_id": str(uuid4()),
+        "operation": "sync",
+        "credential_revision": str(uuid4()),
+        "credential_outcome": "verified",
+        "updates": [
+            {
+                "item_key": "ITEM0001",
+                "attachment_key": "ATTACH01",
+                "annotations_json": "x" * (MAX_ZOTERO_ANNOTATIONS_BYTES + 1),
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError):
+        ZoteroSyncWebhookData.model_validate(payload)
+
+
 def test_auto_import_cursor_stops_before_transient_middle_failure() -> None:
     callback = ZoteroSyncWebhookData.model_validate(
         {
@@ -48,19 +115,19 @@ def test_auto_import_cursor_stops_before_transient_middle_failure() -> None:
             "credential_outcome": "verified",
             "auto_imports": [
                 {
-                    "item_key": "ITEM001",
+                    "item_key": "ITEM0001",
                     "version": 50,
                     "status": "failed",
                     "error_code": "zotero_item_not_found",
                 },
                 {
-                    "item_key": "ITEM002",
+                    "item_key": "ITEM0002",
                     "version": 50,
                     "status": "failed",
                     "error_code": "zotero_rate_limited",
                 },
                 {
-                    "item_key": "ITEM003",
+                    "item_key": "ITEM0003",
                     "version": 50,
                     "status": "failed",
                     "error_code": "zotero_item_not_found",
@@ -78,17 +145,17 @@ def test_auto_import_cursor_stops_before_transient_middle_failure() -> None:
         import_result={
             "items": [
                 {
-                    "zotero_item_key": "ITEM001",
+                    "zotero_item_key": "ITEM0001",
                     "status": "failed",
                     "error_code": "zotero_item_not_found",
                 },
                 {
-                    "zotero_item_key": "ITEM002",
+                    "zotero_item_key": "ITEM0002",
                     "status": "failed",
                     "error_code": "zotero_rate_limited",
                 },
                 {
-                    "zotero_item_key": "ITEM003",
+                    "zotero_item_key": "ITEM0003",
                     "status": "failed",
                     "error_code": "zotero_item_not_found",
                 },
@@ -118,6 +185,10 @@ async def test_invalid_credential_callback_is_revision_scoped_and_fails_job() ->
     revision = uuid4()
     integrations = MagicMock()
     zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
     zotero.credential_revision_is_current.return_value = True
     workflow = ZoteroBackgroundWorkflow(
         executor=_Executor(  # type: ignore[arg-type]
@@ -160,6 +231,10 @@ async def test_failed_items_complete_as_partial_result_without_provider_errors()
     revision = uuid4()
     integrations = MagicMock()
     zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
     zotero.credential_revision_is_current.return_value = True
     zotero.plan_import.return_value = ZoteroImportPlan(
         items=(),
@@ -187,7 +262,7 @@ async def test_failed_items_complete_as_partial_result_without_provider_errors()
             "error_code": None,
             "items": [
                 {
-                    "item_key": "ITEM1",
+                    "item_key": "ITEM0001",
                     "status": "failed",
                     "error_code": "zotero_pdf_unavailable",
                 }
@@ -212,6 +287,10 @@ async def test_rotated_credential_rejects_late_worker_results() -> None:
     old_revision = uuid4()
     integrations = MagicMock()
     zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
     zotero.credential_revision_is_current.return_value = False
     workflow = ZoteroBackgroundWorkflow(
         executor=_Executor(  # type: ignore[arg-type]
@@ -251,6 +330,10 @@ async def test_rotation_after_initial_check_blocks_mutation_and_cleans_staging()
     revision = uuid4()
     integrations = MagicMock()
     zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
     zotero.credential_revision_is_current.return_value = True
     zotero.plan_import.side_effect = AppError(
         code="zotero_credentials_rotated",
@@ -280,20 +363,20 @@ async def test_rotation_after_initial_check_blocks_mutation_and_cleans_staging()
             "error_code": None,
             "items": [
                 {
-                    "item_key": "ITEM1",
+                    "item_key": "ITEM0001",
                     "version": 11,
                     "status": "ready",
-                    "s3_object_key": "zotero-imports/job/ITEM1.pdf",
+                    "s3_object_key": f"zotero-imports/{job_id}/ITEM0001.pdf",
                     "metadata": {
-                        "item_key": "ITEM1",
+                        "item_key": "ITEM0001",
                         "title": "Paper",
                         "item_type": "journalArticle",
                         "version": 11,
                     },
                     "attachment": {
-                        "item_key": "ITEM1",
+                        "item_key": "ITEM0001",
                         "import_source": "pdf_attachment",
-                        "attachment_key": "ATTACH1",
+                        "attachment_key": "ATTACH01",
                         "annotations_json": "[]",
                     },
                     "page_dimensions": [],
@@ -307,9 +390,53 @@ async def test_rotation_after_initial_check_blocks_mutation_and_cleans_staging()
     zotero.reserve_import_item.assert_not_called()
     zotero.complete_import_item.assert_not_called()
     operations.delete_job_pdf.assert_awaited_once_with(
-        object_key="zotero-imports/job/ITEM1.pdf"
+        object_key=f"zotero-imports/{job_id}/ITEM0001.pdf"
     )
     assert (
         zotero.fail_background_operation.call_args.kwargs["error_code"]
         == "zotero_credentials_rotated"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_status", ["cancelled", "completed"])
+async def test_terminal_callback_replay_has_no_side_effects(
+    terminal_status: str,
+) -> None:
+    job_id = uuid4()
+    integrations = MagicMock()
+    zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=False,
+        claim_id=None,
+        job=SimpleNamespace(status=terminal_status),
+    )
+    operations = MagicMock()
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(integrations=integrations, zotero=zotero)
+        ),
+        operations=operations,
+        operation_factory=OperationContextFactory(),
+    )
+
+    result = await workflow.complete(
+        actor=_actor(),
+        operation=_operation(),
+        job_id=job_id,
+        payload={
+            "task_id": str(job_id),
+            "operation": "import",
+            "credential_revision": str(uuid4()),
+            "credential_outcome": "verified",
+            "items": [],
+        },
+    )
+
+    assert result == {"accepted": False}
+    integrations.record_outcome.assert_not_called()
+    zotero.credential_revision_is_current.assert_not_called()
+    zotero.plan_import.assert_not_called()
+    zotero.complete_background_operation.assert_not_called()
+    zotero.fail_background_operation.assert_not_called()
+    assert operations.mock_calls == []

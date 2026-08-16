@@ -210,6 +210,10 @@ item types and Zotero's 100-item page ceiling, then returns a signed cursor
 bound to owner, search, collection, type, sort, and limit. Library items expose
 only stable metadata, current import state, and `stored_pdf`,
 `resolvable_source`, or `unavailable` source availability.
+Web follows the independent collection cursor beyond the first 100 collections.
+For source availability, Server queries complete attachment pages only for the
+currently visible papers. A per-paper safety limit produces a stable dependency
+failure instead of silently treating the unscanned remainder as no PDF.
 
 Import and sync acceptance are short application commands. They enforce
 connection, quota, ownership, idempotency, and concurrency; then commit one
@@ -217,12 +221,17 @@ connection, quota, ownership, idempotency, and concurrency; then commit one
 acceptance transaction locks the user's connection, so import and sync share a
 single active-operation slot. Status projects the active kind and ID without
 exposing the generic job payload.
-payload contains no API key. After the worker claims the operation, it obtains
+The task payload contains no API key. After the worker claims the operation, it obtains
 the current revision-scoped credential, performs Zotero reads and PDF
 validation, and sends idempotent signed progress and item callbacks. Server
 alone creates normal paper-ingestion jobs or appends annotation threads. An
 operation may finish partially, and cooperative cancellation is terminal even
 when a provider response arrives later.
+Each terminal callback first atomically claims an expiring callback-processing
+lease. A terminal, cancelled, concurrent, or replayed callback exits before
+provider-outcome recording or any import, annotation, journal, or storage
+mutation. Callback keys, staging paths, metadata, annotation content, and total
+serialized size are validated against bounded internal contracts.
 
 Manual sync includes only already imported Zotero items. Scheduled sync is
 eligible only for Researcher and uses Zotero library/item versions for
@@ -234,6 +243,11 @@ provider, download, or quota failures stop advancement and are retried. Losing
 Researcher pauses both automatic behaviors without clearing
 the preference. Disconnecting removes future access but not imported Documents,
 Library memberships, annotations, operations, or journal records.
+Annotation targets are fairly ordered by the last attempt, so a failed first
+500 cannot starve later papers. Every success or failure updates the attempt
+time; only success updates `last_synced_at`. Missing Zotero items or attachments
+move that link to `source_unavailable` and out of automatic annotation polling
+while preserving Scholens data.
 
 ## Authentication, permission, and operation provenance
 

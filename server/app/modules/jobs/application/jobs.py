@@ -57,6 +57,13 @@ class OperationTransition:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationClaim:
+    job: JobResponse
+    claim_id: UUID | None
+    acquired: bool
+
+
+@dataclass(frozen=True, slots=True)
 class EnqueuedJob:
     job: JobResponse
     created: bool
@@ -72,14 +79,28 @@ class JobCommandPort(Protocol):
 class IdempotentOperationPort(Protocol):
     def reserve(self, *, command: ReserveOperationCommand) -> ReservedOperation: ...
 
+    def claim_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+    ) -> OperationClaim: ...
+
     def complete(
         self,
         *,
         operation_id: UUID,
+        claim_id: UUID,
         result: dict[str, JsonValue],
     ) -> OperationTransition: ...
 
-    def fail(self, *, operation_id: UUID, error_code: str) -> OperationTransition: ...
+    def fail(
+        self,
+        *,
+        operation_id: UUID,
+        claim_id: UUID,
+        error_code: str,
+    ) -> OperationTransition: ...
 
 
 class JobQueryPort(Protocol):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import re
 import socket
 import time
 from dataclasses import dataclass, field
@@ -21,6 +22,8 @@ IMPORTABLE_ITEM_TYPES = frozenset({"journalArticle", "conferencePaper", "preprin
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_REDIRECTS = 5
 MAX_AUTO_IMPORT_ITEMS = 50
+MAX_ANNOTATIONS_BYTES = 2 * 1024 * 1024
+ZOTERO_KEY = re.compile(r"^[A-Z0-9]{8}$")
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +140,8 @@ class ZoteroClient:
         keys = list(item_keys)
         if not keys:
             return []
+        for item_key in keys:
+            _require_zotero_key(item_key)
         response = self._request(
             "/items",
             params={"itemKey": ",".join(keys), "limit": min(len(keys), 50)},
@@ -149,6 +154,7 @@ class ZoteroClient:
         )
 
     def children(self, item_key: str) -> list[dict[str, Any]]:
+        _require_zotero_key(item_key)
         response = self._request(
             f"/items/{item_key}/children",
             params={"limit": 100},
@@ -161,6 +167,7 @@ class ZoteroClient:
         )
 
     def download_attachment(self, attachment_key: str) -> bytes:
+        _require_zotero_key(attachment_key)
         response = self._request(
             f"/items/{attachment_key}/file",
             stream=True,
@@ -222,6 +229,8 @@ def import_items(
 ) -> tuple[list[dict[str, Any]], int | None]:
     uploaded_keys: list[str] = []
     try:
+        for item_key in item_keys:
+            _require_zotero_key(item_key)
         client = ZoteroClient(credential)
         _require_active(is_active)
         raw_by_key = {
@@ -283,6 +292,9 @@ def _sync_items(
     uploaded_keys: list[str],
 ) -> dict[str, Any]:
     client = ZoteroClient(credential)
+    for target in targets:
+        _require_zotero_key(str(target.get("item_key") or ""))
+        _require_zotero_key(str(target.get("attachment_key") or ""))
     _require_active(is_active)
     updates: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
@@ -303,13 +315,27 @@ def _sync_items(
         except ZoteroJobError as exc:
             if exc.invalid_credential:
                 raise
+            failures.append(
+                {
+                    "item_key": item_key,
+                    "error_code": (
+                        "zotero_attachment_not_found"
+                        if exc.code == "zotero_item_not_found"
+                        else exc.code
+                    ),
+                }
+            )
+            continue
+        try:
+            annotations_json = _annotations_json(annotations)
+        except ZoteroJobError as exc:
             failures.append({"item_key": item_key, "error_code": exc.code})
             continue
         updates.append(
             {
                 "item_key": item_key,
                 "attachment_key": attachment_key,
-                "annotations_json": _annotations_json(annotations),
+                "annotations_json": annotations_json,
             }
         )
 
@@ -359,6 +385,7 @@ def _prepare_import_item(
     item_key: str,
     uploaded_keys: list[str],
 ) -> dict[str, Any]:
+    _require_zotero_key(item_key)
     if item is None:
         return _failed_item(item_key, "zotero_item_not_found")
     data = item.get("data") or {}
@@ -375,6 +402,7 @@ def _prepare_import_item(
         source_url: str | None = None
         if attachment is not None:
             attachment_key = str(attachment.get("key") or "")
+            _require_zotero_key(attachment_key)
             pdf = client.download_attachment(attachment_key)
             import_source = "pdf_attachment"
         else:
@@ -451,12 +479,17 @@ def discard_prepared_items(items: Iterable[dict[str, Any]]) -> None:
 
 
 def _annotations_json(annotations: list[dict[str, Any]]) -> str:
-    stable = [
-        {"key": value.get("key"), "data": value.get("data") or {}}
-        for value in annotations
-        if value.get("key")
-    ]
-    return json.dumps(stable, separators=(",", ":"), sort_keys=True)
+    stable = []
+    for value in annotations:
+        key = str(value.get("key") or "")
+        if not key:
+            continue
+        _require_zotero_key(key)
+        stable.append({"key": key, "data": value.get("data") or {}})
+    serialized = json.dumps(stable, separators=(",", ":"), sort_keys=True)
+    if len(serialized.encode()) > MAX_ANNOTATIONS_BYTES:
+        raise ZoteroJobError("zotero_annotations_too_large")
+    return serialized
 
 
 def _metadata(item: dict[str, Any]) -> dict[str, Any]:
@@ -480,7 +513,7 @@ def _metadata(item: dict[str, Any]) -> dict[str, Any]:
             )
         if name:
             creators.append(name)
-    return {
+    metadata = {
         "item_key": str(item.get("key") or ""),
         "title": str(data.get("title") or "").strip(),
         "authors": creators,
@@ -510,6 +543,44 @@ def _metadata(item: dict[str, Any]) -> dict[str, Any]:
         if isinstance(item.get("version"), int)
         else None,
     }
+    _validate_metadata(metadata)
+    return metadata
+
+
+def _require_zotero_key(value: str) -> str:
+    if ZOTERO_KEY.fullmatch(value) is None:
+        raise ZoteroJobError("zotero_request_invalid")
+    return value
+
+
+def _validate_metadata(metadata: dict[str, Any]) -> None:
+    scalar_limits = {
+        "title": 2_000,
+        "abstract": 200_000,
+        "publish_date": 128,
+        "doi": 512,
+        "date_added": 64,
+        "venue": 2_000,
+    }
+    if any(
+        value is not None and len(str(value)) > limit
+        for name, limit in scalar_limits.items()
+        if (value := metadata.get(name)) is not None
+    ):
+        raise ZoteroJobError("zotero_item_too_large")
+    for field_name, limit in (
+        ("authors", 100),
+        ("tags", 100),
+        ("collection_keys", 100),
+    ):
+        values = metadata.get(field_name) or []
+        if len(values) > limit:
+            raise ZoteroJobError("zotero_item_too_large")
+        if field_name == "collection_keys":
+            for value in values:
+                _require_zotero_key(str(value))
+        elif any(len(str(value)) > 512 for value in values):
+            raise ZoteroJobError("zotero_item_too_large")
 
 
 def _stored_pdf(children: list[dict[str, Any]]) -> dict[str, Any] | None:

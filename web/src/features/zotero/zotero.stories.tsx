@@ -143,6 +143,52 @@ export const Populated: Story = {
   },
 };
 
+export const ManyCollections: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        http.get(`${api}/collections`, ({ request }) => {
+          const cursor = new URL(request.url).searchParams.get("cursor");
+          if (cursor === "collections-page-2") {
+            return HttpResponse.json({
+              items: [{ key: "C0000101", name: "Collection 101" }],
+              next_cursor: null,
+              previous_cursor: "collections-page-1",
+              total_count: 101,
+            });
+          }
+          return HttpResponse.json({
+            items: Array.from({ length: 100 }, (_, index) => ({
+              key: `C${String(index + 1).padStart(7, "0")}`,
+              name: `Collection ${index + 1}`,
+            })),
+            next_cursor: "collections-page-2",
+            previous_cursor: null,
+            total_count: 101,
+          });
+        }),
+        ...connectedHandlers,
+      ],
+    },
+  },
+  play: async () => {
+    const body = within(document.body);
+    await userEvent.click(
+      await body.findByRole("button", { name: "Load more collections" }),
+    );
+    await waitFor(() =>
+      expect(
+        body.queryByRole("button", { name: "Load more collections" }),
+      ).not.toBeInTheDocument(),
+    );
+    await userEvent.click(body.getByRole("combobox", { name: "Collection" }));
+    await expect(
+      await body.findByRole("option", { name: "Collection 101" }),
+    ).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+  },
+};
+
 export const Empty: Story = {
   parameters: {
     msw: {

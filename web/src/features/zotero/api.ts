@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
@@ -46,16 +46,21 @@ export const zoteroQueries = {
       },
     }),
   collections: () =>
-    queryOptions({
+    infiniteQueryOptions({
       queryKey: zoteroKeys.collections(),
-      queryFn: async ({ signal }) => {
+      initialPageParam: undefined as string | undefined,
+      queryFn: async ({ pageParam, signal }) => {
         const { data } = await apiClient.GET(
           "/api/v1/integrations/zotero/collections",
-          { params: { query: { limit: 100 } }, signal },
+          {
+            params: { query: { cursor: pageParam, limit: 100 } },
+            signal,
+          },
         );
         if (!data) throw new Error("Zotero collections response was empty");
         return data;
       },
+      getNextPageParam: (page) => page.next_cursor ?? undefined,
     }),
   library: (filters: ZoteroLibraryFilters) =>
     queryOptions({

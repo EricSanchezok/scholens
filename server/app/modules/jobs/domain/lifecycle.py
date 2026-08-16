@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from app.shared.domain.enums import JobStatus
 
 DEFAULT_JOB_LEASE = timedelta(hours=1)
+DEFAULT_CALLBACK_LEASE = timedelta(minutes=15)
 
 
 def can_claim_job(

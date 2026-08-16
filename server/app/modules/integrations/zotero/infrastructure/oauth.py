@@ -3,6 +3,7 @@ import os
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
+import requests
 from requests_oauthlib import OAuth1Session
 
 load_dotenv()
@@ -16,6 +17,7 @@ ZOTERO_REDIRECT_URI = os.getenv("ZOTERO_REDIRECT_URI")
 REQUEST_TOKEN_URL = "https://www.zotero.org/oauth/request"
 AUTHORIZE_URL = "https://www.zotero.org/oauth/authorize"
 ACCESS_TOKEN_URL = "https://www.zotero.org/oauth/access"
+OAUTH_TIMEOUT = (5, 15)
 
 DEFAULT_PERMISSIONS: dict[str, str] = {
     "library_access": "1",
@@ -38,6 +40,18 @@ class ZoteroRequestTokenResult:
         self.oauth_token_secret = oauth_token_secret
 
 
+def _close_oauth_response(
+    response: requests.Response,
+    *args: object,
+    **kwargs: object,
+) -> requests.Response:
+    """Cache the small token body, then release its connection immediately."""
+    del args, kwargs
+    response.content
+    response.close()
+    return response
+
+
 class ZoteroAuthClient:
     """Zotero OAuth 1.0a client for API key exchange."""
 
@@ -53,7 +67,7 @@ class ZoteroAuthClient:
         resource_owner_secret: str | None = None,
         verifier: str | None = None,
     ) -> OAuth1Session:
-        return OAuth1Session(
+        session = OAuth1Session(
             self.client_key,
             client_secret=self.client_secret,
             callback_uri=self.redirect_uri,
@@ -61,15 +75,22 @@ class ZoteroAuthClient:
             resource_owner_secret=resource_owner_secret,
             verifier=verifier,
         )
+        session.trust_env = False
+        return session
 
     def get_request_token(self) -> ZoteroRequestTokenResult | None:
         if not self.client_key or not self.client_secret or not self.redirect_uri:
             logger.error("zotero.oauth.credentials_missing")
             return None
 
+        oauth = self._oauth_session()
         try:
-            oauth = self._oauth_session()
-            token_data = oauth.fetch_request_token(REQUEST_TOKEN_URL)
+            token_data = oauth.fetch_request_token(
+                REQUEST_TOKEN_URL,
+                timeout=OAUTH_TIMEOUT,
+                allow_redirects=False,
+                hooks={"response": _close_oauth_response},
+            )
             oauth_token = token_data.get("oauth_token")
             oauth_token_secret = token_data.get("oauth_token_secret")
             if not oauth_token or not oauth_token_secret:
@@ -79,9 +100,14 @@ class ZoteroAuthClient:
                 oauth_token=oauth_token,
                 oauth_token_secret=oauth_token_secret,
             )
-        except Exception:
-            logger.exception("zotero.oauth.request_token.failed")
+        except Exception as exc:
+            logger.error(
+                "zotero.oauth.request_token.failed",
+                extra={"exception_type": type(exc).__name__},
+            )
             return None
+        finally:
+            oauth.close()
 
     def get_authorize_url(
         self,
@@ -102,13 +128,18 @@ class ZoteroAuthClient:
             logger.error("zotero.oauth.credentials_missing")
             return None
 
+        oauth = self._oauth_session(
+            resource_owner_key=request_token,
+            resource_owner_secret=request_token_secret,
+            verifier=verifier,
+        )
         try:
-            oauth = self._oauth_session(
-                resource_owner_key=request_token,
-                resource_owner_secret=request_token_secret,
-                verifier=verifier,
+            token_data = oauth.fetch_access_token(
+                ACCESS_TOKEN_URL,
+                timeout=OAUTH_TIMEOUT,
+                allow_redirects=False,
+                hooks={"response": _close_oauth_response},
             )
-            token_data = oauth.fetch_access_token(ACCESS_TOKEN_URL)
             zotero_user_id = token_data.get("userID")
             api_key = token_data.get("oauth_token_secret")
             if not zotero_user_id or not api_key:
@@ -118,9 +149,14 @@ class ZoteroAuthClient:
                 zotero_user_id=str(zotero_user_id),
                 api_key=str(api_key),
             )
-        except Exception:
-            logger.exception("zotero.oauth.access_token.failed")
+        except Exception as exc:
+            logger.error(
+                "zotero.oauth.access_token.failed",
+                extra={"exception_type": type(exc).__name__},
+            )
             return None
+        finally:
+            oauth.close()
 
 
 zotero_auth_client = ZoteroAuthClient()

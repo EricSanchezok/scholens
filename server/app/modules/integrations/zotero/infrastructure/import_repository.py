@@ -6,6 +6,7 @@ from app.database.models import (
     JsonValue,
     Document,
     ZoteroImportedItem,
+    ZoteroAnnotationSyncStatus,
     ZoteroImportSource,
     ZoteroImportStatus,
 )
@@ -172,8 +173,11 @@ class ZoteroImportRepository:
                     ZoteroImportedItem.import_source
                     == ZoteroImportSource.PDF_ATTACHMENT,
                     ZoteroImportedItem.zotero_attachment_key.isnot(None),
+                    ZoteroImportedItem.annotation_sync_status
+                    == ZoteroAnnotationSyncStatus.ACTIVE,
                 )
                 .order_by(
+                    ZoteroImportedItem.last_sync_attempted_at.asc().nullsfirst(),
                     ZoteroImportedItem.last_synced_at.asc().nullsfirst(),
                     ZoteroImportedItem.created_at.desc(),
                 )
@@ -216,9 +220,11 @@ class ZoteroImportRepository:
                         ZoteroImportedItem.import_source
                         == ZoteroImportSource.PDF_ATTACHMENT,
                         ZoteroImportedItem.zotero_attachment_key.isnot(None),
+                        ZoteroImportedItem.annotation_sync_status
+                        == ZoteroAnnotationSyncStatus.ACTIVE,
                         or_(
-                            ZoteroImportedItem.last_synced_at.is_(None),
-                            ZoteroImportedItem.last_synced_at < cutoff,
+                            ZoteroImportedItem.last_sync_attempted_at.is_(None),
+                            ZoteroImportedItem.last_sync_attempted_at < cutoff,
                         ),
                     )
                     .limit(1)
@@ -258,6 +264,8 @@ class ZoteroImportRepository:
             or (last_synced_at is not None and item.last_synced_at != last_synced_at)
             or item.zotero_item_version != zotero_item_version
             or item.zotero_attachment_version != zotero_attachment_version
+            or item.annotation_sync_status != ZoteroAnnotationSyncStatus.ACTIVE.value
+            or item.last_sync_error_code is not None
         )
         if not changed:
             return ZoteroImportChange(item=item, changed=False)
@@ -270,6 +278,8 @@ class ZoteroImportRepository:
         item.error_message = None
         item.zotero_item_version = zotero_item_version
         item.zotero_attachment_version = zotero_attachment_version
+        item.annotation_sync_status = ZoteroAnnotationSyncStatus.ACTIVE.value
+        item.last_sync_error_code = None
         if last_synced_at is not None:
             item.last_synced_at = last_synced_at
         db.add(item)
@@ -288,11 +298,46 @@ class ZoteroImportRepository:
         changed = (
             item.annotations_payload != annotations_payload
             or item.last_synced_at != last_synced_at
+            or item.last_sync_attempted_at != last_synced_at
+            or item.annotation_sync_status != ZoteroAnnotationSyncStatus.ACTIVE.value
+            or item.last_sync_error_code is not None
         )
         if not changed:
             return ZoteroImportChange(item=item, changed=False)
         item.annotations_payload = annotations_payload
         item.last_synced_at = last_synced_at
+        item.last_sync_attempted_at = last_synced_at
+        item.annotation_sync_status = ZoteroAnnotationSyncStatus.ACTIVE.value
+        item.last_sync_error_code = None
+        db.add(item)
+        db.flush()
+        db.refresh(item)
+        return ZoteroImportChange(item=item, changed=True)
+
+    def update_after_sync_failure(
+        self,
+        db: Session,
+        *,
+        item: ZoteroImportedItem,
+        error_code: str,
+        attempted_at: datetime,
+        source_unavailable: bool,
+    ) -> ZoteroImportChange:
+        status = (
+            ZoteroAnnotationSyncStatus.SOURCE_UNAVAILABLE.value
+            if source_unavailable
+            else ZoteroAnnotationSyncStatus.ACTIVE.value
+        )
+        changed = (
+            item.last_sync_attempted_at != attempted_at
+            or item.annotation_sync_status != status
+            or item.last_sync_error_code != error_code
+        )
+        if not changed:
+            return ZoteroImportChange(item=item, changed=False)
+        item.last_sync_attempted_at = attempted_at
+        item.annotation_sync_status = status
+        item.last_sync_error_code = error_code
         db.add(item)
         db.flush()
         db.refresh(item)

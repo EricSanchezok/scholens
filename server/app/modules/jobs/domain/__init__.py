@@ -1,6 +1,7 @@
 """Durable job domain policies and value objects."""
 
 from .lifecycle import (
+    DEFAULT_CALLBACK_LEASE,
     DEFAULT_JOB_LEASE,
     can_claim_job,
     can_complete_job,
@@ -11,6 +12,7 @@ from .lifecycle import (
 )
 
 __all__ = [
+    "DEFAULT_CALLBACK_LEASE",
     "DEFAULT_JOB_LEASE",
     "can_claim_job",
     "can_complete_job",

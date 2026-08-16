@@ -19,6 +19,7 @@ from app.shared.domain.enums import (
     SubscriptionPlan,
     SubscriptionStatus,
     StripeWebhookEventStatus,
+    ZoteroAnnotationSyncStatus,
     ZoteroImportSource,
     ZoteroImportStatus,
 )
@@ -156,6 +157,7 @@ __all__ = [
     "UserProfile",
     "ZoteroImportSource",
     "ZoteroImportStatus",
+    "ZoteroAnnotationSyncStatus",
     "ZoteroImportedItem",
     "ZoteroOAuthPending",
 ]

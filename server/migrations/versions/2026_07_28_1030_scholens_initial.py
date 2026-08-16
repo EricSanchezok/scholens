@@ -1031,6 +1031,10 @@ def upgrade() -> None:
         sa.Column("attempt_count", sa.Integer(), server_default="0", nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("callback_lease_id", sa.UUID(), nullable=True),
+        sa.Column(
+            "callback_lease_expires_at", sa.DateTime(timezone=True), nullable=True
+        ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
@@ -1047,6 +1051,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
             name="ck_jobs_status",
+        ),
+        sa.CheckConstraint(
+            "(callback_lease_id IS NULL) = (callback_lease_expires_at IS NULL)",
+            name="ck_jobs_callback_lease_pair",
         ),
         sa.ForeignKeyConstraint(
             ["document_id"], ["scholens.documents.id"], ondelete="SET NULL"
@@ -2093,6 +2101,14 @@ def upgrade() -> None:
         ),
         sa.Column("error_message", sa.String(), nullable=True),
         sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_sync_attempted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "annotation_sync_status",
+            sa.String(length=24),
+            server_default="active",
+            nullable=False,
+        ),
+        sa.Column("last_sync_error_code", sa.String(length=128), nullable=True),
         sa.Column("zotero_item_version", sa.Integer(), nullable=True),
         sa.Column("zotero_attachment_version", sa.Integer(), nullable=True),
         sa.Column(
@@ -2115,6 +2131,10 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["user_id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.CheckConstraint(
+            "annotation_sync_status IN ('active', 'source_unavailable')",
+            name="ck_zotero_imported_items_annotation_sync_status",
+        ),
         sa.UniqueConstraint(
             "user_id", "zotero_item_key", name="uq_zotero_import_user_item"
         ),

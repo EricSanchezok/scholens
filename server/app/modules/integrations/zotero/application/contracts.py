@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -24,6 +25,9 @@ ZoteroOperationProgress = Literal[
     "syncing_annotations",
     "importing_papers",
 ]
+ZOTERO_KEY_PATTERN = r"^[A-Z0-9]{8}$"
+_ZOTERO_KEY = re.compile(ZOTERO_KEY_PATTERN)
+ZoteroKey = Annotated[str, Field(pattern=ZOTERO_KEY_PATTERN)]
 
 
 class ZoteroOAuthAuthorizationRequest(BaseModel):
@@ -71,23 +75,23 @@ class ZoteroSyncPreferencesRequest(BaseModel):
 
 
 class ZoteroImportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    item_keys: list[str] = Field(..., min_length=1, max_length=50)
+    item_keys: list[ZoteroKey] = Field(..., min_length=1, max_length=50)
 
     @field_validator("item_keys")
     @classmethod
     def validate_item_keys(cls, values: list[str]) -> list[str]:
         normalized = [value.strip() for value in values]
-        if any(not value or len(value) > 64 for value in normalized):
-            raise ValueError("item_keys must contain non-empty Zotero keys")
+        if any(_ZOTERO_KEY.fullmatch(value) is None for value in normalized):
+            raise ValueError("item_keys must contain 8-character Zotero keys")
         if len(set(normalized)) != len(normalized):
             raise ValueError("item_keys must be unique")
         return normalized
 
 
 class ZoteroImportItemResult(BaseModel):
-    zotero_item_key: str
+    zotero_item_key: ZoteroKey
     document_id: str | None = None
     upload_job_id: str | None = None
     import_source: str | None = None
@@ -95,12 +99,12 @@ class ZoteroImportItemResult(BaseModel):
 
 
 class ZoteroImportError(BaseModel):
-    zotero_item_key: str
+    zotero_item_key: ZoteroKey
     error: str
 
 
 class ZoteroOperationItem(BaseModel):
-    zotero_item_key: str
+    zotero_item_key: ZoteroKey
     status: Literal["queued", "running", "accepted", "failed", "cancelled"]
     title: str | None = None
     document_id: UUID | None = None
@@ -129,7 +133,7 @@ class ZoteroOperation(BaseModel):
 
 
 class ZoteroCollection(BaseModel):
-    key: str
+    key: ZoteroKey
     name: str
 
 
@@ -141,7 +145,7 @@ class ZoteroCollectionPage(BaseModel):
 
 
 class ZoteroLibraryItem(BaseModel):
-    zotero_item_key: str
+    zotero_item_key: ZoteroKey
     title: str
     authors: list[str]
     date: str | None = None
@@ -149,7 +153,7 @@ class ZoteroLibraryItem(BaseModel):
     venue: str | None = None
     date_added: str | None = None
     tags: list[str] = Field(default_factory=list)
-    collection_keys: list[str] = Field(default_factory=list)
+    collection_keys: list[ZoteroKey] = Field(default_factory=list)
     import_state: ZoteroImportState
     source_availability: ZoteroSourceAvailability
 

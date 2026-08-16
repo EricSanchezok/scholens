@@ -40,6 +40,7 @@ from app.modules.jobs.application.jobs import (
     IdempotentOperationPort,
     JobQueryPort,
     JobCommandPort,
+    OperationClaim,
 )
 from app.modules.integrations.zotero.domain import (
     import_idempotency_key,
@@ -341,9 +342,15 @@ class ZoteroSyncUpdate:
 
 
 @dataclass(frozen=True, slots=True)
+class ZoteroSyncFailure:
+    item_key: str
+    error_code: str
+
+
+@dataclass(frozen=True, slots=True)
 class ZoteroSyncBatch:
     updates: tuple[ZoteroSyncUpdate, ...]
-    failed_item_keys: tuple[str, ...]
+    failures: tuple[ZoteroSyncFailure, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -730,17 +737,12 @@ class Zotero:
         actor: Actor,
         operation: OperationContext,
         operation_id: UUID,
+        claim_id: UUID,
         result: dict[str, JsonValue],
     ) -> bool:
-        before = self._jobs.get(requested_by_id=actor.id, job_id=operation_id)
-        if before.status in {
-            JobStatus.COMPLETED.value,
-            JobStatus.FAILED.value,
-            JobStatus.CANCELLED.value,
-        }:
-            return False
         transition = self._idempotency.complete(
             operation_id=operation_id,
+            claim_id=claim_id,
             result=result,
         )
         if not transition.changed:
@@ -759,17 +761,12 @@ class Zotero:
         actor: Actor,
         operation: OperationContext,
         operation_id: UUID,
+        claim_id: UUID,
         error_code: str,
     ) -> bool:
-        before = self._jobs.get(requested_by_id=actor.id, job_id=operation_id)
-        if before.status in {
-            JobStatus.COMPLETED.value,
-            JobStatus.FAILED.value,
-            JobStatus.CANCELLED.value,
-        }:
-            return False
         transition = self._idempotency.fail(
             operation_id=operation_id,
+            claim_id=claim_id,
             error_code=error_code,
         )
         if not transition.changed:
@@ -781,6 +778,17 @@ class Zotero:
             resources=(ResourceRef("job", str(operation_id)),),
         )
         return True
+
+    def claim_background_operation(
+        self,
+        *,
+        actor: Actor,
+        operation_id: UUID,
+    ) -> OperationClaim:
+        return self._idempotency.claim_completion(
+            operation_id=operation_id,
+            requested_by_id=actor.id,
+        )
 
     def plan_import(
         self,

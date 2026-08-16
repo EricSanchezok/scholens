@@ -102,6 +102,10 @@ boundaries. Every outbound session ignores environment proxies; public PDF
 redirects are revalidated against the connected peer address, and a Zotero API
 key is never forwarded across origins. Controlled failures, cancellation, and
 failed callback delivery remove temporary `zotero-imports/` objects.
+Worker inputs and provider outputs must use canonical eight-character Zotero
+item, attachment, collection, and annotation keys. Metadata and annotation
+snapshots are bounded before callback delivery so a provider-controlled library
+cannot amplify an internal callback without limit.
 
 A sync fetches new annotations for papers already imported into Scholens and
 returns their Zotero annotation keys for idempotent append-only application.
@@ -114,6 +118,9 @@ quota failures remain eligible on the next run. The worker does not infer
 eligibility, enable auto import, or own the checkpoint. Group
 Libraries, annotation deletion/overwrite, and writes to Zotero are outside the
 worker contract.
+Annotation-target failures retain their stable error code. Missing attachment
+responses are distinguished from transient failures so Server can stop polling
+an unavailable source without pretending that annotations synchronized.
 
 ## Code layout
 

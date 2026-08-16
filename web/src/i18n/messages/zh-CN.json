@@ -1224,6 +1224,7 @@
       "search": "搜索 Zotero 论文",
       "collection": "收藏夹",
       "allCollections": "全部收藏夹",
+      "loadMoreCollections": "加载更多收藏夹",
       "type": "论文类型",
       "types": {
         "all": "全部支持的类型",

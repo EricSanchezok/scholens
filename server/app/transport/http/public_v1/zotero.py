@@ -15,6 +15,7 @@ from app.modules.integrations.zotero.application.contracts import (
     ZoteroOAuthAuthorizationRequest,
     ZoteroOperation,
     ZoteroSyncPreferencesRequest,
+    ZOTERO_KEY_PATTERN,
 )
 from app.shared.application import (
     Actor,
@@ -129,7 +130,12 @@ def zotero_collections(
 def zotero_library(
     cursor: str | None = Query(default=None, max_length=2_048),
     query: str | None = Query(default=None, max_length=240),
-    collection_key: str | None = Query(default=None, max_length=64),
+    collection_key: str | None = Query(
+        default=None,
+        min_length=8,
+        max_length=8,
+        pattern=ZOTERO_KEY_PATTERN,
+    ),
     item_type: str | None = Query(
         default=None, pattern="^(journalArticle|conferencePaper|preprint)$"
     ),

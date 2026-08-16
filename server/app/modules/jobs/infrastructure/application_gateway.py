@@ -9,6 +9,7 @@ from app.modules.jobs.application.contracts import JobResponse
 from app.modules.jobs.application.jobs import (
     EnqueueJobCommand,
     EnqueuedJob,
+    OperationClaim,
     OperationTransition,
     ReserveOperationCommand,
     ReservedOperation,
@@ -132,19 +133,45 @@ class SqlAlchemyJobsGateway:
         self,
         *,
         operation_id: UUID,
+        claim_id: UUID,
         result: dict[str, JsonValue],
     ) -> OperationTransition:
-        job, changed = job_repository.complete(
+        job, changed = job_repository.complete_claimed(
             self._db,
             job_id=operation_id,
+            claim_id=claim_id,
             result=result,
         )
         return OperationTransition(job=job_response(job), changed=changed)
 
-    def fail(self, *, operation_id: UUID, error_code: str) -> OperationTransition:
-        job, changed = job_repository.fail(
+    def claim_completion(
+        self,
+        *,
+        operation_id: UUID,
+        requested_by_id: int,
+    ) -> OperationClaim:
+        job, claim_id, acquired = job_repository.claim_callback(
             self._db,
             job_id=operation_id,
+            requested_by_id=requested_by_id,
+        )
+        return OperationClaim(
+            job=job_response(job),
+            claim_id=claim_id,
+            acquired=acquired,
+        )
+
+    def fail(
+        self,
+        *,
+        operation_id: UUID,
+        claim_id: UUID,
+        error_code: str,
+    ) -> OperationTransition:
+        job, changed = job_repository.fail_claimed(
+            self._db,
+            job_id=operation_id,
+            claim_id=claim_id,
             error_code=error_code,
         )
         return OperationTransition(job=job_response(job), changed=changed)

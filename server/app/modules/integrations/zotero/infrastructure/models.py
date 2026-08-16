@@ -4,13 +4,21 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, UniqueConstraint, UUID
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    UUID,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.domain import JsonValue
 from app.shared.infrastructure.persistence import Base
-from app.shared.domain.enums import ZoteroImportStatus
+from app.shared.domain.enums import ZoteroAnnotationSyncStatus, ZoteroImportStatus
 
 if TYPE_CHECKING:
     from app.modules.identity.infrastructure.models import AuthUser
@@ -79,10 +87,27 @@ class ZoteroImportedItem(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    last_sync_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    annotation_sync_status: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        default=ZoteroAnnotationSyncStatus.ACTIVE.value,
+        server_default=ZoteroAnnotationSyncStatus.ACTIVE.value,
+    )
+    last_sync_error_code: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
     zotero_item_version: Mapped[int | None] = mapped_column(nullable=True)
     zotero_attachment_version: Mapped[int | None] = mapped_column(nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "annotation_sync_status IN ('active', 'source_unavailable')",
+            name="ck_zotero_imported_items_annotation_sync_status",
+        ),
         UniqueConstraint(
             "user_id", "zotero_item_key", name="uq_zotero_import_user_item"
         ),

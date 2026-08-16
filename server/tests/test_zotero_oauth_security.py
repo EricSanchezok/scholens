@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 from app.bootstrap.adapters.zotero_gateway import DefaultZoteroGateway
@@ -13,6 +15,13 @@ from app.modules.integrations.zotero.application.contracts import (
 )
 from app.modules.integrations.zotero.infrastructure.connection_repository import (
     ZoteroConnectionRepository,
+)
+from app.modules.integrations.zotero.infrastructure.oauth import (
+    ACCESS_TOKEN_URL,
+    OAUTH_TIMEOUT,
+    REQUEST_TOKEN_URL,
+    ZoteroAuthClient,
+    _close_oauth_response,
 )
 from app.shared.application import (
     OperationContextFactory,
@@ -118,3 +127,61 @@ def test_oauth_workflow_commits_pending_consumption_before_provider_exchange() -
     consume_session.rollback.assert_not_called()
     consume_session.close.assert_called_once_with()
     operations.exchange_access_token.assert_not_called()
+
+
+def test_oauth_session_ignores_proxy_environment_and_closes_token_response() -> None:
+    client = ZoteroAuthClient()
+    client.client_key = "client-key"
+    client.client_secret = "client-secret"
+    client.redirect_uri = "https://app.example/callback"
+    session = client._oauth_session()
+    assert session.trust_env is False
+    response = MagicMock(spec=requests.Response)
+    response.content = b"oauth_token=request&oauth_token_secret=secret"
+
+    assert _close_oauth_response(response) is response
+    response.close.assert_called_once_with()
+
+
+def test_oauth_token_exchanges_use_timeouts_and_redacted_errors(caplog) -> None:
+    client = ZoteroAuthClient()
+    client.client_key = "client-key"
+    client.client_secret = "client-secret"
+    client.redirect_uri = "https://app.example/callback"
+    request_session = MagicMock()
+    request_session.fetch_request_token.side_effect = RuntimeError(
+        "request-token-secret"
+    )
+    access_session = MagicMock()
+    access_session.fetch_access_token.return_value = {
+        "userID": "42",
+        "oauth_token_secret": "api-key",
+    }
+
+    with patch.object(
+        client,
+        "_oauth_session",
+        side_effect=[request_session, access_session],
+    ):
+        with caplog.at_level(logging.ERROR):
+            assert client.get_request_token() is None
+        access = client.get_access_token("request", "secret", "verifier")
+
+    assert "request-token-secret" not in caplog.text
+    assert caplog.records[-1].exception_type == "RuntimeError"
+    request_session.fetch_request_token.assert_called_once_with(
+        REQUEST_TOKEN_URL,
+        timeout=OAUTH_TIMEOUT,
+        allow_redirects=False,
+        hooks={"response": _close_oauth_response},
+    )
+    request_session.close.assert_called_once_with()
+    access_session.fetch_access_token.assert_called_once_with(
+        ACCESS_TOKEN_URL,
+        timeout=OAUTH_TIMEOUT,
+        allow_redirects=False,
+        hooks={"response": _close_oauth_response},
+    )
+    access_session.close.assert_called_once_with()
+    assert access is not None
+    assert access.zotero_user_id == "42"

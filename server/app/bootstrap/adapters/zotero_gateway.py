@@ -59,6 +59,9 @@ from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 _ANNOTATIONS = TypeAdapter(list[dict[str, JsonValue]])
+_PERMANENT_SYNC_SOURCE_ERRORS = frozenset(
+    {"zotero_item_not_found", "zotero_attachment_not_found"}
+)
 
 
 def _library_import_state(
@@ -712,6 +715,23 @@ class DefaultZoteroGateway:
         changed_documents: set[UUID] = set()
         new_annotations = 0
         synced_at = datetime.now(timezone.utc)
+        for failure in batch.failures:
+            imported_item = zotero_import_repository.get_by_item_key(
+                self._db,
+                user_id=actor.id,
+                zotero_item_key=failure.item_key,
+            )
+            if imported_item is None:
+                continue
+            zotero_import_repository.update_after_sync_failure(
+                self._db,
+                item=imported_item,
+                error_code=failure.error_code,
+                attempted_at=synced_at,
+                source_unavailable=(
+                    failure.error_code in _PERMANENT_SYNC_SOURCE_ERRORS
+                ),
+            )
         for update in batch.updates:
             target = update.target
             imported_item = zotero_import_repository.get_by_item_key(

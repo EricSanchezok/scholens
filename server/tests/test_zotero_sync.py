@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -15,10 +16,15 @@ from app.bootstrap.adapters.zotero_annotations import (
 from app.bootstrap.adapters.zotero_gateway import DefaultZoteroGateway
 from app.modules.integrations.zotero.application.zotero import (
     ZoteroSyncBatch,
+    ZoteroSyncFailure,
     ZoteroSyncTarget,
     ZoteroSyncUpdate,
 )
 from app.shared.application import Actor
+from app.shared.domain.enums import ZoteroAnnotationSyncStatus
+from app.modules.integrations.zotero.infrastructure.import_repository import (
+    zotero_import_repository,
+)
 
 
 def _actor() -> Actor:
@@ -115,7 +121,7 @@ def test_apply_sync_with_empty_annotations_does_not_require_paper_content() -> N
                 page_dimensions=(),
             ),
         ),
-        failed_item_keys=(),
+        failures=(),
     )
 
     with (
@@ -148,10 +154,6 @@ def test_apply_sync_with_empty_annotations_does_not_require_paper_content() -> N
 
 
 def test_syncable_repository_excludes_url_imports() -> None:
-    from app.modules.integrations.zotero.infrastructure.import_repository import (
-        zotero_import_repository,
-    )
-
     db = MagicMock()
     db.scalars.return_value.all.return_value = []
 
@@ -161,3 +163,101 @@ def test_syncable_repository_excludes_url_imports() -> None:
     compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
     assert "zotero_imported_items.import_source = 'pdf_attachment'" in compiled
     assert "zotero_imported_items.zotero_attachment_key IS NOT NULL" in compiled
+    assert "zotero_imported_items.annotation_sync_status = 'active'" in compiled
+    assert "last_sync_attempted_at ASC NULLS FIRST" in compiled
+
+
+def test_failed_front_page_advances_attempt_order_without_faking_success() -> None:
+    attempted_at = datetime.now(UTC)
+    db = MagicMock()
+    failed_front_page = [
+        SimpleNamespace(
+            last_sync_attempted_at=None,
+            last_synced_at=None,
+            annotation_sync_status=ZoteroAnnotationSyncStatus.ACTIVE.value,
+            last_sync_error_code=None,
+        )
+        for _ in range(500)
+    ]
+    unseen = SimpleNamespace(
+        last_sync_attempted_at=None,
+        last_synced_at=None,
+        annotation_sync_status=ZoteroAnnotationSyncStatus.ACTIVE.value,
+        last_sync_error_code=None,
+    )
+
+    for item in failed_front_page:
+        zotero_import_repository.update_after_sync_failure(
+            db,
+            item=item,
+            error_code="zotero_rate_limited",
+            attempted_at=attempted_at,
+            source_unavailable=False,
+        )
+
+    next_window = sorted(
+        [*failed_front_page, unseen],
+        key=lambda item: (
+            item.last_sync_attempted_at is not None,
+            item.last_sync_attempted_at or datetime.min.replace(tzinfo=UTC),
+        ),
+    )[:500]
+    assert unseen in next_window
+    assert unseen is next_window[0]
+    assert all(item.last_synced_at is None for item in failed_front_page)
+
+
+def test_permanent_missing_attachment_disables_only_future_annotation_sync() -> None:
+    item = SimpleNamespace(
+        last_sync_attempted_at=None,
+        last_synced_at=None,
+        annotation_sync_status=ZoteroAnnotationSyncStatus.ACTIVE.value,
+        last_sync_error_code=None,
+    )
+
+    zotero_import_repository.update_after_sync_failure(
+        MagicMock(),
+        item=item,
+        error_code="zotero_attachment_not_found",
+        attempted_at=datetime.now(UTC),
+        source_unavailable=True,
+    )
+
+    assert item.annotation_sync_status == "source_unavailable"
+    assert item.last_sync_error_code == "zotero_attachment_not_found"
+    assert item.last_synced_at is None
+
+
+def test_apply_sync_consumes_provider_failures_as_attempts() -> None:
+    db = MagicMock()
+    imported_item = SimpleNamespace(id=uuid4())
+    failures = tuple(
+        ZoteroSyncFailure(
+            item_key=f"F{index:07d}",
+            error_code=(
+                "zotero_attachment_not_found" if index == 0 else "zotero_rate_limited"
+            ),
+        )
+        for index in range(500)
+    )
+    with (
+        patch.object(
+            gateway_module.zotero_import_repository,
+            "get_by_item_key",
+            return_value=imported_item,
+        ),
+        patch.object(
+            gateway_module.zotero_import_repository,
+            "update_after_sync_failure",
+        ) as update_failure,
+    ):
+        mutation = DefaultZoteroGateway(db, connections=MagicMock()).apply_sync(
+            actor=_actor(),
+            batch=ZoteroSyncBatch(updates=(), failures=failures),
+            credential_revision=uuid4(),
+        )
+
+    assert mutation.response.synced_papers_count == 0
+    assert update_failure.call_count == 500
+    assert update_failure.call_args_list[0].kwargs["source_unavailable"] is True
+    assert update_failure.call_args_list[1].kwargs["source_unavailable"] is False

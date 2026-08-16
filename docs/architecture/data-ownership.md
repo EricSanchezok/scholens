@@ -206,8 +206,17 @@ connector tables and routes have no compatibility facade or dual-write path.
 
 `ZoteroOperation` owns one accepted import or sync request, its idempotency
 identity, summary counts, safe terminal code, and ordered item results.
+Its DurableJob also owns a short-lived callback lease distinct from the worker
+lease. Server must atomically acquire that lease before applying provider
+outcomes; terminal, cancelled, concurrent, and replayed callbacks own no product
+side effects.
 `ZoteroImportedItem` links the user's Zotero item and optional attachment to
-the canonical Document and paper-ingestion job. The Integration Connection
+the canonical Document and paper-ingestion job. It separately records
+`last_sync_attempted_at`, successful `last_synced_at`, annotation-source status,
+and a stable last error. Failed attempts advance only the fairness marker;
+provider-confirmed missing items or attachments become `source_unavailable`
+without deleting the local Document or existing annotations. The Integration
+Connection
 configuration owns automatic-import preference and Zotero library-version
 checkpoints plus the bounded secondary page position. Enabling automatic
 import records the current version; later automatic runs advance only through

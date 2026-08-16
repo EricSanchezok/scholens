@@ -40,6 +40,10 @@ class DurableJob(Base):
             "status IN ('pending', 'running', 'completed', 'failed', 'cancelled')",
             name="ck_jobs_status",
         ),
+        CheckConstraint(
+            "(callback_lease_id IS NULL) = (callback_lease_expires_at IS NULL)",
+            name="ck_jobs_callback_lease_pair",
+        ),
         Index("ix_jobs_requester_activity", "requested_by_id", "created_at"),
         Index("ix_jobs_project_status", "project_id", "status"),
         Index("ix_jobs_document_status", "document_id", "status"),
@@ -101,6 +105,14 @@ class DurableJob(Base):
         nullable=True,
     )
     lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    callback_lease_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+    callback_lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

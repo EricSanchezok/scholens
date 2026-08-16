@@ -43,6 +43,11 @@ class ZoteroImportStatus(str, Enum):
     FAILED = "failed"
 
 
+class ZoteroAnnotationSyncStatus(str, Enum):
+    ACTIVE = "active"
+    SOURCE_UNAVAILABLE = "source_unavailable"
+
+
 class JobStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"

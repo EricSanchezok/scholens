@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -12,6 +13,9 @@ ZOTERO_API_BASE = "https://api.zotero.org"
 MAX_RETRIES = 3
 MAX_REDIRECTS = 5
 IMPORTABLE_ITEM_TYPES = ("journalArticle", "conferencePaper", "preprint")
+MAX_BACKOFF_SECONDS = 10
+MAX_ATTACHMENT_CHILDREN_PER_ITEM = 1_000
+_ZOTERO_KEY = re.compile(r"^[A-Z0-9]{8}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,12 +25,15 @@ class ZoteroApiPage:
     library_version: int | None
 
 
+class ZoteroAttachmentScanLimitError(RuntimeError):
+    pass
+
+
 class ZoteroApiClient:
     """Read-only Zotero Web API v3 client."""
 
     def __init__(self, zotero_user_id: str, api_key: str):
         self.zotero_user_id = zotero_user_id
-        self.api_key = api_key
         self._session = requests.Session()
         self._session.trust_env = False
         self._api_headers = {
@@ -102,7 +109,7 @@ class ZoteroApiClient:
                     continue
                 backoff = response.headers.get("Backoff")
                 if backoff:
-                    time.sleep(int(backoff))
+                    time.sleep(_safe_header_seconds(response, "Backoff", 0))
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:
@@ -139,11 +146,6 @@ class ZoteroApiClient:
         )
         raise last_error or RuntimeError("Zotero API request failed")
 
-    def get_top_importable_items(
-        self, *, limit: int = 25, start: int = 0
-    ) -> list[dict[str, Any]]:
-        return list(self.get_top_importable_items_page(limit=limit, start=start).items)
-
     def get_top_importable_items_page(
         self,
         *,
@@ -171,19 +173,22 @@ class ZoteroApiClient:
             params["q"] = query
             params["qmode"] = "titleCreatorYear"
         response = self._request("GET", url, params=params)
-        items = response.json()
-        if not isinstance(items, list):
-            items = []
-        filtered = tuple(
-            item
-            for item in items
-            if item.get("data", {}).get("itemType") in IMPORTABLE_ITEM_TYPES
-        )
-        return ZoteroApiPage(
-            items=filtered,
-            total_count=_header_int(response, "Total-Results") or len(filtered),
-            library_version=_header_int(response, "Last-Modified-Version"),
-        )
+        try:
+            items = response.json()
+            if not isinstance(items, list):
+                items = []
+            filtered = tuple(
+                item
+                for item in items
+                if item.get("data", {}).get("itemType") in IMPORTABLE_ITEM_TYPES
+            )
+            return ZoteroApiPage(
+                items=filtered,
+                total_count=_header_int(response, "Total-Results") or len(filtered),
+                library_version=_header_int(response, "Last-Modified-Version"),
+            )
+        finally:
+            response.close()
 
     def get_collections_page(
         self,
@@ -196,14 +201,17 @@ class ZoteroApiClient:
             f"{self._user_base}/collections",
             params={"limit": min(limit, 100), "start": start, "sort": "title"},
         )
-        items = response.json()
-        if not isinstance(items, list):
-            items = []
-        return ZoteroApiPage(
-            items=tuple(items),
-            total_count=_header_int(response, "Total-Results") or len(items),
-            library_version=_header_int(response, "Last-Modified-Version"),
-        )
+        try:
+            items = response.json()
+            if not isinstance(items, list):
+                items = []
+            return ZoteroApiPage(
+                items=tuple(items),
+                total_count=_header_int(response, "Total-Results") or len(items),
+                library_version=_header_int(response, "Last-Modified-Version"),
+            )
+        finally:
+            response.close()
 
     def current_library_version(self) -> int | None:
         response = self._request(
@@ -211,122 +219,65 @@ class ZoteroApiClient:
             f"{self._user_base}/items/top",
             params={"limit": 1},
         )
-        return _header_int(response, "Last-Modified-Version")
-
-    def get_items_by_keys(self, item_keys: list[str]) -> list[dict[str, Any]]:
-        """Fetch specific Zotero items by their item keys.
-
-        Zotero supports up to 50 keys per request via the itemKey query param.
-        """
-        if not item_keys:
-            return []
-        results: list[dict[str, Any]] = []
-        batch_size = 50
-        for i in range(0, len(item_keys), batch_size):
-            batch = item_keys[i : i + batch_size]
-            url = f"{self._user_base}/items"
-            params = {"itemKey": ",".join(batch), "limit": len(batch)}
-            response = self._request("GET", url, params=params)
-            items = response.json()
-            if isinstance(items, list):
-                results.extend(
-                    item
-                    for item in items
-                    if item.get("data", {}).get("itemType") in IMPORTABLE_ITEM_TYPES
-                )
-        return results
-
-    def get_children(self, item_key: str) -> list[dict[str, Any]]:
-        url = f"{self._user_base}/items/{item_key}/children"
-        response = self._request("GET", url, params={"limit": 100})
-        children = response.json()
-        return children if isinstance(children, list) else []
-
-    def get_collections(self, *, max_items: int = 3000) -> dict[str, str]:
-        """Return a ``{collection_key: name}`` map for the user's library.
-
-        Used to translate the collection keys carried on each item into
-        human-readable names for the import modal's collection filter.
-        ``max_items`` caps pagination as a safety bound for unusually large
-        libraries.
-        """
-        result: dict[str, str] = {}
-        url = f"{self._user_base}/collections"
-        start = 0
-        page_size = 100
-        while start < max_items:
-            response = self._request(
-                "GET", url, params={"limit": page_size, "start": start}
-            )
-            items = response.json()
-            if not isinstance(items, list) or not items:
-                break
-            for collection in items:
-                data = collection.get("data", {}) or {}
-                key = collection.get("key") or data.get("key")
-                name = (data.get("name") or "").strip()
-                if key and name:
-                    result[key] = name
-            if len(items) < page_size:
-                break
-            start += page_size
-        return result
+        try:
+            return _header_int(response, "Last-Modified-Version")
+        finally:
+            response.close()
 
     def key_info(self) -> dict[str, Any]:
         response = self._request("GET", f"{ZOTERO_API_BASE}/keys/current")
-        payload = response.json()
-        return payload if isinstance(payload, dict) else {}
+        try:
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+        finally:
+            response.close()
 
-    def get_pdf_parent_item_keys(self, *, max_items: int = 3000) -> set[str]:
-        """Return the set of top-level item keys that have a stored PDF attachment.
-
-        Fetches attachment items in bulk via a single paginated query rather than
-        making a per-item ``get_children`` call, so the whole library can be
-        classified cheaply before display.
-
-        Only stored PDFs count (``linkMode`` ``imported_file`` / ``imported_url``);
-        ``linked_url`` attachments are hyperlinks Zotero's file API cannot return
-        as a usable PDF, matching the filter in :meth:`find_pdf_attachment`.
-
-        ``max_items`` caps how many attachments are scanned as a safety bound for
-        pathologically large libraries; if hit, some items may be reported as
-        lacking a PDF.
-        """
+    def get_stored_pdf_parent_keys(
+        self,
+        item_keys: list[str],
+        *,
+        max_children_per_item: int = MAX_ATTACHMENT_CHILDREN_PER_ITEM,
+    ) -> set[str]:
+        """Classify only visible papers, failing instead of truncating silently."""
         parents: set[str] = set()
-        url = f"{self._user_base}/items"
-        start = 0
-        page_size = 100
-        while start < max_items:
-            params = {
-                "itemType": "attachment",
-                "limit": page_size,
-                "start": start,
-            }
-            response = self._request("GET", url, params=params)
-            items = response.json()
-            if not isinstance(items, list) or not items:
-                break
-            for item in items:
-                data = item.get("data", {})
-                parent = data.get("parentItem")
-                if not parent:
-                    continue
-                # Mirror find_pdf_attachment's "stored PDF" predicate so the modal
-                # only marks items importable when the import pipeline could
-                # actually download a usable PDF from the attachment.
-                if not self._attachment_is_pdf(data):
-                    continue
-                if not self._attachment_is_stored(data):
-                    continue
-                parents.add(parent)
-            if len(items) < page_size:
-                break
-            start += page_size
-        else:
-            logger.warning(
-                "zotero.pdf_attachment_scan.limit_reached",
-                extra={"max_items": max_items},
-            )
+        for item_key in item_keys:
+            if _ZOTERO_KEY.fullmatch(item_key) is None:
+                raise ValueError("zotero_item_key_invalid")
+            url = f"{self._user_base}/items/{item_key}/children"
+            start = 0
+            while start < max_children_per_item:
+                page_limit = min(100, max_children_per_item - start)
+                response = self._request(
+                    "GET",
+                    url,
+                    params={
+                        "itemType": "attachment",
+                        "limit": page_limit,
+                        "start": start,
+                    },
+                )
+                try:
+                    values = response.json()
+                    children = values if isinstance(values, list) else []
+                    total = _header_int(response, "Total-Results")
+                finally:
+                    response.close()
+                if any(
+                    self._attachment_is_pdf(data) and self._attachment_is_stored(data)
+                    for child in children
+                    if isinstance(child, dict)
+                    and isinstance((data := child.get("data")), dict)
+                ):
+                    parents.add(item_key)
+                    break
+                scanned = start + len(children)
+                if not children or (total is not None and scanned >= total):
+                    break
+                start = scanned
+            else:
+                raise ZoteroAttachmentScanLimitError(
+                    "Zotero attachment classification exceeded its safety limit"
+                )
         return parents
 
     @staticmethod
@@ -346,64 +297,6 @@ class ZoteroApiClient:
         """
         return (data.get("linkMode") or "").lower() in ("imported_file", "imported_url")
 
-    @staticmethod
-    def find_pdf_attachment(children: list[dict[str, Any]]) -> dict[str, Any] | None:
-        """Return the best PDF attachment child, preferring stored files over linked URLs.
-
-        Zotero attachments have a ``linkMode`` field:
-        - ``"imported_file"`` / ``"imported_url"`` — file is stored in Zotero's cloud.
-        - ``"linked_url"`` — just a hyperlink; no file is stored and Zotero's file
-          download API will not return a usable PDF (often redirects to a paywalled page).
-
-        We do two passes: first for stored PDFs, then as a fallback for linked ones.
-        """
-        stored_pdf: dict[str, Any] | None = None
-        linked_pdf: dict[str, Any] | None = None
-
-        for child in children:
-            data = child.get("data", {})
-            if data.get("itemType") != "attachment":
-                continue
-            if not ZoteroApiClient._attachment_is_pdf(data):
-                continue
-            if ZoteroApiClient._attachment_is_stored(data):
-                if stored_pdf is None:
-                    stored_pdf = child
-            else:
-                if linked_pdf is None:
-                    linked_pdf = child
-
-        return stored_pdf or linked_pdf
-
-    def download_attachment_file(self, attachment_key: str) -> bytes:
-        url = f"{self._user_base}/items/{attachment_key}/file"
-        response = self._request("GET", url, stream=True)
-        return response.content
-
-    @staticmethod
-    def get_annotations_for_attachment(
-        children: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
-        return [
-            child
-            for child in children
-            if child.get("data", {}).get("itemType") == "annotation"
-        ]
-
-    @staticmethod
-    def resolve_item_urls(item_data: dict[str, Any]) -> list[str]:
-        urls: list[str] = []
-        url = (item_data.get("url") or "").strip()
-        if url:
-            urls.append(url)
-        doi = (item_data.get("DOI") or "").strip()
-        if doi:
-            if doi.startswith("http"):
-                urls.append(doi)
-            else:
-                urls.append(f"https://doi.org/{doi}")
-        return urls
-
 
 def _header_int(response: requests.Response, name: str) -> int | None:
     value = response.headers.get(name)
@@ -414,8 +307,16 @@ def _header_int(response: requests.Response, name: str) -> int | None:
 
 
 def _safe_retry_after(response: requests.Response) -> int:
-    value = _header_int(response, "Retry-After")
-    return min(max(value if value is not None else 2, 0), 10)
+    return _safe_header_seconds(response, "Retry-After", 2)
+
+
+def _safe_header_seconds(
+    response: requests.Response,
+    name: str,
+    default: int,
+) -> int:
+    value = _header_int(response, name)
+    return min(max(value if value is not None else default, 0), MAX_BACKOFF_SECONDS)
 
 
 def _same_origin(left: str, right: str) -> bool:

@@ -30,15 +30,27 @@ user, validated local return path, and `manage` or `import` intent, and consumed
 once. Callback verification requires personal-library, files, and notes read
 access, rejects write and Group Library access, and redirects only to the
 original in-product path with a stable result code.
+OAuth token exchanges disable environment proxy inheritance, use bounded
+connect/read timeouts, reject redirects, close token responses, and log only a
+stable event plus exception type.
 
 Zotero browsing remains a Server-owned external-I/O workflow with provider-aware
-pagination and signed query-bound cursors. Import and sync write no remote data
+pagination and signed query-bound cursors. Web follows collection cursors instead
+of truncating at the first 100 entries. Source classification queries attachment
+children only for the current visible paper page; it paginates within a bounded
+per-paper safety limit and fails the page explicitly if Zotero cannot provide a
+complete classification, so an unscanned attachment is never reported as
+unavailable. Import and sync write no remote data
 inside the HTTP request. Their accepted transaction creates a
 `ZoteroOperation`, DurableJob, and outbox dispatch and returns `202`. A worker
 may retrieve the current credential only after claiming that exact owner and
 operation. Task payloads, callbacks, logs, exceptions, journals, and telemetry
 remain secret-free; callbacks carry the fetched revision, and only a failure
 matching the current revision may invalidate the connection.
+Zotero item, attachment, collection, and annotation keys are accepted only in
+their canonical eight-character uppercase form. Internal callback item counts,
+metadata fields, annotations, staging paths, and aggregate serialized size are
+bounded before product mutations run.
 
 Jobs performs read-only item, file, and annotation requests, validates PDFs,
 and uploads accepted sources to temporary private storage. Its signed item
@@ -48,6 +60,11 @@ partial success, retryable rate limits, cooperative cancellation, and replayed
 callbacks. The connection row serializes acceptance so a user has only one
 active Zotero operation, and status exposes its kind and ID for refresh-safe
 recovery without exposing a generic job payload.
+Before any callback outcome or product mutation, Server atomically claims a
+separate expiring callback lease on the non-terminal job. Completed, failed,
+cancelled, concurrent, and replayed callbacks therefore exit before connection,
+document, import, annotation, journal, or object-storage side effects. The lease
+expires with the job recovery boundary after a crash.
 
 Manual sync applies new annotations only to papers already imported from
 Zotero. Researcher scheduled sync performs the same annotation work. Automatic
@@ -59,6 +76,15 @@ and quota failures are retried instead of being skipped. Losing Researcher
 access pauses automatic work without
 clearing the preference. Disconnecting revokes future access but retains
 imported papers, annotations, operations, and audit history.
+
+Annotation scheduling orders imported papers by `last_sync_attempted_at`, not
+only successful synchronization time. Both successful and failed provider
+attempts advance that fairness marker; only successful annotation application
+updates `last_synced_at`. Transient failures remain active for later rounds.
+Provider-confirmed missing items or attachments move the import link to
+`source_unavailable`, retain the local paper and annotations, and stop repeated
+automatic annotation requests until a future explicit reconnection or re-import
+establishes a valid source.
 
 The integration supports only personal-library `journalArticle`,
 `conferencePaper`, and `preprint` items. It never writes to Zotero, synchronizes
@@ -105,10 +131,13 @@ not enable scheduler or deployment configuration.
 
 Server tests cover OAuth expiry/replay/return paths, encrypted secrets,
 permission verification, cursor binding, 100-item pagination, quota,
-idempotency, checkpoints, entitlement pause/resume, stale revisions,
+idempotency, callback leases/replay, bounded callback content, complete
+collection pagination, visible-item attachment classification, checkpoints,
+fair failed-target scheduling, entitlement pause/resume, stale revisions,
 cancellation, and retained data. Jobs tests cover success, partial failure,
-rate limiting, credential rotation, retry, cancellation, PDF safety, version
+rate limiting, canonical keys, credential rotation, retry, cancellation, PDF safety, version
 pagination, and secret-free logging. Web unit and Storybook tests cover OAuth
-return, connection management, browsing, retained selection across pages,
+return, connection management, browsing, collection pagination beyond 100,
+retained selection across pages,
 quota, batch progress, partial completion, keyboard behavior, narrow layouts,
 themes, and English/Simplified Chinese states.

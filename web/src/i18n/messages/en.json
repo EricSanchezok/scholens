@@ -1224,6 +1224,7 @@
       "search": "Search Zotero papers",
       "collection": "Collection",
       "allCollections": "All collections",
+      "loadMoreCollections": "Load more collections",
       "type": "Paper type",
       "types": {
         "all": "All supported types",

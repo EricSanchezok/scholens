@@ -172,6 +172,7 @@ def test_background_terminal_transition_suppresses_concurrent_replay_journal(
     jobs.find_by_idempotency_key.return_value = None
     jobs.list.return_value = []
     operation_id = uuid4()
+    claim_id = uuid4()
     jobs.get.return_value = _job(job_id=operation_id)
     transition = OperationTransition(job=_job(job_id=operation_id), changed=False)
     getattr(idempotency, method).return_value = transition
@@ -187,6 +188,7 @@ def test_background_terminal_transition_suppresses_concurrent_replay_journal(
             actor=_actor(),
             operation=_operation(),
             operation_id=operation_id,
+            claim_id=claim_id,
             result={"items": []},
         )
     else:
@@ -194,11 +196,13 @@ def test_background_terminal_transition_suppresses_concurrent_replay_journal(
             actor=_actor(),
             operation=_operation(),
             operation_id=operation_id,
+            claim_id=claim_id,
             error_code="zotero_unavailable",
         )
 
     assert changed is False
     getattr(idempotency, method).assert_called_once()
+    assert getattr(idempotency, method).call_args.kwargs["claim_id"] == claim_id
     journal.append.assert_not_called()
 
 
@@ -217,7 +221,7 @@ def test_import_enqueue_is_idempotent_and_never_serializes_credentials() -> None
     jobs.enqueue.return_value = EnqueuedJob(
         job=queued_job,
         created=True,
-        payload={"item_keys": ["ITEM1"], "credential_revision": str(revision)},
+        payload={"item_keys": ["ITEM0001"], "credential_revision": str(revision)},
     )
     service = _service(
         gateway=gateway,
@@ -228,7 +232,7 @@ def test_import_enqueue_is_idempotent_and_never_serializes_credentials() -> None
     result = service.enqueue_import(
         actor=_actor(),
         operation=_operation(),
-        request=ZoteroImportRequest(item_keys=["ITEM1"]),
+        request=ZoteroImportRequest(item_keys=["ITEM0001"]),
         idempotency_key="request-1",
     )
 
@@ -237,7 +241,7 @@ def test_import_enqueue_is_idempotent_and_never_serializes_credentials() -> None
     assert command.task_name == "import_zotero_items"
     assert command.idempotency_key == "zotero-import:7:request-1"
     assert command.payload == {
-        "item_keys": ["ITEM1"],
+        "item_keys": ["ITEM0001"],
         "credential_revision": str(revision),
     }
     assert "never-in-job-payload" not in repr(command)
@@ -255,7 +259,7 @@ def test_import_rejects_idempotency_key_reuse_for_different_items() -> None:
     jobs.enqueue.return_value = EnqueuedJob(
         job=_job(),
         created=False,
-        payload={"item_keys": ["ITEM1"], "credential_revision": str(revision)},
+        payload={"item_keys": ["ITEM0001"], "credential_revision": str(revision)},
     )
     service = _service(
         gateway=gateway,
@@ -267,7 +271,7 @@ def test_import_rejects_idempotency_key_reuse_for_different_items() -> None:
         service.enqueue_import(
             actor=_actor(),
             operation=_operation(),
-            request=ZoteroImportRequest(item_keys=["ITEM2"]),
+            request=ZoteroImportRequest(item_keys=["ITEM0002"]),
             idempotency_key="request-1",
         )
 
@@ -296,7 +300,7 @@ def test_enqueue_rejects_second_active_zotero_operation_under_connection_lock() 
         service.enqueue_import(
             actor=_actor(),
             operation=_operation(),
-            request=ZoteroImportRequest(item_keys=["ITEM1"]),
+            request=ZoteroImportRequest(item_keys=["ITEM0001"]),
             idempotency_key="request-2",
         )
 
@@ -314,7 +318,7 @@ def test_active_operation_projects_safe_real_item_totals_and_stage() -> None:
     active = _job(status="running", progress_code="importing_papers")
     jobs.get.return_value = active
     jobs.payload.return_value = {
-        "item_keys": ["ITEM1", "ITEM2"],
+        "item_keys": ["ITEM0001", "ITEM0002"],
         "credential_revision": "must-not-be-exposed",
     }
     service = _service(
@@ -416,7 +420,7 @@ def test_disconnect_and_sync_suppress_noop_journal_entries() -> None:
     service.complete_sync(
         actor=actor,
         operation=operation,
-        batch=ZoteroSyncBatch(updates=(), failed_item_keys=()),
+        batch=ZoteroSyncBatch(updates=(), failures=()),
         credential_revision=uuid4(),
     )
     journal.append.assert_not_called()
@@ -432,7 +436,7 @@ def test_disconnect_and_sync_suppress_noop_journal_entries() -> None:
     service.complete_sync(
         actor=actor,
         operation=operation,
-        batch=ZoteroSyncBatch(updates=(), failed_item_keys=()),
+        batch=ZoteroSyncBatch(updates=(), failures=()),
         credential_revision=uuid4(),
     )
     assert journal.append.call_args.kwargs["action"] == "zotero.annotations_synced"

@@ -144,7 +144,10 @@ account is disconnected it begins OAuth with `intent=import`; a successful
 callback restores Library and opens the chooser exactly once. When connected,
 the chooser browses the personal Zotero library through server-owned search,
 collection and paper-type filtering, sorting, and opaque Previous/Next cursors.
-The Web never downloads a whole library to filter it locally.
+Collection pages are fetched on demand through their own opaque cursor, so
+libraries with more than 100 collections expose an explicit “Load more
+collections” action instead of silently omitting filters. The Web never
+downloads a whole library to filter it locally.
 
 Only `journalArticle`, `conferencePaper`, and `preprint` are selectable.
 Entries expose whether they have a stored PDF, a resolvable source, or no
@@ -233,6 +236,7 @@ Papers acceptance lives in section `974:1831` and maps to
 | Zotero disconnected / error  | responsive runtime acceptance      | `Disconnected`, `RateLimited`                                     |
 | Zotero quota / partial       | responsive runtime acceptance      | `ZeroQuota`, `PartialSuccess`                                     |
 | Zotero paging + keyboard     | responsive runtime acceptance      | `PaginationSelection`                                             |
+| Zotero >100 collections      | provider collection pagination     | `ManyCollections`                                                 |
 | Zotero 390 / 320             | Add papers mobile intent           | `Mobile390`, `Mobile320`                                          |
 | Zotero Dark Chinese          | localized appearance acceptance    | `DarkChinese`                                                     |
 | tag assignment / management  | shared Library interaction state   | `Tag manager dialog` lifecycle stories                            |

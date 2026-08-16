@@ -44,13 +44,13 @@ def test_zotero_credential_secret_is_not_in_repr() -> None:
 def test_annotation_snapshot_keeps_only_stable_remote_keys() -> None:
     serialized = _annotations_json(
         [
-            {"key": "ANN1", "data": {"annotationText": "hello"}},
+            {"key": "ANNOT001", "data": {"annotationText": "hello"}},
             {"key": "", "data": {"annotationText": "skip"}},
         ]
     )
 
     assert json.loads(serialized) == [
-        {"key": "ANN1", "data": {"annotationText": "hello"}}
+        {"key": "ANNOT001", "data": {"annotationText": "hello"}}
     ]
 
 
@@ -60,7 +60,7 @@ def test_import_stops_before_provider_io_after_cancellation() -> None:
             import_items(
                 task_id="job-1",
                 credential=_credential(),
-                item_keys=["ITEM1"],
+                item_keys=["ITEM0001"],
                 is_active=lambda: False,
             )
 
@@ -68,15 +68,35 @@ def test_import_stops_before_provider_io_after_cancellation() -> None:
     items.assert_not_called()
 
 
+@pytest.mark.parametrize("item_key", ["../ITEM1", "item0001", "ITEM/001"])
+def test_worker_rejects_path_shaped_zotero_keys_before_provider_io(
+    item_key: str,
+) -> None:
+    with patch.object(ZoteroClient, "items") as items:
+        with pytest.raises(ZoteroJobError) as raised:
+            import_items(
+                task_id="job-1",
+                credential=_credential(),
+                item_keys=[item_key],
+            )
+
+    assert raised.value.code == "zotero_request_invalid"
+    items.assert_not_called()
+
+
 def test_import_deletes_prior_staging_objects_after_late_credential_failure() -> None:
     client = MagicMock()
-    client.items.return_value = [_item("ITEM1", 1), _item("ITEM2", 2)]
+    client.items.return_value = [_item("ITEM0001", 1), _item("ITEM0002", 2)]
 
     def prepare(**kwargs):  # type: ignore[no-untyped-def]
-        if kwargs["item_key"] == "ITEM1":
-            key = "zotero-imports/job-1/ITEM1.pdf"
+        if kwargs["item_key"] == "ITEM0001":
+            key = "zotero-imports/job-1/ITEM0001.pdf"
             kwargs["uploaded_keys"].append(key)
-            return {"item_key": "ITEM1", "status": "ready", "s3_object_key": key}
+            return {
+                "item_key": "ITEM0001",
+                "status": "ready",
+                "s3_object_key": key,
+            }
         raise ZoteroJobError(
             "zotero_credentials_invalid",
             invalid_credential=True,
@@ -91,23 +111,27 @@ def test_import_deletes_prior_staging_objects_after_late_credential_failure() ->
             import_items(
                 task_id="job-1",
                 credential=_credential(),
-                item_keys=["ITEM1", "ITEM2"],
+                item_keys=["ITEM0001", "ITEM0002"],
                 is_active=lambda: True,
             )
 
     assert raised.value.code == "zotero_credentials_invalid"
-    delete_file.assert_called_once_with("zotero-imports/job-1/ITEM1.pdf")
+    delete_file.assert_called_once_with("zotero-imports/job-1/ITEM0001.pdf")
 
 
 def test_import_deletes_staging_objects_after_cooperative_cancellation() -> None:
     client = MagicMock()
-    client.items.return_value = [_item("ITEM1", 1), _item("ITEM2", 2)]
+    client.items.return_value = [_item("ITEM0001", 1), _item("ITEM0002", 2)]
     activity = iter([True, True, False])
 
     def prepare(**kwargs):  # type: ignore[no-untyped-def]
-        key = "zotero-imports/job-1/ITEM1.pdf"
+        key = "zotero-imports/job-1/ITEM0001.pdf"
         kwargs["uploaded_keys"].append(key)
-        return {"item_key": "ITEM1", "status": "ready", "s3_object_key": key}
+        return {
+            "item_key": "ITEM0001",
+            "status": "ready",
+            "s3_object_key": key,
+        }
 
     with (
         patch("src.zotero.ZoteroClient", return_value=client),
@@ -118,21 +142,21 @@ def test_import_deletes_staging_objects_after_cooperative_cancellation() -> None
             import_items(
                 task_id="job-1",
                 credential=_credential(),
-                item_keys=["ITEM1", "ITEM2"],
+                item_keys=["ITEM0001", "ITEM0002"],
                 is_active=lambda: next(activity),
             )
 
     assert raised.value.code == "zotero_operation_cancelled"
-    delete_file.assert_called_once_with("zotero-imports/job-1/ITEM1.pdf")
+    delete_file.assert_called_once_with("zotero-imports/job-1/ITEM0001.pdf")
 
 
 def test_version_batch_stays_bounded_when_more_than_fifty_share_a_version() -> None:
-    values = [_item(f"ITEM{index:03}", 50) for index in range(75)]
+    values = [_item(f"ITEM{index:04}", 50) for index in range(75)]
 
     selected = _bounded_version_batch(values)
 
     assert len(selected) == 50
-    assert selected[-1]["key"] == "ITEM049"
+    assert selected[-1]["key"] == "ITEM0049"
 
 
 def test_incremental_fetch_is_one_bounded_provider_page() -> None:
@@ -141,7 +165,7 @@ def test_incremental_fetch_is_one_bounded_provider_page() -> None:
         "Last-Modified-Version": "80",
         "Total-Results": "75",
     }
-    response.json.return_value = [_item(f"ITEM{index:03}", 50) for index in range(50)]
+    response.json.return_value = [_item(f"ITEM{index:04}", 50) for index in range(50)]
     client = ZoteroClient(_credential())
 
     with patch.object(client, "_request", return_value=response) as request:
@@ -162,7 +186,7 @@ def test_incremental_fetch_is_one_bounded_provider_page() -> None:
 
 
 def test_sync_uses_secondary_cursor_for_more_than_fifty_items_at_one_version() -> None:
-    changed = [_item(f"ITEM{index:03}", 50) for index in range(75)]
+    changed = [_item(f"ITEM{index:04}", 50) for index in range(75)]
     client = MagicMock()
     client.items_since.return_value = (changed[:50], 80, True)
     client.current_library_version.return_value = 80
@@ -214,7 +238,7 @@ def test_sync_uses_secondary_cursor_for_more_than_fifty_items_at_one_version() -
         )
 
     assert [item["item_key"] for item in second["auto_imports"]] == [
-        f"ITEM{index:03}" for index in range(50, 75)
+        f"ITEM{index:04}" for index in range(50, 75)
     ]
     assert second["auto_import_caught_up_version"] == 80
     assert client.items_since.call_args_list[-1].args[0] == 0
@@ -250,7 +274,7 @@ def test_attachment_cross_origin_redirect_never_forwards_zotero_api_key() -> Non
         patch("src.zotero._require_public_url"),
         patch("src.zotero._require_global_peer"),
     ):
-        assert client.download_attachment("ATTACHMENT") == b"%PDF"
+        assert client.download_attachment("ATTACH01") == b"%PDF"
 
     first_headers = get.call_args_list[0].kwargs["headers"]
     redirected_headers = get.call_args_list[1].kwargs["headers"]

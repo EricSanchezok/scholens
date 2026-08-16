@@ -293,7 +293,11 @@ stable public DTOs; raw provider exceptions and credentials are never public.
 
 Collection and library browsing perform remote I/O outside an application
 transaction, enforce Zotero's 100-item page ceiling, and bind opaque cursors to
-the user and complete query. Import and sync mutations only commit a
+the user and complete query. Collection cursors remain available beyond the
+first page. PDF availability is determined from complete, bounded child pages
+for only the currently visible items; a safety-limit hit fails explicitly
+instead of reporting an unscanned PDF as unavailable. Import and sync mutations
+only commit a
 `ZoteroOperation`, DurableJob, and dispatch outbox before returning `202`.
 The connection row is locked during acceptance, so each user has at most one
 active Zotero import or sync; status returns its kind and ID for refresh-safe
@@ -304,6 +308,11 @@ ingestions, applies annotations idempotently by Zotero annotation key, and
 ignores late credential failures or callbacks from a disconnected/replaced
 revision. Disconnecting retains imported papers, annotations, and operation
 history.
+Before processing a callback, Server atomically claims an expiring callback
+lease. Terminal, cancelled, concurrent, and replayed deliveries make no
+connection, paper, annotation, journal, or storage mutation. Canonical
+eight-character Zotero keys and bounded metadata/annotation callback payloads
+are enforced at both public and internal boundaries.
 
 A manual sync inspects only already imported papers. Researcher scheduling
 automatically syncs their annotations and may also import later Zotero items
@@ -314,6 +323,10 @@ through a contiguous prefix of accepted or permanently skipped items. Rate
 limits, temporary downloads, and quota failures are retried rather than being
 skipped by the checkpoint.
 Loss of Researcher access pauses the preference without clearing it.
+Annotation scheduling orders by the last attempt so failed targets cannot
+starve later papers. Failures update attempt time but never successful-sync
+time; confirmed missing remote items or attachments disable future automatic
+annotation polling for that link while retaining the local paper.
 
 The PDF completion callback persists extracted metadata, generated summary,
 and summary citations on the canonical `Document`. Ingestion never creates a
