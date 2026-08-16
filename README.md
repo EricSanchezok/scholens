@@ -18,8 +18,7 @@ and asynchronous workers in `jobs/`.
 - A document reader with PDF navigation, source-grounded conversations,
   anchored annotation threads, selection translation, and evidence-preserving
   reading reflow.
-- User-owned connections for optional model, search, parsing, and research
-  providers.
+- User-owned connections for optional search, parsing, and research providers.
 
 The stable product principles are documented in [PRODUCT.md](./PRODUCT.md).
 Executable contracts, generated API schemas, and tests remain the authority for
