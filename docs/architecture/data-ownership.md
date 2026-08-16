@@ -181,9 +181,13 @@ and single-flight coordination.
 
 `IntegrationConnection` is user-owned Scholens data. It records one provider,
 enabled state, encrypted credential payload, non-secret display metadata,
-credential revision, verification outcome, and lifecycle timestamps. The
-Server is the sole persistence and decryption authority. Public projections
-never return a stored secret, and Jobs has no process-level MinerU token.
+provider configuration, credential revision, verification outcome, and
+lifecycle timestamps. The Server is the sole persistence and decryption
+authority. Public projections never return a stored secret, and Jobs has no
+process-level MinerU token or Zotero API key. Zotero's OAuth-issued API key is
+the long-lived credential in this same store; its request-token secret is
+encrypted separately in a short-lived `ZoteroOAuthPending` row that is consumed
+once. Neither credential belongs to the `auth` schema.
 
 A DurableJob stores the owning user, but neither the plaintext credential nor a
 credential revision. After the worker has claimed that eligible job, it may
@@ -199,6 +203,23 @@ Disconnecting or replacing a connection does not rewrite immutable job
 history. A retry creates or resumes a new eligible attempt against the current
 credential revision. Pre-release schema evolution is reset-first: the removed
 connector tables and routes have no compatibility facade or dual-write path.
+
+`ZoteroOperation` owns one accepted import or sync request, its idempotency
+identity, summary counts, safe terminal code, and ordered item results.
+`ZoteroImportedItem` links the user's Zotero item and optional attachment to
+the canonical Document and paper-ingestion job. The Integration Connection
+configuration owns automatic-import preference and Zotero library-version
+checkpoints. Enabling automatic import records the current version; later
+automatic runs advance it only after their signed result is accepted. Zotero
+annotation keys live on the resulting Scholens annotation threads and make
+append-only application idempotent.
+
+Disconnecting Zotero removes future credential availability and scheduled
+access. It does not delete `ZoteroOperation`, `ZoteroImportedItem`, Documents,
+Library memberships, or annotation threads already created through the
+integration. Jobs may retrieve the current Zotero API key only for a claimed,
+owner- and operation-scoped Zotero job. The key and revision follow the same
+payload, logging, callback, and stale-failure restrictions as MinerU.
 
 `DocumentReflow`, its ordered `DocumentReflowBlock` rows, and
 `DocumentReflowAsset` rows are derived from the Document's canonical parser

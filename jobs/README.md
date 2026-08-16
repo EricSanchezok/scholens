@@ -82,6 +82,33 @@ render Markdown, source spans, presentation status, source fingerprint, parser
 revision, and warnings return through the signed callback. Server remains the
 persistence authority.
 
+## Zotero import and synchronization
+
+Zotero work is read-only and begins only from a Server-owned DurableJob. The
+task payload contains owner, operation, requested Zotero item keys, signed
+credential/progress/callback URLs, and non-secret policy. After claiming the
+job, the worker retrieves the current API key and Zotero user ID from the
+signed, job-scoped Server endpoint. It never persists that key or includes it
+in Celery payloads, callbacks, logs, exceptions, or telemetry.
+
+An import fetches supported personal-library items, resolves a stored PDF or a
+bounded trustworthy source, validates the download as a safe PDF, uploads it to
+temporary private S3 storage, and reports each result independently. Server
+then creates the ordinary paper-ingestion lifecycle with Zotero metadata as
+the authority. One bad item therefore yields a partial operation instead of
+rolling back accepted papers. Provider rate limits use bounded retry delay;
+credential replacement, disconnect, and cancellation are checked at expensive
+boundaries.
+
+A sync fetches new annotations for papers already imported into Scholens and
+returns their Zotero annotation keys for idempotent append-only application.
+Automatic Researcher runs may additionally request items modified after the
+Server-provided library-version checkpoint. The worker follows Zotero's
+version pagination until complete and returns the observed final version; it
+does not infer eligibility, enable auto import, or own the checkpoint. Group
+Libraries, annotation deletion/overwrite, and writes to Zotero are outside the
+worker contract.
+
 ## Code layout
 
 ```text
@@ -93,6 +120,7 @@ src/
 │   ├── state.py     # Redis task checkpoint and submit lock
 │   └── pipeline.py  # Parser selection, S3 artifacts, metadata
 ├── tasks.py         # Thin Celery task adapters
+├── zotero.py        # Read-only Zotero import, PDF validation, and incremental sync
 ├── reflow.py        # MinerU content-list normalization and continuous AST
 ├── llm_client.py    # provider-neutral structured AI client
 ├── s3_service.py

@@ -13,18 +13,21 @@ Home's conversation or composer implementation.
   and project scope. The Web does not infer permissions or join scopes.
 - Reader and Projects remain separate feature slices. Library output rows do
   not invent a viewer when their canonical kind has no dedicated destination.
+- Zotero is a one-way source for a user's personal Zotero library. Library
+  never browses Group Libraries or writes Scholens changes back to Zotero.
 - The replacement frontend does not import from `client/`, synthesize reports or
   notes, or preserve superseded ingestion contracts.
 
 ## State ownership
 
-| State                                                        | Owner                    |
-| ------------------------------------------------------------ | ------------------------ |
-| active tab, query, tag/kind filters, sort, cursor            | URL search parameters    |
-| papers, outputs, summary, tags, projects, ingestion jobs     | TanStack Query           |
-| source import fields                                         | React Hook Form + Zod    |
-| selected rows, open menu/dialog/sheet, per-file upload queue | feature-local state      |
-| shell collapse and mobile navigation disclosure              | Workspace Shell boundary |
+| State                                                       | Owner                    |
+| ----------------------------------------------------------- | ------------------------ |
+| active tab, query, tag/kind filters, sort, cursor           | URL search parameters    |
+| papers, outputs, summary, tags, projects, ingestion jobs    | TanStack Query           |
+| Zotero collections, library pages, operations, status       | TanStack Query           |
+| source import fields                                        | React Hook Form + Zod    |
+| selected rows, Zotero selection, open dialogs, upload queue | feature-local state      |
+| shell collapse and mobile navigation disclosure             | Workspace Shell boundary |
 
 Search is debounced by 250 ms and query requests receive an abort signal. A
 filter, sort, tab, or page transition clears row selection. Cursor navigation is
@@ -134,6 +137,36 @@ When a network interruption makes the acceptance result unknown, Web retries
 or reconciles with the same operation-scoped idempotency key. It never invents
 a second key merely because the first HTTP response was lost.
 
+### Import from Zotero
+
+Add papers includes a Zotero entry alongside upload and source URL. When the
+account is disconnected it begins OAuth with `intent=import`; a successful
+callback restores Library and opens the chooser exactly once. When connected,
+the chooser browses the personal Zotero library through server-owned search,
+collection and paper-type filtering, sorting, and opaque Previous/Next cursors.
+The Web never downloads a whole library to filter it locally.
+
+Only `journalArticle`, `conferencePaper`, and `preprint` are selectable.
+Entries expose whether they have a stored PDF, a resolvable source, or no
+usable source. Already imported, currently processing, and unavailable items
+remain visible but disabled. Nothing is selected by default. Selection is
+retained while paging and is capped at `min(50, remaining account paper
+slots)`; zero capacity is an explicit state rather than a paid-upgrade action.
+
+Submitting creates one idempotent asynchronous import operation and closes the
+chooser after Server returns `202`. The operation surface polls its durable
+`queued`, `running`, `partial`, `succeeded`, `failed`, `cancelling`, or
+`cancelled` state and supports cooperative cancellation. Each accepted item
+immediately continues through the existing Library ingestion row and PDF
+stages; the Zotero batch is progress context, not another paper-row authority.
+Partial success preserves successful papers and gives every failed Zotero item
+a stable product code without exposing provider exceptions.
+
+Manual Sync now lives in Settings and appends new Zotero annotations only to
+papers previously imported through the connection. It does not discover or
+import new papers. Automatic import of future Zotero additions is a separate,
+default-off Researcher preference.
+
 PDF selection is deduplicated by a browser-computed content digest before the
 queue is created; duplicate content is represented once and the skipped count
 is announced inline. Server-side SHA-256 reservation checks and collection
@@ -193,6 +226,13 @@ Papers acceptance lives in section `974:1831` and maps to
 | duplicate PDF selection      | `1007:2`                           | `AddPapersDuplicateSelection`                                     |
 | OpenAlex required / narrow   | responsive runtime acceptance      | `AddPapersOpenAlexRequired`, `Mobile320AddPapersOpenAlexRequired` |
 | OpenAlex required dark zh-CN | responsive runtime acceptance      | `DarkChineseAddPapersOpenAlexRequired`                            |
+| Zotero populated chooser     | Add papers integration intent      | `Features/Zotero/Library/Populated`                               |
+| Zotero empty / slow          | responsive runtime acceptance      | `Empty`, `Slow`                                                   |
+| Zotero disconnected / error  | responsive runtime acceptance      | `Disconnected`, `RateLimited`                                     |
+| Zotero quota / partial       | responsive runtime acceptance      | `ZeroQuota`, `PartialSuccess`                                     |
+| Zotero paging + keyboard     | responsive runtime acceptance      | `PaginationSelection`                                             |
+| Zotero 390 / 320             | Add papers mobile intent           | `Mobile390`, `Mobile320`                                          |
+| Zotero Dark Chinese          | localized appearance acceptance    | `DarkChinese`                                                     |
 | tag assignment / management  | shared Library interaction state   | `Tag manager dialog` lifecycle stories                            |
 | lifecycle behavior contract  | `1002:2021`                        | ingestion-row state stories                                       |
 

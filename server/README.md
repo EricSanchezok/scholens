@@ -282,6 +282,33 @@ without substituting an MCP or general web-search result. A catalog `404` or a
 work with no open PDF retains the existing source-unavailable/not-found
 semantics.
 
+Zotero is a separate read-only integration under
+`/api/v1/integrations/zotero`. `POST .../oauth/authorizations` starts a
+short-lived OAuth session for a validated local return path and `manage` or
+`import` intent. The callback consumes its encrypted request-token secret once,
+verifies `/keys/current`, and accepts only a personal-library API key with
+read-only library, files, and notes access and no Group Library access. Status,
+preferences, collections, library items, import operations, and sync runs use
+stable public DTOs; raw provider exceptions and credentials are never public.
+
+Collection and library browsing perform remote I/O outside an application
+transaction, enforce Zotero's 100-item page ceiling, and bind opaque cursors to
+the user and complete query. Import and sync mutations only commit a
+`ZoteroOperation`, DurableJob, and dispatch outbox before returning `202`.
+Workers retrieve a current revision-scoped API key through the signed internal
+API, then return item-level signed callbacks. The Server creates standard paper
+ingestions, applies annotations idempotently by Zotero annotation key, and
+ignores late credential failures or callbacks from a disconnected/replaced
+revision. Disconnecting retains imported papers, annotations, and operation
+history.
+
+A manual sync inspects only already imported papers. Researcher scheduling
+automatically syncs their annotations and may also import later Zotero items
+when the user has explicitly enabled auto import. Enabling it records the
+current Zotero library version, and incremental runs advance that checkpoint
+instead of scanning a fixed first page or backfilling the existing library.
+Loss of Researcher access pauses the preference without clearing it.
+
 The PDF completion callback persists extracted metadata, generated summary,
 and summary citations on the canonical `Document`. Ingestion never creates a
 Conversation, Turn, or Response. A paper-scoped conversation begins only from
