@@ -96,7 +96,7 @@ export const SmallMobile: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const compactToc =
-      canvasElement.querySelector<HTMLSummaryElement>("details > summary");
+      canvasElement.querySelector<HTMLElement>("details > summary");
     await expect(compactToc).not.toBeNull();
     if (!compactToc) throw new Error("Compact documentation TOC is missing");
     await expect(compactToc).toHaveTextContent("On this page");
