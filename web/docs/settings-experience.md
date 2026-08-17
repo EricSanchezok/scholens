@@ -33,14 +33,15 @@ sections. Appearance is not duplicated in the menu. Routes mount one
 supports keyboard navigation, visible focus, Light and Dark themes, English and
 Simplified Chinese, 320px containment, and reduced-motion-safe feedback.
 
-The account menu also exposes a localized external
-`Source code · AGPL-3.0` link. The authentication shell exposes the same link
-before sign-in so anonymous and authenticated users can reach the source for
-the version of the network service they are using.
+The account menu exposes localized Documentation and Repository rows with
+semantic icons and explicit external-link affordances. The authentication
+shell exposes the same public destinations before sign-in. Documentation opens
+the public MCP guide; Repository opens the source for the running network
+service without spending menu width on the license label.
 
 ## Panel responsibilities
 
-- General is labeled Appearance, motion & language. It owns application locale,
+- General is labeled Appearance. It owns application locale,
   the visual Light, Dark, and System choices, and the independent System,
   Reduced, and Full motion preference.
 - Account presents the authenticated Actor's shared identity as read-only,
@@ -58,6 +59,8 @@ the version of the network service they are using.
   connected; the interface does not present inert actions.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.
   A secret is never recoverable after the creation acknowledgement is closed.
+  Its header links to `/docs#mcp-setup` in a new tab so configuration guidance
+  does not interrupt key management.
 - Connections owns built-in and user-configured provider status. Scholight is
   built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the
   shared integration inventory and public `/me/integrations` contract. Zotero
@@ -141,14 +144,14 @@ dialogs, feedback, and semantic Iconoir wrappers remain shared components.
 
 ## Acceptance states
 
-Storybook covers Appearance, Motion & Language, Account, Usage, Access Keys,
-Connections, Translation, 390px mobile, and Dark Chinese states. Account states
+Storybook covers Appearance, Account, Usage, Access Keys, Connections,
+Translation, 390px mobile, and Dark Chinese states. Account states
 cover direct URL navigation, read-only identity, canonical and overridden
 Account Center, current-session Sign out, mobile, and Dark. The shell account
 menu covers real usage success, loading, failure/retry, keyboard open,
 expanded/collapsed desktop, mobile settings trigger, localized Dark mode, the
-source-code link, and the exact Settings/Account/Usage URL writes. Usage covers
-the per-Project paper limit, correct English/Chinese
+Documentation and Repository links, and the exact Settings/Account/Usage URL
+writes. Usage covers the per-Project paper limit, correct English/Chinese
 KiB-derived storage display, and UTC-negative date-only formatting.
 Connection stories include connected, not connected, invalid, replacement,
 OpenAlex key-link, and OpenAlex invalid behavior.
@@ -158,8 +161,9 @@ disconnect confirmation. Adjacent Settings stories cover compact OAuth failure,
 active-sync recovery, terminal failure, and invalid-credential recovery; the
 Zotero feature stories own library slow, disconnected, invalid-permission,
 rate-limit, narrow, localized, and Dark variants. Access Key stories include
-empty, populated, create, edit, revoke, and one-time secret states. The shared
-Dialog responsive-full story verifies the mobile shell independently.
+empty, populated, create, edit, revoke, one-time secret states, the MCP guide
+link, and its 320px header composition. The shared Dialog responsive-full story
+verifies the mobile shell independently.
 
 Feature changes must retain the Figma hierarchy, semantic tokens, generated API
 types, localized copy parity, keyboard behavior, and narrow-content coverage.

@@ -75,8 +75,17 @@ test("account menu exposes live usage and direct Settings destinations", async (
   await expect(menu.getByText("24M / 100M")).toBeVisible();
   await expect(menu.getByText("Credits reset on Aug 17, 2026")).toBeVisible();
   await expect(
-    menu.getByRole("menuitem", { name: "Source code · AGPL-3.0" }),
+    menu.getByRole("menuitem", { name: "Repository" }),
   ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
+  await expect(
+    menu.getByRole("menuitem", { name: "Repository" }),
+  ).toHaveAttribute("target", "_blank");
+  await expect(
+    menu.getByRole("menuitem", { name: "Documentation" }),
+  ).toHaveAttribute("href", "/docs");
+  await expect(
+    menu.getByRole("menuitem", { name: "Documentation" }),
+  ).toHaveAttribute("target", "_blank");
 
   await menu.getByRole("menuitem", { name: "Account" }).click();
   await expect(page).toHaveURL(/\?settings=account$/);
@@ -85,6 +94,23 @@ test("account menu exposes live usage and direct Settings destinations", async (
   await accountMenu.click();
   await page.getByRole("menuitem", { name: "Usage" }).click();
   await expect(page).toHaveURL(/\?settings=usage$/);
+});
+
+test("links Access Keys to the public MCP setup guide", async ({ page }) => {
+  await page.route(`${apiPattern}/me/access-keys`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [] }),
+    }),
+  );
+  await page.goto("/?settings=access-keys");
+
+  await expect(
+    page.getByRole("link", { name: /MCP setup guide/ }),
+  ).toHaveAttribute("href", "/docs#mcp-setup");
+  await expect(
+    page.getByRole("link", { name: /MCP setup guide/ }),
+  ).toHaveAttribute("target", "_blank");
 });
 
 test("renders the authenticated Home shell and primary data", async ({
@@ -245,6 +271,7 @@ test("preserves compact sidebar density while collapsing", async ({ page }) => {
   const account = page.getByRole("button", { name: "Open account menu" });
   const actorName = account.getByText(actor.display_name);
   const actorEmail = account.getByText(actor.email);
+  const accountAvatar = account.locator("[data-account-avatar]");
   const conversation = page.getByText(homeConversations[0]!.title, {
     exact: true,
   });
@@ -254,6 +281,9 @@ test("preserves compact sidebar density while collapsing", async ({ page }) => {
   await expect(actorName).toHaveCSS("font-size", "13px");
   await expect(conversation).toHaveCSS("font-size", "13px");
   await expect(actorEmail).toHaveCSS("font-size", "11px");
+  await expect(account).toHaveCSS("height", "56px");
+  await expect(accountAvatar).toHaveCSS("width", "40px");
+  await expect(accountAvatar).toHaveCSS("height", "40px");
   expect(
     await actorEmail.evaluate(
       (element) => element.scrollWidth <= element.clientWidth,
@@ -274,6 +304,8 @@ test("preserves compact sidebar density while collapsing", async ({ page }) => {
     page.getByRole("button", { name: "Expand sidebar" }),
   ).toBeVisible();
   await expect(page.locator("aside")).toHaveCSS("width", "64px");
+  await expect(accountAvatar).toHaveCSS("width", "32px");
+  await expect(accountAvatar).toHaveCSS("height", "32px");
   const after = {
     newChat: await newChat.evaluate((element) =>
       element.getBoundingClientRect().toJSON(),

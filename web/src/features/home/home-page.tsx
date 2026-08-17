@@ -223,19 +223,24 @@ export function HomeWorkspace({
   );
 }
 
-export function HomePage({ conversationId }: { conversationId?: string }) {
+export function HomePage({
+  anonymousReturnTo = "/",
+  conversationId,
+}: {
+  anonymousReturnTo?: string;
+  conversationId?: string;
+}) {
   const router = useRouter();
   const t = useTranslations("Home.session");
   const session = useAuthSession();
 
   React.useEffect(() => {
     if (session.status === "anonymous") {
-      const returnTo = conversationId
-        ? `/?conversation=${encodeURIComponent(conversationId)}`
-        : "/";
-      router.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      router.replace(
+        `/login?returnTo=${encodeURIComponent(anonymousReturnTo)}`,
+      );
     }
-  }, [conversationId, router, session.status]);
+  }, [anonymousReturnTo, router, session.status]);
 
   if (session.status === "bootstrapping" || session.status === "anonymous") {
     return (

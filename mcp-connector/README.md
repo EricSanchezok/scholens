@@ -1,5 +1,12 @@
 # Scholens MCP connector
 
+For client-specific setup, permissions, capability boundaries, and
+troubleshooting, use the public guide at
+[`https://scholens.sanchezcloud.net/docs`](https://scholens.sanchezcloud.net/docs).
+That production guide pins `uvx --from` to the exact deployed 40-character
+release SHA. The repository example below uses the explicitly mutable `main`
+development fallback and must not be presented as a release-pinned command.
+
 This official local bridge exposes the same stored-knowledge, Project,
 collaboration, Library, ingestion, job, annotation, and research-output tools as
 the remote Scholens MCP server. It intentionally does not expose internet paper
@@ -16,7 +23,7 @@ Run it from an MCP host with `uvx`:
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/EricSanchezok/scholens.git#subdirectory=mcp-connector",
+        "git+https://github.com/EricSanchezok/scholens.git@main#subdirectory=mcp-connector",
         "scholens-mcp"
       ],
       "env": {

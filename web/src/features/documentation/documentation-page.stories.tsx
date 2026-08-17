@@ -1,0 +1,98 @@
+import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { expect, userEvent, within } from "storybook/test";
+
+import { DocumentationPage } from "./documentation-page";
+
+const meta = {
+  title: "Features/Documentation/MCP Guide",
+  component: DocumentationPage,
+  args: { selectedClient: "codex" },
+  argTypes: {
+    selectedClient: {
+      control: "select",
+      options: ["codex", "claude-desktop", "cursor", "generic"],
+    },
+  },
+  parameters: {
+    layout: "fullscreen",
+    nextjs: { appDirectory: true },
+  },
+} satisfies Meta<typeof DocumentationPage>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("heading", {
+        level: 1,
+        name: "Connect your research agent to Scholens",
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: /Create access key/ }),
+    ).toHaveAttribute("href", "/?settings=access-keys");
+    await expect(
+      canvas.getAllByText("http://127.0.0.1:7301/mcp")[0],
+    ).toBeVisible();
+    await expect(
+      canvas.getByText(/Development preview: the connector uses mutable/),
+    ).toBeVisible();
+    const copy = canvas.getAllByRole("button", { name: "Copy code" })[0]!;
+    await userEvent.click(copy);
+    await expect(
+      canvas.getAllByRole("button", { name: "Code copied" })[0],
+    ).toBeVisible();
+  },
+};
+
+export const Cursor: Story = {
+  args: { selectedClient: "cursor" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText(/Bearer \$\{env:SCHOLENS_ACCESS_KEY\}/),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("link", { name: "Cursor" }),
+    ).toHaveAttribute("aria-current", "page");
+  },
+};
+
+export const ChineseDark: Story = {
+  globals: { appearance: "dark", locale: "zh-CN" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("heading", {
+        level: 1,
+        name: "将你的研究智能体连接到 Scholens",
+      }),
+    ).toBeVisible();
+    await expect(canvas.getByText("明确的产品边界")).toBeVisible();
+  },
+};
+
+export const Mobile: Story = {
+  globals: { viewport: { value: "mobile", isRotated: false } },
+};
+
+export const LargeMobile: Story = {
+  args: { selectedClient: "claude-desktop" },
+  globals: { viewport: { value: "largeMobile", isRotated: false } },
+};
+
+export const SmallMobile: Story = {
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText("On this page", { exact: true }),
+    ).toBeVisible();
+    expect(document.documentElement.scrollWidth <= window.innerWidth).toBe(
+      true,
+    );
+  },
+};

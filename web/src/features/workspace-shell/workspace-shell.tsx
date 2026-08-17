@@ -3,8 +3,10 @@
 import {
   AccountIcon,
   CollapseRailIcon,
+  DocumentationIcon,
   ExpandRailIcon,
-  LinkIcon,
+  ExternalLinkIcon,
+  RepositoryIcon,
   SignOutIcon,
   MenuIcon,
   SettingsIcon,
@@ -48,7 +50,10 @@ import {
   type CurrentBillingUsageSummary,
 } from "@/features/settings";
 import type { components } from "@/lib/api/generated/schema";
-import { SOURCE_REPOSITORY_URL } from "@/lib/product";
+import {
+  DOCUMENTATION_PATH,
+  SOURCE_REPOSITORY_URL,
+} from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import {
   AskIcon,
@@ -266,11 +271,11 @@ function AccountMenu({
             settingsTrigger
               ? "bg-surface size-12 justify-center rounded-full"
               : "rounded-[var(--radius-lg)]",
-            !settingsTrigger && "h-12",
+            !settingsTrigger && "h-14",
             !settingsTrigger &&
               (collapsed
                 ? "ml-auto w-10 justify-center px-2"
-                : "w-full gap-2 px-1"),
+                : "w-full gap-3 px-2"),
           )}
           type="button"
         >
@@ -280,9 +285,10 @@ function AccountMenu({
             <>
               <span
                 className={cn(
-                  "bg-pressed text-caption grid shrink-0 place-items-center rounded-full font-medium",
-                  collapsed ? "size-6" : "size-5",
+                  "bg-pressed grid shrink-0 place-items-center rounded-full font-medium",
+                  collapsed ? "text-caption size-8" : "size-10 text-sm",
                 )}
+                data-account-avatar
               >
                 {initial}
               </span>
@@ -312,7 +318,10 @@ function AccountMenu({
         sideOffset={collapsed || settingsTrigger ? 8 : 4}
       >
         <DropdownMenuLabel className="flex items-center gap-3 px-2.5 py-3">
-          <span className="bg-pressed text-foreground grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold">
+          <span
+            className="bg-pressed text-foreground grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold"
+            data-account-avatar
+          >
             {initial}
           </span>
           <span className="min-w-0">
@@ -391,14 +400,27 @@ function AccountMenu({
           {t("account.usageSettings")}
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
+          <Link
+            className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+            href={DOCUMENTATION_PATH}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
+            <span className="min-w-0 flex-1">{t("account.documentation")}</span>
+            <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <a
             className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
             href={SOURCE_REPOSITORY_URL}
             rel="noopener noreferrer"
             target="_blank"
           >
-            <Icon glyph={LinkIcon} size={16} tone="secondary" />
-            {t("account.sourceCode")}
+            <Icon glyph={RepositoryIcon} size={16} tone="secondary" />
+            <span className="min-w-0 flex-1">{t("account.repository")}</span>
+            <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
           </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

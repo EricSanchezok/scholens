@@ -1,13 +1,20 @@
-import {
-  SuccessIcon,
-  EmailIcon,
-  WarningIcon,
-} from "@/design-system/icons/semantic-icons";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { keyboardFocusRing } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
-import { SOURCE_REPOSITORY_URL } from "@/lib/product";
+import {
+  DocumentationIcon,
+  EmailIcon,
+  ExternalLinkIcon,
+  RepositoryIcon,
+  SuccessIcon,
+  WarningIcon,
+} from "@/design-system/icons/semantic-icons";
+import {
+  DOCUMENTATION_PATH,
+  SOURCE_REPOSITORY_URL,
+} from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import { AuthViewport } from "./auth-surface";
 
@@ -24,17 +31,37 @@ export function AuthenticationShell({
       </div>
       <div className="grid w-full gap-8 pt-20 sm:pt-12">
         {children}
-        <a
-          className={cn(
-            "text-secondary hover:text-foreground mx-auto rounded-[var(--radius-sm)] text-sm",
-            keyboardFocusRing,
-          )}
-          href={SOURCE_REPOSITORY_URL}
-          rel="noopener noreferrer"
-          target="_blank"
+        <nav
+          aria-label={t("publicLinks")}
+          className="text-secondary mx-auto flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm"
         >
-          {t("sourceCode")}
-        </a>
+          <Link
+            className={cn(
+              "hover:text-foreground inline-flex items-center gap-1.5 rounded-[var(--radius-sm)]",
+              keyboardFocusRing,
+            )}
+            href={DOCUMENTATION_PATH}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
+            {t("documentation")}
+            <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+          </Link>
+          <a
+            className={cn(
+              "hover:text-foreground inline-flex items-center gap-1.5 rounded-[var(--radius-sm)]",
+              keyboardFocusRing,
+            )}
+            href={SOURCE_REPOSITORY_URL}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Icon glyph={RepositoryIcon} size={16} tone="secondary" />
+            {t("repository")}
+            <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+          </a>
+        </nav>
       </div>
     </AuthViewport>
   );

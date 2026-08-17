@@ -395,10 +395,17 @@ export const AccountMenuUsage: Story = {
       await within(menu).findByText("Credits reset on Aug 17, 2026"),
     ).toBeVisible();
     await expect(
-      within(menu).getByRole("menuitem", {
-        name: "Source code · AGPL-3.0",
-      }),
+      within(menu).getByRole("menuitem", { name: "Repository" }),
     ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
+    await expect(
+      within(menu).getByRole("menuitem", { name: "Repository" }),
+    ).toHaveAttribute("target", "_blank");
+    await expect(
+      within(menu).getByRole("menuitem", { name: "Documentation" }),
+    ).toHaveAttribute("href", "/docs");
+    await expect(
+      within(menu).getByRole("menuitem", { name: "Documentation" }),
+    ).toHaveAttribute("target", "_blank");
 
     await userEvent.click(
       within(menu).getByRole("menuitem", { name: "Settings" }),
@@ -484,7 +491,7 @@ export const AccountMenuKeyboard: Story = {
   },
 };
 
-export const AccountMenuSourceKeyboard: Story = {
+export const AccountMenuPublicLinksKeyboard: Story = {
   play: async ({ canvasElement }) => {
     const trigger = within(canvasElement).getByRole("button", {
       name: "Open account menu",
@@ -492,9 +499,11 @@ export const AccountMenuSourceKeyboard: Story = {
     trigger.focus();
     await userEvent.keyboard("{Enter}{ArrowDown}{ArrowDown}{ArrowDown}");
     await expect(
-      within(document.body).getByRole("menuitem", {
-        name: "Source code · AGPL-3.0",
-      }),
+      within(document.body).getByRole("menuitem", { name: "Documentation" }),
+    ).toHaveFocus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect(
+      within(document.body).getByRole("menuitem", { name: "Repository" }),
     ).toHaveFocus();
   },
 };
@@ -602,9 +611,10 @@ export const AccountMenuDarkChinese: Story = {
       within(menu).getByRole("menuitem", { name: "用量" }),
     ).toBeVisible();
     await expect(
-      within(menu).getByRole("menuitem", {
-        name: "源代码 · AGPL-3.0",
-      }),
+      within(menu).getByRole("menuitem", { name: "文档" }),
+    ).toBeVisible();
+    await expect(
+      within(menu).getByRole("menuitem", { name: "仓库" }),
     ).toBeVisible();
   },
 };

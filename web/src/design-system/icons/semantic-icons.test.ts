@@ -16,9 +16,12 @@ describe("semantic icon registry", () => {
       AppearanceIcon: "SettingsProfiles",
       AskIcon: "ChatBubbleQuestion",
       EditIcon: "EditPencil",
+      DocumentationIcon: "BookStack",
+      ExternalLinkIcon: "OpenNewWindow",
       LanguageIcon: "Language",
       LibraryIcon: "Book",
       NewConversationIcon: "Edit",
+      RepositoryIcon: "Repository",
       UsageIcon: "GraphUp",
     });
   });
