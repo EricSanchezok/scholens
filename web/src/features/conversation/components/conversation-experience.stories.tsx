@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { http, HttpResponse } from "msw";
 import {
   expect,
   fireEvent,
@@ -9,6 +10,37 @@ import {
 } from "storybook/test";
 
 import { ResearchComposer } from "./research-composer";
+
+const api = "http://127.0.0.1:7301/api/v1";
+const contextCatalogHandlers = [
+  http.get(`${api}/library/papers`, ({ request }) => {
+    const query = new URL(request.url).searchParams.get("q");
+    return HttpResponse.json({
+      items:
+        query === "remote"
+          ? [
+              {
+                document: {
+                  authors: ["Catalog Author"],
+                  document_id: "30000000-0000-4000-8000-000000000099",
+                  journal: "Catalog Journal",
+                  original_filename: "remote-catalog.pdf",
+                  title: "Remote catalog paper",
+                },
+                entry_type: "paper",
+                metadata_overrides: { title: null },
+              },
+            ]
+          : [],
+      next_cursor: null,
+      previous_cursor: null,
+      total_count: query === "remote" ? 1 : 0,
+    });
+  }),
+  http.get(`${api}/projects`, () =>
+    HttpResponse.json({ items: [], next_cursor: null, total_count: 0 }),
+  ),
+];
 
 const meta = {
   title: "Conversation/ResearchComposer",
@@ -31,7 +63,10 @@ const meta = {
       </main>
     ),
   ],
-  parameters: { layout: "fullscreen" },
+  parameters: {
+    layout: "fullscreen",
+    msw: { handlers: contextCatalogHandlers },
+  },
 } satisfies Meta<typeof ResearchComposer>;
 
 export default meta;
@@ -54,7 +89,6 @@ export const ContextPanelSelection: Story = {
       document_ids: ["paper-1"],
       project_ids: [],
     },
-    contextLabel: "Retrieval-Augmented Generation",
     onTurnContextClear: fn(),
     surface: "context-panel",
     turnContextLabel: "Page 4 selection",
@@ -89,7 +123,6 @@ export const ContextPanelCompact: Story = {
       document_ids: ["paper-1"],
       project_ids: [],
     },
-    contextLabel: "Retrieval-Augmented Generation",
     surface: "context-panel",
   },
   decorators: [
@@ -114,9 +147,79 @@ export const ContextPanelCompact: Story = {
   },
 };
 
+export const ContextPanelScopeEditable: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: [],
+      project_ids: [],
+    },
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const trigger = canvas.getByRole("button", {
+      name: "Research scope: Select scope",
+    });
+    await userEvent.click(trigger);
+    await expect(
+      body.getByRole("heading", { name: "Add context" }),
+    ).toBeVisible();
+    await expect(body.getByText("Entire library")).toBeVisible();
+    await userEvent.click(body.getByRole("button", { name: "Done" }));
+    await expect(
+      body.queryByRole("heading", { name: "Add context" }),
+    ).not.toBeInTheDocument();
+    await fireEvent.keyDown(canvas.getByRole("textbox"), { key: "@" });
+    await expect(
+      body.getByRole("heading", { name: "Add context" }),
+    ).toBeVisible();
+  },
+};
+
+export const ContextPanelServerSearch: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: [],
+      project_ids: [],
+    },
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: "Research scope: Select scope",
+      }),
+    );
+    await userEvent.type(body.getByRole("searchbox"), "remote");
+    await expect(await body.findByText("Remote catalog paper")).toBeVisible();
+  },
+};
+
 export const ContextPanelImeCandidateConfirmation: Story = {
   args: {
-    contextLabel: "Entire library",
     onSubmit: fn(async () => undefined),
     surface: "context-panel",
   },

@@ -68,6 +68,7 @@ import {
   setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
+  type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import { ApiError } from "@/lib/api";
@@ -148,14 +149,35 @@ function ProjectChat({
   const t = useTranslations("Projects.chat");
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
+  const [contextOverrides, setContextOverrides] = React.useState<
+    Record<string, ResearchContext>
+  >({});
+  const defaultContext = React.useMemo<ResearchContext>(
+    () => ({
+      kind: "selection",
+      document_ids: [],
+      project_ids: [project.id],
+    }),
+    [project.id],
+  );
   const session = useConversationSession({
-    context: { kind: "selection", document_ids: [], project_ids: [project.id] },
+    context: contextOverrides[conversationId ?? "new"],
     conversationId,
+    defaultContext,
     onConversationCreated: (id) => onConversationChange(id),
     reasoningLevel,
     scopeId: project.id,
     scopeType: "project",
+    updateExistingContext: true,
   });
+  const contextKey = session.activeConversationId ?? "new";
+
+  function handleContextChange(nextContext: ResearchContext) {
+    setContextOverrides((current) => ({
+      ...current,
+      [contextKey]: nextContext,
+    }));
+  }
   return (
     <section
       className="bg-canvas flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
@@ -195,8 +217,6 @@ function ProjectChat({
           canSend={session.canSend}
           composerForm={session.composerForm}
           context={session.context}
-          contextLabel={project.title}
-          contextLocked
           emptyState={{
             description: t("emptyDescription"),
             title: t("emptyTitle"),
@@ -205,7 +225,7 @@ function ProjectChat({
           layout="side-panel"
           liveTurn={session.liveTurn}
           loading={session.turnsQuery.isPending && Boolean(conversationId)}
-          onContextChange={() => undefined}
+          onContextChange={handleContextChange}
           onReasoningLevelChange={setReasoningLevel}
           onRetry={() => void session.turnsQuery.refetch()}
           onRetryResponse={(turn) => void session.retryResponse(turn)}
@@ -446,6 +466,7 @@ export function ProjectDetailWorkspace({
   const conversationsQuery = useQuery(
     conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
   );
+  const sidebarConversationsQuery = useQuery(conversationQueries.list());
   const papersQuery = useQuery({
     ...projectQueries.papers(projectId, state),
     enabled: state.view === "papers" || state.view === "overview",
@@ -633,10 +654,7 @@ export function ProjectDetailWorkspace({
       activeDestination="projects"
       actor={actor}
       collapsed={collapsed}
-      conversationHref={(conversationId) =>
-        `/projects/${projectId}?conversation=${conversationId}&panel=chat`
-      }
-      conversations={conversationsQuery.data?.items ?? []}
+      conversations={sidebarConversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span
           className="block truncate text-base font-semibold"

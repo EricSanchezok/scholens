@@ -26,6 +26,8 @@ import {
   ResearchComposer,
   type ReasoningLevel,
   type ResearchContext,
+  type ResearchContextPaperOption,
+  type ResearchContextProjectOption,
 } from "./research-composer";
 import { MessageContent } from "./message-content";
 import { ConversationWorklog } from "./conversation-worklog";
@@ -50,8 +52,6 @@ export type ConversationEmptyState = {
   description: string;
   title: string;
 };
-type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
-type Project = components["schemas"]["ProjectResponse"];
 
 function FollowUpSuggestions({
   suggestions,
@@ -452,8 +452,6 @@ export function ConversationView({
   readOnlyReason,
   composerForm,
   showComposer = true,
-  contextLocked = false,
-  contextLabel,
   turnContextLabel,
   onTurnContextClear,
   onDocumentSourceOpen,
@@ -463,8 +461,8 @@ export function ConversationView({
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
   context: ResearchContext;
-  papers: LibraryPaper[];
-  projects: Project[];
+  papers: ResearchContextPaperOption[];
+  projects: ResearchContextProjectOption[];
   reasoningLevel: ReasoningLevel;
   loading?: boolean;
   error?: boolean;
@@ -483,8 +481,6 @@ export function ConversationView({
   readOnlyReason?: string | null;
   composerForm?: UseFormReturn<ComposerValues>;
   showComposer?: boolean;
-  contextLocked?: boolean;
-  contextLabel?: string;
   turnContextLabel?: string;
   onTurnContextClear?: () => void;
   onDocumentSourceOpen?: (
@@ -743,8 +739,6 @@ export function ConversationView({
               projects={projects}
               reasoningLevel={reasoningLevel}
               unavailable={loading || error || !canSend}
-              contextLocked={contextLocked}
-              contextLabel={contextLabel}
               intent="follow-up"
               onTurnContextClear={onTurnContextClear}
               surface={layout === "side-panel" ? "context-panel" : "workspace"}

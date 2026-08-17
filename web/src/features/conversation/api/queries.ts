@@ -4,6 +4,42 @@ import { apiClient } from "@/lib/api";
 import { conversationKeys, type ConversationListFilters } from "./keys";
 
 export const conversationQueries = {
+  contextPapers: (query: string) =>
+    queryOptions({
+      queryKey: conversationKeys.contextPapers(query),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET("/api/v1/library/papers", {
+          params: {
+            query: {
+              limit: 100,
+              q: query || undefined,
+              sort: "added_desc",
+            },
+          },
+          signal,
+        });
+        if (!data) throw new Error("Context paper catalog was empty");
+        return data;
+      },
+    }),
+  contextProjects: (query: string) =>
+    queryOptions({
+      queryKey: conversationKeys.contextProjects(query),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET("/api/v1/projects", {
+          params: {
+            query: {
+              limit: 100,
+              q: query || undefined,
+              sort: "activity_desc",
+            },
+          },
+          signal,
+        });
+        if (!data) throw new Error("Context project catalog was empty");
+        return data;
+      },
+    }),
   list: (filters: ConversationListFilters = {}) =>
     queryOptions({
       queryKey: conversationKeys.list(filters),

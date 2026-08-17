@@ -380,6 +380,10 @@ Entire Library is mutually exclusive with selected projects and papers. While
 it is active, the context picker hides search and item selection rather than
 showing controls that cannot affect the scope; switching it off restores the
 explicit project and paper chooser.
+The shared picker queries Projects and Library papers from the Server whenever
+it opens or its search changes. Seed records from the current surface preserve
+the active scope label, but they never limit discovery to a route's first page;
+large Libraries remain searchable without preloading every paper.
 The canonical responsive Composer contract is Figma node
 [`923:2628`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=923-2628),
 `Matrix / Composer v2`. It supersedes earlier isolated Composer compositions;

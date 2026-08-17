@@ -47,6 +47,9 @@ import {
   ConversationView,
   useConversationSession,
   type ReasoningLevel,
+  type ResearchContext,
+  type ResearchContextPaperOption,
+  type ResearchContextProjectOption,
 } from "@/features/conversation";
 import { useRelativeTimeNow } from "@/i18n/use-relative-time-now";
 import { cn } from "@/lib/utilities/cn";
@@ -894,6 +897,10 @@ export type ReaderContextPanelProps = {
   conversationSession: ReturnType<typeof useConversationSession>;
   conversations: ReaderConversation[];
   conversationsLoading: boolean;
+  context: ResearchContext;
+  onContextChange: (context: ResearchContext) => void;
+  papers: ResearchContextPaperOption[];
+  projects: ResearchContextProjectOption[];
   document: ReaderDocument | undefined;
   onActionError: (error?: unknown) => void;
   onAnnotationDelete: (id: string) => Promise<void>;
@@ -947,6 +954,10 @@ export function ReaderContextPanel({
   conversationSession,
   conversations,
   conversationsLoading,
+  context,
+  onContextChange,
+  papers,
+  projects,
   document,
   onActionError,
   onAnnotationDelete,
@@ -1098,9 +1109,7 @@ export function ReaderContextPanel({
                   layout="side-panel"
                   canSend={conversationSession.canSend}
                   composerForm={conversationSession.composerForm}
-                  context={conversationSession.context}
-                  contextLabel={title}
-                  contextLocked
+                  context={context}
                   error={conversationSession.turnsQuery.isError}
                   emptyState={{
                     description: t("conversations.emptyDescription"),
@@ -1111,7 +1120,7 @@ export function ReaderContextPanel({
                     conversationSession.turnsQuery.isPending &&
                     Boolean(conversationId)
                   }
-                  onContextChange={() => undefined}
+                  onContextChange={onContextChange}
                   onDocumentSourceOpen={onSourceOpen}
                   onReasoningLevelChange={setReasoningLevel}
                   onRetry={() => void conversationSession.turnsQuery.refetch()}
@@ -1131,8 +1140,8 @@ export function ReaderContextPanel({
                   onSubmit={conversationSession.sendMessage}
                   onUseSuggestion={conversationSession.useSuggestion}
                   onTurnContextClear={onTurnContextClear}
-                  papers={[]}
-                  projects={[]}
+                  papers={papers}
+                  projects={projects}
                   reasoningLevel={reasoningLevel}
                   readOnlyReason={
                     conversationSession.conversationQuery.data?.read_only_reason

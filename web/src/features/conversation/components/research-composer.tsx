@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import {
   SendIcon,
   MentionIcon,
@@ -34,10 +35,32 @@ import {
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
+import { conversationQueries } from "../api/queries";
 import { composerSchema, type ComposerValues } from "../schemas";
 
-type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
-type Project = components["schemas"]["ProjectResponse"];
+export type ResearchContextPaperOption = {
+  document: Pick<
+    components["schemas"]["DocumentResponse"],
+    "document_id" | "original_filename" | "title"
+  > &
+    Partial<
+      Pick<components["schemas"]["DocumentResponse"], "authors" | "journal">
+    >;
+  metadata_overrides?: Pick<
+    components["schemas"]["DocumentMetadataOverrides"],
+    "title"
+  > | null;
+};
+export type ResearchContextProjectOption = Pick<
+  components["schemas"]["ProjectResponse"],
+  "id" | "title"
+> &
+  Partial<
+    Pick<
+      components["schemas"]["ProjectResponse"],
+      "num_conversations" | "num_papers"
+    >
+  >;
 export type ResearchContext =
   | components["schemas"]["LibraryPaperContext"]
   | components["schemas"]["SelectedPaperContext"];
@@ -54,15 +77,8 @@ export type ResearchContextDisplay =
 
 export function getResearchContextDisplay(
   context: ResearchContext,
-  papers: ReadonlyArray<{
-    document: {
-      document_id: string;
-      original_filename: string;
-      title?: string | null;
-    };
-    metadata_overrides?: { title?: string | null } | null;
-  }>,
-  projects: ReadonlyArray<{ id: string; title: string }>,
+  papers: ReadonlyArray<ResearchContextPaperOption>,
+  projects: ReadonlyArray<ResearchContextProjectOption>,
 ): ResearchContextDisplay {
   if (context.kind === "library") return { kind: "library" };
 
@@ -106,6 +122,16 @@ export function useResearchComposerForm() {
   });
 }
 
+function mergeContextOptions<T>(
+  seeds: readonly T[],
+  results: readonly T[],
+  getId: (value: T) => string,
+) {
+  const merged = new Map(seeds.map((value) => [getId(value), value]));
+  for (const value of results) merged.set(getId(value), value);
+  return [...merged.values()];
+}
+
 function ContextPicker({
   context,
   papers,
@@ -114,33 +140,86 @@ function ContextPicker({
   open,
   onOpenChange,
   disabled,
+  triggerClassName,
 }: {
   context: ResearchContext;
-  papers: LibraryPaper[];
-  projects: Project[];
+  papers: ResearchContextPaperOption[];
+  projects: ResearchContextProjectOption[];
   onChange: (context: ResearchContext) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: boolean;
+  triggerClassName?: string;
 }) {
   const t = useTranslations("Home.context");
   const librarySwitchId = React.useId();
   const [query, setQuery] = React.useState("");
+  const normalizedInputQuery = query.trim();
+  const [catalogQuery, setCatalogQuery] = React.useState(normalizedInputQuery);
+  React.useEffect(() => {
+    const timer = window.setTimeout(
+      () => setCatalogQuery(normalizedInputQuery),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [normalizedInputQuery]);
+  const catalogEnabled = open && context.kind !== "library";
+  const catalogPapersQuery = useQuery({
+    ...conversationQueries.contextPapers(catalogQuery),
+    enabled: catalogEnabled,
+  });
+  const catalogProjectsQuery = useQuery({
+    ...conversationQueries.contextProjects(catalogQuery),
+    enabled: catalogEnabled,
+  });
+  const catalogPapers = React.useMemo(
+    () =>
+      (catalogPapersQuery.data?.items ?? []).flatMap((entry) =>
+        entry.entry_type === "paper" ? [entry] : [],
+      ),
+    [catalogPapersQuery.data],
+  );
+  const allPapers = React.useMemo(
+    () =>
+      mergeContextOptions(
+        papers,
+        catalogPapers,
+        (paper) => paper.document.document_id,
+      ),
+    [catalogPapers, papers],
+  );
+  const allProjects = React.useMemo(
+    () =>
+      mergeContextOptions(
+        projects,
+        catalogProjectsQuery.data?.items ?? [],
+        (project) => project.id,
+      ),
+    [catalogProjectsQuery.data, projects],
+  );
   const selectedProjects =
     context.kind === "selection" ? (context.project_ids ?? []) : [];
   const selectedDocuments =
     context.kind === "selection" ? (context.document_ids ?? []) : [];
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleProjects = projects.filter((project) =>
+  const normalizedQuery = normalizedInputQuery.toLocaleLowerCase();
+  const visibleProjects = allProjects.filter((project) =>
     project.title.toLocaleLowerCase().includes(normalizedQuery),
   );
-  const visiblePapers = papers.filter((paper) =>
-    (paper.metadata_overrides.title ?? paper.document.title ?? "")
-      .toLocaleLowerCase()
-      .includes(normalizedQuery),
-  );
+  const visiblePapers = allPapers.filter((paper) => {
+    const title =
+      paper.metadata_overrides?.title ??
+      paper.document.title ??
+      paper.document.original_filename;
+    return title.toLocaleLowerCase().includes(normalizedQuery);
+  });
+  const catalogLoading =
+    catalogQuery !== normalizedInputQuery ||
+    catalogPapersQuery.isFetching ||
+    catalogProjectsQuery.isFetching;
+  const catalogError =
+    catalogPapersQuery.isError || catalogProjectsQuery.isError;
   const selectionCount = selectedProjects.length + selectedDocuments.length;
-  const display = getResearchContextDisplay(context, papers, projects);
+  const display = getResearchContextDisplay(context, allPapers, allProjects);
   const displayLabel =
     display.kind === "project" || display.kind === "paper"
       ? display.title
@@ -174,6 +253,7 @@ function ContextPicker({
           className={cn(
             "hover:bg-hover active:bg-pressed grid size-12 shrink-0 place-items-center rounded-full lg:size-11",
             keyboardFocusRing,
+            triggerClassName,
           )}
           disabled={disabled}
           title={displayLabel}
@@ -259,7 +339,8 @@ function ContextPicker({
                             {project.title}
                           </span>
                           <span className="text-secondary mt-1 block text-xs">
-                            {project.num_papers} · {project.num_conversations}
+                            {project.num_papers ?? 0} ·{" "}
+                            {project.num_conversations ?? 0}
                           </span>
                         </span>
                       </label>
@@ -275,7 +356,7 @@ function ContextPicker({
                       paper.document.document_id,
                     );
                     const title =
-                      paper.metadata_overrides.title ??
+                      paper.metadata_overrides?.title ??
                       paper.document.title ??
                       paper.document.original_filename;
                     const authors = paper.document.authors
@@ -314,11 +395,30 @@ function ContextPicker({
                   })}
                 </section>
               )}
-              {visibleProjects.length === 0 && visiblePapers.length === 0 && (
-                <p className="text-muted py-8 text-center text-sm">
-                  {t("noMatches")}
+              {catalogLoading ? (
+                <p
+                  aria-live="polite"
+                  className="text-muted py-3 text-center text-sm"
+                >
+                  {t("searching")}
                 </p>
-              )}
+              ) : null}
+              {catalogError ? (
+                <p
+                  aria-live="polite"
+                  className="text-danger py-3 text-center text-sm"
+                >
+                  {t("loadError")}
+                </p>
+              ) : null}
+              {!catalogLoading &&
+                !catalogError &&
+                visibleProjects.length === 0 &&
+                visiblePapers.length === 0 && (
+                  <p className="text-muted py-8 text-center text-sm">
+                    {t("noMatches")}
+                  </p>
+                )}
             </div>
           </>
         ) : null}
@@ -466,14 +566,12 @@ export function ResearchComposer({
   onTurnContextClear,
   surface,
   unavailable,
-  contextLocked = false,
-  contextLabel,
   turnContextLabel,
 }: {
   form?: UseFormReturn<ComposerValues>;
   context: ResearchContext;
-  papers: LibraryPaper[];
-  projects: Project[];
+  papers: ResearchContextPaperOption[];
+  projects: ResearchContextProjectOption[];
   reasoningLevel: ReasoningLevel;
   busy?: boolean;
   intent?: "new" | "follow-up";
@@ -484,8 +582,6 @@ export function ResearchComposer({
   onTurnContextClear?: () => void;
   surface: ResearchComposerSurface;
   unavailable?: boolean;
-  contextLocked?: boolean;
-  contextLabel?: string;
   turnContextLabel?: string;
 }) {
   const t = useTranslations("Home");
@@ -544,6 +640,7 @@ export function ResearchComposer({
           data-focus-origin={focusOrigin ?? undefined}
           disabled={busy || unavailable}
           onKeyDown={(event) => {
+            if (event.key === "@") setPickerOpen(true);
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
@@ -559,15 +656,21 @@ export function ResearchComposer({
           {...focusHandlers}
         />
         <div
-          aria-label={contextLabel}
           className={cn(
-            "text-secondary col-start-1 grid size-9 shrink-0 place-items-center rounded-full",
+            "col-start-1",
             contextPanelExpanded ? "row-start-2" : "row-start-1",
           )}
-          role="img"
-          title={contextLabel}
         >
-          <Icon glyph={MentionIcon} size={20} tone="secondary" />
+          <ContextPicker
+            context={context}
+            disabled={unavailable}
+            onChange={onContextChange}
+            onOpenChange={setPickerOpen}
+            open={pickerOpen}
+            papers={papers}
+            projects={projects}
+            triggerClassName="text-secondary size-9 lg:size-9"
+          />
         </div>
         <div
           className={cn(
@@ -686,26 +789,15 @@ export function ResearchComposer({
             : "lg:col-start-1 lg:row-start-1",
         )}
       >
-        {contextLocked ? (
-          <div
-            aria-label={contextLabel}
-            className="text-secondary grid size-12 shrink-0 place-items-center rounded-full lg:size-11"
-            role="img"
-            title={contextLabel}
-          >
-            <Icon glyph={DocumentIcon} size={20} tone="secondary" />
-          </div>
-        ) : (
-          <ContextPicker
-            context={context}
-            disabled={unavailable}
-            onChange={onContextChange}
-            onOpenChange={setPickerOpen}
-            open={pickerOpen}
-            papers={papers}
-            projects={projects}
-          />
-        )}
+        <ContextPicker
+          context={context}
+          disabled={unavailable}
+          onChange={onContextChange}
+          onOpenChange={setPickerOpen}
+          open={pickerOpen}
+          papers={papers}
+          projects={projects}
+        />
       </div>
       <ReasoningMenu
         className={cn(
