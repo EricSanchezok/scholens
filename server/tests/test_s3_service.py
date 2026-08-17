@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import logging
+from unittest.mock import MagicMock
+
+import pytest
+from botocore.exceptions import ClientError
+
+from app.helpers import s3 as s3_module
 from app.helpers.s3 import (
     StagingObjectMetadata,
     document_archive_key,
@@ -141,6 +148,61 @@ def test_staging_download_is_version_locked_and_hard_bounded(monkeypatch) -> Non
             "VersionId": "version-1",
         },
     }
+
+
+def test_staging_download_records_sanitized_s3_dependency_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    failure = ClientError(
+        {
+            "Error": {
+                "Code": "AccessDenied",
+                "Message": "do not log diagnostics/uploads/private.pdf",
+            },
+            "ResponseMetadata": {"HTTPStatusCode": 403},
+        },
+        "GetObject",
+    )
+    metric = MagicMock()
+
+    def get_object(**_kwargs: object) -> dict[str, object]:
+        raise failure
+
+    monkeypatch.setattr(s3_service.s3_client, "get_object", get_object)
+    monkeypatch.setattr(s3_service, "bucket_name", "private-bucket")
+    monkeypatch.setattr(s3_module, "add_counter", metric)
+    metadata = StagingObjectMetadata(
+        size_bytes=4,
+        checksum_sha256="checksum",
+        etag='"etag"',
+        version_id="version-1",
+    )
+
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(RuntimeError, match="s3_staging_download_failed"),
+    ):
+        s3_service.download_staging_bytes(
+            "uploads/7/session/source.pdf",
+            metadata=metadata,
+            max_bytes=30,
+        )
+
+    record = next(
+        item
+        for item in caplog.records
+        if item.getMessage() == "s3.staging_object.download_failed"
+    )
+    assert getattr(record, "aws_error_code") == "AccessDenied"
+    assert getattr(record, "aws_operation") == "GetObject"
+    assert getattr(record, "aws_http_status") == 403
+    assert "private-bucket" not in caplog.text
+    assert "private.pdf" not in caplog.text
+    metric.assert_called_once_with(
+        "scholens.dependency.failures",
+        attributes={"dependency": "s3"},
+    )
 
 
 def test_document_keys_are_content_addressed() -> None:

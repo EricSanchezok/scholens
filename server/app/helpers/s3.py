@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Literal, cast
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from scholens_observability import add_counter
 
 if TYPE_CHECKING:
     from types_boto3_s3 import S3Client
@@ -32,6 +33,24 @@ DOCUMENT_PREFIX = "documents"
 RESEARCH_PREFIX = "research"
 DEFAULT_SIGNED_URL_TTL_SECONDS = 900
 STAGING_UPLOAD_PREFIX = "uploads"
+
+
+def _client_error_fields(exc: ClientError) -> dict[str, str | int]:
+    """Emit a dependency metric and return only allowlisted AWS error fields."""
+    response_metadata = exc.response.get("ResponseMetadata", {})
+    error = exc.response.get("Error", {})
+    fields: dict[str, str | int] = {
+        "aws_error_code": str(error.get("Code", "unknown")),
+        "aws_operation": str(exc.operation_name),
+    }
+    http_status = response_metadata.get("HTTPStatusCode")
+    if isinstance(http_status, int):
+        fields["aws_http_status"] = http_status
+    add_counter(
+        "scholens.dependency.failures",
+        attributes={"dependency": "s3"},
+    )
+    return fields
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +131,7 @@ class S3Service:
                 ServerSideEncryption="AES256",
             )
         except ClientError as exc:
-            logger.exception("s3.object.upload_failed")
+            logger.error("s3.object.upload_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_upload_failed") from exc
         return object_key
 
@@ -145,7 +164,7 @@ class S3Service:
                     },
                 )
         except ClientError as exc:
-            logger.exception("s3.object.upload_failed")
+            logger.error("s3.object.upload_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_upload_failed") from exc
         return object_key
 
@@ -183,8 +202,8 @@ class S3Service:
                 Key=object_key,
             )
             return True
-        except ClientError:
-            logger.exception("s3.object.delete_failed")
+        except ClientError as exc:
+            logger.error("s3.object.delete_failed", extra=_client_error_fields(exc))
             return False
 
     def delete_files(self, object_keys: Iterable[str]) -> list[str]:
@@ -208,7 +227,7 @@ class S3Service:
                 raise TypeError("s3_object_body_invalid")
             return data
         except ClientError as exc:
-            logger.exception("s3.object.download_failed")
+            logger.error("s3.object.download_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_download_failed") from exc
 
     def object_size_bytes(self, object_key: str) -> int:
@@ -218,7 +237,7 @@ class S3Service:
                 Key=object_key,
             )
         except ClientError as exc:
-            logger.exception("s3.object.head_failed")
+            logger.error("s3.object.head_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_head_failed") from exc
         content_length = response.get("ContentLength")
         if content_length is None:
@@ -237,7 +256,10 @@ class S3Service:
             error_code = str(exc.response.get("Error", {}).get("Code", ""))
             if error_code in {"404", "NoSuchKey", "NotFound"}:
                 raise FileNotFoundError("staged_upload_not_found") from exc
-            logger.exception("s3.staging_object.head_failed")
+            logger.error(
+                "s3.staging_object.head_failed",
+                extra=_client_error_fields(exc),
+            )
             raise RuntimeError("s3_head_failed") from exc
         size = response.get("ContentLength")
         if size is None:
@@ -286,7 +308,10 @@ class S3Service:
                 raise RuntimeError("s3_staging_object_too_large")
             return data
         except ClientError as exc:
-            logger.exception("s3.staging_object.download_failed")
+            logger.error(
+                "s3.staging_object.download_failed",
+                extra=_client_error_fields(exc),
+            )
             raise RuntimeError("s3_staging_download_failed") from exc
 
     def sign_put(
@@ -323,7 +348,10 @@ class S3Service:
                 ExpiresIn=expires_in_seconds,
             )
         except ClientError as exc:
-            logger.exception("s3.staging_object.sign_failed")
+            logger.error(
+                "s3.staging_object.sign_failed",
+                extra=_client_error_fields(exc),
+            )
             raise RuntimeError("s3_signing_failed") from exc
         return str(url), headers
 
@@ -346,7 +374,7 @@ class S3Service:
                 )
             )
         except ClientError as exc:
-            logger.exception("s3.object.signing_failed")
+            logger.error("s3.object.signing_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_signing_failed") from exc
 
     def generate_presigned_urls(

@@ -6,10 +6,12 @@ from uuid import uuid4
 import pytest
 
 from app.bootstrap.adapters.paper_ingestion import (
+    DefaultPaperIngestionLimits,
     DefaultPaperSourceResolver,
     SafePdfUrlSource,
 )
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
+from app.helpers.ai_limits import AILimitExceeded
 from app.modules.papers.application.contracts.documents import (
     LibraryPaperIngestionResponse,
 )
@@ -423,6 +425,79 @@ async def test_upload_session_rejects_a_different_ingestion_project() -> None:
 
     assert raised.value.code == "paper_upload_project_mismatch"
     assert executor.command.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_upload_rate_dependency_failure_is_retryable_unavailable() -> None:
+    with patch(
+        "app.bootstrap.adapters.paper_ingestion.enforce_rate_limit",
+        AsyncMock(side_effect=AILimitExceeded("rate_limit_unavailable")),
+    ):
+        with pytest.raises(AppError) as raised:
+            await DefaultPaperIngestionLimits().enforce_rate(
+                actor=_actor(),
+                ip_address="127.0.0.1",
+            )
+
+    assert raised.value.code == "rate_limit_unavailable"
+    assert raised.value.kind is FailureKind.UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_upload_session_releases_lease_when_version_read_is_unavailable() -> None:
+    executor = MagicMock()
+    upload_id = uuid4()
+    lease_token = uuid4()
+    executor.command.side_effect = [
+        PaperUploadRecord(
+            id=upload_id,
+            actor_id=_actor().id,
+            project_id=None,
+            filename="paper.pdf",
+            size_bytes=12,
+            sha256="01" * 32,
+            object_key="uploads/7/session/source.pdf",
+            status="claimed",
+            expires_at=MagicMock(),
+            lease_expires_at=MagicMock(),
+            lease_token=lease_token,
+        ),
+        None,
+    ]
+    workflow = PaperIngestionWorkflow(
+        executor=executor,
+        url_source=MagicMock(),
+        source_resolver=MagicMock(),
+        operation_factory=OperationContextFactory(),
+        jobs=MagicMock(),
+    )
+
+    with patch(
+        "app.bootstrap.workflows.paper_ingestion.s3_service.staging_object_metadata",
+        side_effect=RuntimeError("s3_head_failed"),
+    ):
+        with pytest.raises(AppError) as raised:
+            await workflow.from_upload_session(
+                actor=_actor(),
+                operation=_operation(),
+                upload_id=upload_id,
+                project_id=None,
+                idempotency_key=None,
+                ip_address="127.0.0.1",
+            )
+
+    assert raised.value.code == "paper_upload_unavailable"
+    assert raised.value.kind is FailureKind.UNAVAILABLE
+    assert executor.command.call_count == 2
+    release = executor.command.call_args_list[1].args[0]
+    capabilities = MagicMock()
+    release(capabilities)
+    capabilities.paper_uploads.release.assert_called_once_with(
+        actor=_actor(),
+        upload_id=upload_id,
+        lease_token=lease_token,
+        failed=False,
+    )
 
 
 def test_cancel_journals_only_when_gateway_changes_state() -> None:

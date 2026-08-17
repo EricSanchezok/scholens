@@ -179,6 +179,34 @@ export const Processing: Story = {
   },
 };
 
+export const CreationUnavailable: Story = {
+  parameters: {
+    msw: {
+      handlers: [...authHandlers.success, ...homeHandlers.creationUnavailable],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const composer = await canvas.findByRole("textbox", {
+      name: "Ask anything",
+    });
+    await userEvent.type(composer, "Summarize my recent research");
+    await userEvent.click(canvas.getByRole("button", { name: "Ask Scholens" }));
+    const restoredComposer = await canvas.findByRole("textbox", {
+      name: "Ask a follow-up",
+    });
+    await waitFor(() =>
+      expect(restoredComposer).toHaveValue("Summarize my recent research"),
+    );
+    await expect(
+      await body.findByText(
+        "Your input is still in the composer. Try sending it again later.",
+      ),
+    ).toBeVisible();
+  },
+};
+
 export const ReadOnly: Story = {
   args: { initialConversationId: homeConversations[0]!.id },
   parameters: {

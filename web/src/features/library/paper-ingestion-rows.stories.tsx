@@ -166,6 +166,25 @@ export const Failed: Story = {
   },
 };
 
+export const SecureUploadUnavailable: Story = {
+  args: {
+    attentionCount: 1,
+    ingestions: [row("failed", "uploading", "paper_upload_unavailable")],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const messages = await canvas.findAllByText(
+      "Secure upload is temporarily unavailable. The original file remains on this page for a direct retry.",
+    );
+    await expect(
+      messages.some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
+    await expect(
+      canvas.getAllByRole("button", { name: "Retry" })[0],
+    ).toBeVisible();
+  },
+};
+
 export const MinerUClassifiedFailures: Story = {
   args: {
     attentionCount: 6,

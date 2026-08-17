@@ -827,6 +827,103 @@ def test_unhealthy_target_alarms_use_load_balancer_and_target_group() -> None:
     assert "ApiTargetGroupName" in dashboard
 
 
+def test_api_version_locked_upload_reads_are_allowed_by_role_and_boundary() -> None:
+    bootstrap = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    boundary_statements = bootstrap["RuntimeTaskPermissionsBoundary"]["Properties"][
+        "PolicyDocument"
+    ]["Statement"]
+    boundary_version_read = next(
+        statement
+        for statement in boundary_statements
+        if _actions(statement) == {"s3:GetObjectVersion"}
+    )
+    assert boundary_version_read["Resource"] == {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:s3:::sanchezcloud-scholens-content-"
+            "${AWS::AccountId}-${AWS::Region}/uploads/*"
+        )
+    }
+
+    resources = load_template("scholens-production.yml")["Resources"]
+    api_version_read = next(
+        statement
+        for statement in _policy_statements(resources["ApiTaskRole"])
+        if _actions(statement) == {"s3:GetObjectVersion"}
+    )
+    assert api_version_read["Resource"] == {
+        "Fn::Sub": [
+            "${BucketArn}/uploads/*",
+            {
+                "BucketArn": {
+                    "Fn::ImportValue": "sanchezcloud-scholens-content-bucket-arn"
+                }
+            },
+        ]
+    }
+    for role_name in (
+        "DocumentWorkerTaskRole",
+        "ResearchWorkerTaskRole",
+        "MaintenanceWorkerTaskRole",
+    ):
+        assert all(
+            "s3:GetObjectVersion" not in _actions(statement)
+            for statement in _policy_statements(resources[role_name])
+        )
+
+
+def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    target_alarm = resources["ApiTarget5xxAlarm"]["Properties"]
+    assert target_alarm["Namespace"] == "AWS/ApplicationELB"
+    assert target_alarm["MetricName"] == "HTTPCode_Target_5XX_Count"
+    assert target_alarm["Statistic"] == "Sum"
+    assert target_alarm["Period"] == 300
+    assert target_alarm["Threshold"] == 5
+    assert target_alarm["Dimensions"] == [
+        {
+            "Name": "LoadBalancer",
+            "Value": {"Fn::GetAtt": ["LoadBalancer", "LoadBalancerFullName"]},
+        },
+        {
+            "Name": "TargetGroup",
+            "Value": {"Fn::GetAtt": ["ApiTargetGroup", "TargetGroupFullName"]},
+        },
+    ]
+
+    dependency_alarms = {
+        "RedisDependencyFailureAlarm": "redis",
+        "S3DependencyFailureAlarm": "s3",
+    }
+    for name, dependency in dependency_alarms.items():
+        alarm = resources[name]["Properties"]
+        assert alarm["Namespace"] == "Scholens/Production"
+        assert alarm["MetricName"] == "scholens.dependency.failures"
+        assert alarm["Dimensions"] == [
+            {"Name": "dependency", "Value": dependency},
+            {"Name": "OTelLib", "Value": "scholens"},
+        ]
+        assert alarm["Statistic"] == "Sum"
+        assert alarm["Period"] == 300
+        assert alarm["Threshold"] == 1
+        assert alarm["AlarmActions"] == [
+            {"Fn::ImportValue": "sanchezcloud-scholens-alert-topic-arn"}
+        ]
+
+    diagnostic_alarm = resources["DiagnosticSnapshotWriteFailureAlarm"]["Properties"]
+    assert diagnostic_alarm["Namespace"] == "Scholens/Production"
+    assert diagnostic_alarm["MetricName"] == "scholens.diagnostic_snapshot.write_failed"
+    assert diagnostic_alarm["Dimensions"] == [{"Name": "OTelLib", "Value": "scholens"}]
+    assert diagnostic_alarm["Threshold"] == 1
+
+    dashboard = str(resources["Dashboard"])
+    assert "HTTPCode_Target_5XX_Count" in dashboard
+    assert "scholens.dependency.failures" in dashboard
+    assert "scholens.diagnostic_snapshot.write_failed" in dashboard
+    dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]["Fn::Sub"][0]
+    rendered_dashboard = re.sub(r"\$\{[^}]+\}", "fixture", dashboard_body)
+    assert len(json.loads(rendered_dashboard)["widgets"]) == 5
+
+
 def test_scheduler_and_worker_task_protection_are_cluster_scoped() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
     for name in (

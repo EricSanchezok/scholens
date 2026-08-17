@@ -38,6 +38,7 @@ def create_diagnostic_snapshot_recorder(
         client=cast(Any, boto3.client("s3")),
         bucket=settings.diagnostic_snapshot_bucket,
         kms_key_id=settings.diagnostic_snapshot_kms_key_id,
+        prefix="api",
     )
 
 
