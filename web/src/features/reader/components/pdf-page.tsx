@@ -12,6 +12,7 @@ import {
   readerHighlightColorValue,
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
+import { readerScrollTopForTarget } from "../reader-scroll";
 import type { ReaderSearchMatch } from "../reader-search";
 import type {
   ReaderAnnotationAudience,
@@ -429,10 +430,22 @@ function PdfPageSurface({
         );
         if (activeSearchElement) {
           window.requestAnimationFrame(() => {
-            activeSearchElement.scrollIntoView({
+            const container = scrollContainerRef.current;
+            if (!container) return;
+            const containerRect = container.getBoundingClientRect();
+            const targetRect = activeSearchElement.getBoundingClientRect();
+            container.scrollTo({
               behavior: "auto",
-              block: "center",
-              inline: "nearest",
+              top: readerScrollTopForTarget({
+                container: {
+                  clientHeight: container.clientHeight,
+                  scrollHeight: container.scrollHeight,
+                  scrollTop: container.scrollTop,
+                  top: containerRect.top,
+                },
+                target: { height: targetRect.height, top: targetRect.top },
+                alignment: "center",
+              }),
             });
           });
         }
@@ -458,6 +471,7 @@ function PdfPageSurface({
     pageNumber,
     shouldRender,
     scale,
+    scrollContainerRef,
     searchMatches,
     searchQuery,
   ]);
@@ -835,14 +849,29 @@ export function PdfPage({
     const externallyRequested = activePageRef.current !== pageNumber;
     const layoutPending = pendingPageAlignmentRef.current === pageNumber;
     if (!externallyRequested && !layoutPending) return;
-    const target = containerRef.current?.querySelector<HTMLElement>(
+    const container = containerRef.current;
+    const target = container?.querySelector<HTMLElement>(
       `[data-pdf-page-number="${pageNumber}"]`,
     );
-    if (!target) return;
+    if (!container || !target) return;
     pendingPageAlignmentRef.current = pageNumber;
     window.cancelAnimationFrame(alignmentFrameRef.current);
     activePageRef.current = pageNumber;
-    target.scrollIntoView({ behavior: "auto", block: "start" });
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    container.scrollTo({
+      behavior: "auto",
+      top: readerScrollTopForTarget({
+        container: {
+          clientHeight: container.clientHeight,
+          scrollHeight: container.scrollHeight,
+          scrollTop: container.scrollTop,
+          top: containerRect.top,
+        },
+        target: { height: targetRect.height, top: targetRect.top },
+        alignment: "start",
+      }),
+    });
     if (containerSize.height > 0 && containerSize.width > 0) {
       alignmentFrameRef.current = window.requestAnimationFrame(() => {
         if (pendingPageAlignmentRef.current === pageNumber) {
@@ -883,22 +912,34 @@ export function PdfPage({
   React.useEffect(() => {
     if (!selectedAnnotationId) return;
     const frame = window.requestAnimationFrame(() => {
+      const container = containerRef.current;
       const target = [
-        ...(containerRef.current?.querySelectorAll<HTMLElement>(
+        ...(container?.querySelectorAll<HTMLElement>(
           "[data-reader-annotation-highlight]",
         ) ?? []),
       ].find(
         (element) =>
           element.dataset.readerAnnotationHighlight === selectedAnnotationId,
       );
-      target?.scrollIntoView({
+      if (!container || !target) return;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      container.scrollTo({
         behavior: "auto",
-        block: "center",
-        inline: "nearest",
+        top: readerScrollTopForTarget({
+          container: {
+            clientHeight: container.clientHeight,
+            scrollHeight: container.scrollHeight,
+            scrollTop: container.scrollTop,
+            top: containerRect.top,
+          },
+          target: { height: targetRect.height, top: targetRect.top },
+          alignment: "center",
+        }),
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [containerSize.height, containerSize.width, selectedAnnotationId]);
+  }, [selectedAnnotationId]);
 
   return (
     <div

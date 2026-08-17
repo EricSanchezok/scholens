@@ -147,6 +147,9 @@ The document surface supports:
 - viewport-driven current-page updates in the URL, while previous/next,
   thumbnails, internal PDF links, search results, and direct page input scroll
   the same document surface;
+- programmatic navigation (page change, annotation focus, search cursor) scrolls
+  only the PDF document container, never the Workspace Shell main scroller or
+  the browser body;
 - icon-only page controls retain their footprint at the first and last page,
   but express the unavailable direction with a muted icon and no filled block;
 - lazy page thumbnails;
@@ -164,9 +167,9 @@ Search highlights wrap only the matched characters rather than the containing
 PDF.js text fragment. Matches that cross text-fragment boundaries remain one
 logical result, and repeated matches inside one fragment remain separately
 navigable. All results use the translucent document-search match role; the
-current result uses the stronger current role and scrolls into view when the
-search cursor moves. Search styling never reuses neutral selection or warning
-feedback colors.
+current result uses the stronger current role and scrolls into view inside the
+document container when the search cursor moves. Search styling never reuses
+neutral selection or warning feedback colors.
 
 ## AI reflow and full translation
 
@@ -184,7 +187,9 @@ presentations. Desktop expands it as a left navigation rail beside the paper;
 mobile opens it from the bottom with the shared Dialog handle, header, body,
 safe-area, focus-trap, and dismissal behavior used by Sources. Selecting an
 entry scrolls the reflow surface to its exact block and closes the mobile sheet.
-The toolbar never substitutes an overflow-menu glyph for the Outline action.
+The jump stays inside the reflow scroller (with the block's scroll-margin
+clearance) and never scrolls the Workspace Shell main region. The toolbar never
+substitutes an overflow-menu glyph for the Outline action.
 
 Full translation is a toolbar action: a desktop popover and mobile bottom sheet
 own language, bilingual/translation-only presentation, reference opt-in,
@@ -256,9 +261,11 @@ moves to another page.
   normalized selection. When automatic selection translation is enabled, an
   unchanged selection waits 300 ms before starting. A replacement selection,
   page change, Escape, or component unmount aborts the stale request. Desktop
-  shows a compact result beside the toolbar; mobile opens the full-height panel
-  instead of covering the selected source. Completed translations may be
-  copied or inserted as the editable initial comment of a new annotation.
+  shows a compact teaser beside the toolbar; the teaser is line-clamped with an
+  ellipsis and is not a complete reading surface. Mobile opens the full-height
+  panel instead of covering the selected source. Completed translations are
+  only guaranteed complete in the Translate panel; they may be copied or
+  inserted as the editable initial comment of a new annotation.
 - Highlight first discloses the adjacent color palette, creates a thread with
   no comment, then clears the browser selection. In personal Reader its audience
   is personal. In Project Reader its audience defaults to personal but may be
