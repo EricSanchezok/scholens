@@ -64,7 +64,7 @@ type CredentialValues = z.infer<typeof credentialSchema>;
 
 const providerLinks: Partial<Record<IntegrationProvider, string>> = {
   mineru: "https://mineru.net/apiManage/token",
-  anysearch: "https://anysearch.ai/",
+  anysearch: "https://www.anysearch.com/",
   tavily: "https://app.tavily.com/home",
   exa: "https://dashboard.exa.ai/api-keys",
   firecrawl: "https://www.firecrawl.dev/app/api-keys",
