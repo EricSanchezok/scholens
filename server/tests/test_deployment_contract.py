@@ -1334,9 +1334,7 @@ def test_release_recovers_after_stabilization_or_smoke_failure() -> None:
     assert workflow.count(recovery_condition) == 2
     assert "candidate-verification-recovery" in workflow
     assert "Automatic candidate verification recovery" in workflow
-    assert workflow.count(
-        "sanchezcloud-scholens-configuration-key-arn"
-    ) == 2
+    assert workflow.count("sanchezcloud-scholens-configuration-key-arn") == 2
     assert workflow.count('--kms-key-id "$template_kms_key_arn"') == 2
 
 
