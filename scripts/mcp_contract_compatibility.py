@@ -116,11 +116,8 @@ def metadata_breaks(base: dict[str, Any], revision: dict[str, Any]) -> list[str]
         for field in ("execution", "required_permission"):
             if new.get(field) != old.get(field):
                 failures.append(f"MCP tool {name} changed {field}")
-        if (
-            old.get("confirmation_policy") == "none"
-            and new.get("confirmation_policy") != "none"
-        ):
-            failures.append(f"MCP tool {name} now requires confirmation")
+        if new.get("confirmation_policy") != old.get("confirmation_policy"):
+            failures.append(f"MCP tool {name} changed confirmation_policy")
         old_behavior = old.get("behavior", {})
         new_behavior = new.get("behavior", {})
         unsafe = (

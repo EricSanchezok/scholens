@@ -65,6 +65,16 @@ def test_mcp_metadata_checker_rejects_permission_and_safety_regressions() -> Non
         "MCP tool read_paper changed behavior.destructive",
     ]
 
+    revision = json.loads(json.dumps(base))
+    revision["tools"]["read_paper"]["confirmation_policy"] = "required"
+    assert checker.metadata_breaks(base, revision) == [
+        "MCP tool read_paper changed confirmation_policy"
+    ]
+
+    assert checker.metadata_breaks(revision, base) == [
+        "MCP tool read_paper changed confirmation_policy"
+    ]
+
 
 def test_mcp_openapi_renderer_rewrites_local_schema_definitions() -> None:
     checker = _script("mcp_contract_compatibility.py")
@@ -212,14 +222,30 @@ def test_retirement_requires_thirty_zero_traffic_days_and_actual_removal() -> No
     deprecated_entry["state"] = "deprecated"
     deprecated_entry["removed_on"] = None
     deprecated_entry["removal_evidence"] = None
+    assert checker.transition_failures(
+        deprecated,
+        registry,
+        today=date(2026, 8, 17),
+    ) == ["deprecation legacy-tool must record zero traffic before removal"]
+
+    observed = json.loads(json.dumps(deprecated))
+    observed["entries"][0]["zero_traffic_since"] = "2026-05-01"
     assert (
         checker.transition_failures(
-            deprecated,
+            observed,
             registry,
             today=date(2026, 8, 17),
         )
         == []
     )
+
+    changed_observation = json.loads(json.dumps(registry))
+    changed_observation["entries"][0]["zero_traffic_since"] = "2026-05-02"
+    assert checker.transition_failures(
+        observed,
+        changed_observation,
+        today=date(2026, 8, 17),
+    ) == ["deprecation legacy-tool changed zero-traffic evidence during removal"]
 
     with pytest.raises(ValueError, match="retired MCP target still exists"):
         checker.prepare_mcp_base(
@@ -264,4 +290,41 @@ def test_expand_migration_policy_rejects_destructive_operations(
         "0002_expand.py:4 uses op.drop_column",
         "0002_expand.py:5 adds a required column without a server default",
         "0002_expand.py:6 adds a write-restricting constraint",
+    ]
+
+
+def test_expand_migration_policy_rejects_destructive_batch_operations(
+    tmp_path: Path,
+) -> None:
+    checker = _script("migration_policy_compatibility.py")
+    versions = tmp_path / "versions"
+    versions.mkdir()
+    (versions / "0001_root.py").write_text(
+        'revision = "root"\ndown_revision = None\n',
+        encoding="utf-8",
+    )
+    (versions / "0002_expand.py").write_text(
+        'revision = "expand"\ndown_revision = "root"\n'
+        "def upgrade():\n"
+        '    with op.batch_alter_table("papers") as batch_op:\n'
+        '        batch_op.drop_column("legacy_value")\n'
+        '        batch_op.add_column(sa.Column("required", sa.String(), nullable=False))\n',
+        encoding="utf-8",
+    )
+    base = {
+        "contract_version": 1,
+        "production_baseline_revision": "root",
+        "revisions": {"root": {"phase": "baseline"}},
+    }
+    revision = {
+        **base,
+        "revisions": {
+            **base["revisions"],
+            "expand": {"phase": "expand"},
+        },
+    }
+
+    assert checker.compatibility_failures(base, revision, versions=versions) == [
+        "0002_expand.py:5 uses op.drop_column",
+        "0002_expand.py:6 adds a required column without a server default",
     ]

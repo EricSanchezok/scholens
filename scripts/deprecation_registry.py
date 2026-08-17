@@ -169,6 +169,15 @@ def transition_failures(
                 failures.append(f"deprecation {identifier} changed immutable {field}")
         if old["state"] == "removed" and new != old:
             failures.append(f"removed deprecation tombstone changed: {identifier}")
+        if old["state"] == "deprecated" and new["state"] == "removed":
+            if old["zero_traffic_since"] is None:
+                failures.append(
+                    f"deprecation {identifier} must record zero traffic before removal"
+                )
+            elif new["zero_traffic_since"] != old["zero_traffic_since"]:
+                failures.append(
+                    f"deprecation {identifier} changed zero-traffic evidence during removal"
+                )
     for identifier, entry in revision_entries.items():
         if identifier not in base_entries and entry["state"] != "deprecated":
             failures.append(f"new deprecation must start as deprecated: {identifier}")

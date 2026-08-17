@@ -56,11 +56,31 @@ def _literal(tree: ast.Module, name: str, *, path: Path) -> object:
 def _expand_failures(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     failures: list[str] = []
+    operation_targets = {"op"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.With):
+            continue
+        for item in node.items:
+            call = item.context_expr
+            target = item.optional_vars
+            if (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+                and call.func.value.id == "op"
+                and call.func.attr == "batch_alter_table"
+                and isinstance(target, ast.Name)
+            ):
+                operation_targets.add(target.id)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
-        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "op":
+        if (
+            not isinstance(node.func.value, ast.Name)
+            or node.func.value.id not in operation_targets
+        ):
             continue
+        target_name = node.func.value.id
         operation = node.func.attr
         if operation in DESTRUCTIVE_EXPAND_OPERATIONS:
             failures.append(f"{path.name}:{node.lineno} uses op.{operation}")
@@ -75,8 +95,9 @@ def _expand_failures(path: Path) -> list[str]:
                 failures.append(
                     f"{path.name}:{node.lineno} adds a write-restricting unique index"
                 )
-        if operation == "add_column" and len(node.args) >= 2:
-            column = node.args[1]
+        column_index = 1 if target_name == "op" else 0
+        if operation == "add_column" and len(node.args) > column_index:
+            column = node.args[column_index]
             if isinstance(column, ast.Call):
                 keywords = {keyword.arg: keyword.value for keyword in column.keywords}
                 nullable = keywords.get("nullable")
