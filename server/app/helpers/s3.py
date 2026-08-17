@@ -21,6 +21,7 @@ from scholens_observability import add_counter
 
 if TYPE_CHECKING:
     from types_boto3_s3 import S3Client
+    from types_boto3_s3.type_defs import PutObjectRequestTypeDef
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME")
+S3_KMS_KEY_ID = os.environ.get("S3_KMS_KEY_ID")
 
 DOCUMENT_PREFIX = "documents"
 RESEARCH_PREFIX = "research"
@@ -107,6 +109,7 @@ class S3Service:
             ),
         )
         self.bucket_name = S3_BUCKET_NAME or ""
+        self.kms_key_id = S3_KMS_KEY_ID
 
     def _require_bucket(self) -> str:
         if not self.bucket_name:
@@ -122,14 +125,17 @@ class S3Service:
     ) -> str:
         if not data:
             raise ValueError("cannot_upload_empty_object")
+        request: PutObjectRequestTypeDef = {
+            "Bucket": self._require_bucket(),
+            "Key": object_key,
+            "Body": data,
+            "ContentType": content_type,
+        }
+        if self.kms_key_id:
+            request["ServerSideEncryption"] = "aws:kms"
+            request["SSEKMSKeyId"] = self.kms_key_id
         try:
-            self.s3_client.put_object(
-                Bucket=self._require_bucket(),
-                Key=object_key,
-                Body=data,
-                ContentType=content_type,
-                ServerSideEncryption="AES256",
-            )
+            self.s3_client.put_object(**request)
         except ClientError as exc:
             logger.error("s3.object.upload_failed", extra=_client_error_fields(exc))
             raise RuntimeError("s3_upload_failed") from exc
@@ -152,16 +158,21 @@ class S3Service:
         path = Path(file_path)
         if not path.is_file():
             raise ValueError("storage_source_file_not_found")
+        extra_args = {"ContentType": content_type}
+        if self.kms_key_id:
+            extra_args.update(
+                {
+                    "ServerSideEncryption": "aws:kms",
+                    "SSEKMSKeyId": self.kms_key_id,
+                }
+            )
         try:
             with path.open("rb") as source:
                 self.s3_client.upload_fileobj(
                     source,
                     self._require_bucket(),
                     object_key,
-                    ExtraArgs={
-                        "ContentType": content_type,
-                        "ServerSideEncryption": "AES256",
-                    },
+                    ExtraArgs=extra_args,
                 )
         except ClientError as exc:
             logger.error("s3.object.upload_failed", extra=_client_error_fields(exc))

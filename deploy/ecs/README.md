@@ -106,6 +106,9 @@ Browser upload sessions validate and download the exact S3 object version observ
 the API. The runtime permissions boundary and API task role therefore grant
 `s3:GetObjectVersion` only for the content bucket's `uploads/*` keys. Worker roles do not
 receive that action because canonical `documents/*` reads use the current object.
+The API receives the foundation-exported content KMS key ARN as `S3_KMS_KEY_ID` and
+uses `aws:kms` with that exact key for canonical object writes; it must not override the
+KMS-only bucket policy with S3-managed `AES256` encryption.
 An unavailable pre-acceptance read releases the upload lease as retryable: the current
 browser page retains the original `File`, while a refreshed page requires the operator to
 select it again. Abandoned staging objects are not backfilled and expire after two days.

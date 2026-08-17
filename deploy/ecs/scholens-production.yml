@@ -1123,6 +1123,9 @@ Resources:
         - Name: S3_BUCKET_NAME
           Value:
             Fn::ImportValue: sanchezcloud-scholens-content-bucket-name
+        - Name: S3_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-key-arn
         - Name: CACHE_HOST
           Value:
             Fn::ImportValue: sanchezcloud-scholens-cache-endpoint
