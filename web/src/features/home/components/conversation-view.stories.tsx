@@ -907,8 +907,6 @@ export const SidePanelEmpty: Story = {
       document_ids: [homePapers[0]!.document.document_id],
       project_ids: [],
     },
-    contextLabel: homePapers[0]!.document.title ?? "Current paper",
-    contextLocked: true,
     emptyState: {
       description:
         "Ask about this paper’s claims, methods, or conclusions, or select a passage to discuss.",

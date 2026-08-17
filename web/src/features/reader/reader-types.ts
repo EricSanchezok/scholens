@@ -7,6 +7,7 @@ export type ReaderDocument = components["schemas"]["DocumentResponse"];
 export type ReaderAnnotation = components["schemas"]["ResearchItemResponse"];
 export type ReaderAnnotationSummary =
   components["schemas"]["AnnotationThreadSummaryResponse"];
+export type ReaderLibraryPaper = components["schemas"]["LibraryPaperResponse"];
 export type ReaderConversation =
   components["schemas"]["ConversationSummaryResponse"];
 export type ReaderDocumentSource =

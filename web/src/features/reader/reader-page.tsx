@@ -38,6 +38,7 @@ import {
   setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
+  type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
@@ -160,6 +161,9 @@ function ReaderDocumentWorkspace({
   const [annotationModeFilter, setAnnotationModeFilter] =
     React.useState<ReaderAnnotationMode>("all");
   const lastContextPanelRef = React.useRef<ReaderContextPanelName>("ask");
+  const [contextOverrides, setContextOverrides] = React.useState<
+    Record<string, ResearchContext>
+  >({});
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const [fullTranslationStatus, setFullTranslationStatus] =
@@ -228,6 +232,13 @@ function ReaderDocumentWorkspace({
         : { scopeId: documentId, scopeType: "paper" },
     ),
   );
+  const sidebarConversationsQuery = useQuery(conversationQueries.list());
+  const pickerPapersQuery = useQuery(readerQueries.pickerPapers());
+  const pickerProjectsQuery = useQuery(readerQueries.pickerProjects());
+  const pickerPapers = (pickerPapersQuery.data?.items ?? []).flatMap((entry) =>
+    entry.entry_type === "paper" ? [entry] : [],
+  );
+  const pickerProjects = pickerProjectsQuery.data?.items ?? [];
 
   const rawPage = parsePositiveInteger(searchParams.get("page"));
   const pageNumber = Math.min(rawPage, pageCount);
@@ -267,12 +278,15 @@ function ReaderDocumentWorkspace({
     },
     [documentId, router],
   );
+  const defaultContext: ResearchContext = {
+    kind: "selection",
+    document_ids: [documentId],
+    project_ids: projectId ? [projectId] : [],
+  };
+  const requestedContext = contextOverrides[conversationId ?? "new"];
   const conversationSession = useConversationSession({
-    context: {
-      kind: "selection",
-      document_ids: [documentId],
-      project_ids: projectId ? [projectId] : [],
-    },
+    context: requestedContext,
+    defaultContext,
     conversationId,
     getTurnContexts: () => {
       if (pendingTurnContext) {
@@ -283,8 +297,13 @@ function ReaderDocumentWorkspace({
       }
       return undefined;
     },
-    onConversationCreated: (nextConversationId) =>
-      updateLocation({ conversation: nextConversationId, panel: "ask" }),
+    onConversationCreated: (nextConversationId) => {
+      setContextOverrides((current) => ({
+        ...current,
+        [nextConversationId]: requestedContext ?? defaultContext,
+      }));
+      updateLocation({ conversation: nextConversationId, panel: "ask" });
+    },
     onTurnStarted: () => {
       setPendingTurnContext(undefined);
       setSelectedAnnotationId(undefined);
@@ -292,7 +311,20 @@ function ReaderDocumentWorkspace({
     reasoningLevel,
     scopeId: projectId ?? documentId,
     scopeType: projectId ? "project" : "paper",
+    updateExistingContext: true,
   });
+  const contextKey = conversationSession.activeConversationId ?? "new";
+  const resolvedContext =
+    contextOverrides[contextKey] ??
+    conversationSession.conversationQuery.data?.paper_context ??
+    defaultContext;
+
+  function handleContextChange(nextContext: ResearchContext) {
+    setContextOverrides((current) => ({
+      ...current,
+      [contextKey]: nextContext,
+    }));
+  }
   const adapter =
     adapterState?.documentId === documentId ? adapterState.adapter : undefined;
   const adapterError =
@@ -637,6 +669,10 @@ function ReaderDocumentWorkspace({
     conversations: conversationsQuery.data?.items ?? [],
     conversationsLoading: conversationsQuery.isPending,
     document,
+    context: resolvedContext,
+    onContextChange: handleContextChange,
+    papers: pickerPapers,
+    projects: pickerProjects,
     onActionError: notifyActionError,
     onAnnotationAudienceFilterChange: (filter) => {
       setAnnotationAudienceFilter(filter);
@@ -740,10 +776,7 @@ function ReaderDocumentWorkspace({
       activeDestination="library"
       actor={actor}
       collapsed={collapsed}
-      conversations={conversationsQuery.data?.items ?? []}
-      conversationHref={(id) =>
-        `/reader/${documentId}?panel=ask&conversation=${id}${projectId ? `&project=${projectId}` : ""}`
-      }
+      conversations={sidebarConversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span className="block truncate text-sm font-medium">{title}</span>
       }

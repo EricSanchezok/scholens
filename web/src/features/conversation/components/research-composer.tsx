@@ -114,6 +114,7 @@ function ContextPicker({
   open,
   onOpenChange,
   disabled,
+  triggerClassName,
 }: {
   context: ResearchContext;
   papers: LibraryPaper[];
@@ -122,6 +123,7 @@ function ContextPicker({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disabled?: boolean;
+  triggerClassName?: string;
 }) {
   const t = useTranslations("Home.context");
   const librarySwitchId = React.useId();
@@ -174,6 +176,7 @@ function ContextPicker({
           className={cn(
             "hover:bg-hover active:bg-pressed grid size-12 shrink-0 place-items-center rounded-full lg:size-11",
             keyboardFocusRing,
+            triggerClassName,
           )}
           disabled={disabled}
           title={displayLabel}
@@ -466,8 +469,6 @@ export function ResearchComposer({
   onTurnContextClear,
   surface,
   unavailable,
-  contextLocked = false,
-  contextLabel,
   turnContextLabel,
 }: {
   form?: UseFormReturn<ComposerValues>;
@@ -484,8 +485,6 @@ export function ResearchComposer({
   onTurnContextClear?: () => void;
   surface: ResearchComposerSurface;
   unavailable?: boolean;
-  contextLocked?: boolean;
-  contextLabel?: string;
   turnContextLabel?: string;
 }) {
   const t = useTranslations("Home");
@@ -544,6 +543,7 @@ export function ResearchComposer({
           data-focus-origin={focusOrigin ?? undefined}
           disabled={busy || unavailable}
           onKeyDown={(event) => {
+            if (event.key === "@") setPickerOpen(true);
             if (
               event.key === "Enter" &&
               !event.shiftKey &&
@@ -559,15 +559,21 @@ export function ResearchComposer({
           {...focusHandlers}
         />
         <div
-          aria-label={contextLabel}
           className={cn(
-            "text-secondary col-start-1 grid size-9 shrink-0 place-items-center rounded-full",
+            "col-start-1",
             contextPanelExpanded ? "row-start-2" : "row-start-1",
           )}
-          role="img"
-          title={contextLabel}
         >
-          <Icon glyph={MentionIcon} size={20} tone="secondary" />
+          <ContextPicker
+            context={context}
+            disabled={unavailable}
+            onChange={onContextChange}
+            onOpenChange={setPickerOpen}
+            open={pickerOpen}
+            papers={papers}
+            projects={projects}
+            triggerClassName="text-secondary size-9 lg:size-9"
+          />
         </div>
         <div
           className={cn(
@@ -686,26 +692,15 @@ export function ResearchComposer({
             : "lg:col-start-1 lg:row-start-1",
         )}
       >
-        {contextLocked ? (
-          <div
-            aria-label={contextLabel}
-            className="text-secondary grid size-12 shrink-0 place-items-center rounded-full lg:size-11"
-            role="img"
-            title={contextLabel}
-          >
-            <Icon glyph={DocumentIcon} size={20} tone="secondary" />
-          </div>
-        ) : (
-          <ContextPicker
-            context={context}
-            disabled={unavailable}
-            onChange={onContextChange}
-            onOpenChange={setPickerOpen}
-            open={pickerOpen}
-            papers={papers}
-            projects={projects}
-          />
-        )}
+        <ContextPicker
+          context={context}
+          disabled={unavailable}
+          onChange={onContextChange}
+          onOpenChange={setPickerOpen}
+          open={pickerOpen}
+          papers={papers}
+          projects={projects}
+        />
       </div>
       <ReasoningMenu
         className={cn(

@@ -170,7 +170,6 @@ function ConversationGroup({
   items,
   activeConversationId,
   onSelect,
-  conversationHref,
   controller,
   onDelete,
   onRequestMobileRename,
@@ -179,7 +178,6 @@ function ConversationGroup({
   items: ConversationSummary[];
   activeConversationId?: string;
   onSelect?: () => void;
-  conversationHref?: (conversationId: string) => string;
   controller: ConversationListController;
   onDelete: (
     conversation: ConversationSummary,
@@ -198,9 +196,7 @@ function ConversationGroup({
         {title}
       </div>
       {items.map((conversation) => {
-        const href =
-          conversationHref?.(conversation.id) ??
-          `/?conversation=${conversation.id}`;
+        const href = `/?conversation=${conversation.id}`;
         return (
           <ConversationListItem
             conversation={conversation}
@@ -457,7 +453,6 @@ function MobileConversationGroup({
   activeConversationId,
   items,
   onSelect,
-  conversationHref,
   title,
   controller,
   onDelete,
@@ -466,7 +461,6 @@ function MobileConversationGroup({
   activeConversationId?: string;
   items: ConversationSummary[];
   onSelect: () => void;
-  conversationHref?: (conversationId: string) => string;
   title: string;
   controller: ConversationListController;
   onDelete: (
@@ -485,9 +479,7 @@ function MobileConversationGroup({
         {title}
       </h2>
       {items.map((conversation) => {
-        const href =
-          conversationHref?.(conversation.id) ??
-          `/?conversation=${conversation.id}`;
+        const href = `/?conversation=${conversation.id}`;
         return (
           <ConversationListItem
             conversation={conversation}
@@ -528,7 +520,6 @@ function MobileNavigation({
   onOpenUsage,
   onSignOut,
   onSelect,
-  conversationHref,
   controller,
   onDeleteConversation,
   onRequestMobileRename,
@@ -543,7 +534,6 @@ function MobileNavigation({
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
   onSelect: () => void;
-  conversationHref?: (conversationId: string) => string;
   controller: ConversationListController;
   onDeleteConversation: (
     conversation: ConversationSummary,
@@ -581,7 +571,6 @@ function MobileNavigation({
           onDelete={onDeleteConversation}
           onRequestMobileRename={onRequestMobileRename}
           onSelect={onSelect}
-          conversationHref={conversationHref}
           title={t("sidebar.pinned")}
         />
         <MobileConversationGroup
@@ -591,7 +580,6 @@ function MobileNavigation({
           onDelete={onDeleteConversation}
           onRequestMobileRename={onRequestMobileRename}
           onSelect={onSelect}
-          conversationHref={conversationHref}
           title={t("sidebar.conversations")}
         />
         {matching.length === 0 && (
@@ -814,7 +802,6 @@ function Sidebar({
   onOpenUsage,
   onSignOut,
   onSelect,
-  conversationHref,
   controller,
   onDeleteConversation,
   onRequestMobileRename,
@@ -832,7 +819,6 @@ function Sidebar({
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
   onSelect?: () => void;
-  conversationHref?: (conversationId: string) => string;
   controller: ConversationListController;
   onDeleteConversation: (
     conversation: ConversationSummary,
@@ -922,7 +908,6 @@ function Sidebar({
               onDelete={onDeleteConversation}
               onRequestMobileRename={onRequestMobileRename}
               onSelect={onSelect}
-              conversationHref={conversationHref}
               title={t("sidebar.pinned")}
             />
             <div className={pinned.length > 0 ? "mt-2" : undefined}>
@@ -933,7 +918,6 @@ function Sidebar({
                 onDelete={onDeleteConversation}
                 onRequestMobileRename={onRequestMobileRename}
                 onSelect={onSelect}
-                conversationHref={conversationHref}
                 title={t("sidebar.recent")}
               />
             </div>
@@ -976,7 +960,6 @@ export function WorkspaceShell({
   mobileBottomRef,
   mobileViewport,
   showMobileBottomNavigation = true,
-  conversationHref,
   children,
 }: {
   actor: Actor;
@@ -994,7 +977,6 @@ export function WorkspaceShell({
   mobileBottomRef?: React.Ref<HTMLDivElement>;
   mobileViewport?: MobileViewportState;
   showMobileBottomNavigation?: boolean;
-  conversationHref?: (conversationId: string) => string;
   children: React.ReactNode;
 }) {
   const t = useTranslations("WorkspaceShell");
@@ -1149,7 +1131,6 @@ export function WorkspaceShell({
             }
             onSignOut={onSignOut}
             signingOut={signingOut}
-            conversationHref={conversationHref}
           />
         </div>
       </div>
@@ -1195,7 +1176,6 @@ export function WorkspaceShell({
             onSelect={() => setMobileOpen(false)}
             onSignOut={onSignOut}
             signingOut={signingOut}
-            conversationHref={conversationHref}
           />
         </SheetContent>
       </Sheet>

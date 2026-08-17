@@ -80,6 +80,7 @@ export function useConversationSession({
   scopeId,
   scopeType,
   updateExistingContext = false,
+  defaultContext = { kind: "library" } satisfies ResearchContext,
 }: {
   conversationId?: string;
   context?: ResearchContext;
@@ -91,6 +92,7 @@ export function useConversationSession({
   scopeId?: string;
   scopeType: ConversationScopeType;
   updateExistingContext?: boolean;
+  defaultContext?: ResearchContext;
 }) {
   const queryClient = useQueryClient();
   const locale = useLocale() === "zh-CN" ? "zh-CN" : "en";
@@ -116,9 +118,7 @@ export function useConversationSession({
     enabled: Boolean(activeConversationId),
   });
   const context =
-    requestedContext ??
-    conversationQuery.data?.paper_context ??
-    ({ kind: "library" } satisfies ResearchContext);
+    requestedContext ?? conversationQuery.data?.paper_context ?? defaultContext;
 
   React.useEffect(() => {
     if (conversationId) setCreatedConversationId(undefined);

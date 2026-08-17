@@ -54,7 +54,6 @@ export const ContextPanelSelection: Story = {
       document_ids: ["paper-1"],
       project_ids: [],
     },
-    contextLabel: "Retrieval-Augmented Generation",
     onTurnContextClear: fn(),
     surface: "context-panel",
     turnContextLabel: "Page 4 selection",
@@ -89,7 +88,6 @@ export const ContextPanelCompact: Story = {
       document_ids: ["paper-1"],
       project_ids: [],
     },
-    contextLabel: "Retrieval-Augmented Generation",
     surface: "context-panel",
   },
   decorators: [
@@ -114,9 +112,48 @@ export const ContextPanelCompact: Story = {
   },
 };
 
+export const ContextPanelScopeEditable: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: [],
+      project_ids: [],
+    },
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const trigger = canvas.getByRole("button", {
+      name: "Research scope: Select scope",
+    });
+    await userEvent.click(trigger);
+    await expect(
+      body.getByRole("heading", { name: "Add context" }),
+    ).toBeVisible();
+    await expect(body.getByText("Entire library")).toBeVisible();
+    await userEvent.click(body.getByRole("button", { name: "Done" }));
+    await expect(
+      body.queryByRole("heading", { name: "Add context" }),
+    ).not.toBeInTheDocument();
+    await fireEvent.keyDown(canvas.getByRole("textbox"), { key: "@" });
+    await expect(
+      body.getByRole("heading", { name: "Add context" }),
+    ).toBeVisible();
+  },
+};
+
 export const ContextPanelImeCandidateConfirmation: Story = {
   args: {
-    contextLabel: "Entire library",
     onSubmit: fn(async () => undefined),
     surface: "context-panel",
   },

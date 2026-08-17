@@ -370,6 +370,19 @@ local draft until the first send. Scope filtering and authorization happen on
 the Server; the Web must not fetch global conversations and filter them
 locally.
 
+The open paper (and the active Project when reading inside one) is the default
+research context of a new draft, not a locked boundary. The shared `@` context
+trigger on the Ask Composer opens the same picker as Home, so the user may
+narrow or broaden scope; edits persist like Home (create with `paper_context`,
+then `PUT /api/v1/conversations/{id}/context` before the next turn). Turn-level
+selection and annotation contexts stay independent of that conversation
+context. The Workspace sidebar conversation history remains global and
+unfiltered on Reader: selecting a session there navigates to the Home
+conversation workspace at `/?conversation=<id>`. Embedded Reader ask URLs such
+as `/reader/<documentId>?panel=ask&conversation=<id>` are entered only through
+the in-panel Conversation switcher and first-send creation, never through the
+sidebar.
+
 The Ask message viewport and Composer are two siblings inside the contextual
 panel. Messages own the panel's vertical scroll, while the `context-panel`
 Composer remains docked at the bottom. Its resting state is one compact row:

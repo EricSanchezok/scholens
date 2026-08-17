@@ -17,9 +17,21 @@ and the shared Conversation feature.
   explain the collection state without repeating the creation action.
 - Project conversations are private to the current member even though their
   starting scope is the shared Project. The existing Conversation runtime is
-  reused with `scope_type=project`; Projects does not fork chat behavior. Reader
-  and Projects share the Conversation switcher, including search, Pinned and
-  Recent groups, current selection, creation, and pinning.
+  reused with `scope_type=project`; Projects does not fork chat behavior. The
+  Project becomes the default research context of a new draft, not a locked
+  boundary: the shared `@` context picker stays available so the user may
+  narrow or broaden scope, and edits persist like Home (create with
+  `paper_context`, then `PUT /api/v1/conversations/{id}/context` before the
+  next turn). Reader and Projects share the Conversation switcher, including
+  search, Pinned and Recent groups, current selection, creation, and pinning;
+  that switcher remains scoped to the current Project.
+- The Workspace sidebar conversation history is global on every surface: it is
+  never filtered to the current Project, and selecting a session (or opening
+  it in a new tab) navigates to the Home conversation workspace at
+  `/?conversation=<id>`. Embedded Project chat URLs such as
+  `/projects/<id>?conversation=<id>&panel=chat` are entered only through the
+  in-panel Conversation switcher and first-send creation, never through the
+  sidebar.
 - Papers open Reader at `/reader/[documentId]?project=[projectId]`. Adding
   papers starts from the first item in the Manage Project menu and selects real
   personal Library memberships. A successful add clears paper search and

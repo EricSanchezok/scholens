@@ -452,8 +452,6 @@ export function ConversationView({
   readOnlyReason,
   composerForm,
   showComposer = true,
-  contextLocked = false,
-  contextLabel,
   turnContextLabel,
   onTurnContextClear,
   onDocumentSourceOpen,
@@ -483,8 +481,6 @@ export function ConversationView({
   readOnlyReason?: string | null;
   composerForm?: UseFormReturn<ComposerValues>;
   showComposer?: boolean;
-  contextLocked?: boolean;
-  contextLabel?: string;
   turnContextLabel?: string;
   onTurnContextClear?: () => void;
   onDocumentSourceOpen?: (
@@ -743,8 +739,6 @@ export function ConversationView({
               projects={projects}
               reasoningLevel={reasoningLevel}
               unavailable={loading || error || !canSend}
-              contextLocked={contextLocked}
-              contextLabel={contextLabel}
               intent="follow-up"
               onTurnContextClear={onTurnContextClear}
               surface={layout === "side-panel" ? "context-panel" : "workspace"}

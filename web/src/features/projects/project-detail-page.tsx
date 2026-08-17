@@ -68,6 +68,7 @@ import {
   setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
+  type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import { ApiError } from "@/lib/api";
@@ -97,6 +98,7 @@ import {
 
 type Project = components["schemas"]["ProjectResponse"];
 type ProjectPaper = components["schemas"]["ProjectPaperSummaryResponse"];
+type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type ProjectOutput = components["schemas"]["LibraryOutputResponse"];
 
 function ProjectSearchField({
@@ -134,6 +136,8 @@ function ProjectChat({
   onConversationChange,
   onConversationPin,
   onConversationPinError,
+  papers,
+  pickerProjects,
   project,
 }: {
   conversationId?: string;
@@ -143,19 +147,42 @@ function ProjectChat({
   onConversationChange: (conversationId?: string) => void;
   onConversationPin: (id: string, pinned: boolean) => Promise<void>;
   onConversationPinError: () => void;
+  papers: LibraryPaper[];
+  pickerProjects: Project[];
   project: Project;
 }) {
   const t = useTranslations("Projects.chat");
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
+  const [contextOverrides, setContextOverrides] = React.useState<
+    Record<string, ResearchContext>
+  >({});
+  const defaultContext = React.useMemo<ResearchContext>(
+    () => ({
+      kind: "selection",
+      document_ids: [],
+      project_ids: [project.id],
+    }),
+    [project.id],
+  );
   const session = useConversationSession({
-    context: { kind: "selection", document_ids: [], project_ids: [project.id] },
+    context: contextOverrides[conversationId ?? "new"],
     conversationId,
+    defaultContext,
     onConversationCreated: (id) => onConversationChange(id),
     reasoningLevel,
     scopeId: project.id,
     scopeType: "project",
+    updateExistingContext: true,
   });
+  const contextKey = session.activeConversationId ?? "new";
+
+  function handleContextChange(nextContext: ResearchContext) {
+    setContextOverrides((current) => ({
+      ...current,
+      [contextKey]: nextContext,
+    }));
+  }
   return (
     <section
       className="bg-canvas flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
@@ -195,8 +222,6 @@ function ProjectChat({
           canSend={session.canSend}
           composerForm={session.composerForm}
           context={session.context}
-          contextLabel={project.title}
-          contextLocked
           emptyState={{
             description: t("emptyDescription"),
             title: t("emptyTitle"),
@@ -205,7 +230,7 @@ function ProjectChat({
           layout="side-panel"
           liveTurn={session.liveTurn}
           loading={session.turnsQuery.isPending && Boolean(conversationId)}
-          onContextChange={() => undefined}
+          onContextChange={handleContextChange}
           onReasoningLevelChange={setReasoningLevel}
           onRetry={() => void session.turnsQuery.refetch()}
           onRetryResponse={(turn) => void session.retryResponse(turn)}
@@ -217,8 +242,8 @@ function ProjectChat({
           onStop={session.stop}
           onSubmit={session.sendMessage}
           onUseSuggestion={session.useSuggestion}
-          papers={[]}
-          projects={[project]}
+          papers={papers}
+          projects={pickerProjects}
           reasoningLevel={reasoningLevel}
           readOnlyReason={session.conversationQuery.data?.read_only_reason}
           submissionPending={session.submissionPending}
@@ -446,6 +471,14 @@ export function ProjectDetailWorkspace({
   const conversationsQuery = useQuery(
     conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
   );
+  const sidebarConversationsQuery = useQuery(conversationQueries.list());
+  const pickerProjectsQuery = useQuery(
+    projectQueries.list({
+      cursor: undefined,
+      query: "",
+      sort: "activity_desc",
+    }),
+  );
   const papersQuery = useQuery({
     ...projectQueries.papers(projectId, state),
     enabled: state.view === "papers" || state.view === "overview",
@@ -454,10 +487,21 @@ export function ProjectDetailWorkspace({
     ...projectQueries.outputs(projectId, state),
     enabled: state.view === "outputs" || state.view === "overview",
   });
-  const libraryPapersQuery = useQuery({
-    ...projectQueries.libraryPapers(),
-    enabled: addPapersOpen,
-  });
+  const libraryPapersQuery = useQuery(projectQueries.libraryPapers());
+  const pickerPapers = React.useMemo(() => {
+    const items = libraryPapersQuery.data?.items ?? [];
+    return items.flatMap((entry) =>
+      entry.entry_type === "paper" ? [entry as LibraryPaper] : [],
+    );
+  }, [libraryPapersQuery.data]);
+  const pickerProjects = React.useMemo(() => {
+    const items = pickerProjectsQuery.data?.items ?? [];
+    const currentProject = projectQuery.data;
+    return currentProject &&
+      !items.some((item) => item.id === currentProject.id)
+      ? [currentProject, ...items]
+      : items;
+  }, [pickerProjectsQuery.data, projectQuery.data]);
 
   const replaceSearch = React.useCallback(
     (patch: Partial<ProjectDetailSearchState>) => {
@@ -620,6 +664,8 @@ export function ProjectDetailWorkspace({
       onConversationPinError={() =>
         toast.notify({ title: t("feedback.actionFailed") })
       }
+      papers={pickerPapers}
+      pickerProjects={pickerProjects}
       project={project}
     />
   );
@@ -630,10 +676,7 @@ export function ProjectDetailWorkspace({
       activeDestination="projects"
       actor={actor}
       collapsed={collapsed}
-      conversationHref={(conversationId) =>
-        `/projects/${projectId}?conversation=${conversationId}&panel=chat`
-      }
-      conversations={conversationsQuery.data?.items ?? []}
+      conversations={sidebarConversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span
           className="block truncate text-base font-semibold"

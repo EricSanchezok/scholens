@@ -34,6 +34,8 @@ export const readerKeys = {
       filters.mode ?? "all",
       filters.status,
     ] as const,
+  pickerPapers: () => [...readerKeys.all, "picker", "papers"] as const,
+  pickerProjects: () => [...readerKeys.all, "picker", "projects"] as const,
 };
 
 export const readerQueries = {
@@ -64,6 +66,29 @@ export const readerQueries = {
         );
         if (!data) throw new Error("Reader project response was empty");
         return { ...data, verifiedProjectId: projectId ?? null };
+      },
+    }),
+  pickerPapers: () =>
+    queryOptions({
+      queryKey: readerKeys.pickerPapers(),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET("/api/v1/library/papers", {
+          signal,
+        });
+        if (!data) throw new Error("Library response was empty");
+        return data;
+      },
+    }),
+  pickerProjects: () =>
+    queryOptions({
+      queryKey: readerKeys.pickerProjects(),
+      queryFn: async ({ signal }) => {
+        const { data } = await apiClient.GET("/api/v1/projects", {
+          params: { query: { limit: 12 } },
+          signal,
+        });
+        if (!data) throw new Error("Project list response was empty");
+        return data;
       },
     }),
   annotations: (
