@@ -11,8 +11,7 @@ export const MCP_MAX_LOCAL_PDF_BYTES = 30 * 1024 * 1024;
 export const DEVELOPMENT_CONNECTOR_REF = "main";
 
 const releaseShaPattern = /^[0-9a-f]{40}$/;
-const connectorRepository =
-  "git+https://github.com/EricSanchezok/scholens.git";
+const connectorRepository = "git+https://github.com/EricSanchezok/scholens.git";
 
 export const documentationAnchors = {
   quickStart: "quick-start",
@@ -42,7 +41,8 @@ export function isDocumentationClient(
 export const mcpPermissions = [
   {
     id: "read",
-    summary: "Search and read stored papers, Projects, annotations, and outputs.",
+    summary:
+      "Search and read stored papers, Projects, annotations, and outputs.",
   },
   {
     id: "write",
@@ -50,11 +50,13 @@ export const mcpPermissions = [
   },
   {
     id: "manage",
-    summary: "Manage collaborators, invitations, ownership, and public sharing.",
+    summary:
+      "Manage collaborators, invitations, ownership, and public sharing.",
   },
   {
     id: "delete",
-    summary: "Run destructive lifecycle operations after explicit confirmation.",
+    summary:
+      "Run destructive lifecycle operations after explicit confirmation.",
   },
 ] as const;
 
@@ -169,7 +171,8 @@ export function createDocumentationFacts(
         referenceUrl:
           "https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop",
         configuration: localConnector,
-        credential: "Store the key only in your private Claude Desktop configuration.",
+        credential:
+          "Store the key only in your private Claude Desktop configuration.",
       },
       cursor: {
         language: "json",

@@ -55,9 +55,10 @@ export const Cursor: Story = {
     await expect(
       canvas.getByText(/Bearer \$\{env:SCHOLENS_ACCESS_KEY\}/),
     ).toBeVisible();
-    await expect(
-      canvas.getByRole("link", { name: "Cursor" }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(canvas.getByRole("link", { name: "Cursor" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   },
 };
 
@@ -88,9 +89,34 @@ export const SmallMobile: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByText("On this page", { exact: true }),
-    ).toBeVisible();
+    const compactToc = canvas.getByText("On this page", {
+      exact: true,
+      selector: "summary",
+    });
+    await expect(compactToc).toBeVisible();
+    await userEvent.click(compactToc);
+
+    const compactTocDetails = compactToc.closest("details");
+    await expect(compactTocDetails).not.toBeNull();
+    const touchTargets = [
+      ...within(
+        canvas.getByRole("group", { name: "Documentation language" }),
+      ).getAllByRole("button"),
+      canvasElement.querySelector('header a[href="/"]'),
+      compactToc,
+      ...within(compactTocDetails as HTMLElement).getAllByRole("link"),
+      canvas.getByRole("link", {
+        name: "Open the client's official MCP documentation",
+      }),
+      ...canvasElement.querySelectorAll("summary"),
+      ...canvasElement.querySelectorAll("footer a"),
+    ].filter((target): target is Element => target instanceof Element);
+
+    for (const target of touchTargets) {
+      await expect(
+        target.getBoundingClientRect().height,
+      ).toBeGreaterThanOrEqual(44);
+    }
     expect(document.documentElement.scrollWidth <= window.innerWidth).toBe(
       true,
     );

@@ -11,10 +11,7 @@ import {
   SuccessIcon,
   WarningIcon,
 } from "@/design-system/icons/semantic-icons";
-import {
-  DOCUMENTATION_PATH,
-  SOURCE_REPOSITORY_URL,
-} from "@/lib/product";
+import { DOCUMENTATION_PATH, SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import { AuthViewport } from "./auth-surface";
 
@@ -37,7 +34,7 @@ export function AuthenticationShell({
         >
           <Link
             className={cn(
-              "hover:text-foreground inline-flex items-center gap-1.5 rounded-[var(--radius-sm)]",
+              "hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-sm)] sm:min-h-9",
               keyboardFocusRing,
             )}
             href={DOCUMENTATION_PATH}
@@ -50,7 +47,7 @@ export function AuthenticationShell({
           </Link>
           <a
             className={cn(
-              "hover:text-foreground inline-flex items-center gap-1.5 rounded-[var(--radius-sm)]",
+              "hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-sm)] sm:min-h-9",
               keyboardFocusRing,
             )}
             href={SOURCE_REPOSITORY_URL}

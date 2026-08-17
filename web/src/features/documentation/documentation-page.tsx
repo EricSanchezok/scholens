@@ -8,6 +8,7 @@ import { buttonVariants, keyboardFocusRing } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
   BackIcon,
+  ExpandIcon,
   ExternalLinkIcon,
   KeyIcon,
   RepositoryIcon,
@@ -53,7 +54,7 @@ function LocaleControl() {
         <button
           aria-pressed={locale === option}
           className={cn(
-            "motion-control min-h-9 rounded-[calc(var(--radius-md)-2px)] px-2.5 text-xs font-medium",
+            "motion-control min-h-11 rounded-[calc(var(--radius-md)-2px)] px-2.5 text-xs font-medium sm:min-h-9",
             keyboardFocusRing,
             locale === option
               ? "bg-surface text-foreground"
@@ -79,7 +80,7 @@ function DocumentationHeader() {
       <div className="mx-auto flex min-h-16 max-w-[75rem] items-center gap-4 px-4 sm:px-6 lg:px-8">
         <Link
           className={cn(
-            "flex items-center gap-2 rounded-[var(--radius-sm)] font-semibold",
+            "flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] font-semibold sm:min-h-9",
             keyboardFocusRing,
           )}
           href="/"
@@ -129,7 +130,7 @@ function TableOfContents({ compact = false }: { compact?: boolean }) {
       {tableOfContents.map(([anchor, message]) => (
         <a
           className={cn(
-            "text-secondary hover:bg-hover hover:text-foreground rounded-[var(--radius-md)] px-3 py-2 text-sm",
+            "text-secondary hover:bg-hover hover:text-foreground flex min-h-11 items-center rounded-[var(--radius-md)] px-3 text-sm sm:min-h-9",
             keyboardFocusRing,
           )}
           href={`#${anchor}`}
@@ -143,14 +144,20 @@ function TableOfContents({ compact = false }: { compact?: boolean }) {
 
   if (!compact) return links;
   return (
-    <details className="border-line-subtle bg-subtle rounded-[var(--radius-lg)] border p-2 lg:hidden">
+    <details className="border-line-subtle bg-subtle group rounded-[var(--radius-lg)] border p-2 lg:hidden">
       <summary
         className={cn(
-          "cursor-pointer rounded-[var(--radius-md)] px-2 py-2 text-sm font-medium",
+          "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-md)] px-2 text-sm font-medium [&::-webkit-details-marker]:hidden",
           keyboardFocusRing,
         )}
       >
-        {t("toc.open")}
+        <span>{t("toc.open")}</span>
+        <Icon
+          className="motion-control group-open:rotate-180"
+          glyph={ExpandIcon}
+          size={16}
+          tone="secondary"
+        />
       </summary>
       <div className="pt-1">{links}</div>
     </details>
@@ -198,7 +205,9 @@ function CodeSample({
       <figcaption className="border-line-subtle bg-subtle flex min-h-11 items-center justify-between gap-3 border-b px-3 sm:px-4">
         <span className="min-w-0 truncate text-xs font-medium">{title}</span>
         <span className="flex items-center gap-2">
-          <span className="text-muted hidden text-xs sm:inline">{language}</span>
+          <span className="text-muted hidden text-xs sm:inline">
+            {language}
+          </span>
           <CopyActionButton
             errorLabel={t("copy.error")}
             label={t("copy.copy")}
@@ -252,7 +261,12 @@ export function DocumentationPage({
   const t = useTranslations("Documentation");
   const facts = createDocumentationFacts();
   const client = facts.clients[selectedClient];
-  const securityItems = ["store", "leastPrivilege", "confirm", "upload"] as const;
+  const securityItems = [
+    "store",
+    "leastPrivilege",
+    "confirm",
+    "upload",
+  ] as const;
   const troubleshootingItems = [
     "unauthorized",
     "missingTool",
@@ -312,7 +326,7 @@ export function DocumentationPage({
               <TableOfContents />
             </div>
           </aside>
-          <article className="min-w-0 max-w-[50rem]">
+          <article className="max-w-[50rem] min-w-0">
             <TableOfContents compact />
 
             <Section
@@ -400,7 +414,7 @@ export function DocumentationPage({
                   {client.referenceUrl ? (
                     <a
                       className={cn(
-                        "text-secondary hover:text-foreground mt-3 inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] text-sm underline underline-offset-4",
+                        "text-secondary hover:text-foreground mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius-sm)] text-sm underline underline-offset-4 sm:min-h-9",
                         keyboardFocusRing,
                       )}
                       href={client.referenceUrl}
@@ -408,7 +422,11 @@ export function DocumentationPage({
                       target="_blank"
                     >
                       {t("setup.officialReference")}
-                      <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+                      <Icon
+                        glyph={ExternalLinkIcon}
+                        size={16}
+                        tone="secondary"
+                      />
                     </a>
                   ) : null}
                 </div>
@@ -423,21 +441,27 @@ export function DocumentationPage({
                     size: facts.maxLocalPdfMegabytes,
                   })}
                 </p>
-                <p className="text-muted mt-3 break-all text-xs leading-5">
+                <p className="text-muted mt-3 text-xs leading-5 break-all">
                   {facts.connectorSource.kind === "release"
                     ? t("setup.localUpload.releasePinned", {
                         sha: facts.connectorSource.ref,
                       })
                     : t("setup.localUpload.developmentFallback")}
                 </p>
-                <details className="mt-4">
+                <details className="group mt-4">
                   <summary
                     className={cn(
-                      "cursor-pointer rounded-[var(--radius-sm)] text-sm font-medium underline-offset-4 hover:underline",
+                      "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-sm)] text-sm font-medium underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden",
                       keyboardFocusRing,
                     )}
                   >
-                    {t("setup.localUpload.showConfiguration")}
+                    <span>{t("setup.localUpload.showConfiguration")}</span>
+                    <Icon
+                      className="motion-control group-open:rotate-180"
+                      glyph={ExpandIcon}
+                      size={16}
+                      tone="secondary"
+                    />
                   </summary>
                   <div className="mt-4">
                     <CodeSample
@@ -585,11 +609,17 @@ export function DocumentationPage({
                   <details className="group py-5" key={item}>
                     <summary
                       className={cn(
-                        "cursor-pointer rounded-[var(--radius-sm)] font-medium",
+                        "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-sm)] font-medium [&::-webkit-details-marker]:hidden",
                         keyboardFocusRing,
                       )}
                     >
-                      {t(`troubleshooting.items.${item}.title`)}
+                      <span>{t(`troubleshooting.items.${item}.title`)}</span>
+                      <Icon
+                        className="motion-control group-open:rotate-180"
+                        glyph={ExpandIcon}
+                        size={16}
+                        tone="secondary"
+                      />
                     </summary>
                     <p className="text-secondary mt-3 max-w-[70ch] text-sm leading-6">
                       {t(`troubleshooting.items.${item}.description`, {
@@ -604,7 +634,7 @@ export function DocumentationPage({
             <footer className="border-line-subtle mt-20 flex flex-wrap gap-x-6 gap-y-3 border-t py-8 text-sm">
               <a
                 className={cn(
-                  "text-secondary hover:text-foreground",
+                  "text-secondary hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--radius-sm)] sm:min-h-9",
                   keyboardFocusRing,
                 )}
                 href="/docs.md"
@@ -613,7 +643,7 @@ export function DocumentationPage({
               </a>
               <a
                 className={cn(
-                  "text-secondary hover:text-foreground",
+                  "text-secondary hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--radius-sm)] sm:min-h-9",
                   keyboardFocusRing,
                 )}
                 href="/llms.txt"
@@ -622,7 +652,7 @@ export function DocumentationPage({
               </a>
               <a
                 className={cn(
-                  "text-secondary hover:text-foreground",
+                  "text-secondary hover:text-foreground inline-flex min-h-11 items-center rounded-[var(--radius-sm)] sm:min-h-9",
                   keyboardFocusRing,
                 )}
                 href={SOURCE_REPOSITORY_URL}

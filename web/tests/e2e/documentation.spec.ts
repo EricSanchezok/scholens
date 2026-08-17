@@ -1,5 +1,16 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+
+async function expectMinimumTouchTargets(locator: Locator) {
+  const count = await locator.count();
+  for (let index = 0; index < count; index += 1) {
+    expect(
+      await locator
+        .nth(index)
+        .evaluate((element) => element.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(44);
+  }
+}
 
 async function mockAnonymousSession(page: Page) {
   await page.route("**/api/v1/auth/refresh", (route) =>
@@ -93,9 +104,7 @@ test("preserves the Access Keys destination through sign-in", async ({
 
   await page.goto("/docs");
   await page.getByRole("link", { name: /Create access key/ }).click();
-  await expect(page).toHaveURL(
-    "/login?returnTo=%2F%3Fsettings%3Daccess-keys",
-  );
+  await expect(page).toHaveURL("/login?returnTo=%2F%3Fsettings%3Daccess-keys");
 
   await page.getByLabel("Email").fill("researcher@example.com");
   await page.getByLabel("Password").fill("twelve-chars!");
@@ -127,7 +136,28 @@ test("fits the guide at the minimum supported width", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/docs?client=claude-desktop");
 
-  await expect(page.getByText("On this page", { exact: true })).toBeVisible();
+  const compactToc = page
+    .locator("summary")
+    .filter({ hasText: "On this page" });
+  await expect(compactToc).toBeVisible();
+  await compactToc.click();
+
+  const touchTargetGroups = [
+    page
+      .getByRole("group", { name: "Documentation language" })
+      .getByRole("button"),
+    page.locator('header a[href="/"]'),
+    page.locator("details").first().getByRole("link"),
+    page.getByRole("link", {
+      name: "Open the client's official MCP documentation",
+    }),
+    page.locator("summary"),
+    page.locator("footer a"),
+  ];
+  for (const targets of touchTargetGroups) {
+    await expectMinimumTouchTargets(targets);
+  }
+
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

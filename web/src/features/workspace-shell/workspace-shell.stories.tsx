@@ -581,6 +581,11 @@ export const MobileAccountMenu: Story = {
     );
     const menu = await body.findByRole("menu");
     await expect(await within(menu).findByText("24M / 100M")).toBeVisible();
+    for (const item of within(menu).getAllByRole("menuitem")) {
+      await expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+        44,
+      );
+    }
     await userEvent.click(
       within(menu).getByRole("menuitem", { name: "Usage" }),
     );

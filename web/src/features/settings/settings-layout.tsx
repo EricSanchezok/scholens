@@ -17,9 +17,7 @@ export function SettingsPanelHeader({
         <h2 className="text-2xl leading-8 font-semibold tracking-[-0.015em]">
           {title}
         </h2>
-        <p className="text-secondary mt-1.5 text-sm leading-6">
-          {description}
-        </p>
+        <p className="text-secondary mt-1.5 text-sm leading-6">{description}</p>
       </div>
       {action}
     </header>

@@ -81,6 +81,23 @@ export const SignIn: Story = {
   },
 };
 
+export const MobilePublicLinks: Story = {
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("heading", { name: "Welcome back" }),
+    ).toBeVisible();
+
+    for (const name of ["Documentation", "Repository"]) {
+      const link = canvas.getByRole("link", { name });
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+        44,
+      );
+    }
+  },
+};
+
 export const InvalidCredentials: Story = {
   parameters: {
     msw: {

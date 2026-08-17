@@ -64,10 +64,7 @@ if (capabilityCounts.length !== 6) {
     `Documentation must retain six capability groups; found ${capabilityCounts.length}`,
   );
 }
-if (
-  pageToolCount !== groupedToolCount ||
-  pageToolCount !== contractToolCount
-) {
+if (pageToolCount !== groupedToolCount || pageToolCount !== contractToolCount) {
   throw new Error(
     [
       "MCP documentation count drift detected:",

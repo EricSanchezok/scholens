@@ -50,10 +50,7 @@ import {
   type CurrentBillingUsageSummary,
 } from "@/features/settings";
 import type { components } from "@/lib/api/generated/schema";
-import {
-  DOCUMENTATION_PATH,
-  SOURCE_REPOSITORY_URL,
-} from "@/lib/product";
+import { DOCUMENTATION_PATH, SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import {
   AskIcon,
@@ -379,21 +376,21 @@ function AccountMenu({
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          className="rounded-[var(--radius-lg)] px-2.5"
           onSelect={onOpenSettings}
         >
           <Icon glyph={SettingsIcon} size={16} tone="secondary" />
           {t("account.settings")}
         </DropdownMenuItem>
         <DropdownMenuItem
-          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          className="rounded-[var(--radius-lg)] px-2.5"
           onSelect={onOpenAccount}
         >
           <Icon glyph={AccountIcon} size={16} tone="secondary" />
           {t("account.accountSettings")}
         </DropdownMenuItem>
         <DropdownMenuItem
-          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          className="rounded-[var(--radius-lg)] px-2.5"
           onSelect={onOpenUsage}
         >
           <Icon glyph={UsageIcon} size={16} tone="secondary" />
@@ -401,7 +398,7 @@ function AccountMenu({
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link
-            className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+            className="rounded-[var(--radius-lg)] px-2.5"
             href={DOCUMENTATION_PATH}
             rel="noopener noreferrer"
             target="_blank"
@@ -413,7 +410,7 @@ function AccountMenu({
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <a
-            className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+            className="rounded-[var(--radius-lg)] px-2.5"
             href={SOURCE_REPOSITORY_URL}
             rel="noopener noreferrer"
             target="_blank"
@@ -425,7 +422,7 @@ function AccountMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="min-h-10 rounded-[var(--radius-lg)] px-2.5"
+          className="rounded-[var(--radius-lg)] px-2.5"
           disabled={signingOut}
           onSelect={() => void onSignOut()}
         >
