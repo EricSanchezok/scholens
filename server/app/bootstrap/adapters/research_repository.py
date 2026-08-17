@@ -9,15 +9,16 @@ from datetime import datetime, timezone
 from app.database.models import (
     AnnotationComment,
     AnnotationColor,
-    CitationOutput,
     AnnotationThread,
     AnnotationThreadStatus,
-    ResearchItem,
-    ResearchItemKind,
-    ResearchAudienceType,
-    RoleType,
+    AuthUser,
+    CitationOutput,
     Conversation,
     ConversationScopeType,
+    ResearchAudienceType,
+    ResearchItem,
+    ResearchItemKind,
+    RoleType,
 )
 from app.shared.domain.enums import AnnotationAudienceFilter, AnnotationThreadMode
 from app.shared.domain import AppError, FailureKind
@@ -879,6 +880,16 @@ class ResearchRepository:
             )
         db.flush()
 
+    @staticmethod
+    def _creator_response(
+        user_id: int | None,
+        user: AuthUser | None,
+    ) -> ResearchCreatorResponse:
+        if user is None:
+            return ResearchCreatorResponse(id=user_id, display_name=None)
+        display_name = (user.display_name or "").strip() or user.email
+        return ResearchCreatorResponse(id=user_id, display_name=display_name)
+
     def serialize(
         self,
         db: Session,
@@ -891,12 +902,7 @@ class ResearchRepository:
             item=item,
             user_id=user_id,
         )
-        creator = ResearchCreatorResponse(
-            id=item.created_by_id,
-            display_name=(
-                item.created_by.display_name if item.created_by is not None else None
-            ),
-        )
+        creator = self._creator_response(item.created_by_id, item.created_by)
         audience_type = ResearchAudienceType(item.audience_type)
         audience: ResearchAudience
         if audience_type is ResearchAudienceType.DOCUMENT:
@@ -950,11 +956,9 @@ class ResearchRepository:
                 last_activity_at=last_activity_at,
                 status=AnnotationThreadStatus(item.annotation_thread.status),
                 resolved_by=(
-                    ResearchCreatorResponse(
-                        id=item.annotation_thread.resolved_by_id,
-                        display_name=(
-                            resolved_by.display_name if resolved_by else None
-                        ),
+                    self._creator_response(
+                        item.annotation_thread.resolved_by_id,
+                        resolved_by,
                     )
                     if item.annotation_thread.resolved_by_id is not None
                     else None
@@ -1069,13 +1073,9 @@ class ResearchRepository:
             id=item.id,
             audience=audience,
             target_document_id=item.target_document_id,
-            created_by=ResearchCreatorResponse(
-                id=item.created_by_id,
-                display_name=(
-                    item.created_by.display_name
-                    if item.created_by is not None
-                    else None
-                ),
+            created_by=self._creator_response(
+                item.created_by_id,
+                item.created_by,
             ),
             created_at=item.created_at,
             quote_text=thread.quote_text,
@@ -1091,10 +1091,7 @@ class ResearchRepository:
             last_activity_at=last_activity_at,
             status=AnnotationThreadStatus(thread.status),
             resolved_by=(
-                ResearchCreatorResponse(
-                    id=thread.resolved_by_id,
-                    display_name=(resolved_by.display_name if resolved_by else None),
-                )
+                self._creator_response(thread.resolved_by_id, resolved_by)
                 if thread.resolved_by_id is not None
                 else None
             ),
@@ -1132,13 +1129,9 @@ class ResearchRepository:
             thread_id=comment.thread_id,
             content=comment.content,
             role=comment.role,
-            created_by=ResearchCreatorResponse(
-                id=comment.created_by_id,
-                display_name=(
-                    comment.created_by.display_name
-                    if comment.created_by is not None
-                    else None
-                ),
+            created_by=ResearchRepository._creator_response(
+                comment.created_by_id,
+                comment.created_by,
             ),
             created_at=comment.created_at,
             updated_at=comment.updated_at,

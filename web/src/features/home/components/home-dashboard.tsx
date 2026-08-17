@@ -1,6 +1,6 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 
 import { Button, keyboardFocusRing, Skeleton } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
@@ -13,6 +13,7 @@ import {
   type ReasoningLevel,
 } from "@/features/conversation";
 import type { UseFormReturn } from "react-hook-form";
+import { useRelativeTimeNow } from "@/i18n/use-relative-time-now";
 import { LibraryIcon, ProjectIcon } from "./home-icons";
 
 type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
@@ -58,7 +59,7 @@ function PaperPreview({ paper }: { paper: LibraryPaper }) {
 
 function PaperCard({ paper }: { paper: LibraryPaper }) {
   const t = useTranslations("Home.recents");
-  const format = useFormatter();
+  const formatRelativeTime = useRelativeTimeNow();
   const title =
     paper.metadata_overrides.title ??
     paper.document.title ??
@@ -78,7 +79,7 @@ function PaperCard({ paper }: { paper: LibraryPaper }) {
       </div>
       <p className="text-secondary text-xs">
         {t("opened", {
-          relative: format.relativeTime(new Date(paper.last_accessed_at)),
+          relative: formatRelativeTime(paper.last_accessed_at),
         })}
       </p>
     </article>
@@ -87,7 +88,7 @@ function PaperCard({ paper }: { paper: LibraryPaper }) {
 
 function ProjectRow({ project }: { project: Project }) {
   const t = useTranslations("Home.recents");
-  const format = useFormatter();
+  const formatRelativeTime = useRelativeTimeNow();
   return (
     <article className="border-line bg-surface flex min-w-0 items-center gap-3 rounded-[var(--radius-md)] border p-3">
       <span className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
@@ -98,7 +99,7 @@ function ProjectRow({ project }: { project: Project }) {
         <p className="text-secondary mt-0.5 truncate text-xs">
           {t("paperCount", { count: project.num_papers })} ·{" "}
           {t("updated", {
-            relative: format.relativeTime(new Date(project.updated_at)),
+            relative: formatRelativeTime(project.updated_at),
           })}
         </p>
       </div>

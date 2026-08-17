@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -27,6 +27,7 @@ import {
 } from "@/design-system/icons/semantic-icons";
 import { conversationTitleSchema } from "@/features/conversation";
 import type { components } from "@/lib/api/generated/schema";
+import { useRelativeTimeNow } from "@/i18n/use-relative-time-now";
 import { cn } from "@/lib/utilities/cn";
 
 type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
@@ -55,7 +56,7 @@ export function ConversationListItem({
   onTogglePinned: () => Promise<void>;
 }) {
   const t = useTranslations("WorkspaceShell.sidebar");
-  const format = useFormatter();
+  const formatRelativeTime = useRelativeTimeNow();
   const [editing, setEditing] = React.useState(false);
   const [title, setTitle] = React.useState(conversation.title);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -244,7 +245,7 @@ export function ConversationListItem({
           </span>
           {mobile && (
             <span className="text-secondary block truncate text-xs leading-5">
-              {format.relativeTime(new Date(conversation.updated_at))}
+              {formatRelativeTime(conversation.updated_at)}
               {conversation.scope_label && ` · ${conversation.scope_label}`}
             </span>
           )}
