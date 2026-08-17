@@ -22,9 +22,11 @@ and the shared Conversation feature.
   boundary: the shared `@` context picker stays available so the user may
   narrow or broaden scope, and edits persist like Home (create with
   `paper_context`, then `PUT /api/v1/conversations/{id}/context` before the
-  next turn). Reader and Projects share the Conversation switcher, including
-  search, Pinned and Recent groups, current selection, creation, and pinning;
-  that switcher remains scoped to the current Project.
+  next turn). The picker keeps the current Project as a seed and uses the
+  shared server-backed Project and Library search rather than loading a second
+  route-local catalog. Reader and Projects share the Conversation switcher,
+  including search, Pinned and Recent groups, current selection, creation, and
+  pinning; that switcher remains scoped to the current Project.
 - The Workspace sidebar conversation history is global on every surface: it is
   never filtered to the current Project, and selecting a session (or opening
   it in a new tab) navigates to the Home conversation workspace at

@@ -314,6 +314,8 @@
       "scopeItems": "{count, plural, one {# item} other {# items}}",
       "scopeEmpty": "Select scope",
       "scopeAccessible": "Research scope: {scope}",
+      "searching": "Searching your research…",
+      "loadError": "Some research could not be loaded. Refine the search or try again.",
       "noMatches": "No matching research found"
     },
     "recents": {

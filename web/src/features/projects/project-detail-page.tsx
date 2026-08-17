@@ -98,7 +98,6 @@ import {
 
 type Project = components["schemas"]["ProjectResponse"];
 type ProjectPaper = components["schemas"]["ProjectPaperSummaryResponse"];
-type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
 type ProjectOutput = components["schemas"]["LibraryOutputResponse"];
 
 function ProjectSearchField({
@@ -136,8 +135,6 @@ function ProjectChat({
   onConversationChange,
   onConversationPin,
   onConversationPinError,
-  papers,
-  pickerProjects,
   project,
 }: {
   conversationId?: string;
@@ -147,8 +144,6 @@ function ProjectChat({
   onConversationChange: (conversationId?: string) => void;
   onConversationPin: (id: string, pinned: boolean) => Promise<void>;
   onConversationPinError: () => void;
-  papers: LibraryPaper[];
-  pickerProjects: Project[];
   project: Project;
 }) {
   const t = useTranslations("Projects.chat");
@@ -242,8 +237,8 @@ function ProjectChat({
           onStop={session.stop}
           onSubmit={session.sendMessage}
           onUseSuggestion={session.useSuggestion}
-          papers={papers}
-          projects={pickerProjects}
+          papers={[]}
+          projects={[project]}
           reasoningLevel={reasoningLevel}
           readOnlyReason={session.conversationQuery.data?.read_only_reason}
           submissionPending={session.submissionPending}
@@ -472,13 +467,6 @@ export function ProjectDetailWorkspace({
     conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
   );
   const sidebarConversationsQuery = useQuery(conversationQueries.list());
-  const pickerProjectsQuery = useQuery(
-    projectQueries.list({
-      cursor: undefined,
-      query: "",
-      sort: "activity_desc",
-    }),
-  );
   const papersQuery = useQuery({
     ...projectQueries.papers(projectId, state),
     enabled: state.view === "papers" || state.view === "overview",
@@ -487,21 +475,10 @@ export function ProjectDetailWorkspace({
     ...projectQueries.outputs(projectId, state),
     enabled: state.view === "outputs" || state.view === "overview",
   });
-  const libraryPapersQuery = useQuery(projectQueries.libraryPapers());
-  const pickerPapers = React.useMemo(() => {
-    const items = libraryPapersQuery.data?.items ?? [];
-    return items.flatMap((entry) =>
-      entry.entry_type === "paper" ? [entry as LibraryPaper] : [],
-    );
-  }, [libraryPapersQuery.data]);
-  const pickerProjects = React.useMemo(() => {
-    const items = pickerProjectsQuery.data?.items ?? [];
-    const currentProject = projectQuery.data;
-    return currentProject &&
-      !items.some((item) => item.id === currentProject.id)
-      ? [currentProject, ...items]
-      : items;
-  }, [pickerProjectsQuery.data, projectQuery.data]);
+  const libraryPapersQuery = useQuery({
+    ...projectQueries.libraryPapers(),
+    enabled: addPapersOpen,
+  });
 
   const replaceSearch = React.useCallback(
     (patch: Partial<ProjectDetailSearchState>) => {
@@ -664,8 +641,6 @@ export function ProjectDetailWorkspace({
       onConversationPinError={() =>
         toast.notify({ title: t("feedback.actionFailed") })
       }
-      papers={pickerPapers}
-      pickerProjects={pickerProjects}
       project={project}
     />
   );

@@ -48,6 +48,8 @@ import {
   useConversationSession,
   type ReasoningLevel,
   type ResearchContext,
+  type ResearchContextPaperOption,
+  type ResearchContextProjectOption,
 } from "@/features/conversation";
 import { cn } from "@/lib/utilities/cn";
 import {
@@ -67,8 +69,6 @@ import type {
   ReaderConversation,
   ReaderDocument,
   ReaderDocumentSource,
-  ReaderLibraryPaper,
-  ReaderProject,
 } from "../reader-types";
 
 export function formatReaderFileSize(size: number, locale: string) {
@@ -902,8 +902,8 @@ export type ReaderContextPanelProps = {
   conversationsLoading: boolean;
   context: ResearchContext;
   onContextChange: (context: ResearchContext) => void;
-  papers: ReaderLibraryPaper[];
-  projects: ReaderProject[];
+  papers: ResearchContextPaperOption[];
+  projects: ResearchContextProjectOption[];
   document: ReaderDocument | undefined;
   onActionError: (error?: unknown) => void;
   onAnnotationDelete: (id: string) => Promise<void>;

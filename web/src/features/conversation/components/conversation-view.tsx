@@ -26,6 +26,8 @@ import {
   ResearchComposer,
   type ReasoningLevel,
   type ResearchContext,
+  type ResearchContextPaperOption,
+  type ResearchContextProjectOption,
 } from "./research-composer";
 import { MessageContent } from "./message-content";
 import { ConversationWorklog } from "./conversation-worklog";
@@ -50,8 +52,6 @@ export type ConversationEmptyState = {
   description: string;
   title: string;
 };
-type LibraryPaper = components["schemas"]["LibraryPaperResponse"];
-type Project = components["schemas"]["ProjectResponse"];
 
 function FollowUpSuggestions({
   suggestions,
@@ -461,8 +461,8 @@ export function ConversationView({
   turns: ConversationTurn[];
   liveTurn: LiveTurn | null;
   context: ResearchContext;
-  papers: LibraryPaper[];
-  projects: Project[];
+  papers: ResearchContextPaperOption[];
+  projects: ResearchContextProjectOption[];
   reasoningLevel: ReasoningLevel;
   loading?: boolean;
   error?: boolean;

@@ -233,12 +233,6 @@ function ReaderDocumentWorkspace({
     ),
   );
   const sidebarConversationsQuery = useQuery(conversationQueries.list());
-  const pickerPapersQuery = useQuery(readerQueries.pickerPapers());
-  const pickerProjectsQuery = useQuery(readerQueries.pickerProjects());
-  const pickerPapers = (pickerPapersQuery.data?.items ?? []).flatMap((entry) =>
-    entry.entry_type === "paper" ? [entry] : [],
-  );
-  const pickerProjects = pickerProjectsQuery.data?.items ?? [];
 
   const rawPage = parsePositiveInteger(searchParams.get("page"));
   const pageNumber = Math.min(rawPage, pageCount);
@@ -603,6 +597,20 @@ function ReaderDocumentWorkspace({
   );
 
   const document = documentQuery.data;
+  const contextPapers = document
+    ? [
+        {
+          document: {
+            authors: document.authors,
+            document_id: document.document_id,
+            journal: document.journal,
+            original_filename: document.original_filename,
+            title: document.title,
+          },
+        },
+      ]
+    : [];
+  const contextProjects = activeProject ? [activeProject] : [];
   const title = document?.title ?? document?.original_filename ?? t("untitled");
   const documentMetadata = [
     document?.authors?.[0],
@@ -671,8 +679,8 @@ function ReaderDocumentWorkspace({
     document,
     context: resolvedContext,
     onContextChange: handleContextChange,
-    papers: pickerPapers,
-    projects: pickerProjects,
+    papers: contextPapers,
+    projects: contextProjects,
     onActionError: notifyActionError,
     onAnnotationAudienceFilterChange: (filter) => {
       setAnnotationAudienceFilter(filter);

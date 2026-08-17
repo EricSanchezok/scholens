@@ -314,6 +314,8 @@
       "scopeItems": "{count} 项",
       "scopeEmpty": "选择范围",
       "scopeAccessible": "研究范围：{scope}",
+      "searching": "正在搜索你的研究资料…",
+      "loadError": "部分研究资料无法加载，请缩小搜索范围或重试。",
       "noMatches": "没有匹配的研究资料"
     },
     "recents": {

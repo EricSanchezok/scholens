@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { http, HttpResponse } from "msw";
 import {
   expect,
   fireEvent,
@@ -9,6 +10,37 @@ import {
 } from "storybook/test";
 
 import { ResearchComposer } from "./research-composer";
+
+const api = "http://127.0.0.1:7301/api/v1";
+const contextCatalogHandlers = [
+  http.get(`${api}/library/papers`, ({ request }) => {
+    const query = new URL(request.url).searchParams.get("q");
+    return HttpResponse.json({
+      items:
+        query === "remote"
+          ? [
+              {
+                document: {
+                  authors: ["Catalog Author"],
+                  document_id: "30000000-0000-4000-8000-000000000099",
+                  journal: "Catalog Journal",
+                  original_filename: "remote-catalog.pdf",
+                  title: "Remote catalog paper",
+                },
+                entry_type: "paper",
+                metadata_overrides: { title: null },
+              },
+            ]
+          : [],
+      next_cursor: null,
+      previous_cursor: null,
+      total_count: query === "remote" ? 1 : 0,
+    });
+  }),
+  http.get(`${api}/projects`, () =>
+    HttpResponse.json({ items: [], next_cursor: null, total_count: 0 }),
+  ),
+];
 
 const meta = {
   title: "Conversation/ResearchComposer",
@@ -31,7 +63,10 @@ const meta = {
       </main>
     ),
   ],
-  parameters: { layout: "fullscreen" },
+  parameters: {
+    layout: "fullscreen",
+    msw: { handlers: contextCatalogHandlers },
+  },
 } satisfies Meta<typeof ResearchComposer>;
 
 export default meta;
@@ -149,6 +184,37 @@ export const ContextPanelScopeEditable: Story = {
     await expect(
       body.getByRole("heading", { name: "Add context" }),
     ).toBeVisible();
+  },
+};
+
+export const ContextPanelServerSearch: Story = {
+  args: {
+    context: {
+      kind: "selection",
+      document_ids: [],
+      project_ids: [],
+    },
+    surface: "context-panel",
+  },
+  decorators: [
+    (Story) => (
+      <div className="flex min-h-dvh items-end justify-end p-3">
+        <div className="w-[23rem] max-w-full">
+          <Story />
+        </div>
+      </div>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: "Research scope: Select scope",
+      }),
+    );
+    await userEvent.type(body.getByRole("searchbox"), "remote");
+    await expect(await body.findByText("Remote catalog paper")).toBeVisible();
   },
 };
 
