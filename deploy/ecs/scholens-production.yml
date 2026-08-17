@@ -1189,6 +1189,8 @@ Resources:
               https://${DomainName}/api/v1/integrations/zotero/oauth/callback
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
+        - Name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          Value: DELTA
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
           Value:
             Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
@@ -1647,6 +1649,8 @@ Resources:
           Value: '300000'
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
+        - Name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          Value: DELTA
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
           Value:
             Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
@@ -1884,6 +1888,8 @@ Resources:
           Value: '300000'
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
+        - Name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          Value: DELTA
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
           Value:
             Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
@@ -2121,6 +2127,8 @@ Resources:
           Value: '300000'
         - Name: OTEL_EXPORTER_OTLP_ENDPOINT
           Value: http://127.0.0.1:4317
+        - Name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          Value: DELTA
         - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
           Value:
             Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name

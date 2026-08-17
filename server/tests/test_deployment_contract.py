@@ -873,6 +873,22 @@ def test_api_version_locked_upload_reads_are_allowed_by_role_and_boundary() -> N
 
 def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
+    for task_definition, workload in (
+        ("ApiTaskDefinition", "api"),
+        ("DocumentWorkerTaskDefinition", "document-worker"),
+        ("ResearchWorkerTaskDefinition", "research-worker"),
+        ("MaintenanceWorkerTaskDefinition", "maintenance-worker"),
+    ):
+        containers = resources[task_definition]["Properties"]["ContainerDefinitions"]
+        container = next(item for item in containers if item["Name"] == workload)
+        environment = {
+            item["Name"]: item["Value"] for item in container["Environment"]
+        }
+        assert (
+            environment["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"]
+            == "DELTA"
+        )
+
     target_alarm = resources["ApiTarget5xxAlarm"]["Properties"]
     assert target_alarm["Namespace"] == "AWS/ApplicationELB"
     assert target_alarm["MetricName"] == "HTTPCode_Target_5XX_Count"

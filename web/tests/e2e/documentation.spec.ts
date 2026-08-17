@@ -147,12 +147,20 @@ test("serves machine-readable documentation without authentication", async ({
   expect(markdown.headers()["content-type"]).toBe(
     "text/markdown; charset=utf-8",
   );
-  expect(await markdown.text()).toContain("# Scholens MCP setup");
+  const markdownBody = await markdown.text();
+  expect(markdownBody).toContain("# Scholens MCP setup");
+  expect(markdownBody).toContain(
+    "https://scholens.sanchezcloud.net/docs#mcp-setup",
+  );
+  expect(markdownBody).not.toContain("0.0.0.0");
 
   const llms = await request.get("/llms.txt");
   expect(llms.ok()).toBe(true);
   expect(llms.headers()["content-type"]).toBe("text/plain; charset=utf-8");
-  expect(await llms.text()).toContain("Complete machine-readable MCP guide");
+  const llmsBody = await llms.text();
+  expect(llmsBody).toContain("Complete machine-readable MCP guide");
+  expect(llmsBody).toContain("https://scholens.sanchezcloud.net/docs.md");
+  expect(llmsBody).not.toContain("0.0.0.0");
 });
 
 test("fits the guide at the minimum supported width", async ({ page }) => {
