@@ -121,6 +121,43 @@ describe("usePaperIngestions", () => {
     });
   });
 
+  it("preserves a secure-upload outage for direct retry", async () => {
+    api.uploadPaperFile
+      .mockRejectedValueOnce(
+        new ApiError(
+          "The staged PDF could not be read",
+          503,
+          "paper_upload_unavailable",
+        ),
+      )
+      .mockResolvedValueOnce(accepted("server-1", "paper-1.pdf"));
+    const { result } = renderHook(() => usePaperIngestions([]), {
+      wrapper: wrapper(),
+    });
+
+    act(() => result.current.startUploads([upload(1)]));
+
+    await waitFor(() => {
+      const failed = result.current.rows.find((row) => row.id === "local-1");
+      expect(failed).toMatchObject({
+        errorCode: "paper_upload_unavailable",
+        retryable: true,
+        state: "failed",
+      });
+    });
+
+    await act(async () => {
+      await result.current.retry("local-1");
+    });
+
+    await waitFor(() => {
+      expect(api.uploadPaperFile).toHaveBeenCalledTimes(2);
+      expect(result.current.rows.some((row) => row.id === "server-1")).toBe(
+        true,
+      );
+    });
+  });
+
   it("does not start duplicate content twice", async () => {
     api.uploadPaperFile.mockResolvedValue(accepted("server-1", "paper-1.pdf"));
     const first = upload(1);

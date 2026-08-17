@@ -24,6 +24,8 @@ from scholens_observability import (
 )
 
 from app.transport.http.observability import RequestObservabilityMiddleware
+from app.bootstrap.settings import AppSettings
+from app.observability import diagnostics as diagnostic_composition
 
 
 def test_context_is_scoped_and_restored() -> None:
@@ -182,6 +184,39 @@ def test_buffered_snapshot_recorder_writes_encrypted_gzip() -> None:
     payload = json.loads(gzip.decompress(body))
     assert payload["reason"] == "test_failure"
     assert payload["sections"]["failure"]["code"] == "test_failure"
+
+
+def test_api_diagnostic_recorder_uses_iam_scoped_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class Recorder:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def record(self, snapshot: object) -> None:
+            del snapshot
+
+    monkeypatch.setattr(
+        diagnostic_composition,
+        "BufferedS3DiagnosticSnapshotRecorder",
+        Recorder,
+    )
+    monkeypatch.setattr(
+        diagnostic_composition.boto3,
+        "client",
+        lambda _service: object(),
+    )
+
+    diagnostic_composition.create_diagnostic_snapshot_recorder(
+        AppSettings(
+            diagnostic_snapshot_bucket="diagnostics",
+            diagnostic_snapshot_kms_key_id="alias/scholens-diagnostics",
+        )
+    )
+
+    assert captured["prefix"] == "api"
 
 
 def test_snapshot_recorder_drops_work_before_exceeding_memory_budget() -> None:

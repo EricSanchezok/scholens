@@ -1,27 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.helpers import ai_limits
-
-
-class _Pipeline:
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, traceback) -> None:
-        return None
-
-    def incr(self, key: str) -> None:
-        return None
-
-    def expire(self, key: str, seconds: int) -> None:
-        return None
-
-    async def execute(self) -> list[int | bool]:
-        return [1, True, 1, True]
 
 
 @pytest.mark.asyncio
@@ -41,7 +24,7 @@ async def test_product_limiters_create_redis_client_from_production_split_fields
     monkeypatch.setenv("CACHE_PASSWORD", "secret/value")
     monkeypatch.setenv("CACHE_TLS", "true")
     client = MagicMock()
-    client.pipeline.return_value = _Pipeline()
+    client.eval = AsyncMock(return_value=1)
     ai_limits._redis_clients.clear()
 
     with patch.object(ai_limits.Redis, "from_url", return_value=client) as from_url:

@@ -281,7 +281,10 @@ def _patch_stream_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_stage", ["quota", "rate", "capacity"])
+@pytest.mark.parametrize(
+    "failure_stage",
+    ["quota", "rate", "rate_unavailable", "capacity"],
+)
 async def test_branch_preflight_failure_preserves_authoritative_state(
     monkeypatch: pytest.MonkeyPatch,
     failure_stage: str,
@@ -306,9 +309,10 @@ async def test_branch_preflight_failure_preserves_authoritative_state(
 
     async def fail_limit(*_: object, **__: object) -> None:
         raise AILimitExceeded(
-            "rate_limit_exceeded"
-            if failure_stage == "rate"
-            else "interactive_concurrency_exceeded"
+            {
+                "rate": "rate_limit_exceeded",
+                "rate_unavailable": "rate_limit_unavailable",
+            }.get(failure_stage, "interactive_concurrency_exceeded")
         )
 
     if failure_stage == "quota":
@@ -330,7 +334,7 @@ async def test_branch_preflight_failure_preserves_authoritative_state(
     else:
         monkeypatch.setattr(
             "app.bootstrap.adapters.conversation_chat.enforce_rate_limit",
-            fail_limit if failure_stage == "rate" else no_op,
+            fail_limit if failure_stage.startswith("rate") else no_op,
         )
         monkeypatch.setattr(
             "app.bootstrap.adapters.conversation_chat.acquire_concurrency",
@@ -369,6 +373,7 @@ async def test_branch_preflight_failure_preserves_authoritative_state(
     assert exc_info.value.code in {
         "token_quota_exceeded",
         "rate_limit_exceeded",
+        "rate_limit_unavailable",
         "interactive_concurrency_exceeded",
     }
     assert executor.command_calls == 0

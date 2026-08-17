@@ -293,6 +293,9 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
       case "connection_failed":
         description = t("errors.connection_failed");
         break;
+      case "paper_upload_unavailable":
+        description = t("errors.paper_upload_unavailable");
+        break;
       case "invalid_pdf":
         description = t("errors.invalid_pdf");
         break;

@@ -9,6 +9,7 @@ import logging
 import queue
 import re
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import monotonic
@@ -178,11 +179,11 @@ class BufferedS3DiagnosticSnapshotRecorder:
                     return
                 snapshot, _size_bytes = item
                 self._write(snapshot)
-            except Exception:
+            except Exception as exc:
                 add_counter("scholens.diagnostic_snapshot.write_failed")
                 self._logger.error(
                     "diagnostic.snapshot.write_failed",
-                    exc_info=True,
+                    extra=_write_failure_fields(snapshot, exc),
                 )
             finally:
                 if item is not None:
@@ -225,6 +226,39 @@ class BufferedS3DiagnosticSnapshotRecorder:
             ServerSideEncryption="aws:kms",
             SSEKMSKeyId=self._kms_key_id,
         )
+
+
+def _write_failure_fields(
+    snapshot: DiagnosticSnapshot,
+    exc: Exception,
+) -> dict[str, JsonScalar]:
+    """Return allowlisted context without serializing arbitrary exception text."""
+    fields: dict[str, JsonScalar] = {
+        "diagnostic_snapshot_id": str(snapshot.id),
+        "diagnostic_service": snapshot.service,
+        "diagnostic_environment": snapshot.environment,
+        "diagnostic_release": snapshot.release,
+        "request_id": snapshot.request_id,
+        "operation_id": snapshot.operation_id,
+        "correlation_id": snapshot.correlation_id,
+        "exception_type": type(exc).__name__,
+    }
+    response = getattr(exc, "response", None)
+    if isinstance(response, Mapping):
+        error = response.get("Error")
+        if isinstance(error, Mapping):
+            error_code = error.get("Code")
+            if isinstance(error_code, str):
+                fields["aws_error_code"] = error_code
+        metadata = response.get("ResponseMetadata")
+        if isinstance(metadata, Mapping):
+            http_status = metadata.get("HTTPStatusCode")
+            if isinstance(http_status, int):
+                fields["aws_http_status"] = http_status
+    operation = getattr(exc, "operation_name", None)
+    if isinstance(operation, str):
+        fields["aws_operation"] = operation
+    return fields
 
 
 def diagnostic_id() -> UUID:

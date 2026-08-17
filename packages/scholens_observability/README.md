@@ -14,6 +14,10 @@ OpenTelemetry setup, custom spans, and bounded diagnostic snapshots.
   diagnostic context rather than metric dimensions.
 - Snapshot persistence is best effort and bounded. Product behavior must not
   depend on telemetry delivery.
+- Snapshot writers use a caller-owned prefix that must match the workload's
+  object-storage policy. Write failures expose only the originating snapshot
+  identity and allowlisted provider error fields; exception messages and
+  storage coordinates are never emitted.
 - Server and Jobs own instrumentation composition and lifecycle. This package
   does not import either application.
 

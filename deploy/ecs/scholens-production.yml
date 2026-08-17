@@ -549,6 +549,13 @@ Resources:
               - BucketArn:
                   Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
           - Effect: Allow
+            Action: s3:GetObjectVersion
+            Resource:
+              Fn::Sub:
+              - ${BucketArn}/uploads/*
+              - BucketArn:
+                  Fn::ImportValue: sanchezcloud-scholens-content-bucket-arn
+          - Effect: Allow
             Action:
             - kms:Decrypt
             - kms:Encrypt
@@ -2968,6 +2975,86 @@ Resources:
       TreatMissingData: notBreaching
       AlarmActions:
       - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  ApiTarget5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-api-target-5xx
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+      - Name: LoadBalancer
+        Value:
+          Fn::GetAtt:
+          - LoadBalancer
+          - LoadBalancerFullName
+      - Name: TargetGroup
+        Value:
+          Fn::GetAtt:
+          - ApiTargetGroup
+          - TargetGroupFullName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  RedisDependencyFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-redis-dependency-failure
+      Namespace: Scholens/Production
+      MetricName: scholens.dependency.failures
+      Dimensions:
+      - Name: dependency
+        Value: redis
+      - Name: OTelLib
+        Value: scholens
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  S3DependencyFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-s3-dependency-failure
+      Namespace: Scholens/Production
+      MetricName: scholens.dependency.failures
+      Dimensions:
+      - Name: dependency
+        Value: s3
+      - Name: OTelLib
+        Value: scholens
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  DiagnosticSnapshotWriteFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-diagnostic-snapshot-write-failure
+      Namespace: Scholens/Production
+      MetricName: scholens.diagnostic_snapshot.write_failed
+      Dimensions:
+      - Name: OTelLib
+        Value: scholens
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
   WebUnhealthyTargetsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -3147,30 +3234,16 @@ Resources:
       DashboardName: SanchezCloud-Scholens
       DashboardBody:
         Fn::Sub:
-        - "{\n  \"widgets\": [\n    {\"type\":\"metric\",\"x\":0,\"y\":0,\"width\"\
-          :12,\"height\":6,\"properties\":{\"title\":\"Web and API capacity\",\"region\"\
-          :\"${AWS::Region}\",\"metrics\":[[\"AWS/ECS\",\"CPUUtilization\",\"ServiceName\"\
-          ,\"${WebServiceName}\",\"ClusterName\",\"${ClusterName}\"],[\".\",\"MemoryUtilization\"\
-          ,\".\",\".\",\".\",\".\"],[\"AWS/ECS\",\"CPUUtilization\",\"ServiceName\"\
-          ,\"${ApiServiceName}\",\"ClusterName\",\"${ClusterName}\"],[\".\",\"MemoryUtilization\"\
-          ,\".\",\".\",\".\",\".\"]]}},\n    {\"type\":\"metric\",\"x\":12,\"y\":0,\"\
-          width\":12,\"height\":6,\"properties\":{\"title\":\"SQS backlog\",\"region\"\
-          :\"${AWS::Region}\",\"metrics\":[[\"AWS/SQS\",\"ApproximateNumberOfMessagesVisible\"\
-          ,\"QueueName\",\"scholens-production-document\"],[\".\",\".\",\".\",\"scholens-production-research\"\
-          ],[\".\",\".\",\".\",\"scholens-production-maintenance\"]]}},\n    {\"type\"\
-          :\"metric\",\"x\":0,\"y\":6,\"width\":12,\"height\":6,\"properties\":{\"\
-          title\":\"ALB responses\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"\
-          AWS/ApplicationELB\",\"HTTPCode_ELB_5XX_Count\",\"LoadBalancer\",\"${LoadBalancerName}\"\
-          ],[\"AWS/ApplicationELB\",\"UnHealthyHostCount\",\"LoadBalancer\",\"${LoadBalancerName}\"\
-          ,\"TargetGroup\",\"${WebTargetGroupName}\"],[\"AWS/ApplicationELB\",\"UnHealthyHostCount\"\
-          ,\"LoadBalancer\",\"${LoadBalancerName}\",\"TargetGroup\",\"${ApiTargetGroupName}\"\
-          ]]}},\n    {\"type\":\"\
-          metric\",\"x\":12,\"y\":6,\"width\":12,\"height\":6,\"properties\":{\"title\"\
-          :\"Worker tasks\",\"region\":\"${AWS::Region}\",\"metrics\":[[\"ECS/ContainerInsights\"\
-          ,\"RunningTaskCount\",\"ServiceName\",\"${DocumentServiceName}\",\"ClusterName\"\
-          ,\"${ClusterName}\"],[\".\",\".\",\"ServiceName\",\"${ResearchServiceName}\"\
-          ,\"ClusterName\",\"${ClusterName}\"],[\".\",\".\",\"ServiceName\",\"${MaintenanceServiceName}\"\
-          ,\"ClusterName\",\"${ClusterName}\"]]}}\n  ]\n}\n"
+        - |
+          {
+            "widgets": [
+              {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"Web and API capacity","region":"${AWS::Region}","metrics":[["AWS/ECS","CPUUtilization","ServiceName","${WebServiceName}","ClusterName","${ClusterName}"],[".","MemoryUtilization",".",".",".","."],["AWS/ECS","CPUUtilization","ServiceName","${ApiServiceName}","ClusterName","${ClusterName}"],[".","MemoryUtilization",".",".",".","."]]}},
+              {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"SQS backlog","region":"${AWS::Region}","metrics":[["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","scholens-production-document"],[".",".",".","scholens-production-research"],[".",".",".","scholens-production-maintenance"]]}},
+              {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"ALB responses","region":"${AWS::Region}","metrics":[["AWS/ApplicationELB","HTTPCode_ELB_5XX_Count","LoadBalancer","${LoadBalancerName}"],["AWS/ApplicationELB","HTTPCode_Target_5XX_Count","LoadBalancer","${LoadBalancerName}","TargetGroup","${ApiTargetGroupName}"],["AWS/ApplicationELB","UnHealthyHostCount","LoadBalancer","${LoadBalancerName}","TargetGroup","${WebTargetGroupName}"],["AWS/ApplicationELB","UnHealthyHostCount","LoadBalancer","${LoadBalancerName}","TargetGroup","${ApiTargetGroupName}"]]}},
+              {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"Worker tasks","region":"${AWS::Region}","metrics":[["ECS/ContainerInsights","RunningTaskCount","ServiceName","${DocumentServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${ResearchServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${MaintenanceServiceName}","ClusterName","${ClusterName}"]]}},
+              {"type":"metric","x":0,"y":12,"width":24,"height":6,"properties":{"title":"Dependency and diagnostic failures","region":"${AWS::Region}","metrics":[["Scholens/Production","scholens.dependency.failures","dependency","redis","OTelLib","scholens"],[".",".",".","s3",".","."],[".","scholens.diagnostic_snapshot.write_failed","OTelLib","scholens"]]}}
+            ]
+          }
         - ClusterName:
             Fn::ImportValue: sanchezcloud-production-cluster-name
           WebServiceName:

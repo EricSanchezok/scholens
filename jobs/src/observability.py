@@ -100,6 +100,7 @@ def configure_jobs_observability() -> None:
             client=cast(Any, boto3.client("s3")),
             bucket=snapshot_bucket,
             kms_key_id=snapshot_kms_key,
+            prefix="workers",
         )
     elif _ENVIRONMENT.casefold() == "production":
         missing = (

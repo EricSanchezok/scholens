@@ -98,7 +98,17 @@ container root merely to obtain writable temporary storage.
 
 The pinned ADOT sidecar sends traces to X-Ray and metrics to CloudWatch. Application and
 worker task roles are separate; the execution role can pull images and inject only the
-reviewed secrets.
+reviewed secrets. API diagnostic snapshots are written under `api/` and Jobs snapshots
+under `workers/`; those prefixes are part of the workload IAM contract rather than a
+shared unrestricted diagnostics namespace.
+
+Browser upload sessions validate and download the exact S3 object version observed by
+the API. The runtime permissions boundary and API task role therefore grant
+`s3:GetObjectVersion` only for the content bucket's `uploads/*` keys. Worker roles do not
+receive that action because canonical `documents/*` reads use the current object.
+An unavailable pre-acceptance read releases the upload lease as retryable: the current
+browser page retains the original `File`, while a refreshed page requires the operator to
+select it again. Abandoned staging objects are not backfilled and expire after two days.
 
 The unified `scholens doctor` command is transport-aware: production validates all three
 predefined SQS queues and never probes RabbitMQ, while local AMQP development keeps its
@@ -177,6 +187,23 @@ The selected application's migration revision must be present in the live ordere
 and must be at or above `minimum_compatible_application_revision`. An additive migration
 therefore preserves application rollback, while a reviewed contract migration deliberately
 advances that floor after old application revisions can no longer run safely.
+
+ECS stability and public `/healthz` checks are necessary transport checks, not functional
+proof of the Redis, versioned-S3, or asynchronous ingestion paths. After every runtime
+change affecting those dependencies, an authenticated operator must:
+
+1. send a real Conversation message and observe a terminal successful response;
+2. upload a small text PDF and observe upload acceptance, document-queue consumption,
+   completed Library ingestion, and a readable document;
+3. confirm the document, research, and maintenance queues and DLQs drain to zero;
+4. generate one harmless diagnostic response and confirm an encrypted object appears
+   under `api/` without sensitive request data; and
+5. confirm there are no new Redis, S3, target-5xx, or diagnostic-writer failures.
+
+If a candidate fails ECS stabilization or the public health checks, use the automated
+immutable recovery path. If functional verification exposes a data-integrity or security
+regression, disable the application and patch forward; do not treat a known functionally
+broken prior release as the completed recovery.
 
 The runtime template exceeds CloudFormation's inline limit. The production workflow uses
 the release bucket's `cloudformation/<sha>/` prefix and explicitly encrypts each uploaded
@@ -258,6 +285,10 @@ therefore fails closed if its template tries to mutate IAM. Standard resource ta
 inherited from the four stack tags above; the protected foundation workflow supplies the
 same tags on later data-plane updates. Any role, managed-policy, permissions-boundary, or
 bootstrap permission change requires a separately reviewed administrator update.
+Deploy a reviewed bootstrap permissions-boundary update before a runtime template that
+depends on its new action. In particular, the scoped `s3:GetObjectVersion` boundary must
+be active before deploying the API role policy that performs version-locked staged-upload
+reads; verify the managed policy's default version before starting the runtime release.
 The restricted role scopes the serverless-cache ARN to the canonical
 `sanchezcloud-scholens` name and includes both create and rollback deletion for each
 CloudFormation-managed bucket policy; keep those lifecycle permissions symmetric when the
@@ -500,8 +531,11 @@ repaired by a forward revision or an explicitly approved database recovery opera
 - Workers scale on SQS backlog per running task. Scale-in is deliberately slower than
   scale-out, SQS visibility is 45 minutes, and workers request task protection while a job
   is active.
-- Queue DLQs, oldest-message age, ALB 5xx, and unhealthy target alarms publish to the
-  Scholens SNS topic.
+- Queue DLQs, oldest-message age, ALB-generated 5xx, API target 5xx, Redis/S3 dependency
+  failures, diagnostic snapshot write failures, and unhealthy target alarms publish to
+  the Scholens SNS topic. The dependency and diagnostic alarms use the
+  `Scholens/Production` OpenTelemetry metrics and fire on the first failure in five
+  minutes; the API target alarm fires at five responses in five minutes.
 - ECS services use deployment circuit-breaker rollback. A failed database task does not
   change application services. A candidate that fails ECS stabilization or an external
   smoke check enters automatic recovery and remains a failed release after recovery.

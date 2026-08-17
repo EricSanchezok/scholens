@@ -19,6 +19,12 @@ _redis_clients: dict[str, Redis] = {}
 _REDIS_CONNECT_TIMEOUT_SECONDS = 1.0
 _REDIS_OPERATION_TIMEOUT_SECONDS = 1.0
 
+_RATE_LIMIT_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+return count
+"""
+
 _ACQUIRE_SCRIPT = """
 local key = KEYS[1]
 local now = tonumber(ARGV[1])
@@ -99,11 +105,15 @@ async def enforce_rate_limit(
         (f"scholens:rate:ip:{ip_address}:{feature}:{window}", ip_limit),
     )
     try:
-        async with client.pipeline(transaction=True) as pipe:
-            for key, _ in keys:
-                pipe.incr(key)
-                pipe.expire(key, window_seconds + 1)
-            values = await pipe.execute()
+        counts = []
+        for key, _ in keys:
+            count = await client.eval(
+                _RATE_LIMIT_SCRIPT,
+                1,
+                key,
+                window_seconds + 1,
+            )
+            counts.append(int(count))
     except RedisError:
         add_counter(
             "scholens.dependency.failures",
@@ -112,7 +122,6 @@ async def enforce_rate_limit(
         logger.exception("dependency.redis.rate_limit_failed")
         raise AILimitExceeded("rate_limit_unavailable") from None
 
-    counts = (int(values[0]), int(values[2]))
     if any(count > limit for count, (_, limit) in zip(counts, keys, strict=True)):
         raise AILimitExceeded("rate_limit_exceeded")
 

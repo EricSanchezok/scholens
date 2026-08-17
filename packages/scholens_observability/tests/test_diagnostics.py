@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import logging
 from uuid import UUID
 
 import pytest
@@ -72,18 +73,67 @@ def test_buffered_snapshot_writer_encrypts_and_compresses_payload() -> None:
         client=client,
         bucket="diagnostics",
         kms_key_id="alias/scholens-diagnostics",
+        prefix="api",
     )
-    recorder.record(_snapshot(sections={"failure": {"code": "test"}}))
+    snapshot = _snapshot(sections={"failure": {"code": "test"}})
+    recorder.record(snapshot)
     recorder.close()
 
     assert len(client.calls) == 1
     call = client.calls[0]
+    assert call["Key"] == (
+        f"api/{snapshot.captured_at:%Y/%m/%d}/correlation-1/api/{snapshot.id}.json.gz"
+    )
     assert call["ServerSideEncryption"] == "aws:kms"
     assert call["SSEKMSKeyId"] == "alias/scholens-diagnostics"
     body = call["Body"]
     assert isinstance(body, bytes)
     payload = json.loads(gzip.decompress(body))
     assert payload["sections"] == {"failure": {"code": "test"}}
+
+
+def test_buffered_snapshot_writer_logs_safe_origin_context_on_aws_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class StorageFailure(Exception):
+        operation_name = "PutObject"
+        response = {
+            "Error": {
+                "Code": "AccessDenied",
+                "Message": "do not log diagnostics/private-object",
+            },
+            "ResponseMetadata": {"HTTPStatusCode": 403},
+        }
+
+    class FailingObjectStorage:
+        def put_object(self, **_kwargs: object) -> object:
+            raise StorageFailure("do not log diagnostics/private-object")
+
+    recorder = BufferedS3DiagnosticSnapshotRecorder(
+        client=FailingObjectStorage(),
+        bucket="diagnostics",
+        kms_key_id="alias/scholens-diagnostics",
+        prefix="api",
+    )
+    with caplog.at_level(logging.ERROR):
+        recorder.record(_snapshot(sections={"failure": {"code": "test"}}))
+        recorder.close()
+
+    record = next(
+        item
+        for item in caplog.records
+        if item.getMessage() == "diagnostic.snapshot.write_failed"
+    )
+    assert getattr(record, "diagnostic_service") == "api"
+    assert getattr(record, "diagnostic_environment") == "test"
+    assert getattr(record, "diagnostic_release") == "revision-1"
+    assert getattr(record, "request_id") == "request-1"
+    assert getattr(record, "operation_id") == "operation-1"
+    assert getattr(record, "correlation_id") == "correlation-1"
+    assert getattr(record, "aws_error_code") == "AccessDenied"
+    assert getattr(record, "aws_operation") == "PutObject"
+    assert getattr(record, "aws_http_status") == 403
+    assert "private-object" not in caplog.text
 
 
 def test_buffered_snapshot_writer_drops_before_exceeding_memory_budget() -> None:

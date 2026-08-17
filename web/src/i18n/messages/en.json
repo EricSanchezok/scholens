@@ -181,7 +181,7 @@
       "cancelled": "Response stopped. You can ask again.",
       "error": "The response could not be completed.",
       "retry": "Try again",
-      "retryHint": "Your message was saved. Send a new message when you are ready.",
+      "retryHint": "Your input is still in the composer. Try sending it again later.",
       "failure": {
         "unavailable": "Research service is temporarily unavailable. Your message is saved; try again shortly.",
         "rateLimited": "You’re sending requests too quickly. Your message is saved; try again shortly.",
@@ -353,6 +353,7 @@
         },
         "errors": {
           "connection_failed": "Connection failed. Retry with the same file.",
+          "paper_upload_unavailable": "Secure upload is temporarily unavailable. The original file remains on this page for a direct retry.",
           "service_unavailable": "The processing service is unavailable.",
           "jobs_submission_failed": "The processing service did not accept this paper.",
           "paper_source_pdf_unavailable": "The source PDF is no longer available.",

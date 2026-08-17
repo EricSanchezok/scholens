@@ -345,4 +345,17 @@ export const homeHandlers = {
     ),
     ...baseHandlers,
   ],
+  creationUnavailable: [
+    http.post(`${api}/conversations/:conversationId/turns`, () =>
+      HttpResponse.json(
+        {
+          code: "rate_limit_unavailable",
+          message: "AI capacity checks are temporarily unavailable",
+          retryable: true,
+        },
+        { status: 503 },
+      ),
+    ),
+    ...baseHandlers,
+  ],
 };
