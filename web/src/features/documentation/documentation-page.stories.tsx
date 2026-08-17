@@ -95,9 +95,11 @@ export const SmallMobile: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const compactToc = canvas.getByRole("button", {
-      name: "On this page",
-    });
+    const compactToc =
+      canvasElement.querySelector<HTMLSummaryElement>("details > summary");
+    await expect(compactToc).not.toBeNull();
+    if (!compactToc) throw new Error("Compact documentation TOC is missing");
+    await expect(compactToc).toHaveTextContent("On this page");
     await expect(compactToc).toBeVisible();
     await userEvent.click(compactToc);
 
