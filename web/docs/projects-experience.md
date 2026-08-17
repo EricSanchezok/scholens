@@ -72,7 +72,7 @@ content does not stretch edge to edge on wide monitors.
 The Overview tab is an editorial two-column composition on desktop: recent
 papers on the left, recent outputs stacked above a Collaboration strip on the
 right. The Collaboration strip shows the owner's initials and display name
-plus the member count from `num_collaborators`; members with
+plus the total member count (`num_collaborators` plus the Project owner); members with
 `manage_collaborators` also get a quiet Manage action that opens the existing
 collaborator dialog. The strip renders project metadata already in the detail
 payload and never fetches `/members` for decoration. Below the desktop

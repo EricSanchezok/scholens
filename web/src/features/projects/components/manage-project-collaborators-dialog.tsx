@@ -56,6 +56,12 @@ const emptyPermissions: Permissions = {
   manage_papers: false,
 };
 
+const permissionOptions = [
+  ["edit_project", "editProject"],
+  ["manage_papers", "managePapers"],
+  ["manage_collaborators", "manageCollaborators"],
+] as const;
+
 function ErrorMessage({ error }: { error: unknown }) {
   const t = useTranslations("Projects.collaborators.errors");
   if (!(error instanceof ApiError)) return <>{t("offline")}</>;
@@ -90,14 +96,9 @@ function PermissionFields({
   value: Permissions;
 }) {
   const t = useTranslations("Projects.collaborators.permissions");
-  const fields = [
-    ["edit_project", "editProject"],
-    ["manage_papers", "managePapers"],
-    ["manage_collaborators", "manageCollaborators"],
-  ] as const;
   return (
     <div className="grid gap-2">
-      {fields.map(([field, label]) => (
+      {permissionOptions.map(([field, label]) => (
         <label className="flex min-h-11 items-center gap-3 text-sm" key={field}>
           <Checkbox
             checked={value[field]}
@@ -147,13 +148,7 @@ function MemberRow({
     member.display_name.trim().charAt(0).toUpperCase() ||
     member.email.trim().charAt(0).toUpperCase() ||
     "?";
-  const permissionChips = (
-    [
-      ["edit_project", "editProject"],
-      ["manage_papers", "managePapers"],
-      ["manage_collaborators", "manageCollaborators"],
-    ] as const
-  )
+  const permissionChips = permissionOptions
     .filter(([field]) => member.permissions[field])
     .map(([, label]) => t(`permissions.${label}`));
 
@@ -323,13 +318,7 @@ function InvitationRow({
   const format = useFormatter();
   const [action, setAction] = React.useState<"resend" | "revoke" | null>(null);
   const [error, setError] = React.useState<unknown>();
-  const permissionLabels = (
-    [
-      ["edit_project", "editProject"],
-      ["manage_papers", "managePapers"],
-      ["manage_collaborators", "manageCollaborators"],
-    ] as const
-  )
+  const permissionLabels = permissionOptions
     .filter(([permission]) => invitation.permissions[permission])
     .map(([, label]) => t(`permissions.${label}`));
 

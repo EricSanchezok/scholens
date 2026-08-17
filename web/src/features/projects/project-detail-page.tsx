@@ -607,6 +607,7 @@ export function ProjectDetailWorkspace({
     );
   }
   const project = projectQuery.data;
+  const memberCount = project.num_collaborators + 1;
   const ownerInitial =
     project.owner.display_name.trim().charAt(0).toUpperCase() || "?";
   const renderChat = (onClose?: () => void) => (
@@ -739,7 +740,7 @@ export function ProjectDetailWorkspace({
                     <div className="flex items-center gap-1.5">
                       <dt>{t("metrics.members")}</dt>
                       <dd className="text-secondary tabular-nums">
-                        {project.num_collaborators}
+                        {memberCount}
                       </dd>
                     </div>
                   </dl>
@@ -810,9 +811,7 @@ export function ProjectDetailWorkspace({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <dt>{t("metrics.members")}</dt>
-                  <dd className="text-secondary tabular-nums">
-                    {project.num_collaborators}
-                  </dd>
+                  <dd className="text-secondary tabular-nums">{memberCount}</dd>
                 </div>
               </dl>
             </section>
@@ -952,7 +951,7 @@ export function ProjectDetailWorkspace({
                         </span>
                         <span className="text-secondary shrink-0 text-xs tabular-nums">
                           {t("detail.memberCount", {
-                            count: project.num_collaborators,
+                            count: memberCount,
                           })}
                         </span>
                       </div>

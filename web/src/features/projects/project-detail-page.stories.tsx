@@ -67,7 +67,7 @@ export const OverviewCollapsed: Story = {
     await expect(
       canvas.getByRole("heading", { name: "Collaboration" }),
     ).toBeVisible();
-    await expect(canvas.getByText("3 members")).toBeVisible();
+    await expect(canvas.getByText("4 members")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Manage" })).toBeVisible();
   },
 };
