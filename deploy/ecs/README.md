@@ -158,7 +158,9 @@ CI and deployment use four workflows:
    runtime stack through its CloudFormation service role, waits for all ECS services, and
    checks Web and API health through Cloudflare. Failed ECS stabilization or an external
    smoke test automatically restores the prior database-compatible immutable release or
-   disables the failed candidate.
+   disables the failed candidate. Both the candidate and recovery CloudFormation package
+   uploads use the foundation-exported configuration KMS key required by the release-bucket
+   policy.
 
 The release workflow keeps its verifier and orchestration scripts on the trusted workflow
 `main` SHA. Candidate and rollback commits are checked out only as data in separate
@@ -407,6 +409,12 @@ reviewed. The application disables Uvicorn proxy-header rewriting, verifies the 
 against the imported production VPC CIDR, then uses that canonical
 `CF-Connecting-IP` value for request logs and all application rate limits. Missing,
 repeated, malformed, or untrusted headers fail closed.
+
+Keep Cloudflare Bot Fight Mode disabled for this zone. It cannot be scoped away from the
+public API or release health endpoints and may challenge legitimate API clients and hosted
+monitoring runners. Cloudflare documents that this mode runs outside the Ruleset Engine and
+cannot be bypassed with WAF custom rules; the AWS WAF controls below remain the adjustable
+application-security boundary.
 
 The WAF blocks requests that bypass Cloudflare or omit the origin header, then applies AWS
 managed common-threat/IP-reputation rules and a `CF-Connecting-IP` rate limit. Sampled
