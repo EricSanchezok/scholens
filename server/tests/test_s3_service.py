@@ -22,6 +22,34 @@ def test_s3_client_uses_sigv4_virtual_hosted_urls() -> None:
     assert s3_service.s3_client.meta.config.s3["addressing_style"] == "virtual"
 
 
+def test_canonical_upload_uses_the_configured_kms_key(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def put_object(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(s3_service.s3_client, "put_object", put_object)
+    monkeypatch.setattr(s3_service, "bucket_name", "content-bucket")
+    monkeypatch.setattr(s3_service, "kms_key_id", "content-key-arn")
+
+    assert (
+        s3_service.upload_bytes(
+            object_key="documents/digest/source.pdf",
+            data=b"%PDF",
+            content_type="application/pdf",
+        )
+        == "documents/digest/source.pdf"
+    )
+    assert captured == {
+        "Body": b"%PDF",
+        "Bucket": "content-bucket",
+        "ContentType": "application/pdf",
+        "Key": "documents/digest/source.pdf",
+        "ServerSideEncryption": "aws:kms",
+        "SSEKMSKeyId": "content-key-arn",
+    }
+
+
 def test_presigned_url_keeps_the_provider_signed_host(monkeypatch) -> None:
     expected = (
         "https://bucket.s3.ap-southeast-1.amazonaws.com/uploads/paper.pdf"

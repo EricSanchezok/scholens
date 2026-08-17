@@ -870,6 +870,20 @@ def test_api_version_locked_upload_reads_are_allowed_by_role_and_boundary() -> N
             for statement in _policy_statements(resources[role_name])
         )
 
+    api_container = next(
+        container
+        for container in resources["ApiTaskDefinition"]["Properties"][
+            "ContainerDefinitions"
+        ]
+        if container["Name"] == "api"
+    )
+    api_environment = {
+        item["Name"]: item["Value"] for item in api_container["Environment"]
+    }
+    assert api_environment["S3_KMS_KEY_ID"] == {
+        "Fn::ImportValue": "sanchezcloud-scholens-content-key-arn"
+    }
+
 
 def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
