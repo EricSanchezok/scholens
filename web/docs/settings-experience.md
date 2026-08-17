@@ -59,8 +59,10 @@ service without spending menu width on the license label.
   connected; the interface does not present inert actions.
 - Access Keys owns MCP key creation, rename, revoke, and one-time secret reveal.
   A secret is never recoverable after the creation acknowledgement is closed.
-  Its header links to `/docs#mcp-setup` in a new tab so configuration guidance
-  does not interrupt key management.
+  Its panel header owns one action group on the right: the secondary
+  `MCP setup guide` link to `/docs#mcp-setup` (new tab) next to the primary
+  `Create access key` button, so configuration guidance never interrupts key
+  management and creation no longer sits in a separate orphan row.
 - Connections owns built-in and user-configured provider status. Scholight is
   built in; MinerU, AnySearch, Tavily, Exa, Firecrawl, and OpenAlex use the
   shared integration inventory and public `/me/integrations` contract. Zotero

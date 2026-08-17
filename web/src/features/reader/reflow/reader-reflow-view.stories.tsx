@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fn, waitFor, within } from "storybook/test";
 
 import type { DocumentReflowBlock } from "./api";
 import {
@@ -179,6 +179,73 @@ export const AcademicStructure: Story = {
     await expect(canvas.getByText("Paper information")).toBeVisible();
     await expect(canvasElement.textContent).not.toContain("<sup>");
     await expect(canvasElement.querySelector(".katex")).not.toBeNull();
+  },
+};
+
+export const TallDisplayEquation: Story = {
+  args: {
+    blocks: [
+      block(
+        "tall-equation",
+        "equation",
+        [
+          "$$",
+          String.raw`\hat{y} = \sum_{i=1}^{n} \frac{\frac{a_i}{b_i} - \overline{x}}{\sqrt{\sigma^2}}`,
+          "$$",
+        ].join("\n"),
+        { index: 0 },
+      ),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    // KaTeX renders asynchronously through the markdown pipeline; wait for
+    // the display container before asserting its containment contract.
+    await waitFor(() =>
+      expect(canvasElement.querySelector(".katex-display")).not.toBeNull(),
+    );
+    const display = canvasElement.querySelector<HTMLElement>(".katex-display");
+    if (!display) return;
+    const style = getComputedStyle(display);
+    // The production bug: overflow-y hidden shaved the tops off tall glyphs.
+    expect(style.overflowY).not.toBe("hidden");
+    // Breathing padding keeps KaTeX's painted overhang inside the scroll box.
+    expect(parseFloat(style.paddingTop)).toBeGreaterThan(0);
+    expect(parseFloat(style.paddingBottom)).toBeGreaterThan(0);
+    // Rehype KaTeX positions its vlist glyphs with inline styles. A markdown
+    // component override must preserve those attributes while adding focus.
+    expect(display.querySelector("span[style]")).not.toBeNull();
+    expect(display.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    // (Pixel overflow geometry is asserted via the production web font in CI
+    // and manual review; fallback-font environments report unstable values.)
+  },
+};
+
+export const WideDisplayEquation: Story = {
+  args: {
+    blocks: [
+      block(
+        "wide-equation",
+        "equation",
+        [
+          "$$",
+          String.raw`\mathcal{L}(\theta) = \prod_{t=1}^{T} p\left(x_t \mid x_{<t}, \theta\right) \cdot \prod_{s=1}^{S} q\left(z_s \mid z_{<s}, \theta\right)`,
+          "$$",
+        ].join("\n"),
+        { index: 0 },
+      ),
+    ],
+  },
+  globals: { viewport: { value: "smallMobile" } },
+  play: async ({ canvasElement }) => {
+    await waitFor(() =>
+      expect(canvasElement.querySelector(".katex-display")).not.toBeNull(),
+    );
+    const display = canvasElement.querySelector<HTMLElement>(".katex-display");
+    if (!display) return;
+    // Wide equations scroll inside their own box instead of widening the
+    // page, and the same no-vertical-clip contract holds.
+    expect(display.scrollWidth).toBeGreaterThan(display.clientWidth);
+    expect(getComputedStyle(display).overflowY).not.toBe("hidden");
   },
 };
 

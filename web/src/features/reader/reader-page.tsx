@@ -75,6 +75,7 @@ import {
 import { PdfDocumentAdapter } from "./pdf-document-adapter";
 import { moveReaderSearchCursor } from "./reader-search";
 import { compareReaderAnnotationsBySource } from "./reader-annotations";
+import { readerScrollTopForTarget } from "./reader-scroll";
 import type { ReaderHighlightColor } from "./reader-highlight-colors";
 import {
   conversationBelongsToReaderContext,
@@ -164,6 +165,7 @@ function ReaderDocumentWorkspace({
   const [contextOverrides, setContextOverrides] = React.useState<
     Record<string, ResearchContext>
   >({});
+  const reflowScrollContainerRef = React.useRef<HTMLDivElement>(null);
   const [reasoningLevel, setReasoningLevel] =
     React.useState<ReasoningLevel>("standard");
   const [fullTranslationStatus, setFullTranslationStatus] =
@@ -538,12 +540,28 @@ function ReaderDocumentWorkspace({
 
   const scrollToReflowOutlineItem = React.useCallback(
     (id: string) => {
+      const container = reflowScrollContainerRef.current;
       const target = Array.from(
-        window.document.querySelectorAll<HTMLElement>("[data-reflow-block]"),
+        container?.querySelectorAll<HTMLElement>("[data-reflow-block]") ?? [],
       ).find((element) => element.dataset.reflowBlock === id);
-      target?.scrollIntoView({
+      if (!container || !target) return;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      container.scrollTo({
         behavior: resolvedMotion === "reduced" ? "auto" : "smooth",
-        block: "start",
+        top: readerScrollTopForTarget({
+          alignment: "start",
+          container: {
+            clientHeight: container.clientHeight,
+            scrollHeight: container.scrollHeight,
+            scrollTop: container.scrollTop,
+            top: containerRect.top,
+          },
+          // `scroll-mt-24` clearance on reflow blocks is preserved in the
+          // scoped scroll so headings never sit under Reader chrome.
+          startOffset: 96,
+          target: { height: targetRect.height, top: targetRect.top },
+        }),
       });
     },
     [resolvedMotion],
@@ -1118,6 +1136,7 @@ function ReaderDocumentWorkspace({
                       documentId={documentId}
                       fullTranslationEnabled={fullTranslationEnabled}
                       onOutlineChange={setReflowOutline}
+                      scrollContainerRef={reflowScrollContainerRef}
                       onOpenPdfSource={(source) => {
                         setReflowSourceTarget(source);
                         updateLocation({

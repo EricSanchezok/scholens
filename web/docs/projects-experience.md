@@ -78,8 +78,20 @@ below the desktop breakpoints, and all controls remain usable at 320px.
 Project detail inherits the Library collection language: underlined tabs,
 pill-shaped search, the shared light-line Select surface for sorting and kind,
 quiet separators, local row hover, and unboxed empty states. Paper,
-conversation, and output counts live with the project title metadata instead
-of in a separate metric card.
+conversation, output, and member counts live with the project title metadata
+instead of in a separate metric card. The detail canvas uses a narrower
+editorial column (`max-w-5xl`) than the Projects and Library list pages so
+content does not stretch edge to edge on wide monitors.
+
+The Overview tab is an editorial two-column composition on desktop: recent
+papers on the left, recent outputs stacked above a Collaboration strip on the
+right. The Collaboration strip shows the owner's initials and display name
+plus the total member count (`num_collaborators` plus the Project owner); members with
+`manage_collaborators` also get a quiet Manage action that opens the existing
+collaborator dialog. The strip renders project metadata already in the detail
+payload and never fetches `/members` for decoration. Below the desktop
+breakpoint the sections stack in one column in reading order: papers, outputs,
+collaboration.
 
 Desktop Projects uses the same compact workbench density as Library. The list
 title and New project action share a 44 px row, followed by search and sorting
@@ -151,7 +163,10 @@ The canonical detail matrix is the Figma section `1085:1370`. The former
 Archive frame; it is not an active acceptance state.
 The compact desktop list and detail headers are intentional runtime refinements
 pending canonical-frame synchronization after local visual acceptance; the
-documented responsive and interaction state inventory is unchanged.
+same applies to the narrower detail column, the members metric, the two-column
+Overview with its Collaboration strip, and the collapsed-then-expandable
+permission summary in the collaborator dialog. The documented responsive and
+interaction state inventory is unchanged.
 
 ## Motion acceptance
 

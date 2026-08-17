@@ -19,6 +19,8 @@ from app.bootstrap.adapters.research_repository import (
 from app.database.models import (
     AnnotationComment,
     AnnotationThread,
+    AuthUser,
+    CitationOutput,
     ResearchAudioOverview,
     ResearchDataTable,
     ResearchItem,
@@ -455,3 +457,105 @@ def test_clean_baseline_contains_annotation_audience_constraints() -> None:
         "ck_research_items_scope_consistency",
     ):
         assert legacy not in source
+
+
+def _creator_user(
+    *,
+    display_name: str | None = None,
+    email: str = "teammate@example.com",
+) -> AuthUser:
+    return AuthUser(
+        id=7,
+        email=email,
+        password_hash="not-used-in-tests",
+        display_name=display_name,
+        status="active",
+    )
+
+
+def test_creator_response_prefers_display_name() -> None:
+    response = research_repository._creator_response(
+        7,
+        _creator_user(display_name="Ada Researcher"),
+    )
+    assert response.id == 7
+    assert response.display_name == "Ada Researcher"
+
+
+@pytest.mark.parametrize("display_name", [None, "", "   "])
+def test_creator_response_falls_back_to_email_when_display_name_is_blank(
+    display_name: str | None,
+) -> None:
+    response = research_repository._creator_response(
+        7,
+        _creator_user(display_name=display_name),
+    )
+    assert response.display_name == "teammate@example.com"
+
+
+def test_creator_response_keeps_unknown_author_when_user_is_gone() -> None:
+    response = research_repository._creator_response(None, None)
+    assert response.id is None
+    assert response.display_name is None
+
+
+def test_comment_serialization_exposes_creator_email_fallback() -> None:
+    now = datetime.now(timezone.utc)
+    comment = AnnotationComment(
+        id=uuid.uuid4(),
+        thread_id=uuid.uuid4(),
+        created_by_id=7,
+        content="Observation",
+        role="user",
+        created_at=now,
+        updated_at=now,
+    )
+    comment.created_by = _creator_user(display_name=None)
+
+    response = research_repository.serialize_comment(
+        comment,
+        user_id=7,
+        has_audience_access=True,
+    )
+    assert response.created_by.id == 7
+    assert response.created_by.display_name == "teammate@example.com"
+
+
+def test_item_serialization_exposes_creator_email_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock(spec=Session)
+    now = datetime.now(timezone.utc)
+    item = _item(creator_id=7)
+    item.created_at = now
+    item.updated_at = now
+    item.created_by = _creator_user(display_name="   ")
+    item.citation = CitationOutput(
+        snapshot={
+            "kind": "citation",
+            "document_id": str(uuid.uuid4()),
+            "preferred_style": "APA",
+            "style_display": "APA 7th Edition",
+            "data": {
+                "document_id": str(uuid.uuid4()),
+                "title": "Typed citation",
+                "authors": ["Researcher"],
+            },
+            "method": "deterministic",
+            "missing_fields": [],
+            "confidence": 0.95,
+        }
+    )
+    monkeypatch.setattr(
+        research_item_policy,
+        "require_visible",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            has_audience_access=True,
+            can_manage=True,
+            can_resolve=True,
+        ),
+    )
+
+    response = research_repository.serialize(db, item=item, user_id=7)
+    assert response.created_by.id == 7
+    assert response.created_by.display_name == "teammate@example.com"

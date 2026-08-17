@@ -231,7 +231,10 @@ export function ReaderSelectionToolbar({
                     ? labels.translationFailed
                     : labels.viewTranslation}
               </span>
-              <span className="mt-1 block max-h-24 overflow-hidden text-sm leading-6">
+              <span
+                className="mt-1 line-clamp-4 block text-sm leading-6"
+                data-reader-selection-translation-text
+              >
                 {translationPreview.text ||
                   (translationPreview.status === "error"
                     ? labels.translationFailed

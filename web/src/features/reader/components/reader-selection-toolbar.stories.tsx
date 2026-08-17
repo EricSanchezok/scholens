@@ -119,6 +119,38 @@ export const CompletedTranslation: Story = {
       text: "检索质量取决于排序和上下文构建。",
     },
   },
+  play: async ({ canvasElement }) => {
+    const text = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-text]",
+    );
+    await expect(text).not.toBeNull();
+    await expect(getComputedStyle(text!).webkitLineClamp).toBe("4");
+    await expect(getComputedStyle(text!).overflow).toBe("hidden");
+  },
+};
+
+export const LongCompletedTranslationTeaser: Story = {
+  args: {
+    translationPreview: {
+      status: "completed",
+      text: "检索质量取决于排序和上下文构建。完整的翻译结果只保证出现在右侧翻译面板中，桌面预览是一个带省略号的紧凑摘要。检索质量取决于排序和上下文构建。",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const text = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-text]",
+    );
+    const boundary = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-story-boundary]",
+    );
+    await expect(text).not.toBeNull();
+    await expect(boundary).not.toBeNull();
+    await waitFor(() => {
+      const textRect = text!.getBoundingClientRect();
+      expect(textRect.height).toBeLessThanOrEqual(96);
+      expect(getComputedStyle(text!).webkitLineClamp).toBe("4");
+    });
+  },
 };
 
 export const LongSelectionNearPageTop: Story = {

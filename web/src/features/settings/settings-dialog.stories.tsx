@@ -322,6 +322,9 @@ export const AccessKeysSmallMobile: Story = {
     await expect(
       body.getByRole("link", { name: /MCP setup guide/ }),
     ).toBeVisible();
+    await expect(
+      body.getByRole("button", { name: "Create access key" }),
+    ).toBeVisible();
     expect(document.documentElement.scrollWidth <= window.innerWidth).toBe(
       true,
     );

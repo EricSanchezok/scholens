@@ -30,6 +30,7 @@ export function ReaderReflowSurface({
   onOpenPdfSource,
   onTranslationStatusChange,
   preferences,
+  scrollContainerRef,
   targetLanguage,
   translationCacheVersion,
 }: {
@@ -39,6 +40,7 @@ export function ReaderReflowSurface({
   onOpenPdfSource: (source: DocumentReflowSourceSpan) => void;
   onTranslationStatusChange?: (status: FullTranslationStatus) => void;
   preferences?: TranslationPreferences;
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   targetLanguage: string;
   translationCacheVersion?: string;
 }) {
@@ -293,6 +295,7 @@ export function ReaderReflowSurface({
       onOpenPdfSource={onOpenPdfSource}
       onRequestTranslation={translations.request}
       onRetryTranslation={translations.retry}
+      scrollContainerRef={scrollContainerRef}
       showTranslationMarker={preferences?.show_translation_marker ?? true}
       targetLanguage={targetLanguage}
       translateReferences={translateReferences}

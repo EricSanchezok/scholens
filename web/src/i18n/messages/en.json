@@ -1157,7 +1157,8 @@
     "metrics": {
       "papers": "Papers",
       "conversations": "Conversations",
-      "outputs": "Outputs"
+      "outputs": "Outputs",
+      "members": "Members"
     },
     "row": {
       "noDescription": "No description",
@@ -1231,6 +1232,9 @@
       "recentPapers": "Recent papers",
       "recentOutputs": "Recent outputs",
       "viewAll": "View all",
+      "collaboration": "Collaboration",
+      "memberCount": "{count, plural, one {# member} other {# members}}",
+      "manageMembers": "Manage",
       "papers": {
         "search": "Search project papers",
         "sortLabel": "Sort project papers",
@@ -1308,6 +1312,8 @@
       "retry": "Try again",
       "savePermissions": "Save permissions",
       "removeMember": "Remove member",
+      "editPermissions": "Edit permissions",
+      "cancelEdit": "Cancel",
       "memberOutsideAuthority": "Only a collaborator with all of this member’s permissions can manage them.",
       "inviteTitle": "Invite a collaborator",
       "email": "Email address",

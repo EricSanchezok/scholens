@@ -12,7 +12,7 @@ import {
   ClosePanelIcon,
   DeleteIcon,
 } from "@/design-system/icons/semantic-icons";
-import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -51,6 +51,7 @@ import {
   type ResearchContextPaperOption,
   type ResearchContextProjectOption,
 } from "@/features/conversation";
+import { useRelativeTimeNow } from "@/i18n/use-relative-time-now";
 import { cn } from "@/lib/utilities/cn";
 import {
   readerHighlightColors,
@@ -137,7 +138,7 @@ export function ReaderAnnotationPanel({
   statusFilter: ReaderAnnotationStatus;
 }) {
   const t = useTranslations("Reader.annotations");
-  const format = useFormatter();
+  const formatRelativeTime = useRelativeTimeNow();
   const [selectionComment, setSelectionComment] = React.useState(
     annotationInitialComment ?? "",
   );
@@ -577,7 +578,7 @@ export function ReaderAnnotationPanel({
                   </span>
                   <span aria-hidden>·</span>
                   <span className="shrink-0">
-                    {format.relativeTime(new Date(annotation.last_activity_at))}
+                    {formatRelativeTime(annotation.last_activity_at)}
                   </span>
                   {annotation.comment_count > 0 ? (
                     <span className="ml-auto inline-flex shrink-0 items-center gap-1">
@@ -593,9 +594,7 @@ export function ReaderAnnotationPanel({
                       author:
                         annotation.resolved_by?.display_name ??
                         t("unknownAuthor"),
-                      time: format.relativeTime(
-                        new Date(annotation.resolved_at),
-                      ),
+                      time: formatRelativeTime(annotation.resolved_at),
                     })}
                   </p>
                 ) : null}
@@ -680,9 +679,7 @@ export function ReaderAnnotationPanel({
                                     t("unknownAuthor")}
                                 </span>
                                 <span className="text-secondary shrink-0">
-                                  {format.relativeTime(
-                                    new Date(item.created_at),
-                                  )}
+                                  {formatRelativeTime(item.created_at)}
                                 </span>
                                 {item.can_edit || item.can_delete ? (
                                   <DropdownMenu>
