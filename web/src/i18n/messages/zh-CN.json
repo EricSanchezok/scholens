@@ -1155,7 +1155,8 @@
     "metrics": {
       "papers": "论文",
       "conversations": "对话",
-      "outputs": "产物"
+      "outputs": "产物",
+      "members": "成员"
     },
     "row": {
       "noDescription": "暂无描述",
@@ -1229,6 +1230,9 @@
       "recentPapers": "最近论文",
       "recentOutputs": "最近产物",
       "viewAll": "查看全部",
+      "collaboration": "协作",
+      "memberCount": "{count} 位成员",
+      "manageMembers": "管理",
       "papers": {
         "search": "搜索项目论文",
         "sortLabel": "项目论文排序",
@@ -1306,6 +1310,8 @@
       "retry": "重试",
       "savePermissions": "保存权限",
       "removeMember": "移除成员",
+      "editPermissions": "编辑权限",
+      "cancelEdit": "取消",
       "memberOutsideAuthority": "只有拥有该成员全部权限的协作者才能管理此成员。",
       "inviteTitle": "邀请协作者",
       "email": "邮箱地址",
