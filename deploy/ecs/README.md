@@ -170,7 +170,9 @@ CI and deployment use four workflows:
    smoke test automatically restores the prior database-compatible immutable release or
    disables the failed candidate. Both the candidate and recovery CloudFormation package
    uploads use the foundation-exported configuration KMS key required by the release-bucket
-   policy.
+   policy. Every external health attempt has a five-second connection timeout and a
+   twenty-second total request timeout so a runner network failure cannot indefinitely
+   prevent the recovery path from executing.
 
 The release workflow keeps its verifier and orchestration scripts on the trusted workflow
 `main` SHA. Candidate and rollback commits are checked out only as data in separate

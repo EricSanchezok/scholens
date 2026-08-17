@@ -1415,6 +1415,9 @@ def test_release_recovers_after_stabilization_or_smoke_failure() -> None:
         "Restore safe release after candidate verification failure"
     )
     assert deploy < stabilize < smoke < recover
+    smoke_block = workflow[smoke:recover]
+    assert "--connect-timeout 5" in smoke_block
+    assert "--max-time 20" in smoke_block
     assert "continue-on-error: true" not in workflow[deploy:stabilize]
     assert re.search(
         r"- name: Wait for services to stabilize\n"
