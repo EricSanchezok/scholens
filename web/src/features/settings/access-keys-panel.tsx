@@ -282,26 +282,26 @@ export function AccessKeysPanel() {
     <div>
       <SettingsPanelHeader
         action={
-          <LinkButton
-            href={`${DOCUMENTATION_PATH}#${documentationAnchors.mcpSetup}`}
-            rel="noopener noreferrer"
-            size="sm"
-            target="_blank"
-            variant="secondary"
-          >
-            <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
-            {t("accessKeys.configurationGuide")}
-            <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
-          </LinkButton>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <LinkButton
+              href={`${DOCUMENTATION_PATH}#${documentationAnchors.mcpSetup}`}
+              rel="noopener noreferrer"
+              size="sm"
+              target="_blank"
+              variant="secondary"
+            >
+              <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
+              {t("accessKeys.configurationGuide")}
+              <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+            </LinkButton>
+            <Button onClick={() => setFormKey(null)}>
+              {t("accessKeys.create")}
+            </Button>
+          </div>
         }
         description={t("accessKeys.description")}
         title={t("accessKeys.title")}
       />
-      <div className="mb-4 flex justify-end">
-        <Button onClick={() => setFormKey(null)}>
-          {t("accessKeys.create")}
-        </Button>
-      </div>
       <AsyncBoundary
         data={keys.data}
         empty={(data) => data.items.length === 0}

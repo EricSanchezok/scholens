@@ -90,6 +90,26 @@ export const InviteAndPermissions: Story = {
   },
 };
 
+export const PermissionEditing: Story = {
+  play: async () => {
+    const dialog = await within(document.body).findByRole("dialog", {
+      name: "Manage collaborators",
+    });
+    const email = await within(dialog).findByText("mina@example.com");
+    const row = email.closest("article");
+    if (!row) throw new Error("Member row is missing");
+    await expect(within(row).queryByRole("checkbox")).not.toBeInTheDocument();
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Edit permissions" }),
+    );
+    await expect(
+      within(row).getByRole("checkbox", { name: "Edit project" }),
+    ).toBeChecked();
+    await userEvent.click(within(row).getByRole("button", { name: "Cancel" }));
+    await expect(within(row).queryByRole("checkbox")).not.toBeInTheDocument();
+  },
+};
+
 export const MutuallyExclusiveRowActions: Story = {
   parameters: {
     msw: {
@@ -189,9 +209,12 @@ export const PermissionBoundary: Story = {
       ),
     ).toBeVisible();
     const members = within(dialog).getByRole("region", { name: "Members" });
-    for (const checkbox of within(members).getAllByRole("checkbox")) {
-      await expect(checkbox).toBeDisabled();
-    }
+    await expect(
+      within(members).queryByRole("checkbox"),
+    ).not.toBeInTheDocument();
+    await expect(
+      within(members).queryByRole("button", { name: "Edit permissions" }),
+    ).not.toBeInTheDocument();
   },
 };
 

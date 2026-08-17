@@ -607,6 +607,8 @@ export function ProjectDetailWorkspace({
     );
   }
   const project = projectQuery.data;
+  const ownerInitial =
+    project.owner.display_name.trim().charAt(0).toUpperCase() || "?";
   const renderChat = (onClose?: () => void) => (
     <ProjectChat
       conversationId={state.conversation}
@@ -698,7 +700,7 @@ export function ProjectDetailWorkspace({
           layout="size"
           transition={motionTransitions.layout}
         >
-          <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
+          <div className="mx-auto w-full max-w-5xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
             <header className="hidden min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 lg:grid">
               <Link
                 aria-label={t("detail.back")}
@@ -732,6 +734,12 @@ export function ProjectDetailWorkspace({
                       <dt>{t("metrics.outputs")}</dt>
                       <dd className="text-secondary tabular-nums">
                         {project.num_outputs}
+                      </dd>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <dt>{t("metrics.members")}</dt>
+                      <dd className="text-secondary tabular-nums">
+                        {project.num_collaborators}
                       </dd>
                     </div>
                   </dl>
@@ -800,6 +808,12 @@ export function ProjectDetailWorkspace({
                     {project.num_outputs}
                   </dd>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <dt>{t("metrics.members")}</dt>
+                  <dd className="text-secondary tabular-nums">
+                    {project.num_collaborators}
+                  </dd>
+                </div>
               </dl>
             </section>
 
@@ -831,76 +845,120 @@ export function ProjectDetailWorkspace({
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent className="mt-5 grid gap-10" value="overview">
-                <section>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-base font-semibold">
-                      {t("detail.recentPapers")}
-                    </h2>
-                    <Button
-                      onClick={() => replaceSearch({ view: "papers" })}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {t("detail.viewAll")}
-                    </Button>
-                  </div>
-                  <div className="divide-line-subtle border-line-subtle divide-y border-y">
-                    {papersQuery.data?.items.slice(0, 3).map((paper) => (
-                      <ProjectPaperRow
-                        canRemove={project.capabilities.manage_papers}
-                        key={paper.document_id}
-                        onActionTrigger={(trigger) => {
-                          paperRemovalTriggerRef.current = trigger;
-                        }}
-                        onRemove={(paper) => void requestPaperRemoval(paper)}
-                        paper={paper}
-                        projectId={projectId}
-                      />
-                    ))}
-                    {!papersQuery.isPending &&
-                      papersQuery.data?.items.length === 0 && (
-                        <p className="text-muted py-12 text-center text-sm">
-                          {t("detail.papers.empty")}
-                        </p>
-                      )}
-                  </div>
-                </section>
-                <section>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-base font-semibold">
-                      {t("detail.recentOutputs")}
-                    </h2>
-                    <Button
-                      onClick={() => replaceSearch({ view: "outputs" })}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {t("detail.viewAll")}
-                    </Button>
-                  </div>
-                  <div className="divide-line-subtle border-line-subtle divide-y border-y">
-                    {outputsQuery.data?.items.slice(0, 3).map((output) => (
-                      <ProjectOutputRow key={output.item.id} output={output} />
-                    ))}
-                    {!outputsQuery.isPending &&
-                      outputsQuery.data?.items.length === 0 && (
-                        <div className="py-12 text-center">
-                          <p className="text-muted text-sm">
-                            {t("detail.outputs.empty")}
+              <TabsContent className="mt-5" value="overview">
+                <div className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
+                  <section>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-base font-semibold">
+                        {t("detail.recentPapers")}
+                      </h2>
+                      <Button
+                        onClick={() => replaceSearch({ view: "papers" })}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        {t("detail.viewAll")}
+                      </Button>
+                    </div>
+                    <div className="divide-line-subtle border-line-subtle divide-y border-y">
+                      {papersQuery.data?.items.slice(0, 3).map((paper) => (
+                        <ProjectPaperRow
+                          canRemove={project.capabilities.manage_papers}
+                          key={paper.document_id}
+                          onActionTrigger={(trigger) => {
+                            paperRemovalTriggerRef.current = trigger;
+                          }}
+                          onRemove={(paper) => void requestPaperRemoval(paper)}
+                          paper={paper}
+                          projectId={projectId}
+                        />
+                      ))}
+                      {!papersQuery.isPending &&
+                        papersQuery.data?.items.length === 0 && (
+                          <p className="text-muted py-12 text-center text-sm">
+                            {t("detail.papers.empty")}
                           </p>
+                        )}
+                    </div>
+                  </section>
+                  <div className="grid gap-10">
+                    <section>
+                      <div className="mb-3 flex items-center justify-between">
+                        <h2 className="text-base font-semibold">
+                          {t("detail.recentOutputs")}
+                        </h2>
+                        <Button
+                          onClick={() => replaceSearch({ view: "outputs" })}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          {t("detail.viewAll")}
+                        </Button>
+                      </div>
+                      <div className="divide-line-subtle border-line-subtle divide-y border-y">
+                        {outputsQuery.data?.items.slice(0, 3).map((output) => (
+                          <ProjectOutputRow
+                            key={output.item.id}
+                            output={output}
+                          />
+                        ))}
+                        {!outputsQuery.isPending &&
+                          outputsQuery.data?.items.length === 0 && (
+                            <div className="py-12 text-center">
+                              <p className="text-muted text-sm">
+                                {t("detail.outputs.empty")}
+                              </p>
+                              <Button
+                                className="mt-3"
+                                onClick={() => replaceSearch({ panel: "chat" })}
+                                size="sm"
+                                variant="ghost"
+                              >
+                                {t("detail.outputs.startChat")}
+                              </Button>
+                            </div>
+                          )}
+                      </div>
+                    </section>
+                    <section aria-labelledby="project-collaboration-heading">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h2
+                          className="text-base font-semibold"
+                          id="project-collaboration-heading"
+                        >
+                          {t("detail.collaboration")}
+                        </h2>
+                        {project.capabilities.manage_collaborators ? (
                           <Button
-                            className="mt-3"
-                            onClick={() => replaceSearch({ panel: "chat" })}
+                            onClick={() => setCollaboratorsOpen(true)}
                             size="sm"
                             variant="ghost"
                           >
-                            {t("detail.outputs.startChat")}
+                            {t("detail.manageMembers")}
                           </Button>
-                        </div>
-                      )}
+                        ) : null}
+                      </div>
+                      <div className="border-line-subtle flex items-center justify-between gap-3 border-y py-3">
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span
+                            aria-hidden="true"
+                            className="bg-pressed grid size-8 shrink-0 place-items-center rounded-full text-sm font-medium"
+                          >
+                            {ownerInitial}
+                          </span>
+                          <span className="text-secondary truncate text-sm">
+                            {project.owner.display_name}
+                          </span>
+                        </span>
+                        <span className="text-secondary shrink-0 text-xs tabular-nums">
+                          {t("detail.memberCount", {
+                            count: project.num_collaborators,
+                          })}
+                        </span>
+                      </div>
+                    </section>
                   </div>
-                </section>
+                </div>
               </TabsContent>
 
               <TabsContent className="mt-5" value="papers">
