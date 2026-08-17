@@ -59,17 +59,22 @@ const createMarkdownComponents = (figurePlaceholder: string): Components => ({
       {children}
     </code>
   ),
-  span: ({ children, className }) => {
+  span: ({ children, className, node: _node, ...props }) => {
+    void _node;
     if (className?.includes("katex-display")) {
       // Wide equations scroll horizontally; make the scroll container
       // keyboard-accessible like the overflow-contained table wrapper.
       return (
-        <span className={className} tabIndex={0}>
+        <span {...props} className={className} tabIndex={0}>
           {children}
         </span>
       );
     }
-    return <span className={className}>{children}</span>;
+    return (
+      <span {...props} className={className}>
+        {children}
+      </span>
+    );
   },
   h1: ({ children }) => (
     <h1 className="text-3xl leading-[1.14] font-semibold tracking-[-0.025em] text-balance sm:text-4xl">

@@ -211,6 +211,10 @@ export const TallDisplayEquation: Story = {
     // Breathing padding keeps KaTeX's painted overhang inside the scroll box.
     expect(parseFloat(style.paddingTop)).toBeGreaterThan(0);
     expect(parseFloat(style.paddingBottom)).toBeGreaterThan(0);
+    // Rehype KaTeX positions its vlist glyphs with inline styles. A markdown
+    // component override must preserve those attributes while adding focus.
+    expect(display.querySelector("span[style]")).not.toBeNull();
+    expect(display.querySelector('[aria-hidden="true"]')).not.toBeNull();
     // (Pixel overflow geometry is asserted via the production web font in CI
     // and manual review; fallback-font environments report unstable values.)
   },

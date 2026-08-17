@@ -11,11 +11,41 @@ function RelativeLabel({ value }: { value: string }) {
   return <span data-testid="relative">{formatRelativeTime(value)}</span>;
 }
 
+function RelativeLabels({ value }: { value: string }) {
+  return (
+    <>
+      <RelativeLabel value={value} />
+      <RelativeLabel value={value} />
+    </>
+  );
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("useRelativeTimeNow", () => {
+  it("shares one browser clock across mounted labels", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-04T10:20:00Z"));
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+
+    const view = render(
+      <NextIntlClientProvider
+        locale="en"
+        messages={messages}
+        now={new Date("2026-08-04T10:00:00Z")}
+        timeZone="UTC"
+      >
+        <RelativeLabels value="2026-08-04T09:59:00Z" />
+      </NextIntlClientProvider>,
+    );
+
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("ticks past a frozen provider now instead of showing future times", async () => {
     vi.useFakeTimers();
     // Wall clock when the comment was created, nine minutes after the tab
