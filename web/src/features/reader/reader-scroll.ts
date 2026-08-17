@@ -1,16 +1,20 @@
+export type ReaderScrollContainerGeometry = {
+  clientHeight: number;
+  scrollHeight: number;
+  scrollTop: number;
+  top: number;
+};
+
+export type ReaderScrollTargetGeometry = { height: number; top: number };
+
 export function readerScrollTopForTarget({
   alignment,
   container,
   startOffset = 0,
   target,
 }: {
-  container: {
-    clientHeight: number;
-    scrollHeight: number;
-    scrollTop: number;
-    top: number;
-  };
-  target: { height: number; top: number };
+  container: ReaderScrollContainerGeometry;
+  target: ReaderScrollTargetGeometry;
   alignment: "start" | "center";
   startOffset?: number;
 }) {

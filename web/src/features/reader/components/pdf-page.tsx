@@ -12,7 +12,10 @@ import {
   readerHighlightColorValue,
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
-import { readerScrollTopForTarget } from "../reader-scroll";
+import {
+  readerScrollTopForTarget,
+  type ReaderScrollContainerGeometry,
+} from "../reader-scroll";
 import type { ReaderSearchMatch } from "../reader-search";
 import type {
   ReaderAnnotationAudience,
@@ -212,24 +215,18 @@ export function readerPdfSourceScrollTop({
   page,
   sourceRect,
 }: {
-  container: {
-    clientHeight: number;
-    scrollHeight: number;
-    scrollTop: number;
-    top: number;
-  };
+  container: ReaderScrollContainerGeometry;
   page: { height: number; top: number };
   sourceRect: NormalizedSelectionRect;
 }) {
-  const sourceCenter =
-    page.top -
-    container.top +
-    container.scrollTop +
-    (sourceRect.y + sourceRect.height / 2) * page.height;
-  return Math.min(
-    Math.max(sourceCenter - container.clientHeight / 2, 0),
-    Math.max(container.scrollHeight - container.clientHeight, 0),
-  );
+  return readerScrollTopForTarget({
+    alignment: "center",
+    container,
+    target: {
+      height: sourceRect.height * page.height,
+      top: page.top + sourceRect.y * page.height,
+    },
+  });
 }
 
 export function groupReaderAnnotationsByAnchor(
