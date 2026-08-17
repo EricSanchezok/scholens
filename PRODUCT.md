@@ -146,8 +146,11 @@ internal grant never pretends that a payment occurred.
 
 Scholens may connect to a user's personal Zotero library as a one-way import
 source. The connection never writes to Zotero and does not expose Group
-Libraries. The first supported paper types are journal articles, conference
-papers, and preprints.
+Libraries. Scholens requests only personal-library read access, but accepts an
+OAuth key when those required capabilities are present even if Zotero adds
+unused privileges to the key; those privileges do not expand product behavior.
+The first supported paper types are journal articles, conference papers, and
+preprints.
 
 Every account may browse Zotero, import selected papers manually, and run a
 manual annotation sync for papers it already imported. A manual sync never

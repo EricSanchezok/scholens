@@ -110,6 +110,52 @@ def test_default_operations_close_all_api_clients_on_success() -> None:
         client.__exit__.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("access", "expected"),
+    [
+        (
+            {
+                "user": {
+                    "library": True,
+                    "notes": True,
+                    "files": True,
+                    "write": True,
+                },
+                "groups": {"all": {"library": True, "write": True}},
+            },
+            True,
+        ),
+        (
+            {
+                "user": {"library": True, "notes": True, "files": False},
+                "groups": {},
+            },
+            False,
+        ),
+    ],
+)
+def test_verify_access_token_requires_personal_reads_and_ignores_extra_access(
+    access: dict[str, object], expected: bool
+) -> None:
+    operations = DefaultZoteroOperations()
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.key_info.return_value = {"userID": "42", "access": access}
+
+    with patch(
+        "app.bootstrap.adapters.zotero_operations.ZoteroApiClient",
+        return_value=client,
+    ):
+        assert (
+            operations.verify_access_token(
+                access_token=ZoteroAccessToken(user_id="42", api_key="secret")
+            )
+            is expected
+        )
+
+    client.__exit__.assert_called_once()
+
+
 def test_default_operations_close_api_client_on_provider_failure() -> None:
     operations = DefaultZoteroOperations()
     client = MagicMock()

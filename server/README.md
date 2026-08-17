@@ -286,8 +286,10 @@ Zotero is a separate read-only integration under
 `/api/v1/integrations/zotero`. `POST .../oauth/authorizations` starts a
 short-lived OAuth session for a validated local return path and `manage` or
 `import` intent. The callback consumes its encrypted request-token secret once,
-verifies `/keys/current`, and accepts only a personal-library API key with
-read-only library, files, and notes access and no Group Library access. Status,
+verifies `/keys/current`, and requires personal-library, files, and notes read
+access. Zotero may attach additional write or Group Library privileges to the
+issued key; their presence does not reject the connection, while Scholens still
+uses only personal-library read endpoints and never writes through them. Status,
 preferences, collections, library items, import operations, and sync runs use
 stable public DTOs; raw provider exceptions and credentials are never public.
 

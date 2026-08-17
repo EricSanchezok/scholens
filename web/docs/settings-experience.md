@@ -106,17 +106,20 @@ remain separate retry-later messages.
 Zotero connects a user's personal library with read-only files and notes
 permission. Settings begins OAuth with a validated in-product return path and a
 `manage` intent; the callback returns only to that path and exposes one stable
-localized result code. Group Libraries and write access are rejected. The
-OAuth-issued API key is never shown, pasted into a form, or returned through a
-public status response.
+localized result code. The callback requires those personal-library read
+capabilities but does not reject a key merely because Zotero attached additional
+write or Group Library privileges. Scholens ignores those privileges and keeps
+all provider calls personal and read-only. The OAuth-issued API key is never
+shown, pasted into a form, or returned through a public status response.
 
-The connected state shows connection time, the most recent successful sync,
-Sync now, and Disconnect. Sync now creates a background operation for new
-annotations on papers already imported into Scholens; it never imports another
-paper. Basic accounts remain in this manual mode. Researcher accounts also see
-automatic annotation sync and an automatic-import switch. Automatic import is
-off by default, starts from the current Zotero library-version checkpoint, and
-enters a visible paused state while Researcher access is absent.
+Zotero uses the same compact provider row as every other connection. OAuth
+feedback, invalid credentials, automatic-import preference, sync or cancel, and
+disconnect remain inline rather than opening a provider-specific detail block.
+Sync now creates a background operation for new annotations on papers already
+imported into Scholens; it never imports another paper. Basic accounts remain in
+this manual mode. Researcher accounts also see an automatic-import switch.
+Automatic import is off by default, starts from the current Zotero
+library-version checkpoint, and is disabled while Researcher access is absent.
 
 Import and sync share one active Zotero operation per account. Settings restores
 an active sync from the status kind and ID after refresh, retains its cancel
@@ -150,12 +153,13 @@ KiB-derived storage display, and UTC-negative date-only formatting.
 Connection stories include connected, not connected, invalid, replacement,
 OpenAlex key-link, and OpenAlex invalid behavior.
 `Features/Settings/Dialog/ZoteroConnected` is the executable Zotero management
-state and covers connection metadata, manual sync, automatic-import preference,
-and disconnect confirmation; the Zotero feature stories own its slow,
-disconnected, invalid-permission, rate-limit, narrow, localized, and Dark
-variants. Access Key stories include empty, populated, create, edit, revoke,
-and one-time secret states. The shared Dialog responsive-full story verifies
-the mobile shell independently.
+state and covers its compact row, manual sync, automatic-import preference, and
+disconnect confirmation. Adjacent Settings stories cover compact OAuth failure,
+active-sync recovery, terminal failure, and invalid-credential recovery; the
+Zotero feature stories own library slow, disconnected, invalid-permission,
+rate-limit, narrow, localized, and Dark variants. Access Key stories include
+empty, populated, create, edit, revoke, and one-time secret states. The shared
+Dialog responsive-full story verifies the mobile shell independently.
 
 Feature changes must retain the Figma hierarchy, semantic tokens, generated API
 types, localized copy parity, keyboard behavior, and narrow-content coverage.

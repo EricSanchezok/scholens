@@ -249,9 +249,12 @@ export function ConnectionsPanel() {
               <div className="divide-line -m-4 divide-y sm:-m-5">
                 {data.items.map((integration) => {
                   const connected = integration.state !== "disconnected";
+                  const description = t(
+                    `connections.providerDescription.${integration.provider}`,
+                  );
                   return (
                     <article
-                      className="flex flex-wrap items-center gap-4 px-4 py-4 sm:px-5"
+                      className="flex flex-wrap items-center gap-4 px-4 py-4 sm:flex-nowrap sm:px-5"
                       key={integration.provider}
                     >
                       <div className="bg-subtle grid size-10 shrink-0 place-items-center rounded-[var(--radius-lg)]">
@@ -261,7 +264,7 @@ export function ConnectionsPanel() {
                           tone="secondary"
                         />
                       </div>
-                      <div className="min-w-48 flex-1">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold">
                             {t(`connections.provider.${integration.provider}`)}
@@ -272,10 +275,11 @@ export function ConnectionsPanel() {
                             {t(`connections.state.${integration.state}`)}
                           </SettingsStatus>
                         </div>
-                        <p className="text-secondary mt-1 text-sm leading-5">
-                          {t(
-                            `connections.providerDescription.${integration.provider}`,
-                          )}
+                        <p
+                          className="text-secondary mt-1 truncate text-sm leading-5"
+                          title={description}
+                        >
+                          {description}
                         </p>
                       </div>
                       {integration.managed ? (
