@@ -18,6 +18,7 @@ Always read the documents relevant to the task before editing:
 | Backend API or domain behavior                  | [`server/README.md`](./server/README.md)                                                   |
 | Background processing                           | [`jobs/README.md`](./jobs/README.md)                                                       |
 | Data or service ownership                       | [`docs/architecture/data-ownership.md`](./docs/architecture/data-ownership.md)             |
+| API, MCP, job, or schema evolution              | [`docs/architecture/contract-evolution.md`](./docs/architecture/contract-evolution.md)     |
 | Current backend capabilities                    | [`docs/architecture/backend-capabilities.md`](./docs/architecture/backend-capabilities.md) |
 | Shared Python packages                          | [`packages/README.md`](./packages/README.md)                                               |
 | Architecture decision rationale                 | [`docs/decisions/README.md`](./docs/decisions/README.md)                                   |
@@ -40,15 +41,16 @@ token, theme, or Storybook state must follow
 - `jobs/` owns asynchronous workers and their job-facing API.
 - Product code must respect the schema and service ownership documented in
   `docs/architecture/data-ownership.md`.
-- Do not create compatibility layers between the old and new frontends. Evolve
-  the public API contract deliberately instead.
-- Until the product is explicitly declared released, breaking product API and
-  `scholens` schema changes are reset-first: converge on one contract and
-  remove superseded routes, DTOs, columns, workflows, and tests in the same
-  change. Do not add dual read/write paths, legacy mappings, compatibility
-  flags, or backfills whose only purpose is preserving disposable pre-release
-  product data. Reset only the `scholens` schema and rebuild it explicitly;
-  `auth` data remains independently owned and must never be dropped.
+- Do not create compatibility layers between the old and new frontends.
+  Production HTTP `/api/v1`, MCP `/mcp`, accepted job payloads, applied
+  migrations, and `scholens` data evolve under
+  `docs/architecture/contract-evolution.md`.
+- Applied migrations are immutable and schema replacement is
+  expand–migrate–switch–contract. Temporary dual read/write behavior belongs
+  only in the owning transport or persistence adapter, with an owner and
+  removal condition; domain, application, Web, and shared DTO code retain one
+  canonical model. Local reset may rebuild only `scholens`; `auth` remains
+  independently owned and must never be dropped.
 - Local development owns the `7300-7399` host-port block: Web `7300`, Server
   `7301`, Jobs `7302`, legacy client `7303`, Storybook `7306`, and Flower
   `7307`. Scholens local infrastructure uses PostgreSQL `55432`, RabbitMQ
@@ -129,6 +131,8 @@ Do not edit generated files directly. Change their source and regenerate them.
   `web/`.
 - Frontend API types: update the FastAPI contract and public snapshot, then run
   `pnpm api:generate` from `web/`.
+- Public MCP tools: update the canonical tool catalog, then run
+  `uv run scholens contract export` from `server/`.
 - Commit source and generated outputs together.
 
 ## Verification

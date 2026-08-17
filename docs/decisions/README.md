@@ -57,6 +57,11 @@ change what the accepted record decided.
 - [ADR 0023: Agent-native Scholens knowledge boundary](./0023-agent-native-scholens-mcp.md)
 - [ADR 0024: Shared Aliyun account and durable product email](./0024-shared-aliyun-account-and-durable-product-email.md)
 - [ADR 0025: Read-only Zotero integration across Server and Jobs](./0025-read-only-zotero-integration.md)
+- [ADR 0026: Production contract and schema evolution](./0026-production-contract-evolution.md)
+
+ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
+in earlier records and amends ADR 0022's exact-migration-head rollback rule.
+All unrelated decisions in those records remain accepted.
 
 ## Template
 

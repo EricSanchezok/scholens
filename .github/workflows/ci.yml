@@ -35,6 +35,27 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
+      - name: Reject mutable or unclassified migration history
+        if: github.event_name == 'pull_request'
+        working-directory: ${{ github.workspace }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed=$(git diff --name-status "$BASE_SHA" -- server/migrations/versions)
+          if grep -Ev '^(A[[:space:]]|$)' <<<"$changed"; then
+            echo "Applied migration files are immutable; add a new revision." >&2
+            exit 1
+          fi
+          policy_args=()
+          if git cat-file -e "${BASE_SHA}:server/migrations/policy.json"; then
+            git show "${BASE_SHA}:server/migrations/policy.json" > /tmp/base-migration-policy.json
+            policy_args+=(--base /tmp/base-migration-policy.json)
+          fi
+          python scripts/migration_policy_compatibility.py \
+            "${policy_args[@]}" \
+            --revision server/migrations/policy.json \
+            --versions server/migrations/versions
       - name: Mint read-only SanchezCloud Identity token
         id: identity-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
@@ -166,6 +187,72 @@ jobs:
       - name: Run shared-package gate
         run: ./scripts/run-gates.sh shared-packages
 
+  public-contract-compatibility:
+    name: Public contract compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Scholens with comparison history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up pinned Go for oasdiff
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.0"
+          cache: false
+      - name: Install pinned OpenAPI compatibility checker
+        if: github.event_name == 'pull_request'
+        run: go install github.com/oasdiff/oasdiff@v1.29.1
+      - name: Reject breaking HTTP and MCP v1 changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python scripts/deprecation_registry.py check \
+            --registry server/contracts/deprecations.json
+          if git cat-file -e "${BASE_SHA}:server/contracts/deprecations.json"; then
+            git show "${BASE_SHA}:server/contracts/deprecations.json" > /tmp/base-deprecations.json
+          else
+            printf '%s\n' '{"contract_version":1,"entries":[]}' > /tmp/base-deprecations.json
+          fi
+          python scripts/deprecation_registry.py check-transition \
+            --base /tmp/base-deprecations.json \
+            --revision server/contracts/deprecations.json
+          git show "${BASE_SHA}:server/openapi/public-v1.json" > /tmp/base-openapi.json
+          if git cat-file -e "${BASE_SHA}:server/contracts/mcp-v1.json"; then
+            git show "${BASE_SHA}:server/contracts/mcp-v1.json" > /tmp/base-mcp.json
+          else
+            cp server/contracts/mcp-v1.json /tmp/base-mcp.json
+          fi
+          python scripts/deprecation_registry.py prepare-http-base \
+            --registry server/contracts/deprecations.json \
+            --base /tmp/base-openapi.json \
+            --revision server/openapi/public-v1.json \
+            --output /tmp/compatible-base-openapi.json
+          python scripts/deprecation_registry.py prepare-mcp-base \
+            --registry server/contracts/deprecations.json \
+            --base /tmp/base-mcp.json \
+            --revision server/contracts/mcp-v1.json \
+            --output /tmp/compatible-base-mcp.json
+          python scripts/mcp_contract_compatibility.py check-metadata \
+            --base /tmp/compatible-base-mcp.json \
+            --revision server/contracts/mcp-v1.json
+          python scripts/mcp_contract_compatibility.py render-openapi \
+            --contract /tmp/compatible-base-mcp.json \
+            --output /tmp/base-mcp-openapi.json
+          python scripts/mcp_contract_compatibility.py render-openapi \
+            --contract server/contracts/mcp-v1.json \
+            --output /tmp/revision-mcp-openapi.json
+          oasdiff breaking \
+            --fail-on WARN --flatten-allof \
+            /tmp/compatible-base-openapi.json server/openapi/public-v1.json
+          oasdiff breaking \
+            --fail-on WARN --flatten-allof \
+            /tmp/base-mcp-openapi.json /tmp/revision-mcp-openapi.json
+
   deployment-contract:
     runs-on: ubuntu-latest
     services:
@@ -190,6 +277,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
       - name: Resolve checked-out image revision
         id: image-revision
         run: |
@@ -301,11 +389,19 @@ jobs:
           AUTH_MIGRATOR_PASSWORD: auth-migrator-test-password
           MIGRATOR_PASSWORD: migrator-test-password
           APP_PASSWORD: app-test-password
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           psql -h 127.0.0.1 -U postgres -d sanchezcloud -v ON_ERROR_STOP=1 -c \
             "CREATE ROLE auth_migrator LOGIN PASSWORD '$AUTH_MIGRATOR_PASSWORD';
              CREATE ROLE scholens_migrator LOGIN PASSWORD '$MIGRATOR_PASSWORD';
              CREATE ROLE scholens_app LOGIN PASSWORD '$APP_PASSWORD';"
+
+          base_head=$(python scripts/release_manifest.py migration-head)
+          if [[ -n "$BASE_SHA" ]]; then
+            git worktree add --detach /tmp/scholens-base-source "$BASE_SHA"
+            base_head=$(python scripts/release_manifest.py migration-head \
+              --source-root /tmp/scholens-base-source)
+          fi
 
           for phase in before after-auth after-scholens; do
             psql -h 127.0.0.1 -U postgres -d sanchezcloud \
@@ -320,11 +416,31 @@ jobs:
               AUTH_DATABASE_URL="postgresql://auth_migrator:${AUTH_MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
                 server/.venv/bin/sanchezcloud-identity check-schema
             elif [[ $phase == after-auth ]]; then
+              (
+                cd server
+                SCHOLENS_MIGRATION_DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
+                  .venv/bin/alembic upgrade "$base_head"
+              )
+              psql -h 127.0.0.1 -U postgres -d sanchezcloud \
+                -v ON_ERROR_STOP=1 -c \
+                "INSERT INTO auth.users (email, password_hash)
+                   VALUES ('ci-migration-preservation@example.com', 'fixture');
+                 INSERT INTO scholens.user_profiles (user_id)
+                   SELECT id FROM auth.users
+                   WHERE email = 'ci-migration-preservation@example.com';"
               for _ in 1 2; do
                 docker run --rm --network host --entrypoint scholens \
                   -e DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
                   scholens-api:ci db upgrade --yes --json
               done
+              psql -h 127.0.0.1 -U postgres -d sanchezcloud -tAc \
+                "SELECT EXISTS (
+                   SELECT 1 FROM scholens.user_profiles
+                   WHERE user_id = (
+                     SELECT id FROM auth.users
+                     WHERE email = 'ci-migration-preservation@example.com'
+                   )
+                 )" | grep -qx t
               docker run --rm --network host --entrypoint alembic \
                 -e DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
                 scholens-api:ci check
@@ -738,27 +854,18 @@ jobs:
              )" \
             | grep -qx t
 
-          (
-            cd server
-            DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
-              .venv/bin/alembic downgrade b12d7d620e91
-          )
           PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app \
             -d sanchezcloud -tAc \
             "SELECT EXISTS (
                SELECT 1 FROM scholens.operation_journal_entries
                WHERE origin_kind = 'cli'
              )
-             AND to_regclass('scholens.account_plan_grants') IS NULL
-             AND to_regclass('scholens.account_quota_overrides') IS NULL" \
-            | grep -qx t
-          SCHOLENS_MIGRATION_DATABASE_URL="postgresql+psycopg2://scholens_migrator:${MIGRATOR_PASSWORD}@127.0.0.1:5432/sanchezcloud" \
-            server/.venv/bin/scholens db upgrade --yes
-          PGPASSWORD="$APP_PASSWORD" psql -h 127.0.0.1 -U scholens_app \
-            -d sanchezcloud -tAc \
-            "SELECT EXISTS (
-               SELECT 1 FROM scholens.operation_journal_entries
-               WHERE origin_kind = 'cli'
+             AND EXISTS (
+               SELECT 1 FROM scholens.user_profiles
+               WHERE user_id = (
+                 SELECT id FROM auth.users
+                 WHERE email = 'ci-migration-preservation@example.com'
+               )
              )" \
             | grep -qx t
 
@@ -772,7 +879,8 @@ jobs:
             "DELETE FROM auth.users
              WHERE email IN (
                'ci-cli-admin@example.com',
-               'ci-cli-target@example.com'
+               'ci-cli-target@example.com',
+               'ci-migration-preservation@example.com'
              );"
 
   all-checks-passed:
@@ -785,6 +893,7 @@ jobs:
       - web
       - client
       - deployment-contract
+      - public-contract-compatibility
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI lane to succeed
@@ -795,6 +904,7 @@ jobs:
           WEB_RESULT: ${{ needs.web.result }}
           CLIENT_RESULT: ${{ needs.client.result }}
           DEPLOYMENT_RESULT: ${{ needs.deployment-contract.result }}
+          PUBLIC_CONTRACT_RESULT: ${{ needs.public-contract-compatibility.result }}
         run: |
           failed=0
           for lane in \
@@ -803,7 +913,8 @@ jobs:
             "Shared Packages:$SHARED_PACKAGES_RESULT" \
             "Web:$WEB_RESULT" \
             "Legacy Client:$CLIENT_RESULT" \
-            "Deployment Contract:$DEPLOYMENT_RESULT"; do
+            "Deployment Contract:$DEPLOYMENT_RESULT" \
+            "Public Contract:$PUBLIC_CONTRACT_RESULT"; do
             name="${lane%%:*}"
             result="${lane#*:}"
             if [[ $result != success ]]; then

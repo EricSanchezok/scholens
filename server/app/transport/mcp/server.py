@@ -196,7 +196,7 @@ def _resource_json(*, uri: str, value: object, continuation_tool: str) -> str:
     )
 
 
-def _tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
+def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
     """Build the exact transport envelope schema for one typed business result."""
     envelope = create_model(
         f"{output_model.__name__}ToolStructuredResult",
@@ -566,7 +566,7 @@ def build_mcp_transport(
                 description=definition.description,
                 inputSchema=definition.input_model.model_json_schema(),
                 outputSchema=(
-                    _tool_output_schema(definition.output_model)
+                    tool_output_schema(definition.output_model)
                     if definition.output_model is not None
                     else None
                 ),

@@ -53,6 +53,18 @@ jobs:
             --expected-release-sha "$RELEASE_SHA" \
             --expected-account-id "$account_id" \
             --expected-region "$AWS_REGION"
+      - name: Verify append-only production migration transition
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          account_id=$(aws sts get-caller-identity --query Account --output text)
+          bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          aws s3api get-object \
+            --bucket "$bucket" --key migrations/current.json \
+            migration-current.json >/dev/null
+          python scripts/release_manifest.py verify-migration-transition \
+            --manifest release-manifest.json \
+            --current migration-current.json
       - name: Register candidate migration task revision
         id: task
         run: |

@@ -81,12 +81,12 @@ def _literal_assignment(tree: ast.Module, name: str, *, path: Path) -> Any:
     raise ValueError(f"{path.name} does not define {name}")
 
 
-def _migration_contract() -> dict[str, str]:
+def _migration_graph() -> tuple[list[dict[str, str | None]], str]:
     migrations = sorted((ROOT / "server/migrations/versions").glob("*.py"))
     if not migrations:
         raise ValueError("no Scholens migrations found")
     digest = hashlib.sha256()
-    parents_by_revision: dict[str, tuple[str, ...]] = {}
+    entries_by_revision: dict[str, dict[str, str | None]] = {}
     for migration in migrations:
         digest.update(migration.name.encode())
         digest.update(b"\0")
@@ -98,54 +98,125 @@ def _migration_contract() -> dict[str, str]:
         down_revision = _literal_assignment(tree, "down_revision", path=migration)
         if not isinstance(revision, str) or not revision:
             raise ValueError(f"{migration.name} has an invalid revision")
-        if revision in parents_by_revision:
+        if revision in entries_by_revision:
             raise ValueError(f"duplicate migration revision {revision}")
-        if down_revision is None:
-            parents: tuple[str, ...] = ()
-        elif isinstance(down_revision, str):
-            parents = (down_revision,)
-        elif isinstance(down_revision, (tuple, list)) and all(
-            isinstance(value, str) and value for value in down_revision
+        if down_revision is not None and (
+            not isinstance(down_revision, str) or not down_revision
         ):
-            parents = tuple(down_revision)
-        else:
             raise ValueError(f"{migration.name} has an invalid down_revision")
-        parents_by_revision[revision] = parents
-    revisions = set(parents_by_revision)
+        entries_by_revision[revision] = {
+            "revision": revision,
+            "down_revision": down_revision,
+            "filename": migration.name,
+            "sha256": hashlib.sha256(contents).hexdigest(),
+        }
+    revisions = set(entries_by_revision)
     referenced = {
-        parent for parents in parents_by_revision.values() for parent in parents
+        parent
+        for entry in entries_by_revision.values()
+        if (parent := entry["down_revision"]) is not None
     }
-    unknown = referenced - revisions
+    unknown = referenced.difference(revisions)
     if unknown:
         raise ValueError(
             f"migration graph references unknown revisions: {sorted(unknown)}"
         )
-    heads = revisions - referenced
-    if len(heads) != 1:
+    roots = [
+        revision
+        for revision, entry in entries_by_revision.items()
+        if entry["down_revision"] is None
+    ]
+    if len(roots) != 1:
         raise ValueError(
-            f"migration graph must have exactly one head, found {sorted(heads)}"
+            f"migration graph must have exactly one root, found {sorted(roots)}"
         )
-    head = next(iter(heads))
-    reachable: set[str] = set()
-    visiting: set[str] = set()
-
-    def visit(revision: str) -> None:
-        if revision in visiting:
-            raise ValueError("migration graph contains a cycle")
-        if revision in reachable:
-            return
-        visiting.add(revision)
-        for parent in parents_by_revision[revision]:
-            visit(parent)
-        visiting.remove(revision)
-        reachable.add(revision)
-
-    visit(head)
-    if reachable != revisions:
+    children: dict[str, list[str]] = {revision: [] for revision in revisions}
+    for revision, entry in entries_by_revision.items():
+        parent = entry["down_revision"]
+        if parent is not None:
+            children[parent].append(revision)
+    branches = {
+        revision: values for revision, values in children.items() if len(values) > 1
+    }
+    if branches:
         raise ValueError(
-            "migration graph contains revisions disconnected from its head"
+            f"migration graph must remain linear, found branches: {sorted(branches)}"
         )
-    return {"head": head, "checksum": digest.hexdigest()}
+    ordered: list[dict[str, str | None]] = []
+    current: str | None = roots[0]
+    while current is not None:
+        ordered.append(entries_by_revision[current])
+        current = children[current][0] if children[current] else None
+    if len(ordered) != len(revisions):
+        raise ValueError("migration graph contains a cycle or disconnected revision")
+    return ordered, digest.hexdigest()
+
+
+def _migration_contract_legacy() -> dict[str, str]:
+    ordered, checksum = _migration_graph()
+    return {"head": str(ordered[-1]["revision"]), "checksum": checksum}
+
+
+def _migration_contract() -> dict[str, Any]:
+    ordered, checksum = _migration_graph()
+    policy_path = ROOT / "server/migrations/policy.json"
+    try:
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("migration policy is missing or invalid") from exc
+    if policy.get("contract_version") != 1:
+        raise ValueError("migration policy has an unsupported contract version")
+    policy_revisions = policy.get("revisions")
+    if not isinstance(policy_revisions, dict):
+        raise ValueError("migration policy revisions must be an object")
+    revision_names = [str(entry["revision"]) for entry in ordered]
+    if set(policy_revisions) != set(revision_names):
+        raise ValueError("migration policy must classify every revision exactly once")
+    baseline = policy.get("production_baseline_revision")
+    if baseline not in revision_names:
+        raise ValueError("migration policy production baseline is not in the chain")
+    baseline_index = revision_names.index(str(baseline))
+    floor = str(baseline)
+    floor_index = baseline_index
+    enriched: list[dict[str, str | None]] = []
+    for index, entry in enumerate(ordered):
+        revision = str(entry["revision"])
+        metadata = policy_revisions[revision]
+        if not isinstance(metadata, dict):
+            raise ValueError(f"migration policy for {revision} must be an object")
+        phase = metadata.get("phase")
+        allowed_keys = {"phase"}
+        if index <= baseline_index:
+            if phase != "baseline":
+                raise ValueError(
+                    "revisions through the production baseline must be baseline"
+                )
+        elif phase == "expand":
+            pass
+        elif phase == "contract":
+            allowed_keys.add("minimum_compatible_application_revision")
+            proposed_floor = metadata.get("minimum_compatible_application_revision")
+            if proposed_floor not in revision_names[: index + 1]:
+                raise ValueError(
+                    f"contract migration {revision} has an invalid compatibility floor"
+                )
+            proposed_index = revision_names.index(str(proposed_floor))
+            if proposed_index < floor_index:
+                raise ValueError("migration compatibility floor cannot move backward")
+            floor = str(proposed_floor)
+            floor_index = proposed_index
+        else:
+            raise ValueError(f"migration {revision} has an invalid evolution phase")
+        if set(metadata) != allowed_keys:
+            raise ValueError(f"migration policy for {revision} has unsupported fields")
+        enriched.append({**entry, "phase": str(phase)})
+    return {
+        "head": revision_names[-1],
+        "checksum": checksum,
+        "production_baseline_revision": str(baseline),
+        "minimum_compatible_application_revision": floor,
+        "revisions": enriched,
+    }
 
 
 def _validate_source_maps_contract(
@@ -362,7 +433,11 @@ def _validate_https_url(value: str, *, name: str) -> str:
     return value.rstrip("/")
 
 
-def create_manifest(args: argparse.Namespace) -> dict[str, Any]:
+def _create_manifest(
+    args: argparse.Namespace,
+    *,
+    legacy: bool,
+) -> dict[str, Any]:
     if SHA_PATTERN.fullmatch(args.release_sha) is None:
         raise ValueError("release SHA must be a lowercase 40-character commit SHA")
     if (
@@ -414,14 +489,16 @@ def create_manifest(args: argparse.Namespace) -> dict[str, Any]:
             args.image_scan_attestation.read_text(encoding="utf-8")
         )
     image_scans = _validate_image_scans(image_scans, images=images)
-    return {
-        "contract_version": 2,
+    manifest = {
+        "contract_version": 2 if legacy else 3,
         "release_sha": args.release_sha,
         "created_at": created_at.isoformat().replace("+00:00", "Z"),
         "images": images,
         "image_scans": image_scans,
         "identity": _identity_contract(args.identity_schema_version),
-        "scholens_migrations": _migration_contract(),
+        "scholens_migrations": (
+            _migration_contract_legacy() if legacy else _migration_contract()
+        ),
         "public_openapi_sha256": _sha256(ROOT / "server/openapi/public-v1.json"),
         "runtime_template_sha256": _sha256(ROOT / "deploy/ecs/scholens-production.yml"),
         "web_public_config": {
@@ -437,6 +514,13 @@ def create_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "source_maps": source_maps["prefix"],
         },
     }
+    if not legacy:
+        manifest["public_mcp_sha256"] = _sha256(ROOT / "server/contracts/mcp-v1.json")
+    return manifest
+
+
+def create_manifest(args: argparse.Namespace) -> dict[str, Any]:
+    return _create_manifest(args, legacy=False)
 
 
 def verify_manifest(
@@ -446,7 +530,8 @@ def verify_manifest(
     expected_account_id: str | None = None,
     expected_region: str | None = None,
 ) -> None:
-    if manifest.get("contract_version") != 2:
+    contract_version = manifest.get("contract_version")
+    if contract_version not in {2, 3}:
         raise ValueError("unsupported release manifest contract")
     release_sha = manifest.get("release_sha")
     if not isinstance(release_sha, str) or SHA_PATTERN.fullmatch(release_sha) is None:
@@ -469,7 +554,7 @@ def verify_manifest(
                 raise ValueError(
                     f"{component} image is not in the expected AWS registry"
                 )
-    expected = create_manifest(
+    expected = _create_manifest(
         argparse.Namespace(
             release_sha=release_sha,
             created_at=manifest.get("created_at"),
@@ -484,7 +569,8 @@ def verify_manifest(
                 f"{name}_image": manifest.get("images", {}).get(name, "")
                 for name in IMAGE_COMPONENTS
             },
-        )
+        ),
+        legacy=contract_version == 2,
     )
     if manifest != expected:
         raise ValueError(
@@ -543,7 +629,7 @@ def migration_attestation(
         }
     proof = _validate_runtime_migration_proof(runtime_proof, manifest)
     return {
-        "contract_version": 1,
+        "contract_version": 1 if manifest["contract_version"] == 2 else 2,
         "release_sha": manifest["release_sha"],
         "release_manifest_sha256": hashlib.sha256(canonical_manifest).hexdigest(),
         "scholens_migrations": manifest["scholens_migrations"],
@@ -560,12 +646,48 @@ def verify_migration_attestation(
         raise ValueError("migration attestation does not match the release manifest")
 
 
+def _migration_revision_names(
+    contract: dict[str, Any],
+    *,
+    label: str,
+) -> list[str]:
+    revisions = contract.get("revisions")
+    if not isinstance(revisions, list) or not revisions:
+        raise ValueError(f"{label} migration revision history is invalid")
+    names: list[str] = []
+    previous: str | None = None
+    for entry in revisions:
+        if not isinstance(entry, dict):
+            raise ValueError(f"{label} migration revision history is invalid")
+        revision = entry.get("revision")
+        if (
+            not isinstance(revision, str)
+            or not revision
+            or entry.get("down_revision") != previous
+            or CHECKSUM_PATTERN.fullmatch(str(entry.get("sha256", ""))) is None
+            or entry.get("phase") not in {"baseline", "expand", "contract"}
+        ):
+            raise ValueError(f"{label} migration revision history is invalid")
+        names.append(revision)
+        previous = revision
+    if len(names) != len(set(names)) or contract.get("head") != names[-1]:
+        raise ValueError(f"{label} migration revision history is invalid")
+    if CHECKSUM_PATTERN.fullmatch(str(contract.get("checksum", ""))) is None:
+        raise ValueError(f"{label} migration checksum is invalid")
+    if contract.get("production_baseline_revision") not in names:
+        raise ValueError(f"{label} migration baseline is invalid")
+    if contract.get("minimum_compatible_application_revision") not in names:
+        raise ValueError(f"{label} migration compatibility floor is invalid")
+    return names
+
+
 def verify_current_database_contract(
     current: dict[str, Any],
     manifest: dict[str, Any],
 ) -> None:
     """Require the live database contract to remain compatible with a release."""
-    if current.get("contract_version") != 1:
+    current_version = current.get("contract_version")
+    if current_version not in {1, 2}:
         raise ValueError("current database proof has an unsupported contract")
     if SHA_PATTERN.fullmatch(str(current.get("release_sha", ""))) is None:
         raise ValueError("current database proof has an invalid release SHA")
@@ -574,10 +696,131 @@ def verify_current_database_contract(
         is None
     ):
         raise ValueError("current database proof has an invalid manifest checksum")
-    if current.get("scholens_migrations") != manifest.get("scholens_migrations"):
-        raise ValueError("current database migration contract does not match release")
     if current.get("identity") != manifest.get("identity"):
         raise ValueError("current Identity contract does not match release")
+    current_migrations = current.get("scholens_migrations")
+    target_migrations = manifest.get("scholens_migrations")
+    if not isinstance(current_migrations, dict) or not isinstance(
+        target_migrations, dict
+    ):
+        raise ValueError("database migration contract is invalid")
+    if manifest.get("contract_version") == 2:
+        if current_version == 1:
+            compatible = current_migrations == target_migrations
+        else:
+            current_revisions = current_migrations.get("revisions")
+            current_names = _migration_revision_names(
+                current_migrations,
+                label="current",
+            )
+            target_revisions, target_checksum = _migration_graph()
+            target_head = target_migrations.get("head")
+            try:
+                target_index = current_names.index(target_head)
+                floor_index = current_names.index(
+                    current_migrations.get("minimum_compatible_application_revision")
+                )
+            except ValueError:
+                compatible = False
+            else:
+                compatible = (
+                    target_checksum == target_migrations.get("checksum")
+                    and target_head == target_revisions[-1]["revision"]
+                    and target_index >= floor_index
+                    and len(target_revisions) == target_index + 1
+                    and all(
+                        all(
+                            current_entry.get(key) == target_entry[key]
+                            for key in target_entry
+                        )
+                        for current_entry, target_entry in zip(
+                            current_revisions,
+                            target_revisions,
+                            strict=False,
+                        )
+                    )
+                )
+        if not compatible:
+            raise ValueError(
+                "current database migration contract does not match release"
+            )
+        return
+    if current_version != 2:
+        raise ValueError("current database proof predates compatibility ranges")
+    current_revisions = current_migrations.get("revisions")
+    target_revisions = target_migrations.get("revisions")
+    current_names = _migration_revision_names(current_migrations, label="current")
+    _migration_revision_names(target_migrations, label="release")
+    if current_migrations.get("production_baseline_revision") != target_migrations.get(
+        "production_baseline_revision"
+    ):
+        raise ValueError("current database migration baseline does not match release")
+    target_head = target_migrations.get("head")
+    try:
+        target_index = current_names.index(target_head)
+        floor_index = current_names.index(
+            current_migrations.get("minimum_compatible_application_revision")
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "release revision is outside the live compatibility range"
+        ) from exc
+    if (
+        target_index < floor_index
+        or target_revisions != current_revisions[: target_index + 1]
+    ):
+        raise ValueError("release revision is outside the live compatibility range")
+
+
+def verify_migration_transition(
+    current: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    """Require a candidate to append to the attested production migration chain."""
+    verify_manifest(manifest)
+    if manifest.get("contract_version") != 3:
+        raise ValueError("new migrations require a version 3 release manifest")
+    candidate = manifest["scholens_migrations"]
+    current_version = current.get("contract_version")
+    previous = current.get("scholens_migrations")
+    if not isinstance(previous, dict):
+        raise ValueError("current database migration contract is invalid")
+    if current_version == 1:
+        baseline = candidate["production_baseline_revision"]
+        if (
+            previous.get("head") != baseline
+            or candidate.get("head") != baseline
+            or previous.get("checksum") != candidate.get("checksum")
+        ):
+            raise ValueError(
+                "legacy database proof must first transition at the production baseline"
+            )
+        return
+    if current_version != 2:
+        raise ValueError("current database proof has an unsupported contract")
+    previous_revisions = previous.get("revisions")
+    candidate_revisions = candidate.get("revisions")
+    previous_names = _migration_revision_names(previous, label="current")
+    candidate_names = _migration_revision_names(candidate, label="candidate")
+    if previous.get("production_baseline_revision") != candidate.get(
+        "production_baseline_revision"
+    ):
+        raise ValueError("production migration baseline changed")
+    if candidate_revisions[: len(previous_revisions)] != previous_revisions:
+        raise ValueError("candidate rewrites or removes an attested migration")
+    if candidate_names[: len(previous_names)] != previous_names:
+        raise ValueError("candidate rewrites or removes an attested migration")
+    try:
+        previous_floor = candidate_names.index(
+            previous.get("minimum_compatible_application_revision")
+        )
+        candidate_floor = candidate_names.index(
+            candidate.get("minimum_compatible_application_revision")
+        )
+    except ValueError as exc:
+        raise ValueError("migration compatibility floor is not in the chain") from exc
+    if candidate_floor < previous_floor:
+        raise ValueError("migration compatibility floor cannot move backward")
 
 
 def verify_database_contract(
@@ -623,10 +866,16 @@ def _parser() -> argparse.ArgumentParser:
     verify_database.add_argument("--attestation", type=Path, required=True)
     verify_database.add_argument("--current", type=Path, required=True)
     verify_database.add_argument("--source-root", type=Path)
+    verify_transition = subparsers.add_parser("verify-migration-transition")
+    verify_transition.add_argument("--manifest", type=Path, required=True)
+    verify_transition.add_argument("--current", type=Path, required=True)
+    verify_transition.add_argument("--source-root", type=Path)
     verify_scans = subparsers.add_parser("verify-image-scans")
     verify_scans.add_argument("--manifest", type=Path, required=True)
     verify_scans.add_argument("--image-scan-attestation", type=Path, required=True)
     subparsers.add_parser("identity-revision")
+    migration_head = subparsers.add_parser("migration-head")
+    migration_head.add_argument("--source-root", type=Path)
     template_parameters = subparsers.add_parser("template-parameters")
     template_parameters.add_argument("--template", type=Path, required=True)
     return parser
@@ -655,6 +904,8 @@ def main() -> int:
             )
         elif args.command == "identity-revision":
             print(_identity_resolution()[1])
+        elif args.command == "migration-head":
+            print(_migration_contract_legacy()["head"])
         elif args.command == "template-parameters":
             for name in _template_parameter_names(args.template):
                 print(name)
@@ -675,6 +926,10 @@ def main() -> int:
             attestation = json.loads(args.attestation.read_text(encoding="utf-8"))
             current = json.loads(args.current.read_text(encoding="utf-8"))
             verify_database_contract(attestation, current, manifest)
+        elif args.command == "verify-migration-transition":
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            current = json.loads(args.current.read_text(encoding="utf-8"))
+            verify_migration_transition(current, manifest)
         else:
             manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
             scans = json.loads(args.image_scan_attestation.read_text(encoding="utf-8"))

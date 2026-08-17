@@ -98,7 +98,15 @@ second cache in Context or local state.
 
 ## Compatibility policy
 
-The replacement frontend follows the current public v1 schema while the backend
-is being improved. Do not add a frontend compatibility layer for legacy DTOs.
-When a coordinated breaking change is intentional, update the schema snapshot,
-generated types, affected feature code, mocks, and tests together.
+`/api/v1` is a stable production contract. Compatible additions update the
+schema snapshot, generated types, affected feature code, mocks, and tests
+together. A route, field, enum, validation rule, or response shape must not be
+removed or narrowed in place. An incompatible replacement uses another major
+API boundary and keeps v1 as a Server transport adapter to the canonical
+application use case for its support lifetime.
+
+Web consumes exactly one generated contract. Do not add DTO-shape detection,
+dual query implementations, legacy field fallbacks, or a second handwritten
+wire model. Deprecation and removal follow
+[`docs/architecture/contract-evolution.md`](../../docs/architecture/contract-evolution.md),
+including the 90-day minimum and 30 consecutive zero-traffic days.

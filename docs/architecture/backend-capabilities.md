@@ -28,9 +28,9 @@ HTTP / Agent / MCP / job callback
 ## Stable contracts
 
 The browser-facing API is mounted once at `/api/v1`. A future provider callback
-must live under `/webhooks/v1`, but the first release mounts no public provider
-webhook. Worker-only operations are under `/internal/v1`, which production
-routing deliberately does not expose.
+must live under `/webhooks/v1`, but the current production release mounts no
+public provider webhook. Worker-only operations are under `/internal/v1`, which
+production routing deliberately does not expose.
 
 Public resources use canonical identifiers:
 
@@ -393,9 +393,11 @@ snapshot, an optional turn-suggestion update, and one terminal event. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 
-The conversation aggregate has a reset-first Turn/Response tree rather than a
-compatibility wrapper around messages. Conversation and turn selectors define
-one active root-to-leaf path, and a path revision invalidates stale pagination.
+The conversation aggregate has one canonical Turn/Response tree rather than a
+second message-shaped domain model. Any required compatibility translation
+stays at a transport or persistence boundary. Conversation and turn selectors
+define one active root-to-leaf path, and a path revision invalidates stale
+pagination.
 Only the active leaf exposes its response variants and permits retry or response
 selection. Starting a normal child deletes its parent's unselected response
 variants and stale suggestions; edited prompt siblings and their selected
@@ -606,13 +608,13 @@ must convert those quantities from KiB rather than treating them as bytes.
 `period_end` is the inclusive final day of the selected window, not a timestamp
 or the next reset instant.
 
-This is the only mounted billing HTTP route in the first release. Checkout,
-customer portal, subscription refresh/mutation, and Stripe webhook code remains
-dormant and is not composed into FastAPI; production therefore injects no
-Stripe or PostHog configuration. Researcher access is granted and revoked only
-through the audited private CLI. Re-enabling public charging requires a later
-review that restores the provider boundary, runtime secrets, edge scope, and
-end-to-end tests together.
+This is the only mounted billing HTTP route in the current production release.
+Checkout, customer portal, subscription refresh/mutation, and Stripe webhook
+code remains dormant and is not composed into FastAPI; production therefore
+injects no Stripe or PostHog configuration. Researcher access is granted and
+revoked only through the audited private CLI. Re-enabling public charging
+requires a later review that restores the provider boundary, runtime secrets,
+edge scope, and end-to-end tests together.
 
 Account paper and storage usage is the unique union of completed Documents in
 the personal Library and Projects owned by that account. A repeated Document

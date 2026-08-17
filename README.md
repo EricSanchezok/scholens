@@ -2,10 +2,10 @@
 
 [简体中文](./README.zh-CN.md)
 
-Scholens is a pre-release research workspace for building a durable, traceable
-reading and analysis workflow around scholarly papers. The canonical product is
-the Next.js application in `web/`, backed by the FastAPI service in `server/`
-and asynchronous workers in `jobs/`.
+Scholens is a production-deployed research workspace for building a durable,
+traceable reading and analysis workflow around scholarly papers. The canonical
+product is the Next.js application in `web/`, backed by the FastAPI service in
+`server/` and asynchronous workers in `jobs/`.
 
 ## What is implemented
 

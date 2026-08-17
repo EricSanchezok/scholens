@@ -82,8 +82,14 @@ def test_release_manifest_is_deterministic_and_source_bound(tmp_path: Path) -> N
 
     assert first == second
     assert first["release_sha"] == "b" * 40
+    assert first["contract_version"] == 3
     assert first["runtime_template_sha256"]
     assert first["public_openapi_sha256"]
+    assert first["public_mcp_sha256"]
+    assert (
+        first["scholens_migrations"]["minimum_compatible_application_revision"]
+        == "c9f4a62d01ab"
+    )
     release_manifest.verify_manifest(
         first,
         "b" * 40,
@@ -240,8 +246,100 @@ def test_old_attestation_cannot_authorize_release_after_database_advances(
     current["release_manifest_sha256"] = "e" * 64
     current["scholens_migrations"]["head"] = "new-incompatible-head"
 
-    with pytest.raises(ValueError, match="current database migration contract"):
+    with pytest.raises(ValueError, match="current migration revision history"):
         release_manifest.verify_database_contract(attestation, current, manifest)
+
+
+def test_version_three_baseline_accepts_legacy_proof_transition(
+    tmp_path: Path,
+) -> None:
+    arguments = _arguments(tmp_path)
+    legacy = release_manifest._create_manifest(arguments, legacy=True)
+    current = release_manifest.migration_attestation(legacy)
+    candidate = release_manifest.create_manifest(arguments)
+
+    assert legacy["contract_version"] == 2
+    assert current["contract_version"] == 1
+    assert candidate["contract_version"] == 3
+    release_manifest.verify_migration_transition(current, candidate)
+
+
+def test_additive_database_head_keeps_baseline_application_rollback_compatible(
+    tmp_path: Path,
+) -> None:
+    manifest = release_manifest.create_manifest(_arguments(tmp_path))
+    current = json.loads(json.dumps(release_manifest.migration_attestation(manifest)))
+    migrations = current["scholens_migrations"]
+    migrations["revisions"].append(
+        {
+            "revision": "expand-head",
+            "down_revision": migrations["head"],
+            "filename": "expand.py",
+            "sha256": "f" * 64,
+            "phase": "expand",
+        }
+    )
+    migrations["head"] = "expand-head"
+    migrations["checksum"] = "e" * 64
+
+    release_manifest.verify_current_database_contract(current, manifest)
+
+
+def test_additive_database_head_keeps_legacy_baseline_manifest_compatible(
+    tmp_path: Path,
+) -> None:
+    arguments = _arguments(tmp_path)
+    legacy = release_manifest._create_manifest(arguments, legacy=True)
+    current_manifest = release_manifest.create_manifest(arguments)
+    current = json.loads(
+        json.dumps(release_manifest.migration_attestation(current_manifest))
+    )
+    migrations = current["scholens_migrations"]
+    migrations["revisions"].append(
+        {
+            "revision": "expand-head",
+            "down_revision": migrations["head"],
+            "filename": "expand.py",
+            "sha256": "f" * 64,
+            "phase": "expand",
+        }
+    )
+    migrations["head"] = "expand-head"
+    migrations["checksum"] = "e" * 64
+
+    release_manifest.verify_current_database_contract(current, legacy)
+
+
+def test_contract_floor_blocks_an_application_below_the_floor(tmp_path: Path) -> None:
+    manifest = release_manifest.create_manifest(_arguments(tmp_path))
+    current = json.loads(json.dumps(release_manifest.migration_attestation(manifest)))
+    migrations = current["scholens_migrations"]
+    migrations["revisions"].append(
+        {
+            "revision": "contract-head",
+            "down_revision": migrations["head"],
+            "filename": "contract.py",
+            "sha256": "f" * 64,
+            "phase": "contract",
+        }
+    )
+    migrations["head"] = "contract-head"
+    migrations["checksum"] = "e" * 64
+    migrations["minimum_compatible_application_revision"] = "contract-head"
+
+    with pytest.raises(ValueError, match="outside the live compatibility range"):
+        release_manifest.verify_current_database_contract(current, manifest)
+
+
+def test_migration_transition_rejects_rewritten_attested_history(
+    tmp_path: Path,
+) -> None:
+    manifest = release_manifest.create_manifest(_arguments(tmp_path))
+    current = json.loads(json.dumps(release_manifest.migration_attestation(manifest)))
+    current["scholens_migrations"]["revisions"][0]["sha256"] = "f" * 64
+
+    with pytest.raises(ValueError, match="rewrites or removes"):
+        release_manifest.verify_migration_transition(current, manifest)
 
 
 def test_migration_head_comes_from_graph_not_lexical_filename(
@@ -258,9 +356,62 @@ def test_migration_head_comes_from_graph_not_lexical_filename(
         'revision = "actual-head"\ndown_revision = "root"\n',
         encoding="utf-8",
     )
+    (versions.parent / "policy.json").write_text(
+        json.dumps(
+            {
+                "contract_version": 1,
+                "production_baseline_revision": "actual-head",
+                "revisions": {
+                    "root": {"phase": "baseline"},
+                    "actual-head": {"phase": "baseline"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(release_manifest, "ROOT", tmp_path)
 
     assert release_manifest._migration_contract()["head"] == "actual-head"
+
+
+def test_contract_migration_can_advance_floor_to_its_own_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    versions = tmp_path / "server" / "migrations" / "versions"
+    versions.mkdir(parents=True)
+    (versions / "0001_root.py").write_text(
+        'revision = "root"\ndown_revision = None\n',
+        encoding="utf-8",
+    )
+    (versions / "0002_contract.py").write_text(
+        'revision = "contract-head"\ndown_revision = "root"\n',
+        encoding="utf-8",
+    )
+    (versions.parent / "policy.json").write_text(
+        json.dumps(
+            {
+                "contract_version": 1,
+                "production_baseline_revision": "root",
+                "revisions": {
+                    "root": {"phase": "baseline"},
+                    "contract-head": {
+                        "phase": "contract",
+                        "minimum_compatible_application_revision": "contract-head",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(release_manifest, "ROOT", tmp_path)
+
+    assert (
+        release_manifest._migration_contract()[
+            "minimum_compatible_application_revision"
+        ]
+        == "contract-head"
+    )
 
 
 def test_migration_contract_rejects_multiple_heads(
@@ -283,7 +434,7 @@ def test_migration_contract_rejects_multiple_heads(
     )
     monkeypatch.setattr(release_manifest, "ROOT", tmp_path)
 
-    with pytest.raises(ValueError, match="exactly one head"):
+    with pytest.raises(ValueError, match="must remain linear"):
         release_manifest._migration_contract()
 
 

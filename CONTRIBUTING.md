@@ -1,9 +1,9 @@
 # Contributing to Scholens
 
-Scholens is a pre-release product developed as a mixed TypeScript and Python
-repository. Contributions should leave one coherent product contract, record
-the checks that were actually run, and keep current documentation aligned with
-the code.
+Scholens is a production-deployed product developed as a mixed TypeScript and
+Python repository. Contributions should preserve durable data and stable
+contracts, record the checks that were actually run, and keep current
+documentation aligned with the code.
 
 ## Before changing code
 
@@ -17,6 +17,8 @@ will change:
 - [`server/README.md`](./server/README.md) and [`jobs/README.md`](./jobs/README.md)
   for the Python services;
 - [`docs/architecture/`](./docs/architecture/) for service and data ownership;
+- [`docs/architecture/contract-evolution.md`](./docs/architecture/contract-evolution.md)
+  for API, MCP, job, and database compatibility;
 - [`deploy/ecs/README.md`](./deploy/ecs/README.md) for the current
   production boundary.
 
@@ -132,14 +134,21 @@ Do not use an ADR as a live runbook or restate current implementation details in
 several guides. When the implementation changes, update the current-state owner;
 when the underlying durable choice changes, add a superseding ADR.
 
-## Pre-release and production safety
+## Production contract safety
 
-Until release readiness is declared by an explicit decision, public product API
-and `scholens` schema changes are reset-first: converge on one contract and
-remove superseded routes, DTOs, columns, fixtures, and tests together. Do not add
-compatibility layers solely to preserve disposable pre-release product data.
-Never drop, reset, or assume ownership of the independently managed `auth`
-schema.
+Classify every public-contract or schema change as internal, compatible,
+deprecated, or contract. Applied migration files and production data are
+durable. Schema changes follow expand–migrate–switch–contract, and HTTP v1 or
+MCP v1 breaking changes use a replacement version while the old transport
+boundary remains supported. The full lifecycle, 90-day deprecation period,
+30-day zero-traffic removal condition, and compatibility-code boundaries live
+in
+[`docs/architecture/contract-evolution.md`](./docs/architecture/contract-evolution.md).
+
+Temporary compatibility must stay in a transport, job-envelope, or persistence
+adapter and must have an owner and objective removal condition. Do not fork the
+domain model, teach Web to guess DTO versions, or reset, drop, or assume
+ownership of the independently managed `auth` schema.
 
 Canonical `web/` is the only frontend built by the ECS production release.
 Legacy `client/` remains a local comparison surface and is never packaged into
