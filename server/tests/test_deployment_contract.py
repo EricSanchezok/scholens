@@ -881,12 +881,9 @@ def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> N
     ):
         containers = resources[task_definition]["Properties"]["ContainerDefinitions"]
         container = next(item for item in containers if item["Name"] == workload)
-        environment = {
-            item["Name"]: item["Value"] for item in container["Environment"]
-        }
+        environment = {item["Name"]: item["Value"] for item in container["Environment"]}
         assert (
-            environment["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"]
-            == "DELTA"
+            environment["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] == "DELTA"
         )
 
     target_alarm = resources["ApiTarget5xxAlarm"]["Properties"]
