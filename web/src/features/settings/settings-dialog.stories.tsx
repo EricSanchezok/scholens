@@ -558,6 +558,52 @@ export const ZoteroConnected: Story = {
         name: "Automatically import new papers",
       }),
     ).not.toBeChecked();
+    await expect(
+      within(row).getByRole("button", { name: "Disconnect" }),
+    ).toBeVisible();
+    await expect(
+      within(row).queryByText(/^Connected /),
+    ).not.toBeInTheDocument();
+    await expect(
+      within(row).queryByText(/^Last synced /),
+    ).not.toBeInTheDocument();
+    if (window.innerWidth >= 640) {
+      await expect(row.getBoundingClientRect().height).toBeLessThan(96);
+    }
+  },
+};
+
+export const ZoteroOAuthFailure: Story = {
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath:
+          "/?settings=connections&zotero_intent=manage&zotero=zotero_permissions_insufficient",
+        pathname: "/",
+        query: {
+          settings: "connections",
+          zotero: "zotero_permissions_insufficient",
+          zotero_intent: "manage",
+        },
+      },
+    },
+  },
+  play: async () => {
+    const body = within(document.body);
+    const zotero = await body.findByText("Zotero");
+    const row = zotero.closest("article");
+    await expect(row).not.toBeNull();
+    if (!row) return;
+    await expect(
+      within(row).getByRole("button", { name: "Connect" }),
+    ).toBeVisible();
+    await expect(within(row).getByRole("alert")).toHaveTextContent(
+      "Zotero did not grant the required read-only library, note, and file permissions.",
+    );
+    if (window.innerWidth >= 640) {
+      await expect(row.getBoundingClientRect().height).toBeLessThan(96);
+    }
   },
 };
 
@@ -626,8 +672,8 @@ export const ZoteroActiveSyncRecovered: Story = {
       await within(row).findByRole("button", { name: "Cancel sync" }),
     ).toBeVisible();
     await expect(
-      within(row).getByRole("button", { name: "Sync now" }),
-    ).toBeDisabled();
+      within(row).queryByRole("button", { name: "Sync now" }),
+    ).not.toBeInTheDocument();
   },
 };
 
@@ -694,6 +740,66 @@ export const ZoteroFailedSync: Story = {
         "Scholens took too long to finish this Zotero batch. Try the import or sync again.",
       ),
     ).toBeVisible();
+  },
+};
+
+export const ZoteroInvalidConnection: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...authHandlers.success,
+        http.get(`${api}/me/integrations`, () =>
+          HttpResponse.json({
+            items: integrations.map((integration) =>
+              integration.provider === "zotero"
+                ? {
+                    ...integration,
+                    enabled: true,
+                    last_error_code: "zotero_credentials_invalid",
+                    state: "invalid",
+                    updated_at: "2026-08-15T08:00:00Z",
+                    verified_at: "2026-08-15T08:00:00Z",
+                  }
+                : integration,
+            ),
+          }),
+        ),
+        http.get(`${api}/integrations/zotero/status`, () =>
+          HttpResponse.json({
+            active_operation_id: null,
+            active_operation_kind: null,
+            auto_import_enabled: false,
+            auto_import_state: "off",
+            automatic_annotation_sync: "off",
+            automatic_sync_eligible: false,
+            connected_at: "2026-08-15T08:00:00Z",
+            connection_state: "invalid",
+            last_error_code: "zotero_credentials_invalid",
+            last_successful_sync_at: null,
+          }),
+        ),
+      ],
+    },
+    nextjs: navigation("connections"),
+  },
+  play: async () => {
+    const body = within(document.body);
+    const zotero = await body.findByText("Zotero");
+    const row = zotero.closest("article");
+    await expect(row).not.toBeNull();
+    if (!row) return;
+    await expect(
+      await within(row).findByRole("button", { name: "Reconnect" }),
+    ).toBeVisible();
+    await expect(
+      within(row).getByRole("button", { name: "Disconnect" }),
+    ).toBeVisible();
+    await expect(
+      within(row).queryByRole("button", { name: "Sync now" }),
+    ).not.toBeInTheDocument();
+    if (window.innerWidth >= 640) {
+      await expect(row.getBoundingClientRect().height).toBeLessThan(96);
+    }
   },
 };
 

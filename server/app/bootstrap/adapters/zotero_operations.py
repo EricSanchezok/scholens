@@ -169,8 +169,7 @@ class DefaultZoteroOperations:
             user_access.get(name) is True for name in ("library", "notes", "files")
         ):
             return False
-        groups = access.get("groups")
-        return groups in (None, {}, [])
+        return True
 
     def fetch_library(
         self,

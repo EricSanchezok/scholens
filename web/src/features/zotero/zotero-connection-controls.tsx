@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -39,7 +39,6 @@ export function ZoteroConnectionControls({
   const t = useTranslations("Zotero.settings");
   const operationT = useTranslations("Zotero.operation");
   const oauthT = useTranslations("Zotero.oauth");
-  const format = useFormatter();
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -133,8 +132,23 @@ export function ZoteroConnectionControls({
   }, [queryClient, router, searchParams]);
 
   if (!connected) {
+    const error = connect.isError
+      ? t(zoteroSettingsErrorKey(zoteroErrorCode(connect.error)))
+      : oauthResult && oauthResult !== "connected"
+        ? oauthT(zoteroOAuthResultKey(oauthResult))
+        : undefined;
+
     return (
-      <div className="flex flex-col items-start gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+        {error ? (
+          <p
+            className="text-danger max-w-40 truncate text-xs"
+            role="alert"
+            title={error}
+          >
+            {error}
+          </p>
+        ) : null}
         <Button
           loading={connect.isPending}
           onClick={() => connect.mutate()}
@@ -142,23 +156,6 @@ export function ZoteroConnectionControls({
         >
           {t("connect")}
         </Button>
-        {connect.isError ? (
-          <p className="text-danger text-sm" role="alert">
-            {t(zoteroSettingsErrorKey(zoteroErrorCode(connect.error)))}
-          </p>
-        ) : null}
-        {oauthResult ? (
-          <p
-            className={
-              oauthResult === "connected"
-                ? "text-success text-sm"
-                : "text-danger text-sm"
-            }
-            role="status"
-          >
-            {oauthT(zoteroOAuthResultKey(oauthResult))}
-          </p>
-        ) : null}
       </div>
     );
   }
@@ -173,159 +170,146 @@ export function ZoteroConnectionControls({
   const canManageAutoImport = Boolean(
     current?.automatic_sync_eligible || current?.auto_import_enabled,
   );
+  const invalid = current?.connection_state === "invalid";
+  const requestError = sync.error ?? operation.error ?? cancel.error;
+  const feedback = (() => {
+    if (connect.isError) {
+      return {
+        message: t(zoteroSettingsErrorKey(zoteroErrorCode(connect.error))),
+        tone: "danger" as const,
+      };
+    }
+    if (status.isError) {
+      return {
+        message: t(zoteroSettingsErrorKey(zoteroErrorCode(status.error))),
+        tone: "danger" as const,
+      };
+    }
+    if (invalid) {
+      return {
+        message: t(
+          zoteroSettingsErrorKey(
+            current?.last_error_code ?? "zotero_credentials_invalid",
+          ),
+        ),
+        tone: "danger" as const,
+      };
+    }
+    if (preferences.isError) {
+      return {
+        message: t(zoteroSettingsErrorKey(zoteroErrorCode(preferences.error))),
+        tone: "danger" as const,
+      };
+    }
+    if (requestError) {
+      return {
+        message: t(zoteroSettingsErrorKey(zoteroErrorCode(requestError))),
+        tone: "danger" as const,
+      };
+    }
+    if (
+      operation.data &&
+      ["failed", "partial"].includes(operation.data.status) &&
+      operation.data.error_code
+    ) {
+      return {
+        message: operationT(zoteroOperationErrorKey(operation.data.error_code)),
+        tone: "danger" as const,
+      };
+    }
+    if (current?.active_operation_kind === "import") {
+      return {
+        message: t("operation.importActive"),
+        tone: "neutral" as const,
+      };
+    }
+    if (operation.data) {
+      return {
+        message: t(`operation.${operation.data.status}`),
+        tone:
+          operation.data.status === "failed"
+            ? ("danger" as const)
+            : ("neutral" as const),
+      };
+    }
+    if (oauthResult === "connected") {
+      return {
+        message: oauthT(zoteroOAuthResultKey(oauthResult)),
+        tone: "success" as const,
+      };
+    }
+    return undefined;
+  })();
 
   return (
-    <div className="basis-full pl-14 sm:pl-0">
-      {oauthResult ? (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+      {feedback ? (
         <p
-          className={
-            oauthResult === "connected"
-              ? "text-success mb-3 text-sm"
-              : "text-danger mb-3 text-sm"
-          }
-          role="status"
+          className={`max-w-40 truncate text-xs ${
+            feedback.tone === "danger"
+              ? "text-danger"
+              : feedback.tone === "success"
+                ? "text-success"
+                : "text-secondary"
+          }`}
+          role={feedback.tone === "danger" ? "alert" : "status"}
+          title={feedback.message}
         >
-          {oauthT(zoteroOAuthResultKey(oauthResult))}
+          {feedback.message}
         </p>
       ) : null}
-      <div className="border-line grid gap-4 border-t pt-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="grid gap-2 text-sm">
-          {status.isPending ? (
-            <p className="text-secondary" role="status">
-              {t("loading")}
-            </p>
-          ) : status.isError ? (
-            <p className="text-danger" role="alert">
-              {t(zoteroSettingsErrorKey(zoteroErrorCode(status.error)))}
-            </p>
-          ) : current ? (
-            <>
-              <p className="text-secondary">
-                {current.connected_at
-                  ? t("connectedAt", {
-                      date: format.dateTime(new Date(current.connected_at), {
-                        dateStyle: "medium",
-                      }),
-                    })
-                  : t("connected")}
-              </p>
-              <p className="text-secondary">
-                {current.last_successful_sync_at
-                  ? t("lastSync", {
-                      date: format.dateTime(
-                        new Date(current.last_successful_sync_at),
-                        { dateStyle: "medium", timeStyle: "short" },
-                      ),
-                    })
-                  : t("neverSynced")}
-              </p>
-              {current.connection_state === "invalid" ? (
-                <p className="text-danger" role="alert">
-                  {t(
-                    zoteroSettingsErrorKey(
-                      current.last_error_code ?? "zotero_credentials_invalid",
-                    ),
-                  )}
-                </p>
-              ) : null}
-              <p className="text-secondary">
-                {current.automatic_annotation_sync === "active"
-                  ? t("automaticAnnotationsActive")
-                  : t("manualMode")}
-              </p>
-              {canManageAutoImport ? (
-                <label className="flex min-h-11 max-w-xl items-center justify-between gap-4">
-                  <span>
-                    <span className="block font-medium">{t("autoImport")}</span>
-                    <span className="text-secondary mt-0.5 block text-xs leading-5">
-                      {current.auto_import_state === "paused"
-                        ? t("autoImportPaused")
-                        : t("autoImportDescription")}
-                    </span>
-                  </span>
-                  <Switch
-                    aria-label={t("autoImport")}
-                    checked={current.auto_import_enabled}
-                    disabled={
-                      preferences.isPending || !current.automatic_sync_eligible
-                    }
-                    onCheckedChange={(checked) => preferences.mutate(checked)}
-                  />
-                </label>
-              ) : null}
-              {preferences.isError ? (
-                <p className="text-danger" role="alert">
-                  {t(
-                    zoteroSettingsErrorKey(zoteroErrorCode(preferences.error)),
-                  )}
-                </p>
-              ) : null}
-              {operation.data ? (
-                <div className="grid gap-1">
-                  <p
-                    className={
-                      operation.data.status === "failed"
-                        ? "text-danger"
-                        : "text-secondary"
-                    }
-                    role="status"
-                  >
-                    {t(`operation.${operation.data.status}`)}
-                  </p>
-                  {["failed", "partial"].includes(operation.data.status) &&
-                  operation.data.error_code ? (
-                    <p className="text-danger" role="alert">
-                      {operationT(
-                        zoteroOperationErrorKey(operation.data.error_code),
-                      )}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              {current.active_operation_kind === "import" ? (
-                <p className="text-secondary" role="status">
-                  {t("operation.importActive")}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-start gap-2">
-          <Button
-            disabled={
-              current?.connection_state === "invalid" || hasActiveOperation
-            }
-            loading={syncing}
-            onClick={() => sync.mutate()}
-            size="sm"
-            variant="secondary"
-          >
-            {t("syncNow")}
-          </Button>
-          {activeSyncId && !terminal ? (
-            <Button
-              loading={cancel.isPending}
-              onClick={() => cancel.mutate()}
-              size="sm"
-              variant="ghost"
-            >
-              {t("cancelSync")}
-            </Button>
-          ) : null}
-          <Button onClick={onDisconnect} size="sm" variant="ghost">
-            {t("disconnect")}
-          </Button>
-        </div>
-      </div>
-      {sync.isError || operation.isError || cancel.isError ? (
-        <p className="text-danger mt-2 text-sm" role="alert">
-          {t(
-            zoteroSettingsErrorKey(
-              zoteroErrorCode(sync.error ?? operation.error ?? cancel.error),
-            ),
-          )}
-        </p>
+      {!invalid && canManageAutoImport && current ? (
+        <label
+          className="flex min-h-9 items-center gap-2"
+          title={
+            current.auto_import_state === "paused"
+              ? t("autoImportPaused")
+              : undefined
+          }
+        >
+          <span className="text-secondary hidden text-xs whitespace-nowrap sm:inline">
+            {t("autoImportShort")}
+          </span>
+          <Switch
+            aria-label={t("autoImport")}
+            checked={current.auto_import_enabled}
+            disabled={preferences.isPending || !current.automatic_sync_eligible}
+            onCheckedChange={(checked) => preferences.mutate(checked)}
+          />
+        </label>
       ) : null}
+      {invalid ? (
+        <Button
+          loading={connect.isPending}
+          onClick={() => connect.mutate()}
+          size="sm"
+          variant="secondary"
+        >
+          {t("reconnect")}
+        </Button>
+      ) : activeSyncId && !terminal ? (
+        <Button
+          loading={cancel.isPending}
+          onClick={() => cancel.mutate()}
+          size="sm"
+          variant="secondary"
+        >
+          {t("cancelSync")}
+        </Button>
+      ) : (
+        <Button
+          disabled={!current || hasActiveOperation}
+          loading={status.isPending || syncing}
+          onClick={() => sync.mutate()}
+          size="sm"
+          variant="secondary"
+        >
+          {t("syncNow")}
+        </Button>
+      )}
+      <Button onClick={onDisconnect} size="sm" variant="ghost">
+        {t("disconnect")}
+      </Button>
     </div>
   );
 }
