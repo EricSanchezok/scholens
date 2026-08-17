@@ -32,13 +32,19 @@ test("renders the sign-in entry accessibly and normalizes an invalid mode", asyn
     "email",
   );
   const sourceLink = page.getByRole("link", {
-    name: "Source code · AGPL-3.0",
+    name: "Repository",
   });
   await expect(sourceLink).toHaveAttribute(
     "href",
     "https://github.com/EricSanchezok/scholens",
   );
   await expect(sourceLink).toHaveAttribute("target", "_blank");
+  await expect(
+    page.getByRole("link", { name: "Documentation" }),
+  ).toHaveAttribute("href", "/docs");
+  await expect(
+    page.getByRole("link", { name: "Documentation" }),
+  ).toHaveAttribute("target", "_blank");
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
 });
@@ -159,7 +165,9 @@ test("uses the Simplified Chinese authentication dictionary", async ({
   ]);
   await page.goto("/login");
   await expect(page.getByRole("heading", { name: "欢迎回来" })).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "源代码 · AGPL-3.0" }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "仓库" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "文档" })).toHaveAttribute(
+    "href",
+    "/docs",
+  );
 });

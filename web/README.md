@@ -24,6 +24,7 @@ pnpm test:storybook
 pnpm test:e2e
 pnpm i18n:check          # message keys and ICU arguments stay aligned
 pnpm design:check        # token parity, adapters, styling and Storybook contract
+pnpm docs:check          # docs links plus MCP snapshot/page fact alignment
 ```
 
 Authentication modes are available at `/login`, `?mode=register`,

@@ -20,5 +20,23 @@ export default async function HomeRoute({
     )
       ? candidate
       : undefined;
-  return <HomePage conversationId={conversationId} />;
+  const returnToQuery = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => returnToQuery.append(key, item));
+    } else if (value !== undefined) {
+      returnToQuery.set(key, value);
+    }
+  });
+  const serializedReturnTo = returnToQuery.toString();
+  const anonymousReturnTo = serializedReturnTo
+    ? `/?${serializedReturnTo}`
+    : "/";
+
+  return (
+    <HomePage
+      anonymousReturnTo={anonymousReturnTo}
+      conversationId={conversationId}
+    />
+  );
 }

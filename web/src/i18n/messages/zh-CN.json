@@ -15,6 +15,205 @@
     "title": "Scholens",
     "description": "使用 Scholens 阅读、组织论文，并基于研究资料提问。"
   },
+  "Documentation": {
+    "metadata": {
+      "title": "Scholens MCP 文档",
+      "description": "将 Codex、Claude Desktop、Cursor 和其他 MCP 客户端连接到你的 Scholens 研究工作区。"
+    },
+    "header": {
+      "docs": "文档",
+      "navigation": "文档导航",
+      "skipToContent": "跳到文档正文",
+      "backToApp": "返回应用",
+      "repository": "仓库",
+      "language": "文档语言"
+    },
+    "hero": {
+      "title": "将你的研究智能体连接到 Scholens",
+      "description": "让 Codex、Claude Desktop、Cursor 或任意 Streamable HTTP 客户端安全使用 {count} 个工具，访问你已经存储的研究知识。",
+      "createKey": "创建访问密钥",
+      "openRepository": "打开仓库"
+    },
+    "toc": {
+      "label": "本页目录",
+      "open": "本页目录",
+      "quickStart": "快速开始",
+      "mcpSetup": "连接客户端",
+      "permissions": "权限",
+      "capabilities": "功能范围",
+      "repositoryBinding": "绑定研究仓库",
+      "security": "安全说明",
+      "troubleshooting": "故障排查"
+    },
+    "quickStart": {
+      "title": "快速开始",
+      "description": "创建一个权限明确的密钥，连接客户端，并在开始研究工作前确认 Scholens 工具目录。",
+      "steps": {
+        "create": {
+          "title": "创建密钥",
+          "description": "打开“设置 → 访问密钥”，只授予这个客户端实际需要的权限。"
+        },
+        "copy": {
+          "title": "保存密钥",
+          "description": "立即复制完整密钥。Scholens 只会显示一次。"
+        },
+        "connect": {
+          "title": "连接 MCP",
+          "description": "在下方选择客户端，并将密钥保存在环境变量或客户端私有配置中。"
+        },
+        "verify": {
+          "title": "验证工具",
+          "description": "重启客户端，查看 Scholens 服务器，并确认所需工具已经出现。"
+        }
+      }
+    },
+    "setup": {
+      "title": "连接客户端",
+      "description": "日常工具和资源访问使用远程端点；当智能体需要从研究仓库上传本地 PDF 时，使用官方本地连接器。",
+      "endpoint": "Streamable HTTP 端点",
+      "chooseClient": "选择客户端",
+      "credential": "密钥配置",
+      "configuration": "MCP 配置",
+      "officialReference": "打开该客户端的 MCP 官方文档",
+      "remote": {
+        "title": "远程 Streamable HTTP",
+        "description": "最直接地访问已存储知识、项目、协作、批注和任务。每次请求都通过 Bearer Token 发送访问密钥。"
+      },
+      "local": {
+        "title": "本地 uvx 连接器",
+        "description": "增加安全的仓库 PDF 上传能力，不开放入站端口，也不会暴露本地绝对路径。"
+      },
+      "localUpload": {
+        "title": "安全上传本地 PDF",
+        "description": "本地连接器以 upload_local_paper 替换远程上传准备工具。文件必须位于 MCP root 或 --allowed-root 之下，必须是有效 PDF，且不能超过 {size} MB。",
+        "releasePinned": "这份生产指南已将 uvx 连接器固定到 Scholens 发布版本 {sha}。",
+        "developmentFallback": "开发预览：连接器使用可变的 @main；生产构建会替换为实际部署版本的 40 位 release SHA。",
+        "showConfiguration": "显示可复用的本地连接器配置",
+        "configuration": "本地 uvx 连接器"
+      }
+    },
+    "clients": {
+      "codex": {
+        "label": "Codex",
+        "description": "Codex App、CLI 和 IDE 扩展共享同一份 config.toml MCP 配置。将密钥保存在 SCHOLENS_ACCESS_KEY 中，并在服务器配置中引用这个环境变量。",
+        "after": "保存文件后重启 Codex App 或 IDE 扩展。在 Codex CLI 中可使用 /mcp 查看已连接的服务器。"
+      },
+      "claude-desktop": {
+        "label": "Claude Desktop",
+        "description": "在 Claude Desktop 中使用 Scholens 本地 stdio 桥接。它兼容现有访问密钥契约，提供研究仓库 PDF 上传能力，也避免依赖目前无法接收静态 Bearer Token 的远程自定义连接器流程。",
+        "after": "macOS 使用 ~/Library/Application Support/Claude/claude_desktop_config.json；Windows 使用 %APPDATA%\\Claude\\claude_desktop_config.json。仅在这个私有文件中替换 YOUR_ACCESS_KEY，重启 Claude Desktop，然后从输入框的“连接器”中检查服务器。"
+      },
+      "cursor": {
+        "label": "Cursor",
+        "description": "在项目的 .cursor/mcp.json 或 Cursor 全局 MCP 配置中填写远程端点，并从环境变量注入密钥。",
+        "after": "保存配置后重新加载 Cursor，并在 MCP 设置中检查 Scholens 连接和可用工具。"
+      },
+      "generic": {
+        "label": "通用 MCP",
+        "description": "任何支持 Streamable HTTP 和 Authorization Header 的 MCP Host 都可以直接连接 Scholens。",
+        "after": "每次 MCP 请求都必须通过 Bearer Token 发送访问密钥。不要把密钥放进端点 URL，也不要提交到源代码仓库。"
+      }
+    },
+    "permissions": {
+      "title": "选择最小权限",
+      "description": "权限决定密钥能够看到哪些工具。优先从 read 开始，仅为客户端必须执行的工作流增加权限。",
+      "items": {
+        "read": "搜索和读取已存储论文、项目、批注、资料库状态和已有研究输出。",
+        "write": "创建或更新研究内容，上传已知来源，并启动异步导入任务。",
+        "manage": "管理协作者、邀请、所有权变化和公开分享状态。",
+        "delete": "在明确完成状态绑定确认后执行破坏性生命周期操作。"
+      },
+      "authorization": "工具可见性只是第一层检查。Scholens 会在每次请求中再次校验具体项目、论文、批注或输出的访问权限。"
+    },
+    "capabilities": {
+      "title": "MCP 服务器能做什么",
+      "description": "具有全部权限的远程或本地连接会提供 {count} 个工具，覆盖六类持久研究工作流。",
+      "groups": {
+        "papers": {
+          "title": "已存储论文",
+          "description": "搜索、受限正文读取、引用上下文和来源下载。"
+        },
+        "projects": {
+          "title": "项目",
+          "description": "论文、成员、邀请、所有权和持久项目清单。"
+        },
+        "library": {
+          "title": "个人资料库",
+          "description": "资料库归属、分享和标签，同时保持用户所有权。"
+        },
+        "ingestion": {
+          "title": "资料导入",
+          "description": "已知来源导入、上传准备和异步任务状态。"
+        },
+        "annotations": {
+          "title": "批注",
+          "description": "面向个人或项目范围的批注讨论和评论。"
+        },
+        "outputs": {
+          "title": "研究输出",
+          "description": "读取已经存储在 Scholens 中的现有研究输出。"
+        }
+      },
+      "resources": "资源",
+      "templates": "资源模板",
+      "boundary": {
+        "title": "明确的产品边界",
+        "description": "Scholens 管理和检索已经存储在工作区中的研究知识。它的 MCP 服务器不会从公开互联网发现论文，也不会生成新的研究输出。"
+      }
+    },
+    "binding": {
+      "title": "绑定研究仓库",
+      "description": "调用一次 create_project 或 get_project，然后将返回的 binding_markdown 保存到仓库的 AGENTS.md 或 README.md。",
+      "guidance": "后续调用始终使用不可变的项目 UUID 和 scholens:// URI，不要通过可编辑的项目标题选择项目。"
+    },
+    "security": {
+      "title": "限制密钥与操作范围",
+      "description": "访问密钥是功能强大的智能体凭证。密钥存储、权限和确认流程都属于研究边界的一部分。",
+      "items": {
+        "store": "将密钥保存在环境变量或客户端私有配置中，不要写入 URL、日志、截图或源代码仓库。",
+        "leastPrivilege": "为每个客户端选择最短的实用有效期和最小权限集。",
+        "confirm": "破坏性或对外可见的工具会先返回状态绑定预览，只有使用未过期确认令牌重复同一次调用才会执行。",
+        "upload": "本地连接器只向 Scholens 发送访问密钥；对象存储上传使用独立的校验授权。"
+      }
+    },
+    "troubleshooting": {
+      "title": "故障排查",
+      "items": {
+        "unauthorized": {
+          "title": "401 Unauthorized",
+          "description": "密钥缺失、过期、已撤销或复制错误。创建或导出有效密钥，然后重启客户端。"
+        },
+        "missingTool": {
+          "title": "缺少预期工具",
+          "description": "访问密钥没有包含用于显示该工具的权限。编辑密钥，或创建一个权限明确的新密钥。"
+        },
+        "restart": {
+          "title": "客户端仍显示旧配置",
+          "description": "修改 MCP 配置或环境变量后，请重启 Codex 或 Claude Desktop，或者重新加载 Cursor。"
+        },
+        "localFile": {
+          "title": "本地 PDF 被拒绝",
+          "description": "将仓库暴露为 MCP root 或传入 --allowed-root。文件必须是不超过 {size} MB 的非空 PDF，并始终位于允许的根目录内。"
+        },
+        "longOperation": {
+          "title": "资料导入尚未完成",
+          "description": "资料导入是异步过程。使用返回的任务 UUID 轮询 get_job，不要重复上传论文。"
+        }
+      }
+    },
+    "copy": {
+      "copy": "复制代码",
+      "copying": "正在复制代码",
+      "copied": "代码已复制",
+      "error": "无法复制代码"
+    },
+    "footer": {
+      "markdown": "Markdown 文档",
+      "llms": "llms.txt",
+      "repository": "仓库",
+      "license": "AGPL-3.0 开源"
+    }
+  },
   "FoundationSmoke": {
     "eyebrow": "前端基础 · 验证页面",
     "description": "独立的 Next.js、设计令牌、主题、查询、组件和多语言基础已经运行。具体产品页面将在后续开始开发。"
@@ -73,7 +272,8 @@
       "settings": "设置",
       "accountSettings": "账户",
       "usageSettings": "用量",
-      "sourceCode": "源代码 · AGPL-3.0",
+      "documentation": "文档",
+      "repository": "仓库",
       "signOut": "退出登录",
       "signingOut": "正在退出…"
     }
@@ -824,7 +1024,9 @@
   },
   "Authentication": {
     "brand": "Scholens",
-    "sourceCode": "源代码 · AGPL-3.0",
+    "publicLinks": "公开链接",
+    "documentation": "文档",
+    "repository": "仓库",
     "a11y": {
       "showPassword": "显示密码",
       "hidePassword": "隐藏密码"
@@ -1321,7 +1523,7 @@
     "navigationLabel": "设置导航",
     "navigation": {
       "account": "账户",
-      "general": "外观、动态效果与语言",
+      "general": "外观",
       "usage": "用量",
       "access-keys": "访问密钥",
       "connections": "连接",
@@ -1360,7 +1562,7 @@
       "researcher": "研究者版"
     },
     "general": {
-      "title": "外观、动态效果与语言",
+      "title": "外观",
       "description": "选择 Scholens 的显示、动态效果与界面语言。",
       "interfaceLanguage": "界面语言",
       "appearance": "外观",
@@ -1401,6 +1603,7 @@
     "accessKeys": {
       "title": "访问密钥",
       "description": "为受信任的 API 客户端创建最小权限密钥，并可随时撤销。",
+      "configurationGuide": "MCP 配置指南",
       "create": "创建访问密钥",
       "createTitle": "创建访问密钥",
       "editTitle": "编辑访问密钥",

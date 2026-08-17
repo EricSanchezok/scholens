@@ -157,7 +157,8 @@ export const General: Story = {
     const body = within(document.body);
     await expect(
       await body.findByRole("heading", {
-        name: "Appearance, motion & language",
+        level: 2,
+        name: "Appearance",
       }),
     ).toBeVisible();
     await expect(body.getByRole("button", { name: "Light" })).toBeVisible();
@@ -193,7 +194,8 @@ export const NonBlockingPanelReplacement: Story = {
   play: async () => {
     const body = within(document.body);
     const initialHeading = await body.findByRole("heading", {
-      name: "Appearance, motion & language",
+      level: 2,
+      name: "Appearance",
     });
     await waitFor(() => expect(initialHeading).toBeVisible());
     await userEvent.click(body.getByRole("button", { name: "Account" }));
@@ -300,6 +302,29 @@ export const AccessKeys: Story = {
     await expect(
       body.getByRole("button", { name: "Create access key" }),
     ).toBeVisible();
+    await expect(
+      body.getByRole("link", { name: /MCP setup guide/ }),
+    ).toHaveAttribute("href", "/docs#mcp-setup");
+    await expect(
+      body.getByRole("link", { name: /MCP setup guide/ }),
+    ).toHaveAttribute("target", "_blank");
+  },
+};
+
+export const AccessKeysSmallMobile: Story = {
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+  parameters: { nextjs: navigation("access-keys") },
+  play: async () => {
+    const body = within(document.body);
+    await expect(
+      await body.findByRole("heading", { name: "Access keys" }),
+    ).toBeVisible();
+    await expect(
+      body.getByRole("link", { name: /MCP setup guide/ }),
+    ).toBeVisible();
+    expect(document.documentElement.scrollWidth <= window.innerWidth).toBe(
+      true,
+    );
   },
 };
 

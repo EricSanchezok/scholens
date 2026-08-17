@@ -100,6 +100,11 @@ while Scholens remains the durable, permission-aware system of record. The
 in-product Agent uses the same capability definitions so the two surfaces do
 not develop conflicting semantics.
 
+The public Web documentation explains how to create a scoped Access Key,
+connect supported MCP clients, understand the available capabilities and
+permissions, and bind a research repository. It is available without signing
+in; Settings links Access Keys directly to the same setup contract.
+
 Known DOI, arXiv, and HTTP(S) sources can be imported directly. A local Agent
 may also upload a PDF from an explicitly exposed filesystem root through the
 official local bridge; the local path never leaves the computer. After

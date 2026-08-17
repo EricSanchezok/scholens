@@ -102,6 +102,7 @@ the superseded names.
 | `CLIENT_ALLOWED_ORIGINS`                                                                          | server (`http://127.0.0.1:7300,http://127.0.0.1:7303`)          |
 | `NEXT_PUBLIC_API_URL`                                                                             | web + legacy client                                             |
 | `NEXT_PUBLIC_ACCOUNT_CENTER_URL`                                                                  | web; optional Account Center override (`http://127.0.0.1:7100`) |
+| `NEXT_PUBLIC_RELEASE_SHA`                                                                         | web build metadata; `development` uses labeled mutable fallback |
 
 MOSS Voice is required only for audio overviews. Zotero and admin variables are
 grouped in the root `.env.example`. Public charging and PostHog are intentionally

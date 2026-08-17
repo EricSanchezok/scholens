@@ -11,6 +11,17 @@ const nextConfig: NextConfig = {
   },
   generateBuildId: async () =>
     process.env.NEXT_PUBLIC_RELEASE_SHA ?? "development",
+  headers: async () => [
+    {
+      source: "/docs",
+      headers: [
+        {
+          key: "Link",
+          value: '</docs.md>; rel="alternate"; type="text/markdown"',
+        },
+      ],
+    },
+  ],
   output: "standalone",
   productionBrowserSourceMaps: true,
   reactStrictMode: true,

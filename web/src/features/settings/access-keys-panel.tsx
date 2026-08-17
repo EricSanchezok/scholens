@@ -29,12 +29,20 @@ import {
   FieldLabel,
   FieldMessage,
   Input,
+  LinkButton,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
+import { Icon } from "@/design-system/icons/icon";
+import {
+  DocumentationIcon,
+  ExternalLinkIcon,
+} from "@/design-system/icons/semantic-icons";
+import { documentationAnchors } from "@/features/documentation";
+import { DOCUMENTATION_PATH } from "@/lib/product";
 import {
   createAccessKey,
   revokeAccessKey,
@@ -273,6 +281,19 @@ export function AccessKeysPanel() {
   return (
     <div>
       <SettingsPanelHeader
+        action={
+          <LinkButton
+            href={`${DOCUMENTATION_PATH}#${documentationAnchors.mcpSetup}`}
+            rel="noopener noreferrer"
+            size="sm"
+            target="_blank"
+            variant="secondary"
+          >
+            <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
+            {t("accessKeys.configurationGuide")}
+            <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+          </LinkButton>
+        }
         description={t("accessKeys.description")}
         title={t("accessKeys.title")}
       />

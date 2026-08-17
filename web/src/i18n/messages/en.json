@@ -15,6 +15,205 @@
     "title": "Scholens",
     "description": "Read, organize, and ask across your research with Scholens."
   },
+  "Documentation": {
+    "metadata": {
+      "title": "Scholens MCP documentation",
+      "description": "Connect Codex, Claude Desktop, Cursor, and other MCP clients to your Scholens research workspace."
+    },
+    "header": {
+      "docs": "Docs",
+      "navigation": "Documentation navigation",
+      "skipToContent": "Skip to documentation",
+      "backToApp": "Back to app",
+      "repository": "Repository",
+      "language": "Documentation language"
+    },
+    "hero": {
+      "title": "Connect your research agent to Scholens",
+      "description": "Give Codex, Claude Desktop, Cursor, or any Streamable HTTP client secure access to {count} tools for your stored research knowledge.",
+      "createKey": "Create access key",
+      "openRepository": "Open repository"
+    },
+    "toc": {
+      "label": "On this page",
+      "open": "On this page",
+      "quickStart": "Quick start",
+      "mcpSetup": "Connect a client",
+      "permissions": "Permissions",
+      "capabilities": "Capabilities",
+      "repositoryBinding": "Bind a repository",
+      "security": "Security",
+      "troubleshooting": "Troubleshooting"
+    },
+    "quickStart": {
+      "title": "Quick start",
+      "description": "Create one scoped key, connect your client, and verify the Scholens catalog before beginning research work.",
+      "steps": {
+        "create": {
+          "title": "Create a key",
+          "description": "Open Settings → Access keys and grant only the permissions this client needs."
+        },
+        "copy": {
+          "title": "Save the secret",
+          "description": "Copy the key immediately. Scholens shows the complete secret only once."
+        },
+        "connect": {
+          "title": "Connect MCP",
+          "description": "Choose your client below and keep the key in its environment or private configuration."
+        },
+        "verify": {
+          "title": "Verify tools",
+          "description": "Restart the client, inspect the Scholens server, and confirm that the expected tools are visible."
+        }
+      }
+    },
+    "setup": {
+      "title": "Connect a client",
+      "description": "Use the remote endpoint for normal tool and resource access. Use the official local connector when an agent must upload a PDF from your repository.",
+      "endpoint": "Streamable HTTP endpoint",
+      "chooseClient": "Choose a client",
+      "credential": "Credential",
+      "configuration": "MCP configuration",
+      "officialReference": "Open the client's official MCP documentation",
+      "remote": {
+        "title": "Remote Streamable HTTP",
+        "description": "The simplest path for stored knowledge, Projects, collaboration, annotations, and jobs. Every request sends an Access Key as a Bearer token."
+      },
+      "local": {
+        "title": "Local uvx connector",
+        "description": "Adds safe repository PDF upload without opening an inbound port or exposing an absolute local path."
+      },
+      "localUpload": {
+        "title": "Upload local PDFs safely",
+        "description": "The local connector replaces the remote upload-preparation tool with upload_local_paper. Files must be beneath an exposed MCP root or --allowed-root, must be valid PDFs, and may not exceed {size} MB.",
+        "releasePinned": "This production guide pins the uvx connector to Scholens release {sha}.",
+        "developmentFallback": "Development preview: the connector uses mutable @main. Production builds replace it with their exact 40-character release SHA.",
+        "showConfiguration": "Show the reusable local connector configuration",
+        "configuration": "Local uvx connector"
+      }
+    },
+    "clients": {
+      "codex": {
+        "label": "Codex",
+        "description": "Codex app, CLI, and IDE extension share the same config.toml MCP configuration. Keep the secret in SCHOLENS_ACCESS_KEY and reference the environment variable from the server entry.",
+        "after": "Save the file, then restart the Codex app or IDE extension. In Codex CLI, use /mcp to inspect the connected server."
+      },
+      "claude-desktop": {
+        "label": "Claude Desktop",
+        "description": "Use the Scholens local stdio bridge in Claude Desktop. This supports the existing Access Key contract, adds repository PDF upload, and avoids the remote custom-connector flow that does not currently accept a static Bearer token.",
+        "after": "On macOS, use ~/Library/Application Support/Claude/claude_desktop_config.json; on Windows, use %APPDATA%\\Claude\\claude_desktop_config.json. Replace YOUR_ACCESS_KEY only in this private file, restart Claude Desktop, then inspect Connectors from the composer."
+      },
+      "cursor": {
+        "label": "Cursor",
+        "description": "Configure the remote endpoint in a project .cursor/mcp.json or the global Cursor MCP configuration, and inject the key from the environment.",
+        "after": "Reload Cursor after saving the configuration and check MCP settings for the Scholens connection and available tools."
+      },
+      "generic": {
+        "label": "Generic MCP",
+        "description": "Any MCP host that supports Streamable HTTP and Authorization headers can connect directly to the Scholens endpoint.",
+        "after": "Send the Access Key as a Bearer token on every MCP request. Do not put it in the endpoint URL or commit it to source control."
+      }
+    },
+    "permissions": {
+      "title": "Choose the minimum permissions",
+      "description": "Permissions filter which tools a key can see. Start with read and add authority only for the workflows the client must perform.",
+      "items": {
+        "read": "Search and read stored papers, Projects, annotations, Library state, and existing research outputs.",
+        "write": "Create or update research content, upload known sources, and start asynchronous ingestion jobs.",
+        "manage": "Manage collaborators, invitations, ownership changes, and public-sharing state.",
+        "delete": "Run destructive lifecycle operations after an explicit state-bound confirmation."
+      },
+      "authorization": "Tool visibility is only the first check. Scholens authorizes the concrete Project, paper, annotation, or output again for every request."
+    },
+    "capabilities": {
+      "title": "What the MCP server can do",
+      "description": "A fully authorized remote or local connection exposes {count} tools across six durable research workflows.",
+      "groups": {
+        "papers": {
+          "title": "Stored papers",
+          "description": "Search, bounded content retrieval, citation context, and source download."
+        },
+        "projects": {
+          "title": "Projects",
+          "description": "Papers, membership, invitations, ownership, and durable project manifests."
+        },
+        "library": {
+          "title": "Personal Library",
+          "description": "Library membership, sharing, and tags while preserving user ownership."
+        },
+        "ingestion": {
+          "title": "Ingestion",
+          "description": "Known-source ingestion, upload preparation, and asynchronous job status."
+        },
+        "annotations": {
+          "title": "Annotations",
+          "description": "Annotation threads and comments for personal or Project-scoped discussion."
+        },
+        "outputs": {
+          "title": "Research outputs",
+          "description": "Read existing outputs already stored in Scholens."
+        }
+      },
+      "resources": "Resources",
+      "templates": "Resource templates",
+      "boundary": {
+        "title": "Deliberate product boundary",
+        "description": "Scholens manages and retrieves research knowledge already stored in the workspace. Its MCP server does not discover literature on the public internet and does not generate new research outputs."
+      }
+    },
+    "binding": {
+      "title": "Bind a research repository",
+      "description": "Call create_project or get_project once, then save the returned binding_markdown in the repository's AGENTS.md or README.md.",
+      "guidance": "Use the immutable Project UUID and scholens:// URI in later calls. Never select a Project by its editable title."
+    },
+    "security": {
+      "title": "Keep credentials and actions bounded",
+      "description": "Access Keys are powerful agent credentials. Treat their storage, permissions, and confirmations as part of the research boundary.",
+      "items": {
+        "store": "Keep keys in environment variables or private client configuration. Never place them in URLs, logs, screenshots, or source control.",
+        "leastPrivilege": "Use the shortest practical expiration and the minimum permission set for each client.",
+        "confirm": "Destructive or externally visible tools return a state-bound preview first and execute only when the same call is repeated with its unexpired confirmation token.",
+        "upload": "The local connector sends the Access Key only to Scholens. Object-storage uploads use separate checksummed authorization."
+      }
+    },
+    "troubleshooting": {
+      "title": "Troubleshooting",
+      "items": {
+        "unauthorized": {
+          "title": "401 Unauthorized",
+          "description": "The key is missing, expired, revoked, or copied incorrectly. Create or export a valid key, then restart the client."
+        },
+        "missingTool": {
+          "title": "An expected tool is missing",
+          "description": "The Access Key does not include the permission that exposes the tool. Edit the key or create a narrowly scoped replacement."
+        },
+        "restart": {
+          "title": "The client still shows an old configuration",
+          "description": "Restart Codex or Claude Desktop, or reload Cursor, after changing MCP configuration or environment variables."
+        },
+        "localFile": {
+          "title": "A local PDF is rejected",
+          "description": "Expose the repository as an MCP root or pass --allowed-root. The file must be a non-empty PDF no larger than {size} MB and must remain beneath the allowed root."
+        },
+        "longOperation": {
+          "title": "Ingestion has not finished",
+          "description": "Ingestion is asynchronous. Poll get_job with the returned job UUID instead of uploading the paper again."
+        }
+      }
+    },
+    "copy": {
+      "copy": "Copy code",
+      "copying": "Copying code",
+      "copied": "Code copied",
+      "error": "Could not copy code"
+    },
+    "footer": {
+      "markdown": "Markdown documentation",
+      "llms": "llms.txt",
+      "repository": "Repository",
+      "license": "AGPL-3.0 licensed"
+    }
+  },
   "FoundationSmoke": {
     "eyebrow": "Web foundation · smoke route",
     "description": "The independent Next.js, token, theme, query, component, and internationalization foundation is running. Product routes intentionally begin later."
@@ -73,7 +272,8 @@
       "settings": "Settings",
       "accountSettings": "Account",
       "usageSettings": "Usage",
-      "sourceCode": "Source code · AGPL-3.0",
+      "documentation": "Documentation",
+      "repository": "Repository",
       "signOut": "Sign out",
       "signingOut": "Signing out…"
     }
@@ -824,7 +1024,9 @@
   },
   "Authentication": {
     "brand": "Scholens",
-    "sourceCode": "Source code · AGPL-3.0",
+    "publicLinks": "Public links",
+    "documentation": "Documentation",
+    "repository": "Repository",
     "a11y": {
       "showPassword": "Show password",
       "hidePassword": "Hide password"
@@ -1321,7 +1523,7 @@
     "navigationLabel": "Settings navigation",
     "navigation": {
       "account": "Account",
-      "general": "Appearance, motion & language",
+      "general": "Appearance",
       "usage": "Usage",
       "access-keys": "Access keys",
       "connections": "Connections",
@@ -1360,7 +1562,7 @@
       "researcher": "Researcher"
     },
     "general": {
-      "title": "Appearance, motion & language",
+      "title": "Appearance",
       "description": "Choose how Scholens looks, moves, and which language its interface uses.",
       "interfaceLanguage": "Interface language",
       "appearance": "Appearance",
@@ -1401,6 +1603,7 @@
     "accessKeys": {
       "title": "Access keys",
       "description": "Create scoped keys for approved API clients and revoke them at any time.",
+      "configurationGuide": "MCP setup guide",
       "create": "Create access key",
       "createTitle": "Create access key",
       "editTitle": "Edit access key",

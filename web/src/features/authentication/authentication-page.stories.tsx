@@ -67,8 +67,34 @@ export const SignIn: Story = {
       "email",
     );
     await expect(
-      canvas.getByRole("link", { name: "Source code · AGPL-3.0" }),
+      canvas.getByRole("link", { name: "Repository" }),
     ).toHaveAttribute("href", "https://github.com/EricSanchezok/scholens");
+    await expect(
+      canvas.getByRole("link", { name: "Repository" }),
+    ).toHaveAttribute("target", "_blank");
+    await expect(
+      canvas.getByRole("link", { name: "Documentation" }),
+    ).toHaveAttribute("href", "/docs");
+    await expect(
+      canvas.getByRole("link", { name: "Documentation" }),
+    ).toHaveAttribute("target", "_blank");
+  },
+};
+
+export const MobilePublicLinks: Story = {
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("heading", { name: "Welcome back" }),
+    ).toBeVisible();
+
+    for (const name of ["Documentation", "Repository"]) {
+      const link = canvas.getByRole("link", { name });
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+        44,
+      );
+    }
   },
 };
 
@@ -249,8 +275,11 @@ export const SimplifiedChinese: Story = {
     ).toBeVisible();
     await expect(
       within(canvasElement).getByRole("link", {
-        name: "源代码 · AGPL-3.0",
+        name: "仓库",
       }),
     ).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole("link", { name: "文档" }),
+    ).toHaveAttribute("href", "/docs");
   },
 };
