@@ -292,6 +292,10 @@ jobs:
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
           bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          template_kms_key_arn=$(aws cloudformation list-exports \
+            --query 'Exports[?Name==`sanchezcloud-scholens-configuration-key-arn`].Value|[0]' \
+            --output text)
+          test "$template_kms_key_arn" != None
           aws cloudformation describe-stack-events \
             --stack-name sanchezcloud-scholens-production \
             --max-items 20 \
@@ -362,6 +366,7 @@ jobs:
             --template-file "$recovery_template" \
             --s3-bucket "$bucket" \
             --s3-prefix "cloudformation/${recovery_sha}/candidate-verification-recovery" \
+            --kms-key-id "$template_kms_key_arn" \
             --role-arn "$CLOUDFORMATION_ROLE_ARN" \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
