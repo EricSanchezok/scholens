@@ -264,7 +264,14 @@ jobs:
           retry() {
             local url=$1
             for attempt in {1..18}; do
-              if curl --fail --silent --show-error --output /dev/null "$url"; then
+              if curl \
+                --connect-timeout 5 \
+                --max-time 20 \
+                --fail \
+                --silent \
+                --show-error \
+                --output /dev/null \
+                "$url"; then
                 return 0
               fi
               (( attempt == 18 )) || sleep 10

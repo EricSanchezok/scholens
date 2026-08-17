@@ -5,15 +5,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export function GET(request: Request): Response {
-  const origin = new URL(request.url).origin;
-  return new Response(
-    renderLlmsText(createDocumentationFacts(undefined, origin)),
-    {
-      headers: {
-        "Cache-Control": "public, max-age=300, s-maxage=3600",
-        "Content-Type": "text/plain; charset=utf-8",
-      },
+export function GET(): Response {
+  return new Response(renderLlmsText(createDocumentationFacts()), {
+    headers: {
+      "Cache-Control": "public, max-age=300, s-maxage=3600",
+      "Content-Type": "text/plain; charset=utf-8",
     },
-  );
+  });
 }

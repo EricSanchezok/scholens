@@ -170,7 +170,9 @@ CI and deployment use four workflows:
    smoke test automatically restores the prior database-compatible immutable release or
    disables the failed candidate. Both the candidate and recovery CloudFormation package
    uploads use the foundation-exported configuration KMS key required by the release-bucket
-   policy.
+   policy. Every external health attempt has a five-second connection timeout and a
+   twenty-second total request timeout so a runner network failure cannot indefinitely
+   prevent the recovery path from executing.
 
 The release workflow keeps its verifier and orchestration scripts on the trusted workflow
 `main` SHA. Candidate and rollback commits are checked out only as data in separate
@@ -535,7 +537,9 @@ repaired by a forward revision or an explicitly approved database recovery opera
   failures, diagnostic snapshot write failures, and unhealthy target alarms publish to
   the Scholens SNS topic. The dependency and diagnostic alarms use the
   `Scholens/Production` OpenTelemetry metrics and fire on the first failure in five
-  minutes; the API target alarm fires at five responses in five minutes.
+  minutes; the API target alarm fires at five responses in five minutes. Production
+  application exporters send Counter and Histogram instruments with delta temporality so
+  CloudWatch `Sum` evaluates each window rather than a process-lifetime cumulative value.
 - ECS services use deployment circuit-breaker rollback. A failed database task does not
   change application services. A candidate that fails ECS stabilization or an external
   smoke check enters automatic recovery and remains a failed release after recovery.

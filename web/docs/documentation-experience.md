@@ -34,7 +34,9 @@ page, `/docs.md`, and `/llms.txt` consume the same factual model rather than
 copying those values.
 
 The remote endpoint is the origin of `NEXT_PUBLIC_API_URL` plus `/mcp`.
-Machine-documentation links use the origin of their incoming request. Codex uses
+Machine-documentation links use the canonical application origin rather than the
+incoming request origin, because the Next.js standalone server receives its internal
+container address behind the production proxy. Codex uses
 `bearer_token_env_var`, Cursor uses environment interpolation in the
 Authorization header, Claude Desktop uses the official local `uvx` bridge, and
 the generic example states the Streamable HTTP and Bearer requirements without
