@@ -157,6 +157,7 @@ export const General: Story = {
     const body = within(document.body);
     await expect(
       await body.findByRole("heading", {
+        level: 2,
         name: "Appearance",
       }),
     ).toBeVisible();
@@ -193,6 +194,7 @@ export const NonBlockingPanelReplacement: Story = {
   play: async () => {
     const body = within(document.body);
     const initialHeading = await body.findByRole("heading", {
+      level: 2,
       name: "Appearance",
     });
     await waitFor(() => expect(initialHeading).toBeVisible());

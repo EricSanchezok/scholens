@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 
 import { DocumentationPage } from "./documentation-page";
 
@@ -25,6 +25,11 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const writeText = fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
     await expect(
       canvas.getByRole("heading", {
         level: 1,
@@ -45,6 +50,7 @@ export const Default: Story = {
     await expect(
       canvas.getAllByRole("button", { name: "Code copied" })[0],
     ).toBeVisible();
+    await expect(writeText).toHaveBeenCalledTimes(1);
   },
 };
 
@@ -89,9 +95,8 @@ export const SmallMobile: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const compactToc = canvas.getByText("On this page", {
-      exact: true,
-      selector: "summary",
+    const compactToc = canvas.getByRole("button", {
+      name: "On this page",
     });
     await expect(compactToc).toBeVisible();
     await userEvent.click(compactToc);

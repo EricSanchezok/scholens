@@ -217,7 +217,11 @@ function CodeSample({
           />
         </span>
       </figcaption>
-      <pre className="bg-surface overflow-x-auto p-4 text-[0.8125rem] leading-6">
+      <pre
+        aria-label={title}
+        className="bg-surface overflow-x-auto p-4 text-[0.8125rem] leading-6"
+        tabIndex={0}
+      >
         <code>{code}</code>
       </pre>
     </figure>
