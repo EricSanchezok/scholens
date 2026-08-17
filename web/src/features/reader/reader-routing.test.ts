@@ -6,6 +6,7 @@ import {
   readReaderPanel,
   readReaderView,
   readSourcePage,
+  shouldFallbackFromReaderProjectContext,
 } from "./reader-routing";
 
 const conversation = {
@@ -66,6 +67,61 @@ describe("reader URL state", () => {
     expect(readSourcePage({ page: "4" })).toBe(4);
     expect(readSourcePage({ page_number: -1 })).toBeUndefined();
     expect(readSourcePage({ page: "chapter-two" })).toBeUndefined();
+  });
+
+  it("waits for a fresh successful Project lookup before falling back", () => {
+    const projectLookup = {
+      hasActiveProject: false,
+      isFetchedAfterMount: false,
+      isFetching: false,
+      isRefetchError: false,
+      isSuccess: true,
+      projectId: "project-1",
+      verifiedProjectId: "project-1",
+    };
+
+    expect(shouldFallbackFromReaderProjectContext(projectLookup)).toBe(false);
+    expect(
+      shouldFallbackFromReaderProjectContext({
+        ...projectLookup,
+        isFetchedAfterMount: true,
+        verifiedProjectId: null,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackFromReaderProjectContext({
+        ...projectLookup,
+        isFetchedAfterMount: true,
+        isRefetchError: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackFromReaderProjectContext({
+        ...projectLookup,
+        isFetchedAfterMount: true,
+        isSuccess: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackFromReaderProjectContext({
+        ...projectLookup,
+        hasActiveProject: true,
+        isFetchedAfterMount: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackFromReaderProjectContext({
+        ...projectLookup,
+        isFetchedAfterMount: true,
+        isFetching: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFallbackFromReaderProjectContext({
+        ...projectLookup,
+        isFetchedAfterMount: true,
+      }),
+    ).toBe(true);
   });
 
   it("validates an active conversation against the authoritative Reader scope", () => {

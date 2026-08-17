@@ -22,7 +22,8 @@ type AnnotationListFilters = {
 export const readerKeys = {
   all: ["reader"] as const,
   document: (documentId: string) => ["reader", "document", documentId] as const,
-  projects: (documentId: string) => ["reader", "projects", documentId] as const,
+  projects: (documentId: string, projectId?: string) =>
+    ["reader", "projects", documentId, projectId ?? "personal"] as const,
   annotationLists: (documentId: string) =>
     ["reader", "annotations", documentId] as const,
   annotations: (documentId: string, filters: AnnotationListFilters) =>
@@ -52,16 +53,17 @@ export const readerQueries = {
         return status === "pending" || status === "processing" ? 1_500 : false;
       },
     }),
-  projects: (documentId: string) =>
+  projects: (documentId: string, projectId?: string) =>
     queryOptions({
-      queryKey: readerKeys.projects(documentId),
+      queryKey: readerKeys.projects(documentId, projectId),
+      refetchOnMount: projectId ? "always" : undefined,
       queryFn: async ({ signal }) => {
         const { data } = await apiClient.GET(
           "/api/v1/papers/{document_id}/projects",
           { params: { path: { document_id: documentId } }, signal },
         );
         if (!data) throw new Error("Reader project response was empty");
-        return data;
+        return { ...data, verifiedProjectId: projectId ?? null };
       },
     }),
   annotations: (

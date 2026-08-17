@@ -81,6 +81,7 @@ import {
   readReaderPanel,
   readReaderView,
   readSourcePage,
+  shouldFallbackFromReaderProjectContext,
 } from "./reader-routing";
 import {
   ReaderTranslationPanel,
@@ -168,8 +169,9 @@ function ReaderDocumentWorkspace({
   >([]);
   const [reflowSourceTarget, setReflowSourceTarget] =
     React.useState<ReaderPdfSourceTarget>();
+  const projectId = searchParams.get("project") ?? undefined;
   const documentQuery = useQuery(readerQueries.document(documentId));
-  const projectsQuery = useQuery(readerQueries.projects(documentId));
+  const projectsQuery = useQuery(readerQueries.projects(documentId, projectId));
   const translation = useReaderTranslation({
     documentId,
     selection: activeTextSelection,
@@ -187,10 +189,19 @@ function ReaderDocumentWorkspace({
       })
     : undefined;
 
-  const projectId = searchParams.get("project") ?? undefined;
   const activeProject = projectsQuery.data?.items.find(
     (project) => project.id === projectId,
   );
+  const shouldFallbackFromProjectContext =
+    shouldFallbackFromReaderProjectContext({
+      hasActiveProject: Boolean(activeProject),
+      isFetchedAfterMount: projectsQuery.isFetchedAfterMount,
+      isFetching: projectsQuery.isFetching,
+      isRefetchError: projectsQuery.isRefetchError,
+      isSuccess: projectsQuery.isSuccess,
+      projectId,
+      verifiedProjectId: projectsQuery.data?.verifiedProjectId,
+    });
   const annotationsQuery = useQuery(
     readerQueries.annotations(
       documentId,
@@ -378,20 +389,13 @@ function ReaderDocumentWorkspace({
   );
 
   React.useEffect(() => {
-    if (projectsQuery.isPending || !projectId || activeProject) return;
+    if (!shouldFallbackFromProjectContext) return;
     updateLocation({ conversation: null, project: null });
     toast.notify({
       description: t("projects.unavailableDescription"),
       title: t("projects.unavailableTitle"),
     });
-  }, [
-    activeProject,
-    projectId,
-    projectsQuery.isPending,
-    t,
-    toast,
-    updateLocation,
-  ]);
+  }, [shouldFallbackFromProjectContext, t, toast, updateLocation]);
 
   const rejectedConversationRef = React.useRef<string | undefined>(undefined);
   React.useEffect(() => {
