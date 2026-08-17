@@ -74,15 +74,34 @@ test("keeps the selected client in the URL", async ({ page }) => {
 test("preserves the Access Keys destination through sign-in", async ({
   page,
 }) => {
-  await page.route("**/api/v1/auth/login", (route) =>
+  let signedIn = false;
+  await page.route("**/api/v1/auth/refresh", (route) =>
     route.fulfill({
+      status: signedIn ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(
+        signedIn
+          ? {
+              access_token: "playwright-access",
+              token_type: "bearer",
+            }
+          : {
+              code: "auth_session_missing",
+              message: "session missing",
+            },
+      ),
+    }),
+  );
+  await page.route("**/api/v1/auth/login", (route) => {
+    signedIn = true;
+    return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         access_token: "playwright-access",
         token_type: "bearer",
       }),
-    }),
-  );
+    });
+  });
   await page.route("**/api/v1/me", (route) =>
     route.fulfill({
       contentType: "application/json",

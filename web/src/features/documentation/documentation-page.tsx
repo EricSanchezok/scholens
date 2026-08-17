@@ -412,7 +412,7 @@ export function DocumentationPage({
                       title={t("setup.configuration")}
                     />
                   </div>
-                  <p className="text-secondary mt-4 text-sm leading-6">
+                  <p className="text-secondary mt-4 text-sm leading-6 [overflow-wrap:anywhere]">
                     {t(`clients.${selectedClient}.after`)}
                   </p>
                   {client.referenceUrl ? (
