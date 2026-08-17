@@ -1,0 +1,12 @@
+{
+  "contract_version": 1,
+  "production_baseline_revision": "c9f4a62d01ab",
+  "revisions": {
+    "b12d7d620e91": {
+      "phase": "baseline"
+    },
+    "c9f4a62d01ab": {
+      "phase": "baseline"
+    }
+  }
+}

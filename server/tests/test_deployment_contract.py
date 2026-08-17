@@ -1238,6 +1238,7 @@ def test_release_workflows_separate_publish_migrate_and_deploy() -> None:
     assert "sanchezcloud-scholens-configuration-key-arn" in workflows["release.yml"]
     assert '--kms-key-id "$template_kms_key_arn"' in workflows["release.yml"]
     assert "create-migration-attestation" in workflows["database-production.yml"]
+    assert "verify-migration-transition" in workflows["database-production.yml"]
     assert "migrations/current.json" in workflows["database-production.yml"]
     assert "--if-none-match '*'" in workflows["database-production.yml"]
     assert "verify-database-contract" in workflows["release.yml"]
@@ -1850,14 +1851,14 @@ def test_runbook_locks_production_environment_and_secret_preflights() -> None:
         assert operator_managed in readme
     assert "/sanchezcloud/scholens/production/billing" not in readme
 
-    first_release = readme[readme.index("## First release") :]
-    disabled = first_release.index("ApplicationEnabled=false")
-    migration = first_release.index("Run protected product migration")
-    cloudflare = first_release.index("Point the proxied Cloudflare CNAME")
-    enabled = first_release.index("ApplicationEnabled=true")
-    scheduler = first_release.index("Enable the scheduler")
+    bootstrap = readme[readme.index("## Initial production bootstrap") :]
+    disabled = bootstrap.index("ApplicationEnabled=false")
+    migration = bootstrap.index("Run protected product migration")
+    cloudflare = bootstrap.index("Point the proxied Cloudflare CNAME")
+    enabled = bootstrap.index("ApplicationEnabled=true")
+    scheduler = bootstrap.index("Enable the scheduler")
     assert disabled < migration < cloudflare < enabled < scheduler
-    assert "immediately requires both public Cloudflare health checks" in first_release
+    assert "immediately requires both public Cloudflare health checks" in bootstrap
 
 
 def test_operator_managed_secret_containers_have_no_cloudformation_value() -> None:
@@ -1922,7 +1923,10 @@ def test_ci_builds_images_and_runs_independent_migrations_twice() -> None:
     assert "RESET-SCHOLENS-LOCAL" in workflow
     assert "account_plan_grants" in workflow
     assert "account_quota_overrides" in workflow
-    assert "alembic downgrade b12d7d620e91" in workflow
+    assert 'alembic upgrade "$base_head"' in workflow
+    assert "ci-migration-preservation@example.com" in workflow
+    assert "migration_policy_compatibility.py" in workflow
+    assert "alembic downgrade" not in workflow
     assert "WHERE origin_kind = 'cli'" in workflow
     assert "test_postgres_quota_invariants.py" in workflow
     assert "--entrypoint alembic" in workflow
@@ -1960,6 +1964,11 @@ def test_ci_has_one_stable_aggregate_required_check() -> None:
 
     assert "all-checks-passed:" in workflow
     assert "name: all checks passed" in workflow
+    assert "public-contract-compatibility:" in workflow
+    assert "github.com/oasdiff/oasdiff@v1.29.1" in workflow
+    assert workflow.count("oasdiff breaking") == 2
+    assert "mcp_contract_compatibility.py check-metadata" in workflow
+    assert "deprecation_registry.py" in workflow
     for dependency in (
         "server",
         "jobs",
@@ -1967,6 +1976,7 @@ def test_ci_has_one_stable_aggregate_required_check() -> None:
         "web",
         "client",
         "deployment-contract",
+        "public-contract-compatibility",
     ):
         assert f"      - {dependency}" in workflow
 

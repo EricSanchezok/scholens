@@ -116,7 +116,7 @@ current resource state. A changed or replayed confirmation must fail safely.
 The promotional Basic plan is intentionally useful enough for a researcher to
 build a real working library instead of merely evaluating an upload screen.
 Researcher is the high-comfort plan intended for future paid access and current
-internal team members. The first public release does not mount checkout,
+internal team members. The current production release does not mount checkout,
 customer-portal, subscription-mutation, or payment-webhook routes; operators
 grant expiring Researcher access through the audited private CLI. Current
 product limits are:
@@ -139,8 +139,8 @@ reset on Monday UTC and continue to use provider-reported raw total tokens.
 
 The entitlement resolver keeps paid subscriptions and explicitly expiring
 product grants independent so future charging does not require a schema or
-ownership rewrite. During the first release only product grants are issued: an
-internal grant never pretends that a payment occurred.
+ownership rewrite. In the current production release only product grants are
+issued: an internal grant never pretends that a payment occurred.
 
 ## Zotero is a read-only personal-library bridge
 

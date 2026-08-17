@@ -29,6 +29,15 @@ After a protected deployment:
    load-balancer dimensions, and that queue age/DLQ alarms publish to the alert
    topic.
 
+For a deprecated HTTP route or MCP tool, confirm the registry's
+low-cardinality telemetry key is queryable for the full retirement window.
+Removal requires both at least 90 days since notice and production evidence of
+30 consecutive days with zero calls. Preserve the dashboard or query reference
+in the registry's removal tombstone. For a contract migration, retain the
+backfill totals and invariant results, confirm queued work using the retired
+shape has drained, and record the deployed application revision before the
+compatibility floor advances.
+
 Use only the MFA-protected break-glass role to read a diagnostic snapshot during
 an incident. Never place user prompts, document contents, credentials, query
 strings, or raw provider responses in metric dimensions or routine logs.

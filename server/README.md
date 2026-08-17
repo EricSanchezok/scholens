@@ -368,16 +368,18 @@ locked `uv` environment:
 uv run alembic revision --autogenerate -m "migration message"
 ```
 
+Add the new revision to `migrations/policy.json` as `expand` or `contract`.
+Applied files are immutable. Expand revisions may not drop or rename objects,
+narrow an existing type or enum, make an existing column non-nullable, add an
+immediately enforced constraint to existing writes, or run unbounded data
+rewrites. Contract revisions are separate releases and advance the minimum
+compatible application revision only after the replacement code and backfill
+have been proven in production.
+
 To apply the migration, run:
 
 ```bash
 uv run scholens db upgrade
-```
-
-To downgrade the migration, run:
-
-```bash
-uv run alembic downgrade -1
 ```
 
 Before committing a migration, run `uv run alembic check` and
@@ -386,6 +388,10 @@ only the `scholens` schema; `auth` belongs to sanchezcloud-identity and other pr
 schemas are deliberately outside this migration environment. The local
 product-only reset procedure is documented in
 [`DEVELOPMENT.md`](../DEVELOPMENT.md#reset-only-the-local-product-schema).
+Production rollback never runs Alembic downgrade; it selects only an immutable
+application release inside the live database compatibility range. See
+[`docs/architecture/contract-evolution.md`](../docs/architecture/contract-evolution.md)
+for the complete expand–migrate–switch–contract workflow.
 
 # Tests
 

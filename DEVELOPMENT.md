@@ -105,7 +105,8 @@ the superseded names.
 
 MOSS Voice is required only for audio overviews. Zotero and admin variables are
 grouped in the root `.env.example`. Public charging and PostHog are intentionally
-disabled for the first release and have no ordinary runtime configuration.
+disabled in the current production release and have no ordinary runtime
+configuration.
 
 Settings → Account defaults to the canonical
 `https://myaccount.sanchezcloud.net` destination. Set
@@ -346,27 +347,28 @@ Detailed leaf checks and test ownership remain in the owning service guides.
 The `docs` lane validates repository documentation and ADR structure; it is
 also included in the Web lane because Web owns the documentation checker.
 
-## Pre-release schema policy
+## Production schema policy
 
-Scholens is currently pre-release. A breaking product schema or public API
-change must leave one canonical contract, not a compatibility period. Remove
-the superseded column, route, DTO, workflow, fixture, and test together. Do not
-add dual reads, dual writes, legacy adapters, feature flags, or data backfills
-solely to keep disposable local product rows alive.
+Production data and every applied migration are durable. Never edit, rename,
+delete, reorder, or squash an existing file under
+`server/migrations/versions`; add a new revision and classify it in
+`server/migrations/policy.json`. Changes use separate
+expand–migrate–switch–contract releases. Large or interruptible data movement
+belongs in a bounded, restartable operator command rather than an Alembic
+transaction.
 
-For breaking data-model work, reset the local `scholens` schema and rebuild the
-target schema. Alembic remains the reproducible schema builder; an unreleased
-revision is not a promise to migrate user data forever. Prefer replacing or
-squashing unreleased revisions over stacking transformations whose only value
-is preserving pre-release data. This policy changes only through an explicit
-release-readiness decision that also defines production migration and rollback
-requirements.
+Production application rollback does not run Alembic downgrade. The release
+contract records a monotonic minimum compatible application revision and may
+select an older image only within that live range. Full authoring, temporary
+adapter, backfill, deprecation, and contract-removal requirements are in
+[`docs/architecture/contract-evolution.md`](./docs/architecture/contract-evolution.md).
 
 ## Reset only the local product schema
 
 Scholens owns `scholens`; sanchezcloud-identity independently owns `auth`.
-Local product data is disposable during this pre-release phase, but `auth`
-must never be dropped. Configure `LOCAL_DATABASE_ADMIN_URL` and
+The guarded reset remains available only for an intentionally disposable local
+product environment; it is not a migration rehearsal or production recovery
+method. `auth` must never be dropped. Configure `LOCAL_DATABASE_ADMIN_URL` and
 `SCHOLENS_MIGRATION_DATABASE_URL` for exactly
 `127.0.0.1:55432/sanchezcloud`, then run:
 

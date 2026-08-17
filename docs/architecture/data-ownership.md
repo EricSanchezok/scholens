@@ -29,8 +29,8 @@ product schema.
 - `subscriptions` records payment state only. Internal Researcher access lives
   in `account_plan_grants`, and temporary numerical test limits live in
   `account_quota_overrides`; neither table mutates or impersonates Stripe. The
-  first release does not expose a payment mutation or webhook route, so only
-  audited private CLI grants create new Researcher access.
+  current production release does not expose a payment mutation or webhook
+  route, so only audited private CLI grants create new Researcher access.
 
 ## Project invitation and email ownership
 
@@ -71,8 +71,9 @@ roles or persist credentials. The required order is:
 6. CI audits `scholens_app` with the Identity `product-runtime` profile and separately verifies
    Scholens DML, append-only journal behavior, and cross-schema denials.
 
-A Scholens deployment never bundles or executes Identity migrations. Candidate Identity failures
-remain advisory until Scholens is declared production-ready in the consumer registry.
+A Scholens deployment never bundles or executes Identity migrations. Identity
+compatibility remains an independent required check before its schema version
+or the Scholens dependency may advance.
 
 ## Conversation storage
 
@@ -201,8 +202,10 @@ connection.
 
 Disconnecting or replacing a connection does not rewrite immutable job
 history. A retry creates or resumes a new eligible attempt against the current
-credential revision. Pre-release schema evolution is reset-first: the removed
-connector tables and routes have no compatibility facade or dual-write path.
+credential revision. Later schema changes preserve this data through the
+production evolution policy; temporary overlap remains in the owning
+persistence or transport adapter and never creates a second credential
+authority.
 
 `ZoteroOperation` owns one accepted import or sync request, its idempotency
 identity, summary counts, safe terminal code, and ordered item results.

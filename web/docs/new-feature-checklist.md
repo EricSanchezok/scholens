@@ -59,6 +59,8 @@ Use this checklist for every new route or substantial product capability.
 - [ ] Pass abort signals and invalidate the narrowest affected cache keys.
 - [ ] Standardize known errors and expose a request ID for unknown failures.
 - [ ] Update OpenAPI snapshot/types, handlers, fixtures, and feature code together.
+- [ ] Confirm `/api/v1` remains backward compatible; use a new major boundary
+      for an incompatible request or response instead of adding Web DTO fallbacks.
 
 ## Verification
 

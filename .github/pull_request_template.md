@@ -27,6 +27,16 @@ Visual / accessibility:
 Deployment / release:
 -->
 
+Contract evolution class (required when API, MCP, jobs, or schema is affected):
+
+- [ ] Internal — no stored-data or published-contract change
+- [ ] Compatible — additive for every supported consumer/application revision
+- [ ] Deprecated — exact target, replacement, owner, telemetry key, and removal
+      dates recorded
+- [ ] Contract — prior rollout/backfill, compatibility floor, and recovery
+      evidence recorded
+- [ ] Not applicable
+
 ## Verification
 
 List the exact commands that were executed. Do not write “CI” or “tests pass”
@@ -43,7 +53,11 @@ Manual or visual verification:
 ## Delivery notes
 
 - [ ] Generated artifacts changed with their source, or are not applicable
-- [ ] Breaking pre-release contract changes remove superseded code in the same PR
+- [ ] Public v1 and applied-migration compatibility gates pass, or are not
+      applicable
+- [ ] Temporary compatibility is boundary-local and has an owner and removal condition
+- [ ] Schema work identifies expand, migrate/switch, or contract phase and
+      preserves production data
 - [ ] Documentation impact was handled in this PR
 - [ ] This PR does not install dependencies, migrate data, or publish as a side effect
 - [ ] Rollout, rollback, or follow-up work is recorded when deployment is affected

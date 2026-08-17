@@ -24,6 +24,8 @@ and implementation snapshots.
   storage and service ownership.
 - [`architecture/backend-capabilities.md`](./architecture/backend-capabilities.md)
   defines the current backend capability boundaries.
+- [`architecture/contract-evolution.md`](./architecture/contract-evolution.md)
+  defines production API, MCP, job, and database compatibility rules.
 - [`decisions/README.md`](./decisions/README.md) indexes accepted architecture
   decisions. ADRs explain why a durable choice was made; they are not live
   runbooks.

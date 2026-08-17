@@ -149,10 +149,10 @@ CI and deployment use four workflows:
    every content-addressed map, and writes one immutable `releases/<sha>/manifest.json`.
 3. `Run protected product migration` clones only the reviewed migration task definition,
    replaces its API image with the selected manifest digest, injects the exact release
-   SHA, runs it once, checks the
-   unique Scholens head and exact Identity schema proof, writes an immutable per-release
-   migration attestation plus the versioned current database contract, and deregisters the
-   candidate revision.
+   SHA, verifies that live migration history is an immutable prefix of the candidate,
+   runs it once, checks the unique Scholens head and exact Identity schema proof, writes
+   an immutable per-release migration attestation plus the versioned current database
+   contract, and deregisters the candidate revision.
 4. `Deploy immutable release` verifies the manifest against the checked-out source,
    rechecks live digest-bound ECR results and the current database contract, deploys the
    runtime stack through its CloudFormation service role, waits for all ECS services, and
@@ -173,6 +173,10 @@ undeployable.
 Publishing never changes production. Deploy and rollback both select an exact 40-character
 commit SHA already contained in `main`. Rollback redeploys an older immutable manifest; it
 does not move tags, rebuild images, reverse a migration, or restore a database snapshot.
+The selected application's migration revision must be present in the live ordered chain
+and must be at or above `minimum_compatible_application_revision`. An additive migration
+therefore preserves application rollback, while a reviewed contract migration deliberately
+advances that floor after old application revisions can no longer run safely.
 
 The runtime template exceeds CloudFormation's inline limit. The production workflow uses
 the release bucket's `cloudformation/<sha>/` prefix and explicitly encrypts each uploaded
@@ -424,7 +428,11 @@ rotation, check WAF/CloudTrail access history for unexpected prior visibility be
 retiring the old version. Verify that the ALB DNS name fails without the header and the
 public hostname succeeds through Cloudflare.
 
-## First release
+## Initial production bootstrap
+
+This sequence records how the retained production resources were first created. It is not
+the normal release procedure and must not be replayed against an existing production
+stack.
 
 1. Merge the reviewed release implementation into `main` and let CI pass.
 2. Create the administrator-owned bootstrap and foundation stacks in the documented order,
@@ -449,8 +457,28 @@ public hostname succeeds through Cloudflare.
    then verify authentication, upload, document, research, callback, queue-drain,
    billing usage, private entitlement grants, Zotero, source-map, alarm, and
    autoscaling paths. Checkout, subscription mutation, Stripe webhook, and
-   PostHog remain intentionally absent from the first release.
+   PostHog remain intentionally absent from the current production release.
 9. Enable the scheduler only after the one-shot job and maintenance queue are verified.
+
+## Subsequent releases and migrations
+
+Ordinary changes merge through review and CI, after which the publish workflow may create
+an immutable manifest. Publishing alone never changes production. An authorized operator
+then runs the protected migration workflow when the release contains a new revision and
+deploys only after its attestation becomes current.
+
+Every new migration is appended to the linear history and classified in
+`server/migrations/policy.json`. The protected migration workflow rejects a candidate when
+the live history is not its exact prefix, when any applied migration checksum changed, or
+when the compatibility floor moves backward. The first version 3 manifest establishes
+revision `c9f4a62d01ab` as the production baseline without changing schema; later expand
+revisions retain the existing floor. A contract revision may advance the floor only after
+the backfill, drain, recovery, and supported-application evidence required by
+[`docs/architecture/contract-evolution.md`](../../docs/architecture/contract-evolution.md)
+has been reviewed.
+
+Never use Alembic downgrade as production application rollback. A migration failure is
+repaired by a forward revision or an explicitly approved database recovery operation.
 
 ## Capacity and failure handling
 
@@ -464,10 +492,11 @@ public hostname succeeds through Cloudflare.
   cap or either pool only after a reviewed move to a larger Multi-AZ instance or RDS Proxy,
   with a new aggregate connection budget and alarm threshold.
 - The inherited shared database is currently `db.t4g.micro`, publicly accessible, and
-  single-AZ. Scholens does not mutate it. Before release, verify its security group admits
-  only the application/migrator groups and verify the client remains `sslmode=verify-full`.
-  Before a production SLA, the platform owner must review capacity and upgrade it to
-  Multi-AZ; public accessibility must also receive a separate platform security review.
+  single-AZ. Scholens does not mutate it. Every release review must verify its security
+  group admits only the application/migrator groups and that the client remains
+  `sslmode=verify-full`. Before adopting a production SLA, the platform owner must review
+  capacity and upgrade it to Multi-AZ; public accessibility must also receive a separate
+  platform security review.
 - Workers scale on SQS backlog per running task. Scale-in is deliberately slower than
   scale-out, SQS visibility is 45 minutes, and workers request task protection while a job
   is active.
