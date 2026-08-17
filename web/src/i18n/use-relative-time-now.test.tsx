@@ -22,6 +22,7 @@ function RelativeLabels({ value }: { value: string }) {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("useRelativeTimeNow", () => {
