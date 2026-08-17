@@ -506,6 +506,7 @@ export function ReaderReflowView({
   onOpenPdfSource,
   onRequestTranslation,
   onRetryTranslation,
+  scrollContainerRef,
   showTranslationMarker,
   targetLanguage,
   translateReferences,
@@ -521,6 +522,7 @@ export function ReaderReflowView({
   onOpenPdfSource?: (source: DocumentReflowSourceSpan) => void;
   onRequestTranslation: (blockId: string) => void;
   onRetryTranslation: (blockId: string) => void;
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   showTranslationMarker: boolean;
   targetLanguage: string;
   translateReferences: boolean;
@@ -561,6 +563,7 @@ export function ReaderReflowView({
         "bg-canvas min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-x-none",
         className,
       )}
+      ref={scrollContainerRef}
     >
       <article
         aria-label={labels.document}

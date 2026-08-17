@@ -64,6 +64,11 @@ export const OverviewCollapsed: Story = {
       canvas.queryByRole("region", { name: "Project chat" }),
     ).not.toBeInTheDocument();
     await expect(canvas.getByText("Recent papers")).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { name: "Collaboration" }),
+    ).toBeVisible();
+    await expect(canvas.getByText("4 members")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Manage" })).toBeVisible();
   },
 };
 

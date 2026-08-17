@@ -56,6 +56,12 @@ const emptyPermissions: Permissions = {
   manage_papers: false,
 };
 
+const permissionOptions = [
+  ["edit_project", "editProject"],
+  ["manage_papers", "managePapers"],
+  ["manage_collaborators", "manageCollaborators"],
+] as const;
+
 function ErrorMessage({ error }: { error: unknown }) {
   const t = useTranslations("Projects.collaborators.errors");
   if (!(error instanceof ApiError)) return <>{t("offline")}</>;
@@ -90,14 +96,9 @@ function PermissionFields({
   value: Permissions;
 }) {
   const t = useTranslations("Projects.collaborators.permissions");
-  const fields = [
-    ["edit_project", "editProject"],
-    ["manage_papers", "managePapers"],
-    ["manage_collaborators", "manageCollaborators"],
-  ] as const;
   return (
     <div className="grid gap-2">
-      {fields.map(([field, label]) => (
+      {permissionOptions.map(([field, label]) => (
         <label className="flex min-h-11 items-center gap-3 text-sm" key={field}>
           <Checkbox
             checked={value[field]}
@@ -128,6 +129,7 @@ function MemberRow({
 }) {
   const t = useTranslations("Projects.collaborators");
   const [permissions, setPermissions] = React.useState(member.permissions);
+  const [editing, setEditing] = React.useState(false);
   const [error, setError] = React.useState<unknown>();
   const [action, setAction] = React.useState<"save" | "remove" | null>(null);
   const withinActorAuthority =
@@ -142,6 +144,13 @@ function MemberRow({
     permissions.manage_papers !== member.permissions.manage_papers ||
     permissions.manage_collaborators !==
       member.permissions.manage_collaborators;
+  const initial =
+    member.display_name.trim().charAt(0).toUpperCase() ||
+    member.email.trim().charAt(0).toUpperCase() ||
+    "?";
+  const permissionChips = permissionOptions
+    .filter(([field]) => member.permissions[field])
+    .map(([, label]) => t(`permissions.${label}`));
 
   async function run(nextAction: "save" | "remove") {
     setError(undefined);
@@ -159,9 +168,19 @@ function MemberRow({
   return (
     <article className="border-line grid gap-3 border-t py-4 first:border-t-0 first:pt-0">
       <div className="flex min-w-0 items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{member.display_name}</p>
-          <p className="text-muted truncate text-xs">{member.email}</p>
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="bg-pressed grid size-9 shrink-0 place-items-center rounded-full text-sm font-medium"
+          >
+            {initial}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">
+              {member.display_name}
+            </p>
+            <p className="text-muted truncate text-xs">{member.email}</p>
+          </div>
         </div>
         {member.is_owner ? (
           <span className="bg-subtle text-secondary rounded-full px-2.5 py-1 text-xs">
@@ -170,22 +189,26 @@ function MemberRow({
         ) : null}
       </div>
       {!member.is_owner ? (
-        <>
-          <PermissionFields
-            disabled={{
-              edit_project:
-                immutable || action !== null || !actorPermissions.edit_project,
-              manage_collaborators:
-                immutable ||
-                action !== null ||
-                !actorPermissions.manage_collaborators,
-              manage_papers:
-                immutable || action !== null || !actorPermissions.manage_papers,
-            }}
-            onChange={setPermissions}
-            value={permissions}
-          />
-          {!immutable ? (
+        editing ? (
+          <>
+            <PermissionFields
+              disabled={{
+                edit_project:
+                  immutable ||
+                  action !== null ||
+                  !actorPermissions.edit_project,
+                manage_collaborators:
+                  immutable ||
+                  action !== null ||
+                  !actorPermissions.manage_collaborators,
+                manage_papers:
+                  immutable ||
+                  action !== null ||
+                  !actorPermissions.manage_papers,
+              }}
+              onChange={setPermissions}
+              value={permissions}
+            />
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={!changed || action !== null}
@@ -199,6 +222,18 @@ function MemberRow({
               </Button>
               <Button
                 disabled={action !== null}
+                onClick={() => {
+                  setPermissions(member.permissions);
+                  setEditing(false);
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {t("cancelEdit")}
+              </Button>
+              <Button
+                disabled={action !== null}
                 loading={action === "remove"}
                 onClick={() => void run("remove")}
                 size="sm"
@@ -208,13 +243,58 @@ function MemberRow({
                 {t("removeMember")}
               </Button>
             </div>
-          ) : null}
-          {!member.is_owner &&
-          member.user_id !== actorId &&
-          !withinActorAuthority ? (
-            <p className="text-muted text-xs">{t("memberOutsideAuthority")}</p>
-          ) : null}
-        </>
+          </>
+        ) : (
+          <>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {permissionChips.length > 0 ? (
+                permissionChips.map((label) => (
+                  <span
+                    className="bg-subtle text-secondary rounded-full px-2.5 py-1 text-xs"
+                    key={label}
+                  >
+                    {label}
+                  </span>
+                ))
+              ) : (
+                <span className="text-muted text-xs">{t("minimumAccess")}</span>
+              )}
+            </div>
+            {!immutable ? (
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Button
+                  disabled={action !== null}
+                  onClick={() => {
+                    setPermissions(member.permissions);
+                    setEditing(true);
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  {t("editPermissions")}
+                </Button>
+                <Button
+                  disabled={action !== null}
+                  loading={action === "remove"}
+                  onClick={() => void run("remove")}
+                  size="sm"
+                  type="button"
+                  variant="danger"
+                >
+                  {t("removeMember")}
+                </Button>
+              </div>
+            ) : null}
+            {!member.is_owner &&
+            member.user_id !== actorId &&
+            !withinActorAuthority ? (
+              <p className="text-muted text-xs">
+                {t("memberOutsideAuthority")}
+              </p>
+            ) : null}
+          </>
+        )
       ) : null}
       {error ? (
         <p aria-live="polite" className="text-danger text-sm">
@@ -238,13 +318,7 @@ function InvitationRow({
   const format = useFormatter();
   const [action, setAction] = React.useState<"resend" | "revoke" | null>(null);
   const [error, setError] = React.useState<unknown>();
-  const permissionLabels = (
-    [
-      ["edit_project", "editProject"],
-      ["manage_papers", "managePapers"],
-      ["manage_collaborators", "manageCollaborators"],
-    ] as const
-  )
+  const permissionLabels = permissionOptions
     .filter(([permission]) => invitation.permissions[permission])
     .map(([, label]) => t(`permissions.${label}`));
 
@@ -389,7 +463,11 @@ export function ManageProjectCollaboratorsDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent closeLabel={t("close")} placement="responsive-full">
+      <DialogContent
+        className="lg:max-w-4xl"
+        closeLabel={t("close")}
+        placement="responsive-full"
+      >
         <DialogHandle />
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
@@ -458,7 +536,7 @@ export function ManageProjectCollaboratorsDialog({
                 {t("inviteTitle")}
               </h2>
               <form
-                className="mt-4 grid gap-4"
+                className="border-line bg-subtle mt-4 grid gap-4 rounded-[var(--radius-lg)] border p-4"
                 onSubmit={form.handleSubmit(async (values) => {
                   try {
                     await submit(values);
