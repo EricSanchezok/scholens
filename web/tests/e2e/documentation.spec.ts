@@ -47,7 +47,11 @@ test("publishes an anonymous, accessible MCP setup guide", async ({ page }) => {
   await expect(
     page.locator("code").filter({ hasText: "/mcp" }).first(),
   ).toBeVisible();
-  await expect(page.getByText("56", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByText(
+      /secure access to 56 tools for your stored research knowledge/,
+    ),
+  ).toBeVisible();
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
@@ -107,7 +111,7 @@ test("preserves the Access Keys destination through sign-in", async ({
   await expect(page).toHaveURL("/login?returnTo=%2F%3Fsettings%3Daccess-keys");
 
   await page.getByLabel("Email").fill("researcher@example.com");
-  await page.getByLabel("Password").fill("twelve-chars!");
+  await page.getByRole("textbox", { name: "Password" }).fill("twelve-chars!");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL("/?settings=access-keys");
@@ -146,7 +150,7 @@ test("fits the guide at the minimum supported width", async ({ page }) => {
     page
       .getByRole("group", { name: "Documentation language" })
       .getByRole("button"),
-    page.locator('header a[href="/"]'),
+    page.getByRole("link", { name: "Scholens / Docs", exact: true }),
     page.locator("details").first().getByRole("link"),
     page.getByRole("link", {
       name: "Open the client's official MCP documentation",
