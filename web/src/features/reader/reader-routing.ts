@@ -35,6 +35,34 @@ export function readSourcePage(locator: ReaderDocumentSource["locator"]) {
   return Number.isInteger(page) && page > 0 ? page : undefined;
 }
 
+export function shouldFallbackFromReaderProjectContext({
+  hasActiveProject,
+  isFetchedAfterMount,
+  isFetching,
+  isRefetchError,
+  isSuccess,
+  projectId,
+  verifiedProjectId,
+}: {
+  hasActiveProject: boolean;
+  isFetchedAfterMount: boolean;
+  isFetching: boolean;
+  isRefetchError: boolean;
+  isSuccess: boolean;
+  projectId?: string;
+  verifiedProjectId: string | null | undefined;
+}) {
+  return Boolean(
+    projectId &&
+    !hasActiveProject &&
+    isSuccess &&
+    isFetchedAfterMount &&
+    !isRefetchError &&
+    verifiedProjectId === projectId &&
+    !isFetching,
+  );
+}
+
 export function conversationBelongsToReaderContext({
   conversation,
   documentId,

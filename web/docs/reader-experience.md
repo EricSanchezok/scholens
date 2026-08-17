@@ -128,6 +128,12 @@ panel animation state are local. Invalid page, panel, and conversation
 parameters are normalized after the document metadata is known and must not
 produce a second history entry.
 
+When `project` is present, Reader always refreshes the Document's accessible
+Project memberships on mount. Cached membership data, an in-flight refresh, or
+a failed refresh must not clear the Project context. Reader returns to personal
+reading only after a new successful response confirms that the Project is no
+longer accessible or no longer contains the Document.
+
 ## PDF surface
 
 Reader uses the official `pdfjs-dist` Display and Viewer layers through the

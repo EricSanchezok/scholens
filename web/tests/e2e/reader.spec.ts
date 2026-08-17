@@ -4,9 +4,24 @@ import { mockBillingUsage } from "./billing-fixture";
 import path from "node:path";
 
 import { libraryPapers } from "../../src/features/library/api/fixtures";
+import {
+  projectFixtures,
+  projectPaperFixtures,
+} from "../../src/features/projects/api/fixtures";
 
 const apiPattern = "**/api/v1";
 const paperDocument = libraryPapers[0]!.document;
+const readerProject = {
+  ...projectFixtures[0]!,
+  id: "50000000-0000-4000-8000-000000000001",
+  num_papers: 1,
+  title: "Agentic Web review",
+};
+const readerProjectPaper = {
+  ...projectPaperFixtures[0]!,
+  document_id: paperDocument.document_id,
+  title: paperDocument.title,
+};
 const pdfPath = path.resolve(
   "../server/evals/seed_data/chain_of_thought_for_reasoning.pdf",
 );
@@ -219,31 +234,6 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
   const annotations: Array<Record<string, unknown>> = [];
-  const project = {
-    id: "50000000-0000-4000-8000-000000000001",
-    title: "Agentic Web review",
-    description: null,
-    created_at: "2026-08-13T12:00:00Z",
-    updated_at: "2026-08-13T12:00:00Z",
-    num_audio_overviews: 0,
-    num_collaborators: 2,
-    num_conversations: 0,
-    num_data_tables: 0,
-    num_papers: 1,
-    owner: { id: 7, display_name: "Eric", email: actor.email },
-    membership: { kind: "owner", permissions: {} },
-    capabilities: {
-      contribute_research: true,
-      create_conversation: true,
-      delete: true,
-      edit_project: true,
-      leave: false,
-      manage_collaborators: true,
-      manage_papers: true,
-      read: true,
-      transfer: true,
-    },
-  };
   await page.route(`${apiPattern}/auth/refresh`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -278,7 +268,11 @@ async function mockReader(page: Page) {
     (route) =>
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ items: [project], next_cursor: null }),
+        body: JSON.stringify({
+          items: [readerProject],
+          next_cursor: null,
+          total_count: 1,
+        }),
       }),
   );
   await page.route(
@@ -1133,6 +1127,122 @@ test("falls back from an inaccessible Project Reader context", async ({
   await expect(
     page.getByRole("combobox", { name: "Reader context" }),
   ).toHaveText("Personal");
+});
+
+test("keeps Project context while cached membership is revalidated", async ({
+  page,
+}) => {
+  let membershipReads = 0;
+  let releaseFreshMembership!: () => void;
+  let markFreshMembershipStarted!: () => void;
+  const freshMembershipStarted = new Promise<void>((resolve) => {
+    markFreshMembershipStarted = resolve;
+  });
+  const freshMembershipRelease = new Promise<void>((resolve) => {
+    releaseFreshMembership = resolve;
+  });
+
+  await page.route(
+    `${apiPattern}/papers/${paperDocument.document_id}/projects`,
+    async (route) => {
+      membershipReads += 1;
+      if (membershipReads === 1) {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            items: [],
+            next_cursor: null,
+            total_count: 0,
+          }),
+        });
+        return;
+      }
+
+      markFreshMembershipStarted();
+      await freshMembershipRelease;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [readerProject],
+          next_cursor: null,
+          total_count: 1,
+        }),
+      });
+    },
+  );
+  await page.route(/\/api\/v1\/projects(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [readerProject],
+        next_cursor: null,
+        previous_cursor: null,
+        total_count: 1,
+      }),
+    }),
+  );
+  await page.route(`${apiPattern}/projects/${readerProject.id}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(readerProject),
+    }),
+  );
+  await page.route(
+    `${apiPattern}/projects/${readerProject.id}/papers**`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [readerProjectPaper],
+          next_cursor: null,
+          previous_cursor: null,
+          total_count: 1,
+        }),
+      }),
+  );
+  await page.route(
+    `${apiPattern}/projects/${readerProject.id}/outputs**`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [],
+          next_cursor: null,
+          previous_cursor: null,
+          total_count: 0,
+        }),
+      }),
+  );
+
+  await page.goto(`/reader/${paperDocument.document_id}`);
+  await expect.poll(() => membershipReads).toBe(1);
+
+  await page.getByRole("link", { name: "Projects" }).click();
+  await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
+  await page.getByRole("link", { name: readerProject.title }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${readerProject.id}`));
+  await page
+    .locator(
+      `a[href="/reader/${paperDocument.document_id}?project=${readerProject.id}"]`,
+    )
+    .click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/reader/${paperDocument.document_id}\\?project=${readerProject.id}`,
+    ),
+  );
+  await expect.poll(() => membershipReads).toBe(2);
+  await freshMembershipStarted;
+
+  await expect(page).toHaveURL(new RegExp(`project=${readerProject.id}`));
+  await expect(
+    page.getByText("Switched to personal reading", { exact: true }),
+  ).toHaveCount(0);
+
+  releaseFreshMembership();
+  await expect(
+    page.getByRole("combobox", { name: "Reader context" }),
+  ).toHaveText(readerProject.title);
 });
 
 test("deduplicates exact anchors and reveals resolved Project discussions weakly", async ({
