@@ -30,11 +30,10 @@ if (task === "tokens") {
     stdio: "inherit",
   });
 } else {
-  execFileSync(
-    "node",
-    ["scripts/generate-api.mjs", regeneratedPath],
-    { cwd: root, stdio: "inherit" },
-  );
+  execFileSync("node", ["scripts/generate-api.mjs", regeneratedPath], {
+    cwd: root,
+    stdio: "inherit",
+  });
 }
 
 const compare = (left, right) => {
