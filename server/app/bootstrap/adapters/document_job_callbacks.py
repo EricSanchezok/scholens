@@ -31,7 +31,10 @@ from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
 from app.helpers.celery_config import get_webhook_base_url
 from app.helpers.parser import parse_publication_date
 from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
-from app.bootstrap.adapters.document_gc import collect_document_if_due
+from app.bootstrap.adapters.document_gc import (
+    collect_document_if_due,
+    schedule_document_gc,
+)
 from app.modules.papers.infrastructure.search_repository import (
     document_search_repository,
 )
@@ -355,6 +358,12 @@ def handle_failed_upload(
             )
         if job.reference_created_library or job.reference_created_project:
             db.flush()
+            schedule_document_gc(
+                db,
+                document_id=document_id,
+                origin_operation_id=operation.trace.operation_id,
+                correlation_id=operation.trace.correlation_id,
+            )
 
     persisted_error_code = _safe_pdf_failure_code(
         reason=reason,

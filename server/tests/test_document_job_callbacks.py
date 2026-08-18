@@ -401,6 +401,12 @@ def test_failed_upload_compensates_only_memberships_this_job_created(
         "get_by_upload_job_id",
         MagicMock(return_value=None),
     )
+    gc_schedule = MagicMock()
+    monkeypatch.setattr(
+        document_job_callbacks,
+        "schedule_document_gc",
+        gc_schedule,
+    )
 
     operation = OperationContextFactory().root(
         initiated_by=OperationInitiator.SYSTEM,
@@ -419,6 +425,12 @@ def test_failed_upload_compensates_only_memberships_this_job_created(
     assert any(str(change.action) == "document.processing_failed" for change in changes)
     delete_calls = [call.args[0] for call in db.execute.call_args_list]
     assert len(delete_calls) == 2
+    gc_schedule.assert_called_once_with(
+        db,
+        document_id=document_id,
+        origin_operation_id=operation.trace.operation_id,
+        correlation_id=operation.trace.correlation_id,
+    )
 
 
 def test_failed_upload_keeps_pre_existing_memberships_when_nothing_created(
@@ -463,6 +475,12 @@ def test_failed_upload_keeps_pre_existing_memberships_when_nothing_created(
         "get_by_upload_job_id",
         MagicMock(return_value=None),
     )
+    gc_schedule = MagicMock()
+    monkeypatch.setattr(
+        document_job_callbacks,
+        "schedule_document_gc",
+        gc_schedule,
+    )
 
     operation = OperationContextFactory().root(
         initiated_by=OperationInitiator.SYSTEM,
@@ -479,3 +497,4 @@ def test_failed_upload_keeps_pre_existing_memberships_when_nothing_created(
     )
 
     assert db.execute.call_args_list == []
+    gc_schedule.assert_not_called()
