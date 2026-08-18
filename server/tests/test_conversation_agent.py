@@ -34,9 +34,14 @@ from app.modules.conversations.application.contracts.answer_packet import (
     ReferenceBundle,
 )
 from app.modules.integrations.connectors.infrastructure.mcp import (
+    ConnectorToolIssue,
     ResolvedConnectorToolSet,
 )
-from app.modules.papers.application.contracts.search import LibraryPaperCollection
+from app.modules.integrations.connections.domain import IntegrationProvider
+from app.modules.papers.application.contracts.search import (
+    LibraryPaperCollection,
+    SelectedPaperCollection,
+)
 from app.shared.application import (
     Actor,
     ConversationOrigin,
@@ -109,8 +114,11 @@ class _Executor:
 
 
 class _ConnectorTools:
+    def __init__(self, connector_set: ResolvedConnectorToolSet | None = None) -> None:
+        self._connector_set = connector_set or ResolvedConnectorToolSet()
+
     async def resolve(self, **_kwargs: object) -> ResolvedConnectorToolSet:
-        return ResolvedConnectorToolSet()
+        return self._connector_set
 
 
 class _Dispatcher:
@@ -196,11 +204,12 @@ async def _events(
     locale: str = "zh-CN",
     time_zone: str = "Asia/Shanghai",
     scope: ConversationChatScope | None = None,
+    connector_set: ResolvedConnectorToolSet | None = None,
 ) -> list[ConversationAgentStreamEvent]:
     runtime = ScholensConversationAgent(
         catalog=_catalog(),
         dispatcher=dispatcher,  # type: ignore[arg-type]
-        connector_tools=_ConnectorTools(),  # type: ignore[arg-type]
+        connector_tools=_ConnectorTools(connector_set),  # type: ignore[arg-type]
         operation_factory=OperationContextFactory(),
         clock=_Clock(),
         model_factory=lambda _level: model,
@@ -764,3 +773,126 @@ def test_request_rejects_non_iana_time_zone() -> None:
             locale="en",
             time_zone="Shanghai",
         )
+
+
+async def _capture_instructions(
+    *,
+    query: str = "What can you do?",
+    scope: ConversationChatScope | None = None,
+    connector_set: ResolvedConnectorToolSet | None = None,
+) -> str:
+    seen: list[str] = []
+
+    async def direct_answer(
+        _messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[str]:
+        seen.append(info.instructions or "")
+        yield "Understood."
+
+    await _events(
+        model=FunctionModel(stream_function=direct_answer),
+        dispatcher=_Dispatcher(),
+        query=query,
+        locale="en",
+        time_zone="UTC",
+        scope=scope,
+        connector_set=connector_set,
+    )
+    assert len(seen) == 1
+    return seen[0]
+
+
+@pytest.mark.parametrize(
+    ("scope_type", "project_id", "document_id", "paper_context", "gravity_phrase"),
+    [
+        (
+            ConversationScopeType.GLOBAL,
+            None,
+            None,
+            LibraryPaperCollection(),
+            "broad Home research flow",
+        ),
+        (
+            ConversationScopeType.PROJECT,
+            uuid4(),
+            None,
+            SelectedPaperCollection(project_ids=[uuid4()]),
+            "project-centered research flow",
+        ),
+        (
+            ConversationScopeType.PAPER,
+            None,
+            uuid4(),
+            SelectedPaperCollection(document_ids=[uuid4()]),
+            "deep-reading flow",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_instructions_encode_scope_gravity_and_attention(
+    scope_type: ConversationScopeType,
+    project_id: UUID | None,
+    document_id: UUID | None,
+    paper_context: Any,
+    gravity_phrase: str,
+) -> None:
+    scope = ConversationChatScope(
+        scope_type=scope_type,
+        project_id=project_id,
+        document_id=document_id,
+        paper_context=paper_context,
+        tool_permissions=frozenset({WorkspacePermission.READ}),
+        title_is_default=False,
+    )
+    instructions = await _capture_instructions(scope=scope)
+
+    assert gravity_phrase in instructions
+    assert "not a capability wall" in instructions
+    assert f'"scope_type": "{scope_type.value}"' in instructions
+    assert f'"gravity": "{scope_type.value}"' in instructions
+    assert f'"kind": "{paper_context.kind}"' in instructions
+
+
+@pytest.mark.asyncio
+async def test_instructions_expose_resolved_connector_tools() -> None:
+    connector_set = ResolvedConnectorToolSet(
+        declarations=(
+            {
+                "name": "search_papers",
+                "description": "Discover external literature.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        )
+    )
+    instructions = await _capture_instructions(connector_set=connector_set)
+
+    assert "connector_tools: search_papers" in instructions
+    assert "connector_issues: none" in instructions
+
+
+@pytest.mark.asyncio
+async def test_instructions_expose_connector_omissions() -> None:
+    connector_set = ResolvedConnectorToolSet(
+        issues=(
+            ConnectorToolIssue(
+                provider=IntegrationProvider.SCHOLIGHT,
+                code="connector_unavailable",
+                message="Scholight is unavailable",
+            ),
+        )
+    )
+    instructions = await _capture_instructions(connector_set=connector_set)
+
+    assert "connector_tools: none available" in instructions
+    assert "connector_issues: scholight:connector_unavailable" in instructions
+
+
+@pytest.mark.asyncio
+async def test_instructions_prefer_tools_for_stored_research_facts() -> None:
+    instructions = await _capture_instructions()
+
+    assert "solving requests with the available tools" in instructions
+    assert "inspect with tools before claiming absence" in instructions
+    assert "no mandatory" in instructions
+    assert "A direct answer is allowed" in instructions
+    assert "External literature discovery" in instructions

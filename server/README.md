@@ -441,6 +441,18 @@ authorized subset of the canonical workspace and connector tools:
 - `search_paper_content`
 - workspace management tools selected from the same catalog exposed by `/mcp`
 
+The agent follows an autonomy policy rather than a fixed tool workflow: it
+prefers solving with available tools when the answer depends on stored
+knowledge, workspace state, user-specific resources, or external evidence,
+inspects before claiming absence, and treats clarification as a last resort.
+A direct no-tool answer remains allowed for purely conversational requests,
+current-date questions, and requests fully covered by server-validated
+materials. Global, project, and paper scopes are centers of gravity, not
+capability walls: each scope shifts default attention while remaining
+general-purpose, and manual `paper_context` edits plus the resolved connector
+inventory are injected so the model acts on real capabilities. External
+literature discovery stays connector-owned.
+
 Unified Conversation agent workflow:
 
 ```mermaid
