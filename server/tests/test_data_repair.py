@@ -4,10 +4,24 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from typing import Callable
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+from app.modules.papers.infrastructure.data_repair import ReprocessEnqueuer
 from app.modules.papers.infrastructure.data_repair import SqlDataRepair
+
+
+def _repair(
+    db: MagicMock,
+    *,
+    enqueuer: ReprocessEnqueuer | Callable[..., bool] | None = None,
+) -> SqlDataRepair:
+    """Build the gateway with a stub composition enqueuer."""
+    return SqlDataRepair(
+        db,
+        reprocess_enqueuer=enqueuer if enqueuer is not None else MagicMock(),
+    )
 
 
 def _source_job(*, job_id: UUID, requested_by_id: int = 1) -> MagicMock:
@@ -35,7 +49,7 @@ def test_fix_publish_dates_dry_run_only_counts_candidates() -> None:
     db = MagicMock()
     db.scalar.return_value = 3
 
-    result = SqlDataRepair(db).fix_publish_dates(batch_size=10, apply=False)
+    result = _repair(db).fix_publish_dates(batch_size=10, apply=False)
 
     assert result.candidates == 3
     assert result.fixed == 0
@@ -50,7 +64,7 @@ def test_fix_publish_dates_applies_bounded_update() -> None:
     selected.all.return_value = [(document_id, "2017-01-01")]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).fix_publish_dates(batch_size=1, apply=True)
+    result = _repair(db).fix_publish_dates(batch_size=1, apply=True)
 
     assert result.candidates == 2
     assert result.fixed == 1
@@ -75,7 +89,7 @@ def test_fix_annotation_offsets_dry_run_reports_candidates() -> None:
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).fix_annotation_offsets(batch_size=10, apply=False)
+    result = _repair(db).fix_annotation_offsets(batch_size=10, apply=False)
 
     assert result.candidates == 1
     assert result.fixed == 0
@@ -96,7 +110,7 @@ def test_fix_annotation_offsets_applies_exact_reanchor() -> None:
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).fix_annotation_offsets(batch_size=10, apply=True)
+    result = _repair(db).fix_annotation_offsets(batch_size=10, apply=True)
     assert result.fixed == 1
     assert result.unresolved == 0
     statement, params = db.execute.call_args_list[1].args
@@ -120,7 +134,7 @@ def test_fix_annotation_offsets_leaves_unresolvable_quotes_untouched() -> None:
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).fix_annotation_offsets(batch_size=10, apply=True)
+    result = _repair(db).fix_annotation_offsets(batch_size=10, apply=True)
 
     assert result.fixed == 0
     assert result.unresolved == 1
@@ -141,7 +155,7 @@ def test_purge_bad_citations_dry_run_samples_provider_rows() -> None:
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).purge_bad_citations(batch_size=10, apply=False)
+    result = _repair(db).purge_bad_citations(batch_size=10, apply=False)
 
     assert result.candidates == 1
     assert result.purged == 0
@@ -166,7 +180,7 @@ def test_purge_bad_citations_apply_clears_provider_fields_keeps_provenance() -> 
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).purge_bad_citations(batch_size=10, apply=True)
+    result = _repair(db).purge_bad_citations(batch_size=10, apply=True)
 
     assert result.candidates == 1
     assert result.purged == 1
@@ -195,7 +209,7 @@ def test_purge_bad_citations_apply_skips_non_provider_fields() -> None:
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = SqlDataRepair(db).purge_bad_citations(batch_size=10, apply=True)
+    result = _repair(db).purge_bad_citations(batch_size=10, apply=True)
 
     assert result.candidates == 1
     assert result.purged == 0
@@ -210,17 +224,19 @@ def test_reprocess_contaminated_documents_dry_run_lists_jobs() -> None:
     selected = MagicMock()
     selected.all.return_value = [row]
     db.execute.return_value = selected
+    enqueuer = MagicMock()
 
-    result = SqlDataRepair(db).reprocess_contaminated_documents(
+    result = _repair(db, enqueuer=enqueuer).reprocess_contaminated_documents(
         batch_size=10, apply=False
     )
 
     assert result.candidates == 1
     assert result.reprocessed == 0
     assert str(job_id) in result.sample_job_ids
+    enqueuer.assert_not_called()
 
 
-def test_reprocess_contaminated_documents_apply_enqueues_dispatchable_job() -> None:
+def test_reprocess_contaminated_documents_apply_delegates_to_enqueuer() -> None:
     db = MagicMock()
     job_id = uuid4()
     row = MagicMock()
@@ -231,38 +247,27 @@ def test_reprocess_contaminated_documents_apply_enqueues_dispatchable_job() -> N
     source_job = _source_job(job_id=job_id)
     document = _document()
     db.get.side_effect = [source_job, document, None]
-    persisted = MagicMock()
-    persisted.created = True
-    persisted.job = MagicMock()
-    with patch(
-        "app.modules.papers.infrastructure.data_repair.job_repository"
-    ) as job_repo:
-        job_repo.enqueue.return_value = persisted
-        result = SqlDataRepair(db).reprocess_contaminated_documents(
-            batch_size=10, apply=True
-        )
+    enqueuer = MagicMock(return_value=True)
+
+    result = _repair(db, enqueuer=enqueuer).reprocess_contaminated_documents(
+        batch_size=10, apply=True
+    )
 
     assert result.candidates == 1
     assert result.reprocessed == 1
-    job_repo.enqueue.assert_called_once()
-    request = job_repo.enqueue.call_args.kwargs["request"]
-    assert request.idempotency_key == f"pdf-reprocess:{job_id}"
-    assert request.document_id == document.id
-    assert request.payload["s3_object_key"] == document.s3_object_key
-    assert request.task_kwargs["s3_object_key"] == document.s3_object_key
-    assert request.task_name == "upload_and_process_file"
-    assert request.queue == "document"
-    # The new upload reservation must never tear down existing memberships.
-    assert db.add.called
-    reservation = db.add.call_args.args[0]
-    assert reservation.reference_created is False
-    assert reservation.reserved_reference_count == 0
-    assert reservation.content_sha256 == document.sha256
-    assert document.processing_status == "processing"
-    assert document.processing_job_id == request.job_id
+    assert str(job_id) in result.sample_job_ids
+    enqueuer.assert_called_once()
+    kwargs = enqueuer.call_args.kwargs
+    assert kwargs["db"] is db
+    assert kwargs["source"] is source_job
+    assert kwargs["document"] is document
+    assert kwargs["reservation"] is None
+    # The composition adapter owns job/dispatch/reservation creation; the
+    # gateway must only locate the rows and delegate.
+    document.processing_status.assert_not_called()
 
 
-def test_reprocess_contaminated_documents_apply_idempotent_replay_skips() -> None:
+def test_reprocess_contaminated_documents_apply_replay_skips() -> None:
     db = MagicMock()
     job_id = uuid4()
     row = MagicMock()
@@ -273,19 +278,14 @@ def test_reprocess_contaminated_documents_apply_idempotent_replay_skips() -> Non
     source_job = _source_job(job_id=job_id)
     document = _document()
     db.get.side_effect = [source_job, document, None]
-    persisted = MagicMock()
-    persisted.created = False  # idempotency-key replay
-    persisted.job = MagicMock()
-    with patch(
-        "app.modules.papers.infrastructure.data_repair.job_repository"
-    ) as job_repo:
-        job_repo.enqueue.return_value = persisted
-        result = SqlDataRepair(db).reprocess_contaminated_documents(
-            batch_size=10, apply=True
-        )
+    enqueuer = MagicMock(return_value=False)  # idempotency-key replay
+
+    result = _repair(db, enqueuer=enqueuer).reprocess_contaminated_documents(
+        batch_size=10, apply=True
+    )
 
     assert result.reprocessed == 0
-    db.add.assert_not_called()
+    enqueuer.assert_called_once()
 
 
 def test_reprocess_contaminated_documents_apply_skips_missing_document() -> None:
@@ -297,13 +297,12 @@ def test_reprocess_contaminated_documents_apply_skips_missing_document() -> None
     selected.all.return_value = [row]
     db.execute.return_value = selected
     db.get.side_effect = [None]
-    with patch(
-        "app.modules.papers.infrastructure.data_repair.job_repository"
-    ) as job_repo:
-        result = SqlDataRepair(db).reprocess_contaminated_documents(
-            batch_size=10, apply=True
-        )
+    enqueuer = MagicMock()
+
+    result = _repair(db, enqueuer=enqueuer).reprocess_contaminated_documents(
+        batch_size=10, apply=True
+    )
 
     assert result.candidates == 1
     assert result.reprocessed == 0
-    job_repo.enqueue.assert_not_called()
+    enqueuer.assert_not_called()

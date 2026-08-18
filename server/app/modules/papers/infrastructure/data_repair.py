@@ -10,21 +10,17 @@ import json
 import re
 import uuid
 from datetime import datetime
+from typing import Protocol
 
-from scholens_job_contracts import JobQueue
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database.models import (
     Document,
-    DocumentProcessingStatus,
     DurableJob,
-    JobOperation,
     UploadReservation,
 )
-from app.helpers.celery_config import get_webhook_base_url
 from app.llm.utils import find_offsets
-from app.modules.jobs.infrastructure.repository import EnqueueJob, job_repository
 from app.modules.papers.application.data_repair import (
     AnnotationOffsetRepairResult,
     CitationPurgeResult,
@@ -43,9 +39,32 @@ def _normalize_whitespace(value: str) -> str:
     return " ".join(value.split())
 
 
+class ReprocessEnqueuer(Protocol):
+    """Composition-injected enqueuer for one contaminated document.
+
+    Implemented in ``app.bootstrap.adapters.data_repair_jobs`` so the papers
+    module never reaches into another module's infrastructure.
+    """
+
+    def __call__(
+        self,
+        *,
+        db: Session,
+        source: DurableJob,
+        document: Document,
+        reservation: UploadReservation | None,
+    ) -> bool: ...
+
+
 class SqlDataRepair(DataRepairGateway):
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        reprocess_enqueuer: ReprocessEnqueuer,
+    ) -> None:
         self._db = db
+        self._reprocess_enqueuer = reprocess_enqueuer
 
     def fix_publish_dates(
         self,
@@ -340,88 +359,30 @@ class SqlDataRepair(DataRepairGateway):
     def _reprocess_one(self, *, job_id: uuid.UUID) -> bool:
         """Enqueue one dispatchable reprocess job for a contaminated document.
 
-        The new job reuses the original requester, correlation and origin so
-        the terminal webhook can resume the same actor, and reuses the
-        document's content-addressed source S3 key. A matching upload
-        reservation is created with ``reference_created=False`` so the failure
-        path never tears down an existing Library/Project membership, and
-        ``reserved_reference_count=0`` so no reference quota is consumed.
+        The candidate SQL already guarantees a non-null requester; the new job
+        reuses the original requester, correlation and origin so the terminal
+        webhook can resume the same actor, and reuses the document's
+        content-addressed source S3 key. The composition-injected enqueuer
+        creates the durable job, outbox dispatch and upload reservation
+        (``reference_created=False`` so existing memberships are never torn
+        down, ``reserved_reference_count=0`` so no reference quota is
+        consumed). The original terminal job row stays immutable.
         """
         source = self._db.get(DurableJob, job_id)
         if source is None or source.document_id is None:
             return False
+        if source.requested_by_id is None:
+            return False
         document = self._db.get(Document, source.document_id)
         if document is None:
             return False
-        assert source.requested_by_id is not None
         reservation = self._db.get(UploadReservation, job_id)
-        new_job_id = uuid.uuid4()
-        base_url = get_webhook_base_url().rstrip("/")
-        persisted = job_repository.enqueue(
-            self._db,
-            request=EnqueueJob(
-                operation=JobOperation.PDF_PROCESS,
-                requested_by_id=source.requested_by_id,
-                correlation_id=source.correlation_id,
-                origin_operation_id=source.origin_operation_id,
-                project_id=source.project_id,
-                document_id=document.id,
-                idempotency_key=f"pdf-reprocess:{job_id}",
-                payload={
-                    "content_sha256": document.sha256,
-                    "original_filename": document.original_filename,
-                    "input_size_bytes": document.size_bytes,
-                    "s3_object_key": document.s3_object_key,
-                    "skip_metadata_extraction": False,
-                },
-                task_name="upload_and_process_file",
-                queue=JobQueue.DOCUMENT,
-                task_kwargs={
-                    "s3_object_key": document.s3_object_key,
-                    "webhook_url": (
-                        f"{base_url}/internal/v1/jobs/{new_job_id}/complete"
-                    ),
-                    "claim_url": f"{base_url}/internal/v1/jobs/{new_job_id}/claim",
-                    "credential_url": (
-                        f"{base_url}/internal/v1/jobs/{new_job_id}"
-                        "/integration-credentials/mineru"
-                    ),
-                    "progress_url": (
-                        f"{base_url}/internal/v1/jobs/{new_job_id}/progress"
-                    ),
-                    "skip_metadata_extraction": False,
-                },
-                job_id=new_job_id,
-            ),
+        return self._reprocess_enqueuer(
+            db=self._db,
+            source=source,
+            document=document,
+            reservation=reservation,
         )
-        if not persisted.created:
-            return False
-        display_name = (
-            reservation.display_name
-            if reservation is not None
-            else document.original_filename
-        )
-        source_kind = reservation.source_kind if reservation is not None else "upload"
-        new_reservation = UploadReservation(
-            id=new_job_id,
-            quota_owner_id=(
-                reservation.quota_owner_id
-                if reservation is not None
-                else source.requested_by_id
-            ),
-            reserved_size_kb=document.size_bytes // 1024,
-            reserved_reference_count=0,
-            content_sha256=document.sha256,
-            original_filename=document.original_filename,
-            display_name=display_name,
-            source_kind=source_kind,
-            reference_created=False,
-        )
-        new_reservation.job = persisted.job
-        self._db.add(new_reservation)
-        document.processing_status = DocumentProcessingStatus.PROCESSING.value
-        document.processing_job_id = new_job_id
-        return True
 
 
 __all__ = ["SqlDataRepair"]

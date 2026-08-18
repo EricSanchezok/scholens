@@ -16,6 +16,7 @@ from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.infrastructure import (
     SqlAlchemyOperationJournalStore,
 )
+from app.bootstrap.adapters.data_repair_jobs import enqueue_reprocess_job
 from app.modules.papers.application.data_repair import DataRepair
 from app.modules.papers.application.maintenance import PassageMaintenance
 from app.modules.papers.infrastructure.data_repair import SqlDataRepair
@@ -64,7 +65,10 @@ class OperatorCapabilities:
     @cached_property
     def data_repair(self) -> DataRepair:
         return DataRepair(
-            SqlDataRepair(self._session),
+            SqlDataRepair(
+                self._session,
+                reprocess_enqueuer=enqueue_reprocess_job,
+            ),
             journal=self._journal,
         )
 
