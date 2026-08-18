@@ -169,7 +169,7 @@ export function MessageContent({
     [onCitationOpen, streaming, t],
   );
   return (
-    <div className="max-w-[72ch] min-w-0 text-base leading-7 [overflow-wrap:anywhere] lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4">
+    <div className="max-w-[72ch] min-w-0 overflow-x-clip text-base leading-7 [overflow-wrap:anywhere] lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4">
       <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
         {renderedContent}
       </ReactMarkdown>

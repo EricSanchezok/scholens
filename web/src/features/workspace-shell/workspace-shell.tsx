@@ -67,6 +67,8 @@ import {
   useConversationListController,
   type ConversationListController,
 } from "./use-conversation-list-controller";
+import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
+import { useShellVisualViewport } from "./use-shell-visual-viewport";
 
 export type WorkspaceDestination = "ask" | "library" | "projects";
 
@@ -754,7 +756,7 @@ function MobileBottomDock({
     <div
       className={cn(
         "bg-canvas relative z-30 grid shrink-0 gap-1 pr-[calc(var(--space-2)+env(safe-area-inset-right))] pl-[calc(var(--space-2)+env(safe-area-inset-left))] lg:hidden",
-        !keyboardOpen && "pb-[env(safe-area-inset-bottom)]",
+        !keyboardOpen && "pb-[max(0.5rem,env(safe-area-inset-bottom))]",
       )}
       data-keyboard-open={keyboardOpen || undefined}
       data-testid="mobile-bottom-dock"
@@ -1003,7 +1005,17 @@ export function WorkspaceShell({
     undefined,
   );
   const railAnimationsRef = React.useRef<Animation[]>([]);
+  const isDesktop = useDesktopLayout();
+  const shellVisualViewport = useShellVisualViewport(!isDesktop);
   const effectiveMobileViewport = mobileViewport ?? { open: false };
+  const shellViewportHeight = effectiveMobileViewport.open
+    ? (effectiveMobileViewport.viewportHeight ?? shellVisualViewport?.height)
+    : shellVisualViewport?.height;
+  const shellViewportOffsetTop = effectiveMobileViewport.open
+    ? (effectiveMobileViewport.viewportOffsetTop ??
+      shellVisualViewport?.offsetTop ??
+      0)
+    : (shellVisualViewport?.offsetTop ?? 0);
 
   const stopRailAnimations = React.useCallback(() => {
     for (const animation of railAnimationsRef.current) animation.cancel();
@@ -1089,10 +1101,12 @@ export function WorkspaceShell({
       className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden"
       data-workspace-shell=""
       style={
-        effectiveMobileViewport.viewportHeight
+        shellViewportHeight
           ? {
-              height: `${effectiveMobileViewport.viewportHeight}px`,
-              transform: `translateY(${effectiveMobileViewport.viewportOffsetTop ?? 0}px)`,
+              height: `${shellViewportHeight}px`,
+              top: 0,
+              bottom: "auto",
+              transform: `translateY(${shellViewportOffsetTop}px)`,
             }
           : undefined
       }
@@ -1200,7 +1214,7 @@ export function WorkspaceShell({
           </div>
         </header>
         <main
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+          className="min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-y-contain"
           data-scrollbar-gutter="stable"
           tabIndex={0}
         >
