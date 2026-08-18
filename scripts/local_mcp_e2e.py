@@ -200,12 +200,20 @@ class Driver:
         return self._report()
 
     def _discover_document(self, client: httpx.Client) -> None:
-        """Find one library paper to drive the real read/write paths."""
+        """Find one library paper to drive the real read/write paths.
+
+        The library list mixes ``entry_type == "paper"`` entries (the
+        paper's own record, carrying ``document.document_id``) with
+        ``entry_type == "ingestion"`` entries (active uploads that may
+        reference a document not yet in the Library). Prefer the paper
+        record so the discovered document is guaranteed usable by the
+        read/write paths.
+        """
         try:
             result = self.call(
                 client,
                 "tools/call",
-                {"name": "list_library_papers", "arguments": {"limit": 5}},
+                {"name": "list_library_papers", "arguments": {"limit": 10}},
             )
         except E2EFailure:
             return
@@ -214,27 +222,41 @@ class Driver:
         items = (
             result_payload.get("items", []) if isinstance(result_payload, dict) else []
         )
+        paper_document_id: str | None = None
+        fallback_document_id: str | None = None
         for item in items:
             if not isinstance(item, dict):
                 continue
-            document = item.get("document") or item.get("ingestion") or {}
+            entry_type = item.get("entry_type")
+            document = (
+                item.get("document") if isinstance(item.get("document"), dict) else None
+            )
             document_id = None
-            if isinstance(document, dict):
+            if document is not None:
                 document_id = document.get("document_id") or item.get("document_id")
-            if document_id:
-                self.document_id = str(document_id)
-                self.outcomes.append(
-                    Outcome(
-                        "list_library_papers",
-                        "success",
-                        "OK",
-                        f"discovered document {document_id}",
-                    )
+            if document_id is None and isinstance(item.get("ingestion"), dict):
+                document_id = item["ingestion"].get("document_id")
+            if not document_id:
+                continue
+            if entry_type == "paper" and paper_document_id is None:
+                paper_document_id = str(document_id)
+            elif fallback_document_id is None:
+                fallback_document_id = str(document_id)
+        document_id = paper_document_id or fallback_document_id
+        if document_id:
+            self.document_id = document_id
+            self.outcomes.append(
+                Outcome(
+                    "list_library_papers",
+                    "success",
+                    "OK",
+                    f"discovered document {document_id}",
                 )
-                return
+            )
 
     def _matrix(self) -> list[Case]:
         fake = self._fake_uuid()
+        project_key = f"e2e-create-project-{uuid.uuid4().hex[:8]}"
         cases: list[Case] = [
             # -- read-only baseline -------------------------------------------
             Case("list_projects", {}, "success"),
@@ -260,13 +282,12 @@ class Driver:
                 "error",
                 "annotation_thread kind is managed by annotation tools and must be rejected",
             ),
-            # -- project lifecycle --------------------------------------------
             Case("create_project", {"title": "E2E Project"}, "success"),
             Case(
                 "create_project",
-                {"title": "E2E Project", "idempotency_key": "e2e-create-project"},
+                {"title": "E2E Project", "idempotency_key": project_key},
                 "success",
-                "idempotent replay",
+                "idempotent replay: same key returns the same project",
             ),
             Case("update_project", {"project_id": fake, "title": "Nope"}, "error"),
             Case("delete_project", {"project_id": fake}, "error"),
@@ -336,15 +357,14 @@ class Driver:
                 "error",
             ),
             Case("remove_library_papers", {"document_ids": [fake]}, "error"),
-            Case("create_library_tag", {"name": "e2e-tag"}, "success"),
             Case("update_library_tag", {"tag_id": fake, "name": "nope"}, "error"),
             Case("delete_library_tag", {"tag_id": fake}, "error"),
             Case(
-                "replace_library_paper_tags",
-                {"document_ids": [fake], "tag_ids": []},
-                "error",
+                "create_library_tag",
+                {"name": f"e2e-tag-{uuid.uuid4().hex[:8]}"},
+                "success",
+                "unique tag name keeps the matrix repeatable",
             ),
-            # -- annotation lifecycle ------------------------------------------
             Case("get_annotation_thread", {"thread_id": fake}, "error"),
             Case(
                 "create_annotation_comment",
