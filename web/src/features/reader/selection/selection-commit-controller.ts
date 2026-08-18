@@ -1,227 +1,133 @@
-/**
- * Selection commit controller.
- *
- * Owns the transition from a live browser selection to the committed,
- * geometry-normalized selection:
- *
- * - Tracks the last valid DOM extent so a transient selection rewrite (the
- *   browser landing on the `.selecting` container / sentinel while dragging)
- *   is restored instead of committed as a huge collapsed range.
- * - Commits only after pointer-up, with an rAF + 100 ms settle and a
- *   generation counter so stale syncs are dropped; the pointer-up position
- *   feeds the dead-zone clamp.
- * - After a successful commit, clears the browser selection (the overlay then
- *   owns the visual) and reports the normalized selection upward.
- *
- * The 300 ms auto-translation debounce lives downstream in
- * `useReaderTranslation` and is deliberately untouched.
- */
-
-import type {
-  GeometryPoint,
-  PageTextGeometryIndex,
-} from "./page-text-geometry";
-import {
-  normalizePdfSelection,
-  type NormalizedSelection,
-} from "./normalize-pdf-selection";
-import { ensureEndOfContent } from "./text-layer-selection-guard";
+/** Commit a stable, single-page browser Range after pointer release. */
 
 export const SELECTION_SETTLE_DELAY_MS = 100;
 
-export type SelectionCommitControllerOptions = {
-  /** Called when the user commits a new normalized selection. */
-  onCommit?: (selection: NormalizedSelection) => void;
-  /** Called when the controller is cleared (Escape / outside click / page change). */
-  onClear?: () => void;
+export type CommittedTextSelection = {
+  rects: Array<{ height: number; left: number; top: number; width: number }>;
+  text: string;
 };
 
-type PendingSync = {
-  generation: number;
-  timer: ReturnType<typeof setTimeout>;
-};
-
-function isElementSelectionOnSentinel(selection: Selection) {
-  if (selection.rangeCount === 0) return false;
-  const range = selection.getRangeAt(0);
-  if (!range.collapsed) return false;
-  const node = range.startContainer;
-  if (node.nodeType !== Node.ELEMENT_NODE) return false;
-  const element = node as Element;
+function isRangeInside(range: Range, textLayer: HTMLElement) {
   return (
-    element.classList.contains("selecting") ||
-    element.classList.contains("endOfContent") ||
-    Boolean(element.closest(".endOfContent"))
+    !range.collapsed &&
+    textLayer.contains(range.startContainer) &&
+    textLayer.contains(range.endContainer)
   );
-}
-
-function isRangeInsideTextLayer(range: Range, textLayer: HTMLElement) {
-  const ancestor =
-    range.commonAncestorContainer.nodeType === Node.TEXT_NODE
-      ? range.commonAncestorContainer.parentElement
-      : (range.commonAncestorContainer as Element | null);
-  return Boolean(ancestor && textLayer.contains(ancestor));
 }
 
 export function createSelectionCommitController({
   textLayer,
-  getIndex,
   onCommit,
-  onClear,
 }: {
   textLayer: HTMLElement;
-  getIndex: () => PageTextGeometryIndex | undefined;
-  onCommit?: (selection: NormalizedSelection) => void;
-  onClear?: () => void;
+  onCommit: (selection: CommittedTextSelection) => void;
 }) {
-  let lastValid:
-    | {
-        anchorNode: Node;
-        anchorOffset: number;
-        focusNode: Node;
-        focusOffset: number;
-      }
-    | undefined;
-  let lastCommitted: NormalizedSelection | undefined;
+  let lastValidRange: Range | undefined;
   let generation = 0;
-  let pending: PendingSync | undefined;
+  let pendingFrame: number | undefined;
+  let pendingTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
-  let lastPointerPoint: GeometryPoint | undefined;
 
-  function recordValidSelection(selection: Selection) {
-    if (selection.rangeCount === 0) return;
+  function currentValidRange() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return undefined;
+    }
     const range = selection.getRangeAt(0);
-    if (range.collapsed) return;
-    if (!isRangeInsideTextLayer(range, textLayer)) return;
-    lastValid = {
-      anchorNode: selection.anchorNode ?? range.startContainer,
-      anchorOffset: selection.anchorOffset ?? range.startOffset,
-      focusNode: selection.focusNode ?? range.endContainer,
-      focusOffset: selection.focusOffset ?? range.endOffset,
-    };
+    return isRangeInside(range, textLayer) ? range : undefined;
+  }
+
+  function cancelPending() {
+    generation += 1;
+    if (pendingFrame !== undefined) {
+      window.cancelAnimationFrame(pendingFrame);
+      pendingFrame = undefined;
+    }
+    if (pendingTimer !== undefined) {
+      clearTimeout(pendingTimer);
+      pendingTimer = undefined;
+    }
   }
 
   function commit() {
     if (disposed) return;
-    pending = undefined;
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    pendingTimer = undefined;
+    const range = currentValidRange() ?? lastValidRange;
+    if (!range || !isRangeInside(range, textLayer)) return;
+    let committed: CommittedTextSelection;
+    try {
+      const text = range.toString().trim();
+      const rects = Array.from(range.getClientRects(), (rect) => ({
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+      }));
+      if (!text || rects.length === 0) return;
+      committed = { rects, text };
+    } catch {
+      // A text-layer render can detach Range boundaries during the settle
+      // window. The next gesture starts from a fresh browser selection.
+      lastValidRange = undefined;
       return;
     }
-    const range = selection.getRangeAt(0);
-    if (!isRangeInsideTextLayer(range, textLayer)) return;
-    const index = getIndex();
-    if (!index) return;
-    const normalized = normalizePdfSelection({
-      index,
-      range,
-      previous: lastCommitted,
-      pointerPoint: lastPointerPoint,
-    });
-    if (!normalized) return;
-    recordValidSelection(selection);
-    lastCommitted = normalized;
-    onCommit?.(normalized);
-    selection.removeAllRanges();
+    onCommit(committed);
+    window.getSelection()?.removeAllRanges();
+    lastValidRange = undefined;
   }
 
-  function scheduleSync() {
+  function scheduleCommit() {
     if (disposed) return;
-    generation += 1;
-    const currentGeneration = generation;
-    if (pending) clearTimeout(pending.timer);
-    pending = {
-      generation: currentGeneration,
-      timer: setTimeout(() => {
-        if (disposed || generation !== currentGeneration) return;
+    cancelPending();
+    const scheduledGeneration = generation;
+    pendingFrame = window.requestAnimationFrame(() => {
+      pendingFrame = undefined;
+      pendingTimer = setTimeout(() => {
+        if (disposed || generation !== scheduledGeneration) return;
         commit();
-      }, SELECTION_SETTLE_DELAY_MS),
-    };
+      }, SELECTION_SETTLE_DELAY_MS);
+    });
   }
 
   function handleSelectionChange() {
     if (disposed) return;
-    const selection = window.getSelection();
-    if (!selection) return;
-    // Restore the last valid extent when the browser rewrote the selection
-    // into a transient collapsed element selection on the sentinel/container.
-    if (isElementSelectionOnSentinel(selection) && lastValid) {
-      try {
-        selection.setBaseAndExtent(
-          lastValid.anchorNode,
-          lastValid.anchorOffset,
-          lastValid.focusNode,
-          lastValid.focusOffset,
-        );
-        recordValidSelection(selection);
-      } catch {
-        // Ignore invalid extents; the next change event will re-evaluate.
-      }
-      return;
-    }
-    if (!selection.isCollapsed && selection.rangeCount > 0) {
-      recordValidSelection(selection);
-    }
+    const range = currentValidRange();
+    if (range) lastValidRange = range.cloneRange();
   }
 
-  function handlePointerUp(event: PointerEvent) {
+  function handlePointerDown() {
+    cancelPending();
+    lastValidRange = undefined;
+  }
+
+  function handlePointerUp() {
     if (disposed) return;
-    // Synthesized events (tests, assistive tech) may carry (0,0); only a
-    // real pointer position should feed the dead-zone clamp.
-    lastPointerPoint =
-      event.clientX !== 0 || event.clientY !== 0
-        ? { x: event.clientX, y: event.clientY }
-        : undefined;
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-      return;
-    }
-    if (!isRangeInsideTextLayer(selection.getRangeAt(0), textLayer)) return;
-    recordValidSelection(selection);
-    scheduleSync();
+    const range = currentValidRange();
+    if (range) lastValidRange = range.cloneRange();
+    if (lastValidRange) scheduleCommit();
   }
 
-  // Capture-phase so releases outside the article still commit, and so the
-  // commit runs before the guard's bubble-phase sentinel reset.
+  document.addEventListener("pointerdown", handlePointerDown, true);
   document.addEventListener("pointerup", handlePointerUp, true);
   document.addEventListener("selectionchange", handleSelectionChange);
 
   return {
-    clear() {
-      if (disposed) return;
-      if (pending) clearTimeout(pending.timer);
-      pending = undefined;
-      generation += 1;
-      lastValid = undefined;
-      lastCommitted = undefined;
-      onClear?.();
-    },
     dispose() {
       if (disposed) return;
       disposed = true;
-      if (pending) clearTimeout(pending.timer);
-      pending = undefined;
+      cancelPending();
+      lastValidRange = undefined;
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("pointerup", handlePointerUp, true);
       document.removeEventListener("selectionchange", handleSelectionChange);
     },
-    /** Public for tests and immediate commit paths. */
+    scheduleNow() {
+      handlePointerUp();
+    },
     syncNow() {
+      const range = currentValidRange();
+      if (range) lastValidRange = range.cloneRange();
       commit();
-    },
-    /** Public for tests: simulate the pointer-up commit flow. */
-    commitFromPointerUp(point: GeometryPoint) {
-      lastPointerPoint = point;
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-        return;
-      }
-      if (!isRangeInsideTextLayer(selection.getRangeAt(0), textLayer)) return;
-      recordValidSelection(selection);
-      scheduleSync();
-    },
-    /** Public for tests: notify the controller that text layer DOM changed. */
-    notifyTextLayerChanged() {
-      ensureEndOfContent(textLayer);
     },
   };
 }

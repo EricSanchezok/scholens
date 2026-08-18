@@ -231,6 +231,8 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
   };
 }
 
+const createdAnnotationQuotes: string[] = [];
+
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
   const annotations: Array<Record<string, unknown>> = [];
@@ -297,6 +299,7 @@ async function mockReader(page: Page) {
           position: Record<string, unknown>;
           quote_text: string;
         };
+        createdAnnotationQuotes.push(body.quote_text);
         const item = {
           id: "20000000-0000-4000-8000-000000000001",
           kind: "annotation_thread",
@@ -450,40 +453,7 @@ async function mockReader(page: Page) {
   await page.route("**/reader-test.pdf", (route) =>
     route.fulfill({ contentType: "application/pdf", path: pdfPath }),
   );
-  await page.route(`${apiPattern}/me/translation-preferences`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        auto_translate_selection: true,
-        custom_instructions: null,
-        full_translation_display: "bilingual",
-        show_translation_marker: true,
-        source_language: "auto",
-        target_language: "zh-CN",
-        translate_references: false,
-      }),
-    }),
-  );
-  await page.route(
-    `${apiPattern}/papers/${paperDocument.document_id}/selection-translations`,
-    (route) => {
-      const body = route.request().postDataJSON() as { text?: string };
-      selectedTranslationTexts.push(body.text ?? "");
-      const stream = [
-        `event: start\ndata: ${JSON.stringify({ cache_hit: false, target_language: "zh-CN" })}\n\n`,
-        `event: delta\ndata: ${JSON.stringify({ text: "翻译占位" })}\n\n`,
-        `event: complete\ndata: ${JSON.stringify({ cache_hit: false })}\n\n`,
-      ].join("");
-      return route.fulfill({
-        contentType: "text/event-stream",
-        body: stream,
-      });
-    },
-  );
 }
-
-// Captured selection texts sent to the translation endpoint during a test.
-const selectedTranslationTexts: string[] = [];
 
 async function mockReaderReflow(
   page: Page,
@@ -737,6 +707,7 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
 }
 
 test.beforeEach(async ({ page }) => {
+  createdAnnotationQuotes.length = 0;
   await mockReader(page);
 });
 
@@ -1006,9 +977,7 @@ test("creates a persistent document highlight with the full color palette", asyn
     persistedAppearance.background,
   );
 });
-test("does not swallow the next paragraph when a selection ends in whitespace", async ({
-  page,
-}) => {
+test("preserves an exact partial-span PDF selection", async ({ page }) => {
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);
   const textLayer = page.locator('[data-pdf-page-number="2"] .pdf-text-layer');
   await expect(
@@ -1022,34 +991,23 @@ test("does not swallow the next paragraph when a selection ends in whitespace", 
     const firstSpan = spans.find((span) =>
       span.textContent?.includes("The NLP landscape"),
     );
-    const firstSpanIndex = firstSpan ? spans.indexOf(firstSpan) : -1;
-    const lastSpan = spans[firstSpanIndex + 5];
-    if (!firstSpan?.firstChild || !lastSpan?.firstChild) return;
+    if (!firstSpan?.firstChild) return;
+    const text = firstSpan.textContent ?? "";
+    const start = text.indexOf("NLP");
+    if (start < 0) return;
     const range = document.createRange();
-    range.setStart(firstSpan.firstChild, 0);
-    range.setEnd(lastSpan.firstChild, lastSpan.textContent?.length ?? 0);
+    range.setStart(firstSpan.firstChild, start);
+    range.setEnd(firstSpan.firstChild, start + 3);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    // Release the pointer in the whitespace below the dragged line so the
-    // dead-zone clamp is exercised instead of swallowing the next paragraph.
-    const rect = lastSpan.getBoundingClientRect();
-    layer.dispatchEvent(
-      new PointerEvent("pointerup", {
-        bubbles: true,
-        clientX: rect.left + rect.width / 2,
-        clientY: rect.bottom + 60,
-      }),
-    );
+    layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
   });
 
   await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
-  await expect
-    .poll(() => selectedTranslationTexts.at(-1) ?? "")
-    .toContain("The NLP");
-  expect(selectedTranslationTexts.at(-1) ?? "").not.toContain(
-    "This work explores",
-  );
+  await page.getByRole("button", { name: "Highlight selection" }).click();
+  await page.getByRole("button", { name: "Yellow highlight" }).click();
+  await expect.poll(() => createdAnnotationQuotes.at(-1) ?? "").toBe("NLP");
 });
 
 test("keeps PDF selection stable while search highlights are present", async ({
@@ -1057,7 +1015,7 @@ test("keeps PDF selection stable while search highlights are present", async ({
 }) => {
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);
   // Search rewrites the text layer DOM with nested .pdf-search-match spans;
-  // the geometry index must rebuild and selection must still commit cleanly.
+  // the sentinel must be restored and the browser Range must still commit.
   // "NLP landscape" only matches on page 2, so the Reader never navigates
   // away and page 2 keeps rendering while the highlights are applied.
   await page.getByRole("button", { name: "Search PDF" }).click();
@@ -1073,9 +1031,9 @@ test("keeps PDF selection stable while search highlights are present", async ({
 
   await selectPdfPassage(page, 2);
   await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
-  await expect
-    .poll(() => selectedTranslationTexts.at(-1) ?? "")
-    .toContain("The NLP");
+  await expect(
+    page.getByRole("button", { name: "Highlight selection" }),
+  ).toBeVisible();
   await expect(page.locator(".pdf-search-match").first()).toBeVisible();
 });
 

@@ -249,23 +249,22 @@ pointer-up, Reader replaces the browser-native selection with a normalized
 overlay using the same token. The browser selection is cleared before this
 overlay appears.
 
-PDF selection is guarded and normalized by a Reader-owned selection engine:
+PDF selection is guarded by a small Reader-owned adapter around the browser
+Range and the PDF.js text layer:
 
 - A selection sentinel (`.endOfContent`) plus a `.selecting` state mirror the
   PDF.js viewer behavior, so a drag that lands in the whitespace between
   lines or paragraphs never expands the browser selection to the whole text
   layer while the pointer is down.
-- On pointer-up the commit waits a short settle window (100 ms) so transient
-  selection rewrites settle, then maps the browser range through a span-level
-  geometry index of the rendered text layer. Endpoints that land on the
-  sentinel, container, or whitespace snap to the nearest selectable glyph
-  instead of the page edges.
-- A dead-zone clamp stops the committed range at the last line above a large
-  vertical gap when the pointer was released in the gap, and a column strip
-  keeps DOM-order text from a neighboring column out of the result.
-- The committed `selected_text` and overlay rectangles come from the same
-  geometry model, so the quote, the translation request, and the painted
-  highlight can never drift apart. Reader preserves PDF.js' complete
+- On pointer-up the commit waits one animation frame and a short settle window
+  (100 ms). If the browser transiently collapses onto the sentinel, Reader
+  retains the last valid Range from that gesture; a detached Range caused by
+  a concurrent text-layer render is discarded instead of guessed.
+- The committed `selected_text` and overlay rectangles come from that same
+  native Range. Partial words, search-highlight nesting, bidirectional text,
+  and multi-column DOM order therefore keep the browser's own exact selection
+  semantics instead of being reconstructed from whole text spans. Reader
+  preserves PDF.js' complete
   TextLayer positioning contract so the selectable browser glyphs stay
   aligned with the Canvas glyphs; page-sized and out-of-page browser
   rectangles are rejected rather than clamped into false highlights.

@@ -24,6 +24,11 @@ function makeTextLayer() {
 afterEach(() => {
   vi.restoreAllMocks();
   window.getSelection()?.removeAllRanges();
+  for (const layer of document.querySelectorAll<HTMLElement>(
+    ".pdf-text-layer",
+  )) {
+    uninstallTextLayerSelectionGuard(layer);
+  }
   document.body.replaceChildren();
 });
 
@@ -69,6 +74,15 @@ describe("text-layer-selection-guard", () => {
     expect(isSelectingTextLayer(layer)).toBe(true);
   });
 
+  it("marks the layer selecting as soon as a drag starts", () => {
+    const layer = makeTextLayer();
+    installTextLayerSelectionGuard(layer);
+
+    layer.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+    expect(layer.classList.contains("selecting")).toBe(true);
+  });
+
   it("marks the layer selecting when a selection intersects it", () => {
     const layer = makeTextLayer();
     installTextLayerSelectionGuard(layer);
@@ -79,5 +93,23 @@ describe("text-layer-selection-guard", () => {
     selection.addRange(range);
     document.dispatchEvent(new Event("selectionchange"));
     expect(layer.classList.contains("selecting")).toBe(true);
+  });
+
+  it("guards every text layer intersected by a cross-page range", () => {
+    const first = makeTextLayer();
+    const second = makeTextLayer();
+    installTextLayerSelectionGuard(first);
+    installTextLayerSelectionGuard(second);
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.setStart(first.querySelector("span")!.firstChild!, 0);
+    range.setEnd(second.querySelector("span")!.firstChild!, 3);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    document.dispatchEvent(new Event("selectionchange"));
+
+    expect(first.classList.contains("selecting")).toBe(true);
+    expect(second.classList.contains("selecting")).toBe(true);
   });
 });

@@ -27,11 +27,6 @@ import {
   type ReaderSelectionTranslationPreview,
 } from "./reader-selection-toolbar";
 import {
-  buildPageTextGeometryIndex,
-  type PageTextGeometryIndex,
-} from "../selection/page-text-geometry";
-import type { NormalizedSelection } from "../selection/normalize-pdf-selection";
-import {
   normalizeReaderSelectionRects,
   type NormalizedSelectionRect,
 } from "../selection/rect-normalization";
@@ -40,7 +35,10 @@ import {
   installTextLayerSelectionGuard,
   uninstallTextLayerSelectionGuard,
 } from "../selection/text-layer-selection-guard";
-import { createSelectionCommitController } from "../selection/selection-commit-controller";
+import {
+  createSelectionCommitController,
+  type CommittedTextSelection,
+} from "../selection/selection-commit-controller";
 
 const EMPTY_SEARCH_MATCHES: ReaderSearchMatch[] = [];
 
@@ -296,11 +294,6 @@ function PdfPageSurface({
     pageState?.pageNumber === pageNumber ? pageState.page : undefined;
   const shouldRender = renderEnabled || pageNumber === currentPageNumber;
 
-  const [geometryIndex, setGeometryIndex] = React.useState<
-    PageTextGeometryIndex | undefined
-  >(undefined);
-  const geometryVersionRef = React.useRef(0);
-
   React.useEffect(() => {
     if (searchMatches.length > 0) return;
     const textLayer = textLayerRef.current;
@@ -353,17 +346,7 @@ function PdfPageSurface({
         setRenderedKey(
           `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`,
         );
-        // The text layer DOM is final only after render resolves; rebuild the
-        // geometry index here so it can never point at a replaced subtree.
         ensureEndOfContent(textLayer);
-        geometryVersionRef.current += 1;
-        setGeometryIndex(
-          buildPageTextGeometryIndex(
-            textLayer,
-            pageNumber,
-            geometryVersionRef.current,
-          ),
-        );
         if (activeSearchElement) {
           window.requestAnimationFrame(() => {
             const container = scrollContainerRef.current;
@@ -427,12 +410,10 @@ function PdfPageSurface({
 
   React.useEffect(() => {
     const textLayer = textLayerRef.current;
-    if (!textLayer) return;
+    if (!textLayer || !onActiveTextSelectionChange) return;
     const controller = createSelectionCommitController({
       textLayer,
-      getIndex: () => geometryIndex,
-      onCommit: (selection: NormalizedSelection) => {
-        if (!onActiveTextSelectionChange) return;
+      onCommit: (selection: CommittedTextSelection) => {
         const pageRect = textLayer.getBoundingClientRect();
         const rects = normalizeReaderSelectionRects(pageRect, selection.rects);
         if (rects.length === 0 || !selection.text) return;
@@ -446,7 +427,7 @@ function PdfPageSurface({
       },
     });
     return () => controller.dispose();
-  }, [geometryIndex, onActiveTextSelectionChange, pageNumber]);
+  }, [onActiveTextSelectionChange, pageNumber]);
 
   const pageAnnotations = annotations.filter((annotation) => {
     const position = annotation.position;
