@@ -10,6 +10,7 @@ import {
   TranslationIcon,
 } from "@/design-system/icons/semantic-icons";
 import * as React from "react";
+import { useTranslations } from "next-intl";
 
 import { useCopyActionFeedback } from "@/components/feedback";
 import {
@@ -31,6 +32,7 @@ import {
 import type { ReaderSelection } from "./pdf-page";
 import type { ReaderAnnotationAudience } from "../reader-types";
 import { useReaderFloatingPosition } from "./use-reader-floating-position";
+import { translationErrorMessageKey } from "../translation/translation-errors";
 
 export type ReaderSelectionLabels = {
   ask: string;
@@ -52,6 +54,7 @@ export type ReaderSelectionLabels = {
 export type ReaderSelectionTranslationPreview = {
   status: "streaming" | "completed" | "error";
   text: string;
+  errorCode?: string;
 };
 
 const floatingSurfaceClass =
@@ -114,6 +117,7 @@ export function ReaderSelectionToolbar({
   selection: ReaderSelection;
   translationPreview?: ReaderSelectionTranslationPreview;
 }) {
+  const translationError = useTranslations("Reader.translation");
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [audience, setAudience] =
     React.useState<ReaderAnnotationAudience>("personal");
@@ -237,7 +241,11 @@ export function ReaderSelectionToolbar({
               >
                 {translationPreview.text ||
                   (translationPreview.status === "error"
-                    ? labels.translationFailed
+                    ? translationError(
+                        translationErrorMessageKey(
+                          translationPreview.errorCode,
+                        ),
+                      )
                     : labels.translating)}
               </span>
             </m.button>

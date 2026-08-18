@@ -134,9 +134,15 @@ export function useReaderTranslation({
         if (controller.signal.aborted || requestIdRef.current !== requestId) {
           return;
         }
+        const edgeBlocked =
+          error instanceof ApiError && error.status === 403 && !error.code;
         setState((current) => ({
           ...current,
-          errorCode: error instanceof ApiError ? error.code : undefined,
+          errorCode: edgeBlocked
+            ? "edge_blocked"
+            : error instanceof ApiError
+              ? error.code
+              : undefined,
           errorMessage: error instanceof Error ? error.message : undefined,
           retryable: !(error instanceof ApiError) || error.status >= 500,
           status: "error",

@@ -212,7 +212,7 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - {Action: ['logs:CreateLogGroup', 'logs:DeleteLogGroup', 'logs:DeleteRetentionPolicy', 'logs:ListTagsForResource', 'logs:PutRetentionPolicy', 'logs:TagResource', 'logs:UntagResource'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*'}
+        - {Action: ['logs:CreateLogGroup', 'logs:DeleteLogGroup', 'logs:DeleteRetentionPolicy', 'logs:ListTagsForResource', 'logs:PutRetentionPolicy', 'logs:TagResource', 'logs:UntagResource'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/sanchezcloud/scholens/*', !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws-waf-logs-*']}
         - Action: ['cloudwatch:DeleteAlarms', 'cloudwatch:DescribeAlarms', 'cloudwatch:ListTagsForResource', 'cloudwatch:PutMetricAlarm', 'cloudwatch:TagResource', 'cloudwatch:UntagResource']
           Effect: Allow
           Resource:
@@ -227,6 +227,8 @@ Resources:
         - {Action: ['wafv2:AssociateWebACL', 'wafv2:GetWebACL', 'wafv2:GetWebACLForResource', 'wafv2:ListResourcesForWebACL'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/*/*'}
         - {Action: 'wafv2:DisassociateWebACL', Effect: Allow, Resource: '*'}
         - {Action: ['wafv2:CreateWebACL', 'wafv2:UpdateWebACL'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:regional/managedruleset/*/*'}
+        - {Action: ['wafv2:PutLoggingConfiguration', 'wafv2:GetLoggingConfiguration', 'wafv2:DeleteLoggingConfiguration'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/sanchezcloud-scholens/*'}
+        - {Action: ['logs:CreateLogDelivery', 'logs:DeleteLogDelivery', 'logs:PutResourcePolicy', 'logs:DescribeResourcePolicies'], Effect: Allow, Resource: '*'}
   RuntimeCloudFormationServiceRole:
     Type: AWS::IAM::Role
     DeletionPolicy: RetainExceptOnCreate

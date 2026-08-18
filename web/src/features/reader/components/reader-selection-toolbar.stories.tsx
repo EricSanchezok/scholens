@@ -129,6 +129,25 @@ export const CompletedTranslation: Story = {
   },
 };
 
+export const EdgeBlockedTranslation: Story = {
+  args: {
+    translationPreview: {
+      status: "error",
+      text: "",
+      errorCode: "edge_blocked",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const header = within(canvasElement).getByText("Translation failed");
+    const body = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-selection-translation-text]",
+    );
+    await expect(body).not.toBeNull();
+    await expect(body!.textContent).not.toBe(header.textContent);
+    await expect(body!.textContent).toContain("network edge");
+  },
+};
+
 export const LongCompletedTranslationTeaser: Story = {
   args: {
     translationPreview: {

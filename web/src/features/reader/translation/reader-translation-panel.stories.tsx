@@ -130,6 +130,20 @@ export const RetryableError: Story = {
   },
 };
 
+export const EdgeBlocked: Story = {
+  args: {
+    state: {
+      cacheHit: false,
+      errorCode: "edge_blocked",
+      retryable: false,
+      selection,
+      status: "error",
+      translatedText: "",
+      trigger: "manual",
+    },
+  },
+};
+
 export const NarrowMobile: Story = {
   ...Streaming,
   globals: { viewport: { value: "smallMobile" } },

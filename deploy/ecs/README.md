@@ -457,12 +457,42 @@ cannot be bypassed with WAF custom rules; the AWS WAF controls below remain the 
 application-security boundary.
 
 The WAF blocks requests that bypass Cloudflare or omit the origin header, then applies AWS
-managed common-threat/IP-reputation rules and a `CF-Connecting-IP` rate limit. Sampled
-requests are disabled on the entire Web ACL and every rule because normal requests carry
-the origin secret; aggregated CloudWatch metrics remain enabled. During origin-token
-rotation, check WAF/CloudTrail access history for unexpected prior visibility before
-retiring the old version. Verify that the ALB DNS name fails without the header and the
-public hostname succeeds through Cloudflare.
+managed common-threat/IP-reputation rules and a `CF-Connecting-IP` rate limit. The
+common-threat rule set is split by path into two scopes:
+
+- Structured paths (auth, billing, access keys, invitations, tags, integration
+  credentials, and every other body-bearing route not listed below) keep the full CRS
+  inspection, including all five body rules.
+- Free-text content paths are matched by `LargeBodyPathSet` (`/mcp`,
+  `conversations`, `paper-ingestions`) plus `ContentFreeTextPathSet` (selection
+  translation, annotation threads/comments, library paper metadata, translation
+  preferences, projects, onboarding, audio-overview instructions, search). On these
+  paths the five CRS body rules (`SizeRestrictions_BODY`,
+  `EC2MetaDataSSRF_BODY`, `GenericLFI_BODY`, `GenericRFI_BODY`,
+  `CrossSiteScripting_BODY`) run in Count mode, so legitimate academic text containing
+  path-like strings is logged and metered instead of blocked. Query-string inspection
+  remains enforced because these APIs carry their free text in request bodies. Academic
+  text legitimately contains `../`-style tokens, so full body
+  content inspection on those routes is a false-positive source, not protection; the
+  application layer still enforces field length caps, JSON parsing, auth, and per-module
+  authorization, and the origin/IP-reputation/rate-limit rules remain unchanged.
+
+Every body-bearing public write route must be explicitly classified by
+`test_waf_free_text_path_sets_classify_every_public_write_route` in
+`server/tests/test_deployment_contract.py`: it either matches one of the two path sets
+or appears in the structured whitelist. A new or renamed route that lands in neither
+bucket fails the deployment gate, which is the WAF classification obligation for the
+change that introduces it.
+
+WAF Block and Count records stream to the `aws-waf-logs-scholens-production` CloudWatch
+Logs log group (30-day retention); ordinary allowed traffic is dropped by the logging
+filter. The `x-scholens-origin`, `cookie`, and `authorization` headers are redacted and
+request bodies are substituted by the Web ACL data-protection policy. Sampled requests
+remain disabled on the entire Web ACL and every rule because normal requests carry the
+origin secret; aggregated CloudWatch metrics remain enabled. During origin-token
+rotation, check WAF/CloudTrail access history for
+unexpected prior visibility before retiring the old version. Verify that the ALB DNS
+name fails without the header and the public hostname succeeds through Cloudflare.
 
 ## Initial production bootstrap
 
