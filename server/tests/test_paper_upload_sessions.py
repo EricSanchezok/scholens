@@ -117,14 +117,20 @@ def _actor() -> Actor:
 
 def test_library_intent_defaults_at_runtime_but_not_in_json_schema() -> None:
     upload_id = uuid4()
-    assert PreparePaperUploadRequest(
-        filename="paper.pdf",
-        size_bytes=10,
-        sha256="01" * 32,
-    ).add_to_library is True
-    assert PaperIngestionRequest(
-        source=UploadPaperSource(upload_id=upload_id)
-    ).add_to_library is True
+    assert (
+        PreparePaperUploadRequest(
+            filename="paper.pdf",
+            size_bytes=10,
+            sha256="01" * 32,
+        ).add_to_library
+        is True
+    )
+    assert (
+        PaperIngestionRequest(
+            source=UploadPaperSource(upload_id=upload_id)
+        ).add_to_library
+        is True
+    )
 
     prepare_property = PreparePaperUploadRequest.model_json_schema()["properties"][
         "add_to_library"
