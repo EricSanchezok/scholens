@@ -202,6 +202,30 @@ body {
   background: transparent;
 }
 
+/*
+ * Selection sentinel (ported from PDF.js TextLayerBuilder). The sentinel
+ * absorbs a drag that lands in whitespace so the browser never expands the
+ * selection to the whole text layer; `.selecting` keeps it covering the page
+ * while a drag is in progress.
+ */
+.pdf-text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.pdf-text-layer.selecting .endOfContent {
+  top: 0;
+}
+
+/* While selecting, annotation/link hit targets must not steal the drag. */
+.pdf-text-layer.selecting ~ .pdf-annotation-layer a {
+  pointer-events: none;
+}
+
 .pdf-selection-overlay {
   color: var(--color-document-selection-bg);
 }

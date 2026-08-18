@@ -247,14 +247,32 @@ through the selection, matching the familiar line-by-line treatment of desktop
 research readers rather than placing an opaque wash over the page. After
 pointer-up, Reader replaces the browser-native selection with a normalized
 overlay using the same token. The browser selection is cleared before this
-overlay appears. Reader preserves PDF.js' complete TextLayer positioning
-contract so the selectable browser glyphs stay aligned with the Canvas glyphs;
-page-sized and out-of-page browser rectangles are rejected rather than clamped
-into false highlights. Overlapping PDF text fragments on the same visual line
-are coalesced, and the remaining geometry is painted once so translucent color
-can never accumulate into darker stripes. The overlay remains visible with the
-floating toolbar until the user acts, presses Escape, clicks elsewhere, or
-moves to another page.
+overlay appears.
+
+PDF selection is guarded by a small Reader-owned adapter around the browser
+Range and the PDF.js text layer:
+
+- A selection sentinel (`.endOfContent`) plus a `.selecting` state mirror the
+  PDF.js viewer behavior, so a drag that lands in the whitespace between
+  lines or paragraphs never expands the browser selection to the whole text
+  layer while the pointer is down.
+- On pointer-up the commit waits one animation frame and a short settle window
+  (100 ms). If the browser transiently collapses onto the sentinel, Reader
+  retains the last valid Range from that gesture; a detached Range caused by
+  a concurrent text-layer render is discarded instead of guessed.
+- The committed `selected_text` and overlay rectangles come from that same
+  native Range. Partial words, search-highlight nesting, bidirectional text,
+  and multi-column DOM order therefore keep the browser's own exact selection
+  semantics instead of being reconstructed from whole text spans. Reader
+  preserves PDF.js' complete
+  TextLayer positioning contract so the selectable browser glyphs stay
+  aligned with the Canvas glyphs; page-sized and out-of-page browser
+  rectangles are rejected rather than clamped into false highlights.
+  Overlapping PDF text fragments on the same visual line are coalesced, and
+  the remaining geometry is painted once so translucent color can never
+  accumulate into darker stripes.
+- The overlay remains visible with the floating toolbar until the user acts,
+  presses Escape, clicks elsewhere, or moves to another page.
 
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends

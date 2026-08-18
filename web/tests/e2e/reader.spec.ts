@@ -231,6 +231,8 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
   };
 }
 
+const createdAnnotationQuotes: string[] = [];
+
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
   const annotations: Array<Record<string, unknown>> = [];
@@ -297,6 +299,7 @@ async function mockReader(page: Page) {
           position: Record<string, unknown>;
           quote_text: string;
         };
+        createdAnnotationQuotes.push(body.quote_text);
         const item = {
           id: "20000000-0000-4000-8000-000000000001",
           kind: "annotation_thread",
@@ -677,7 +680,7 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
   );
   await expect(
     textLayer.locator("span").filter({ hasText: "The NLP landscape" }),
-  ).toBeAttached();
+  ).toBeAttached({ timeout: 10_000 });
   await expect(async () => {
     await textLayer.evaluate((layer) => {
       const spans = [...layer.querySelectorAll("span")].filter((span) =>
@@ -704,6 +707,7 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
 }
 
 test.beforeEach(async ({ page }) => {
+  createdAnnotationQuotes.length = 0;
   await mockReader(page);
 });
 
@@ -972,6 +976,84 @@ test("creates a persistent document highlight with the full color palette", asyn
     "background-color",
     persistedAppearance.background,
   );
+});
+test("preserves an exact partial-span PDF selection", async ({ page }) => {
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  const textLayer = page.locator('[data-pdf-page-number="2"] .pdf-text-layer');
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+  await expect(
+    textLayer.locator("span").filter({ hasText: "The NLP landscape" }),
+  ).toBeAttached();
+  // The sentinel is appended only after PDF.js has finished the text-layer
+  // render. Selecting an earlier attached span can race the remaining render
+  // work on a busy browser and exercise a Range the user could never create.
+  await expect(textLayer.locator(".endOfContent")).toBeAttached();
+
+  const highlightButton = page.getByRole("button", {
+    name: "Highlight selection",
+  });
+  const yellowHighlight = page.getByRole("button", {
+    name: "Yellow highlight",
+  });
+  await expect(async () => {
+    await textLayer.evaluate((layer) => {
+      const spans = [...layer.querySelectorAll("span")].filter((span) =>
+        span.textContent?.trim(),
+      );
+      const firstSpan = spans.find((span) =>
+        span.textContent?.includes("The NLP landscape"),
+      );
+      if (!firstSpan?.firstChild) return;
+      const text = firstSpan.textContent ?? "";
+      const start = text.indexOf("NLP");
+      if (start < 0) return;
+      const range = document.createRange();
+      range.setStart(firstSpan.firstChild, start);
+      range.setEnd(firstSpan.firstChild, start + 3);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    });
+    await expect(page.locator("[data-active-selection-overlay]")).toBeVisible({
+      timeout: 1_500,
+    });
+    await highlightButton.click({ timeout: 1_500 });
+    await expect(yellowHighlight).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 10_000 });
+
+  await yellowHighlight.click();
+  await expect.poll(() => createdAnnotationQuotes.at(-1) ?? "").toBe("NLP");
+});
+
+test("keeps PDF selection stable while search highlights are present", async ({
+  page,
+}) => {
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  // Search rewrites the text layer DOM with nested .pdf-search-match spans;
+  // the sentinel must be restored and the browser Range must still commit.
+  // "NLP landscape" only matches on page 2, so the Reader never navigates
+  // away and page 2 keeps rendering while the highlights are applied.
+  await page.getByRole("button", { name: "Search PDF" }).click();
+  const search = page.getByRole("textbox", { name: "Search PDF" });
+  await search.fill("NLP landscape");
+  await expect(page.locator(".pdf-search-match").first()).toBeVisible();
+  await expect(
+    page
+      .locator('[data-pdf-page-number="2"] .pdf-text-layer')
+      .locator("span")
+      .filter({ hasText: "The NLP landscape" }),
+  ).toBeAttached();
+
+  await selectPdfPassage(page, 2);
+  await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Highlight selection" }),
+  ).toBeVisible();
+  await expect(page.locator(".pdf-search-match").first()).toBeVisible();
 });
 
 test("refreshes visible annotation discussions on the collaboration interval", async ({

@@ -63,6 +63,7 @@ export function ConversationListItem({
   const formRef = React.useRef<HTMLFormElement>(null);
   const overflowButtonRef = React.useRef<HTMLButtonElement>(null);
   const restoreInputFocusRef = React.useRef(false);
+  const restoreOverflowFocusRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!editing) return;
@@ -76,6 +77,14 @@ export function ConversationListItem({
     restoreInputFocusRef.current = false;
   }, [editing, pending]);
 
+  React.useLayoutEffect(() => {
+    if (editing || pending || !restoreOverflowFocusRef.current) return;
+    const trigger = overflowButtonRef.current;
+    if (!trigger) return;
+    trigger.focus();
+    restoreOverflowFocusRef.current = false;
+  }, [editing, pending]);
+
   const parsedTitle = conversationTitleSchema.safeParse(title);
   const unchanged =
     parsedTitle.success && parsedTitle.data === conversation.title.trim();
@@ -85,8 +94,8 @@ export function ConversationListItem({
     if (!parsedTitle.success || unchanged || pending) return;
     try {
       await onRename(parsedTitle.data);
+      restoreOverflowFocusRef.current = true;
       setEditing(false);
-      requestAnimationFrame(() => overflowButtonRef.current?.focus());
     } catch {
       restoreInputFocusRef.current = true;
       requestAnimationFrame(() => {
@@ -102,10 +111,8 @@ export function ConversationListItem({
     if (pending) return;
     restoreInputFocusRef.current = false;
     setTitle(conversation.title);
+    restoreOverflowFocusRef.current = restoreFocus;
     setEditing(false);
-    if (restoreFocus) {
-      requestAnimationFrame(() => overflowButtonRef.current?.focus());
-    }
   }
 
   const actions = (
