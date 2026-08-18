@@ -26,6 +26,23 @@ import {
   type ReaderSelectionLabels,
   type ReaderSelectionTranslationPreview,
 } from "./reader-selection-toolbar";
+import {
+  buildPageTextGeometryIndex,
+  type PageTextGeometryIndex,
+} from "../selection/page-text-geometry";
+import type { NormalizedSelection } from "../selection/normalize-pdf-selection";
+import {
+  normalizeReaderSelectionRects,
+  type NormalizedSelectionRect,
+} from "../selection/rect-normalization";
+import {
+  ensureEndOfContent,
+  installTextLayerSelectionGuard,
+  uninstallTextLayerSelectionGuard,
+} from "../selection/text-layer-selection-guard";
+import { createSelectionCommitController } from "../selection/selection-commit-controller";
+
+const EMPTY_SEARCH_MATCHES: ReaderSearchMatch[] = [];
 
 export type ReaderFitMode = "width" | "page" | "custom";
 export type ReaderSelection =
@@ -35,104 +52,10 @@ export type ReaderPdfSourceTarget = {
   source_rect: NormalizedSelectionRect;
 };
 
-type SelectionRect = {
-  height: number;
-  left: number;
-  top: number;
-  width: number;
-};
-
-type NormalizedSelectionRect = {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-};
-
-function coalesceSelectionRects(rects: SelectionRect[]) {
-  const merged: SelectionRect[] = [];
-
-  for (const rect of rects.sort(
-    (left, right) => left.top - right.top || left.left - right.left,
-  )) {
-    const match = merged.find((candidate) => {
-      const verticalOverlap = Math.max(
-        0,
-        Math.min(candidate.top + candidate.height, rect.top + rect.height) -
-          Math.max(candidate.top, rect.top),
-      );
-      const overlapRatio =
-        verticalOverlap / Math.min(candidate.height, rect.height);
-      const horizontalGap = Math.max(
-        0,
-        rect.left - (candidate.left + candidate.width),
-        candidate.left - (rect.left + rect.width),
-      );
-      return (
-        overlapRatio >= 0.55 &&
-        horizontalGap <=
-          Math.max(2, Math.min(candidate.height, rect.height) / 2)
-      );
-    });
-
-    if (!match) {
-      merged.push({ ...rect });
-      continue;
-    }
-
-    const right = Math.max(match.left + match.width, rect.left + rect.width);
-    const bottom = Math.max(match.top + match.height, rect.top + rect.height);
-    match.left = Math.min(match.left, rect.left);
-    match.top = Math.min(match.top, rect.top);
-    match.width = right - match.left;
-    match.height = bottom - match.top;
-  }
-
-  return merged;
-}
-
-export function normalizeReaderSelectionRects(
-  pageRect: SelectionRect,
-  clientRects: SelectionRect[],
-): NormalizedSelectionRect[] {
-  if (pageRect.width <= 0 || pageRect.height <= 0) return [];
-  const pageRight = pageRect.left + pageRect.width;
-  const pageBottom = pageRect.top + pageRect.height;
-  const containmentTolerance = 1;
-  const clippedRects = clientRects
-    .filter((rect) => {
-      const rectRight = rect.left + rect.width;
-      const rectBottom = rect.top + rect.height;
-      return (
-        rect.width > 0 &&
-        rect.height > 0 &&
-        rect.width < pageRect.width &&
-        rect.height < pageRect.height &&
-        rect.left >= pageRect.left - containmentTolerance &&
-        rect.top >= pageRect.top - containmentTolerance &&
-        rectRight <= pageRight + containmentTolerance &&
-        rectBottom <= pageBottom + containmentTolerance
-      );
-    })
-    .map((rect) => ({
-      left: Math.max(pageRect.left, Math.min(pageRight, rect.left)),
-      top: Math.max(pageRect.top, Math.min(pageBottom, rect.top)),
-      width:
-        Math.max(pageRect.left, Math.min(pageRight, rect.left + rect.width)) -
-        Math.max(pageRect.left, Math.min(pageRight, rect.left)),
-      height:
-        Math.max(pageRect.top, Math.min(pageBottom, rect.top + rect.height)) -
-        Math.max(pageRect.top, Math.min(pageBottom, rect.top)),
-    }))
-    .filter((rect) => rect.width > 0 && rect.height > 0);
-
-  return coalesceSelectionRects(clippedRects).map((rect) => ({
-    x: (rect.left - pageRect.left) / pageRect.width,
-    y: (rect.top - pageRect.top) / pageRect.height,
-    width: rect.width / pageRect.width,
-    height: rect.height / pageRect.height,
-  }));
-}
+export {
+  coalesceSelectionRects,
+  normalizeReaderSelectionRects,
+} from "../selection/rect-normalization";
 
 function ReaderSelectionOverlay({
   rects,
@@ -373,6 +296,11 @@ function PdfPageSurface({
     pageState?.pageNumber === pageNumber ? pageState.page : undefined;
   const shouldRender = renderEnabled || pageNumber === currentPageNumber;
 
+  const [geometryIndex, setGeometryIndex] = React.useState<
+    PageTextGeometryIndex | undefined
+  >(undefined);
+  const geometryVersionRef = React.useRef(0);
+
   React.useEffect(() => {
     if (searchMatches.length > 0) return;
     const textLayer = textLayerRef.current;
@@ -424,6 +352,17 @@ function PdfPageSurface({
         if (!active) return;
         setRenderedKey(
           `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`,
+        );
+        // The text layer DOM is final only after render resolves; rebuild the
+        // geometry index here so it can never point at a replaced subtree.
+        ensureEndOfContent(textLayer);
+        geometryVersionRef.current += 1;
+        setGeometryIndex(
+          buildPageTextGeometryIndex(
+            textLayer,
+            pageNumber,
+            geometryVersionRef.current,
+          ),
         );
         if (activeSearchElement) {
           window.requestAnimationFrame(() => {
@@ -479,43 +418,35 @@ function PdfPageSurface({
       renderedKey !==
         `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`);
 
-  function captureSelection() {
-    if (!onActiveTextSelectionChange) return;
-    window.setTimeout(() => {
-      const browserSelection = window.getSelection();
-      const pageSurface = pageSurfaceRef.current;
-      const textLayer = textLayerRef.current;
-      if (
-        !browserSelection ||
-        browserSelection.isCollapsed ||
-        browserSelection.rangeCount === 0 ||
-        !pageSurface ||
-        !textLayer
-      ) {
-        return;
-      }
-      const range = browserSelection.getRangeAt(0);
-      const ancestor =
-        range.commonAncestorContainer.nodeType === Node.TEXT_NODE
-          ? range.commonAncestorContainer.parentElement
-          : (range.commonAncestorContainer as Element);
-      if (!ancestor || !textLayer.contains(ancestor)) return;
-      const pageRect = textLayer.getBoundingClientRect();
-      const rects = normalizeReaderSelectionRects(pageRect, [
-        ...range.getClientRects(),
-      ]);
-      const selectedText = browserSelection.toString().trim();
-      if (!selectedText || rects.length === 0) return;
-      browserSelection.removeAllRanges();
-      onActiveTextSelectionChange({
-        kind: "paper_selection",
-        document_id: "",
-        page_number: pageNumber,
-        selected_text: selectedText,
-        anchor: { kind: "pdf_text", page_number: pageNumber, rects },
-      });
+  React.useEffect(() => {
+    const textLayer = textLayerRef.current;
+    if (!textLayer) return;
+    installTextLayerSelectionGuard(textLayer);
+    return () => uninstallTextLayerSelectionGuard(textLayer);
+  }, []);
+
+  React.useEffect(() => {
+    const textLayer = textLayerRef.current;
+    if (!textLayer) return;
+    const controller = createSelectionCommitController({
+      textLayer,
+      getIndex: () => geometryIndex,
+      onCommit: (selection: NormalizedSelection) => {
+        if (!onActiveTextSelectionChange) return;
+        const pageRect = textLayer.getBoundingClientRect();
+        const rects = normalizeReaderSelectionRects(pageRect, selection.rects);
+        if (rects.length === 0 || !selection.text) return;
+        onActiveTextSelectionChange({
+          kind: "paper_selection",
+          document_id: "",
+          page_number: pageNumber,
+          selected_text: selection.text,
+          anchor: { kind: "pdf_text", page_number: pageNumber, rects },
+        });
+      },
     });
-  }
+    return () => controller.dispose();
+  }, [geometryIndex, onActiveTextSelectionChange, pageNumber]);
 
   const pageAnnotations = annotations.filter((annotation) => {
     const position = annotation.position;
@@ -530,7 +461,6 @@ function PdfPageSurface({
         activeTextSelection?.page_number === pageNumber && "z-30",
       )}
       data-pdf-page-number={pageNumber}
-      onPointerUp={captureSelection}
       ref={pageSurfaceRef}
       style={{
         height: `${pageSize.height * scale}px`,
@@ -938,6 +868,19 @@ export function PdfPage({
     return () => window.cancelAnimationFrame(frame);
   }, [selectedAnnotationId]);
 
+  // Stable per-page match arrays: the page render effect depends on
+  // `searchMatches`, so a fresh array identity on every parent render would
+  // restart visible pages' text-layer renders (emptying the DOM mid-flight).
+  const pageSearchMatches = React.useMemo(() => {
+    const byPage = new Map<number, ReaderSearchMatch[]>();
+    for (const match of searchMatches) {
+      const matches = byPage.get(match.pageNumber) ?? [];
+      matches.push(match);
+      byPage.set(match.pageNumber, matches);
+    }
+    return byPage;
+  }, [searchMatches]);
+
   return (
     <div
       aria-label={canvasLabel}
@@ -976,9 +919,9 @@ export function PdfPage({
               onInternalDestination={onInternalDestination}
               pageNumber={number}
               projectContext={projectContext}
-              searchMatches={searchMatches.filter(
-                (match) => match.pageNumber === number,
-              )}
+              searchMatches={
+                pageSearchMatches.get(number) ?? EMPTY_SEARCH_MATCHES
+              }
               activeSearchMatch={
                 activeSearchMatch?.pageNumber === number
                   ? activeSearchMatch
