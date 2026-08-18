@@ -97,7 +97,7 @@ class PaperIngestionRequest(BaseModel):
         ),
     )
     add_to_library: bool = Field(
-        default=True,
+        default_factory=lambda: True,
         description=(
             "When true and a Project is targeted, the completed paper is also "
             "added to the caller's personal Library. Set false to keep it "

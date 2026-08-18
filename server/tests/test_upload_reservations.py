@@ -14,6 +14,7 @@ from app.database.models import (
 )
 from app.shared.domain import AppError, FailureKind
 from app.bootstrap.adapters.upload_reservations import (
+    _active_account_reservations,
     reassign_project_quota_owner,
     reserve_upload,
 )
@@ -54,10 +55,6 @@ def _quota_patches(*, active_count: int = 0, active_size_kb: int = 0):
             "app.bootstrap.adapters.upload_reservations._account_has_active_digest_reservation",
             return_value=False,
         ),
-        patch(
-            "app.bootstrap.adapters.upload_reservations._active_library_reservations",
-            return_value=(0, 0),
-        ),
     )
 
 
@@ -83,8 +80,13 @@ def _reservation(
     project_id=None,
     reference_count: int,
     size_kb: int,
+    requester_id: int | None = None,
+    add_to_library: bool | None = None,
 ) -> tuple[UploadReservation, DurableJob]:
-    job = _durable_job(requester_id=owner_id, project_id=project_id)
+    job = _durable_job(
+        requester_id=requester_id if requester_id is not None else owner_id,
+        project_id=project_id,
+    )
     reservation = UploadReservation(
         id=job.id,
         quota_owner_id=owner_id,
@@ -93,9 +95,24 @@ def _reservation(
         source_kind="upload",
         reserved_reference_count=reference_count,
         reserved_size_kb=size_kb,
+        add_to_library=add_to_library,
     )
     reservation.job = job
     return reservation, job
+
+
+def test_active_account_reservations_include_both_billing_roles() -> None:
+    db = MagicMock()
+    db.execute.return_value.one.return_value = (3, 7)
+
+    assert _active_account_reservations(db, owner_id=17) == (3, 7)
+
+    statement = db.execute.call_args.args[0]
+    sql = str(statement)
+    assert "upload_reservations.quota_owner_id" in sql
+    assert "upload_reservations.library_quota_owner_id" in sql
+    assert "upload_reservations.reserved_reference_count" in sql
+    assert "upload_reservations.library_reserved_reference_count" in sql
 
 
 def test_personal_upload_is_reserved_to_requester() -> None:
@@ -114,7 +131,6 @@ def test_personal_upload_is_reserved_to_requester() -> None:
         patches[5],
         patches[6],
         patches[7],
-        patches[8],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -170,7 +186,6 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
         patches[5],
         patches[6],
         patches[7],
-        patches[8],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -304,7 +319,6 @@ def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
         patches[5],
         patches[6],
         patches[7],
-        patches[8],
         pytest.raises(AppError) as error,
     ):
         reserve_upload(
@@ -428,6 +442,52 @@ def test_idempotency_key_does_not_resurrect_a_cancelled_ingestion() -> None:
 
     assert error.value.code == "paper_ingestion_cancelled"
     db.add.assert_not_called()
+
+
+def test_idempotency_key_rejects_changed_library_intent() -> None:
+    project_id = uuid4()
+    project = Project(id=project_id, title="Shared corpus", owner_id=91)
+    requester = MagicMock(id=17)
+    existing_job = _durable_job(requester_id=17, project_id=project_id)
+    existing_job.payload = {"content_sha256": "e" * 64}
+    reservation = UploadReservation(
+        id=existing_job.id,
+        quota_owner_id=91,
+        content_sha256="e" * 64,
+        display_name="paper.pdf",
+        source_kind="upload",
+        add_to_library=False,
+    )
+    reservation.job = existing_job
+    db = MagicMock()
+    db.scalar.return_value = project
+    db.get.return_value = reservation
+
+    with (
+        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch("app.bootstrap.adapters.upload_reservations.lock_account_resource_quota"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations.job_repository.find_by_idempotency_key",
+            return_value=existing_job,
+        ),
+        pytest.raises(AppError) as error,
+    ):
+        reserve_upload(
+            db,
+            requester=requester,
+            origin_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            project_id=project_id,
+            input_size_bytes=1_024,
+            original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
+            content_sha256="e" * 64,
+            add_to_library=True,
+            idempotency_key="request-1",
+        )
+
+    assert error.value.code == "idempotency_key_reused"
 
 
 def _run_transfer(
@@ -637,7 +697,6 @@ def test_project_upload_with_add_to_library_false_skips_library_billing() -> Non
         patches[5],
         patches[6],
         patches[7],
-        patches[8],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -688,7 +747,6 @@ def test_owner_uploading_to_own_project_is_not_library_billed_twice() -> None:
         patches[5],
         patches[6],
         patches[7],
-        patches[8],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -723,8 +781,9 @@ def test_project_transfer_preserves_library_side_billing_owner() -> None:
         project_id=project.id,
         reference_count=1,
         size_kb=2,
+        requester_id=15,
+        add_to_library=True,
     )
-    transferred.add_to_library = True
     transferred.library_quota_owner_id = 15
     transferred.library_reserved_reference_count = 1
     transferred.library_reserved_size_kb = 2
@@ -738,3 +797,55 @@ def test_project_transfer_preserves_library_side_billing_owner() -> None:
     assert transferred.library_quota_owner_id == 15
     assert transferred.library_reserved_reference_count == 1
     assert transferred.library_reserved_size_kb == 2
+
+
+def test_project_transfer_adds_old_owner_library_side_reservation() -> None:
+    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
+    transferred, transferred_job = _reservation(
+        owner_id=10,
+        digest="f" * 64,
+        project_id=project.id,
+        reference_count=1,
+        size_kb=2,
+        requester_id=10,
+        add_to_library=True,
+    )
+
+    _run_transfer(
+        project=project,
+        active_rows=[(transferred, transferred_job)],
+    )
+
+    assert transferred.quota_owner_id == 20
+    assert transferred.reserved_reference_count == 1
+    assert transferred.library_quota_owner_id == 10
+    assert transferred.library_reserved_reference_count == 1
+    assert transferred.library_reserved_size_kb == 2
+
+
+def test_project_transfer_merges_new_owner_library_side_into_primary() -> None:
+    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
+    transferred, transferred_job = _reservation(
+        owner_id=10,
+        digest="a" * 64,
+        project_id=project.id,
+        reference_count=1,
+        size_kb=2,
+        requester_id=20,
+        add_to_library=True,
+    )
+    transferred.library_quota_owner_id = 20
+    transferred.library_reserved_reference_count = 1
+    transferred.library_reserved_size_kb = 2
+
+    _run_transfer(
+        project=project,
+        active_rows=[(transferred, transferred_job)],
+    )
+
+    assert transferred.quota_owner_id == 20
+    assert transferred.reserved_reference_count == 1
+    assert transferred.reserved_size_kb == 2
+    assert transferred.library_quota_owner_id is None
+    assert transferred.library_reserved_reference_count == 0
+    assert transferred.library_reserved_size_kb == 0

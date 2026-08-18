@@ -367,6 +367,7 @@ def test_failed_upload_compensates_only_memberships_this_job_created(
     actor = _actor()
     upload_job = SimpleNamespace(
         id=job_id,
+        reference_created=False,
         reference_created_library=True,
         reference_created_project=True,
     )
@@ -441,6 +442,7 @@ def test_failed_upload_keeps_pre_existing_memberships_when_nothing_created(
     actor = _actor()
     upload_job = SimpleNamespace(
         id=job_id,
+        reference_created=False,
         reference_created_library=False,
         reference_created_project=False,
     )

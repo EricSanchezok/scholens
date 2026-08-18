@@ -557,7 +557,7 @@ def test_gateway_accept_retry_overrides_client_add_to_library_from_reservation()
 ):
     db = MagicMock()
     original_job_id = uuid4()
-    original = SimpleNamespace(id=original_job_id)
+    original = SimpleNamespace(id=original_job_id, project_id=None)
     original_reservation = SimpleNamespace(id=original_job_id, add_to_library=False)
     db.scalar.return_value = original
     db.get.side_effect = [original_reservation, None]

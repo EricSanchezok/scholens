@@ -12,6 +12,10 @@ from app.modules.papers.application.upload_sessions import (
     PaperUploadSessions,
     PreparePaperUploadRequest,
 )
+from app.modules.papers.application.contracts.uploads import (
+    PaperIngestionRequest,
+    UploadPaperSource,
+)
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 
@@ -109,6 +113,27 @@ def _actor() -> Actor:
         status="active",
         email_verified=True,
     )
+
+
+def test_library_intent_defaults_at_runtime_but_not_in_json_schema() -> None:
+    upload_id = uuid4()
+    assert PreparePaperUploadRequest(
+        filename="paper.pdf",
+        size_bytes=10,
+        sha256="01" * 32,
+    ).add_to_library is True
+    assert PaperIngestionRequest(
+        source=UploadPaperSource(upload_id=upload_id)
+    ).add_to_library is True
+
+    prepare_property = PreparePaperUploadRequest.model_json_schema()["properties"][
+        "add_to_library"
+    ]
+    ingestion_property = PaperIngestionRequest.model_json_schema()["properties"][
+        "add_to_library"
+    ]
+    assert "default" not in prepare_property
+    assert "default" not in ingestion_property
 
 
 def test_prepare_upload_returns_bounded_session_and_exact_checksum_headers() -> None:

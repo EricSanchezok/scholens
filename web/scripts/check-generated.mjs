@@ -30,10 +30,17 @@ if (task === "tokens") {
     stdio: "inherit",
   });
 } else {
-  execFileSync("node", ["scripts/generate-api.mjs", regeneratedPath], {
-    cwd: root,
-    stdio: "inherit",
-  });
+  execFileSync(
+    "pnpm",
+    [
+      "exec",
+      "openapi-typescript",
+      "../server/openapi/public-v1.json",
+      "-o",
+      regeneratedPath,
+    ],
+    { cwd: root, stdio: "inherit" },
+  );
 }
 
 const compare = (left, right) => {

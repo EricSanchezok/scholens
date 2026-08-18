@@ -19,6 +19,7 @@ from app.helpers.s3 import document_source_key
 from app.modules.billing.infrastructure.quotas import require_library_document_capacity
 from app.modules.papers.domain import can_begin_processing
 from app.modules.papers.application.ingestion import IngestionFinalization
+from app.modules.papers.application.upload_intent import resolve_add_to_library
 from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.jobs.infrastructure.repository import job_repository
 from app.shared.application import Actor
@@ -64,7 +65,10 @@ def finalize_reserved_document(
     # attaches there too unless the caller explicitly opted out. The project
     # association is an independent, idempotent membership.
     library_created = False
-    if upload_job.add_to_library:
+    if resolve_add_to_library(
+        upload_job.add_to_library,
+        project_id=durable_job.project_id,
+    ):
         already_in_library = bool(
             db.scalar(
                 select(func.count(LibraryPaper.id)).where(
@@ -97,6 +101,9 @@ def finalize_reserved_document(
         )
         del association
     upload_job.reference_created_project = project_created
+    upload_job.reference_created = (
+        library_created if durable_job.project_id is None else project_created
+    )
     changed = changed or project_created
 
     if (

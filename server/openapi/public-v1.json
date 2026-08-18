@@ -5916,7 +5916,6 @@
         "additionalProperties": false,
         "properties": {
           "add_to_library": {
-            "default": true,
             "description": "When true and a Project is targeted, the completed paper is also added to the caller's personal Library. Set false to keep it Project-only. Requires project_id.",
             "title": "Add To Library",
             "type": "boolean"
@@ -6465,7 +6464,6 @@
         "description": "Metadata known locally before PDF bytes leave the user's computer.",
         "properties": {
           "add_to_library": {
-            "default": true,
             "description": "When true and a Project is targeted, the completed paper is also added to the caller's personal Library. Set false to keep it Project-only. Requires project_id.",
             "title": "Add To Library",
             "type": "boolean"

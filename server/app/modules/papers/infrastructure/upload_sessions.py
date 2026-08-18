@@ -10,6 +10,7 @@ from app.modules.papers.application.upload_sessions import (
     PaperUploadRecord,
     PreparePaperUploadRequest,
 )
+from app.modules.papers.application.upload_intent import resolve_add_to_library
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.infrastructure.persistence import Base
@@ -67,11 +68,9 @@ class PaperUploadSession(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    add_to_library: Mapped[bool] = mapped_column(
+    add_to_library: Mapped[bool | None] = mapped_column(
         Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
+        nullable=True,
     )
     object_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
@@ -143,7 +142,11 @@ class SqlPaperUploadGateway:
                 or model.size_bytes != request.size_bytes
                 or model.sha256 != request.sha256
                 or model.project_id != request.project_id
-                or model.add_to_library != request.add_to_library
+                or resolve_add_to_library(
+                    model.add_to_library,
+                    project_id=model.project_id,
+                )
+                != request.add_to_library
             ):
                 raise AppError(
                     code="paper_upload_metadata_mismatch",
@@ -322,7 +325,10 @@ def _record(model: PaperUploadSession) -> PaperUploadRecord:
         filename=model.filename,
         size_bytes=model.size_bytes,
         sha256=model.sha256,
-        add_to_library=model.add_to_library,
+        add_to_library=resolve_add_to_library(
+            model.add_to_library,
+            project_id=model.project_id,
+        ),
         object_key=model.object_key,
         status=model.status,
         expires_at=model.expires_at,

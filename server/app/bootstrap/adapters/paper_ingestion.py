@@ -38,6 +38,10 @@ from app.modules.papers.application.ingestion import (
     FetchedPdf,
     RetrySource,
 )
+from app.modules.papers.application.upload_intent import (
+    resolve_add_to_library,
+    resolve_created_memberships,
+)
 from app.modules.papers.domain import content_sha256, normalize_doi
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind
@@ -289,7 +293,10 @@ class SqlPaperIngestionGateway:
             original_reservation = self._db.get(UploadReservation, original.id)
             if original_reservation is None:
                 self._not_found()
-            add_to_library = original_reservation.add_to_library
+            add_to_library = resolve_add_to_library(
+                original_reservation.add_to_library,
+                project_id=original.project_id,
+            )
             durable_key = (
                 f"pdf-ingestion-retry:{actor.id}:{retry_of}:{idempotency_key}"
                 if idempotency_key is not None
@@ -367,7 +374,10 @@ class SqlPaperIngestionGateway:
             display_name=reservation.display_name,
             source_kind=reservation.source_kind,
             project_id=original.project_id,
-            add_to_library=reservation.add_to_library,
+            add_to_library=resolve_add_to_library(
+                reservation.add_to_library,
+                project_id=original.project_id,
+            ),
         )
 
     def cancel(
@@ -401,24 +411,27 @@ class SqlPaperIngestionGateway:
         if reservation is None:
             self._not_found()
         if job.document_id is not None:
-            if reservation.reference_created_library:
+            library_created, project_created = resolve_created_memberships(
+                library_created=reservation.reference_created_library,
+                project_created=reservation.reference_created_project,
+                legacy_created=reservation.reference_created,
+                project_id=job.project_id,
+            )
+            if library_created:
                 self._db.execute(
                     delete(LibraryPaper).where(
                         LibraryPaper.user_id == actor.id,
                         LibraryPaper.document_id == job.document_id,
                     )
                 )
-            if reservation.reference_created_project:
+            if project_created:
                 self._db.execute(
                     delete(ProjectPaper).where(
                         ProjectPaper.project_id == job.project_id,
                         ProjectPaper.document_id == job.document_id,
                     )
                 )
-            if (
-                reservation.reference_created_library
-                or reservation.reference_created_project
-            ):
+            if library_created or project_created:
                 from app.bootstrap.adapters.document_gc import schedule_document_gc
 
                 schedule_document_gc(

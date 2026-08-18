@@ -10,10 +10,6 @@
     },
     "8a8f20189e5c45c5aceb09eb45dd8e87": {
       "phase": "expand"
-    },
-    "48cd53a3c1f84fbb95d93a2505db221c": {
-      "phase": "contract",
-      "minimum_compatible_application_revision": "48cd53a3c1f84fbb95d93a2505db221c"
     }
   }
 }

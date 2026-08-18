@@ -88,7 +88,7 @@ def test_release_manifest_is_deterministic_and_source_bound(tmp_path: Path) -> N
     assert first["public_mcp_sha256"]
     assert (
         first["scholens_migrations"]["minimum_compatible_application_revision"]
-        == "48cd53a3c1f84fbb95d93a2505db221c"
+        == "c9f4a62d01ab"
     )
     release_manifest.verify_manifest(
         first,

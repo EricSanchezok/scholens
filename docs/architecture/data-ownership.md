@@ -149,6 +149,9 @@ and the Project membership is an independent idempotent association.
 cancellation compensation deletes only the membership this job created, never
 a pre-existing membership. The library-side billing owner and reserved
 capacity are stored on the reservation alongside the Project owner's side.
+During the additive rollout, nullable `add_to_library` distinguishes rows
+written by the previous application, and the legacy `reference_created` flag
+is retained and dual-written; their removal requires a later contract release.
 
 `ActionConfirmation` owns only short-lived authorization to perform one risky
 action. It stores a token hash, actor and credential binding, action and

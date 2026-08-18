@@ -49,6 +49,7 @@ from app.modules.jobs.infrastructure.repository import (
     job_repository,
 )
 from app.modules.papers.application.contracts.documents import DocumentUpdate
+from app.modules.papers.application.upload_intent import resolve_created_memberships
 from app.modules.jobs.application.contracts import (
     JobCallbackIdentity,
     JobClaimResponse,
@@ -342,21 +343,27 @@ def handle_failed_upload(
                     resources=(ResourceRef("document", str(document_id)),),
                 )
             )
-        if job.reference_created_library:
+        library_created, project_created = resolve_created_memberships(
+            library_created=job.reference_created_library,
+            project_created=job.reference_created_project,
+            legacy_created=job.reference_created,
+            project_id=durable_job.project_id,
+        )
+        if library_created:
             db.execute(
                 delete(LibraryPaper).where(
                     LibraryPaper.user_id == durable_job.requested_by_id,
                     LibraryPaper.document_id == document_id,
                 )
             )
-        if job.reference_created_project:
+        if project_created:
             db.execute(
                 delete(ProjectPaper).where(
                     ProjectPaper.project_id == durable_job.project_id,
                     ProjectPaper.document_id == document_id,
                 )
             )
-        if job.reference_created_library or job.reference_created_project:
+        if library_created or project_created:
             db.flush()
             schedule_document_gc(
                 db,

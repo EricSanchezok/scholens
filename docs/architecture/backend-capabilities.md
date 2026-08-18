@@ -669,7 +669,9 @@ creation and ownership transfer. Transfer locks both account quota namespaces
 in stable user-ID order and recomputes both owners' completed and active
 unique-document views before committing; an already-owned Document may reserve
 zero account units while still reserving one Project slot. Project ownership
-transfer never moves the library-side billing owner.
+transfer derives each target upload's post-transfer Project and Library billing
+roles from its uploader and the new owner, then reprices both accounts without
+double-charging a digest.
 Paid subscriptions, product entitlements, and capacity writes share one
 billing-owned PostgreSQL bigint advisory key. The key is a stable BLAKE2b-64
 digest of a versioned account-resource namespace plus the complete bigint user

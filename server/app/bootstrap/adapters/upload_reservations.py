@@ -34,9 +34,10 @@ from app.modules.billing.infrastructure.quotas import (
     get_user_entitlements,
 )
 from app.modules.projects.infrastructure.access import require_project_permission
+from app.modules.papers.application.upload_intent import resolve_add_to_library
 from app.shared.application import Actor
 from app.modules.jobs.infrastructure.repository import CreateJob, job_repository
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 ACTIVE_UPLOAD_STATUSES = (JobStatus.PENDING, JobStatus.RUNNING)
@@ -49,32 +50,65 @@ class UploadReservationResult:
 
 
 def _active_account_reservations(db: Session, *, owner_id: int) -> tuple[int, int]:
-    row = db.execute(
-        select(
-            func.coalesce(func.sum(UploadReservation.reserved_reference_count), 0),
-            func.coalesce(func.sum(UploadReservation.reserved_size_kb), 0),
-        )
-        .join(DurableJob, DurableJob.id == UploadReservation.id)
-        .where(
-            UploadReservation.quota_owner_id == owner_id,
-            DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
-        )
-    ).one()
-    return int(row[0]), int(row[1])
+    """Sum every active reservation role billed to one account."""
 
-
-def _active_library_reservations(db: Session, *, owner_id: int) -> tuple[int, int]:
-    """Sum the library-side reference and storage reservations billed to one account."""
     row = db.execute(
         select(
             func.coalesce(
-                func.sum(UploadReservation.library_reserved_reference_count), 0
+                func.sum(
+                    case(
+                        (
+                            UploadReservation.quota_owner_id == owner_id,
+                            UploadReservation.reserved_reference_count,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+            + func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            UploadReservation.library_quota_owner_id == owner_id,
+                            UploadReservation.library_reserved_reference_count,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
             ),
-            func.coalesce(func.sum(UploadReservation.library_reserved_size_kb), 0),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            UploadReservation.quota_owner_id == owner_id,
+                            UploadReservation.reserved_size_kb,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+            + func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            UploadReservation.library_quota_owner_id == owner_id,
+                            UploadReservation.library_reserved_size_kb,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
         )
         .join(DurableJob, DurableJob.id == UploadReservation.id)
         .where(
-            UploadReservation.library_quota_owner_id == owner_id,
+            or_(
+                UploadReservation.quota_owner_id == owner_id,
+                UploadReservation.library_quota_owner_id == owner_id,
+            ),
             DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
         )
     ).one()
@@ -170,6 +204,7 @@ def _locked_transfer_reservations(
                 DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
                 or_(
                     UploadReservation.quota_owner_id.in_(owner_ids),
+                    UploadReservation.library_quota_owner_id.in_(owner_ids),
                     DurableJob.project_id == project_id,
                 ),
             )
@@ -196,6 +231,27 @@ def _input_size_kb(job: DurableJob) -> int:
     return math.ceil(input_size / 1024)
 
 
+def _post_transfer_owners(
+    reservation: UploadReservation,
+    job: DurableJob,
+    *,
+    new_owner_id: int,
+    project_id: UUID,
+) -> tuple[int, int | None]:
+    if job.project_id != project_id:
+        return reservation.quota_owner_id, reservation.library_quota_owner_id
+    library_owner_id = (
+        job.requested_by_id
+        if resolve_add_to_library(
+            reservation.add_to_library,
+            project_id=job.project_id,
+        )
+        and job.requested_by_id != new_owner_id
+        else None
+    )
+    return new_owner_id, library_owner_id
+
+
 def _reprice_active_reservations(
     rows: list[tuple[UploadReservation, DurableJob]],
     *,
@@ -203,28 +259,38 @@ def _reprice_active_reservations(
     new_owner_id: int,
     project_id: UUID,
     completed_digests: set[str],
-) -> list[tuple[UploadReservation, DurableJob, int, int]]:
+) -> list[tuple[UploadReservation, DurableJob, str, int, int]]:
     """Price one owner's active digests in the post-transfer ownership view."""
     covered_digests = set(completed_digests)
     unique_rows = {
         reservation.id: (reservation, job)
         for reservation, job in rows
-        if (
-            new_owner_id if job.project_id == project_id else reservation.quota_owner_id
+        if owner_id
+        in _post_transfer_owners(
+            reservation,
+            job,
+            new_owner_id=new_owner_id,
+            project_id=project_id,
         )
-        == owner_id
     }
     ordered_rows = sorted(
         unique_rows.values(),
         key=lambda row: str(row[0].id),
     )
-    pricing: list[tuple[UploadReservation, DurableJob, int, int]] = []
+    pricing: list[tuple[UploadReservation, DurableJob, str, int, int]] = []
     for reservation, job in ordered_rows:
+        primary_owner_id, _library_owner_id = _post_transfer_owners(
+            reservation,
+            job,
+            new_owner_id=new_owner_id,
+            project_id=project_id,
+        )
+        role = "primary" if primary_owner_id == owner_id else "library"
         if reservation.content_sha256 in covered_digests:
-            pricing.append((reservation, job, 0, 0))
+            pricing.append((reservation, job, role, 0, 0))
             continue
         covered_digests.add(reservation.content_sha256)
-        pricing.append((reservation, job, 1, _input_size_kb(job)))
+        pricing.append((reservation, job, role, 1, _input_size_kb(job)))
     return pricing
 
 
@@ -312,8 +378,8 @@ def reassign_project_quota_owner(
     for owner_id in owner_ids:
         documents = completed_by_owner[owner_id]
         pricing = pricing_by_owner[owner_id]
-        active_count = sum(reference_count for _, _, reference_count, _ in pricing)
-        active_size_kb = sum(size_kb for _, _, _, size_kb in pricing)
+        active_count = sum(reference_count for _, _, _, reference_count, _ in pricing)
+        active_size_kb = sum(size_kb for _, _, _, _, size_kb in pricing)
         limits = limits_by_owner[owner_id]
         if len(documents) + active_count > limits[PAPER_UPLOAD_KEY]:
             raise AppError(
@@ -346,12 +412,34 @@ def reassign_project_quota_owner(
             kind=FailureKind.CONFLICT,
         )
 
-    for pricing in pricing_by_owner.values():
-        for reservation, job, reference_count, size_kb in pricing:
-            reservation.reserved_reference_count = reference_count
-            reservation.reserved_size_kb = size_kb
-            if job.project_id == project.id:
-                reservation.quota_owner_id = new_owner_id
+    assignments = {
+        (reservation.id, role): (reference_count, size_kb)
+        for pricing in pricing_by_owner.values()
+        for reservation, _job, role, reference_count, size_kb in pricing
+    }
+    for reservation, job in active_rows:
+        primary_owner_id, library_owner_id = _post_transfer_owners(
+            reservation,
+            job,
+            new_owner_id=new_owner_id,
+            project_id=project.id,
+        )
+        if primary_owner_id in owner_ids:
+            (
+                reservation.reserved_reference_count,
+                reservation.reserved_size_kb,
+            ) = assignments.get((reservation.id, "primary"), (0, 0))
+        if library_owner_id in owner_ids:
+            (
+                reservation.library_reserved_reference_count,
+                reservation.library_reserved_size_kb,
+            ) = assignments.get((reservation.id, "library"), (0, 0))
+        if job.project_id == project.id:
+            reservation.quota_owner_id = primary_owner_id
+            reservation.library_quota_owner_id = library_owner_id
+            if library_owner_id is None:
+                reservation.library_reserved_reference_count = 0
+                reservation.library_reserved_size_kb = 0
     db.flush()
 
 
@@ -441,6 +529,15 @@ def reserve_upload(
                 and existing_job.payload.get("content_sha256") == content_sha256
             )
             existing_reservation = db.get(UploadReservation, existing_job.id)
+            if existing_reservation is not None:
+                same_request = (
+                    same_request
+                    and resolve_add_to_library(
+                        existing_reservation.add_to_library,
+                        project_id=existing_job.project_id,
+                    )
+                    == add_to_library
+                )
             if not same_request or existing_reservation is None:
                 raise AppError(
                     code="idempotency_key_reused",
@@ -599,7 +696,7 @@ def reserve_upload(
             library_reserved_reference_count = 1
             library_reserved_size_kb = math.ceil(input_size_bytes / 1024)
             library_reserved_count, library_active_size_kb = (
-                _active_library_reservations(
+                _active_account_reservations(
                     db,
                     owner_id=library_billing_account_id,
                 )
