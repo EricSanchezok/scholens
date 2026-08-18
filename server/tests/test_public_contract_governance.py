@@ -110,6 +110,102 @@ def test_mcp_openapi_renderer_rewrites_local_schema_definitions() -> None:
     ] == {"paper": "#/components/schemas/read_paper_input_PaperId"}
 
 
+def test_mcp_openapi_renderer_projects_anyof_onto_success_envelope() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    contract = {
+        "contract_version": 1,
+        "tools": {
+            "read_paper": {
+                "input_schema": {"type": "object", "properties": {}},
+                "output_schema": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/ReadPaperToolStructuredResult",
+                        },
+                        {
+                            "$ref": "#/$defs/ReadPaperToolErrorResult",
+                        },
+                    ],
+                    "$defs": {
+                        "ReadPaperToolStructuredResult": {
+                            "type": "object",
+                            "properties": {
+                                "result": {"$ref": "#/$defs/PaperPayload"},
+                                "sources": {"type": "array"},
+                            },
+                            "required": ["result"],
+                        },
+                        "ReadPaperToolErrorResult": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "object",
+                                    "properties": {
+                                        "code": {"type": "string"},
+                                        "message": {"type": "string"},
+                                    },
+                                    "required": ["code", "message"],
+                                }
+                            },
+                            "required": ["error"],
+                        },
+                        "PaperPayload": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        },
+                    },
+                },
+            }
+        },
+    }
+
+    rendered = checker.render_openapi(contract)
+
+    response_schema = rendered["paths"]["/tools/read_paper"]["post"]["responses"][
+        "200"
+    ]["content"]["application/json"]["schema"]
+    # The HTTP 200 projection must be the success envelope only; the error
+    # branch (isError transport) must never surface as an HTTP body change.
+    assert response_schema["properties"]["result"] == {
+        "$ref": "#/components/schemas/read_paper_output_PaperPayload"
+    }
+    assert response_schema["required"] == ["result"]
+    assert "error" not in response_schema["properties"]
+    # Reachable $defs are carried over so rendered refs resolve.
+    assert "read_paper_output_PaperPayload" in rendered["components"]["schemas"]
+    # The unreachable error-branch definition is dropped.
+    assert (
+        "read_paper_output_ReadPaperToolErrorResult"
+        not in rendered["components"]["schemas"]
+    )
+
+
+def test_mcp_openapi_renderer_passes_legacy_single_envelope_through() -> None:
+    checker = _script("mcp_contract_compatibility.py")
+    contract = {
+        "contract_version": 1,
+        "tools": {
+            "read_paper": {
+                "input_schema": {"type": "object", "properties": {}},
+                "output_schema": {
+                    "type": "object",
+                    "properties": {"result": {"type": "object"}},
+                    "required": ["result"],
+                },
+            }
+        },
+    }
+
+    rendered = checker.render_openapi(contract)
+
+    response_schema = rendered["paths"]["/tools/read_paper"]["post"]["responses"][
+        "200"
+    ]["content"]["application/json"]["schema"]
+    assert response_schema["required"] == ["result"]
+    assert "anyOf" not in response_schema
+
+
 def test_deprecation_registry_is_machine_readable() -> None:
     checker = _script("deprecation_registry.py")
     registry = json.loads(
