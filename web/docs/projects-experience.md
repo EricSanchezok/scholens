@@ -85,13 +85,13 @@ content does not stretch edge to edge on wide monitors.
 
 The Overview tab is an editorial two-column composition on desktop: recent
 papers on the left, recent outputs stacked above a Collaboration strip on the
-right. The Collaboration strip shows the owner's initials and display name
-plus the total member count (`num_collaborators` plus the Project owner); members with
-`manage_collaborators` also get a quiet Manage action that opens the existing
-collaborator dialog. The strip renders project metadata already in the detail
-payload and never fetches `/members` for decoration. Below the desktop
-breakpoint the sections stack in one column in reading order: papers, outputs,
-collaboration.
+right. The Collaboration strip shows the complete accepted-member roster
+returned by `GET /members`, including the owner, plus the total member count.
+Members with `manage_collaborators` also get a quiet Manage action that opens
+the existing collaborator dialog. The roster query is shared with that dialog
+through the Projects TanStack Query keys, so collaborator changes update both
+surfaces without a duplicate member model. Below the desktop breakpoint the
+sections stack in one column in reading order: papers, outputs, collaboration.
 
 Desktop Projects uses the same compact workbench density as Library. The list
 title and New project action share a 44 px row, followed by search and sorting

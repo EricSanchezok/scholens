@@ -36,9 +36,10 @@ the deliberately deferred boundaries.
   latest turn cannot expose an artificial blank page below the answer.
 - The desktop conversation lane has one 832 px maximum measure shared by the
   transcript and Composer. User messages align to its right edge; assistant
-  messages and Worklogs align to its left edge. The Reader side-panel adapter
-  keeps the same relationship with 20 px horizontal insets rather than adding
-  a second, narrower message measure.
+  messages and Worklogs align to its left edge, and the rendered assistant
+  content occupies that full lane instead of introducing a second prose-only
+  maximum. The Reader side-panel adapter keeps the same relationship with 20 px
+  horizontal insets rather than adding a second, narrower message measure.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
 - Desktop sidebar density remains subordinate to the reading surface: primary

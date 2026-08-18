@@ -849,11 +849,16 @@ test("edits any prompt into a persistent branch and switches the full suffix", a
   const assistantMessage = page
     .getByRole("article", { name: "Assistant response" })
     .first();
-  const [composerBox, userBox, assistantBox] = await Promise.all([
-    composerForm.boundingBox(),
-    userMessage.boundingBox(),
-    assistantMessage.boundingBox(),
-  ]);
+  const assistantContent = assistantMessage
+    .locator("[data-message-content]")
+    .first();
+  const [composerBox, userBox, assistantBox, assistantContentBox] =
+    await Promise.all([
+      composerForm.boundingBox(),
+      userMessage.boundingBox(),
+      assistantMessage.boundingBox(),
+      assistantContent.boundingBox(),
+    ]);
   expect(composerBox?.width).toBeCloseTo(832, 0);
   expect(
     Math.abs(
@@ -864,6 +869,16 @@ test("edits any prompt into a persistent branch and switches the full suffix", a
   ).toBeLessThanOrEqual(1);
   expect(
     Math.abs((assistantBox?.x ?? 0) - (composerBox?.x ?? 0)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs((assistantContentBox?.x ?? 0) - (composerBox?.x ?? 0)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      (assistantContentBox?.x ?? 0) +
+        (assistantContentBox?.width ?? 0) -
+        ((composerBox?.x ?? 0) + (composerBox?.width ?? 0)),
+    ),
   ).toBeLessThanOrEqual(1);
 
   const messageControls = userMessage.locator("[data-user-message-controls]");
