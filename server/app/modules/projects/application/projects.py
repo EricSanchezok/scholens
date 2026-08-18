@@ -216,6 +216,10 @@ class ProjectGateway(Protocol):
         email: str,
     ) -> AcceptedProjectInvitation: ...
 
+    def validate_invitation_token(self, *, raw_token: str) -> None:
+        """Raise ``project_invitation_invalid`` when the token is not decodable."""
+        ...
+
     def list_invitations(
         self,
         *,
@@ -593,6 +597,10 @@ class Projects:
             ),
         )
         return accepted.project_id
+
+    def validate_invitation_token(self, *, raw_token: str) -> None:
+        """Reject an undecodable invitation before a confirmation preview."""
+        self._gateway.validate_invitation_token(raw_token=raw_token)
 
     def invitations(
         self,

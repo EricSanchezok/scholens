@@ -29,6 +29,7 @@ from app.database.models import (
 from app.shared.domain import AppError, FailureKind
 from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
 from app.helpers.celery_config import get_webhook_base_url
+from app.helpers.parser import parse_publication_date
 from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
 from app.bootstrap.adapters.document_gc import collect_document_if_due
 from app.modules.papers.infrastructure.search_repository import (
@@ -959,7 +960,11 @@ async def handle_paper_processing_webhook(
                         summary_citations=metadata.summary_citations,
                         institutions=metadata.institutions,
                         keywords=metadata.keywords,
-                        publish_date=metadata.publish_date,
+                        publish_date=(
+                            parse_publication_date(metadata.publish_date)
+                            if metadata.publish_date
+                            else None
+                        ),
                         raw_content=result.raw_content,
                         parser_markdown_s3_key=result.parser_markdown_s3_key,
                         parser_archive_s3_key=result.parser_archive_s3_key,

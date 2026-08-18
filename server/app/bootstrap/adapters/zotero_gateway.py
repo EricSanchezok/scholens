@@ -9,6 +9,7 @@ from uuid import UUID
 
 from app.bootstrap.adapters.zotero_annotations import apply_annotation_snapshot
 from app.database.models import Document, ZoteroImportSource, ZoteroImportStatus
+from app.helpers.parser import parse_publication_date
 from app.modules.papers.domain import normalize_doi
 from app.modules.billing.infrastructure.quotas import (
     can_user_auto_sync_zotero,
@@ -871,7 +872,11 @@ class DefaultZoteroGateway:
                 title=item.title or None,
                 authors=list(item.authors) or None,
                 abstract=item.abstract,
-                publish_date=item.publish_date,
+                publish_date=(
+                    parse_publication_date(item.publish_date)
+                    if item.publish_date
+                    else None
+                ),
                 doi=item.doi,
             ),
             user=actor,

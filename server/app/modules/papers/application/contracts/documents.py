@@ -14,6 +14,7 @@ from app.shared.domain.enums import (
 from app.modules.papers.application.contracts.extraction import ResponseCitation
 from app.modules.research.application.contracts import ResearchItemResponse
 from app.modules.jobs.application.contracts import ActionableJobFailure
+from app.helpers.parser import parse_publication_date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -46,7 +47,7 @@ class DocumentUpdate(BaseModel):
     summary: str | None = None
     summary_citations: list[ResponseCitation] | None = None
     starter_questions: list[str] | None = None
-    publish_date: datetime | str | None = None
+    publish_date: datetime | None = None
     raw_content: str | None = None
     parser_markdown_s3_key: str | None = None
     parser_archive_s3_key: str | None = None
@@ -63,6 +64,33 @@ class DocumentUpdate(BaseModel):
     publisher: str | None = None
     attempted_metadata_at: datetime | None = None
     field_provenance: dict[str, JsonValue] | None = None
+
+    @field_validator("publish_date", mode="before")
+    @classmethod
+    def normalize_publish_date(
+        cls,
+        value: object,
+    ) -> datetime | None:
+        """Normalize date-only strings into a canonical datetime.
+
+        Trusted writers (LLM metadata extraction, Zotero, citation providers,
+        PDF postprocess) all converge on this write contract. Previously a
+        raw ``YYYY-MM-DD`` string passed through unchanged and escaped as
+        date-only in the MCP document/library responses, violating the
+        advertised ``format: date-time`` and breaking five read tools.
+        """
+        if value is None or isinstance(value, datetime):
+            return value
+        if not isinstance(value, str):
+            raise ValueError(
+                "publish_date must be a datetime, an ISO date string, or None"
+            )
+        parsed = parse_publication_date(value)
+        if parsed is None:
+            raise ValueError(
+                "publish_date must be a valid date (YYYY-MM-DD, YYYY-MM, or YYYY)"
+            )
+        return parsed
 
 
 class DocumentMetadataOverrides(BaseModel):

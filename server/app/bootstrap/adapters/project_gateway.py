@@ -520,6 +520,14 @@ class SqlAlchemyProjectGateway:
             invitation_id=accepted.invitation_id,
         )
 
+    def validate_invitation_token(self, *, raw_token: str) -> None:
+        if self._invitation_tokens.decode(raw_token) is None:
+            raise AppError(
+                code="project_invitation_invalid",
+                message="Invitation is invalid or expired",
+                kind=FailureKind.NOT_FOUND,
+            )
+
     def list_invitations(
         self,
         *,

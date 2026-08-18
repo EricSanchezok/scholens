@@ -84,11 +84,22 @@ def create_ai_annotations(
     content = require_parsed_content(db, document_id=document_id, user=user)
     thread_ids: list[uuid.UUID] = []
     comment_ids: list[uuid.UUID] = []
+    skipped = 0
     for highlight in metadata.highlights:
         offsets = find_offsets(highlight.text, content.raw_content)
+        if offsets == (-1, -1):
+            skipped += 1
+            logger.warning(
+                "research.ai_annotations.quote_not_found_skipped",
+                extra={
+                    "document_id": str(document_id),
+                    "quote_chars": len(highlight.text),
+                },
+            )
+            continue
         page_number = (
             get_start_page_from_offset(content.page_offsets, offsets[0])
-            if offsets and content.page_offsets
+            if content.page_offsets
             else None
         )
         item = research_repository.create_annotation_thread(
@@ -114,7 +125,15 @@ def create_ai_annotations(
         if item.annotation_thread is None:
             raise RuntimeError("annotation_item_without_thread")
         comment_ids.extend(comment.id for comment in item.annotation_thread.comments)
-    db.flush()
+    if skipped:
+        logger.info(
+            "research.ai_annotations.partial_skip",
+            extra={
+                "document_id": str(document_id),
+                "skipped": skipped,
+                "total": len(metadata.highlights),
+            },
+        )
     return CreatedAiAnnotations(
         thread_ids=tuple(thread_ids),
         comment_ids=tuple(comment_ids),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import difflib
 from typing import TYPE_CHECKING
 
 from app.helpers.parser import parse_publication_date
@@ -58,12 +59,16 @@ class CitationMetadataProvider:
         publisher = fields.publisher
         publish_date = fields.publish_date
         if doi and (not journal or not publisher or not publish_date):
-            journal, publisher, publish_date = _merge_enriched(
-                enriched=self._crossref.enriched_data(doi=doi),
-                journal=journal,
-                publisher=publisher,
-                publish_date=publish_date,
-            )
+            enriched = self._crossref.enriched_data(doi=doi)
+            if _enrichment_title_matches(fields, enriched):
+                journal, publisher, publish_date = _merge_enriched(
+                    enriched=enriched,
+                    journal=journal,
+                    publisher=publisher,
+                    publish_date=publish_date,
+                )
+            else:
+                doi = None
 
         if not doi and fields.title:
             try:
@@ -88,12 +93,15 @@ class CitationMetadataProvider:
                 if not _is_skippable_openalex_error(exc):
                     raise
             else:
-                journal, publisher, publish_date = _merge_enriched(
-                    enriched=enriched,
-                    journal=journal,
-                    publisher=publisher,
-                    publish_date=publish_date,
-                )
+                if _enrichment_title_matches(fields, enriched):
+                    journal, publisher, publish_date = _merge_enriched(
+                        enriched=enriched,
+                        journal=journal,
+                        publisher=publisher,
+                        publish_date=publish_date,
+                    )
+                else:
+                    doi = None
 
         filled: dict[str, object] = {
             field_name: value
@@ -186,6 +194,34 @@ class CitationMetadataProvider:
 
 def _optional_string(value: object) -> str | None:
     return str(value) if value else None
+
+
+def _enrichment_title_matches(
+    fields: CitationFields,
+    enriched: EnrichedData | None,
+) -> bool:
+    """Whether an enrichment result plausibly describes the requested paper.
+
+    Crossref/OpenAlex title search can return a top hit whose bibliographic
+    fields belong to a different work (observed in production: a paper was
+    enriched with an unrelated publisher and DOI). When the requested title
+    is known, a similarity score below 0.8 means the enrichment is not for
+    this paper; the caller then discards the DOI and leaves the fields
+    missing so a later recovery pass can retry.
+    """
+    if enriched is None or not enriched.title:
+        return True
+    requested = fields.title
+    if not requested:
+        return True
+    return (
+        difflib.SequenceMatcher(
+            None,
+            requested.casefold(),
+            enriched.title.casefold(),
+        ).ratio()
+        >= 0.8
+    )
 
 
 def _merge_enriched(

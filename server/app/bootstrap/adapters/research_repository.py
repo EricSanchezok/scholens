@@ -23,7 +23,10 @@ from app.database.models import (
 from app.shared.domain.enums import AnnotationAudienceFilter, AnnotationThreadMode
 from app.shared.domain import AppError, FailureKind
 from app.helpers.s3 import s3_service
-from app.modules.papers.infrastructure.access import require_document_access
+from app.modules.papers.infrastructure.access import (
+    ResolvedDocumentAccess,
+    require_document_access,
+)
 from app.bootstrap.adapters.research_access import (
     research_item_policy,
     research_item_visible_to,
@@ -46,6 +49,7 @@ from app.modules.research.application.contracts import (
     ResearchItemResponse,
 )
 from app.modules.research.application.positions import (
+    ParsedTextPosition,
     ResearchPosition,
     position_columns,
 )
@@ -54,6 +58,11 @@ from sqlalchemy import Float, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
+
+
+def _normalize_whitespace(text: str) -> str:
+    """Collapse runs of whitespace so selection/OCR differences do not reject."""
+    return " ".join(text.split())
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,7 +403,12 @@ class ResearchRepository:
         create: AnnotationThreadCreate,
         refresh_result: bool = True,
     ) -> ResearchItem:
-        require_document_access(db, document_id=document_id, user_id=user_id)
+        access = require_document_access(
+            db,
+            document_id=document_id,
+            user_id=user_id,
+        )
+        self._validate_quote_position(access, create)
         if create.audience_type not in {
             ResearchAudienceType.PERSONAL,
             ResearchAudienceType.PROJECT,
@@ -463,6 +477,41 @@ class ResearchRepository:
         else:
             db.flush()
         return item
+
+    @staticmethod
+    def _validate_quote_position(
+        access: ResolvedDocumentAccess,
+        create: AnnotationThreadCreate,
+    ) -> None:
+        """Reject parsed-text anchors whose window does not cover the quote.
+
+        A ``parsed_text`` position must point at the exact quote in the
+        canonical parsed content. Previously the anchor was persisted
+        verbatim, so a 3-character window could be stored for a 200-character
+        quote and every Reader highlight built from it was corrupted.
+        Whitespace is normalized so selection/OCR whitespace differences do
+        not create false rejections.
+        """
+        position = create.position
+        if not isinstance(position, ParsedTextPosition):
+            return
+        quote = create.quote_text
+        if not quote:
+            return
+        document = getattr(access, "document", None)
+        raw_content = getattr(document, "raw_content", None) if document else None
+        if not raw_content:
+            return
+        window = raw_content[position.start_offset : position.end_offset]
+        if _normalize_whitespace(window) != _normalize_whitespace(quote):
+            raise AppError(
+                code="annotation_quote_mismatch",
+                message=(
+                    "The anchor offsets do not match the quote text in the "
+                    "document content"
+                ),
+                kind=FailureKind.INVALID_ARGUMENT,
+            )
 
     def has_assistant_annotation(
         self,
@@ -786,6 +835,7 @@ class ResearchRepository:
                 changed = True
         if not changed:
             return ResearchItemWrite(value=item, changed=False)
+        item.updated_at = datetime.now(timezone.utc)
         db.flush()
         db.refresh(item)
         return ResearchItemWrite(value=item, changed=True)
