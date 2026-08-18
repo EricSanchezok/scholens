@@ -57,3 +57,22 @@ Run the side-effect-free deployment contract before operational review:
 Creating or updating either CloudFormation stack, changing Cloudflare, reading
 diagnostics, and running protected workflows remain explicit operator actions;
 this document does not authorize them.
+
+## WAF logs
+
+The runtime stack streams AWS WAF traffic logs directly to the
+`aws-waf-logs-scholens-production` CloudWatch Logs log group (30-day
+retention). The `x-scholens-origin`, `cookie`, and `authorization` headers are
+redacted in every record, so the origin secret never reaches the log group.
+Sampled requests stay disabled across the Web ACL and its rules for the same
+reason; WAF logging and request sampling are separate controls.
+
+When a request is blocked by the edge before it reaches the API, CloudWatch
+Logs Insights against this group is the fastest signal: filter on the request
+ID/URI and inspect `terminatingRuleId` and `ruleMatchDetails` plus any
+`awswaf:managed:*` labels. The two WAF CloudWatch metrics namespaces
+(`scholens-common-threats-standard-body` for structured paths and
+`scholens-common-threats-reviewed-large-body` for free-text content paths)
+report `BlockedRequests` and `CountedRequests` per managed rule; a
+`GenericLFI_Body` count with a COUNT action on a free-text path is the expected
+false-positive signature for academic text containing path-like tokens.

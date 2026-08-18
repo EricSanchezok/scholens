@@ -320,6 +320,27 @@ Resources:
       - {Key: Product, Value: Scholens}
       - {Key: Environment, Value: production}
       - {Key: ManagedBy, Value: CloudFormation}
+  ContentFreeTextPathSet:
+    Type: AWS::WAFv2::RegexPatternSet
+    Properties:
+      Name: sanchezcloud-scholens-free-text-content-paths
+      Scope: REGIONAL
+      RegularExpressionList:
+      - ^/api/v1/papers/[^/]+/selection-translations$
+      - ^/api/v1/papers/[^/]+/annotation-threads(?:/.*)?$
+      - ^/api/v1/annotation-threads(?:/.*)?$
+      - ^/api/v1/annotation-comments(?:/.*)?$
+      - ^/api/v1/library/papers/[^/]+$
+      - ^/api/v1/me/translation-preferences$
+      - ^/api/v1/projects(?:/.*)?$
+      - ^/api/v1/me/onboarding$
+      - ^/api/v1/(?:papers|projects)/[^/]+/audio-overviews$
+      - ^/api/v1/search/(?:papers|research)$
+      Tags:
+      - {Key: System, Value: SanchezCloud}
+      - {Key: Product, Value: Scholens}
+      - {Key: Environment, Value: production}
+      - {Key: ManagedBy, Value: CloudFormation}
   WebAcl:
     Type: AWS::WAFv2::WebACL
     Properties:
@@ -386,13 +407,22 @@ Resources:
             ScopeDownStatement:
               NotStatement:
                 Statement:
-                  RegexPatternSetReferenceStatement:
-                    Arn:
-                      Fn::GetAtt: [LargeBodyPathSet, Arn]
-                    FieldToMatch:
-                      UriPath: {}
-                    TextTransformations:
-                    - {Priority: 0, Type: NONE}
+                  OrStatement:
+                    Statements:
+                    - RegexPatternSetReferenceStatement:
+                        Arn:
+                          Fn::GetAtt: [LargeBodyPathSet, Arn]
+                        FieldToMatch:
+                          UriPath: {}
+                        TextTransformations:
+                        - {Priority: 0, Type: NONE}
+                    - RegexPatternSetReferenceStatement:
+                        Arn:
+                          Fn::GetAtt: [ContentFreeTextPathSet, Arn]
+                        FieldToMatch:
+                          UriPath: {}
+                        TextTransformations:
+                        - {Priority: 0, Type: NONE}
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
           MetricName: scholens-common-threats-standard-body
@@ -405,16 +435,31 @@ Resources:
           ManagedRuleGroupStatement:
             VendorName: AWS
             Name: AWSManagedRulesCommonRuleSet
-            ExcludedRules:
-            - Name: SizeRestrictions_BODY
+            RuleActionOverrides:
+            - {Name: SizeRestrictions_BODY, ActionToUse: {Count: {}}}
+            - {Name: EC2MetaDataSSRF_BODY, ActionToUse: {Count: {}}}
+            - {Name: GenericLFI_BODY, ActionToUse: {Count: {}}}
+            - {Name: GenericRFI_BODY, ActionToUse: {Count: {}}}
+            - {Name: CrossSiteScripting_BODY, ActionToUse: {Count: {}}}
+            - {Name: GenericLFI_QUERYARGUMENTS, ActionToUse: {Count: {}}}
+            - {Name: CrossSiteScripting_QUERYARGUMENTS, ActionToUse: {Count: {}}}
             ScopeDownStatement:
-              RegexPatternSetReferenceStatement:
-                Arn:
-                  Fn::GetAtt: [LargeBodyPathSet, Arn]
-                FieldToMatch:
-                  UriPath: {}
-                TextTransformations:
-                - {Priority: 0, Type: NONE}
+              OrStatement:
+                Statements:
+                - RegexPatternSetReferenceStatement:
+                    Arn:
+                      Fn::GetAtt: [LargeBodyPathSet, Arn]
+                    FieldToMatch:
+                      UriPath: {}
+                    TextTransformations:
+                    - {Priority: 0, Type: NONE}
+                - RegexPatternSetReferenceStatement:
+                    Arn:
+                      Fn::GetAtt: [ContentFreeTextPathSet, Arn]
+                    FieldToMatch:
+                      UriPath: {}
+                    TextTransformations:
+                    - {Priority: 0, Type: NONE}
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
           MetricName: scholens-common-threats-reviewed-large-body
@@ -464,6 +509,22 @@ Resources:
         Fn::GetAtt:
         - WebAcl
         - Arn
+  WafLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: aws-waf-logs-scholens-production
+      RetentionInDays: 30
+  WebAclLoggingConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn:
+        Fn::GetAtt: [WebAcl, Arn]
+      LogDestinationConfigs:
+      - Fn::GetAtt: [WafLogGroup, Arn]
+      RedactedFields:
+      - SingleHeader: {Name: x-scholens-origin}
+      - SingleHeader: {Name: cookie}
+      - SingleHeader: {Name: authorization}
   ApiDiscoveryService:
     Type: AWS::ServiceDiscovery::Service
     Properties:

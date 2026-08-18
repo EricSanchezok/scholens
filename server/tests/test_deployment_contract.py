@@ -1934,16 +1934,146 @@ def test_waf_large_body_exceptions_are_path_scoped() -> None:
     ]
 
     assert "ExcludedRules" not in standard
-    assert reviewed["ExcludedRules"] == [{"Name": "SizeRestrictions_BODY"}]
+    assert "ExcludedRules" not in reviewed
+    assert reviewed["RuleActionOverrides"] == [
+        {"Name": "SizeRestrictions_BODY", "ActionToUse": {"Count": {}}},
+        {"Name": "EC2MetaDataSSRF_BODY", "ActionToUse": {"Count": {}}},
+        {"Name": "GenericLFI_BODY", "ActionToUse": {"Count": {}}},
+        {"Name": "GenericRFI_BODY", "ActionToUse": {"Count": {}}},
+        {"Name": "CrossSiteScripting_BODY", "ActionToUse": {"Count": {}}},
+        {"Name": "GenericLFI_QUERYARGUMENTS", "ActionToUse": {"Count": {}}},
+        {"Name": "CrossSiteScripting_QUERYARGUMENTS", "ActionToUse": {"Count": {}}},
+    ]
     assert resources["LargeBodyPathSet"]["Properties"]["RegularExpressionList"] == [
         "^/mcp$",
         "^/api/v1/conversations(?:/.*)?$",
         "^/api/v1/paper-ingestions(?:/.*)?$",
     ]
+    assert resources["ContentFreeTextPathSet"]["Properties"][
+        "RegularExpressionList"
+    ] == [
+        "^/api/v1/papers/[^/]+/selection-translations$",
+        "^/api/v1/papers/[^/]+/annotation-threads(?:/.*)?$",
+        "^/api/v1/annotation-threads(?:/.*)?$",
+        "^/api/v1/annotation-comments(?:/.*)?$",
+        "^/api/v1/library/papers/[^/]+$",
+        "^/api/v1/me/translation-preferences$",
+        "^/api/v1/projects(?:/.*)?$",
+        "^/api/v1/me/onboarding$",
+        "^/api/v1/(?:papers|projects)/[^/]+/audio-overviews$",
+        "^/api/v1/search/(?:papers|research)$",
+    ]
     assert str(standard["ScopeDownStatement"]).count("LargeBodyPathSet") == 1
+    assert str(standard["ScopeDownStatement"]).count("ContentFreeTextPathSet") == 1
     assert str(reviewed["ScopeDownStatement"]).count("LargeBodyPathSet") == 1
+    assert str(reviewed["ScopeDownStatement"]).count("ContentFreeTextPathSet") == 1
     assert "'FieldToMatch': {'UriPath': {}}" in str(standard["ScopeDownStatement"])
     assert "'FieldToMatch': {'UriPath': {}}" in str(reviewed["ScopeDownStatement"])
+
+
+def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
+    """Every public write route with a body must be explicitly classified.
+
+    A route is either matched by one of the two path sets (CRS body rules run
+    in Count mode) or listed in the structured whitelist below (full CRS body
+    inspection). A new or renamed public write route that lands in neither
+    bucket fails this test, which is the classification obligation of the
+    change that introduces it.
+    """
+    resources = load_template("scholens-production.yml")["Resources"]
+    exempt_patterns = (
+        resources["LargeBodyPathSet"]["Properties"]["RegularExpressionList"]
+        + resources["ContentFreeTextPathSet"]["Properties"]["RegularExpressionList"]
+    )
+
+    # Paths that must keep full CRS body inspection. Their bodies are
+    # structured (enums, UUIDs, patterns, credentials, short labels) and
+    # should never need the free-text Count treatment.
+    structured_whitelist = {
+        "PUT /api/v1/admin/users/{user_id}/block",
+        "POST /api/v1/auth/change-password",
+        "POST /api/v1/auth/forgot-password",
+        "POST /api/v1/auth/login",
+        "POST /api/v1/auth/register",
+        "POST /api/v1/auth/resend-verification",
+        "POST /api/v1/auth/reset-password",
+        "POST /api/v1/auth/verify-email",
+        "POST /api/v1/integrations/zotero/imports",
+        "POST /api/v1/integrations/zotero/oauth/authorizations",
+        "PUT /api/v1/integrations/zotero/sync-preferences",
+        "POST /api/v1/library/paper-removals",
+        "POST /api/v1/library/papers",
+        "POST /api/v1/library/tags",
+        "PUT /api/v1/library/tags/assignments",
+        "PATCH /api/v1/library/tags/{tag_id}",
+        "POST /api/v1/me/access-keys",
+        "PATCH /api/v1/me/access-keys/{access_key_id}",
+        "PATCH /api/v1/me/integrations/{provider}",
+        "PUT /api/v1/me/integrations/{provider}",
+        "PATCH /api/v1/me/profile",
+        "PUT /api/v1/me/profile",
+    }
+
+    openapi = json.loads(
+        (ROOT / "server" / "openapi" / "public-v1.json").read_text(encoding="utf-8")
+    )
+    body_paths = []
+    for path, methods in openapi["paths"].items():
+        for method in ("post", "put", "patch"):
+            if method in methods and "requestBody" in methods[method]:
+                body_paths.append((method.upper(), path))
+
+    compiled = [re.compile(pattern) for pattern in exempt_patterns]
+
+    def exempt(path: str) -> bool:
+        return any(pattern.fullmatch(path) for pattern in compiled)
+
+    # Every body-bearing write route is classified exactly once. Note: the
+    # broad project and annotation-thread patterns deliberately count-cover
+    # some nested structured endpoints (invitations, members, transfer,
+    # PATCH /annotation-threads/{id}); their enum/UUID bodies cannot trip the
+    # relaxed body rules, so the wider free-text exemption is accepted there.
+    for method, path in body_paths:
+        key = f"{method} {path}"
+        if exempt(path):
+            assert key not in structured_whitelist, (
+                f"{key} is both free-text-exempt and in the structured "
+                "whitelist; it must be classified exactly once"
+            )
+        else:
+            assert key in structured_whitelist, (
+                f"{key} is not classified by the WAF body policy; add it to "
+                "the free-text path sets or the structured whitelist"
+            )
+
+    # The whitelist stays honest: every entry is a real body-bearing route.
+    body_keys = {f"{method} {path}" for method, path in body_paths}
+    assert structured_whitelist <= body_keys
+
+    # Every exemption pattern earns its place by matching a real body-bearing
+    # route. `^/mcp$` is the documented constant exception: the MCP route is
+    # not part of the public OpenAPI snapshot.
+    for pattern in exempt_patterns:
+        if pattern == "^/mcp$":
+            continue
+        assert any(re.fullmatch(pattern, path) for _, path in body_paths), (
+            f"dead WAF path-set regex: {pattern}"
+        )
+
+
+def test_waf_logging_redacts_origin_and_auth_headers() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    log_group = resources["WafLogGroup"]
+    assert log_group["Properties"]["LogGroupName"].startswith("aws-waf-logs-")
+    assert log_group["Properties"]["RetentionInDays"] == 30
+
+    logging = resources["WebAclLoggingConfiguration"]["Properties"]
+    assert logging["ResourceArn"] == {"Fn::GetAtt": ["WebAcl", "Arn"]}
+    assert logging["LogDestinationConfigs"] == [{"Fn::GetAtt": ["WafLogGroup", "Arn"]}]
+    redacted = logging["RedactedFields"]
+    assert {"SingleHeader": {"Name": "x-scholens-origin"}} in redacted
+    assert {"SingleHeader": {"Name": "cookie"}} in redacted
+    assert {"SingleHeader": {"Name": "authorization"}} in redacted
 
 
 def test_waf_never_samples_requests_that_carry_the_origin_secret() -> None:
