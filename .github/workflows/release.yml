@@ -226,7 +226,7 @@ jobs:
               SchedulerState) parameter_overrides+=("SchedulerState=$SCHEDULER_STATE") ;;
             esac
           done
-          aws cloudformation deploy \
+          if ! aws cloudformation deploy \
             --stack-name sanchezcloud-scholens-production \
             --template-file "$template" \
             --s3-bucket "$template_bucket" \
@@ -235,7 +235,14 @@ jobs:
             --role-arn "$CLOUDFORMATION_ROLE_ARN" \
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
-            --parameter-overrides "${parameter_overrides[@]}"
+            --parameter-overrides "${parameter_overrides[@]}"; then
+            aws cloudformation describe-stack-events \
+              --stack-name sanchezcloud-scholens-production \
+              --max-items 30 \
+              --query 'StackEvents[?ResourceStatusReason!=`null`].{Time:Timestamp,Status:ResourceStatus,LogicalId:LogicalResourceId,Type:ResourceType,Reason:ResourceStatusReason}' \
+              --output table || true
+            exit 1
+          fi
           aws cloudformation update-termination-protection \
             --stack-name sanchezcloud-scholens-production \
             --enable-termination-protection
