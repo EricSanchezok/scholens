@@ -16,7 +16,9 @@ from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.infrastructure import (
     SqlAlchemyOperationJournalStore,
 )
+from app.modules.papers.application.data_repair import DataRepair
 from app.modules.papers.application.maintenance import PassageMaintenance
+from app.modules.papers.infrastructure.data_repair import SqlDataRepair
 from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
 from app.shared.infrastructure import SystemClock
 from sqlalchemy.orm import Session
@@ -56,6 +58,13 @@ class OperatorCapabilities:
     def passage_maintenance(self) -> PassageMaintenance:
         return PassageMaintenance(
             SqlPassageBackfill(self._session),
+            journal=self._journal,
+        )
+
+    @cached_property
+    def data_repair(self) -> DataRepair:
+        return DataRepair(
+            SqlDataRepair(self._session),
             journal=self._journal,
         )
 
