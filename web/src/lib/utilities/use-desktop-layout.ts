@@ -18,6 +18,7 @@ function getServerSnapshot() {
   return false;
 }
 
-export function useProjectDesktopLayout() {
+/** Keep JavaScript layout behavior aligned with the design system's lg breakpoint. */
+export function useDesktopLayout() {
   return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

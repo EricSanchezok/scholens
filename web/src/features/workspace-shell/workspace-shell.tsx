@@ -67,7 +67,7 @@ import {
   useConversationListController,
   type ConversationListController,
 } from "./use-conversation-list-controller";
-import { useDesktopLayout } from "./use-desktop-layout";
+import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import { useShellVisualViewport } from "./use-shell-visual-viewport";
 
 export type WorkspaceDestination = "ask" | "library" | "projects";

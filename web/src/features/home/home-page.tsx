@@ -22,7 +22,7 @@ import {
   WorkspaceShell,
 } from "@/features/workspace-shell";
 import { HomeDashboard } from "./components/home-dashboard";
-import { useDesktopLayout } from "./hooks/use-desktop-layout";
+import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import { useMobileKeyboard } from "./hooks/use-mobile-keyboard";
 import { homeQueries } from "./api/queries";
 

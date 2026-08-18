@@ -85,7 +85,7 @@ import {
 import { AddProjectPapersDialog } from "./components/add-project-papers-dialog";
 import { ManageProjectCollaboratorsDialog } from "./components/manage-project-collaborators-dialog";
 import { ProjectFormDialog } from "./components/project-form-dialog";
-import { useProjectDesktopLayout } from "./hooks/use-project-desktop-layout";
+import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import {
   parseProjectDetailSearch,
   serializeProjectDetailSearch,
@@ -443,7 +443,7 @@ export function ProjectDetailWorkspace({
   const queryClient = useQueryClient();
   const toast = useToast();
   const t = useTranslations("Projects");
-  const desktopLayout = useProjectDesktopLayout();
+  const desktopLayout = useDesktopLayout();
   const { signOut } = useAuthSession();
   const state = React.useMemo(
     () =>
