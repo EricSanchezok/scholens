@@ -980,33 +980,52 @@ test("creates a persistent document highlight with the full color palette", asyn
 test("preserves an exact partial-span PDF selection", async ({ page }) => {
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);
   const textLayer = page.locator('[data-pdf-page-number="2"] .pdf-text-layer');
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
   await expect(
     textLayer.locator("span").filter({ hasText: "The NLP landscape" }),
   ).toBeAttached();
+  // The sentinel is appended only after PDF.js has finished the text-layer
+  // render. Selecting an earlier attached span can race the remaining render
+  // work on a busy browser and exercise a Range the user could never create.
+  await expect(textLayer.locator(".endOfContent")).toBeAttached();
 
-  await textLayer.evaluate((layer) => {
-    const spans = [...layer.querySelectorAll("span")].filter((span) =>
-      span.textContent?.trim(),
-    );
-    const firstSpan = spans.find((span) =>
-      span.textContent?.includes("The NLP landscape"),
-    );
-    if (!firstSpan?.firstChild) return;
-    const text = firstSpan.textContent ?? "";
-    const start = text.indexOf("NLP");
-    if (start < 0) return;
-    const range = document.createRange();
-    range.setStart(firstSpan.firstChild, start);
-    range.setEnd(firstSpan.firstChild, start + 3);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  const highlightButton = page.getByRole("button", {
+    name: "Highlight selection",
   });
+  const yellowHighlight = page.getByRole("button", {
+    name: "Yellow highlight",
+  });
+  await expect(async () => {
+    await textLayer.evaluate((layer) => {
+      const spans = [...layer.querySelectorAll("span")].filter((span) =>
+        span.textContent?.trim(),
+      );
+      const firstSpan = spans.find((span) =>
+        span.textContent?.includes("The NLP landscape"),
+      );
+      if (!firstSpan?.firstChild) return;
+      const text = firstSpan.textContent ?? "";
+      const start = text.indexOf("NLP");
+      if (start < 0) return;
+      const range = document.createRange();
+      range.setStart(firstSpan.firstChild, start);
+      range.setEnd(firstSpan.firstChild, start + 3);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      layer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    });
+    await expect(page.locator("[data-active-selection-overlay]")).toBeVisible({
+      timeout: 1_500,
+    });
+    await highlightButton.click({ timeout: 1_500 });
+    await expect(yellowHighlight).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 10_000 });
 
-  await expect(page.locator("[data-active-selection-overlay]")).toBeVisible();
-  await page.getByRole("button", { name: "Highlight selection" }).click();
-  await page.getByRole("button", { name: "Yellow highlight" }).click();
+  await yellowHighlight.click();
   await expect.poll(() => createdAnnotationQuotes.at(-1) ?? "").toBe("NLP");
 });
 

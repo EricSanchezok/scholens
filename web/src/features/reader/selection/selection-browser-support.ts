@@ -3,8 +3,8 @@
  *
  * PDF.js only moves the sentinel on legacy Chromium; Firefox and modern
  * Chromium (>= 148) handle dead-zone expansion natively and the moving
- * sentinel would be wasted work. The commit-time geometric normalization in
- * `normalize-pdf-selection` always runs regardless of this check.
+ * sentinel would be wasted work. The commit controller still reads exact text
+ * and geometry from the browser Range regardless of this check.
  */
 
 type NavigatorWithUAData = Navigator & {
