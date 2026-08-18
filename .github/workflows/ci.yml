@@ -111,6 +111,9 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --user 1001
     defaults:
       run:
         working-directory: web
@@ -132,8 +135,6 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Run canonical Web gate
         working-directory: ${{ github.workspace }}
         run: ./scripts/run-gates.sh web
