@@ -31,14 +31,8 @@ if (task === "tokens") {
   });
 } else {
   execFileSync(
-    "pnpm",
-    [
-      "exec",
-      "openapi-typescript",
-      "../server/openapi/public-v1.json",
-      "-o",
-      regeneratedPath,
-    ],
+    "node",
+    ["scripts/generate-api.mjs", regeneratedPath],
     { cwd: root, stdio: "inherit" },
   );
 }
