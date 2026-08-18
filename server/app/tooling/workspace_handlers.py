@@ -1870,6 +1870,7 @@ class WorkspaceToolHandlers:
                 operation=context.operation,
                 upload_id=parsed.source.upload_id,
                 project_id=parsed.project_id,
+                add_to_library=parsed.add_to_library,
                 idempotency_key=idempotency_key,
                 ip_address=context.client_ip,
             )
@@ -1889,6 +1890,7 @@ class WorkspaceToolHandlers:
                 kind=parsed.source.kind,
                 value=value,
                 project_id=parsed.project_id,
+                add_to_library=parsed.add_to_library,
                 idempotency_key=idempotency_key,
                 ip_address=context.client_ip,
             )

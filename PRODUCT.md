@@ -133,9 +133,13 @@ product limits are:
 
 Paper count and storage are account-level unique-document quantities. A paper
 in a personal Library and any number of Projects owned by the same person is
-charged once to that account. Each Project still counts its own memberships,
-and its owner—not a collaborator who adds a paper—carries the Project and
-account quota responsibility.
+charged once to that account. Uploads default to the uploader's personal
+Library even when they target a Project; `add_to_library=false` keeps a
+paper Project-only. Each Project still counts its own memberships, and its
+owner—not a collaborator who adds a paper—carries the Project and account
+quota responsibility. A collaborator uploading with `add_to_library=true`
+also reserves one personal Library slot on their own account, matching the
+accounting of an upload followed by an explicit collect.
 
 An expired entitlement never removes existing research. An over-limit account
 remains readable and may remove resources, but cannot add another paper or

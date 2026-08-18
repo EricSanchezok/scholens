@@ -38,6 +38,10 @@ from app.modules.papers.application.ingestion import (
     FetchedPdf,
     RetrySource,
 )
+from app.modules.papers.application.upload_intent import (
+    resolve_add_to_library,
+    resolve_created_memberships,
+)
 from app.modules.papers.domain import content_sha256, normalize_doi
 from app.shared.application import Actor, OperationContext
 from app.shared.domain import AppError, FailureKind
@@ -273,6 +277,7 @@ class SqlPaperIngestionGateway:
         correlation_id: UUID,
         origin_operation_id: UUID,
         project_id: UUID | None,
+        add_to_library: bool,
         content: bytes,
         filename: str | None,
         display_name: str,
@@ -288,6 +293,10 @@ class SqlPaperIngestionGateway:
             original_reservation = self._db.get(UploadReservation, original.id)
             if original_reservation is None:
                 self._not_found()
+            add_to_library = resolve_add_to_library(
+                original_reservation.add_to_library,
+                project_id=original.project_id,
+            )
             durable_key = (
                 f"pdf-ingestion-retry:{actor.id}:{retry_of}:{idempotency_key}"
                 if idempotency_key is not None
@@ -305,6 +314,7 @@ class SqlPaperIngestionGateway:
             display_name=display_name,
             source_kind=source_kind,
             content_sha256=content_sha256(content),
+            add_to_library=add_to_library,
             idempotency_key=idempotency_key,
             durable_idempotency_key=durable_key,
             job_id=job_id,
@@ -364,6 +374,10 @@ class SqlPaperIngestionGateway:
             display_name=reservation.display_name,
             source_kind=reservation.source_kind,
             project_id=original.project_id,
+            add_to_library=resolve_add_to_library(
+                reservation.add_to_library,
+                project_id=original.project_id,
+            ),
         )
 
     def cancel(
@@ -396,29 +410,36 @@ class SqlPaperIngestionGateway:
         reservation = self._db.get(UploadReservation, job.id)
         if reservation is None:
             self._not_found()
-        if reservation.reference_created and job.document_id is not None:
-            if job.project_id is None:
+        if job.document_id is not None:
+            library_created, project_created = resolve_created_memberships(
+                library_created=reservation.reference_created_library,
+                project_created=reservation.reference_created_project,
+                legacy_created=reservation.reference_created,
+                project_id=job.project_id,
+            )
+            if library_created:
                 self._db.execute(
                     delete(LibraryPaper).where(
                         LibraryPaper.user_id == actor.id,
                         LibraryPaper.document_id == job.document_id,
                     )
                 )
-            else:
+            if project_created:
                 self._db.execute(
                     delete(ProjectPaper).where(
                         ProjectPaper.project_id == job.project_id,
                         ProjectPaper.document_id == job.document_id,
                     )
                 )
-            from app.bootstrap.adapters.document_gc import schedule_document_gc
+            if library_created or project_created:
+                from app.bootstrap.adapters.document_gc import schedule_document_gc
 
-            schedule_document_gc(
-                self._db,
-                document_id=job.document_id,
-                origin_operation_id=origin_operation_id,
-                correlation_id=correlation_id,
-            )
+                schedule_document_gc(
+                    self._db,
+                    document_id=job.document_id,
+                    origin_operation_id=origin_operation_id,
+                    correlation_id=correlation_id,
+                )
         job.status = JobStatus.CANCELLED.value
         job.completed_at = datetime.now(UTC)
         job.lease_expires_at = None

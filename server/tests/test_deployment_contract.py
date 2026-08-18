@@ -1801,6 +1801,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
     assert [path.name for path in versions] == [
         "2026_07_28_1030_scholens_initial.py",
         "2026_08_16_1200_entitlement_grants_and_cli_origin.py",
+        "2026_08_18_1200_project_upload_library_expand.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

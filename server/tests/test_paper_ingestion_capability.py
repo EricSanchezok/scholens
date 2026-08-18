@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -9,6 +11,7 @@ from app.bootstrap.adapters.paper_ingestion import (
     DefaultPaperIngestionLimits,
     DefaultPaperSourceResolver,
     SafePdfUrlSource,
+    SqlPaperIngestionGateway,
 )
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
 from app.helpers.ai_limits import AILimitExceeded
@@ -116,6 +119,7 @@ async def test_ingestion_validates_then_accepts_one_atomic_snapshot() -> None:
         operation=operation,
         prepared=prepared,
         project_id=None,
+        add_to_library=True,
         idempotency_key=" request-1 ",
         job_id=proposed_job_id,
     )
@@ -151,6 +155,7 @@ def test_idempotent_replay_does_not_journal_a_second_job() -> None:
             source_kind="upload",
         ),
         project_id=None,
+        add_to_library=True,
         idempotency_key="request-1",
         job_id=uuid4(),
     )
@@ -397,6 +402,7 @@ async def test_upload_session_rejects_a_different_ingestion_project() -> None:
             filename="paper.pdf",
             size_bytes=12,
             sha256="01" * 32,
+            add_to_library=True,
             object_key="uploads/7/session/source.pdf",
             status="claimed",
             expires_at=MagicMock(),
@@ -456,6 +462,7 @@ async def test_upload_session_releases_lease_when_version_read_is_unavailable() 
             filename="paper.pdf",
             size_bytes=12,
             sha256="01" * 32,
+            add_to_library=True,
             object_key="uploads/7/session/source.pdf",
             status="claimed",
             expires_at=MagicMock(),
@@ -515,3 +522,93 @@ def test_cancel_journals_only_when_gateway_changes_state() -> None:
     assert ingestion.cancel(actor=_actor(), operation=_operation(), job_id=job_id)
     assert len(journal.entries) == 1
     assert str(journal.entries[0]["action"]) == "job.failed"
+
+
+def test_gateway_retry_source_inherits_add_to_library_from_original_reservation() -> (
+    None
+):
+    db = MagicMock()
+    original_job_id = uuid4()
+    original = SimpleNamespace(id=original_job_id, project_id=None)
+    reservation = SimpleNamespace(
+        content_sha256="ab" * 32,
+        original_filename="paper.pdf",
+        display_name="paper.pdf",
+        source_kind="upload",
+        add_to_library=False,
+    )
+    db.scalar.return_value = original
+    db.get.return_value = reservation
+
+    with patch(
+        "app.bootstrap.adapters.paper_ingestion.SqlPaperIngestionGateway._require_failed",
+        return_value=original,
+    ):
+        gateway = SqlPaperIngestionGateway(db=db)
+        source = gateway.retry_source(actor=_actor(), job_id=original_job_id)
+
+    assert source.add_to_library is False
+    assert source.project_id is None
+    assert source.content_sha256 == "ab" * 32
+
+
+def test_gateway_accept_retry_overrides_client_add_to_library_from_reservation() -> (
+    None
+):
+    db = MagicMock()
+    original_job_id = uuid4()
+    original = SimpleNamespace(id=original_job_id, project_id=None)
+    original_reservation = SimpleNamespace(id=original_job_id, add_to_library=False)
+    db.scalar.return_value = original
+    db.get.side_effect = [original_reservation, None]
+
+    with (
+        patch(
+            "app.bootstrap.adapters.paper_ingestion.SqlPaperIngestionGateway._require_failed",
+            return_value=original,
+        ),
+        patch(
+            "app.bootstrap.adapters.paper_ingestion.SqlPaperIngestionGateway.response",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.bootstrap.adapters.paper_ingestion.reserve_upload",
+            return_value=SimpleNamespace(
+                id=uuid4(),
+                reservation=SimpleNamespace(
+                    id=uuid4(),
+                    job=SimpleNamespace(
+                        id=uuid4(),
+                        project_id=None,
+                        document_id=None,
+                        status="queued",
+                        progress_code=None,
+                        error_code=None,
+                        created_at=datetime.now(UTC),
+                    ),
+                ),
+                created=True,
+            ),
+        ) as reserve_mock,
+        patch(
+            "app.bootstrap.adapters.paper_ingestion.finalize_reserved_document",
+            return_value=SimpleNamespace(job_completed=False),
+        ),
+    ):
+        gateway = SqlPaperIngestionGateway(db=db)
+        gateway.accept(
+            actor=_actor(),
+            correlation_id=uuid4(),
+            origin_operation_id=uuid4(),
+            project_id=None,
+            add_to_library=True,
+            content=b"%PDF-1.7\n",
+            filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
+            idempotency_key=None,
+            job_id=uuid4(),
+            retry_of=original_job_id,
+        )
+
+    assert reserve_mock.call_args.kwargs["add_to_library"] is False

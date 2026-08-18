@@ -4,12 +4,20 @@ import base64
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import uuid4
+
+import pytest
+
 from app.modules.papers.application.upload_sessions import (
     PaperUploadRecord,
     PaperUploadSessions,
     PreparePaperUploadRequest,
 )
+from app.modules.papers.application.contracts.uploads import (
+    PaperIngestionRequest,
+    UploadPaperSource,
+)
 from app.shared.application import Actor
+from app.shared.domain import AppError, FailureKind
 
 
 @dataclass
@@ -37,6 +45,7 @@ class MemoryUploadGateway:
             filename=request.filename,
             size_bytes=request.size_bytes,
             sha256=request.sha256,
+            add_to_library=request.add_to_library,
             object_key=str(values["object_key"]),
             status="prepared",
             expires_at=values["expires_at"],
@@ -106,6 +115,33 @@ def _actor() -> Actor:
     )
 
 
+def test_library_intent_defaults_at_runtime_but_not_in_json_schema() -> None:
+    upload_id = uuid4()
+    assert (
+        PreparePaperUploadRequest(
+            filename="paper.pdf",
+            size_bytes=10,
+            sha256="01" * 32,
+        ).add_to_library
+        is True
+    )
+    assert (
+        PaperIngestionRequest(
+            source=UploadPaperSource(upload_id=upload_id)
+        ).add_to_library
+        is True
+    )
+
+    prepare_property = PreparePaperUploadRequest.model_json_schema()["properties"][
+        "add_to_library"
+    ]
+    ingestion_property = PaperIngestionRequest.model_json_schema()["properties"][
+        "add_to_library"
+    ]
+    assert "default" not in prepare_property
+    assert "default" not in ingestion_property
+
+
 def test_prepare_upload_returns_bounded_session_and_exact_checksum_headers() -> None:
     now = datetime(2026, 8, 16, 9, 0, tzinfo=UTC)
     gateway = MemoryUploadGateway()
@@ -144,6 +180,28 @@ def test_prepare_upload_returns_bounded_session_and_exact_checksum_headers() -> 
         "expires_in_seconds": 900,
     }
     assert gateway.cleanup_calls == [(now, 100)]
+
+
+def test_prepare_rejects_add_to_library_false_without_a_project() -> None:
+    sessions = PaperUploadSessions(
+        gateway=MemoryUploadGateway(),
+        store=RecordingUploadStore(),
+        clock=FixedClock(datetime(2026, 8, 16, 9, 0, tzinfo=UTC)),
+    )
+
+    with pytest.raises(AppError) as error:
+        sessions.prepare(
+            actor=_actor(),
+            request=PreparePaperUploadRequest(
+                filename="paper.pdf",
+                size_bytes=10,
+                sha256="01" * 32,
+                add_to_library=False,
+            ),
+        )
+
+    assert error.value.code == "add_to_library_false_requires_project"
+    assert error.value.kind is FailureKind.INVALID_ARGUMENT
 
 
 def test_upload_lifecycle_delegates_claim_consume_and_retryable_release() -> None:

@@ -74,8 +74,10 @@ relative path that resolves beneath exactly one root. It reads at most 30 MB,
 checks the extension and PDF signature, hashes the exact bytes, prepares a
 short-lived checksummed upload, transfers the bytes, and starts the canonical
 asynchronous ingestion. Supply the bound `project_id` to add the completed
-paper to that Project; omit it for the personal Library. Poll `get_job` with the
-returned job UUID.
+paper to that Project; omit it for the personal Library. The completed paper
+is also added to the caller's personal Library by default
+(`add_to_library=true`); pass `add_to_library=false` to keep a Project upload
+Project-only. Poll `get_job` with the returned job UUID.
 
 The authenticated MCP connection and object-storage PUT use separate HTTP
 clients. The Scholens Access Key is never attached to the upload request. The

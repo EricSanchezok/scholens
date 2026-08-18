@@ -31,7 +31,10 @@ from app.helpers.advisory_locks import AdvisoryLock, AdvisoryLockNamespace
 from app.helpers.celery_config import get_webhook_base_url
 from app.helpers.parser import parse_publication_date
 from app.modules.billing.infrastructure.quotas import can_user_auto_sync_zotero
-from app.bootstrap.adapters.document_gc import collect_document_if_due
+from app.bootstrap.adapters.document_gc import (
+    collect_document_if_due,
+    schedule_document_gc,
+)
 from app.modules.papers.infrastructure.search_repository import (
     document_search_repository,
 )
@@ -46,6 +49,7 @@ from app.modules.jobs.infrastructure.repository import (
     job_repository,
 )
 from app.modules.papers.application.contracts.documents import DocumentUpdate
+from app.modules.papers.application.upload_intent import resolve_created_memberships
 from app.modules.jobs.application.contracts import (
     JobCallbackIdentity,
     JobClaimResponse,
@@ -339,22 +343,34 @@ def handle_failed_upload(
                     resources=(ResourceRef("document", str(document_id)),),
                 )
             )
-        if job.reference_created:
-            if durable_job.project_id is None:
-                db.execute(
-                    delete(LibraryPaper).where(
-                        LibraryPaper.user_id == durable_job.requested_by_id,
-                        LibraryPaper.document_id == document_id,
-                    )
+        library_created, project_created = resolve_created_memberships(
+            library_created=job.reference_created_library,
+            project_created=job.reference_created_project,
+            legacy_created=job.reference_created,
+            project_id=durable_job.project_id,
+        )
+        if library_created:
+            db.execute(
+                delete(LibraryPaper).where(
+                    LibraryPaper.user_id == durable_job.requested_by_id,
+                    LibraryPaper.document_id == document_id,
                 )
-            else:
-                db.execute(
-                    delete(ProjectPaper).where(
-                        ProjectPaper.project_id == durable_job.project_id,
-                        ProjectPaper.document_id == document_id,
-                    )
+            )
+        if project_created:
+            db.execute(
+                delete(ProjectPaper).where(
+                    ProjectPaper.project_id == durable_job.project_id,
+                    ProjectPaper.document_id == document_id,
                 )
+            )
+        if library_created or project_created:
             db.flush()
+            schedule_document_gc(
+                db,
+                document_id=document_id,
+                origin_operation_id=operation.trace.operation_id,
+                correlation_id=operation.trace.correlation_id,
+            )
 
     persisted_error_code = _safe_pdf_failure_code(
         reason=reason,

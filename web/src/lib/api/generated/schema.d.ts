@@ -3750,6 +3750,11 @@ export interface components {
         /** PaperIngestionRequest */
         PaperIngestionRequest: {
             /**
+             * Add To Library
+             * @description When true and a Project is targeted, the completed paper is also added to the caller's personal Library. Set false to keep it Project-only. Requires project_id.
+             */
+            add_to_library?: boolean;
+            /**
              * Project Id
              * @description Optional immutable Scholens Project UUID that should receive the paper when ingestion succeeds. For an upload source, this must exactly match the Project bound by the upload preparation. Read it from the repository binding or a Project tool.
              */
@@ -3968,6 +3973,11 @@ export interface components {
          * @description Metadata known locally before PDF bytes leave the user's computer.
          */
         PreparePaperUploadRequest: {
+            /**
+             * Add To Library
+             * @description When true and a Project is targeted, the completed paper is also added to the caller's personal Library. Set false to keep it Project-only. Requires project_id.
+             */
+            add_to_library?: boolean;
             /**
              * Filename
              * @description Plain local PDF filename without directory components. Paths remain on the client and must never be sent to Scholens.

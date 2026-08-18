@@ -12,15 +12,19 @@ from app.bootstrap.adapters.project_documents import (
 )
 from app.database.models import (
     DocumentProcessingStatus,
+    LibraryPaper,
     UploadReservation,
 )
 from app.helpers.s3 import document_source_key
+from app.modules.billing.infrastructure.quotas import require_library_document_capacity
 from app.modules.papers.domain import can_begin_processing
 from app.modules.papers.application.ingestion import IngestionFinalization
+from app.modules.papers.application.upload_intent import resolve_add_to_library
 from app.modules.papers.infrastructure.repository import document_repository
 from app.modules.jobs.infrastructure.repository import job_repository
 from app.shared.application import Actor
 from app.helpers.celery_config import get_webhook_base_url
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -55,25 +59,52 @@ def finalize_reserved_document(
     durable_job = upload_job.job
     changed = canonical.created or durable_job.document_id != document.id
     durable_job.document_id = document.id
-    if durable_job.project_id is None:
+
+    # Personal-library membership is the default for every upload: a personal
+    # upload always attaches to the caller's Library, and a Project upload
+    # attaches there too unless the caller explicitly opted out. The project
+    # association is an independent, idempotent membership.
+    library_created = False
+    if resolve_add_to_library(
+        upload_job.add_to_library,
+        project_id=durable_job.project_id,
+    ):
+        already_in_library = bool(
+            db.scalar(
+                select(func.count(LibraryPaper.id)).where(
+                    LibraryPaper.user_id == user.id,
+                    LibraryPaper.document_id == document.id,
+                )
+            )
+        )
+        if not already_in_library:
+            require_library_document_capacity(db, user=user, document=document)
         reference = document_repository.attach_library(
             db,
             document_id=document.id,
             user_id=user.id,
         )
-        upload_job.reference_created = reference.created
-        changed = changed or reference.created
-    else:
-        association, created = project_document_repository.attach_reserved_upload(
-            db=db,
-            document=document,
-            upload_job=upload_job,
-            user=user,
-            project_id=durable_job.project_id,
+        library_created = reference.created
+    upload_job.reference_created_library = library_created
+    changed = changed or library_created
+
+    project_created = False
+    if durable_job.project_id is not None:
+        association, project_created = (
+            project_document_repository.attach_reserved_upload(
+                db=db,
+                document=document,
+                upload_job=upload_job,
+                user=user,
+                project_id=durable_job.project_id,
+            )
         )
         del association
-        upload_job.reference_created = created
-        changed = changed or created
+    upload_job.reference_created_project = project_created
+    upload_job.reference_created = (
+        library_created if durable_job.project_id is None else project_created
+    )
+    changed = changed or project_created
 
     if (
         not canonical.created
