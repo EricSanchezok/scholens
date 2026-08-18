@@ -54,6 +54,14 @@ class PreparePaperUploadRequest(BaseModel):
             "ingestion."
         ),
     )
+    add_to_library: bool = Field(
+        default=True,
+        description=(
+            "When true and a Project is targeted, the completed paper is also "
+            "added to the caller's personal Library. Set false to keep it "
+            "Project-only. Requires project_id."
+        ),
+    )
     upload_id: UUID | None = Field(
         default=None,
         description=(
@@ -110,6 +118,7 @@ class PaperUploadRecord:
     filename: str
     size_bytes: int
     sha256: str
+    add_to_library: bool
     object_key: str
     status: str
     expires_at: datetime
@@ -190,6 +199,12 @@ class PaperUploadSessions:
         actor: Actor,
         request: PreparePaperUploadRequest,
     ) -> PreparePaperUploadResponse:
+        if request.project_id is None and not request.add_to_library:
+            raise AppError(
+                code="add_to_library_false_requires_project",
+                message="add_to_library=false requires a destination Project",
+                kind=FailureKind.INVALID_ARGUMENT,
+            )
         now = self._clock.now()
         session_id = request.upload_id or uuid4()
         object_key = f"uploads/{actor.id}/{session_id}/source.pdf"

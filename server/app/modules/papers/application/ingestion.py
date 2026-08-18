@@ -53,6 +53,7 @@ class RetrySource:
     display_name: str
     source_kind: str
     project_id: UUID | None
+    add_to_library: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +93,7 @@ class PaperIngestionGateway(Protocol):
         correlation_id: UUID,
         origin_operation_id: UUID,
         project_id: UUID | None,
+        add_to_library: bool,
         content: bytes,
         filename: str | None,
         display_name: str,
@@ -192,6 +194,7 @@ class IngestPaper:
         operation: OperationContext,
         prepared: PreparedPaperInput,
         project_id: UUID | None,
+        add_to_library: bool,
         idempotency_key: str | None,
         job_id: UUID,
         retry_of: UUID | None = None,
@@ -201,6 +204,7 @@ class IngestPaper:
             correlation_id=operation.trace.correlation_id,
             origin_operation_id=operation.trace.operation_id,
             project_id=project_id,
+            add_to_library=add_to_library,
             content=prepared.content,
             filename=prepared.filename,
             display_name=prepared.display_name,

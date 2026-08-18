@@ -26,7 +26,7 @@ def _user() -> Actor:
     )
 
 
-def _upload_job(*, project_id=None) -> UploadReservation:
+def _upload_job(*, project_id=None, add_to_library: bool = True) -> UploadReservation:
     job_id = uuid4()
     durable_job = DurableJob(
         id=job_id,
@@ -44,6 +44,7 @@ def _upload_job(*, project_id=None) -> UploadReservation:
         quota_owner_id=11 if project_id else 7,
         reserved_size_kb=2,
         reserved_reference_count=1,
+        add_to_library=add_to_library,
         original_filename="source.pdf",
         display_name="source.pdf",
         source_kind="upload",
@@ -70,6 +71,7 @@ def test_personal_submission_persists_identity_before_broker_publish(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
     upload_job = _upload_job()
     document = _document(processing_job_id=upload_job.id)
     get_by_sha = MagicMock(return_value=None)
@@ -94,6 +96,10 @@ def test_personal_submission_persists_identity_before_broker_publish(
         "app.bootstrap.adapters.document_submission.job_repository.add_dispatch",
         add_dispatch,
     )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.require_library_document_capacity",
+        MagicMock(),
+    )
 
     result = finalize_reserved_document(
         pdf_bytes=b"%PDF-1.7",
@@ -113,6 +119,8 @@ def test_personal_submission_persists_identity_before_broker_publish(
         document_id=document.id,
         user_id=7,
     )
+    assert upload_job.reference_created_library is True
+    assert upload_job.reference_created_project is False
     db.commit.assert_not_called()
     db.flush.assert_called()
     assert add_dispatch.call_args.kwargs["job"] is upload_job.job
@@ -123,14 +131,16 @@ def test_personal_submission_persists_identity_before_broker_publish(
     assert task_kwargs["progress_url"].endswith(f"/jobs/{upload_job.id}/progress")
 
 
-def test_project_submission_consumes_reserved_project_destination(
+def test_project_submission_attaches_library_and_project_memberships(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
     upload_job = _upload_job(project_id=project_id)
     document = _document(processing_job_id=upload_job.id)
     db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
     attach = MagicMock(return_value=(SimpleNamespace(document_id=document.id), True))
+    attach_library = MagicMock(return_value=SimpleNamespace(created=True))
     monkeypatch.setattr(
         "app.bootstrap.adapters.document_submission.document_repository.get_by_sha256",
         MagicMock(return_value=None),
@@ -140,11 +150,19 @@ def test_project_submission_consumes_reserved_project_destination(
         MagicMock(return_value=SimpleNamespace(document=document, created=True)),
     )
     monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.document_repository.attach_library",
+        attach_library,
+    )
+    monkeypatch.setattr(
         "app.bootstrap.adapters.document_submission.project_document_repository.attach_reserved_upload",
         attach,
     )
     monkeypatch.setattr(
         "app.bootstrap.adapters.document_submission.job_repository.add_dispatch",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.require_library_document_capacity",
         MagicMock(),
     )
 
@@ -162,3 +180,52 @@ def test_project_submission_consumes_reserved_project_destination(
         user=_user(),
         project_id=project_id,
     )
+    attach_library.assert_called_once_with(
+        db,
+        document_id=document.id,
+        user_id=7,
+    )
+    assert upload_job.reference_created_library is True
+    assert upload_job.reference_created_project is True
+
+
+def test_project_submission_with_add_to_library_false_skips_library_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    upload_job = _upload_job(project_id=project_id, add_to_library=False)
+    document = _document(processing_job_id=upload_job.id)
+    db = MagicMock(spec=Session)
+    attach = MagicMock(return_value=(SimpleNamespace(document_id=document.id), True))
+    attach_library = MagicMock()
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.document_repository.get_by_sha256",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.document_repository.get_or_create",
+        MagicMock(return_value=SimpleNamespace(document=document, created=True)),
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.document_repository.attach_library",
+        attach_library,
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.project_document_repository.attach_reserved_upload",
+        attach,
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.document_submission.job_repository.add_dispatch",
+        MagicMock(),
+    )
+
+    finalize_reserved_document(
+        pdf_bytes=b"%PDF-1.7",
+        upload_job=upload_job,
+        db=db,
+        user=_user(),
+    )
+
+    attach_library.assert_not_called()
+    assert upload_job.reference_created_library is False
+    assert upload_job.reference_created_project is True

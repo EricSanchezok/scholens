@@ -135,11 +135,20 @@ does not require a separate compatibility endpoint.
 
 `PaperUploadSession` owns temporary direct-upload intent before a Document
 exists: actor, optional Project, plain filename, declared size and SHA-256,
-private staging object key, expiry, and ingestion lease state. It never stores
-a client filesystem path. A consumed session cannot be reused, and abandoned
-objects are also bounded by the content bucket lifecycle. The canonical
-Document and Library/Project memberships remain owned by the normal ingestion
-transaction; staging is not a second paper record.
+`add_to_library` intent, private staging object key, expiry, and ingestion
+lease state. It never stores a client filesystem path. A consumed session
+cannot be reused, and abandoned objects are also bounded by the content bucket
+lifecycle. The canonical Document and Library/Project memberships remain owned
+by the normal ingestion transaction; staging is not a second paper record.
+
+Ingestion attaches memberships atomically: the uploader's personal Library
+membership is the default for every upload (including Project-targeted ones),
+and the Project membership is an independent idempotent association.
+`UploadReservation` records each side's creation separately
+(`reference_created_library`, `reference_created_project`) so failure and
+cancellation compensation deletes only the membership this job created, never
+a pre-existing membership. The library-side billing owner and reserved
+capacity are stored on the reservation alongside the Project owner's side.
 
 `ActionConfirmation` owns only short-lived authorization to perform one risky
 action. It stores a token hash, actor and credential binding, action and

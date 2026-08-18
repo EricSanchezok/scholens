@@ -339,21 +339,21 @@ def handle_failed_upload(
                     resources=(ResourceRef("document", str(document_id)),),
                 )
             )
-        if job.reference_created:
-            if durable_job.project_id is None:
-                db.execute(
-                    delete(LibraryPaper).where(
-                        LibraryPaper.user_id == durable_job.requested_by_id,
-                        LibraryPaper.document_id == document_id,
-                    )
+        if job.reference_created_library:
+            db.execute(
+                delete(LibraryPaper).where(
+                    LibraryPaper.user_id == durable_job.requested_by_id,
+                    LibraryPaper.document_id == document_id,
                 )
-            else:
-                db.execute(
-                    delete(ProjectPaper).where(
-                        ProjectPaper.project_id == durable_job.project_id,
-                        ProjectPaper.document_id == document_id,
-                    )
+            )
+        if job.reference_created_project:
+            db.execute(
+                delete(ProjectPaper).where(
+                    ProjectPaper.project_id == durable_job.project_id,
+                    ProjectPaper.document_id == document_id,
                 )
+            )
+        if job.reference_created_library or job.reference_created_project:
             db.flush()
 
     persisted_error_code = _safe_pdf_failure_code(

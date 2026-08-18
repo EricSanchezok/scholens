@@ -356,3 +356,126 @@ async def test_pdf_completion_rejects_mismatched_object_key(
     assert handled.value == {
         "status": "webhook processed - failed due to object key mismatch"
     }
+
+
+def test_failed_upload_compensates_only_memberships_this_job_created(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job_id = uuid4()
+    document_id = uuid4()
+    project_id = uuid4()
+    actor = _actor()
+    upload_job = SimpleNamespace(
+        id=job_id,
+        reference_created_library=True,
+        reference_created_project=True,
+    )
+    durable_job = SimpleNamespace(
+        operation=JobOperation.PDF_PROCESS.value,
+        requested_by_id=actor.id,
+        project_id=project_id,
+        document_id=document_id,
+        status=JobStatus.RUNNING.value,
+        progress_code="parsing",
+    )
+    document = SimpleNamespace(
+        id=document_id,
+        processing_job_id=job_id,
+        processing_status=DocumentProcessingStatus.PROCESSING.value,
+    )
+    db = MagicMock()
+    db.scalar.return_value = document
+
+    monkeypatch.setattr(
+        document_job_callbacks.upload_reservation_repository,
+        "get",
+        MagicMock(return_value=SimpleNamespace(job=durable_job, **vars(upload_job))),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.job_repository,
+        "fail",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.zotero_import_repository,
+        "get_by_upload_job_id",
+        MagicMock(return_value=None),
+    )
+
+    operation = OperationContextFactory().root(
+        initiated_by=OperationInitiator.SYSTEM,
+        origin=SchedulerOrigin("pdf_callback_test", uuid4()),
+        credential=None,
+    )
+
+    changes = document_job_callbacks.handle_failed_upload(
+        db,
+        str(job_id),
+        actor,
+        operation=operation,
+        reason="pdf_content_insufficient",
+    )
+
+    assert any(str(change.action) == "document.processing_failed" for change in changes)
+    delete_calls = [call.args[0] for call in db.execute.call_args_list]
+    assert len(delete_calls) == 2
+
+
+def test_failed_upload_keeps_pre_existing_memberships_when_nothing_created(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job_id = uuid4()
+    document_id = uuid4()
+    actor = _actor()
+    upload_job = SimpleNamespace(
+        id=job_id,
+        reference_created_library=False,
+        reference_created_project=False,
+    )
+    durable_job = SimpleNamespace(
+        operation=JobOperation.PDF_PROCESS.value,
+        requested_by_id=actor.id,
+        project_id=None,
+        document_id=document_id,
+        status=JobStatus.RUNNING.value,
+        progress_code="parsing",
+    )
+    document = SimpleNamespace(
+        id=document_id,
+        processing_job_id=job_id,
+        processing_status=DocumentProcessingStatus.PROCESSING.value,
+    )
+    db = MagicMock()
+    db.scalar.return_value = document
+
+    monkeypatch.setattr(
+        document_job_callbacks.upload_reservation_repository,
+        "get",
+        MagicMock(return_value=SimpleNamespace(job=durable_job, **vars(upload_job))),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.job_repository,
+        "fail",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.zotero_import_repository,
+        "get_by_upload_job_id",
+        MagicMock(return_value=None),
+    )
+
+    operation = OperationContextFactory().root(
+        initiated_by=OperationInitiator.SYSTEM,
+        origin=SchedulerOrigin("pdf_callback_test", uuid4()),
+        credential=None,
+    )
+
+    document_job_callbacks.handle_failed_upload(
+        db,
+        str(job_id),
+        actor,
+        operation=operation,
+        reason="pdf_content_insufficient",
+    )
+
+    assert db.execute.call_args_list == []

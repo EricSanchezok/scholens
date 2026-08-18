@@ -188,6 +188,7 @@ async def test_local_upload_sends_bytes_and_metadata_but_never_the_path(
                 "size_bytes": len(content),
                 "sha256": hashlib.sha256(content).hexdigest(),
                 "project_id": project_id,
+                "add_to_library": True,
             },
         ),
         (
@@ -195,6 +196,7 @@ async def test_local_upload_sends_bytes_and_metadata_but_never_the_path(
             {
                 "source": {"kind": "upload", "upload_id": upload_id},
                 "project_id": project_id,
+                "add_to_library": True,
                 "idempotency_key": "import-private-paper-v1",
             },
         ),
@@ -253,6 +255,7 @@ async def test_uncertain_ingestion_returns_exact_last_step_retry(
                 "retry_arguments": {
                     "idempotency_key": "stable-import",
                     "project_id": None,
+                    "add_to_library": True,
                     "source": {"kind": "upload", "upload_id": upload_id},
                 },
                 "retry_tool": "ingest_paper",

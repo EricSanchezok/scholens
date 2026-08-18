@@ -66,6 +66,7 @@ class PaperIngestionWorkflow:
         operation: OperationContext,
         url: str,
         project_id: UUID | None,
+        add_to_library: bool = True,
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
@@ -85,6 +86,7 @@ class PaperIngestionWorkflow:
             operation=operation,
             prepared=prepared,
             project_id=project_id,
+            add_to_library=add_to_library,
             idempotency_key=idempotency_key,
         )
 
@@ -96,6 +98,7 @@ class PaperIngestionWorkflow:
         kind: str,
         value: str,
         project_id: UUID | None,
+        add_to_library: bool = True,
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
@@ -121,6 +124,7 @@ class PaperIngestionWorkflow:
             operation=operation,
             prepared=prepared,
             project_id=project_id,
+            add_to_library=add_to_library,
             idempotency_key=idempotency_key,
         )
 
@@ -132,6 +136,7 @@ class PaperIngestionWorkflow:
         content: bytes,
         filename: str | None,
         project_id: UUID | None,
+        add_to_library: bool = True,
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
@@ -149,6 +154,7 @@ class PaperIngestionWorkflow:
             operation=operation,
             prepared=prepared,
             project_id=project_id,
+            add_to_library=add_to_library,
             idempotency_key=idempotency_key,
         )
 
@@ -159,6 +165,7 @@ class PaperIngestionWorkflow:
         operation: OperationContext,
         upload_id: UUID,
         project_id: UUID | None,
+        add_to_library: bool = True,
         idempotency_key: str | None,
         ip_address: str,
     ) -> LibraryPaperIngestionResponse:
@@ -178,6 +185,14 @@ class PaperIngestionWorkflow:
                     message=(
                         "The ingestion Project must match the Project bound when the "
                         "upload was prepared"
+                    ),
+                    kind=FailureKind.CONFLICT,
+                )
+            if record.add_to_library != add_to_library:
+                raise AppError(
+                    code="paper_upload_metadata_mismatch",
+                    message=(
+                        "The ingestion add_to_library must match the upload preparation"
                     ),
                     kind=FailureKind.CONFLICT,
                 )
@@ -227,6 +242,7 @@ class PaperIngestionWorkflow:
                 content=content,
                 filename=record.filename,
                 project_id=record.project_id,
+                add_to_library=record.add_to_library,
                 idempotency_key=idempotency_key or f"upload-session:{upload_id}",
                 ip_address=ip_address,
             )
@@ -308,6 +324,7 @@ class PaperIngestionWorkflow:
             operation=operation,
             prepared=prepared,
             project_id=retry_source.project_id,
+            add_to_library=retry_source.add_to_library,
             idempotency_key=idempotency_key,
             retry_of=job_id,
         )
@@ -343,6 +360,7 @@ class PaperIngestionWorkflow:
         operation: OperationContext,
         prepared: PreparedPaperInput,
         project_id: UUID | None,
+        add_to_library: bool = True,
         idempotency_key: str | None,
         retry_of: UUID | None = None,
     ) -> LibraryPaperIngestionResponse:
@@ -371,6 +389,7 @@ class PaperIngestionWorkflow:
                     operation=accept_operation,
                     prepared=prepared,
                     project_id=project_id,
+                    add_to_library=add_to_library,
                     idempotency_key=idempotency_key,
                     job_id=proposed_job_id,
                     retry_of=retry_of,

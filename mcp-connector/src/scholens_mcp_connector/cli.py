@@ -234,6 +234,14 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
                         "guidance or a Project tool; never infer it from the title."
                     ),
                 },
+                "add_to_library": {
+                    "type": "boolean",
+                    "description": (
+                        "When true and a Project is targeted, the completed paper is "
+                        "also added to the caller's personal Library. Set false to "
+                        "keep it Project-only. Requires project_id."
+                    ),
+                },
                 "idempotency_key": {
                     "type": ["string", "null"],
                     "minLength": 1,
@@ -380,6 +388,7 @@ async def upload_local_paper(
     content = await asyncio.to_thread(_read_bounded_pdf, path)
     digest = hashlib.sha256(content).hexdigest()
     project_id = arguments.get("project_id")
+    add_to_library = arguments.get("add_to_library", True)
     idempotency_key = arguments.get("idempotency_key")
     prepare = await remote.call_tool(
         PREPARE_TOOL,
@@ -388,6 +397,7 @@ async def upload_local_paper(
             "size_bytes": len(content),
             "sha256": digest,
             "project_id": project_id,
+            "add_to_library": add_to_library,
         },
     )
     prepared = _structured_result(prepare)
@@ -413,6 +423,7 @@ async def upload_local_paper(
     source_arguments: dict[str, object] = {
         "source": {"kind": "upload", "upload_id": upload_id},
         "project_id": project_id,
+        "add_to_library": add_to_library,
     }
     if idempotency_key is not None:
         source_arguments["idempotency_key"] = idempotency_key

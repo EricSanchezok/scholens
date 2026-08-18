@@ -52,6 +52,7 @@ async def upload_pdf_from_source(
             operation=operation,
             upload_id=payload.source.upload_id,
             project_id=payload.project_id,
+            add_to_library=payload.add_to_library,
             idempotency_key=idempotency_key,
             ip_address=http_client_ip(request),
         )
@@ -70,6 +71,7 @@ async def upload_pdf_from_source(
         kind=payload.source.kind,
         value=value,
         project_id=payload.project_id,
+        add_to_library=payload.add_to_library,
         idempotency_key=idempotency_key,
         ip_address=http_client_ip(request),
     )

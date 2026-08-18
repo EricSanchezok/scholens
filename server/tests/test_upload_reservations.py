@@ -12,7 +12,7 @@ from app.database.models import (
     SubscriptionPlan,
     UploadReservation,
 )
-from app.shared.domain import AppError
+from app.shared.domain import AppError, FailureKind
 from app.bootstrap.adapters.upload_reservations import (
     reassign_project_quota_owner,
     reserve_upload,
@@ -49,6 +49,14 @@ def _quota_patches(*, active_count: int = 0, active_size_kb: int = 0):
         patch(
             "app.bootstrap.adapters.upload_reservations.resource_usage_repository.completed_storage_kb",
             return_value=0,
+        ),
+        patch(
+            "app.bootstrap.adapters.upload_reservations._account_has_active_digest_reservation",
+            return_value=False,
+        ),
+        patch(
+            "app.bootstrap.adapters.upload_reservations._active_library_reservations",
+            return_value=(0, 0),
         ),
     )
 
@@ -105,6 +113,8 @@ def test_personal_upload_is_reserved_to_requester() -> None:
         patches[4],
         patches[5],
         patches[6],
+        patches[7],
+        patches[8],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -159,6 +169,8 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
         patches[4],
         patches[5],
         patches[6],
+        patches[7],
+        patches[8],
         patch(
             "app.bootstrap.adapters.upload_reservations.job_repository.create",
             return_value=PersistedJob(job=durable_job, created=True),
@@ -184,10 +196,16 @@ def test_project_upload_is_billed_to_owner_not_collaborator() -> None:
         user_id=17,
         permission="manage_papers",
     )
-    quota_lock.assert_called_once_with(db, user_id=91)
+    assert quota_lock.call_count == 2
+    quota_lock.assert_any_call(db, user_id=17)
+    quota_lock.assert_any_call(db, user_id=91)
     assert job.job.requested_by_id == 17
     assert job.quota_owner_id == 91
     assert job.job.project_id == project_id
+    assert job.add_to_library is True
+    assert job.library_quota_owner_id == 17
+    assert job.library_reserved_reference_count == 1
+    assert job.library_reserved_size_kb == 4
 
 
 def test_active_reservations_prevent_concurrent_paper_quota_bypass() -> None:
@@ -268,7 +286,6 @@ def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
     db = MagicMock()
     db.scalar.side_effect = [project, document_id, 0, 0, 300]
     patches = _quota_patches()
-
     with (
         patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
         patch(
@@ -286,6 +303,8 @@ def test_existing_account_document_still_consumes_a_new_project_slot() -> None:
         patches[4],
         patches[5],
         patches[6],
+        patches[7],
+        patches[8],
         pytest.raises(AppError) as error,
     ):
         reserve_upload(
@@ -570,3 +589,152 @@ def test_project_transfer_rejects_new_owner_project_limit() -> None:
 
     assert error.value.code == "project_transfer_quota_exceeded"
     db.execute.assert_not_called()
+
+
+def test_add_to_library_false_without_project_is_rejected() -> None:
+    db = MagicMock()
+
+    with pytest.raises(AppError) as error:
+        reserve_upload(
+            db,
+            requester=MagicMock(id=17),
+            origin_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            project_id=None,
+            input_size_bytes=1_024,
+            original_filename="paper.pdf",
+            display_name="paper.pdf",
+            source_kind="upload",
+            content_sha256="a1" * 32,
+            add_to_library=False,
+        )
+
+    assert error.value.code == "add_to_library_false_requires_project"
+    assert error.value.kind is FailureKind.INVALID_ARGUMENT
+    db.add.assert_not_called()
+
+
+def test_project_upload_with_add_to_library_false_skips_library_billing() -> None:
+    project_id = uuid4()
+    project = Project(id=project_id, title="Shared corpus", owner_id=91)
+    db = MagicMock()
+    db.scalar.side_effect = [project, None, 0, 3]
+    requester = MagicMock(id=17)
+    durable_job = _durable_job(requester_id=17, project_id=project_id)
+    patches = _quota_patches()
+
+    with (
+        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
+            return_value=0,
+        ),
+        patches[0] as quota_lock,
+        patches[1],
+        patches[2],
+        patches[3],
+        patches[4],
+        patches[5],
+        patches[6],
+        patches[7],
+        patches[8],
+        patch(
+            "app.bootstrap.adapters.upload_reservations.job_repository.create",
+            return_value=PersistedJob(job=durable_job, created=True),
+        ),
+    ):
+        result = reserve_upload(
+            db,
+            requester=requester,
+            origin_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            project_id=project_id,
+            input_size_bytes=1_025,
+            original_filename="shared.pdf",
+            display_name="shared.pdf",
+            source_kind="upload",
+            content_sha256="b1" * 32,
+            add_to_library=False,
+        )
+
+    job = result.reservation
+    assert job.add_to_library is False
+    assert job.library_quota_owner_id is None
+    assert job.library_reserved_reference_count == 0
+    assert job.library_reserved_size_kb == 0
+    quota_lock.assert_called_once_with(db, user_id=91)
+
+
+def test_owner_uploading_to_own_project_is_not_library_billed_twice() -> None:
+    project_id = uuid4()
+    project = Project(id=project_id, title="Own project", owner_id=17)
+    db = MagicMock()
+    db.scalar.side_effect = [project, None, 0, 3]
+    requester = MagicMock(id=17)
+    durable_job = _durable_job(requester_id=17, project_id=project_id)
+    patches = _quota_patches()
+
+    with (
+        patch("app.bootstrap.adapters.upload_reservations.require_project_permission"),
+        patch(
+            "app.bootstrap.adapters.upload_reservations._unattached_project_reservations",
+            return_value=0,
+        ),
+        patches[0] as quota_lock,
+        patches[1],
+        patches[2],
+        patches[3],
+        patches[4],
+        patches[5],
+        patches[6],
+        patches[7],
+        patches[8],
+        patch(
+            "app.bootstrap.adapters.upload_reservations.job_repository.create",
+            return_value=PersistedJob(job=durable_job, created=True),
+        ),
+    ):
+        result = reserve_upload(
+            db,
+            requester=requester,
+            origin_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            project_id=project_id,
+            input_size_bytes=1_025,
+            original_filename="own.pdf",
+            display_name="own.pdf",
+            source_kind="upload",
+            content_sha256="c1" * 32,
+        )
+
+    job = result.reservation
+    assert job.quota_owner_id == 17
+    assert job.library_quota_owner_id is None
+    assert job.library_reserved_reference_count == 0
+    assert job.library_reserved_size_kb == 0
+    quota_lock.assert_called_once_with(db, user_id=17)
+
+
+def test_project_transfer_preserves_library_side_billing_owner() -> None:
+    project = Project(id=uuid4(), title="Shared corpus", owner_id=10)
+    transferred, transferred_job = _reservation(
+        owner_id=10,
+        digest="e" * 64,
+        project_id=project.id,
+        reference_count=1,
+        size_kb=2,
+    )
+    transferred.add_to_library = True
+    transferred.library_quota_owner_id = 15
+    transferred.library_reserved_reference_count = 1
+    transferred.library_reserved_size_kb = 2
+
+    _run_transfer(
+        project=project,
+        active_rows=[(transferred, transferred_job)],
+    )
+
+    assert transferred.quota_owner_id == 20
+    assert transferred.library_quota_owner_id == 15
+    assert transferred.library_reserved_reference_count == 1
+    assert transferred.library_reserved_size_kb == 2

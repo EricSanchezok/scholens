@@ -580,13 +580,15 @@ mutating the failed history row.
 
 PDF uploads and source imports share one atomic acceptance boundary. A local or
 browser client first creates a 24-hour `PaperUploadSession` using only a plain
-filename, exact byte count, SHA-256, and optional Project. Server returns a
+filename, exact byte count, SHA-256, optional Project, and the
+`add_to_library` intent (defaults to true). Server returns a
 15-minute S3 PUT URL signed for PDF content type and checksum. The client sends
 bytes directly to object storage; Server credentials and Scholens Access Keys
 are never attached to that request. Ingestion claims the session for five
-minutes with a generation-specific lease token, rechecks Project access,
-verifies stored size and the S3 checksum, downloads and hashes the bounded bytes
-again, and then enters the canonical byte-ingestion path. A stale worker cannot
+minutes with a generation-specific lease token, rechecks Project access and the
+`add_to_library` intent, verifies stored size and the S3 checksum, downloads
+and hashes the bounded bytes again, and then enters the canonical byte-ingestion
+path. A stale worker cannot
 consume or release a newer claim. Success consumes the session and removes its
 staging object; validation failure makes it non-reusable, transient failure
 releases it for retry, bounded request-time cleanup removes expired database
@@ -621,6 +623,12 @@ constraints remain authoritative for repeated and concurrent uploads. `DELETE
 /api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
 replay and ignore late worker callbacks. The worker reports bounded lifecycle
 stages and heartbeats, while the Server owns terminal timeout/failure policy.
+Ingestion attaches memberships atomically: the uploader's personal Library
+membership is the default even for Project-targeted uploads, and the Project
+membership is an independent idempotent association. `add_to_library=false`
+(requires a Project) keeps a paper Project-only. Failure and cancellation
+compensation removes only the membership(s) the job actually created, and a
+retry inherits the original job's `add_to_library` intent.
 
 PDF completion persists extracted metadata, generated summary, and summary
 citations on the canonical `Document`. It rejects a successful worker result
@@ -652,12 +660,16 @@ Account paper and storage usage is the unique union of completed Documents in
 the personal Library and Projects owned by that account. A repeated Document
 therefore adds no account cost until its final owned reference disappears.
 Project paper limits remain membership counts, and collaborators reserve quota
-against the Project owner. Account advisory locks and durable upload
-reservations serialize concurrent additions, including Project creation and
-ownership transfer. Transfer locks both account quota namespaces in stable
-user-ID order and recomputes both owners' completed and active unique-document
-views before committing; an already-owned Document may reserve zero account
-units while still reserving one Project slot.
+against the Project owner. When a collaborator uploads into another user's
+Project with `add_to_library=true`, the uploader's own account reserves one
+personal Library slot; an owner uploading to their own Project is never
+double-charged because of the account-unique union. Account advisory locks and
+durable upload reservations serialize concurrent additions, including Project
+creation and ownership transfer. Transfer locks both account quota namespaces
+in stable user-ID order and recomputes both owners' completed and active
+unique-document views before committing; an already-owned Document may reserve
+zero account units while still reserving one Project slot. Project ownership
+transfer never moves the library-side billing owner.
 Paid subscriptions, product entitlements, and capacity writes share one
 billing-owned PostgreSQL bigint advisory key. The key is a stable BLAKE2b-64
 digest of a versioned account-resource namespace plus the complete bigint user

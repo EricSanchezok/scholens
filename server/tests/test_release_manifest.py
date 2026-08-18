@@ -88,7 +88,7 @@ def test_release_manifest_is_deterministic_and_source_bound(tmp_path: Path) -> N
     assert first["public_mcp_sha256"]
     assert (
         first["scholens_migrations"]["minimum_compatible_application_revision"]
-        == "c9f4a62d01ab"
+        == "48cd53a3c1f84fbb95d93a2505db221c"
     )
     release_manifest.verify_manifest(
         first,
@@ -261,7 +261,20 @@ def test_version_three_baseline_accepts_legacy_proof_transition(
     assert legacy["contract_version"] == 2
     assert current["contract_version"] == 1
     assert candidate["contract_version"] == 3
-    release_manifest.verify_migration_transition(current, candidate)
+    # The chain now grows past the production baseline, so a v1 legacy proof
+    # must first transition at the baseline point instead of jumping to v3.
+    with pytest.raises(
+        ValueError,
+        match="legacy database proof must first transition at the production baseline",
+    ):
+        release_manifest.verify_migration_transition(current, candidate)
+
+    # After that transition (a v2 proof whose revision history is a prefix of
+    # the candidate chain), the v3 manifest is accepted normally.
+    transitioned = json.loads(json.dumps(current))
+    transitioned["contract_version"] = 2
+    transitioned["scholens_migrations"] = candidate["scholens_migrations"]
+    release_manifest.verify_migration_transition(transitioned, candidate)
 
 
 def test_additive_database_head_keeps_baseline_application_rollback_compatible(

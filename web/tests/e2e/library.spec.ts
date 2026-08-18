@@ -250,6 +250,7 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   );
   await dialog.getByRole("button", { name: "Add source" }).click();
   expect((await sourceRequest).postDataJSON()).toEqual({
+    add_to_library: true,
     source: { doi: "10.48550/arXiv.1706.03762", kind: "doi" },
   });
   await expect(dialog).toHaveCount(0);
@@ -320,6 +321,7 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
   const acceptedRequest = await ingestionRequest;
   expect(acceptedRequest.headers()["idempotency-key"]).toBeTruthy();
   expect(acceptedRequest.postDataJSON()).toEqual({
+    add_to_library: true,
     source: {
       kind: "upload",
       upload_id: "00000000-0000-4000-8000-000000000088",

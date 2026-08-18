@@ -996,6 +996,7 @@ async def _execute_planned_import(
                 operation=accept_operation,
                 prepared=prepared_paper,
                 project_id=None,
+                add_to_library=True,
                 idempotency_key=(
                     f"zotero:{planned.item.item_key}:"
                     f"{accept_operation.trace.operation_id}"

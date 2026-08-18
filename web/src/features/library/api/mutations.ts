@@ -23,6 +23,7 @@ export async function uploadPaperFile(
         filename: file.name,
         sha256: contentDigest,
         size_bytes: file.size,
+        add_to_library: true,
       },
       signal,
     },
@@ -46,6 +47,7 @@ export async function uploadPaperFile(
     {
       body: {
         source: { kind: "upload", upload_id: prepared.upload_id },
+        add_to_library: true,
       },
       headers: { "Idempotency-Key": idempotencyKey },
       signal,
@@ -66,7 +68,7 @@ export async function uploadPaperSource(
         ? { kind: source.kind, arxiv_id: source.value }
         : { kind: source.kind, url: source.value };
   const { data } = await apiClient.POST("/api/v1/paper-ingestions/sources", {
-    body: { source: normalized },
+    body: { source: normalized, add_to_library: true },
     headers: { "Idempotency-Key": idempotencyKey },
     signal,
   });

@@ -41,6 +41,7 @@ class UploadReservation(Base):
             "reserved_size_kb >= 0",
             name="ck_upload_reservations_reserved_size_nonnegative",
         ),
+        Index("ix_upload_reservations_library_quota_owner", "library_quota_owner_id"),
         CheckConstraint(
             "reserved_reference_count IN (0, 1)",
             name="ck_upload_reservations_reserved_reference_count",
@@ -72,11 +73,40 @@ class UploadReservation(Base):
         server_default="1",
     )
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    reference_created: Mapped[bool] = mapped_column(
+    add_to_library: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    reference_created_library: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,
         server_default="false",
+    )
+    reference_created_project: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    library_quota_owner_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("auth.users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    library_reserved_reference_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    library_reserved_size_kb: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
     )
     original_filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
     display_name: Mapped[str] = mapped_column(String(512), nullable=False)

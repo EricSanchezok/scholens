@@ -96,3 +96,11 @@ class PaperIngestionRequest(BaseModel):
             "or a Project tool."
         ),
     )
+    add_to_library: bool = Field(
+        default=True,
+        description=(
+            "When true and a Project is targeted, the completed paper is also "
+            "added to the caller's personal Library. Set false to keep it "
+            "Project-only. Requires project_id."
+        ),
+    )

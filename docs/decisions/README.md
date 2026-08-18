@@ -59,6 +59,7 @@ change what the accepted record decided.
 - [ADR 0025: Read-only Zotero integration across Server and Jobs](./0025-read-only-zotero-integration.md)
 - [ADR 0026: Production contract and schema evolution](./0026-production-contract-evolution.md)
 - [ADR 0027: WAF free-text content policy](./0027-waf-free-text-content-policy.md)
+- [ADR 0027: Project uploads default to the personal Library](./0027-project-uploads-default-to-personal-library.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

@@ -63,6 +63,47 @@ def _active_account_reservations(db: Session, *, owner_id: int) -> tuple[int, in
     return int(row[0]), int(row[1])
 
 
+def _active_library_reservations(db: Session, *, owner_id: int) -> tuple[int, int]:
+    """Sum the library-side reference and storage reservations billed to one account."""
+    row = db.execute(
+        select(
+            func.coalesce(
+                func.sum(UploadReservation.library_reserved_reference_count), 0
+            ),
+            func.coalesce(func.sum(UploadReservation.library_reserved_size_kb), 0),
+        )
+        .join(DurableJob, DurableJob.id == UploadReservation.id)
+        .where(
+            UploadReservation.library_quota_owner_id == owner_id,
+            DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
+        )
+    ).one()
+    return int(row[0]), int(row[1])
+
+
+def _account_has_active_digest_reservation(
+    db: Session,
+    *,
+    account_id: int,
+    content_sha256: str,
+) -> bool:
+    """True when the account already pays for an in-flight upload of this digest."""
+    return bool(
+        db.scalar(
+            select(func.count(UploadReservation.id))
+            .join(DurableJob, DurableJob.id == UploadReservation.id)
+            .where(
+                UploadReservation.content_sha256 == content_sha256,
+                DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
+                or_(
+                    UploadReservation.quota_owner_id == account_id,
+                    UploadReservation.library_quota_owner_id == account_id,
+                ),
+            )
+        )
+    )
+
+
 def _unattached_project_reservations(
     db: Session,
     *,
@@ -326,6 +367,7 @@ def reserve_upload(
     display_name: str,
     source_kind: str,
     content_sha256: str,
+    add_to_library: bool = True,
     idempotency_key: str | None = None,
     durable_idempotency_key: str | None = None,
     job_id: UUID | None = None,
@@ -335,6 +377,12 @@ def reserve_upload(
         raise AppError(
             code="empty_upload",
             message="The uploaded file is empty",
+            kind=FailureKind.INVALID_ARGUMENT,
+        )
+    if project_id is None and not add_to_library:
+        raise AppError(
+            code="add_to_library_false_requires_project",
+            message="add_to_library=false requires a destination Project",
             kind=FailureKind.INVALID_ARGUMENT,
         )
 
@@ -359,7 +407,23 @@ def reserve_upload(
             )
         owner_id = project.owner_id
 
-    lock_account_resource_quota(db, user_id=owner_id)
+    # Library-side billing is credited to the requester only when they upload
+    # into someone else's Project with add_to_library enabled; an owner's own
+    # upload is already billed once through the account-unique union.
+    library_billing_account_id = (
+        requester.id
+        if (project_id is not None and add_to_library and requester.id != owner_id)
+        else None
+    )
+    lock_ids = tuple(
+        sorted(
+            {owner_id}
+            | ({library_billing_account_id} if library_billing_account_id else set())
+        )
+    )
+    for lock_id in lock_ids:
+        lock_account_resource_quota(db, user_id=lock_id)
+
     resolved_idempotency_key = durable_idempotency_key or (
         f"pdf-ingestion:{requester.id}:{project_id or 'library'}:{idempotency_key}"
         if idempotency_key is not None
@@ -439,6 +503,7 @@ def reserve_upload(
             message="This document is already being uploaded to this collection",
             kind=FailureKind.CONFLICT,
         )
+
     owner = get_quota_user(db, user_id=owner_id)
     limits = get_user_entitlements(db, owner).limits.as_limits()
     account_already_owns_document = (
@@ -449,16 +514,10 @@ def reserve_upload(
             document_id=existing_document_id,
         )
     )
-    active_account_reservation = bool(
-        db.scalar(
-            select(func.count(UploadReservation.id))
-            .join(DurableJob, DurableJob.id == UploadReservation.id)
-            .where(
-                UploadReservation.quota_owner_id == owner_id,
-                UploadReservation.content_sha256 == content_sha256,
-                DurableJob.status.in_(ACTIVE_UPLOAD_STATUSES),
-            )
-        )
+    active_account_reservation = _account_has_active_digest_reservation(
+        db,
+        account_id=owner_id,
+        content_sha256=content_sha256,
     )
     adds_account_document = not (
         account_already_owns_document or active_account_reservation
@@ -501,6 +560,80 @@ def reserve_upload(
             message="The account's storage limit would be exceeded",
             kind=FailureKind.PERMISSION_DENIED,
         )
+
+    # Library-side capacity: billed to the requester's own account only when
+    # they do not already own the digest. The project owner's side is never
+    # double-charged for the same Document (account-unique union).
+    library_reserved_reference_count = 0
+    library_reserved_size_kb = 0
+    if library_billing_account_id is not None:
+        library_user = get_quota_user(db, user_id=library_billing_account_id)
+        library_limits = get_user_entitlements(db, library_user).limits.as_limits()
+        requester_owns_document = (
+            existing_document_id is not None
+            and resource_usage_repository.contains_document(
+                db,
+                user_id=library_billing_account_id,
+                document_id=existing_document_id,
+            )
+        )
+        requester_has_library_membership = existing_document_id is not None and bool(
+            db.scalar(
+                select(func.count(LibraryPaper.id)).where(
+                    LibraryPaper.user_id == library_billing_account_id,
+                    LibraryPaper.document_id == existing_document_id,
+                )
+            )
+        )
+        requester_active_reservation = _account_has_active_digest_reservation(
+            db,
+            account_id=library_billing_account_id,
+            content_sha256=content_sha256,
+        )
+        adds_library_document = not (
+            requester_owns_document
+            or requester_has_library_membership
+            or requester_active_reservation
+        )
+        if adds_library_document:
+            library_reserved_reference_count = 1
+            library_reserved_size_kb = math.ceil(input_size_bytes / 1024)
+            library_reserved_count, library_active_size_kb = (
+                _active_library_reservations(
+                    db,
+                    owner_id=library_billing_account_id,
+                )
+            )
+            library_completed_count = (
+                resource_usage_repository.completed_reference_count(
+                    db, user_id=library_user.id
+                )
+            )
+            if (
+                library_completed_count
+                + library_reserved_count
+                + library_reserved_reference_count
+                > library_limits[PAPER_UPLOAD_KEY]
+            ):
+                raise AppError(
+                    code="paper_quota_exceeded",
+                    message="The account's paper limit has been reached",
+                    kind=FailureKind.PERMISSION_DENIED,
+                )
+            library_completed_size_kb = resource_usage_repository.completed_storage_kb(
+                db, user_id=library_user.id
+            )
+            if (
+                library_completed_size_kb
+                + library_active_size_kb
+                + library_reserved_size_kb
+                > library_limits[KB_SIZE_KEY]
+            ):
+                raise AppError(
+                    code="storage_quota_exceeded",
+                    message="The account's storage limit would be exceeded",
+                    kind=FailureKind.PERMISSION_DENIED,
+                )
 
     if project is not None:
         linked_count = int(
@@ -547,6 +680,10 @@ def reserve_upload(
         reserved_size_kb=reserved_size_kb,
         reserved_reference_count=reserved_reference_count,
         content_sha256=content_sha256,
+        add_to_library=add_to_library,
+        library_quota_owner_id=library_billing_account_id,
+        library_reserved_reference_count=library_reserved_reference_count,
+        library_reserved_size_kb=library_reserved_size_kb,
         original_filename=original_filename,
         display_name=display_name,
         source_kind=source_kind,

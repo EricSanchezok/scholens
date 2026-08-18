@@ -15,6 +15,7 @@ from app.shared.domain import AppError, FailureKind
 from app.shared.infrastructure.persistence import Base
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -66,6 +67,12 @@ class PaperUploadSession(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    add_to_library: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
     object_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="prepared", server_default="prepared"
@@ -136,6 +143,7 @@ class SqlPaperUploadGateway:
                 or model.size_bytes != request.size_bytes
                 or model.sha256 != request.sha256
                 or model.project_id != request.project_id
+                or model.add_to_library != request.add_to_library
             ):
                 raise AppError(
                     code="paper_upload_metadata_mismatch",
@@ -160,6 +168,7 @@ class SqlPaperUploadGateway:
             filename=request.filename,
             size_bytes=request.size_bytes,
             sha256=request.sha256,
+            add_to_library=request.add_to_library,
             object_key=object_key,
             status="prepared",
             expires_at=expires_at,
@@ -313,6 +322,7 @@ def _record(model: PaperUploadSession) -> PaperUploadRecord:
         filename=model.filename,
         size_bytes=model.size_bytes,
         sha256=model.sha256,
+        add_to_library=model.add_to_library,
         object_key=model.object_key,
         status=model.status,
         expires_at=model.expires_at,
