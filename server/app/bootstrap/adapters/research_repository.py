@@ -498,10 +498,16 @@ class ResearchRepository:
         quote = create.quote_text
         if not quote:
             return
-        document = getattr(access, "document", None)
-        raw_content = getattr(document, "raw_content", None) if document else None
+        raw_content = access.document.raw_content
         if not raw_content:
-            return
+            raise AppError(
+                code="annotation_content_unavailable",
+                message=(
+                    "Parsed document content is unavailable; use a PDF text "
+                    "anchor or retry after parsing completes"
+                ),
+                kind=FailureKind.CONFLICT,
+            )
         window = raw_content[position.start_offset : position.end_offset]
         if _normalize_whitespace(window) != _normalize_whitespace(quote):
             raise AppError(

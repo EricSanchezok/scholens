@@ -8,6 +8,7 @@ import pytest
 
 from app.bootstrap.adapters.citation_provider import CitationProviderResult
 from app.bootstrap.workflows.pdf_postprocess import (
+    PdfPostprocessResolution,
     PdfPostprocessSnapshot,
     PdfPostprocessWorkflow,
 )
@@ -140,3 +141,40 @@ async def test_pdf_postprocess_resolves_before_finalize_command() -> None:
     assert callbacks.resolution is not None
     assert callbacks.resolution.doi == "10.1/example"  # type: ignore[union-attr]
     assert callbacks.resolution.journal == "Journal"  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
+async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> None:
+    events: list[str] = []
+    callbacks = _Callbacks(events)
+
+    class MismatchedProvider(_Provider):
+        def deterministic(self, **_kwargs: object) -> CitationProviderResult:
+            events.append("external")
+            return CitationProviderResult(
+                patch=CitationMetadataPatch(),
+                filled_fields={},
+                identity_mismatch=True,
+            )
+
+        def agentic(self, **_kwargs: object) -> CitationProviderResult:
+            raise AssertionError("identity mismatch must stop metadata recovery")
+
+    workflow = PdfPostprocessWorkflow(
+        executor=_Executor(_Capabilities(callbacks)),  # type: ignore[arg-type]
+        reader=_Reader(events),
+        provider=MismatchedProvider(events),  # type: ignore[arg-type]
+        operation_factory=OperationContextFactory(),
+    )
+
+    job_id = uuid4()
+    result = await workflow.complete(
+        actor=_actor(),
+        operation=_operation(),
+        job_id=job_id,
+        payload={"task_id": str(job_id)},
+    )
+
+    assert result.value == "done"
+    assert events == ["read", "external", "finalize"]
+    assert callbacks.resolution == PdfPostprocessResolution()

@@ -118,6 +118,7 @@ class PdfPostprocessWorkflow:
         fields: CitationFields,
     ) -> PdfPostprocessResolution:
         deterministic_patch = CitationMetadataPatch()
+        identity_mismatch = False
         try:
             deterministic = self._provider.deterministic(
                 actor=actor,
@@ -125,13 +126,14 @@ class PdfPostprocessWorkflow:
                 fields=fields,
             )
             deterministic_patch = deterministic.patch
+            identity_mismatch = deterministic.identity_mismatch
         except Exception:
             logger.exception("paper.pdf_metadata.deterministic_resolution_failed")
 
         resolved_fields = _apply_patch(fields, deterministic_patch)
         agentic_patch = CitationMetadataPatch()
         missing_fields = bibliographic_gaps(resolved_fields)
-        if missing_fields:
+        if missing_fields and not identity_mismatch:
             try:
                 agentic = self._provider.agentic(
                     actor=actor,

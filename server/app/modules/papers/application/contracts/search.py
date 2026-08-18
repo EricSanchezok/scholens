@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.papers.application.contracts.documents import PublicUtcDateTime
+
 
 class LibraryPaperCollection(BaseModel):
     """All documents readable through personal or Project-based access."""
@@ -117,7 +119,7 @@ class PaperSearchResult(BaseModel):
     authors: list[str] | None
     abstract: str | None
     status: str
-    publish_date: datetime | None
+    publish_date: PublicUtcDateTime | None
     created_at: datetime
     last_accessed_at: datetime
     preview_url: str | None = None

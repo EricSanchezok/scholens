@@ -1462,7 +1462,10 @@ class WorkspaceToolHandlers:
         arguments: BaseModel,
     ) -> ToolOutcome:
         parsed = wc.AcceptProjectInvitationInput.model_validate(arguments)
-        capabilities.projects.validate_invitation_token(raw_token=parsed.token)
+        capabilities.projects.validate_invitation_token(
+            actor=context.actor,
+            raw_token=parsed.token,
+        )
         state = {
             "token_hash": hashlib.sha256(parsed.token.encode()).hexdigest(),
             "actor": context.actor.id,
@@ -1943,6 +1946,12 @@ class WorkspaceToolHandlers:
                 code="paper_ingestion_cancel_not_allowed",
                 message="Completed paper ingestions cannot be cancelled",
                 kind=FailureKind.CONFLICT,
+            )
+        if job.status == "cancelled":
+            return self._completed(
+                action="paper_ingestion_cancelled",
+                affected_resources=[f"job:{parsed.job_id}"],
+                changed=False,
             )
         challenge = await asyncio.to_thread(
             self._executor.command,

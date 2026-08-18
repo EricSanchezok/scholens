@@ -14,6 +14,8 @@ always satisfies.
 
 from __future__ import annotations
 
+from datetime import datetime
+import re
 from typing import Any, cast
 
 import jsonschema
@@ -85,10 +87,33 @@ def _error_sample(
 
 
 def _validator(schema: dict[str, object]) -> jsonschema.Draft202012Validator:
+    format_checker = jsonschema.FormatChecker()
+    rfc3339_datetime = re.compile(
+        r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?"
+        r"(?:[Zz]|[+-]\d{2}:\d{2})$"
+    )
+
+    def strict_datetime(value: object) -> bool:
+        if not isinstance(value, str) or rfc3339_datetime.fullmatch(value) is None:
+            return False
+        normalized = value[:-1] + "+00:00" if value[-1:] in {"Z", "z"} else value
+        try:
+            return datetime.fromisoformat(normalized).tzinfo is not None
+        except ValueError:
+            return False
+
+    format_checker.checks("date-time")(strict_datetime)
     return jsonschema.Draft202012Validator(
         schema,
-        format_checker=jsonschema.FormatChecker(),
+        format_checker=format_checker,
     )
+
+
+def test_schema_validator_matches_ajv_timezone_requirement() -> None:
+    schema: dict[str, object] = {"type": "string", "format": "date-time"}
+
+    assert list(_validator(schema).iter_errors("2017-01-01T00:00:00"))
+    assert not list(_validator(schema).iter_errors("2017-01-01T00:00:00Z"))
 
 
 def test_catalog_has_56_tools_with_output_models() -> None:

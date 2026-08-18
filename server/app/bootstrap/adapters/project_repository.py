@@ -499,14 +499,15 @@ class ProjectRepository:
             ).all()
         )
 
-    def _accept_invitation(
+    def _require_invitation_acceptance(
         self,
         db: Session,
         *,
         invitation: ProjectInvitation | None,
         user_id: int,
         email: str,
-    ) -> ProjectCollaborator:
+    ) -> tuple[ProjectInvitation, ProjectCollaborator | None]:
+        """Validate the complete invitation state without mutating it."""
         now = datetime.now(timezone.utc)
         if (
             invitation is None
@@ -561,6 +562,23 @@ class ProjectRepository:
                 ProjectCollaborator.user_id == user_id,
             )
         )
+        return invitation, existing
+
+    def _accept_invitation(
+        self,
+        db: Session,
+        *,
+        invitation: ProjectInvitation | None,
+        user_id: int,
+        email: str,
+    ) -> ProjectCollaborator:
+        invitation, existing = self._require_invitation_acceptance(
+            db,
+            invitation=invitation,
+            user_id=user_id,
+            email=email,
+        )
+        now = datetime.now(timezone.utc)
         if existing is not None:
             invitation.accepted_at = now
             invitation.delivery_lease_id = None
@@ -582,6 +600,28 @@ class ProjectRepository:
         db.flush()
         db.refresh(collaborator)
         return collaborator
+
+    def validate_invitation(
+        self,
+        db: Session,
+        *,
+        invitation_id: uuid.UUID,
+        token_revision: int,
+        user_id: int,
+        email: str,
+    ) -> None:
+        invitation = db.scalar(
+            select(ProjectInvitation).where(
+                ProjectInvitation.id == invitation_id,
+                ProjectInvitation.token_revision == token_revision,
+            )
+        )
+        self._require_invitation_acceptance(
+            db,
+            invitation=invitation,
+            user_id=user_id,
+            email=email,
+        )
 
     def accept_invitation(
         self,

@@ -489,6 +489,13 @@ user's complete accessible paper collection. Protocol code only authenticates,
 builds typed provenance, selects a profile, and delegates to
 `ToolDispatcher`.
 
+Every advertised MCP output schema accepts either the typed success envelope
+or the same structured business-error envelope that the transport emits with
+`isError: true`; strict clients therefore preserve the original Scholens error
+code instead of replacing it with a schema-validation failure. Public
+publication timestamps are serialized as RFC 3339 UTC values even though the
+canonical database column stores calendar metadata without a time zone.
+
 Only progress-owning infrastructure may commit independently. The executable
 architecture whitelist contains the durable Jobs outbox and the dormant Stripe
 webhook ledger; the latter is retained with its payment code but has no mounted

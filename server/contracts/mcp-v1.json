@@ -175,18 +175,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -622,6 +610,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -664,7 +665,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -985,18 +986,6 @@
             "title": "ProjectPapersAddedResponse",
             "type": "object"
           },
-          "ProjectPapersAddedResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectPapersAddedResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectPapersAddedResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -1152,6 +1141,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -1194,7 +1196,7 @@
             "$ref": "#/$defs/ProjectPapersAddedResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectPapersAddedResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -1367,18 +1369,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -1815,6 +1805,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -1857,7 +1860,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -2169,18 +2172,6 @@
             "title": "ProjectPaperCollectedResponse",
             "type": "object"
           },
-          "ProjectPaperCollectedResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectPaperCollectedResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectPaperCollectedResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -2336,6 +2327,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -2378,7 +2382,7 @@
             "$ref": "#/$defs/ProjectPaperCollectedResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectPaperCollectedResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -2452,18 +2456,6 @@
               "already_exists"
             ],
             "title": "CollectPublicPaperResponse",
-            "type": "object"
-          },
-          "CollectPublicPaperResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "CollectPublicPaperResponseToolErrorResult",
             "type": "object"
           },
           "CollectPublicPaperResponseToolStructuredResult": {
@@ -2862,6 +2854,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -2904,7 +2909,7 @@
             "$ref": "#/$defs/CollectPublicPaperResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/CollectPublicPaperResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -3033,18 +3038,6 @@
               "resource_uri"
             ],
             "title": "CommentActionOutput",
-            "type": "object"
-          },
-          "CommentActionOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "CommentActionOutputToolErrorResult",
             "type": "object"
           },
           "CommentActionOutputToolStructuredResult": {
@@ -3475,6 +3468,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -3517,7 +3523,7 @@
             "$ref": "#/$defs/CommentActionOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/CommentActionOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -4956,18 +4962,6 @@
             "title": "ThreadActionOutput",
             "type": "object"
           },
-          "ThreadActionOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ThreadActionOutputToolErrorResult",
-            "type": "object"
-          },
           "ThreadActionOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -5123,6 +5117,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -5165,7 +5172,7 @@
             "$ref": "#/$defs/ThreadActionOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ThreadActionOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -5488,18 +5495,6 @@
             "title": "LibraryTagResponse",
             "type": "object"
           },
-          "LibraryTagResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryTagResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryTagResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -5655,6 +5650,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -5697,7 +5705,7 @@
             "$ref": "#/$defs/LibraryTagResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryTagResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -6215,18 +6223,6 @@
             "title": "ProjectToolResponse",
             "type": "object"
           },
-          "ProjectToolResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectToolResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectToolResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -6382,6 +6378,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -6424,7 +6433,7 @@
             "$ref": "#/$defs/ProjectToolResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectToolResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -6623,18 +6632,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -7070,6 +7067,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -7112,7 +7122,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -7286,18 +7296,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -7733,6 +7731,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -7775,7 +7786,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -7949,18 +7960,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -8396,6 +8395,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -8438,7 +8450,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -8612,18 +8624,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -9059,6 +9059,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -9101,7 +9114,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -9275,18 +9288,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -9722,6 +9723,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -9764,7 +9778,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -10896,18 +10910,6 @@
             "title": "ResearchItemResponse",
             "type": "object"
           },
-          "ResearchItemResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ResearchItemResponseToolErrorResult",
-            "type": "object"
-          },
           "ResearchItemResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -11097,6 +11099,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -11139,7 +11154,7 @@
             "$ref": "#/$defs/ResearchItemResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ResearchItemResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -11498,18 +11513,6 @@
             "title": "JobResponse",
             "type": "object"
           },
-          "JobResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "JobResponseToolErrorResult",
-            "type": "object"
-          },
           "JobResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -11703,6 +11706,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -11745,7 +11761,7 @@
             "$ref": "#/$defs/JobResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/JobResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -12461,18 +12477,6 @@
             "title": "LibraryPaperResponse",
             "type": "object"
           },
-          "LibraryPaperResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryPaperResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryPaperResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -12702,6 +12706,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -12744,7 +12761,7 @@
             "$ref": "#/$defs/LibraryPaperResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryPaperResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -13042,18 +13059,6 @@
             "title": "LibrarySummaryResponse",
             "type": "object"
           },
-          "LibrarySummaryResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibrarySummaryResponseToolErrorResult",
-            "type": "object"
-          },
           "LibrarySummaryResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -13209,6 +13214,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -13251,7 +13269,7 @@
             "$ref": "#/$defs/LibrarySummaryResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibrarySummaryResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -13523,18 +13541,6 @@
               "updated_at"
             ],
             "title": "DocumentResponse",
-            "type": "object"
-          },
-          "DocumentResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "DocumentResponseToolErrorResult",
             "type": "object"
           },
           "DocumentResponseToolStructuredResult": {
@@ -13967,6 +13973,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -14009,7 +14028,7 @@
             "$ref": "#/$defs/DocumentResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/DocumentResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -14430,18 +14449,6 @@
             "title": "PaperCitationReadOutput",
             "type": "object"
           },
-          "PaperCitationReadOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "PaperCitationReadOutputToolErrorResult",
-            "type": "object"
-          },
           "PaperCitationReadOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -14597,6 +14604,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -14639,7 +14659,7 @@
             "$ref": "#/$defs/PaperCitationReadOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/PaperCitationReadOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -15010,18 +15030,6 @@
             "title": "PaperContentOutput",
             "type": "object"
           },
-          "PaperContentOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "PaperContentOutputToolErrorResult",
-            "type": "object"
-          },
           "PaperContentOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -15177,6 +15185,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -15219,7 +15240,7 @@
             "$ref": "#/$defs/PaperContentOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/PaperContentOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -15270,18 +15291,6 @@
               "expires_in_seconds"
             ],
             "title": "DocumentFileUrlResponse",
-            "type": "object"
-          },
-          "DocumentFileUrlResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "DocumentFileUrlResponseToolErrorResult",
             "type": "object"
           },
           "DocumentFileUrlResponseToolStructuredResult": {
@@ -15680,6 +15689,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -15722,7 +15744,7 @@
             "$ref": "#/$defs/DocumentFileUrlResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/DocumentFileUrlResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -16210,18 +16232,6 @@
             "title": "ProjectToolResponse",
             "type": "object"
           },
-          "ProjectToolResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectToolResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectToolResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -16377,6 +16387,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -16419,7 +16442,7 @@
             "$ref": "#/$defs/ProjectToolResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectToolResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -17551,18 +17574,6 @@
             "title": "ResearchItemResponse",
             "type": "object"
           },
-          "ResearchItemResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ResearchItemResponseToolErrorResult",
-            "type": "object"
-          },
           "ResearchItemResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -17752,6 +17763,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -17794,7 +17818,7 @@
             "$ref": "#/$defs/ResearchItemResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ResearchItemResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -18348,18 +18372,6 @@
             "title": "LibraryPaperIngestionResponse",
             "type": "object"
           },
-          "LibraryPaperIngestionResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryPaperIngestionResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryPaperIngestionResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -18515,6 +18527,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -18557,7 +18582,7 @@
             "$ref": "#/$defs/LibraryPaperIngestionResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryPaperIngestionResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -18730,18 +18755,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -19178,6 +19191,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -19220,7 +19246,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -20071,18 +20097,6 @@
             "title": "ThreadListOutput",
             "type": "object"
           },
-          "ThreadListOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ThreadListOutputToolErrorResult",
-            "type": "object"
-          },
           "ThreadListOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -20238,6 +20252,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -20280,7 +20307,7 @@
             "$ref": "#/$defs/ThreadListOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ThreadListOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -20602,18 +20629,6 @@
             "title": "JobListResponse",
             "type": "object"
           },
-          "JobListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "JobListResponseToolErrorResult",
-            "type": "object"
-          },
           "JobListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -20928,6 +20943,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -20970,7 +20998,7 @@
             "$ref": "#/$defs/JobListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/JobListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -21956,18 +21984,6 @@
             "title": "LibraryPaperListResponse",
             "type": "object"
           },
-          "LibraryPaperListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryPaperListResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryPaperListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -22197,6 +22213,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -22239,7 +22268,7 @@
             "$ref": "#/$defs/LibraryPaperListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryPaperListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -22533,18 +22562,6 @@
             "title": "LibraryTagListResponse",
             "type": "object"
           },
-          "LibraryTagListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryTagListResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryTagListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -22731,6 +22748,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -22773,7 +22803,7 @@
             "$ref": "#/$defs/LibraryTagListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryTagListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -23148,18 +23178,6 @@
             "title": "ProjectListResponse",
             "type": "object"
           },
-          "ProjectListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectListResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -23459,6 +23477,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -23501,7 +23532,7 @@
             "$ref": "#/$defs/ProjectListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -23814,18 +23845,6 @@
             "title": "ProjectInvitationListResponse",
             "type": "object"
           },
-          "ProjectInvitationListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectInvitationListResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectInvitationListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -24072,6 +24091,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -24114,7 +24146,7 @@
             "$ref": "#/$defs/ProjectInvitationListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectInvitationListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -24418,18 +24450,6 @@
             "title": "ProjectCollaboratorListResponse",
             "type": "object"
           },
-          "ProjectCollaboratorListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectCollaboratorListResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectCollaboratorListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -24653,6 +24673,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -24695,7 +24728,7 @@
             "$ref": "#/$defs/ProjectCollaboratorListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectCollaboratorListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -25070,18 +25103,6 @@
             "title": "ProjectPaperListResponse",
             "type": "object"
           },
-          "ProjectPaperListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectPaperListResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectPaperListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -25382,6 +25403,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -25424,7 +25458,7 @@
             "$ref": "#/$defs/ProjectPaperListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectPaperListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -25843,18 +25877,6 @@
             "title": "ProjectListResponse",
             "type": "object"
           },
-          "ProjectListResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectListResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectListResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -26154,6 +26176,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -26196,7 +26231,7 @@
             "$ref": "#/$defs/ProjectListResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectListResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -27606,18 +27641,6 @@
             "title": "ResearchOutputList",
             "type": "object"
           },
-          "ResearchOutputListToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ResearchOutputListToolErrorResult",
-            "type": "object"
-          },
           "ResearchOutputListToolStructuredResult": {
             "properties": {
               "action": {
@@ -27807,6 +27830,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -27849,7 +27885,7 @@
             "$ref": "#/$defs/ResearchOutputListToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ResearchOutputListToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -28234,18 +28270,6 @@
             "title": "PreparePaperUploadResponse",
             "type": "object"
           },
-          "PreparePaperUploadResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "PreparePaperUploadResponseToolErrorResult",
-            "type": "object"
-          },
           "PreparePaperUploadResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -28401,6 +28425,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -28443,7 +28480,7 @@
             "$ref": "#/$defs/PreparePaperUploadResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/PreparePaperUploadResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -28621,18 +28658,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -29069,6 +29094,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -29111,7 +29149,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -29292,18 +29330,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -29739,6 +29765,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -29781,7 +29820,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -29962,18 +30001,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -30409,6 +30436,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -30451,7 +30491,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -30770,18 +30810,6 @@
             "title": "LibraryTagAssignmentResponse",
             "type": "object"
           },
-          "LibraryTagAssignmentResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryTagAssignmentResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryTagAssignmentResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -30937,6 +30965,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -30979,7 +31020,7 @@
             "$ref": "#/$defs/LibraryTagAssignmentResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryTagAssignmentResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -31159,18 +31200,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -31607,6 +31636,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -31649,7 +31691,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -32160,18 +32202,6 @@
             "title": "ResolvedCitationOutput",
             "type": "object"
           },
-          "ResolvedCitationOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ResolvedCitationOutputToolErrorResult",
-            "type": "object"
-          },
           "ResolvedCitationOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -32327,6 +32357,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -32369,7 +32412,7 @@
             "$ref": "#/$defs/ResolvedCitationOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ResolvedCitationOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -32790,18 +32833,6 @@
             "title": "LibraryPaperIngestionResponse",
             "type": "object"
           },
-          "LibraryPaperIngestionResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryPaperIngestionResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryPaperIngestionResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -32957,6 +32988,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -32999,7 +33043,7 @@
             "$ref": "#/$defs/LibraryPaperIngestionResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryPaperIngestionResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -33179,18 +33223,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -33627,6 +33659,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -33669,7 +33714,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -33986,18 +34031,6 @@
             "title": "PaperContentSearchOutput",
             "type": "object"
           },
-          "PaperContentSearchOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "PaperContentSearchOutputToolErrorResult",
-            "type": "object"
-          },
           "PaperContentSearchOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -34153,6 +34186,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -34195,7 +34241,7 @@
             "$ref": "#/$defs/PaperContentSearchOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/PaperContentSearchOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -34755,18 +34801,6 @@
             "title": "KnowledgeSearchOutput",
             "type": "object"
           },
-          "KnowledgeSearchOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "KnowledgeSearchOutputToolErrorResult",
-            "type": "object"
-          },
           "KnowledgeSearchOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -35098,6 +35132,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -35140,7 +35187,7 @@
             "$ref": "#/$defs/KnowledgeSearchOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/KnowledgeSearchOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -35313,18 +35360,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -35761,6 +35796,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -35803,7 +35851,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -35984,18 +36032,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -36431,6 +36467,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -36473,7 +36522,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -36647,18 +36696,6 @@
             ],
             "title": "ConfirmationAwareAction"
           },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
-          },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
               "action": {
@@ -37094,6 +37131,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -37136,7 +37186,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -37265,18 +37315,6 @@
               "resource_uri"
             ],
             "title": "CommentActionOutput",
-            "type": "object"
-          },
-          "CommentActionOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "CommentActionOutputToolErrorResult",
             "type": "object"
           },
           "CommentActionOutputToolStructuredResult": {
@@ -37707,6 +37745,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -37749,7 +37800,7 @@
             "$ref": "#/$defs/CommentActionOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/CommentActionOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -38995,18 +39046,6 @@
             "title": "ThreadActionOutput",
             "type": "object"
           },
-          "ThreadActionOutputToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ThreadActionOutputToolErrorResult",
-            "type": "object"
-          },
           "ThreadActionOutputToolStructuredResult": {
             "properties": {
               "action": {
@@ -39162,6 +39201,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -39204,7 +39256,7 @@
             "$ref": "#/$defs/ThreadActionOutputToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ThreadActionOutputToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -40097,18 +40149,6 @@
             "title": "LibraryPaperResponse",
             "type": "object"
           },
-          "LibraryPaperResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryPaperResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryPaperResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -40338,6 +40378,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -40380,7 +40433,7 @@
             "$ref": "#/$defs/LibraryPaperResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryPaperResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -40710,18 +40763,6 @@
             "title": "LibraryTagResponse",
             "type": "object"
           },
-          "LibraryTagResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "LibraryTagResponseToolErrorResult",
-            "type": "object"
-          },
           "LibraryTagResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -40877,6 +40918,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -40919,7 +40973,7 @@
             "$ref": "#/$defs/LibraryTagResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/LibraryTagResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -41451,18 +41505,6 @@
             "title": "ProjectToolResponse",
             "type": "object"
           },
-          "ProjectToolResponseToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ProjectToolResponseToolErrorResult",
-            "type": "object"
-          },
           "ProjectToolResponseToolStructuredResult": {
             "properties": {
               "action": {
@@ -41618,6 +41660,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -41660,7 +41715,7 @@
             "$ref": "#/$defs/ProjectToolResponseToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ProjectToolResponseToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },
@@ -41858,18 +41913,6 @@
               }
             ],
             "title": "ConfirmationAwareAction"
-          },
-          "ConfirmationAwareActionToolErrorResult": {
-            "properties": {
-              "error": {
-                "$ref": "#/$defs/ToolErrorEnvelope"
-              }
-            },
-            "required": [
-              "error"
-            ],
-            "title": "ConfirmationAwareActionToolErrorResult",
-            "type": "object"
           },
           "ConfirmationAwareActionToolStructuredResult": {
             "properties": {
@@ -42306,6 +42349,19 @@
             "title": "ToolErrorEnvelope",
             "type": "object"
           },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
           "ToolResourceLink": {
             "description": "A stable Scholens resource made available by a tool result.",
             "properties": {
@@ -42348,7 +42404,7 @@
             "$ref": "#/$defs/ConfirmationAwareActionToolStructuredResult"
           },
           {
-            "$ref": "#/$defs/ConfirmationAwareActionToolErrorResult"
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
         ]
       },

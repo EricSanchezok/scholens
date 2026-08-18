@@ -627,8 +627,8 @@ def test_batch_result_rejects_mismatched_single_result() -> None:
 @pytest.mark.parametrize(
     "page_indices",
     [
-        [1, 2, 4],
-        [1, 1, 2],
+        [0, 1, 3],
+        [1, 2],
     ],
 )
 def test_canonical_markdown_rejects_non_contiguous_pages(
@@ -644,3 +644,17 @@ def test_canonical_markdown_rejects_non_contiguous_pages(
         match="pages are not contiguous",
     ):
         canonical_markdown(blocks)
+
+
+def test_canonical_markdown_sorts_out_of_order_blocks_and_allows_same_page() -> None:
+    markdown, offsets = canonical_markdown(
+        [
+            {"type": "text", "text": "Page two", "page_idx": 1},
+            {"type": "text", "text": "Page one A", "page_idx": 0},
+            {"type": "text", "text": "Page one B", "page_idx": 0},
+        ]
+    )
+
+    assert markdown == "Page one A\n\nPage one B\n\nPage two"
+    assert markdown[offsets[1][0] : offsets[1][1]] == "Page one A\n\nPage one B"
+    assert markdown[offsets[2][0] : offsets[2][1]] == "\n\nPage two"

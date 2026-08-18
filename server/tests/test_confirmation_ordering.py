@@ -99,6 +99,22 @@ async def test_cancel_active_ingestion_still_issues_preview() -> None:
     handler._executor.command.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_cancel_cancelled_ingestion_is_idempotent_without_preview() -> None:
+    handler = _handler()
+    handler._executor.query.return_value = MagicMock(status="cancelled")
+    arguments = CancelPaperIngestionInput(job_id=uuid4())
+
+    outcome = await handler.cancel_paper_ingestion(_context(), arguments, "test")
+
+    assert outcome.action is not None
+    assert outcome.action["action"] == "paper_ingestion_cancelled"
+    assert outcome.action["changed"] is False
+    assert outcome.action["affected_resources"] == [f"job:{arguments.job_id}"]
+    handler._executor.command.assert_not_called()
+    handler._ingestion.cancel.assert_not_called()
+
+
 def test_accept_invitation_with_invalid_token_rejects_before_preview() -> None:
     handler = _handler()
     capabilities = MagicMock()
@@ -114,3 +130,7 @@ def test_accept_invitation_with_invalid_token_rejects_before_preview() -> None:
 
     assert excinfo.value.code == "project_invitation_invalid"
     capabilities.action_confirmations.issue.assert_not_called()
+    capabilities.projects.validate_invitation_token.assert_called_once_with(
+        actor=_context().actor,
+        raw_token="garbage-token-value",
+    )

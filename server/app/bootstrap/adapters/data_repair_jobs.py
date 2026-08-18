@@ -38,9 +38,9 @@ def enqueue_reprocess_job(
     content-addressed source S3 key. A matching upload reservation is created
     with ``reference_created=False`` so the failure path never tears down an
     existing Library/Project membership, and ``reserved_reference_count=0`` so
-    no reference quota is consumed. The original terminal job row stays
-    immutable; the new job supersedes it through the ordinary worker + webhook
-    path.
+    no reference quota is consumed. Existing storage is not reserved again.
+    The original terminal job row stays immutable; the new job supersedes it
+    through the ordinary worker + webhook path.
     """
     new_job_id = uuid.uuid4()
     base_url = get_webhook_base_url().rstrip("/")
@@ -92,7 +92,9 @@ def enqueue_reprocess_job(
             if reservation is not None
             else source.requested_by_id
         ),
-        reserved_size_kb=document.size_bytes // 1024,
+        # Reprocessing an existing canonical Document does not reserve new
+        # storage; its source object is already charged to the account.
+        reserved_size_kb=0,
         reserved_reference_count=0,
         content_sha256=document.sha256,
         original_filename=document.original_filename,

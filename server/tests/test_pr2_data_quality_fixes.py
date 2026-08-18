@@ -8,6 +8,8 @@ import pytest
 from app.bootstrap.adapters.citation_provider import _enrichment_title_matches
 from app.modules.papers.application.contracts.discovery import EnrichedData
 from app.modules.papers.application.contracts.documents import DocumentUpdate
+from app.modules.papers.application.contracts.documents import DocumentResponse
+from app.shared.domain.enums import DocumentProcessingStatus
 from app.modules.papers.domain.citations import CitationFields
 from pydantic import ValidationError
 
@@ -33,6 +35,36 @@ def test_document_update_rejects_invalid_date_strings() -> None:
         DocumentUpdate(publish_date="not-a-date")
     with pytest.raises(ValidationError):
         DocumentUpdate(publish_date="2017-13-01")
+
+
+def test_document_response_serializes_publish_date_as_rfc3339_utc() -> None:
+    response = DocumentResponse(
+        document_id="10000000-0000-4000-8000-000000000001",
+        original_filename="paper.pdf",
+        mime_type="application/pdf",
+        size_bytes=1024,
+        title="Paper",
+        authors=None,
+        abstract=None,
+        institutions=None,
+        keywords=None,
+        doi=None,
+        journal=None,
+        publisher=None,
+        publish_date=datetime(2017, 1, 1),
+        summary=None,
+        summary_citations=None,
+        starter_questions=None,
+        processing_status=DocumentProcessingStatus.COMPLETED,
+        parser_quality="full",
+        parser_warning_code=None,
+        created_at=datetime(2017, 1, 1),
+        updated_at=datetime(2017, 1, 1),
+    )
+
+    assert response.model_dump(mode="json")["publish_date"] == "2017-01-01T00:00:00Z"
+    schema = DocumentResponse.model_json_schema()
+    assert schema["properties"]["publish_date"]["anyOf"][0]["format"] == "date-time"
 
 
 def test_enrichment_title_match_accepts_same_title() -> None:
@@ -68,12 +100,23 @@ def test_enrichment_title_match_tolerates_minor_punctuation_differences() -> Non
     assert _enrichment_title_matches(fields, enriched) is True
 
 
-def test_enrichment_title_match_accepts_missing_enrichment_title() -> None:
+def test_enrichment_title_match_rejects_missing_enrichment_title() -> None:
     fields = CitationFields(title="Attention Is All You Need")
     enriched = EnrichedData(
         publisher="Curran Associates",
         journal=None,
         publication_date=None,
         title=None,
+    )
+    assert _enrichment_title_matches(fields, enriched) is False
+
+
+def test_enrichment_title_match_normalizes_unicode_and_punctuation() -> None:
+    fields = CitationFields(title="Ａttention: Is All You Need?")
+    enriched = EnrichedData(
+        publisher="Curran Associates",
+        journal=None,
+        publication_date=None,
+        title="Attention — Is All You Need!",
     )
     assert _enrichment_title_matches(fields, enriched) is True

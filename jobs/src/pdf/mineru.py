@@ -180,11 +180,9 @@ def canonical_markdown(
             raise ParserContentError(
                 "MinerU content list contains invalid blocks"
             ) from exc
-    if pages_in_order and pages_in_order[0] != 1:
+    unique_pages = set(pages_in_order)
+    if unique_pages and unique_pages != set(range(1, max(unique_pages) + 1)):
         raise ParserContentError("MinerU content pages are not contiguous")
-    for previous, current in zip(pages_in_order, pages_in_order[1:]):
-        if current != previous and current != previous + 1:
-            raise ParserContentError("MinerU content pages are not contiguous")
 
     indexed = list(enumerate(content_list))
     try:

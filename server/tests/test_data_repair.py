@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from types import SimpleNamespace
 from typing import Callable
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+import pytest
 from app.modules.papers.infrastructure.data_repair import ReprocessEnqueuer
 from app.modules.papers.infrastructure.data_repair import SqlDataRepair
+from app.bootstrap.adapters.data_repair_jobs import enqueue_reprocess_job
 
 
 def _repair(
@@ -32,6 +34,7 @@ def _source_job(*, job_id: UUID, requested_by_id: int = 1) -> MagicMock:
     job.correlation_id = uuid4()
     job.origin_operation_id = uuid4()
     job.project_id = None
+    job.status = "completed"
     return job
 
 
@@ -42,37 +45,8 @@ def _document(*, sha256: str = "a" * 64, size_bytes: int = 2048) -> MagicMock:
     document.original_filename = "paper.pdf"
     document.size_bytes = size_bytes
     document.s3_object_key = "documents/a" * 32
+    document.processing_status = "completed"
     return document
-
-
-def test_fix_publish_dates_dry_run_only_counts_candidates() -> None:
-    db = MagicMock()
-    db.scalar.return_value = 3
-
-    result = _repair(db).fix_publish_dates(batch_size=10, apply=False)
-
-    assert result.candidates == 3
-    assert result.fixed == 0
-    db.execute.assert_not_called()
-
-
-def test_fix_publish_dates_applies_bounded_update() -> None:
-    db = MagicMock()
-    db.scalar.return_value = 2
-    document_id = uuid4()
-    selected = MagicMock()
-    selected.all.return_value = [(document_id, "2017-01-01")]
-    db.execute.return_value = selected
-
-    result = _repair(db).fix_publish_dates(batch_size=1, apply=True)
-
-    assert result.candidates == 2
-    assert result.fixed == 1
-    statements = [str(call.args[0]) for call in db.execute.call_args_list]
-    assert "UPDATE scholens.documents" in statements[1]
-    assert db.execute.call_args_list[1].args[1][0]["publish_date"] == datetime(
-        2017, 1, 1
-    )
 
 
 def test_fix_annotation_offsets_dry_run_reports_candidates() -> None:
@@ -141,79 +115,22 @@ def test_fix_annotation_offsets_leaves_unresolvable_quotes_untouched() -> None:
     assert len(db.execute.call_args_list) == 1  # no UPDATE issued
 
 
-def test_purge_bad_citations_dry_run_samples_provider_rows() -> None:
+def test_fix_annotation_offsets_leaves_ambiguous_repeated_quote_untouched() -> None:
     db = MagicMock()
-    document_id = uuid4()
     row = MagicMock()
-    row.id = document_id
-    row.title = "Attention Is All You Need"
-    row.publisher = "Shenzhen Medical Academy of Research and Translation"
-    row.doi = "10.65215/ctdc8e75"
-    row.journal = None
-    row.field_provenance = {"publisher": {"filled_by": "get_paper_citation"}}
+    row.research_item_id = uuid4()
+    row.quote_text = "same quote"
+    row.position = None
+    row.raw_content = "same quote then same quote"
     selected = MagicMock()
     selected.all.return_value = [row]
     db.execute.return_value = selected
 
-    result = _repair(db).purge_bad_citations(batch_size=10, apply=False)
+    result = _repair(db).fix_annotation_offsets(batch_size=10, apply=True)
 
-    assert result.candidates == 1
-    assert result.purged == 0
-    assert str(document_id) in result.sample_document_ids
-
-
-def test_purge_bad_citations_apply_clears_provider_fields_keeps_provenance() -> None:
-    db = MagicMock()
-    document_id = uuid4()
-    row = MagicMock()
-    row.id = document_id
-    row.title = "Attention Is All You Need"
-    row.publisher = "Shenzhen Medical Academy of Research and Translation"
-    row.doi = "10.65215/ctdc8e75"
-    row.journal = "Medical Journal"
-    row.field_provenance = {
-        "publisher": {"filled_by": "get_paper_citation"},
-        "doi": {"filled_by": "resolve_paper_citation"},
-        "journal": {"filled_by": "get_paper_citation"},
-    }
-    selected = MagicMock()
-    selected.all.return_value = [row]
-    db.execute.return_value = selected
-
-    result = _repair(db).purge_bad_citations(batch_size=10, apply=True)
-
-    assert result.candidates == 1
-    assert result.purged == 1
-    assert str(document_id) in result.sample_document_ids
-    statement, params = db.execute.call_args_list[1].args
-    rendered = str(statement)
-    assert "publisher = NULL" in rendered
-    assert "doi = NULL" in rendered
-    assert "journal = NULL" in rendered
-    assert params["document_id"] == document_id
-
-
-def test_purge_bad_citations_apply_skips_non_provider_fields() -> None:
-    db = MagicMock()
-    document_id = uuid4()
-    row = MagicMock()
-    row.id = document_id
-    row.title = "Attention Is All You Need"
-    row.publisher = "Shenzhen Medical Academy of Research and Translation"
-    row.doi = "10.65215/ctdc8e75"
-    row.journal = None
-    # Filled by an agentic/import path — not an external provider, so the
-    # operator command must leave the row alone.
-    row.field_provenance = {"publisher": {"filled_by": "zotero_import"}}
-    selected = MagicMock()
-    selected.all.return_value = [row]
-    db.execute.return_value = selected
-
-    result = _repair(db).purge_bad_citations(batch_size=10, apply=True)
-
-    assert result.candidates == 1
-    assert result.purged == 0
-    assert len(db.execute.call_args_list) == 1  # no UPDATE issued
+    assert result.fixed == 0
+    assert result.unresolved == 1
+    assert len(db.execute.call_args_list) == 1
 
 
 def test_reprocess_contaminated_documents_dry_run_lists_jobs() -> None:
@@ -234,6 +151,10 @@ def test_reprocess_contaminated_documents_dry_run_lists_jobs() -> None:
     assert result.reprocessed == 0
     assert str(job_id) in result.sample_job_ids
     enqueuer.assert_not_called()
+    statement = str(db.execute.call_args.args[0])
+    assert "job.status = 'completed'" in statement
+    assert "document.processing_status = 'completed'" in statement
+    assert "document.processing_job_id = job.id" in statement
 
 
 def test_reprocess_contaminated_documents_apply_delegates_to_enqueuer() -> None:
@@ -246,6 +167,7 @@ def test_reprocess_contaminated_documents_apply_delegates_to_enqueuer() -> None:
     db.execute.return_value = selected
     source_job = _source_job(job_id=job_id)
     document = _document()
+    document.processing_job_id = source_job.id
     db.get.side_effect = [source_job, document, None]
     enqueuer = MagicMock(return_value=True)
 
@@ -264,7 +186,7 @@ def test_reprocess_contaminated_documents_apply_delegates_to_enqueuer() -> None:
     assert kwargs["reservation"] is None
     # The composition adapter owns job/dispatch/reservation creation; the
     # gateway must only locate the rows and delegate.
-    document.processing_status.assert_not_called()
+    assert document.processing_status == "completed"
 
 
 def test_reprocess_contaminated_documents_apply_replay_skips() -> None:
@@ -277,6 +199,7 @@ def test_reprocess_contaminated_documents_apply_replay_skips() -> None:
     db.execute.return_value = selected
     source_job = _source_job(job_id=job_id)
     document = _document()
+    document.processing_job_id = source_job.id
     db.get.side_effect = [source_job, document, None]
     enqueuer = MagicMock(return_value=False)  # idempotency-key replay
 
@@ -306,3 +229,32 @@ def test_reprocess_contaminated_documents_apply_skips_missing_document() -> None
     assert result.candidates == 1
     assert result.reprocessed == 0
     enqueuer.assert_not_called()
+
+
+def test_reprocess_existing_document_does_not_reserve_storage_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock()
+    source = _source_job(job_id=uuid4())
+    document = _document(size_bytes=8 * 1024)
+    persisted_job = MagicMock()
+    enqueue = MagicMock(return_value=SimpleNamespace(created=True, job=persisted_job))
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.job_repository.enqueue",
+        enqueue,
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.get_webhook_base_url",
+        lambda: "http://127.0.0.1:7301",
+    )
+
+    assert enqueue_reprocess_job(
+        db=db,
+        source=source,
+        document=document,
+        reservation=None,
+    )
+
+    created_reservation = db.add.call_args.args[0]
+    assert created_reservation.reserved_size_kb == 0
+    assert created_reservation.reserved_reference_count == 0

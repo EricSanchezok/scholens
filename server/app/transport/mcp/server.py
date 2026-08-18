@@ -239,13 +239,9 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
         action=(dict[str, JsonValue] | None, None),
         resource_links=(list[ToolResourceLink], Field(default_factory=list)),
     )
-    error_envelope = create_model(
-        f"{output_model.__name__}ToolErrorResult",
-        error=(ToolErrorEnvelope, ...),
-    )
     return cast(
         dict[str, object],
-        TypeAdapter(success_envelope | error_envelope).json_schema(),
+        TypeAdapter(success_envelope | ToolErrorResultEnvelope).json_schema(),
     )
 
 

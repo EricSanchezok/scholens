@@ -307,6 +307,14 @@ the reported candidate count reaches zero. It uses ordinary row DML and the
 existing search-vector trigger; the runtime role never receives trigger or
 table DDL privileges.
 
+Two evidence-bound repair commands are dry-run by default and require `--apply`
+to mutate data: `maintenance fix-annotation-offsets` reanchors only a unique
+verbatim quote, leaving missing or repeated quotes unresolved, and
+`maintenance reprocess-contaminated-documents` queues only the current completed
+PDF job when its persisted result object key differs from its canonical
+Document. Both accept `--batch-size N`; rerun the dry-run after each applied
+batch and inspect unresolved samples before taking any manual action.
+
 Useful read-only diagnostics include:
 
 ```bash

@@ -139,6 +139,13 @@ caps the documents handled by one invocation and transaction. It relies on
 normal INSERT permissions and the existing tsvector trigger, never runtime
 trigger DDL.
 
+The `maintenance fix-annotation-offsets` and
+`maintenance reprocess-contaminated-documents` repairs are also bounded and
+dry-run by default. They act only on locally provable candidates: a unique
+verbatim quote for reanchoring, or the current completed PDF job whose result
+object key conflicts with its canonical Document. `--apply` and normal operator
+confirmation are required for writes.
+
 The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
 enabled.
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import difflib
+import unicodedata
 from typing import TYPE_CHECKING
 
 from app.helpers.parser import parse_publication_date
@@ -28,6 +29,7 @@ class CitationProviderResult:
     patch: CitationMetadataPatch
     filled_fields: dict[str, object]
     confidence: float | None = None
+    identity_mismatch: bool = False
 
 
 class CitationMetadataProvider:
@@ -49,18 +51,26 @@ class CitationMetadataProvider:
         fields: CitationFields,
     ) -> CitationProviderResult:
         doi = fields.doi
+        doi_title_verified = False
         if not doi and fields.title:
             doi = self._crossref.find_doi(
                 title=fields.title,
                 authors=fields.authors or None,
             )
+            # Crossref's lookup accepts a DOI only when the returned title is
+            # an exact case-insensitive match for the requested title.
+            doi_title_verified = doi is not None
 
         journal = fields.journal
         publisher = fields.publisher
         publish_date = fields.publish_date
         if doi and (not journal or not publisher or not publish_date):
             enriched = self._crossref.enriched_data(doi=doi)
-            if _enrichment_title_matches(fields, enriched):
+            if _enrichment_title_matches(
+                fields,
+                enriched,
+                allow_missing_title=doi_title_verified,
+            ):
                 journal, publisher, publish_date = _merge_enriched(
                     enriched=enriched,
                     journal=journal,
@@ -68,7 +78,17 @@ class CitationMetadataProvider:
                     publish_date=publish_date,
                 )
             else:
+                # Never combine metadata from a newly discovered work with an
+                # existing DOI. A mismatch on caller-owned DOI metadata is not
+                # enough evidence to overwrite or reinterpret that record.
+                if fields.doi:
+                    return CitationProviderResult(
+                        patch=CitationMetadataPatch(),
+                        filled_fields={},
+                        identity_mismatch=True,
+                    )
                 doi = None
+                doi_title_verified = False
 
         if not doi and fields.title:
             try:
@@ -78,6 +98,7 @@ class CitationMetadataProvider:
                     title=fields.title,
                     authors=fields.authors or None,
                 )
+                doi_title_verified = False
             except AppError as exc:
                 if not _is_skippable_openalex_error(exc):
                     raise
@@ -93,7 +114,11 @@ class CitationMetadataProvider:
                 if not _is_skippable_openalex_error(exc):
                     raise
             else:
-                if _enrichment_title_matches(fields, enriched):
+                if _enrichment_title_matches(
+                    fields,
+                    enriched,
+                    allow_missing_title=doi_title_verified,
+                ):
                     journal, publisher, publish_date = _merge_enriched(
                         enriched=enriched,
                         journal=journal,
@@ -101,6 +126,12 @@ class CitationMetadataProvider:
                         publish_date=publish_date,
                     )
                 else:
+                    if fields.doi:
+                        return CitationProviderResult(
+                            patch=CitationMetadataPatch(),
+                            filled_fields={},
+                            identity_mismatch=True,
+                        )
                     doi = None
 
         filled: dict[str, object] = {
@@ -199,6 +230,8 @@ def _optional_string(value: object) -> str | None:
 def _enrichment_title_matches(
     fields: CitationFields,
     enriched: EnrichedData | None,
+    *,
+    allow_missing_title: bool = False,
 ) -> bool:
     """Whether an enrichment result plausibly describes the requested paper.
 
@@ -209,18 +242,31 @@ def _enrichment_title_matches(
     this paper; the caller then discards the DOI and leaves the fields
     missing so a later recovery pass can retry.
     """
-    if enriched is None or not enriched.title:
-        return True
     requested = fields.title
     if not requested:
         return True
+    if enriched is None or not enriched.title:
+        return allow_missing_title
+    requested_title = _normalize_title(requested)
+    enriched_title = _normalize_title(enriched.title)
+    if not requested_title or not enriched_title:
+        return False
     return (
         difflib.SequenceMatcher(
             None,
-            requested.casefold(),
-            enriched.title.casefold(),
+            requested_title,
+            enriched_title,
         ).ratio()
         >= 0.8
+    )
+
+
+def _normalize_title(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(
+        "".join(
+            character if character.isalnum() else " " for character in normalized
+        ).split()
     )
 
 
