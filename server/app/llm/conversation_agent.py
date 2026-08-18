@@ -373,7 +373,6 @@ class ScholensConversationAgent:
             initial_packet=initial_packet,
             citation_instructions=grounded_citation_instructions(nonce),
             scope=conversation_scope,
-            attention=self._attention_payload(conversation_scope, context_snapshot),
             connector_names=connector_names,
             connector_issues=connector_issues,
         )
@@ -965,6 +964,13 @@ class ScholensConversationAgent:
         scope: ConversationChatScope,
         snapshot: ConversationContextSnapshot,
     ) -> dict[str, JsonValue]:
+        paper_context = scope.paper_context
+        selection: dict[str, JsonValue] = {}
+        if isinstance(paper_context, SelectedPaperCollection):
+            selection = {
+                "project_ids": [str(item) for item in paper_context.project_ids],
+                "document_ids": [str(item) for item in paper_context.document_ids],
+            }
         return cast(
             dict[str, JsonValue],
             _JSON_VALUE.validate_python(
@@ -977,6 +983,10 @@ class ScholensConversationAgent:
                         "document_id": str(scope.document_id)
                         if scope.document_id
                         else None,
+                    },
+                    "paper_context": {
+                        "kind": paper_context.kind,
+                        **selection,
                     },
                     "papers": [
                         {
@@ -1002,45 +1012,6 @@ class ScholensConversationAgent:
                         for project in snapshot.projects
                     ],
                     "available_document_count": snapshot.available_document_count,
-                }
-            ),
-        )
-
-    @staticmethod
-    def _attention_payload(
-        scope: ConversationChatScope,
-        snapshot: ConversationContextSnapshot,
-    ) -> dict[str, JsonValue]:
-        paper_context = scope.paper_context
-        selection: dict[str, JsonValue] = {}
-        if isinstance(paper_context, SelectedPaperCollection):
-            selection = {
-                "project_ids": [str(item) for item in paper_context.project_ids],
-                "document_ids": [str(item) for item in paper_context.document_ids],
-            }
-        return cast(
-            dict[str, JsonValue],
-            _JSON_VALUE.validate_python(
-                {
-                    "scope_type": scope.scope_type.value,
-                    "gravity": scope.scope_type.value,
-                    "paper_context": {
-                        "kind": paper_context.kind,
-                        **selection,
-                    },
-                    "anchor": {
-                        "project_id": str(scope.project_id)
-                        if scope.project_id
-                        else None,
-                        "document_id": str(scope.document_id)
-                        if scope.document_id
-                        else None,
-                    },
-                    "counts": {
-                        "available_documents": snapshot.available_document_count,
-                        "context_papers": len(snapshot.papers),
-                        "context_projects": len(snapshot.projects),
-                    },
                 }
             ),
         )
@@ -1106,7 +1077,6 @@ class ScholensConversationAgent:
         initial_packet: AnswerPacket,
         citation_instructions: str,
         scope: ConversationChatScope,
-        attention: dict[str, JsonValue],
         connector_names: list[str],
         connector_issues: list[str],
     ) -> str:
@@ -1163,9 +1133,6 @@ The user's current local date and time is {local_now} in {request.time_zone}.
 
 Active context:
 {json.dumps(context, ensure_ascii=False, default=str)}
-
-Attention:
-{json.dumps(attention, ensure_ascii=False, default=str)}
 
 Capabilities:
 connector_tools: {connector_line}

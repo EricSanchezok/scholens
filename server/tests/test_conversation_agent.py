@@ -849,8 +849,10 @@ async def test_instructions_encode_scope_gravity_and_attention(
     assert gravity_phrase in instructions
     assert "not a capability wall" in instructions
     assert f'"scope_type": "{scope_type.value}"' in instructions
-    assert f'"gravity": "{scope_type.value}"' in instructions
     assert f'"kind": "{paper_context.kind}"' in instructions
+    if isinstance(paper_context, SelectedPaperCollection):
+        for item in (*paper_context.project_ids, *paper_context.document_ids):
+            assert str(item) in instructions
 
 
 @pytest.mark.asyncio
