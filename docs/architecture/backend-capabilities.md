@@ -489,6 +489,13 @@ user's complete accessible paper collection. Protocol code only authenticates,
 builds typed provenance, selects a profile, and delegates to
 `ToolDispatcher`.
 
+Every advertised MCP output schema accepts either the typed success envelope
+or the same structured business-error envelope that the transport emits with
+`isError: true`; strict clients therefore preserve the original Scholens error
+code instead of replacing it with a schema-validation failure. Public
+publication timestamps are serialized as RFC 3339 UTC values even though the
+canonical database column stores calendar metadata without a time zone.
+
 Only progress-owning infrastructure may commit independently. The executable
 architecture whitelist contains the durable Jobs outbox and the dormant Stripe
 webhook ledger; the latter is retained with its payment code but has no mounted
@@ -593,10 +600,12 @@ replay and ignore late worker callbacks. The worker reports bounded lifecycle
 stages and heartbeats, while the Server owns terminal timeout/failure policy.
 
 PDF completion persists extracted metadata, generated summary, and summary
-citations on the canonical `Document`. It does not synthesize a paper-scoped
-conversation or a fake user turn. Starting a conversation about a paper is an
-explicit user operation and the conversation references that existing
-Document-owned context.
+citations on the canonical `Document`. It rejects a successful worker result
+whose `s3_object_key` does not match the Document's canonical source key,
+failing the job with `job_result_key_mismatch` instead of persisting content.
+It does not synthesize a paper-scoped conversation or a fake user turn.
+Starting a conversation about a paper is an explicit user operation and the
+conversation references that existing Document-owned context.
 
 ## Billing usage projection
 

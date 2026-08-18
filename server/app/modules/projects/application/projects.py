@@ -216,6 +216,16 @@ class ProjectGateway(Protocol):
         email: str,
     ) -> AcceptedProjectInvitation: ...
 
+    def validate_invitation_token(
+        self,
+        *,
+        raw_token: str,
+        user_id: int,
+        email: str,
+    ) -> None:
+        """Validate the token and current invitation state without mutation."""
+        ...
+
     def list_invitations(
         self,
         *,
@@ -593,6 +603,14 @@ class Projects:
             ),
         )
         return accepted.project_id
+
+    def validate_invitation_token(self, *, actor: Actor, raw_token: str) -> None:
+        """Validate every acceptance precondition before showing a preview."""
+        self._gateway.validate_invitation_token(
+            raw_token=raw_token,
+            user_id=actor.id,
+            email=actor.email,
+        )
 
     def invitations(
         self,

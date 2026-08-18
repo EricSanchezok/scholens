@@ -260,7 +260,9 @@ async def test_mcp_lists_catalog_tools_and_dispatches_with_bound_actor() -> None
     assert (
         tools_by_name["prepare_paper_upload"]["annotations"]["idempotentHint"] is False
     )
-    assert "result" in tools_by_name["get_project"]["outputSchema"]["properties"]
+    get_project_schema = tools_by_name["get_project"]["outputSchema"]
+    assert "anyOf" in get_project_schema
+    assert len(get_project_schema["anyOf"]) == 2
     assert tools_by_name["get_project"]["inputSchema"]["properties"]["project_id"][
         "description"
     ]

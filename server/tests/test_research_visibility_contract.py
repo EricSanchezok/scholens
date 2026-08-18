@@ -154,7 +154,9 @@ def test_thread_creation_atomically_attaches_initial_flat_comment(
     db = MagicMock(spec=Session)
     monkeypatch.setattr(
         "app.bootstrap.adapters.research_repository.require_document_access",
-        lambda *_args, **_kwargs: object(),
+        lambda *_args, **_kwargs: SimpleNamespace(
+            document=SimpleNamespace(raw_content="Evidence")
+        ),
     )
     item = research_repository.create_annotation_thread(
         db,
@@ -175,6 +177,24 @@ def test_thread_creation_atomically_attaches_initial_flat_comment(
     assert [comment.content for comment in item.annotation_thread.comments] == [
         "This matters."
     ]
+
+
+def test_parsed_text_annotation_requires_canonical_content() -> None:
+    access = SimpleNamespace(document=SimpleNamespace(raw_content=None))
+    create = AnnotationThreadCreate(
+        quote_text="Evidence",
+        position=ParsedTextPosition(start_offset=0, end_offset=8),
+        color="yellow",
+        audience_type=ResearchAudienceType.PERSONAL,
+        audience_project_id=None,
+        content_role=RoleType.USER,
+        initial_comment=None,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        research_repository._validate_quote_position(access, create)
+
+    assert exc_info.value.code == "annotation_content_unavailable"
 
 
 @pytest.mark.parametrize(

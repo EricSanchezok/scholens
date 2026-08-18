@@ -176,6 +176,7 @@ class OpenAlexApiClient:
             publisher=publisher,
             journal=source.display_name if source else None,
             publication_date=work.publication_date,
+            title=work.title,
         )
 
     async def _organization_name(

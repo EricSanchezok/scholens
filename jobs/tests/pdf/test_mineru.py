@@ -578,3 +578,83 @@ def test_transient_error_carries_safe_structured_diagnostics() -> None:
         "http_status": 503,
         "exception_type": "ParserTransientError",
     }
+
+
+def test_batch_result_rejects_mismatched_single_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "data": {
+                    "batch_id": "batch-1",
+                    "extract_result": [
+                        {
+                            "data_id": "other-job",
+                            "state": "done",
+                            "full_zip_url": "https://cdn.example/other.zip",
+                        }
+                    ],
+                },
+            },
+            request=request,
+        )
+
+    client = MinerUClient(
+        _config(),
+        MemoryStateStore(),
+        transport=httpx.MockTransport(handler),
+    )
+
+    async def run() -> None:
+        async with client._api_client() as api_client:
+            await client.get_batch_result(
+                api_client,
+                "batch-1",
+                data_id="job-1",
+            )
+
+    with pytest.raises(
+        ParserTransientError,
+        match="missing the requested document",
+    ) as captured:
+        asyncio.run(run())
+
+    assert captured.value.phase == "poll"
+    assert captured.value.task_id == "batch-1"
+
+
+@pytest.mark.parametrize(
+    "page_indices",
+    [
+        [0, 1, 3],
+        [1, 2],
+    ],
+)
+def test_canonical_markdown_rejects_non_contiguous_pages(
+    page_indices: list[int],
+) -> None:
+    blocks = [
+        {"type": "text", "text": f"Block {page}", "page_idx": page}
+        for page in page_indices
+    ]
+
+    with pytest.raises(
+        ParserContentError,
+        match="pages are not contiguous",
+    ):
+        canonical_markdown(blocks)
+
+
+def test_canonical_markdown_sorts_out_of_order_blocks_and_allows_same_page() -> None:
+    markdown, offsets = canonical_markdown(
+        [
+            {"type": "text", "text": "Page two", "page_idx": 1},
+            {"type": "text", "text": "Page one A", "page_idx": 0},
+            {"type": "text", "text": "Page one B", "page_idx": 0},
+        ]
+    )
+
+    assert markdown == "Page one A\n\nPage one B\n\nPage two"
+    assert markdown[offsets[1][0] : offsets[1][1]] == "Page one A\n\nPage one B"
+    assert markdown[offsets[2][0] : offsets[2][1]] == "\n\nPage two"

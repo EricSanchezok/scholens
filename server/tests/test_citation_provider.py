@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 from app.bootstrap.adapters.citation_provider import CitationMetadataProvider
+from app.modules.papers.application.citations import CitationMetadataPatch
 from app.modules.papers.application.contracts.discovery import EnrichedData
 from app.modules.papers.domain.citations import CitationFields
 from app.shared.application import (
@@ -121,3 +122,30 @@ def test_missing_openalex_connection_keeps_partial_crossref_result() -> None:
     assert result.patch.doi == "10.1000/example"
     assert result.patch.journal == "Crossref Journal"
     assert result.patch.publisher is None
+
+
+def test_existing_doi_title_mismatch_does_not_mix_another_work_metadata() -> None:
+    crossref = MagicMock()
+    crossref.enriched_data.return_value = EnrichedData(
+        title="An unrelated paper",
+        journal="Wrong Journal",
+        publisher="Wrong Publisher",
+        publication_date="2024-01-01",
+    )
+    openalex = MagicMock()
+
+    result = _provider(crossref=crossref, openalex=openalex).deterministic(
+        actor=_actor(),
+        operation=_operation(),
+        fields=CitationFields(
+            title="Attention Is All You Need",
+            authors=["Ada"],
+            doi="10.1000/existing",
+        ),
+    )
+
+    assert result.patch == CitationMetadataPatch()
+    assert result.filled_fields == {}
+    assert result.identity_mismatch is True
+    openalex.resolve_doi_sync.assert_not_called()
+    openalex.enriched_data_sync.assert_not_called()

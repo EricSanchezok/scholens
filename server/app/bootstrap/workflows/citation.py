@@ -143,6 +143,9 @@ class CitationWorkflow:
                     "doi": fields.doi,
                     "journal": fields.journal,
                     "publisher": fields.publisher,
+                    "identity_mismatch": bool(
+                        deterministic and deterministic.identity_mismatch
+                    ),
                 },
             )
         )
@@ -154,6 +157,19 @@ class CitationWorkflow:
                 fields=fields,
                 method="deterministic",
                 missing_fields=[],
+                filled_fields={},
+                confidence=None,
+                steps=steps,
+            )
+
+        if deterministic is not None and deterministic.identity_mismatch:
+            return build_citation_result(
+                document_id=document_id,
+                canonical_style=canonical,
+                style_display=display,
+                fields=fields,
+                method="partial",
+                missing_fields=missing,
                 filled_fields={},
                 confidence=None,
                 steps=steps,

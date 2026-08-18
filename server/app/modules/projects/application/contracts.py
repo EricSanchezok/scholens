@@ -6,7 +6,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
-from app.modules.papers.application.contracts.documents import LibraryOutputResponse
+from app.modules.papers.application.contracts.documents import (
+    LibraryOutputResponse,
+    PublicUtcDateTime,
+)
 
 
 class ProjectSort(StrEnum):
@@ -175,7 +178,7 @@ class ProjectPaperSummaryResponse(BaseModel):
     journal: str | None
     publisher: str | None
     doi: str | None
-    publish_date: datetime | None
+    publish_date: PublicUtcDateTime | None
     file_url: str | None
     in_library: bool
 

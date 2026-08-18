@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -30,6 +31,8 @@ from app.modules.integrations.zotero.infrastructure.import_repository import (
 )
 from app.shared.application import Actor
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 type PageDimensions = tuple[tuple[int, float, float], ...]
 
@@ -253,6 +256,16 @@ def apply_annotation_snapshot(
             if start >= 0 and end >= 0:
                 start_offset = start
                 end_offset = end
+            else:
+                logger.warning(
+                    "zotero.annotations.quote_not_found_skipped",
+                    extra={
+                        "document_id": str(document_id),
+                        "zotero_key": zotero_key,
+                        "quote_chars": len(quote_text),
+                    },
+                )
+                continue
         if page_number is None and start_offset is not None and page_offsets:
             from app.helpers.parser import get_start_page_from_offset
 

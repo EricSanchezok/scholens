@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 import pymupdf
 import pytest
@@ -147,6 +148,7 @@ def _markitdown_document() -> ParsedDocument:
 class _FakeMinerUClient:
     def __init__(self, _config: MinerUConfig) -> None:
         self.state_store = self
+        self.received_data_ids: list[str] = []
 
     async def clear(self, _data_id: str) -> None:
         return None
@@ -158,7 +160,8 @@ class _FakeMinerUClient:
         data_id: str,
         deadline: float | None = None,
     ) -> ParsedDocument:
-        del data_id, deadline
+        del deadline
+        self.received_data_ids.append(data_id)
         return _full_mineru_document()
 
     async def close(self) -> None:
@@ -385,6 +388,53 @@ def test_scanned_pdf_goes_directly_to_mineru(
     assert result.parser_backend == "mineru"
     assert result.parser_quality == "full"
     assert result.parser_archive_s3_key == f"documents/{'e' * 64}/mineru-result.zip"
+
+
+def _recorded_mineru_data_id(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    job_id: str,
+) -> str:
+    instances: list[_FakeMinerUClient] = []
+
+    class _RecordingMinerUClient(_FakeMinerUClient):
+        def __init__(self, config: MinerUConfig) -> None:
+            super().__init__(config)
+            instances.append(self)
+
+    monkeypatch.setattr("src.pdf.pipeline.MinerUClient", _RecordingMinerUClient)
+    _patch_s3(monkeypatch, [])
+    _patch_metadata(monkeypatch, "Scanned paper")
+
+    result = asyncio.run(
+        process_pdf_file(
+            _scanned_pdf(),
+            f"documents/{'e' * 64}/source.pdf",
+            job_id,
+            status_callback=lambda _status: None,
+            mineru_credential_loader=_credential,
+        )
+    )
+
+    assert result.success
+    assert len(instances) == 1
+    assert len(instances[0].received_data_ids) == 1
+    return instances[0].received_data_ids[0]
+
+
+def test_mineru_checkpoint_scope_includes_job_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_data_id = _recorded_mineru_data_id(monkeypatch, job_id="job-123")
+    second_data_id = _recorded_mineru_data_id(monkeypatch, job_id="job-456")
+
+    assert len(first_data_id) == 64
+    assert all(character in "0123456789abcdef" for character in first_data_id)
+    assert first_data_id != second_data_id
+    expected_first = hashlib.sha256(
+        f"job-123:pdf-ingestion:{'e' * 64}:credential-revision-1".encode()
+    ).hexdigest()
+    assert first_data_id == expected_first
 
 
 def test_scanned_pdf_with_mineru_failure_preserves_transient_error(

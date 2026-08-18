@@ -86,10 +86,20 @@ class CrossrefClient:
             and isinstance(container_titles[0], str)
             else None
         )
+        titles = message.get("title")
+        title = (
+            titles[0]
+            if isinstance(titles, Sequence)
+            and not isinstance(titles, (str, bytes))
+            and titles
+            and isinstance(titles[0], str)
+            else None
+        )
         return EnrichedData(
             publisher=publisher if isinstance(publisher, str) else None,
             journal=journal,
             publication_date=_publication_date(message),
+            title=title,
         )
 
 

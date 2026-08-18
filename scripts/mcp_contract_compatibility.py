@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from pathlib import Path
@@ -52,6 +53,84 @@ def _schema_for_openapi(
     return rewrite(schema)
 
 
+def _collect_refs(value: Any, refs: set[str]) -> None:
+    """Collect every ``#/$defs/<name>`` reference inside a schema subtree."""
+    if isinstance(value, str):
+        if value.startswith("#/$defs/"):
+            refs.add(value.removeprefix("#/$defs/"))
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_refs(item, refs)
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_refs(item, refs)
+
+
+def _project_success_envelope(schema: dict[str, Any]) -> dict[str, Any]:
+    """Project an MCP output schema onto its success envelope branch.
+
+    MCP business errors are transported in the same HTTP 200 CallToolResult
+    with ``isError: true``; the OpenAPI 200 projection therefore compares
+    only the success envelope. The error branch stays guarded by
+    ``check-metadata`` and the server conformance suite, so the HTTP-level
+    diff must not treat the additive error branch as a body type change.
+    Schemas without ``anyOf`` (legacy snapshots) pass through unchanged.
+    """
+    branches = schema.get("anyOf")
+    if not isinstance(branches, list):
+        return schema
+    definitions = schema.get("$defs")
+    if not isinstance(definitions, dict):
+        raise ValueError("MCP output schema anyOf requires a $defs object")
+
+    def resolve(branch: Any) -> dict[str, Any]:
+        if not isinstance(branch, dict) or "$ref" not in branch:
+            return branch
+        name = branch["$ref"].removeprefix("#/$defs/")
+        if name not in definitions:
+            raise ValueError(
+                f"MCP output schema anyOf references unknown $defs: {name}"
+            )
+        definition = definitions[name]
+        if not isinstance(definition, dict):
+            raise ValueError(f"MCP $defs/{name} is not an object schema")
+        return definition
+
+    success = None
+    for branch in branches:
+        resolved = resolve(branch)
+        properties = resolved.get("properties")
+        if isinstance(properties, dict) and "result" in properties:
+            success = resolved
+            break
+    if success is None:
+        raise ValueError("MCP output schema anyOf has no success envelope branch")
+
+    projected = copy.deepcopy(success)
+    refs: set[str] = set()
+    _collect_refs(projected, refs)
+    pending = list(refs)
+    needed: dict[str, Any] = {}
+    while pending:
+        name = pending.pop()
+        if name in needed:
+            continue
+        definition = definitions.get(name)
+        if definition is None:
+            raise ValueError(f"MCP success envelope references unknown $defs: {name}")
+        needed[name] = definition
+        nested: set[str] = set()
+        _collect_refs(definition, nested)
+        for nested_name in nested:
+            if nested_name not in needed:
+                pending.append(nested_name)
+    if needed:
+        projected["$defs"] = needed
+    return projected
+
+
 def render_openapi(contract: dict[str, Any]) -> dict[str, Any]:
     components: dict[str, Any] = {}
     paths: dict[str, Any] = {}
@@ -62,6 +141,7 @@ def render_openapi(contract: dict[str, Any]) -> dict[str, Any]:
         output_schema = raw_tool.get("output_schema")
         if not isinstance(input_schema, dict) or not isinstance(output_schema, dict):
             raise ValueError(f"MCP tool {name} requires input and output schemas")
+        output_schema = _project_success_envelope(output_schema)
         paths[f"/tools/{name}"] = {
             "post": {
                 "operationId": name,
