@@ -1941,8 +1941,6 @@ def test_waf_large_body_exceptions_are_path_scoped() -> None:
         {"Name": "GenericLFI_BODY", "ActionToUse": {"Count": {}}},
         {"Name": "GenericRFI_BODY", "ActionToUse": {"Count": {}}},
         {"Name": "CrossSiteScripting_BODY", "ActionToUse": {"Count": {}}},
-        {"Name": "GenericLFI_QUERYARGUMENTS", "ActionToUse": {"Count": {}}},
-        {"Name": "CrossSiteScripting_QUERYARGUMENTS", "ActionToUse": {"Count": {}}},
     ]
     assert resources["LargeBodyPathSet"]["Properties"]["RegularExpressionList"] == [
         "^/mcp$",
@@ -1958,7 +1956,7 @@ def test_waf_large_body_exceptions_are_path_scoped() -> None:
         "^/api/v1/annotation-comments(?:/.*)?$",
         "^/api/v1/library/papers/[^/]+$",
         "^/api/v1/me/translation-preferences$",
-        "^/api/v1/projects(?:/.*)?$",
+        "^/api/v1/projects(?:/[^/]+(?:/data-tables)?)?$",
         "^/api/v1/me/onboarding$",
         "^/api/v1/(?:papers|projects)/[^/]+/audio-overviews$",
         "^/api/v1/search/(?:papers|research)$",
@@ -2012,6 +2010,10 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         "PUT /api/v1/me/integrations/{provider}",
         "PATCH /api/v1/me/profile",
         "PUT /api/v1/me/profile",
+        "POST /api/v1/projects/{project_id}/invitations",
+        "PATCH /api/v1/projects/{project_id}/members/{user_id}",
+        "POST /api/v1/projects/{project_id}/papers",
+        "POST /api/v1/projects/{project_id}/transfer",
     }
 
     openapi = json.loads(
@@ -2029,10 +2031,9 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         return any(pattern.fullmatch(path) for pattern in compiled)
 
     # Every body-bearing write route is classified exactly once. Note: the
-    # broad project and annotation-thread patterns deliberately count-cover
-    # some nested structured endpoints (invitations, members, transfer,
-    # PATCH /annotation-threads/{id}); their enum/UUID bodies cannot trip the
-    # relaxed body rules, so the wider free-text exemption is accepted there.
+    # Annotation edits deliberately stay in the free-text scope because thread
+    # and comment bodies contain user-authored text. Structured project
+    # membership, paper-assignment, and ownership-transfer bodies do not.
     for method, path in body_paths:
         key = f"{method} {path}"
         if exempt(path):
@@ -2074,6 +2075,35 @@ def test_waf_logging_redacts_origin_and_auth_headers() -> None:
     assert {"SingleHeader": {"Name": "x-scholens-origin"}} in redacted
     assert {"SingleHeader": {"Name": "cookie"}} in redacted
     assert {"SingleHeader": {"Name": "authorization"}} in redacted
+    assert logging["LoggingFilter"] == {
+        "DefaultBehavior": "DROP",
+        "Filters": [
+            {
+                "Behavior": "KEEP",
+                "Requirement": "MEETS_ANY",
+                "Conditions": [
+                    {"ActionCondition": {"Action": "BLOCK"}},
+                    {"ActionCondition": {"Action": "COUNT"}},
+                    {"ActionCondition": {"Action": "EXCLUDED_AS_COUNT"}},
+                ],
+            }
+        ],
+    }
+
+
+def test_waf_logs_substitute_request_bodies() -> None:
+    web_acl = load_template("scholens-production.yml")["Resources"]["WebAcl"]
+
+    assert web_acl["Properties"]["DataProtectionConfig"] == {
+        "DataProtections": [
+            {
+                "Field": {"FieldType": "BODY"},
+                "Action": "SUBSTITUTION",
+                "ExcludeRuleMatchDetails": False,
+                "ExcludeRateBasedDetails": False,
+            }
+        ]
+    }
 
 
 def test_waf_never_samples_requests_that_carry_the_origin_secret() -> None:

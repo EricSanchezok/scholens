@@ -39,9 +39,9 @@ under the existing two CRS references (WCU unchanged):
   translation preferences, projects, onboarding, audio-overview instructions,
   search) — get `RuleActionOverrides` turning the five CRS body rules
   (`SizeRestrictions_BODY`, `EC2MetaDataSSRF_BODY`, `GenericLFI_BODY`,
-  `GenericRFI_BODY`, `CrossSiteScripting_BODY`) and the two query-string rules
-  (`GenericLFI_QUERYARGUMENTS`, `CrossSiteScripting_QUERYARGUMENTS`) into
-  Count mode, so legitimate content is logged and metered instead of blocked.
+  `GenericRFI_BODY`, `CrossSiteScripting_BODY`) into Count mode, so legitimate
+  content is logged and metered instead of blocked. Query-string inspection
+  remains enforced because these APIs carry free text in request bodies.
 
 Academic text legitimately contains path-like, URL-like, code-like, and
 metadata-address-like tokens, so CRS body content signatures are a
@@ -60,11 +60,13 @@ the two path sets or appears in the structured whitelist. A new or renamed
 route in neither bucket fails the deployment gate — the WAF classification is
 part of the change that introduces the route.
 
-WAF traffic logs stream to the `aws-waf-logs-scholens-production` CloudWatch
-Logs log group (30-day retention, template-owned) with `x-scholens-origin`,
-`cookie`, and `authorization` redacted. Request sampling stays disabled on the
-Web ACL and every rule because requests carry the origin secret; logging and
-sampling are separate controls. The reader treats a codeless 403 from a
+WAF Block and Count records stream to the `aws-waf-logs-scholens-production`
+CloudWatch Logs log group (30-day retention, template-owned); ordinary allowed
+traffic is dropped by the logging filter. `x-scholens-origin`, `cookie`, and
+`authorization` are redacted, and the Web ACL data-protection policy substitutes
+request bodies. Request sampling stays disabled on the Web ACL and every rule
+because requests carry the origin secret; logging and sampling are separate
+controls. The reader treats a codeless 403 from a
 translation request as `edge_blocked` and shows an actionable explanation
 instead of a duplicated generic title.
 
@@ -75,7 +77,8 @@ instead of a duplicated generic title.
   other body content rules would keep blocking the incident class.
 - A third CRS reference with per-path exclusions. Rejected: every CRS
   reference costs 700 WCUs and the two scopes share one override set, so a
-  third reference would exceed the 1,500-WCU base price without benefit.
+  third reference would add avoidable capacity and pricing overhead without
+  improving the policy boundary.
 - An explicit Allow rule for free-text paths. Rejected: Allow terminates
   evaluation and would skip the IP reputation list and rate limiting.
 - A label-matching pipeline (count rules, then a post rule matching
@@ -96,25 +99,23 @@ New body-bearing public write routes now carry a visible WAF classification
 obligation, enforced by the deployment gate. `ContentFreeTextPathSet` holds
 exactly ten patterns, the per-set service limit; a future free-text route
 must either merge into an existing pattern or add a third regex set joined
-into the same Or statements (no additional WCU). The broad
-`^/api/v1/projects(?:/.*)?$` pattern counts down some nested structured
-endpoints (invitations, members, transfer) whose enum/UUID bodies cannot trip
-the relaxed rules; the drift test's whitelist cross-check keeps that
-over-approximation visible and prevents double classification. WAF log
-ingestion and 30-day retention add CloudWatch Logs cost; the redaction list is
-part of the deployment contract test and must stay complete if more sensitive
-headers appear.
+into the same Or statements (no additional WCU). Project free-text coverage is
+limited to project creation/update and data-table generation; invitations,
+membership changes, paper assignment, and ownership transfer retain full CRS
+inspection. Filtered WAF log ingestion and 30-day retention add CloudWatch Logs
+cost; log filtering, header redaction, and body substitution are deployment
+contract invariants.
 
 ## Validation
 
 - `./scripts/run-gates.sh deployment` — cfn-lint plus deployment contract
-  tests asserting both path sets, the Or/Not scope-downs, the exact seven
-  RuleActionOverrides, the three redacted fields, and the full
+  tests asserting both path sets, the Or/Not scope-downs, the exact five
+  RuleActionOverrides, log filtering, header/body protection, and the full
   OpenAPI-driven classification drift test.
 - `./scripts/run-gates.sh server` and `./scripts/run-gates.sh web` — snapshot
   unchanged, translation unit tests including the codeless-403 mapping, and
   i18n catalog alignment.
 - Post-deploy: the incident paper's `../cwm-sft` selection translates with
   200; the reviewed-large-body metric reports CountedRequests for
-  `GenericLFI_Body`; the WAF log group shows the COUNT record with redacted
-  origin header.
+  `GenericLFI_Body`; the WAF log group shows the COUNT record with a redacted
+  origin header and substituted body.

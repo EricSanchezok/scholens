@@ -469,10 +469,10 @@ common-threat rule set is split by path into two scopes:
   preferences, projects, onboarding, audio-overview instructions, search). On these
   paths the five CRS body rules (`SizeRestrictions_BODY`,
   `EC2MetaDataSSRF_BODY`, `GenericLFI_BODY`, `GenericRFI_BODY`,
-  `CrossSiteScripting_BODY`) and the two query-string rules
-  (`GenericLFI_QUERYARGUMENTS`, `CrossSiteScripting_QUERYARGUMENTS`) run in Count mode,
-  so legitimate academic text containing path-like strings is logged and metered instead
-  of blocked. Academic text legitimately contains `../`-style tokens, so full body
+  `CrossSiteScripting_BODY`) run in Count mode, so legitimate academic text containing
+  path-like strings is logged and metered instead of blocked. Query-string inspection
+  remains enforced because these APIs carry their free text in request bodies. Academic
+  text legitimately contains `../`-style tokens, so full body
   content inspection on those routes is a false-positive source, not protection; the
   application layer still enforces field length caps, JSON parsing, auth, and per-module
   authorization, and the origin/IP-reputation/rate-limit rules remain unchanged.
@@ -484,12 +484,13 @@ or appears in the structured whitelist. A new or renamed route that lands in nei
 bucket fails the deployment gate, which is the WAF classification obligation for the
 change that introduces it.
 
-WAF traffic logs stream to the `aws-waf-logs-scholens-production` CloudWatch Logs log
-group (30-day retention). The `x-scholens-origin`, `cookie`, and `authorization` headers
-are redacted in every log record, so the origin secret never reaches the log group.
-Sampled requests remain disabled on the entire Web ACL and every rule because normal
-requests carry the origin secret; aggregated CloudWatch metrics and WAF logs remain
-enabled. During origin-token rotation, check WAF/CloudTrail access history for
+WAF Block and Count records stream to the `aws-waf-logs-scholens-production` CloudWatch
+Logs log group (30-day retention); ordinary allowed traffic is dropped by the logging
+filter. The `x-scholens-origin`, `cookie`, and `authorization` headers are redacted and
+request bodies are substituted by the Web ACL data-protection policy. Sampled requests
+remain disabled on the entire Web ACL and every rule because normal requests carry the
+origin secret; aggregated CloudWatch metrics remain enabled. During origin-token
+rotation, check WAF/CloudTrail access history for
 unexpected prior visibility before retiring the old version. Verify that the ALB DNS
 name fails without the header and the public hostname succeeds through Cloudflare.
 

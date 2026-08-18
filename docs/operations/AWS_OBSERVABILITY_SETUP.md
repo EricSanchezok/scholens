@@ -60,12 +60,13 @@ this document does not authorize them.
 
 ## WAF logs
 
-The runtime stack streams AWS WAF traffic logs directly to the
+The runtime stack streams AWS WAF Block and Count records directly to the
 `aws-waf-logs-scholens-production` CloudWatch Logs log group (30-day
-retention). The `x-scholens-origin`, `cookie`, and `authorization` headers are
-redacted in every record, so the origin secret never reaches the log group.
-Sampled requests stay disabled across the Web ACL and its rules for the same
-reason; WAF logging and request sampling are separate controls.
+retention); ordinary allowed traffic is dropped by the logging filter. The
+`x-scholens-origin`, `cookie`, and `authorization` headers are redacted, and
+the Web ACL data-protection policy substitutes request bodies. Sampled requests
+stay disabled across the Web ACL and its rules; WAF logging and request
+sampling are separate controls.
 
 When a request is blocked by the edge before it reaches the API, CloudWatch
 Logs Insights against this group is the fastest signal: filter on the request

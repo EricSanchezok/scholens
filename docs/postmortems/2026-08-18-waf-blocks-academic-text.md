@@ -77,7 +77,8 @@ All times CST on 2026-08-18 unless noted.
 No service recovery was needed; the WAF continued to protect all other
 traffic throughout. Resolution is the repo-wide fix delivered in the same
 change set as ADR 0027: two explicit path scopes where free-text content
-routes run the five CRS body rules and two query-string rules in Count mode;
+routes run the five CRS body rules in Count mode while query-string inspection
+stays enforced;
 a deployment-contract drift test that classifies every body-bearing public
 write route; template-owned WAF logging to CloudWatch Logs with origin and
 auth headers redacted; and an `edge_blocked` reader error state with an
@@ -87,13 +88,13 @@ process; no migration is involved.
 ## Corrective actions
 
 - WAF template: `ContentFreeTextPathSet` plus Or-scoped rules with
-  `RuleActionOverrides` for the body and query-string content rules
+  `RuleActionOverrides` for the body content rules
   (`deploy/ecs/scholens-production.yml`).
 - Drift prevention: `test_waf_free_text_path_sets_classify_every_public_write_route`
   cross-checks the committed OpenAPI snapshot against both path sets and the
   structured whitelist (`server/tests/test_deployment_contract.py`).
-- WAF logging with redacted `x-scholens-origin`, `cookie`, and `authorization`
-  headers to `aws-waf-logs-scholens-production`.
+- Filtered WAF Block/Count logging to `aws-waf-logs-scholens-production`, with
+  sensitive headers redacted and request bodies substituted.
 - Reader: codeless 403 → `edge_blocked` state with en/zh copy; unit test and
   Storybook coverage.
 - Minimal IAM additions to the runtime CloudFormation role for WAF logging
