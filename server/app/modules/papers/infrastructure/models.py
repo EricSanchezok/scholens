@@ -46,14 +46,6 @@ class UploadReservation(Base):
             "reserved_reference_count IN (0, 1)",
             name="ck_upload_reservations_reserved_reference_count",
         ),
-        CheckConstraint(
-            "library_reserved_reference_count IN (0, 1)",
-            name="ck_upload_reservations_library_reserved_reference_count",
-        ),
-        CheckConstraint(
-            "library_reserved_size_kb >= 0",
-            name="ck_upload_reservations_library_reserved_size_nonnegative",
-        ),
         Index("ix_upload_reservations_quota_owner", "quota_owner_id"),
         Index("ix_upload_reservations_superseded_by", "superseded_by_id"),
     )

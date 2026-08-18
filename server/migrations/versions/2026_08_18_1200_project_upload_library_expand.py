@@ -83,18 +83,6 @@ def upgrade() -> None:
         unique=False,
         schema="scholens",
     )
-    op.create_check_constraint(
-        "ck_upload_reservations_library_reserved_reference_count",
-        "upload_reservations",
-        "library_reserved_reference_count IN (0, 1)",
-        schema="scholens",
-    )
-    op.create_check_constraint(
-        "ck_upload_reservations_library_reserved_size_nonnegative",
-        "upload_reservations",
-        "library_reserved_size_kb >= 0",
-        schema="scholens",
-    )
     op.add_column(
         "paper_upload_sessions",
         sa.Column(
