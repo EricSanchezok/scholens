@@ -113,6 +113,7 @@ async def _upload_mineru_archive(
 async def _parse_with_mineru(
     pdf_bytes: bytes,
     *,
+    job_id: str,
     document_sha256: str,
     purpose: str,
     credential_loader: MinerUCredentialLoader | None,
@@ -127,7 +128,7 @@ async def _parse_with_mineru(
     credential = await credential_loader()
     config = MinerUConfig.from_runtime(token=credential.token)
     checkpoint_scope = hashlib.sha256(
-        f"{purpose}:{document_sha256}:{credential.revision}".encode()
+        f"{job_id}:{purpose}:{document_sha256}:{credential.revision}".encode()
     ).hexdigest()
     status_callback("Parsing scanned PDF with MinerU")
     client = MinerUClient(config)
@@ -223,6 +224,7 @@ async def process_pdf_file(
             # A scanned PDF has no usable text layer; only MinerU OCR can help.
             document = await _parse_with_mineru(
                 pdf_bytes,
+                job_id=job_id,
                 document_sha256=document_sha256,
                 purpose="pdf-ingestion",
                 credential_loader=mineru_credential_loader,
@@ -247,6 +249,7 @@ async def process_pdf_file(
                 try:
                     document = await _parse_with_mineru(
                         pdf_bytes,
+                        job_id=job_id,
                         document_sha256=document_sha256,
                         purpose="pdf-ingestion",
                         credential_loader=mineru_credential_loader,

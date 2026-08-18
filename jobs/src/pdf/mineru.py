@@ -170,6 +170,22 @@ def _block_markdown(block: dict) -> str:
 def canonical_markdown(
     content_list: list[dict],
 ) -> tuple[str, dict[int, list[int]]]:
+    pages_in_order: list[int] = []
+    for block in content_list:
+        if not isinstance(block, dict):
+            raise ParserContentError("MinerU content list contains invalid blocks")
+        try:
+            pages_in_order.append(int(block.get("page_idx", 0) or 0) + 1)
+        except (TypeError, ValueError) as exc:
+            raise ParserContentError(
+                "MinerU content list contains invalid blocks"
+            ) from exc
+    if pages_in_order and pages_in_order[0] != 1:
+        raise ParserContentError("MinerU content pages are not contiguous")
+    for previous, current in zip(pages_in_order, pages_in_order[1:]):
+        if current != previous and current != previous + 1:
+            raise ParserContentError("MinerU content pages are not contiguous")
+
     indexed = list(enumerate(content_list))
     try:
         indexed.sort(key=lambda item: (int(item[1].get("page_idx", 0) or 0), item[0]))
@@ -618,8 +634,6 @@ class MinerUClient:
         for result in results:
             if isinstance(result, dict) and result.get("data_id") == data_id:
                 return result
-        if len(results) == 1 and isinstance(results[0], dict):
-            return results[0]
         raise ParserTransientError(
             "MinerU batch result is missing the requested document",
             phase="poll",

@@ -106,6 +106,7 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         id=document_id,
         title="upload.pdf",
         processing_status=DocumentProcessingStatus.PROCESSING.value,
+        s3_object_key=f"documents/{'a' * 64}/source.pdf",
     )
     completed_paper = SimpleNamespace(
         id=document_id,
@@ -161,6 +162,7 @@ async def test_pdf_completion_persists_summary_without_creating_conversation(
         job_id=str(job_id),
         raw_content="Parsed paper content",
         page_offset_map={1: [0, 20]},
+        s3_object_key=f"documents/{'a' * 64}/source.pdf",
         metadata=PaperMetadataExtraction(
             title="Canonical paper title",
             summary="The paper's canonical summary.[^1]",
@@ -260,3 +262,97 @@ async def test_terminal_pdf_callback_does_not_rewrite_document(
 
     assert handled.value == {"status": "webhook ignored - job is terminal"}
     update_canonical.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pdf_completion_rejects_mismatched_object_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job_id = uuid4()
+    document_id = uuid4()
+    actor = _actor()
+    upload_job = SimpleNamespace(id=job_id, created_at=datetime.now(UTC))
+    durable_job = SimpleNamespace(
+        operation=JobOperation.PDF_PROCESS.value,
+        requested_by_id=actor.id,
+        status=JobStatus.RUNNING.value,
+    )
+    existing_paper = SimpleNamespace(
+        id=document_id,
+        title="upload.pdf",
+        processing_status=DocumentProcessingStatus.PROCESSING.value,
+        s3_object_key=f"documents/{'a' * 64}/source.pdf",
+    )
+    update_canonical = MagicMock()
+    fail_job = MagicMock()
+
+    monkeypatch.setattr(document_job_callbacks, "AdvisoryLock", _AvailableLock)
+    monkeypatch.setattr(
+        document_job_callbacks.upload_reservation_repository,
+        "get_by",
+        MagicMock(return_value=upload_job),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.upload_reservation_repository,
+        "get",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.job_repository,
+        "require",
+        MagicMock(return_value=durable_job),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.job_repository,
+        "fail",
+        fail_job,
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.zotero_import_repository,
+        "get_by_upload_job_id",
+        MagicMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.document_repository,
+        "find_by_upload_job",
+        MagicMock(return_value=existing_paper),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.document_repository,
+        "update_canonical",
+        update_canonical,
+    )
+    result = PDFProcessingResult(
+        success=True,
+        job_id=str(job_id),
+        raw_content="Parsed paper content",
+        page_offset_map={1: [0, 20]},
+        s3_object_key=f"documents/{'b' * 64}/source.pdf",
+        metadata=PaperMetadataExtraction(title="Canonical paper title"),
+        parser_backend="pymupdf4llm",
+        parser_quality="full",
+        parser_version="test-parser",
+    )
+    operation = OperationContextFactory().root(
+        initiated_by=OperationInitiator.SYSTEM,
+        origin=SchedulerOrigin("pdf_callback_test", uuid4()),
+        credential=None,
+    )
+
+    handled = await document_job_callbacks.handle_paper_processing_webhook(
+        str(job_id),
+        PdfProcessingWebhookData(
+            task_id=str(job_id),
+            status="completed",
+            result=result,
+        ),
+        MagicMock(),
+        actor=actor,
+        operation=operation,
+    )
+
+    update_canonical.assert_not_called()
+    assert fail_job.call_args.kwargs["error_code"] == "job_result_key_mismatch"
+    assert handled.value == {
+        "status": "webhook processed - failed due to object key mismatch"
+    }

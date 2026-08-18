@@ -51,14 +51,15 @@ local extraction failed; its results are persisted as `full` quality. A
 `text_only` result (local fallback or rescue timeout) is persisted so the
 client can warn that layout-dependent content may be incomplete.
 
-MinerU task IDs are checkpointed in Redis under a digest of the job purpose,
-Document content hash, and credential revision. Four consecutive network
-failures switch polling or downloading to a slower bounded backoff; they do not
-end the task before its deadline. Redelivery and later retry attempts with the
-same source and credential resume the same provider task instead of submitting
-another one. A retryable failure retains the checkpoint; successful and
-non-retryable provider outcomes clear it once the provider result no longer
-needs to be resumed.
+MinerU task IDs are checkpointed in Redis under a digest of the job ID, job
+purpose, document content hash, and credential revision, so two jobs parsing
+the same PDF never reuse each other's provider batch or archive. Four
+consecutive network failures switch polling or downloading to a slower bounded
+backoff; they do not end the task before its deadline. Redelivery and later
+retry attempts with the same job, source, and credential resume the same
+provider task instead of submitting another one. A retryable failure retains
+the checkpoint; successful and non-retryable provider outcomes clear it once
+the provider result no longer needs to be resumed.
 
 ## AI reading reflow
 
