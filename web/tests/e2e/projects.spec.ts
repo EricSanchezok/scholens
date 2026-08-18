@@ -447,6 +447,16 @@ test("fills the desktop Project Chat panel symmetrically", async ({ page }) => {
   expect(Math.abs(leftInset - rightInset)).toBeLessThanOrEqual(1);
 });
 
+test("shows the complete Project collaboration roster", async ({ page }) => {
+  const project = projectFixtures[0]!;
+  await page.goto(`/projects/${project.id}`);
+
+  const collaboration = page.locator("[data-project-collaboration]");
+  await expect(collaboration.getByText("2 members")).toBeVisible();
+  await expect(collaboration.getByText("Eric Sanchez")).toBeVisible();
+  await expect(collaboration.getByText("Mina Park")).toBeVisible();
+});
+
 test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/projects/${projectFixtures[0]!.id}`);
@@ -524,7 +534,7 @@ test("does not expose Add papers without paper-management permission", async ({
   );
 });
 
-for (const width of [1440, 768, 430, 390, 320]) {
+for (const width of [2560, 1440, 768, 430, 390, 320]) {
   test(`keeps Project detail within a ${width}px viewport`, async ({
     page,
   }) => {

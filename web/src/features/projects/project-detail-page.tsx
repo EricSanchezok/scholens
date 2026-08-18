@@ -84,6 +84,7 @@ import {
 } from "./api";
 import { AddProjectPapersDialog } from "./components/add-project-papers-dialog";
 import { ManageProjectCollaboratorsDialog } from "./components/manage-project-collaborators-dialog";
+import { ProjectCollaboration } from "./components/project-collaboration";
 import { ProjectFormDialog } from "./components/project-form-dialog";
 import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import {
@@ -264,7 +265,7 @@ function ProjectPaperRow({
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <div className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-2">
+    <div className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-2">
       <Link
         className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
@@ -347,7 +348,7 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
   const format = useFormatter();
   const kind = output.item.kind;
   return (
-    <div className="motion-control hover:bg-hover flex min-w-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-4">
+    <div className="motion-control hover:bg-hover flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-[var(--radius-lg)] px-3 py-4">
       <div className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
         <Icon glyph={outputIcons[kind]} size={20} tone="secondary" />
       </div>
@@ -629,8 +630,6 @@ export function ProjectDetailWorkspace({
   }
   const project = projectQuery.data;
   const memberCount = project.num_collaborators + 1;
-  const ownerInitial =
-    project.owner.display_name.trim().charAt(0).toUpperCase() || "?";
   const renderChat = (onClose?: () => void) => (
     <ProjectChat
       conversationId={state.conversation}
@@ -715,7 +714,7 @@ export function ProjectDetailWorkspace({
         transition={motionTransitions.layout}
       >
         <m.div
-          className="min-w-0 flex-1 overflow-y-auto"
+          className="min-w-0 flex-1 overflow-x-clip overflow-y-auto"
           layout="size"
           transition={motionTransitions.layout}
         >
@@ -863,8 +862,8 @@ export function ProjectDetailWorkspace({
               </TabsList>
 
               <TabsContent className="mt-5" value="overview">
-                <div className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
-                  <section>
+                <div className="grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
+                  <section className="min-w-0">
                     <div className="mb-3 flex items-center justify-between">
                       <h2 className="text-base font-semibold">
                         {t("detail.recentPapers")}
@@ -877,7 +876,7 @@ export function ProjectDetailWorkspace({
                         {t("detail.viewAll")}
                       </Button>
                     </div>
-                    <div className="divide-line-subtle border-line-subtle divide-y border-y">
+                    <div className="divide-line-subtle border-line-subtle min-w-0 divide-y border-y">
                       {papersQuery.data?.items.slice(0, 3).map((paper) => (
                         <ProjectPaperRow
                           canRemove={project.capabilities.manage_papers}
@@ -898,8 +897,8 @@ export function ProjectDetailWorkspace({
                         )}
                     </div>
                   </section>
-                  <div className="grid gap-10">
-                    <section>
+                  <div className="grid min-w-0 gap-10">
+                    <section className="min-w-0">
                       <div className="mb-3 flex items-center justify-between">
                         <h2 className="text-base font-semibold">
                           {t("detail.recentOutputs")}
@@ -912,7 +911,7 @@ export function ProjectDetailWorkspace({
                           {t("detail.viewAll")}
                         </Button>
                       </div>
-                      <div className="divide-line-subtle border-line-subtle divide-y border-y">
+                      <div className="divide-line-subtle border-line-subtle min-w-0 divide-y overflow-hidden border-y">
                         {outputsQuery.data?.items.slice(0, 3).map((output) => (
                           <ProjectOutputRow
                             key={output.item.id}
@@ -937,43 +936,10 @@ export function ProjectDetailWorkspace({
                           )}
                       </div>
                     </section>
-                    <section aria-labelledby="project-collaboration-heading">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h2
-                          className="text-base font-semibold"
-                          id="project-collaboration-heading"
-                        >
-                          {t("detail.collaboration")}
-                        </h2>
-                        {project.capabilities.manage_collaborators ? (
-                          <Button
-                            onClick={() => setCollaboratorsOpen(true)}
-                            size="sm"
-                            variant="ghost"
-                          >
-                            {t("detail.manageMembers")}
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div className="border-line-subtle flex items-center justify-between gap-3 border-y py-3">
-                        <span className="flex min-w-0 items-center gap-3">
-                          <span
-                            aria-hidden="true"
-                            className="bg-pressed grid size-8 shrink-0 place-items-center rounded-full text-sm font-medium"
-                          >
-                            {ownerInitial}
-                          </span>
-                          <span className="text-secondary truncate text-sm">
-                            {project.owner.display_name}
-                          </span>
-                        </span>
-                        <span className="text-secondary shrink-0 text-xs tabular-nums">
-                          {t("detail.memberCount", {
-                            count: memberCount,
-                          })}
-                        </span>
-                      </div>
-                    </section>
+                    <ProjectCollaboration
+                      onManage={() => setCollaboratorsOpen(true)}
+                      project={project}
+                    />
                   </div>
                 </div>
               </TabsContent>

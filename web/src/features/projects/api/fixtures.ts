@@ -40,7 +40,7 @@ export const projectFixtures: Project[] = [
         manage_papers: true,
       },
     },
-    num_collaborators: 3,
+    num_collaborators: 1,
     num_conversations: 7,
     num_outputs: 4,
     num_papers: 18,
@@ -263,7 +263,8 @@ export const projectOutputFixtures: Output[] = [
       audience_type: "project",
       title: projectFixtures[0]!.title,
     },
-    title: "Attention Is All You Need",
+    title:
+      "What matters is designing agents that can thrive within an interconnected ecosystem of peers, specialists, and collaborators they have never encountered",
   },
 ];
 
