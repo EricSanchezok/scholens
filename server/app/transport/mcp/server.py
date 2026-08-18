@@ -196,9 +196,42 @@ def _resource_json(*, uri: str, value: object, continuation_tool: str) -> str:
     )
 
 
+class ToolErrorEnvelope(BaseModel):
+    """Structured error shape returned as ``structuredContent.error``.
+
+    Field names mirror ``ErrorEnvelope.to_dict()`` plus the transport-level
+    ``remediation`` hint. Every field except the required identity keys is
+    optional because the error serializer omits ``None`` values.
+    """
+
+    code: str
+    message: str
+    kind: str
+    retryable: bool
+    remediation: str
+    stage: str | None = None
+    request_id: str | None = None
+    correlation_id: str | None = None
+    diagnostic_id: str | None = None
+    details: dict[str, JsonValue] | None = None
+
+
+class ToolErrorResultEnvelope(BaseModel):
+    """The error branch of the advertised output schema (``{error: ...}``)."""
+
+    error: ToolErrorEnvelope
+
+
 def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
-    """Build the exact transport envelope schema for one typed business result."""
-    envelope = create_model(
+    """Build the exact transport envelope schema for one typed business result.
+
+    The advertised schema accepts both the success envelope (unchanged, with a
+    required ``result``) and the structured error envelope. Strict clients
+    validate ``structuredContent`` against this schema; before the error branch
+    existed, every business error was rejected client-side with -32602.
+    """
+
+    success_envelope = create_model(
         f"{output_model.__name__}ToolStructuredResult",
         result=(output_model, ...),
         sources=(list[ToolSourceCandidate], Field(default_factory=list)),
@@ -206,7 +239,14 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
         action=(dict[str, JsonValue] | None, None),
         resource_links=(list[ToolResourceLink], Field(default_factory=list)),
     )
-    return cast(dict[str, object], envelope.model_json_schema())
+    error_envelope = create_model(
+        f"{output_model.__name__}ToolErrorResult",
+        error=(ToolErrorEnvelope, ...),
+    )
+    return cast(
+        dict[str, object],
+        TypeAdapter(success_envelope | error_envelope).json_schema(),
+    )
 
 
 def _error_remediation(*, kind: FailureKind, code: str) -> str:
