@@ -228,7 +228,10 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
     The advertised schema accepts both the success envelope (unchanged, with a
     required ``result``) and the structured error envelope. Strict clients
     validate ``structuredContent`` against this schema; before the error branch
-    existed, every business error was rejected client-side with -32602.
+    existed, every business error was rejected client-side with -32602. Both
+    branches are objects, so the union also declares the object root required
+    by the negotiated MCP Tool shape instead of relying on clients to infer it
+    from ``anyOf`` references.
     """
 
     success_envelope = create_model(
@@ -239,10 +242,12 @@ def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
         action=(dict[str, JsonValue] | None, None),
         resource_links=(list[ToolResourceLink], Field(default_factory=list)),
     )
-    return cast(
+    schema = cast(
         dict[str, object],
         TypeAdapter(success_envelope | ToolErrorResultEnvelope).json_schema(),
     )
+    schema["type"] = "object"
+    return schema
 
 
 def _error_remediation(*, kind: FailureKind, code: str) -> str:

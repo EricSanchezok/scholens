@@ -120,6 +120,14 @@ def test_catalog_has_56_tools_with_output_models() -> None:
     assert len(_catalog_tools()) == 56
 
 
+def test_every_tool_output_schema_declares_an_object_root() -> None:
+    for definition in _catalog_tools():
+        schema = tool_output_schema(definition.output_model)
+        assert schema.get("type") == "object", (
+            f"{definition.name} does not advertise the MCP object root"
+        )
+
+
 def test_every_tool_output_schema_accepts_the_error_envelope() -> None:
     for definition in _catalog_tools():
         schema = tool_output_schema(definition.output_model)
@@ -191,6 +199,8 @@ async def test_error_response_passes_the_advertised_output_schema_end_to_end() -
             )
 
     tools = listed.json()["result"]["tools"]
+    assert len(tools) == 56
+    assert all(tool["outputSchema"].get("type") == "object" for tool in tools)
     schema = next(
         tool["outputSchema"] for tool in tools if tool["name"] == "list_projects"
     )

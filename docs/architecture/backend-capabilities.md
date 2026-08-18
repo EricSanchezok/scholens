@@ -514,8 +514,11 @@ builds typed provenance, selects a profile, and delegates to
 
 Every advertised MCP output schema accepts either the typed success envelope
 or the same structured business-error envelope that the transport emits with
-`isError: true`; strict clients therefore preserve the original Scholens error
-code instead of replacing it with a schema-validation failure. Public
+`isError: true`. The shared envelope declares `type: object` at its root as
+well as the two object branches, so clients that enforce the MCP
+`2025-11-25` Tool shape do not have to infer the root type through `anyOf`.
+Strict clients therefore preserve the original Scholens error code instead of
+replacing it with a schema-validation failure. Public
 publication timestamps are serialized as RFC 3339 UTC values even though the
 canonical database column stores calendar metadata without a time zone.
 

@@ -28,6 +28,10 @@ def test_public_mcp_snapshot_is_current_and_complete() -> None:
     assert committed == public_mcp_contract()
     assert committed["endpoint"] == "/mcp"
     assert len(committed["tools"]) == 56
+    assert all(
+        tool["output_schema"].get("type") == "object"
+        for tool in committed["tools"].values()
+    )
     assert set(committed["tools"]["get_project"]) >= {
         "input_schema",
         "output_schema",

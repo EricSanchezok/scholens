@@ -667,7 +667,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Accept Project invitation"
@@ -1198,7 +1199,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Add papers to Project"
@@ -1862,7 +1864,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Cancel paper ingestion"
@@ -2384,7 +2387,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Collect Project paper"
@@ -2911,7 +2915,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Collect shared paper"
@@ -3525,7 +3530,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Reply to annotation thread"
@@ -5174,7 +5180,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Create annotation thread"
@@ -5707,7 +5714,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Create Library tag"
@@ -6435,7 +6443,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Create Project"
@@ -7124,7 +7133,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Invite Project collaborator"
@@ -7788,7 +7798,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Delete annotation comment"
@@ -8452,7 +8463,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Delete annotation thread"
@@ -9116,7 +9128,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Delete Library tag"
@@ -9780,7 +9793,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Delete Project"
@@ -11156,7 +11170,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get annotation thread"
@@ -11763,7 +11778,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get job"
@@ -12763,7 +12779,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get Library paper"
@@ -13271,7 +13288,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get Library summary"
@@ -14030,7 +14048,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get paper metadata"
@@ -14661,7 +14680,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Read citation metadata"
@@ -15242,7 +15262,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Read bounded paper text"
@@ -15746,7 +15767,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get temporary paper download URL"
@@ -16444,7 +16466,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get Project manifest"
@@ -17820,7 +17843,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Get research output"
@@ -18589,7 +18613,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Ingest known paper"
@@ -19253,7 +19278,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Leave Project"
@@ -20314,7 +20340,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List annotation threads"
@@ -21005,7 +21032,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List jobs"
@@ -22275,7 +22303,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List Library papers"
@@ -22810,7 +22839,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List Library tags"
@@ -23539,7 +23569,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List paper Projects"
@@ -24153,7 +24184,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "List Project invitations"
@@ -24735,7 +24767,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List Project members"
@@ -25465,7 +25498,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List Project papers"
@@ -26238,7 +26272,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List Projects"
@@ -27892,7 +27927,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "List research outputs"
@@ -28492,7 +28528,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Prepare PDF upload"
@@ -29161,7 +29198,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Remove Library papers"
@@ -29832,7 +29870,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "delete",
       "title": "Remove paper from Project"
@@ -30503,7 +30542,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Remove Project member"
@@ -31032,7 +31072,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Replace Library paper tags"
@@ -31703,7 +31744,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Resend Project invitation"
@@ -32424,7 +32466,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Resolve missing citation metadata"
@@ -33055,7 +33098,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Retry paper ingestion"
@@ -33726,7 +33770,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Revoke Project invitation"
@@ -34253,7 +34298,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Search inside one paper"
@@ -35199,7 +35245,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "read",
       "title": "Search Scholens knowledge"
@@ -35863,7 +35910,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Share Library paper"
@@ -36534,7 +36582,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Transfer Project ownership"
@@ -37198,7 +37247,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Disable Library paper share"
@@ -37812,7 +37862,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Update annotation comment"
@@ -39268,7 +39319,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Update annotation thread"
@@ -40445,7 +40497,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Update Library paper"
@@ -40985,7 +41038,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Rename Library tag"
@@ -41727,7 +41781,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "write",
       "title": "Update Project"
@@ -42416,7 +42471,8 @@
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
           }
-        ]
+        ],
+        "type": "object"
       },
       "required_permission": "manage",
       "title": "Update Project member"
