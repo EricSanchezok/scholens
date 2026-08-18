@@ -374,6 +374,29 @@ authorization, operation provenance, argument validation, idempotent dispatch,
 source registration, citation validation, persistence, limits, and
 cancellation.
 
+The agent instructions encode an autonomy policy instead of a fixed tool
+workflow: prefer solving with available tools when the answer depends on stored
+knowledge, workspace state, user-specific resources, or external evidence;
+inspect before claiming absence or inventing details; and treat clarification
+as a last resort after cheap tool checks. A direct no-tool answer remains
+allowed for purely conversational requests, current-date questions already
+answered by the injected clock, and requests fully covered by server-validated
+materials already in the prompt.
+
+Scope supplies a center of gravity, not a capability wall. Global, project,
+and paper conversations each receive a gravity paragraph that shifts default
+attention (corpus-wide orientation, project-centered research, or deep reading
+of the open paper) while remaining general-purpose and free to broaden or
+narrow when the request needs it and tools permit. Manual conversation
+`paper_context` edits and turn contexts refine attention and are injected into
+the prompt, so the model sees the current selection shape instead of assuming
+a default. The instructions also expose the resolved connector inventory:
+attached connector tool names such as Scholight's `search_papers`, bounded
+omission summaries, and a statement that authorized workspace tools are
+available through their schemas. External literature discovery remains
+connector-owned and is never a built-in catalog tool; when no discovery
+connector is available, the agent says so instead of fabricating a search.
+
 The model receives an injected absolute time for the request's validated IANA
 time zone, so current-date answers do not rely on model memory. Tool results are
 bounded and projected before returning to the model. `Agent.iter()` exposes
