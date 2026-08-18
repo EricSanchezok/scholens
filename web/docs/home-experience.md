@@ -26,7 +26,11 @@ the deliberately deferred boundaries.
   rather than a dismiss-style X. Search, Settings, and New conversation remain
   anchored in one bottom utility row above the safe area.
 - `AppShell` is fixed to the visual viewport and prevents document scrolling.
-  Its `main` element is the sole vertical conversation scroller; the desktop
+  On phones it continuously sizes itself from `visualViewport` (height and
+  offsetTop) so expanding mobile browser chrome after a client-side tab switch
+  cannot clip the bottom Dock; keyboard focus still overrides that measurement
+  with the focused soft-keyboard viewport. Its `main` element is the sole
+  vertical conversation scroller and clips horizontal overflow; the desktop
   Sidebar and mobile Dock remain outside that scroll ownership. Message content
   keeps only the padding needed for its in-flow Composer, so scrolling to the
   latest turn cannot expose an artificial blank page below the answer.
@@ -353,7 +357,8 @@ moves away from the bottom of an overflowing conversation, a 48 px
 return. These are presentation rules only: desktop density, Agent events, and
 persisted conversation data remain unchanged. A single
 `MobileBottomDock` owns the Composer, primary navigation, horizontal safe-area
-gutters, bottom safe area, and stacking layer. The Composer and navigation are
+gutters, bottom safe area with a minimum pad fallback
+(`max(0.5rem, env(safe-area-inset-bottom))`), and stacking layer. The Composer and navigation are
 separated by 4 px inside the Dock rather than behaving as independent floating
 surfaces; a non-layout 20 px fade softens the transition from scrolling content.
 Only one real Composer is mounted at a time. On desktop it rests as a rounded
@@ -394,23 +399,28 @@ The current bottom-navigation destination is represented by both
 This state is not color-only: shape, weight, and semantics remain distinguishable
 in monochrome, Dark appearance, and high-contrast environments.
 
-When the Composer receives focus, the shell freezes the pre-focus viewport
-height and compares it with `visualViewport.height` to distinguish a soft
-keyboard from a hardware keyboard. It deliberately ignores
-`visualViewport.offsetTop`: Android Chrome changes that value while panning a
-focused page, which must not remount the navigation. The offset is still
-applied as a shell translation while the keyboard is open, compensating for
-Chrome's visual-viewport pan so the Dock remains immediately above the
-keyboard. A soft keyboard hides the three-item navigation, removes the Dock's
-bottom safe-area padding, and constrains the shell to the visible viewport.
-Navigation returns only after the visible height recovers or focus leaves the
-Composer, without changing the message scroll position. Browsers without
-`visualViewport` fall back to hiding navigation while the mobile Composer is
-focused.
+The shell keeps the mobile workspace aligned to `visualViewport` at all times,
+not only while the keyboard is open, so tab switches that expand browser chrome
+cannot leave the Dock under the home indicator. When the Composer receives
+focus, the shell freezes the pre-focus viewport height and compares it with
+`visualViewport.height` to distinguish a soft keyboard from a hardware
+keyboard. It deliberately ignores `visualViewport.offsetTop` for the
+open/closed decision: Android Chrome changes that value while panning a focused
+page, which must not remount the navigation. The offset is still applied as a
+shell translation while the keyboard is open, compensating for Chrome's
+visual-viewport pan so the Dock remains immediately above the keyboard. A soft
+keyboard hides the three-item navigation, removes the Dock's bottom safe-area
+padding, and constrains the shell to the focused visible viewport. Navigation
+returns only after the visible height recovers or focus leaves the Composer,
+without changing the message scroll position. Browsers without `visualViewport`
+fall back to hiding navigation while the mobile Composer is focused and to the
+layout viewport height for shell sizing.
 Markdown is rendered as semantic headings, lists, links, code, and
-horizontally scrollable tables; raw HTML is not accepted. The same messages,
-stream reducer, context state, and submission logic are used by desktop and
-mobile.
+horizontally scrollable tables; raw HTML is not accepted. Streaming answers
+disable `text-pretty` so incomplete lines wrap with the same
+`overflow-wrap: anywhere` contract as completed answers; once the stream
+settles, pretty balancing returns. The same messages, stream reducer, context
+state, and submission logic are used by desktop and mobile.
 
 The mobile visual baseline is represented by `Home / Workspace / Mobile Empty`,
 `Mobile Composer Expanded`, `Mobile Conversation`, `Mobile Conversation Large`,

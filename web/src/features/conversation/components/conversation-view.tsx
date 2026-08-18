@@ -158,7 +158,10 @@ function AssistantMessage({
       state === "cancelled"),
   );
   return (
-    <article aria-label={t("assistantMessage")} className="grid gap-2 lg:gap-3">
+    <article
+      aria-label={t("assistantMessage")}
+      className="grid min-w-0 gap-2 lg:gap-3"
+    >
       <ConversationWorklog
         entries={entries}
         failure={failure ?? null}
@@ -180,6 +183,7 @@ function AssistantMessage({
             setSelectedSourceKey(sourceKeys[0]);
             setSourcesOpen(true);
           }}
+          streaming={state === "streaming"}
         />
       )}
       {(completedActionsVisible || terminalRetryVisible || suggestions) && (
@@ -523,7 +527,7 @@ export function ConversationView({
       className={
         layout === "side-panel"
           ? "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden"
-          : "mx-auto flex min-h-full w-full max-w-[var(--layout-conversation-lane)] min-w-0 flex-col px-4 min-[390px]:px-5 sm:px-8 lg:px-0"
+          : "mx-auto flex min-h-full w-full max-w-[var(--layout-conversation-lane)] min-w-0 flex-col overflow-x-clip px-4 min-[390px]:px-5 sm:px-8 lg:px-0"
       }
       ref={rootRef}
     >
