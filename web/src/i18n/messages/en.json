@@ -873,6 +873,7 @@
         "inProgress": "The same passage is already being translated. Try again shortly.",
         "provider": "The translation service is temporarily unavailable.",
         "access": "This paper is no longer available in your library.",
+        "edgeBlocked": "The request was blocked by the network edge. The selected text may contain code or file-path patterns — try translating a different passage.",
         "generic": "Something interrupted the translation. Try again."
       },
       "preferencesError": "Translation preferences could not be saved. Your previous preferences are still active.",

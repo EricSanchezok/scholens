@@ -1101,6 +1101,7 @@ function ReaderDocumentWorkspace({
                           ? {
                               status: translation.state.status,
                               text: translation.state.translatedText,
+                              errorCode: translation.state.errorCode,
                             }
                           : undefined
                       }

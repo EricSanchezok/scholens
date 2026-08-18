@@ -33,6 +33,7 @@ import { cn } from "@/lib/utilities/cn";
 import type { ReaderSelection } from "../components/pdf-page";
 import type { TranslationPreferences } from "./api";
 import type { SelectionTranslationState } from "./use-reader-translation";
+import { translationErrorMessageKey } from "./translation-errors";
 
 export const translationLanguageCodes = [
   "en",
@@ -92,24 +93,6 @@ export function TranslationLanguageSelect({
   );
 }
 
-function errorMessageKey(code: string | undefined) {
-  switch (code) {
-    case "token_quota_exceeded":
-      return "errors.quota" as const;
-    case "translation_rate_limited":
-    case "translation_concurrency_limited":
-      return "errors.busy" as const;
-    case "translation_in_progress":
-      return "errors.inProgress" as const;
-    case "translation_provider_unavailable":
-      return "errors.provider" as const;
-    case "paper_not_found":
-      return "errors.access" as const;
-    default:
-      return "errors.generic" as const;
-  }
-}
-
 function TranslationResult({
   onAnnotate,
   onRetry,
@@ -152,7 +135,7 @@ function TranslationResult({
       <div className="border-line bg-surface rounded-[var(--radius-lg)] border p-4">
         <p className="text-sm font-medium">{t("errors.title")}</p>
         <p className="text-muted mt-1 text-sm">
-          {t(errorMessageKey(state.errorCode))}
+          {t(translationErrorMessageKey(state.errorCode))}
         </p>
         {state.retryable ? (
           <Button

@@ -9,6 +9,7 @@ import {
   AUTO_TRANSLATION_DELAY_MS,
   useReaderTranslation,
 } from "./use-reader-translation";
+import { ApiError } from "@/lib/api";
 
 function selection(text: string): ReaderSelection {
   return {
@@ -97,5 +98,29 @@ describe("useReaderTranslation", () => {
 
     rerender({ source: "second" });
     expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("maps a codeless 403 into the edge_blocked error state", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(translationApi, "streamSelectionTranslation").mockRejectedValue(
+      new ApiError("Request failed with status 403", 403),
+    );
+    const { result } = renderHook(
+      () =>
+        useReaderTranslation({
+          documentId: "10000000-0000-4000-8000-000000000001",
+          selection: selection("contains ../cwm-sft"),
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_TRANSLATION_DELAY_MS);
+    });
+
+    expect(result.current.state.status).toBe("error");
+    expect(result.current.state.errorCode).toBe("edge_blocked");
+    expect(result.current.state.retryable).toBe(false);
+    expect(result.current.state.translatedText).toBe("");
   });
 });
