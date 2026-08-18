@@ -494,6 +494,14 @@ rotation, check WAF/CloudTrail access history for
 unexpected prior visibility before retiring the old version. Verify that the ALB DNS
 name fails without the header and the public hostname succeeds through Cloudflare.
 
+The first runtime release that enables WAF logging depends on the reviewed
+`RuntimeOperationsPolicy` logging actions in
+`scholens-foundation-bootstrap.yml`. An administrator must deploy that bootstrap update
+before the runtime release; the restricted foundation workflow cannot reconcile IAM.
+The release workflow prints the terminal CloudFormation resource events when a runtime
+update fails so a missing bootstrap prerequisite is distinguishable from ECS health or
+application failure.
+
 ## Initial production bootstrap
 
 This sequence records how the retained production resources were first created. It is not
