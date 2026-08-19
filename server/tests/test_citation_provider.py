@@ -64,7 +64,7 @@ def test_crossref_complete_metadata_does_not_read_openalex_credential() -> None:
     assert result.patch.doi == "10.1000/example"
     assert result.patch.journal == "Crossref Journal"
     assert result.patch.publisher == "Crossref Publisher"
-    assert result.patch.publish_date == "2025-02-03T00:00:00"
+    assert result.patch.publish_date == "2025-02-03"
     openalex.resolve_doi_sync.assert_not_called()
     openalex.enriched_data_sync.assert_not_called()
 
@@ -92,7 +92,7 @@ def test_openalex_fills_only_fields_missing_from_crossref() -> None:
 
     assert result.patch.journal == "Crossref Journal"
     assert result.patch.publisher == "OpenAlex Publisher"
-    assert result.patch.publish_date == "2024-11-01T00:00:00"
+    assert result.patch.publish_date == "2024-11-01"
     openalex.resolve_doi_sync.assert_not_called()
     openalex.enriched_data_sync.assert_called_once()
 

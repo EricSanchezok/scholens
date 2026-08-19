@@ -30,6 +30,14 @@ def test_document_update_keeps_datetime_and_none() -> None:
     assert DocumentUpdate(publish_date=None).publish_date is None
 
 
+def test_document_update_accepts_iso_datetime_strings() -> None:
+    # Regression: citation providers produced "2025-02-03T00:00:00" via
+    # datetime.isoformat() round-trips, which parse_publication_date rejected,
+    # making the PDF postprocess callback 500 and leaking concurrency leases.
+    update = DocumentUpdate(publish_date="2025-02-03T00:00:00")
+    assert update.publish_date == datetime(2025, 2, 3, 0, 0, 0)
+
+
 def test_document_update_rejects_invalid_date_strings() -> None:
     with pytest.raises(ValidationError):
         DocumentUpdate(publish_date="not-a-date")

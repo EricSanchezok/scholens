@@ -271,7 +271,12 @@ def extract_pdf_page_dimensions(pdf_bytes: bytes) -> dict[int, tuple[float, floa
 
 
 def parse_publication_date(date_str: str) -> datetime | None:
-    """Parse publication date string in various formats (yyyy-mm-dd, yyyy-mm, yyyy)."""
+    """Parse publication date string in various formats (yyyy-mm-dd, yyyy-mm, yyyy).
+
+    Falls back to ``datetime.fromisoformat`` so ISO datetime strings produced by
+    ``datetime.isoformat()`` round-trips (for example ``2025-02-03T00:00:00``) are
+    accepted instead of rejected by downstream validators.
+    """
     if not date_str:
         return None
 
@@ -279,6 +284,9 @@ def parse_publication_date(date_str: str) -> datetime | None:
     for fmt in formats:
         try:
             return datetime.strptime(date_str, fmt)
-        except ValueError:
+        except (ValueError, TypeError):
             continue
-    return None
+    try:
+        return datetime.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        return None
