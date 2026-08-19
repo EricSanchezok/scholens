@@ -11,6 +11,7 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 import requests
+from pydantic import ValidationError
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.modules.integrations.zotero.application.contracts import (
@@ -473,13 +474,20 @@ class ZoteroBackgroundWorkflow:
                 kind=FailureKind.NOT_FOUND,
             )
         kind = payload.get("operation")
-        callback = (
-            ZoteroImportWebhookData.model_validate(payload)
-            if kind == "import"
-            else ZoteroSyncWebhookData.model_validate(payload)
-            if kind == "sync"
-            else None
-        )
+        try:
+            callback = (
+                ZoteroImportWebhookData.model_validate(payload)
+                if kind == "import"
+                else ZoteroSyncWebhookData.model_validate(payload)
+                if kind == "sync"
+                else None
+            )
+        except ValidationError as exc:
+            raise AppError(
+                code="zotero_callback_payload_invalid",
+                message="Zotero job callback payload is invalid",
+                kind=FailureKind.UNPROCESSABLE,
+            ) from exc
         if callback is None or callback.task_id != job_id:
             raise AppError(
                 code="job_callback_mismatch",

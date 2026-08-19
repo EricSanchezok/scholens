@@ -603,6 +603,38 @@ def test_failed_reflow_does_not_change_document_processing_state() -> None:
     assert artifact.completed_at.tzinfo is UTC
 
 
+def test_reflow_completion_without_result_fails_job_instead_of_raising() -> None:
+    db, job, artifact, document = _scope()
+    callback = DocumentReflowWebhookData.model_construct(
+        task_id=job.id,
+        status="completed",
+        result=None,
+        usage_events=[],
+    )
+    failed_job = SimpleNamespace(status=JobStatus.FAILED.value)
+    with (
+        patch(
+            "app.bootstrap.adapters.document_reflow_callbacks.job_repository.require",
+            return_value=job,
+        ),
+        patch(
+            "app.bootstrap.adapters.document_reflow_callbacks.job_repository.fail",
+            return_value=(failed_job, True),
+        ),
+    ):
+        result = complete_document_reflow(
+            db,
+            actor=_actor(),
+            job_id=job.id,
+            callback=callback,
+        )
+
+    assert result.value == {"accepted": True}
+    assert artifact.status == "failed"
+    assert artifact.error_code == "document_reflow_result_missing"
+    assert document.raw_content == "# Paper\n\nSource paragraph."
+
+
 def test_asset_url_reauthorizes_paper_before_signing_derived_asset() -> None:
     document_id = uuid4()
     access = MagicMock(return_value=SimpleNamespace(title="Paper"))
