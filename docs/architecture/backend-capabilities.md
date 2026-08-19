@@ -41,6 +41,9 @@ Public resources use canonical identifiers:
   is part of the product. Cursors are opaque, signed, user- and query-bound
   keysets with a stable identifier tie-breaker; offset values are not disguised
   as cursors.
+- Job completion always releases the Redis concurrency lease for the finished
+  operation, including when the completion handler itself raises; the lease
+  TTL (default 3600 seconds) covers only process death.
 - Resource creation returns `201`, accepted asynchronous work returns `202`,
   and deletions without a response body return `204`.
 - Project browsing is an aggregate projection: cards expose paper, private
@@ -437,7 +440,7 @@ typed turn contexts. Personal Reader conversations are paper-scoped. Reader
 conversations created while a Project is active remain private to the user but
 are Project-scoped with the open paper in selected document context. Project
 conversation listing may therefore filter by that context document; its signed
-cursor binds actor, Project, context document, and page size. The browser never
+    cursor binds actor, Project, and context document. The browser never
 downloads a broader collection to filter it locally.
 
 Reader annotation collections return self-contained thread timelines. The
@@ -513,14 +516,18 @@ builds typed provenance, selects a profile, and delegates to
 `ToolDispatcher`.
 
 Every advertised MCP output schema accepts either the typed success envelope
-or the same structured business-error envelope that the transport emits with
-`isError: true`. The shared envelope declares `type: object` at its root as
-well as the two object branches, so clients that enforce the MCP
-`2025-11-25` Tool shape do not have to infer the root type through `anyOf`.
-Strict clients therefore preserve the original Scholens error code instead of
-replacing it with a schema-validation failure. Public
-publication timestamps are serialized as RFC 3339 UTC values even though the
-canonical database column stores calendar metadata without a time zone.
+or the structured business-error envelope, which the schema keeps so older
+clients that still receive structured errors are not rejected. Runtime error
+results (`isError: true`) intentionally omit `structuredContent` and carry
+the full JSON error (code, kind, message, retryable, remediation, diagnostic
+ID) only in the content text, so strict MCP clients skip schema validation of
+errors and always surface the original Scholens error instead of a
+-32602 schema-validation failure. The shared envelope declares `type: object`
+at its root as well as the two object branches, so clients that enforce the
+MCP `2025-11-25` Tool shape do not have to infer the root type through
+`anyOf`. Public publication timestamps are serialized as RFC 3339 UTC values
+even though the canonical database column stores calendar metadata without a
+time zone.
 
 Only progress-owning infrastructure may commit independently. The executable
 architecture whitelist contains the durable Jobs outbox and the dormant Stripe
@@ -574,8 +581,9 @@ The Library exposes two deliberately different collections:
 
 `GET /api/v1/library/summary` returns successful Paper and Output counts plus
 the number of current ingestion lifecycles and failed ingestions that require
-attention. Both list endpoints use signed Previous/Next keyset cursors bound to
-user, collection, filters, sort, and limit. Paper sources enter through the discriminated
+attention. Both list endpoints use signed Previous/Next keyset cursors bound
+to user, collection, filters, and sort; page size is a caller preference and
+never binds the cursor. Paper sources enter through the discriminated
 `POST /api/v1/paper-ingestions/sources` contract (`doi`, `arxiv`, or direct PDF
 `url`); URL resolution and PDF validation remain server-owned. Failed jobs are
 retried by creating a new durable job from the persisted source, never by
