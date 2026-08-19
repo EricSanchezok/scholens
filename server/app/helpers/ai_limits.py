@@ -97,7 +97,7 @@ async def enforce_rate_limit(
         return
 
     window_seconds = int(os.getenv("AI_RATE_WINDOW_SECONDS", "60"))
-    user_limit = int(os.getenv("AI_RATE_PER_USER", "60"))
+    user_limit = int(os.getenv("AI_RATE_PER_USER", "120"))
     ip_limit = int(os.getenv("AI_RATE_PER_IP", "120"))
     window = int(time.time()) // window_seconds
     keys = (
@@ -149,12 +149,12 @@ async def acquire_concurrency(
         return AIConcurrencyLease(key="", member=member)
 
     limits = {
-        "interactive": int(os.getenv("AI_MAX_INTERACTIVE_PER_USER", "8")),
-        "background": int(os.getenv("AI_MAX_BACKGROUND_PER_USER", "4")),
-        "audio": int(os.getenv("AI_MAX_AUDIO_PER_USER", "2")),
+        "interactive": int(os.getenv("AI_MAX_INTERACTIVE_PER_USER", "12")),
+        "background": int(os.getenv("AI_MAX_BACKGROUND_PER_USER", "8")),
+        "audio": int(os.getenv("AI_MAX_AUDIO_PER_USER", "4")),
     }
     limit = limits[category]
-    ttl_seconds = int(os.getenv("AI_CONCURRENCY_TTL_SECONDS", "7200"))
+    ttl_seconds = int(os.getenv("AI_CONCURRENCY_TTL_SECONDS", "3600"))
     now_ms = int(time.time() * 1000)
     try:
         acquired = await client.eval(
