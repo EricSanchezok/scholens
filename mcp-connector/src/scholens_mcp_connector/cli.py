@@ -299,7 +299,6 @@ def _local_error_result(
                 text=json.dumps({"error": error}, separators=(",", ":")),
             )
         ],
-        structuredContent={"error": error},
         isError=True,
     )
 
@@ -326,16 +325,35 @@ def _ingestion_retry_result(
     )
 
 
+def _error_from_text(result: types.CallToolResult) -> dict[str, object] | None:
+    """Parse the JSON error envelope from an isError result's text content."""
+    for block in result.content:
+        if not isinstance(block, types.TextContent):
+            continue
+        try:
+            payload = json.loads(block.text)
+        except (TypeError, ValueError):
+            continue
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            return error
+    return None
+
+
 def _remote_ingestion_error_with_retry(
     result: types.CallToolResult,
     *,
     upload_id: str,
     source_arguments: dict[str, object],
 ) -> types.CallToolResult:
-    """Preserve the Scholens error while attaching a safe exact-step continuation."""
-    structured = result.structuredContent
-    remote_error = structured.get("error") if isinstance(structured, dict) else None
-    if not isinstance(remote_error, dict):
+    """Preserve the Scholens error while attaching a safe exact-step continuation.
+
+    Error envelopes carry the JSON error only in the text content (the server
+    intentionally omits ``structuredContent`` on ``isError`` results so strict
+    clients skip schema validation of the error), so parse it from the text.
+    """
+    remote_error = _error_from_text(result)
+    if remote_error is None:
         return _ingestion_retry_result(
             upload_id=upload_id,
             source_arguments=source_arguments,
@@ -368,7 +386,6 @@ def _remote_ingestion_error_with_retry(
                 text=json.dumps({"error": error}, separators=(",", ":")),
             )
         ],
-        structuredContent={"error": error},
         isError=True,
     )
 

@@ -168,7 +168,6 @@ def _error_result(
                 text=json.dumps({"error": error}, separators=(",", ":")),
             )
         ],
-        structuredContent={"error": error},
         isError=True,
     )
 

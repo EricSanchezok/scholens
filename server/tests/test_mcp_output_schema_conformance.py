@@ -15,6 +15,7 @@ always satisfies.
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import re
 from typing import Any, cast
 
@@ -160,7 +161,7 @@ def test_every_tool_output_schema_keeps_the_strict_success_branch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_error_response_passes_the_advertised_output_schema_end_to_end() -> None:
+async def test_error_response_carries_no_structured_content_end_to_end() -> None:
     application, dispatcher = _transport()
     dispatcher.error = AppError(
         kind=FailureKind.PERMISSION_DENIED,
@@ -204,7 +205,18 @@ async def test_error_response_passes_the_advertised_output_schema_end_to_end() -
     schema = next(
         tool["outputSchema"] for tool in tools if tool["name"] == "list_projects"
     )
-    structured = called.json()["result"]["structuredContent"]
-    assert called.json()["result"]["isError"] is True
-    errors = list(_validator(schema).iter_errors(structured))
+    result = called.json()["result"]
+    assert result["isError"] is True
+    assert "structuredContent" not in result
+    error = json.loads(result["content"][0]["text"])["error"]
+    assert error["kind"] == "permission_denied"
+    assert error["code"] == "project_access_denied"
+    assert error["message"] == "Project access denied"
+    assert error["details"] == {"project_id": "missing"}
+    assert error["retryable"] is False
+    assert error["stage"] == "mcp_tool_call"
+    # The advertised schema still accepts the error envelope, so clients that
+    # did receive structuredContent (for example from an older server) are not
+    # rejected either; this branch is kept for compatibility.
+    errors = list(_validator(schema).iter_errors(_error_sample()))
     assert not errors, [error.message for error in errors]
