@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+from typing import Literal
 from app.database.models import (
     JobOperation,
     ResearchAudioOverview,
@@ -91,7 +92,7 @@ def _research_failure_result(
     job_id: uuid.UUID,
     error_code: str,
     user_id: int | None,
-    release_categories: tuple[str, ...],
+    release_categories: tuple[Literal["audio", "background"], ...],
     usage_events: list[TokenUsageEventPayload],
 ) -> JobHandlerResult:
     """Mark a research callback job failed while still releasing its leases.
