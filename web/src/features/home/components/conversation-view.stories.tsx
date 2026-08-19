@@ -725,6 +725,49 @@ export const ProvisionalResponse: Story = {
   },
 };
 
+export const MobileStreamingLongTokenOverflow: Story = {
+  globals: { locale: "zh-CN", viewport: { value: "mobile", isRotated: false } },
+  args: {
+    turns: [],
+    liveTurn: liveTurn({
+      userMessage: "调研一下长标题论文",
+      provisionalItems: [
+        {
+          id: "assistant:long:1",
+          sequence: 1,
+          phase: "provisional",
+          content:
+            "WhereDoesKnowledgeLiveExternalizingMemoryFromLargeLanguageModelsAndTheReasoningCoreHypothesis 是一个很长的英文标题，流式输出时它必须被安全换行而不能把页面撑宽，后面的中文正文也一样要正常换行。",
+        },
+      ],
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() => {
+      const content = canvas.getByText(/WhereDoesKnowledgeLive/);
+      expect(content.closest("li")).toBeVisible();
+      expect(canvas.getByRole("button", { name: /正在思考/ })).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+    });
+    // Streaming provisional rows must never widen the page horizontally,
+    // even with an unbreakable long Latin token and CJK body.
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      window.innerWidth + 1,
+    );
+    const messageContent = canvas
+      .getByText(/WhereDoesKnowledgeLive/)
+      .closest("[data-message-content]");
+    if (messageContent) {
+      await expect(messageContent.scrollWidth).toBeLessThanOrEqual(
+        messageContent.clientWidth + 1,
+      );
+    }
+  },
+};
+
 export const ProgressBeforeTools: Story = {
   args: {
     turns: [],

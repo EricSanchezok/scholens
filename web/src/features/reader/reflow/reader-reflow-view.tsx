@@ -363,7 +363,7 @@ function ReflowBlock({
             block.kind === "equation" &&
               "my-1 max-w-full text-[0.98rem] leading-relaxed",
             block.kind === "caption" &&
-              "text-secondary mx-auto max-w-[40rem] px-3 text-center font-sans text-sm leading-6",
+              "text-secondary mx-auto max-w-[var(--layout-reading-caption)] px-3 text-center font-sans text-sm leading-6",
           )}
         >
           <span className="sr-only">{labels.original}</span>
@@ -567,7 +567,7 @@ export function ReaderReflowView({
     >
       <article
         aria-label={labels.document}
-        className="mx-auto grid w-full max-w-[46rem] min-w-0 grid-cols-[minmax(0,1fr)] gap-5 px-5 pt-9 pb-[max(5rem,env(safe-area-inset-bottom))] sm:gap-6 sm:px-8 sm:pt-12"
+        className="mx-auto grid w-full max-w-[var(--layout-reading-column)] min-w-0 grid-cols-[minmax(0,1fr)] gap-5 px-5 pt-9 pb-[max(5rem,env(safe-area-inset-bottom))] sm:gap-6 sm:px-8 sm:pt-12"
       >
         {blocks.map((block, index) => {
           if (index === firstInfoIndex) {

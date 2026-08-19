@@ -316,11 +316,11 @@ export function ConversationWorklog({
         </span>
       ) : null}
       {open && hasDetails && (
-        <ol className="settled-content-enter border-line relative mt-2 ml-3 grid gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
+        <ol className="settled-content-enter border-line relative mt-2 ml-3 grid min-w-0 gap-2 border-s pb-1 pl-5 lg:mt-1 lg:ml-0 lg:gap-1 lg:border-s-0 lg:pl-0">
           {rows.map((row) =>
             row.kind === "progress" ? (
               <li
-                className="text-foreground relative py-1 [overflow-wrap:anywhere] lg:static"
+                className="text-foreground relative min-w-0 py-1 [overflow-wrap:anywhere] lg:static"
                 key={row.id}
               >
                 <span className="border-line bg-canvas absolute top-0.5 -left-[2.0625rem] grid size-6 place-items-center rounded-full border lg:hidden">

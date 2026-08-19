@@ -420,8 +420,11 @@ Markdown is rendered as semantic headings, lists, links, code, and
 horizontally scrollable tables; raw HTML is not accepted. Streaming answers
 disable `text-pretty` so incomplete lines wrap with the same
 `overflow-wrap: anywhere` contract as completed answers; once the stream
-settles, pretty balancing returns. The same messages, stream reducer, context
-state, and submission logic are used by desktop and mobile.
+settles, pretty balancing returns. Streaming provisional Worklog rows render
+through the same message markdown surface with a complete `min-w-0` chain, so
+long unbreakable titles or URLs wrap inside the lane instead of widening the
+page. The same messages, stream reducer, context state, and submission logic
+are used by desktop and mobile.
 
 The mobile visual baseline is represented by `Home / Workspace / Mobile Empty`,
 `Mobile Composer Expanded`, `Mobile Conversation`, `Mobile Conversation Large`,

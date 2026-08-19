@@ -174,15 +174,18 @@ neutral selection or warning feedback colors.
 ## AI reflow and full translation
 
 The document toolbar exposes an explicit PDF/AI reflow switch. Reflow is a
-continuous, single-column academic Markdown reading surface with a bounded
-measure, semantic block types, overflow-contained tables and code, authorized
-lazy image assets, Light and Dark support, and mobile safe-area padding. Wide
-display equations scroll horizontally inside their block, and tall equation
-glyphs are never vertically clipped by that scroll container. Reflow does
-not preserve PDF page whitespace or restart layout at page boundaries. Every
-block retains ordered MinerU source spans and can return to the exact source
-page and rectangle. Degraded blocks offer a compact PDF fallback and never
-display guessed content.
+continuous, single-column academic Markdown reading surface with a bounded,
+tokenized measure — the article column caps at `layout.reading-column`
+(1104 px) and figure captions at `layout.reading-caption` (960 px), both
+defined in `src/design-system/tokens/dimensions.json` — plus semantic block
+types, overflow-contained tables and code, authorized lazy image assets,
+Light and Dark support, and mobile safe-area padding. Wide display equations
+scroll horizontally inside their block, and tall equation glyphs are never
+vertically clipped by that scroll container. Reflow does not preserve PDF page
+whitespace or restart layout at page boundaries. Every block retains ordered
+MinerU source spans and can return to the exact source page and rectangle.
+Degraded blocks offer a compact PDF fallback and never display guessed
+content.
 
 Reflow headings form one semantic outline shared by both responsive
 presentations. Desktop expands it as a left navigation rail beside the paper;
