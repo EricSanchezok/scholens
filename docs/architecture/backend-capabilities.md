@@ -440,7 +440,7 @@ typed turn contexts. Personal Reader conversations are paper-scoped. Reader
 conversations created while a Project is active remain private to the user but
 are Project-scoped with the open paper in selected document context. Project
 conversation listing may therefore filter by that context document; its signed
-    cursor binds actor, Project, and context document. The browser never
+  cursor binds actor, Project, and context document. The browser never
 downloads a broader collection to filter it locally.
 
 Reader annotation collections return self-contained thread timelines. The

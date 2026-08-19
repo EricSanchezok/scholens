@@ -110,6 +110,50 @@ def test_internal_callback_caps_annotation_content() -> None:
         ZoteroSyncWebhookData.model_validate(payload)
 
 
+@pytest.mark.asyncio
+async def test_invalid_import_callback_payload_raises_unprocessable() -> None:
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(integrations=MagicMock(), zotero=MagicMock())
+        ),
+        operations=MagicMock(),
+        operation_factory=OperationContextFactory(),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await workflow.complete(
+            actor=_actor(),
+            operation=_operation(),
+            job_id=uuid4(),
+            payload={"operation": "import"},
+        )
+
+    assert exc_info.value.code == "zotero_callback_payload_invalid"
+    assert exc_info.value.kind is FailureKind.UNPROCESSABLE
+
+
+@pytest.mark.asyncio
+async def test_invalid_sync_callback_payload_raises_unprocessable() -> None:
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(integrations=MagicMock(), zotero=MagicMock())
+        ),
+        operations=MagicMock(),
+        operation_factory=OperationContextFactory(),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await workflow.complete(
+            actor=_actor(),
+            operation=_operation(),
+            job_id=uuid4(),
+            payload={"operation": "sync"},
+        )
+
+    assert exc_info.value.code == "zotero_callback_payload_invalid"
+    assert exc_info.value.kind is FailureKind.UNPROCESSABLE
+
+
 def test_auto_import_cursor_stops_before_transient_middle_failure() -> None:
     callback = ZoteroSyncWebhookData.model_validate(
         {

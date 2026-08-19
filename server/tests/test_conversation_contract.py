@@ -927,6 +927,54 @@ def test_conversation_list_cursor_is_bound_to_paper_scope() -> None:
     assert exc_info.value.code == "conversation_cursor_expired"
 
 
+def test_conversation_list_cursor_survives_page_size_changes() -> None:
+    gateway = MagicMock()
+    next_position = ConversationListPosition(
+        pinned_at=None,
+        updated_at=datetime.now(timezone.utc),
+        conversation_id=uuid.uuid4(),
+    )
+    gateway.list_conversations.return_value = ConversationPage(
+        items=[],
+        next_position=next_position,
+    )
+    service = Conversations(
+        gateway=gateway,
+        list_cursors=SignedCursorCodec(
+            "test-secret",
+            revision="conversation-list-v2",
+            error_code="conversation_cursor_expired",
+        ),
+        turn_cursors=MagicMock(),
+        journal=MagicMock(spec=OperationJournal),
+    )
+    document_id = uuid.uuid4()
+    first_page = service.list_page(
+        actor=_current_user(),
+        request=ConversationListRequest(
+            scope_type=ConversationScopeType.PAPER,
+            scope_id=document_id,
+            limit=20,
+        ),
+    )
+    assert first_page.next_cursor is not None
+
+    resized = service.list_page(
+        actor=_current_user(),
+        request=ConversationListRequest(
+            scope_type=ConversationScopeType.PAPER,
+            scope_id=document_id,
+            cursor=first_page.next_cursor,
+            limit=50,
+        ),
+    )
+
+    assert resized.next_cursor is not None
+    assert gateway.list_conversations.call_args.kwargs["limit"] == 50
+    position = gateway.list_conversations.call_args.kwargs["position"]
+    assert position.conversation_id == next_position.conversation_id
+
+
 def test_owned_conversation_lookup_filters_id_and_user_in_one_query() -> None:
     db = MagicMock(spec=Session)
     db.scalar.return_value = None
