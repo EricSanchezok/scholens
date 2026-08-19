@@ -54,6 +54,21 @@ class _ResumedJob:
     operation: OperationContext
 
 
+def _lease_categories_for_operation(operation: JobOperation) -> tuple[str, ...]:
+    """Map a job operation to the Redis concurrency categories it holds.
+
+    Used as a safety net: when a completion handler raises, the caller still
+    releases the categories the operation acquired so leases never outlive
+    the job until the TTL. PDF_POSTPROCESS and Zotero jobs do not hold Redis
+    leases (Zotero uses a DB claim) and map to no categories.
+    """
+    return {
+        JobOperation.PDF_PROCESS: ("background",),
+        JobOperation.AUDIO_GENERATE: ("background", "audio"),
+        JobOperation.DATA_TABLE_GENERATE: ("background",),
+    }.get(operation, ())
+
+
 class JobCompletionProcessor:
     def __init__(
         self,
@@ -80,36 +95,70 @@ class JobCompletionProcessor:
         facts = self._causality(job_id=job_id)
         resumed = self._resume(facts=facts, verified=verified)
         job_operation = facts.operation
-        if job_operation is JobOperation.PDF_POSTPROCESS:
-            if resumed.actor is None:
-                raise RuntimeError("pdf_postprocess_job_owner_missing")
-            result = await self._pdf_postprocess.complete(
-                actor=resumed.actor,
-                operation=resumed.operation,
-                job_id=job_id,
-                payload=payload,
+        try:
+            if job_operation is JobOperation.PDF_POSTPROCESS:
+                if resumed.actor is None:
+                    raise RuntimeError("pdf_postprocess_job_owner_missing")
+                result = await self._pdf_postprocess.complete(
+                    actor=resumed.actor,
+                    operation=resumed.operation,
+                    job_id=job_id,
+                    payload=payload,
+                )
+                await self._run_post_commit(result)
+                return result.value
+            if job_operation in {
+                JobOperation.ZOTERO_IMPORT,
+                JobOperation.ZOTERO_SYNC,
+            }:
+                if resumed.actor is None:
+                    raise RuntimeError("zotero_job_owner_missing")
+                return await self._zotero_background.complete(
+                    actor=resumed.actor,
+                    operation=resumed.operation,
+                    job_id=job_id,
+                    payload=payload,
+                )
+            result = await self._executor.command_async(
+                lambda capabilities: capabilities.job_callbacks.complete(
+                    actor=resumed.actor,
+                    operation=resumed.operation,
+                    job_id=job_id,
+                    payload=payload,
+                )
             )
             await self._run_post_commit(result)
             return result.value
-        if job_operation in {JobOperation.ZOTERO_IMPORT, JobOperation.ZOTERO_SYNC}:
-            if resumed.actor is None:
-                raise RuntimeError("zotero_job_owner_missing")
-            return await self._zotero_background.complete(
-                actor=resumed.actor,
-                operation=resumed.operation,
-                job_id=job_id,
-                payload=payload,
-            )
-        result = await self._executor.command_async(
-            lambda capabilities: capabilities.job_callbacks.complete(
-                actor=resumed.actor,
-                operation=resumed.operation,
-                job_id=job_id,
-                payload=payload,
-            )
-        )
-        await self._run_post_commit(result)
-        return result.value
+        except Exception:
+            await self._compensate_leases(facts=facts)
+            raise
+
+    async def _compensate_leases(self, *, facts: JobCausalityFacts) -> None:
+        """Best-effort release of Redis leases when a completion raises.
+
+        The normal path releases leases through ``ReleaseJobConcurrency``
+        post-commit actions. When the handler itself raises, that post-commit
+        never runs; releasing here keeps a failed job from occupying a
+        concurrency slot until the TTL expires.
+        """
+        requested_by_id = facts.requested_by_id
+        if requested_by_id is None:
+            return
+        for category in _lease_categories_for_operation(facts.operation):
+            try:
+                await release_concurrency_by_id(
+                    user_id=requested_by_id,
+                    category=category,
+                    operation_id=str(facts.job_id),
+                )
+            except Exception:
+                logger.exception(
+                    "jobs.completion.lease_compensation_failed",
+                    extra={
+                        "job_id": str(facts.job_id),
+                        "category": category,
+                    },
+                )
 
     def fail(
         self,
