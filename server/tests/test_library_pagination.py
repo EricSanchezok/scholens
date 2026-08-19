@@ -122,6 +122,32 @@ def test_paper_cursor_rejects_cross_query_reuse(
     assert raised.value.code == "library_cursor_invalid"
 
 
+def test_paper_cursor_survives_page_size_changes() -> None:
+    """Page size is a preference, not a filter: the same keyset cursor must
+    remain valid when the caller changes limit between pages."""
+    first_id = uuid4()
+    second_id = uuid4()
+    gateway = MagicMock()
+    outputs = MagicMock()
+    gateway.list.side_effect = [
+        _paper_page(item_id=first_id, has_more=True),
+        _paper_page(item_id=second_id, has_more=False),
+    ]
+    library = _library(gateway=gateway, outputs=outputs)
+
+    first = library.list(actor=_actor(), query="graph", limit=1)
+    resized = library.list(
+        actor=_actor(),
+        query="graph",
+        limit=50,
+        cursor=first.next_cursor,
+    )
+
+    assert resized.total_count == 2
+    assert gateway.list.call_args_list[1].kwargs["position"].id == first_id
+    assert gateway.list.call_args_list[1].kwargs["limit"] == 50
+
+
 def test_outputs_use_the_same_canonical_cursor_envelope() -> None:
     gateway = MagicMock()
     outputs = MagicMock()

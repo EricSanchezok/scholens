@@ -217,7 +217,6 @@ class PaperLibrary:
                 "q": normalized_query,
                 "tag_ids": [str(tag_id) for tag_id in normalized_tags],
                 "sort": sort.value,
-                "limit": limit,
             },
             cursor=cursor,
         )
@@ -239,7 +238,6 @@ class PaperLibrary:
                     "q": normalized_query,
                     "tag_ids": [str(tag_id) for tag_id in normalized_tags],
                     "sort": sort.value,
-                    "limit": limit,
                 },
                 page=page,
                 direction=direction,
@@ -252,7 +250,6 @@ class PaperLibrary:
                     "q": normalized_query,
                     "tag_ids": [str(tag_id) for tag_id in normalized_tags],
                     "sort": sort.value,
-                    "limit": limit,
                 },
                 page=page,
                 direction=direction,
@@ -277,7 +274,6 @@ class PaperLibrary:
             "q": normalized_query,
             "kinds": [kind.value for kind in normalized_kinds],
             "sort": sort.value,
-            "limit": limit,
         }
         direction, position = self._decode_cursor(
             actor=actor,

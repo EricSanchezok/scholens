@@ -120,6 +120,31 @@ def test_project_cursor_rejects_cross_query_reuse(
     assert raised.value.code == "project_cursor_invalid"
 
 
+def test_project_cursor_survives_page_size_changes() -> None:
+    """Page size is a preference, not a filter: the same keyset cursor must
+    remain valid when the caller changes limit between pages."""
+    first_id = uuid4()
+    second_id = uuid4()
+    gateway = MagicMock()
+    gateway.list_projects.side_effect = [
+        _page(item_id=first_id, has_more=True),
+        _page(item_id=second_id, has_more=False),
+    ]
+    projects = _projects(gateway=gateway)
+
+    first = projects.list(actor=_actor(), query="retrieval", limit=1)
+    resized = projects.list(
+        actor=_actor(),
+        query="retrieval",
+        limit=50,
+        cursor=first.next_cursor,
+    )
+
+    assert resized.total_count == 2
+    assert gateway.list_projects.call_args_list[1].kwargs["position"].id == first_id
+    assert gateway.list_projects.call_args_list[1].kwargs["limit"] == 50
+
+
 def test_project_list_uses_one_aggregate_projection_query() -> None:
     db = MagicMock(spec=Session)
     db.scalar.return_value = 0

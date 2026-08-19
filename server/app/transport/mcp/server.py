@@ -256,6 +256,11 @@ def _error_remediation(*, kind: FailureKind, code: str) -> str:
             "Correct the named arguments using this tool's input schema, then call "
             "the same tool again. Do not guess identifiers or opaque cursors."
         )
+    if code.endswith("_cursor_invalid") or code.endswith("_cursor_expired"):
+        return (
+            "Return the exact opaque cursor from the previous response with "
+            "unchanged filters, or omit it to start over."
+        )
     if code in {"confirmation_required", "confirmation_stale"}:
         return (
             "Show the returned impact preview to the user. Call the same tool with "

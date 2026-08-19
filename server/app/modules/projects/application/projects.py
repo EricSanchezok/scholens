@@ -378,7 +378,9 @@ class Projects:
         limit: int = 20,
     ) -> ProjectListResponse:
         normalized_query = query.strip() if query and query.strip() else None
-        filters = {"q": normalized_query, "sort": sort.value, "limit": limit}
+        # keyset pagination positions on (key, id); limit is a page-size
+        # preference, not a filter, so it must not bind the cursor.
+        filters = {"q": normalized_query, "sort": sort.value}
         direction, position = self._decode_cursor(
             actor=actor,
             collection="projects",
@@ -773,7 +775,6 @@ class Projects:
             "project_id": str(project_id),
             "q": normalized_query,
             "sort": sort.value,
-            "limit": limit,
             "load_urls": load_urls,
         }
         direction, position = self._decode_cursor(
@@ -833,7 +834,6 @@ class Projects:
             "q": normalized_query,
             "kinds": [kind.value for kind in normalized_kinds],
             "sort": sort.value,
-            "limit": limit,
         }
         direction, position = self._decode_cursor(
             actor=actor,
