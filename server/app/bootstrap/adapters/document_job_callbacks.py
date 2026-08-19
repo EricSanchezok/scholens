@@ -494,10 +494,19 @@ def _apply_pdf_postprocess(
         )
         updates["field_provenance"] = provenance
     updates["attempted_metadata_at"] = datetime.now(timezone.utc)
+    update, dropped_fields = DocumentUpdate.validate_lenient(updates)
+    if dropped_fields:
+        logger.warning(
+            "document.pdf_postprocess.dropped_invalid_fields",
+            extra={
+                "document_id": str(paper.id),
+                "dropped_fields": dropped_fields,
+            },
+        )
     updated = document_repository.update_canonical(
         db,
         document=paper,
-        update=DocumentUpdate.model_validate(updates),
+        update=update,
         user=actor,
         refresh_result=False,
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from app.bootstrap.adapters.project_documents import project_document_repository
@@ -15,6 +16,8 @@ from app.modules.papers.domain.citations import CitationFields, fields_from_pape
 from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.application import Actor
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 
 class SqlAlchemyCitationMetadataStore:
@@ -95,10 +98,19 @@ class SqlAlchemyCitationMetadataStore:
         if not changes:
             return CitationMetadataWrite(fields_from_paper(paper), changed=False)
 
+        update, dropped_fields = DocumentUpdate.validate_lenient(changes)
+        if dropped_fields:
+            logger.warning(
+                "citation.metadata.dropped_invalid_fields",
+                extra={
+                    "document_id": str(document_id),
+                    "dropped_fields": dropped_fields,
+                },
+            )
         updated = document_repository.update_canonical(
             self._db,
             document=paper,
-            update=DocumentUpdate.model_validate(changes),
+            update=update,
             user=actor,
         )
         return CitationMetadataWrite(

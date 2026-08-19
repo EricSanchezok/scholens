@@ -45,6 +45,30 @@ def test_document_update_rejects_invalid_date_strings() -> None:
         DocumentUpdate(publish_date="2017-13-01")
 
 
+def test_document_update_validate_lenient_drops_only_invalid_fields() -> None:
+    update, dropped = DocumentUpdate.validate_lenient(
+        {
+            "journal": "A Journal",
+            "publish_date": "not-a-date",
+        }
+    )
+    assert dropped == ("publish_date",)
+    assert update.journal == "A Journal"
+    assert update.publish_date is None
+
+
+def test_document_update_validate_lenient_keeps_valid_updates_untouched() -> None:
+    update, dropped = DocumentUpdate.validate_lenient(
+        {
+            "doi": "10.1000/example",
+            "publish_date": "2025-02-03",
+        }
+    )
+    assert dropped == ()
+    assert update.doi == "10.1000/example"
+    assert update.publish_date == datetime(2025, 2, 3)
+
+
 def test_document_response_serializes_publish_date_as_rfc3339_utc() -> None:
     response = DocumentResponse(
         document_id="10000000-0000-4000-8000-000000000001",

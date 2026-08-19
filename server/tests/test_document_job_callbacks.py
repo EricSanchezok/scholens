@@ -31,6 +31,9 @@ from app.shared.domain.enums import (
     JobStatus,
 )
 
+from app.modules.papers.application.contracts.documents import DocumentUpdate
+from app.bootstrap.workflows.pdf_postprocess import PdfPostprocessResolution
+
 
 class _AvailableLock:
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -500,3 +503,56 @@ def test_failed_upload_keeps_pre_existing_memberships_when_nothing_created(
 
     assert db.execute.call_args_list == []
     gc_schedule.assert_not_called()
+
+
+def test_apply_pdf_postprocess_drops_invalid_fields_without_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed provider publish_date must not fail the whole callback."""
+    paper = SimpleNamespace(
+        id=uuid4(),
+        raw_content="content",
+        doi=None,
+        journal=None,
+        publisher=None,
+        publish_date=None,
+        field_provenance=None,
+    )
+    db = MagicMock()
+    updated_paper = SimpleNamespace(
+        id=paper.id,
+        raw_content="content",
+        doi="10.1000/example",
+        journal=None,
+        publisher=None,
+        publish_date=None,
+        field_provenance=None,
+    )
+    update_canonical = MagicMock(return_value=updated_paper)
+    monkeypatch.setattr(
+        document_job_callbacks.document_search_repository,
+        "replace_passage_index",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        document_job_callbacks.document_repository,
+        "update_canonical",
+        update_canonical,
+    )
+
+    result = document_job_callbacks._apply_pdf_postprocess(
+        db=db,
+        paper=paper,
+        actor=_actor(),
+        resolution=PdfPostprocessResolution(
+            doi="10.1000/example",
+            publish_date="not-a-date",
+        ),
+    )
+
+    assert result is True
+    assert update_canonical.call_count == 1
+    applied = update_canonical.call_args.kwargs["update"]
+    assert isinstance(applied, DocumentUpdate)
+    assert applied.doi == "10.1000/example"
+    assert applied.publish_date is None
