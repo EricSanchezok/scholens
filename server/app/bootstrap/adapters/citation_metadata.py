@@ -107,6 +107,8 @@ class SqlAlchemyCitationMetadataStore:
                     "dropped_fields": dropped_fields,
                 },
             )
+        if not update.model_dump(exclude_unset=True):
+            return CitationMetadataWrite(fields_from_paper(paper), changed=False)
         updated = document_repository.update_canonical(
             self._db,
             document=paper,

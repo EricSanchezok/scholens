@@ -83,6 +83,11 @@ schema validation of errors and always surface the original Scholens error
 code instead of a `-32602` schema-validation failure. The advertised
 `outputSchema` keeps its structured error branch for compatibility.
 
+Authenticated Job callbacks that fail the registered operation contract are
+atomically marked failed before their Redis concurrency leases are released.
+Unexpected handler or database failures keep their leases until retry or TTL,
+so error handling cannot admit duplicate active work.
+
 External Agents should call `create_project` or `get_project` once, then store
 the returned `binding_markdown` in the research repository. Titles may change;
 the returned Project UUID and resource URI are the durable binding. Destructive

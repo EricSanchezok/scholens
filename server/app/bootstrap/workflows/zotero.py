@@ -474,6 +474,8 @@ class ZoteroBackgroundWorkflow:
                 kind=FailureKind.NOT_FOUND,
             )
         kind = payload.get("operation")
+        callback: ZoteroImportWebhookData | ZoteroSyncWebhookData | None
+        invalid_callback = False
         try:
             callback = (
                 ZoteroImportWebhookData.model_validate(payload)
@@ -482,13 +484,27 @@ class ZoteroBackgroundWorkflow:
                 if kind == "sync"
                 else None
             )
-        except ValidationError as exc:
+        except ValidationError:
+            callback = None
+            invalid_callback = True
+        raw_task_id = payload.get("task_id")
+        try:
+            callback_task_id = UUID(str(raw_task_id)) if raw_task_id else None
+        except ValueError:
+            callback_task_id = None
+        if callback_task_id is not None and callback_task_id != job_id:
             raise AppError(
-                code="zotero_callback_payload_invalid",
-                message="Zotero job callback payload is invalid",
-                kind=FailureKind.UNPROCESSABLE,
-            ) from exc
-        if callback is None or callback.task_id != job_id:
+                code="job_callback_mismatch",
+                message="Zotero job callback does not match",
+                kind=FailureKind.CONFLICT,
+            )
+        if callback is None and not invalid_callback:
+            raise AppError(
+                code="job_callback_mismatch",
+                message="Zotero job callback does not match",
+                kind=FailureKind.CONFLICT,
+            )
+        if callback is not None and callback.task_id != job_id:
             raise AppError(
                 code="job_callback_mismatch",
                 message="Zotero job callback does not match",
@@ -507,6 +523,22 @@ class ZoteroBackgroundWorkflow:
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
+        if invalid_callback:
+            changed = self._executor.command(
+                lambda capabilities: capabilities.zotero.fail_background_operation(
+                    actor=actor,
+                    operation=outcome_operation,
+                    operation_id=job_id,
+                    claim_id=claim_id,
+                    error_code="zotero_callback_payload_invalid",
+                )
+            )
+            return (
+                {"accepted": True, "status": "failed"}
+                if changed
+                else {"accepted": False}
+            )
+        assert callback is not None
         heartbeat_stop = asyncio.Event()
         heartbeat_lost = asyncio.Event()
         heartbeat_task = asyncio.create_task(

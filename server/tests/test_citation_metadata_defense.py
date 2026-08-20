@@ -96,6 +96,5 @@ def test_apply_missing_is_safe_when_only_publish_date_is_invalid(
         patch=CitationMetadataPatch(publish_date="not-a-date"),
     )
 
-    assert result.changed is True
-    update = repository.update_canonical.call_args.kwargs["update"]
-    assert update.model_dump(exclude_unset=True) == {}
+    assert result.changed is False
+    repository.update_canonical.assert_not_called()

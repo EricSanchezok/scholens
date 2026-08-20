@@ -190,8 +190,8 @@ class CitationMetadataProvider:
             "journal": _optional_string(findings.get("journal")),
             "publisher": _optional_string(findings.get("publisher")),
             "doi": doi,
-            # date-only ISO: parse_publication_date and DocumentUpdate.publish_date
-            # reject ISO datetime strings such as "2025-02-03T00:00:00".
+            # Keep provider patches date-only at the public boundary while the
+            # canonical validator remains compatible with legacy ISO datetimes.
             "publish_date": parsed_date.date().isoformat() if parsed_date else None,
         }
         filled: dict[str, object] = {

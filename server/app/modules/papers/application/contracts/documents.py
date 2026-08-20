@@ -141,10 +141,11 @@ class DocumentUpdate(BaseModel):
                 return cls.model_validate(remaining), tuple(dropped)
             except ValidationError as exc:
                 invalid = {
-                    location
+                    location[0]
                     for error in exc.errors()
-                    for location in (error.get("loc") or ())
-                    if isinstance(location, str)
+                    if (location := error.get("loc"))
+                    and isinstance(location[0], str)
+                    and location[0] in remaining
                 }
                 if not invalid:
                     raise

@@ -196,11 +196,12 @@ def _resource_json(*, uri: str, value: object, continuation_tool: str) -> str:
 
 
 class ToolErrorEnvelope(BaseModel):
-    """Structured error shape returned as ``structuredContent.error``.
+    """Compatibility shape retained in the advertised tool output schema.
 
-    Field names mirror ``ErrorEnvelope.to_dict()`` plus the transport-level
-    ``remediation`` hint. Every field except the required identity keys is
-    optional because the error serializer omits ``None`` values.
+    Current ``isError`` results omit ``structuredContent`` and serialize this
+    shape under ``content[].text.error`` so strict clients do not validate
+    errors against stale cached output schemas. Retaining the branch keeps old
+    structured error results valid during rolling upgrades.
     """
 
     code: str
@@ -224,13 +225,12 @@ class ToolErrorResultEnvelope(BaseModel):
 def tool_output_schema(output_model: type[BaseModel]) -> dict[str, object]:
     """Build the exact transport envelope schema for one typed business result.
 
-    The advertised schema accepts both the success envelope (unchanged, with a
-    required ``result``) and the structured error envelope. Strict clients
-    validate ``structuredContent`` against this schema; before the error branch
-    existed, every business error was rejected client-side with -32602. Both
-    branches are objects, so the union also declares the object root required
-    by the negotiated MCP Tool shape instead of relying on clients to infer it
-    from ``anyOf`` references.
+    The advertised schema accepts both the success envelope (with a required
+    ``result``) and the legacy structured error envelope. Current errors omit
+    ``structuredContent`` entirely, but the error branch remains for rolling
+    compatibility. Both branches are objects, so the union also declares the
+    object root required by the negotiated MCP Tool shape instead of relying on
+    clients to infer it from ``anyOf`` references.
     """
 
     success_envelope = create_model(

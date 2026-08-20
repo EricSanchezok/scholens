@@ -42,6 +42,7 @@ from app.shared.application import (
     OperationContextFactory,
     OperationInitiator,
 )
+from app.shared.domain import AppError
 from app.shared.domain.enums import JobOperation
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -57,10 +58,9 @@ class _ResumedJob:
 def _lease_categories_for_operation(operation: JobOperation) -> tuple[str, ...]:
     """Map a job operation to the Redis concurrency categories it holds.
 
-    Used as a safety net: when a completion handler raises, the caller still
-    releases the categories the operation acquired so leases never outlive
-    the job until the TTL. PDF_POSTPROCESS and Zotero jobs do not hold Redis
-    leases (Zotero uses a DB claim) and map to no categories.
+    Callback-contract failures are durably marked failed before these categories
+    are released. PDF_POSTPROCESS and Zotero jobs do not hold Redis leases
+    (Zotero uses a DB claim) and map to no categories.
     """
     return {
         JobOperation.PDF_PROCESS: ("background",),
@@ -129,17 +129,37 @@ class JobCompletionProcessor:
             )
             await self._run_post_commit(result)
             return result.value
-        except Exception:
-            await self._compensate_leases(facts=facts)
-            raise
+        except AppError as exc:
+            if exc.code != "job_callback_invalid":
+                raise
+            failed = self._executor.command(
+                lambda capabilities: capabilities.job_callbacks.fail(
+                    actor=resumed.actor,
+                    operation=resumed.operation,
+                    job_id=job_id,
+                    callback=JobFailureCallback(
+                        task_id=job_id,
+                        error_code="job_callback_invalid",
+                    ),
+                )
+            )
+            if failed.claimed:
+                await self._release_terminal_failure_leases(facts=facts)
+            return failed
 
-    async def _compensate_leases(self, *, facts: JobCausalityFacts) -> None:
-        """Best-effort release of Redis leases when a completion raises.
+    async def _release_terminal_failure_leases(
+        self,
+        *,
+        facts: JobCausalityFacts,
+    ) -> None:
+        """Release Redis leases after an invalid callback is durably failed.
 
-        The normal path releases leases through ``ReleaseJobConcurrency``
-        post-commit actions. When the handler itself raises, that post-commit
-        never runs; releasing here keeps a failed job from occupying a
-        concurrency slot until the TTL expires.
+        Callback contract validation happens before operation-specific handlers
+        can produce their normal ``ReleaseJobConcurrency`` post-commit actions.
+        Mark the job failed in a separate committed operation first, then release
+        only that terminal job's leases. Unexpected handler and database errors
+        retain their leases until retry or TTL instead of weakening concurrency
+        protection for work that may still be active.
         """
         requested_by_id = facts.requested_by_id
         if requested_by_id is None:

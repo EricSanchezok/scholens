@@ -325,8 +325,12 @@ def _ingestion_retry_result(
     )
 
 
-def _error_from_text(result: types.CallToolResult) -> dict[str, object] | None:
-    """Parse the JSON error envelope from an isError result's text content."""
+def _error_from_result(result: types.CallToolResult) -> dict[str, object] | None:
+    """Read the error envelope across old and current server representations."""
+    structured = result.structuredContent
+    structured_error = structured.get("error") if isinstance(structured, dict) else None
+    if isinstance(structured_error, dict):
+        return cast(dict[str, object], structured_error)
     for block in result.content:
         if not isinstance(block, types.TextContent):
             continue
@@ -336,7 +340,7 @@ def _error_from_text(result: types.CallToolResult) -> dict[str, object] | None:
             continue
         error = payload.get("error") if isinstance(payload, dict) else None
         if isinstance(error, dict):
-            return error
+            return cast(dict[str, object], error)
     return None
 
 
@@ -348,11 +352,11 @@ def _remote_ingestion_error_with_retry(
 ) -> types.CallToolResult:
     """Preserve the Scholens error while attaching a safe exact-step continuation.
 
-    Error envelopes carry the JSON error only in the text content (the server
-    intentionally omits ``structuredContent`` on ``isError`` results so strict
-    clients skip schema validation of the error), so parse it from the text.
+    Current servers carry JSON errors only in text so strict clients skip schema
+    validation; older servers used ``structuredContent``. Accept both during
+    rolling upgrades, then return the current text-only representation.
     """
-    remote_error = _error_from_text(result)
+    remote_error = _error_from_result(result)
     if remote_error is None:
         return _ingestion_retry_result(
             upload_id=upload_id,

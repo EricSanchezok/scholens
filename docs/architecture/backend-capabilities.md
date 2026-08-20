@@ -41,9 +41,10 @@ Public resources use canonical identifiers:
   is part of the product. Cursors are opaque, signed, user- and query-bound
   keysets with a stable identifier tie-breaker; offset values are not disguised
   as cursors.
-- Job completion always releases the Redis concurrency lease for the finished
-  operation, including when the completion handler itself raises; the lease
-  TTL (default 3600 seconds) covers only process death.
+- Authenticated callback payloads that fail their operation contract are
+  durably marked failed before their Redis concurrency leases are released.
+  Unexpected handler or database failures retain the lease for retry or the
+  3600-second TTL instead of weakening concurrency protection for active work.
 - Resource creation returns `201`, accepted asynchronous work returns `202`,
   and deletions without a response body return `204`.
 - Project browsing is an aggregate projection: cards expose paper, private
@@ -440,7 +441,7 @@ typed turn contexts. Personal Reader conversations are paper-scoped. Reader
 conversations created while a Project is active remain private to the user but
 are Project-scoped with the open paper in selected document context. Project
 conversation listing may therefore filter by that context document; its signed
-  cursor binds actor, Project, and context document. The browser never
+cursor binds actor, Project, and context document. The browser never
 downloads a broader collection to filter it locally.
 
 Reader annotation collections return self-contained thread timelines. The

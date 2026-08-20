@@ -337,3 +337,27 @@ def test_remote_ingestion_error_falls_back_when_text_has_no_error_envelope() -> 
     assert error["code"] == "local_pdf_ingestion_unavailable"
     assert error["details"]["retry_tool"] == "ingest_paper"
     assert error["details"]["upload_id"] == "upload-id"
+
+
+def test_remote_ingestion_error_accepts_legacy_structured_envelope() -> None:
+    remote = types.CallToolResult(
+        content=[],
+        structuredContent={
+            "error": {
+                "code": "paper_upload_unavailable",
+                "message": "Staging is temporarily unavailable",
+                "remediation": "Retry after a short delay.",
+            }
+        },
+        isError=True,
+    )
+
+    result = _remote_ingestion_error_with_retry(
+        remote,
+        upload_id="upload-id",
+        source_arguments={"source": {"kind": "upload", "upload_id": "upload-id"}},
+    )
+
+    error = json.loads(result.content[0].text)["error"]
+    assert error["code"] == "paper_upload_unavailable"
+    assert error["message"] == "Staging is temporarily unavailable"

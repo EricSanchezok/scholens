@@ -69,6 +69,19 @@ def test_document_update_validate_lenient_keeps_valid_updates_untouched() -> Non
     assert update.publish_date == datetime(2025, 2, 3)
 
 
+def test_document_update_validate_lenient_reports_only_top_level_fields() -> None:
+    update, dropped = DocumentUpdate.validate_lenient(
+        {
+            "journal": "A Journal",
+            "field_provenance": {"publish_date": object()},
+        }
+    )
+
+    assert dropped == ("field_provenance",)
+    assert update.journal == "A Journal"
+    assert "field_provenance" not in update.model_dump(exclude_unset=True)
+
+
 def test_document_response_serializes_publish_date_as_rfc3339_utc() -> None:
     response = DocumentResponse(
         document_id="10000000-0000-4000-8000-000000000001",
