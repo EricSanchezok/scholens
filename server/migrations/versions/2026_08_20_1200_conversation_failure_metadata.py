@@ -24,8 +24,3 @@ def upgrade() -> None:
         sa.Column("failure", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         schema="scholens",
     )
-
-
-def downgrade() -> None:
-    """Development-only downgrade; production rollback never downgrades."""
-    op.drop_column("conversation_responses", "failure", schema="scholens")
