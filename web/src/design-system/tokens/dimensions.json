@@ -27,7 +27,7 @@
     },
     "reading-column": {
       "$type": "dimension",
-      "$value": { "value": 720, "unit": "px" }
+      "$value": { "value": 1104, "unit": "px" }
     },
     "conversation-lane": {
       "$type": "dimension",
