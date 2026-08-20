@@ -10,7 +10,7 @@ import {
 import { clientEnvironment } from "@/lib/env/client";
 
 export type ConversationStreamEvent =
-  components["schemas"]["ConversationStreamEventSchema"];
+  components["schemas"]["ConversationSubscriptionEventSchema"];
 export type ConversationTurnCreateRequest =
   components["schemas"]["ConversationTurnCreateRequest"];
 export type ConversationTurnBranchCreateRequest =

@@ -2441,14 +2441,13 @@
         "type": "object"
       },
       "ConversationStreamEventSchema": {
-        "description": "Public schema for the JSON payload carried by each SSE event.",
+        "description": "Compatible schema for the existing inline SSE response.",
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
-            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
             "error": "#/components/schemas/ConversationStreamErrorEvent",
             "references": "#/components/schemas/ConversationStreamReferencesEvent",
@@ -2485,9 +2484,6 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamErrorEvent"
@@ -2624,6 +2620,61 @@
         ],
         "title": "ConversationStreamSuggestionsEvent",
         "type": "object"
+      },
+      "ConversationSubscriptionEventSchema": {
+        "description": "Schema for detachable response subscriptions, including cancellation.",
+        "discriminator": {
+          "mapping": {
+            "activity": "#/components/schemas/ConversationStreamActivityEvent",
+            "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
+            "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
+            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
+            "complete": "#/components/schemas/ConversationStreamCompleteEvent",
+            "error": "#/components/schemas/ConversationStreamErrorEvent",
+            "references": "#/components/schemas/ConversationStreamReferencesEvent",
+            "response_ready": "#/components/schemas/ConversationStreamResponseReadyEvent",
+            "start": "#/components/schemas/ConversationStreamStartEvent",
+            "suggestions": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ConversationStreamStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamActivityEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamReferencesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamResponseReadyEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
+          }
+        ],
+        "title": "ConversationSubscriptionEventSchema"
       },
       "ConversationSummaryResponse": {
         "properties": {
@@ -11797,12 +11848,12 @@
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
+                  "$ref": "#/components/schemas/ConversationSubscriptionEventSchema",
                   "type": "string"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "Replayable SSE subscription for an accepted response."
           },
           "422": {
             "content": {

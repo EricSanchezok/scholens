@@ -94,6 +94,20 @@ class ConversationStreamErrorEvent(BaseModel):
     error: dict[str, JsonValue]
 
 
+ConversationLegacyStreamEvent = Annotated[
+    ConversationStreamStartEvent
+    | ConversationStreamActivityEvent
+    | ConversationStreamAssistantItemStartEvent
+    | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemCompleteEvent
+    | ConversationStreamReferencesEvent
+    | ConversationStreamResponseReadyEvent
+    | ConversationStreamSuggestionsEvent
+    | ConversationStreamCompleteEvent
+    | ConversationStreamErrorEvent,
+    Field(discriminator="type"),
+]
+
 ConversationStreamEvent = Annotated[
     ConversationStreamStartEvent
     | ConversationStreamActivityEvent
@@ -110,8 +124,12 @@ ConversationStreamEvent = Annotated[
 ]
 
 
-class ConversationStreamEventSchema(RootModel[ConversationStreamEvent]):
-    """Public schema for the JSON payload carried by each SSE event."""
+class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
+    """Compatible schema for the existing inline SSE response."""
+
+
+class ConversationSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+    """Schema for detachable response subscriptions, including cancellation."""
 
 
 class ConversationTurnCreateRequest(BaseModel):

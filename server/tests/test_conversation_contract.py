@@ -567,7 +567,6 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "ConversationStreamResponseReadyEvent",
         "ConversationStreamSuggestionsEvent",
         "ConversationStreamCompleteEvent",
-        "ConversationStreamCancelledEvent",
         "ConversationStreamErrorEvent",
     }
 
@@ -599,6 +598,14 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
     ]["get"]["responses"]
     assert "202" not in event_subscription
     assert set(event_subscription["200"]["content"]) == {"text/event-stream"}
+    assert (
+        event_subscription["200"]["content"]["text/event-stream"]["schema"]["$ref"]
+        == "#/components/schemas/ConversationSubscriptionEventSchema"
+    )
+    subscription_schema = schemas["ConversationSubscriptionEventSchema"]["oneOf"]
+    assert "ConversationStreamCancelledEvent" in {
+        item["$ref"].rsplit("/", maxsplit=1)[-1] for item in subscription_schema
+    }
     create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
     assert "contexts" in create_properties
     assert "mentioned_thread_ids" not in create_properties

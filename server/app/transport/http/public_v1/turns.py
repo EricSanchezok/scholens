@@ -11,6 +11,7 @@ from app.bootstrap.execution import (
 from app.modules.conversations.application.chat import ConversationChat
 from app.modules.conversations.application.contracts.turns import (
     ConversationResponseCreateRequest,
+    ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
     ConversationTurnCreateRequest,
     ConversationTurnBranchCreateRequest,
@@ -63,7 +64,21 @@ def _stream_responses() -> dict[int | str, dict[str, object]]:
 
 
 def _subscription_responses() -> dict[int | str, dict[str, object]]:
-    return _stream_responses()
+    return {
+        200: {
+            "description": "Replayable SSE subscription for an accepted response.",
+            "model": ConversationSubscriptionEventSchema,
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "$ref": (
+                            "#/components/schemas/ConversationSubscriptionEventSchema"
+                        )
+                    }
+                }
+            },
+        }
+    }
 
 
 def _prefers_background(prefer: str | None) -> bool:

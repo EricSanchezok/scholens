@@ -2725,9 +2725,9 @@ export interface components {
         };
         /**
          * ConversationStreamEventSchema
-         * @description Public schema for the JSON payload carried by each SSE event.
+         * @description Compatible schema for the existing inline SSE response.
          */
-        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
             /** References */
@@ -2804,6 +2804,11 @@ export interface components {
              */
             type: "suggestions";
         };
+        /**
+         * ConversationSubscriptionEventSchema
+         * @description Schema for detachable response subscriptions, including cancellation.
+         */
+        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationSummaryResponse */
         ConversationSummaryResponse: {
             /** Archived At */
@@ -6572,13 +6577,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Standard SSE stream of typed conversation events. */
+            /** @description Replayable SSE subscription for an accepted response. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                    "text/event-stream": components["schemas"]["ConversationSubscriptionEventSchema"];
                 };
             };
             /** @description Validation Error */
