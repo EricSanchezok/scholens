@@ -10,6 +10,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Identity,
@@ -236,10 +237,16 @@ class Document(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     ts_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
-    search_text_compact: Mapped[str] = mapped_column(
+    search_text_compact: Mapped[str | None] = mapped_column(
         Text,
-        nullable=False,
-        server_default="",
+        Computed(
+            "regexp_replace("
+            "lower(coalesce(title, '') || ' ' || coalesce(doi, '')), "
+            "'[^[:alnum:]]', '', 'g'"
+            ")",
+            persisted=True,
+        ),
+        nullable=True,
     )
     page_offset_map: Mapped[dict[int, list[int]] | None] = mapped_column(
         JSONB, nullable=True

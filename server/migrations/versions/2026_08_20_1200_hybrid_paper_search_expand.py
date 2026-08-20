@@ -19,41 +19,21 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add independently backfillable fuzzy and semantic search projections."""
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')
-               OR NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')
-            THEN
-                RAISE EXCEPTION 'pg_trgm and vector extensions must be installed by the database owner';
-            END IF;
-        END
-        $$
-        """
-    )
     op.add_column(
         "documents",
         sa.Column(
             "search_text_compact",
             sa.Text(),
-            nullable=False,
-            server_default="",
+            sa.Computed(
+                "regexp_replace("
+                "lower(coalesce(title, '') || ' ' || coalesce(doi, '')), "
+                "'[^[:alnum:]]', '', 'g'"
+                ")",
+                persisted=True,
+            ),
+            nullable=True,
         ),
         schema="scholens",
-    )
-    op.execute(
-        """
-        UPDATE scholens.documents
-        SET search_text_compact = regexp_replace(
-            lower(
-                coalesce(title, '') || ' ' ||
-                coalesce(array_to_string(authors, ' '), '') || ' ' ||
-                coalesce(doi, '')
-            ),
-            '[^[:alnum:]]', '', 'g'
-        )
-        """
     )
     op.create_index(
         "ix_documents_search_text_compact_trgm",
@@ -95,36 +75,12 @@ def upgrade() -> None:
         unique=False,
         schema="scholens",
     )
-    op.execute(
-        """
-        CREATE INDEX ix_document_search_embeddings_hnsw_cosine
-        ON scholens.document_search_embeddings
-        USING hnsw (embedding vector_cosine_ops)
-        """
+    op.create_index(
+        "ix_document_search_embeddings_hnsw_cosine",
+        "document_search_embeddings",
+        ["embedding"],
+        unique=False,
+        schema="scholens",
+        postgresql_using="hnsw",
+        postgresql_ops={"embedding": "vector_cosine_ops"},
     )
-    op.execute(
-        """
-        CREATE OR REPLACE FUNCTION scholens.document_content_trigger()
-        RETURNS trigger AS $$
-        BEGIN
-            NEW.search_text_compact := regexp_replace(
-                lower(
-                    coalesce(NEW.title, '') || ' ' ||
-                    coalesce(array_to_string(NEW.authors, ' '), '') || ' ' ||
-                    coalesce(NEW.doi, '')
-                ),
-                '[^[:alnum:]]', '', 'g'
-            );
-            NEW.ts_vector :=
-                setweight(to_tsvector('pg_catalog.english', coalesce(NEW.title, '')), 'A') ||
-                setweight(to_tsvector('pg_catalog.english', coalesce(array_to_string(NEW.authors, ' '), '')), 'A') ||
-                setweight(to_tsvector('pg_catalog.english', coalesce(array_to_string(NEW.keywords, ' '), '')), 'B') ||
-                setweight(to_tsvector('pg_catalog.english', coalesce(NEW.summary, '')), 'B') ||
-                setweight(to_tsvector('pg_catalog.english', coalesce(NEW.abstract, '')), 'C') ||
-                setweight(to_tsvector('pg_catalog.english', coalesce(NEW.raw_content, '')), 'D');
-            RETURN NEW;
-        END
-        $$ LANGUAGE plpgsql
-        """
-    )
-    op.execute("UPDATE scholens.documents SET title = title")
