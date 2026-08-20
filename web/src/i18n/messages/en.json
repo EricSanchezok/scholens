@@ -15,6 +15,40 @@
     "title": "Scholens",
     "description": "Read, organize, and ask across your research with Scholens."
   },
+  "InstallExperience": {
+    "promotion": {
+      "title": "Keep Scholens within reach",
+      "description": "Open it from your Home Screen without browser controls.",
+      "install": "Install",
+      "dismiss": "Dismiss install suggestion"
+    },
+    "instructions": {
+      "close": "Close installation instructions",
+      "done": "Done",
+      "ios": {
+        "title": "Add Scholens to your Home Screen",
+        "description": "Safari installs Scholens from its Share menu.",
+        "step1": "Tap Share in Safari’s toolbar.",
+        "step2": "Choose Add to Home Screen.",
+        "step3": "Confirm Add. Scholens will open in its own window."
+      },
+      "android": {
+        "title": "Install Scholens",
+        "description": "Use your browser’s app installation command.",
+        "step1": "Open the browser menu.",
+        "step2": "Choose Install app or Add to Home screen.",
+        "step3": "Confirm Install. Scholens will appear with your other apps."
+      },
+      "in-app": {
+        "title": "Open Scholens in your browser",
+        "description": "In-app browsers such as WeChat cannot install Scholens directly.",
+        "step1": "Open the page menu in this browser.",
+        "step2": "Choose Open in browser to continue in Safari or Chrome.",
+        "step3": "Use that browser’s Add to Home Screen or Install app command."
+      }
+    },
+    "firstLaunch": "Scholens is installed. Sign in once on this device to continue."
+  },
   "Documentation": {
     "metadata": {
       "title": "Scholens MCP documentation",
@@ -235,6 +269,7 @@
       "searchShort": "Search",
       "searchConversations": "Search conversations",
       "searchPapers": "Search all papers (⌘K)",
+      "install": "Install Scholens",
       "comingSoon": "Not available yet"
     },
     "sidebar": {
@@ -725,6 +760,12 @@
     "documentCanvas": "PDF document",
     "pdfLink": "Link in PDF",
     "renderingPage": "Rendering page",
+    "mobileReflowNudge": {
+      "title": "A better fit for your phone",
+      "description": "AI reflow removes PDF columns while keeping the original PDF as the source of truth.",
+      "open": "Try AI reflow",
+      "dismiss": "Dismiss AI reflow suggestion"
+    },
     "closePanel": "Close panel",
     "toolbar": {
       "closePanel": "Close context panel",

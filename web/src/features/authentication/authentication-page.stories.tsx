@@ -5,6 +5,7 @@ import { authHandlers } from "../../../.storybook/msw/auth-handlers";
 import { ToastProvider } from "@/components/ui/toast";
 import { QueryProvider } from "@/lib/query/query-provider";
 import { resetRefreshForTests } from "@/lib/api";
+import { InstallExperienceProvider } from "@/features/install-experience";
 import { AuthProvider } from "./auth-session";
 import {
   AuthenticationPage,
@@ -30,11 +31,13 @@ const meta = {
   decorators: [
     (Story) => (
       <QueryProvider>
-        <AuthProvider>
-          <ToastProvider dismissLabel="Dismiss">
-            <Story />
-          </ToastProvider>
-        </AuthProvider>
+        <InstallExperienceProvider>
+          <AuthProvider>
+            <ToastProvider dismissLabel="Dismiss">
+              <Story />
+            </ToastProvider>
+          </AuthProvider>
+        </InstallExperienceProvider>
       </QueryProvider>
     ),
   ],

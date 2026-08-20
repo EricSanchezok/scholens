@@ -5,6 +5,12 @@ contracts. A navigation must acknowledge the input immediately even when a
 dynamic route, authentication, or a remote API still needs a network round
 trip. Full-page transition animation is not part of that contract.
 
+The installable Web App registers its root-scoped Service Worker after the load
+event so installation support does not delay the initial render. The worker is
+network-only and adds no runtime or storage cache; it supplies only a static
+bilingual document when a top-level navigation fails offline. Service-worker
+updates bypass the HTTP cache and use the release SHA embedded in `/sw.js`.
+
 ## Navigation
 
 The persistent Workspace destinations use Next.js `Link` prefetching and

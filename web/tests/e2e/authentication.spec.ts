@@ -171,3 +171,30 @@ test("uses the Simplified Chinese authentication dictionary", async ({
     "/docs",
   );
 });
+
+test("explains the isolated first sign-in after installed launch", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const originalMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      query === "(display-mode: standalone)"
+        ? ({
+            matches: true,
+            media: query,
+            onchange: null,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            dispatchEvent: () => true,
+          } as MediaQueryList)
+        : originalMatchMedia(query);
+  });
+  await page.goto("/login");
+  await expect(
+    page.getByText(
+      "Scholens is installed. Sign in once on this device to continue.",
+    ),
+  ).toBeVisible();
+});

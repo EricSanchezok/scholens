@@ -23,6 +23,7 @@ import {
 import { Input, PasswordInput } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { Icon } from "@/design-system/icons/icon";
+import { useInstallExperience } from "@/features/install-experience";
 import { ApiError, publicApiClient } from "@/lib/api";
 import {
   AuthenticationHeader,
@@ -164,8 +165,10 @@ function AuthenticationSkeleton() {
 
 function SignInForm({ returnTo }: { returnTo?: string }) {
   const t = useTranslations("Authentication");
+  const installT = useTranslations("InstallExperience");
   const schemas = useAuthenticationSchemas();
   const session = useAuthSession();
+  const installExperience = useInstallExperience();
   const router = useRouter();
   const [problem, setProblem] = React.useState<unknown>();
   const form = useForm<z.input<typeof schemas.signIn>>({
@@ -176,6 +179,7 @@ function SignInForm({ returnTo }: { returnTo?: string }) {
     setProblem(undefined);
     try {
       await session.signIn(values);
+      installExperience.completeFirstLaunch();
       router.replace(appRoute(returnTo));
     } catch (error) {
       setProblem(error);
@@ -188,6 +192,11 @@ function SignInForm({ returnTo }: { returnTo?: string }) {
         description={t("signIn.description")}
         title={t("signIn.title")}
       />
+      {installExperience.firstLaunchHintVisible ? (
+        <Alert tone="neutral">
+          <AlertDescription>{installT("firstLaunch")}</AlertDescription>
+        </Alert>
+      ) : null}
       <SessionUnavailable />
       {problem ? <AuthenticationProblem error={problem} /> : null}
       <form className="grid gap-4" noValidate onSubmit={submit}>

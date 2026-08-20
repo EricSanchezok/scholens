@@ -6,6 +6,7 @@ import {
   DocumentationIcon,
   ExpandRailIcon,
   ExternalLinkIcon,
+  InstallAppIcon,
   RepositoryIcon,
   SignOutIcon,
   MenuIcon,
@@ -30,6 +31,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Button,
   IconButton,
   keyboardFocusRing,
   Sheet,
@@ -46,6 +48,11 @@ import { CurrentUserAvatar, type Actor } from "@/features/authentication";
 import { conversationQueries } from "@/features/conversation";
 import { GlobalSearch } from "@/features/paper-search";
 import { ProductLockup, ProductMark } from "@/features/product-identity";
+import {
+  InstallInstructionsDialog,
+  InstallPromotion,
+  useInstallExperience,
+} from "@/features/install-experience";
 import {
   formatDateOnly,
   SettingsDialog,
@@ -829,6 +836,8 @@ function MobileNavigation({
   controller,
   onDeleteConversation,
   onRequestMobileRename,
+  onInstall,
+  showInstall,
 }: {
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
@@ -856,6 +865,8 @@ function MobileNavigation({
     conversation: ConversationSummary,
     returnFocus: HTMLButtonElement | null,
   ) => void;
+  onInstall: () => void;
+  showInstall: boolean;
 }) {
   const t = useTranslations("WorkspaceShell");
 
@@ -891,6 +902,16 @@ function MobileNavigation({
         className="shrink-0 bg-[var(--color-bg-sidebar)] px-3 pt-2 pb-[max(var(--space-3),env(safe-area-inset-bottom))]"
         data-testid="mobile-navigation-tools"
       >
+        {showInstall && (
+          <Button
+            className="mb-2 w-full justify-start"
+            onClick={onInstall}
+            variant="ghost"
+          >
+            <Icon glyph={InstallAppIcon} size={20} tone="secondary" />
+            {t("navigation.install")}
+          </Button>
+        )}
         <div className="flex items-center gap-2">
           <button
             aria-label={t("navigation.search")}
@@ -1297,6 +1318,7 @@ export function WorkspaceShell({
   mobileBottomRef,
   mobileViewport,
   showMobileBottomNavigation = true,
+  suppressInstallPromotion = false,
   children,
 }: {
   actor: Actor;
@@ -1313,6 +1335,7 @@ export function WorkspaceShell({
   mobileBottomRef?: React.Ref<HTMLDivElement>;
   mobileViewport?: MobileViewportState;
   showMobileBottomNavigation?: boolean;
+  suppressInstallPromotion?: boolean;
   children: React.ReactNode;
 }) {
   const t = useTranslations("WorkspaceShell");
@@ -1323,6 +1346,7 @@ export function WorkspaceShell({
     React.useState<ConversationDialogTarget>();
   const [renameTarget, setRenameTarget] =
     React.useState<ConversationDialogTarget>();
+  const installExperience = useInstallExperience();
   const billingUsage = useCurrentBillingUsage();
   const conversationController = useConversationListController({
     activeConversationId,
@@ -1597,6 +1621,10 @@ export function WorkspaceShell({
             onRequestMobileRename={(conversation, returnFocus) =>
               setRenameTarget({ conversation, returnFocus })
             }
+            onInstall={() => {
+              setMobileOpen(false);
+              void installExperience.openInstallExperience();
+            }}
             onSelect={() => setMobileOpen(false)}
             onRetry={retryConversations}
             onSearch={() => {
@@ -1604,6 +1632,7 @@ export function WorkspaceShell({
               openSearch();
             }}
             onSignOut={onSignOut}
+            showInstall={installExperience.showInstallEntry}
             signingOut={signingOut}
           />
         </SheetContent>
@@ -1636,6 +1665,7 @@ export function WorkspaceShell({
         >
           {children}
         </main>
+        {!suppressInstallPromotion && <InstallPromotion />}
         {(mobileBottomContent || showMobileBottomNavigation) && (
           <MobileBottomDock
             activeDestination={activeDestination}
@@ -1647,6 +1677,7 @@ export function WorkspaceShell({
         )}
       </div>
       <SettingsDialog />
+      <InstallInstructionsDialog />
       <GlobalSearch
         conversations={conversations}
         onOpenChange={handleSearchOpenChange}

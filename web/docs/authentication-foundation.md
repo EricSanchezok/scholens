@@ -89,6 +89,10 @@ must never look like a logged-out account.
 
 - Access tokens live only in module memory.
 - Refresh tokens remain in HttpOnly cookies.
+- An installed iOS Web App may own storage separately from Safari. Its first
+  anonymous standalone launch explains that one local sign-in is required;
+  successful sign-in records only a versioned local boolean and never copies a
+  token from the browser context.
 - Initial session bootstrap rotates the refresh cookie and returns the
   product-enriched Actor with the access token in one response. The existing
   `/auth/refresh` and `/me` contracts remain available for protected-request

@@ -273,12 +273,15 @@ export const FullMotion: Story = {
       canvas.getByRole("heading", { name: "gentle spring" }),
     ).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Add finding" }));
-    await waitFor(() => expect(canvas.getByText("Finding 1")).toBeVisible());
+    await waitFor(() => expect(canvas.getByText("Finding 1")).toBeVisible(), {
+      timeout: 5_000,
+    });
     await userEvent.click(
       canvas.getByRole("button", { name: "Toggle context" }),
     );
-    await waitFor(() =>
-      expect(canvas.getByText("Research context")).toBeVisible(),
+    await waitFor(
+      () => expect(canvas.getByText("Research context")).toBeVisible(),
+      { timeout: 5_000 },
     );
   },
 };

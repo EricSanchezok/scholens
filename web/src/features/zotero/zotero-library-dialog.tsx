@@ -38,6 +38,13 @@ import {
 } from "./api";
 import { zoteroLibraryErrorKey } from "./message-keys";
 import { buildZoteroReturnPath } from "./oauth-return";
+import {
+  cancelPreparedZoteroAuthorization,
+  clearPendingZoteroAuthorization,
+  continueZoteroAuthorization,
+  hasPendingZoteroAuthorization,
+  prepareZoteroAuthorizationWindow,
+} from "./oauth-navigation";
 
 function useDebouncedValue(value: string) {
   const [debounced, setDebounced] = React.useState(value);
@@ -92,18 +99,43 @@ export function ZoteroLibraryDialog({
     enabled: open && connected,
   });
   const authorize = useMutation({
-    mutationFn: async () => {
-      const result = await beginZoteroAuthorization(
-        "import",
-        buildZoteroReturnPath(
-          window.location.pathname,
-          window.location.search,
+    mutationFn: async (authorizationWindow?: Window | null) => {
+      try {
+        const result = await beginZoteroAuthorization(
           "import",
-        ),
-      );
-      window.location.assign(result.auth_url);
+          buildZoteroReturnPath(
+            window.location.pathname,
+            window.location.search,
+            "import",
+          ),
+        );
+        continueZoteroAuthorization(result.auth_url, authorizationWindow);
+      } catch (error) {
+        cancelPreparedZoteroAuthorization(authorizationWindow);
+        throw error;
+      }
     },
   });
+
+  React.useEffect(() => {
+    if (status.data?.connection_state === "connected") {
+      clearPendingZoteroAuthorization();
+    }
+  }, [status.data?.connection_state]);
+
+  React.useEffect(() => {
+    function resumeAuthorization() {
+      if (document.visibilityState === "hidden") return;
+      if (!hasPendingZoteroAuthorization()) return;
+      void queryClient.invalidateQueries({ queryKey: zoteroKeys.all });
+    }
+    window.addEventListener("focus", resumeAuthorization);
+    document.addEventListener("visibilitychange", resumeAuthorization);
+    return () => {
+      window.removeEventListener("focus", resumeAuthorization);
+      document.removeEventListener("visibilitychange", resumeAuthorization);
+    };
+  }, [queryClient]);
   const importMutation = useMutation({
     mutationFn: startZoteroImport,
     onSuccess: (operation) => {
@@ -174,7 +206,9 @@ export function ZoteroLibraryDialog({
               </div>
               <Button
                 loading={authorize.isPending}
-                onClick={() => authorize.mutate()}
+                onClick={() =>
+                  authorize.mutate(prepareZoteroAuthorizationWindow())
+                }
               >
                 {t("connect")}
               </Button>
