@@ -20,6 +20,9 @@ FILES = (
 
 
 def download_model(target: Path, *, revision: str) -> None:
+    if not revision.strip():
+        raise ValueError("embedding model revision must not be empty")
+
     target.mkdir(parents=True, exist_ok=True)
     for filename in FILES:
         source = Path(

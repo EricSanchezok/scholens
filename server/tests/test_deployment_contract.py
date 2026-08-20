@@ -1076,6 +1076,18 @@ def test_python_runtime_images_keep_their_hardened_runtime_contract() -> None:
     assert "not os.path.exists('/usr/local/bin/pip')" in workflow
 
 
+def test_jobs_builder_consumes_the_pinned_embedding_model_revision() -> None:
+    jobs = (ROOT / "jobs" / "Dockerfile").read_text(encoding="utf-8")
+    builder = jobs.split("FROM ${PYTHON_IMAGE} AS builder", maxsplit=1)[1].split(
+        "FROM ${RUNTIME_IMAGE} AS runtime", maxsplit=1
+    )[0]
+
+    revision_arg = "ARG SCHOLENS_EMBEDDING_MODEL_REVISION\n"
+    download_command = "-m scholens_ai.download_embeddings"
+    assert revision_arg in builder
+    assert builder.index(revision_arg) < builder.index(download_command)
+
+
 def test_read_only_python_tasks_initialize_writable_temporary_storage() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
     workloads = {

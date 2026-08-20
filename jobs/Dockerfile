@@ -9,6 +9,8 @@ RUN rm -rf /usr/local/bin/pip* \
 
 FROM ${PYTHON_IMAGE} AS builder
 
+ARG SCHOLENS_EMBEDDING_MODEL_REVISION
+
 RUN python -m pip install --no-cache-dir uv==0.9.2
 WORKDIR /app
 COPY packages/scholens_observability/ /packages/scholens_observability/
