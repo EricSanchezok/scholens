@@ -135,6 +135,28 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
     assert cache["DailySnapshotTime"] == "18:00"
     assert re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", cache["DailySnapshotTime"])
 
+    api_cache_access = set(
+        resources["ApiCacheUser"]["Properties"]["AccessString"].split()
+    )
+    assert api_cache_access == {
+        "on",
+        "~scholens:rate:*",
+        "~scholens:concurrency:*",
+        "~scholens:translation:*",
+        "~scholens:conversation-events:*",
+        "+@all",
+        "-@dangerous",
+    }
+    jobs_cache_access = set(
+        resources["JobsCacheUser"]["Properties"]["AccessString"].split()
+    )
+    assert jobs_cache_access == {
+        "on",
+        "~scholens:pdf-parse:*",
+        "+@all",
+        "-@dangerous",
+    }
+
     release = resources["ReleaseBucket"]["Properties"]
     assert release["ObjectLockEnabled"] is True
     assert release["ObjectLockConfiguration"] == {

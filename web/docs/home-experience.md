@@ -45,6 +45,9 @@ the deliberately deferred boundaries.
   horizontal insets rather than adding a second, narrower message measure.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
+  Global paper search is a compact header action beside the collapse control in
+  the expanded rail; the collapsed rail places the same action below New chat so
+  it remains reachable without relying on the keyboard shortcut.
 - Desktop sidebar density remains subordinate to the reading surface: primary
   navigation uses 40 px rows with 20 px semantic glyphs in 24 px fixed slots, conversation
   history uses 36 px rows so its contextual action retains a full desktop hit

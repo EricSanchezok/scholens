@@ -954,20 +954,39 @@ function Sidebar({
           >
             Scholens
           </Link>
-          <IconButton
-            className="hover:bg-hover size-8 min-h-8 bg-transparent"
-            label={
-              collapsed ? t("navigation.expand") : t("navigation.collapse")
-            }
-            onClick={() => onCollapsedChange(!collapsed)}
-            variant="ghost"
-          >
-            <Icon
-              glyph={collapsed ? ExpandRailIcon : CollapseRailIcon}
-              size={16}
-              tone="secondary"
-            />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            {!collapsed && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    className="hover:bg-hover size-8 min-h-8 bg-transparent"
+                    label={t("navigation.searchPapers")}
+                    onClick={onSearchPapers}
+                    variant="ghost"
+                  >
+                    <Icon glyph={SearchIcon} size={20} tone="secondary" />
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t("navigation.searchPapers")}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <IconButton
+              className="hover:bg-hover size-8 min-h-8 bg-transparent"
+              label={
+                collapsed ? t("navigation.expand") : t("navigation.collapse")
+              }
+              onClick={() => onCollapsedChange(!collapsed)}
+              variant="ghost"
+            >
+              <Icon
+                glyph={collapsed ? ExpandRailIcon : CollapseRailIcon}
+                size={16}
+                tone="secondary"
+              />
+            </IconButton>
+          </div>
         </div>
         <nav
           className={cn("grid gap-0.5", collapsed && "justify-items-end")}
@@ -981,12 +1000,14 @@ function Sidebar({
             label={t("navigation.newChat")}
             onSelect={onSelect}
           />
-          <SidebarControl
-            collapsed={collapsed}
-            glyph={SearchIcon}
-            label={t("navigation.searchPapers")}
-            onSelect={onSearchPapers}
-          />
+          {collapsed && (
+            <SidebarControl
+              collapsed
+              glyph={SearchIcon}
+              label={t("navigation.searchPapers")}
+              onSelect={onSearchPapers}
+            />
+          )}
           <SidebarControl
             active={activeDestination === "library"}
             collapsed={collapsed}
