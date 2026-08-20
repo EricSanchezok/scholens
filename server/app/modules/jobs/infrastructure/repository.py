@@ -213,6 +213,30 @@ class JobRepository:
         return job
 
     @staticmethod
+    def require_many_for_requester(
+        db: Session,
+        *,
+        job_ids: tuple[uuid.UUID, ...],
+        requested_by_id: int,
+    ) -> list[DurableJob]:
+        jobs = list(
+            db.scalars(
+                select(DurableJob).where(
+                    DurableJob.id.in_(job_ids),
+                    DurableJob.requested_by_id == requested_by_id,
+                )
+            ).all()
+        )
+        jobs_by_id = {job.id: job for job in jobs}
+        if len(jobs_by_id) != len(set(job_ids)):
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        return [jobs_by_id[job_id] for job_id in job_ids]
+
+    @staticmethod
     def claim(
         db: Session,
         *,

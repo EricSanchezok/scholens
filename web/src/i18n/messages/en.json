@@ -143,7 +143,7 @@
         },
         "ingestion": {
           "title": "Ingestion",
-          "description": "Known-source ingestion, upload preparation, and asynchronous job status."
+          "description": "Single or batch known-source ingestion, upload preparation, and bounded job waiting."
         },
         "annotations": {
           "title": "Annotations",

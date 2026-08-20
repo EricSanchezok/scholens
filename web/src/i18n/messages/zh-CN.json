@@ -143,7 +143,7 @@
         },
         "ingestion": {
           "title": "资料导入",
-          "description": "已知来源导入、上传准备和异步任务状态。"
+          "description": "单篇或批量已知来源导入、上传准备和有界任务等待。"
         },
         "annotations": {
           "title": "批注",

@@ -37,7 +37,10 @@ def public_mcp_contract() -> dict[str, object]:
             "description": definition.description,
             "input_schema": definition.input_model.model_json_schema(),
             "output_schema": tool_output_schema(definition.output_model),
-            "execution": definition.execution.value,
+            # Async reads remain public queries; scheduling is an internal runtime detail.
+            "execution": (
+                "query" if behavior.read_only else definition.execution.value
+            ),
             "required_permission": definition.required_permission.value,
             "confirmation_policy": definition.confirmation_policy.value,
             "behavior": {

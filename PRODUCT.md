@@ -111,6 +111,13 @@ official local bridge; the local path never leaves the computer. After
 ingestion, the same paper can be searched and cited by an Agent or opened in
 the Scholens Web Reader for deep human reading and collaboration.
 
+Tool-driven ingestion accepts one known source or a bounded batch. Submission
+and exact job-status tools wait for terminal state for a caller-selected bounded
+period before returning the latest durable snapshot, so Agents do not need to
+busy-poll. The in-product Agent also has one internal batch wait capability for
+jobs that outlive the first deadline; that orchestration primitive is not part
+of the external MCP surface.
+
 Agent autonomy does not remove user control. Public sharing, invitations,
 access changes, and destructive actions require a bounded impact preview and a
 short-lived confirmation tied to the actor, credential, exact arguments, and

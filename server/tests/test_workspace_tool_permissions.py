@@ -370,6 +370,7 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
             "get_annotation_thread",
             "list_jobs",
             "get_job",
+            "wait_for_jobs",
             "list_research_outputs",
             "get_research_output",
         },
@@ -385,6 +386,7 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
             "update_library_tag",
             "replace_library_paper_tags",
             "ingest_paper",
+            "ingest_papers",
             "retry_paper_ingestion",
             "create_annotation_thread",
             "update_annotation_thread",
@@ -444,7 +446,7 @@ def test_workspace_tool_permission_mapping_is_exact() -> None:
     )
     assert {
         definition.name for definition in catalog.definitions_for(full_mcp_access)
-    } == set().union(*expected.values(), {"prepare_paper_upload"})
+    } == (set().union(*expected.values(), {"prepare_paper_upload"}) - {"wait_for_jobs"})
 
 
 def test_conversation_permission_contracts_normalize_and_allow_empty() -> None:

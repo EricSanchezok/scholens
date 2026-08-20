@@ -13,12 +13,11 @@ from typing import cast
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.bootstrap.workflows.citation import CitationWorkflow
 from app.bootstrap.workflows.paper_ingestion import PaperIngestionWorkflow
-from app.modules.jobs.application.contracts import JobListResponse, JobResponse
+from app.modules.jobs.application.contracts import JobListResponse
 from app.modules.papers.application.contracts.documents import (
     CollectPublicPaperResponse,
     DocumentFileUrlResponse,
     DocumentResponse,
-    LibraryPaperIngestionResponse,
     LibraryPaperListResponse,
     LibraryPaperResponse,
     LibrarySummaryResponse,
@@ -83,19 +82,25 @@ def _tool(
     confirmation: bool = False,
     persist_result: bool = True,
     subject: str | None = None,
+    allow_repeated_calls: bool = False,
 ) -> ToolDefinition[ApplicationCapabilities]:
     behavior = ToolBehavior(
-        read_only=execution is ToolExecutionKind.QUERY,
+        read_only=execution in {ToolExecutionKind.QUERY, ToolExecutionKind.ASYNC_QUERY},
         destructive=destructive,
         idempotent=(
-            execution is ToolExecutionKind.QUERY if idempotent is None else idempotent
+            execution in {ToolExecutionKind.QUERY, ToolExecutionKind.ASYNC_QUERY}
+            if idempotent is None
+            else idempotent
         ),
         open_world=open_world,
     )
     policy = (
         ToolConfirmationPolicy.REQUIRED if confirmation else ToolConfirmationPolicy.NONE
     )
-    if execution is ToolExecutionKind.WORKFLOW:
+    if execution in {
+        ToolExecutionKind.ASYNC_QUERY,
+        ToolExecutionKind.WORKFLOW,
+    }:
         return ToolDefinition(
             name=name,
             title=title,
@@ -109,6 +114,7 @@ def _tool(
             persist_result=persist_result,
             workflow_handler=cast(WorkflowToolHandler, handler),
             activity_subject_field=subject,
+            allow_repeated_calls=allow_repeated_calls,
         )
     return ToolDefinition(
         name=name,
@@ -123,6 +129,7 @@ def _tool(
         persist_result=persist_result,
         handler=cast(ToolHandler[ApplicationCapabilities], handler),
         activity_subject_field=subject,
+        allow_repeated_calls=allow_repeated_calls,
     )
 
 
@@ -146,6 +153,7 @@ def build_workspace_tool_catalog(
     manage = WorkspacePermission.MANAGE
     delete = WorkspacePermission.DELETE
     query = ToolExecutionKind.QUERY
+    async_query = ToolExecutionKind.ASYNC_QUERY
     command = ToolExecutionKind.COMMAND
     workflow = ToolExecutionKind.WORKFLOW
     confirmed = wc.ConfirmationAwareAction
@@ -778,13 +786,34 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="you already know a DOI, arXiv ID, PDF URL, or prepared upload ID",
                 avoid="you are searching the internet for relevant papers",
-                result="a durable asynchronous ingestion identity and initial state",
-                next_step="poll get_job and then use the returned document UUID.",
+                result="a durable ingestion identity and terminal or timed-out job snapshot",
+                next_step=(
+                    "use the result when terminal; otherwise wait for the returned job "
+                    "instead of rapidly polling"
+                ),
             ),
             input_model=wc.IngestPaperInput,
-            output_model=LibraryPaperIngestionResponse,
+            output_model=wc.PaperIngestionToolResponse,
             permission=write,
             handler=handlers.ingest_paper,
+            execution=workflow,
+            open_world=True,
+        ),
+        _tool(
+            name="ingest_papers",
+            title="Ingest known papers",
+            description=_description(
+                use="you already know between one and fifty paper sources to import together",
+                avoid="you are discovering papers or need different Project destinations per source",
+                result="ordered per-source acceptance and terminal or timed-out job snapshots",
+                next_step=(
+                    "inspect rejected items and wait once for only the remaining active jobs"
+                ),
+            ),
+            input_model=wc.IngestPapersInput,
+            output_model=wc.BatchPaperIngestionResponse,
+            permission=write,
+            handler=handlers.ingest_papers,
             execution=workflow,
             open_world=True,
         ),
@@ -794,11 +823,11 @@ def build_workspace_tool_catalog(
             description=_description(
                 use="a specific failed ingestion job reports a retryable failure",
                 avoid="the job is active, completed, or requires different source data",
-                result="the restarted ingestion identity and state",
-                next_step="poll get_job using the returned job identity.",
+                result="the restarted ingestion identity and terminal or timed-out job snapshot",
+                next_step="wait again only when the returned job remains active.",
             ),
             input_model=wc.RetryPaperIngestionInput,
-            output_model=LibraryPaperIngestionResponse,
+            output_model=wc.PaperIngestionToolResponse,
             permission=write,
             handler=handlers.retry_paper_ingestion,
             execution=workflow,
@@ -856,15 +885,34 @@ def build_workspace_tool_catalog(
             name="get_job",
             title="Get job",
             description=_description(
-                use="you know a job UUID and need its exact progress or failure",
+                use="you know one job UUID and need to await its exact progress or failure",
                 avoid="you are searching across jobs",
-                result="current status, progress code, result, and failure fields",
-                next_step="retry only when the reported failure is retryable.",
+                result="terminal status or the latest durable snapshot after a bounded wait",
+                next_step="follow next_action and never rapidly poll an active job.",
             ),
-            input_model=wc.JobInput,
-            output_model=JobResponse,
+            input_model=wc.GetJobInput,
+            output_model=wc.WaitableJobResponse,
             permission=read,
             handler=handlers.get_job,
+            execution=async_query,
+            persist_result=False,
+        ),
+        _tool(
+            name="wait_for_jobs",
+            title="Wait for jobs",
+            description=_description(
+                use="one or more known durable jobs remain active after a tool timeout",
+                avoid="you do not know exact job UUIDs or all jobs are already terminal",
+                result="ordered terminal or timed-out snapshots for every requested job",
+                next_step="inspect terminal items or repeat once for only active job IDs.",
+            ),
+            input_model=wc.WaitForJobsInput,
+            output_model=wc.WaitForJobsResponse,
+            permission=read,
+            handler=handlers.wait_for_jobs,
+            execution=async_query,
+            persist_result=False,
+            allow_repeated_calls=True,
         ),
         _tool(
             name="list_annotation_threads",
@@ -1019,16 +1067,20 @@ def build_workspace_tool_catalog(
             handler=handlers.get_research_output,
         ),
     ]
+    internal_names = frozenset({"wait_for_jobs"})
     shared_names = frozenset(
         definition.name
         for definition in definitions
-        if definition.name != "prepare_paper_upload"
+        if definition.name not in {"prepare_paper_upload", *internal_names}
     )
     return ToolCatalog(
         definitions=definitions,
         require_agent_metadata=True,
         profiles=[
-            ToolProfile(name=CONVERSATION_TOOL_PROFILE, tool_names=shared_names),
+            ToolProfile(
+                name=CONVERSATION_TOOL_PROFILE,
+                tool_names=shared_names | internal_names,
+            ),
             ToolProfile(
                 name=MCP_TOOL_PROFILE,
                 tool_names=shared_names | {"prepare_paper_upload"},

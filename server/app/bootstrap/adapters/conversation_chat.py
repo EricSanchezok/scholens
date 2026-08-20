@@ -50,6 +50,7 @@ from app.modules.conversations.application.contracts.conversations import (
 from app.modules.conversations.application.chat import ChatHistoryMessage
 from app.modules.conversations.infrastructure.chat_streaming import (
     encode_conversation_sse,
+    stream_with_keepalive,
     stream_with_stable_error,
 )
 from app.modules.papers.application.contracts.search import PaperCollection
@@ -641,7 +642,7 @@ async def stream_conversation_agent(
         try:
             yield start_event
             async for event in stream_with_stable_error(
-                run_response_generator(),
+                stream_with_keepalive(run_response_generator()),
                 event_name="conversation_chat_message_error",
                 user_id=current_user.id,
                 properties={

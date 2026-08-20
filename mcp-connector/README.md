@@ -42,8 +42,8 @@ directories, non-PDF signatures, empty files, and PDFs over 30 MB are rejected.
 The remote service receives only the plain filename, size, checksum, and bytes;
 the local absolute path is never sent or included in results.
 
-With `read`, `write`, `manage`, and `delete` permission, the bridge exposes 56
-tools. It forwards the 55 canonical tools shared with the Scholens in-product
+With `read`, `write`, `manage`, and `delete` permission, the bridge exposes 57
+tools. It forwards the 56 canonical tools shared by the remote and in-product
 Agent, hides the remote-only `prepare_paper_upload` transport primitive, and
 adds `upload_local_paper`. Narrower Access Keys see only their authorized
 subset. Internet literature discovery and research-output generation remain
@@ -77,7 +77,9 @@ asynchronous ingestion. Supply the bound `project_id` to add the completed
 paper to that Project; omit it for the personal Library. The completed paper
 is also added to the caller's personal Library by default
 (`add_to_library=true`); pass `add_to_library=false` to keep a Project upload
-Project-only. Poll `get_job` with the returned job UUID.
+Project-only. The tool waits up to 30 seconds by default and returns terminal
+state or the latest durable job snapshot; use its next-action guidance and a
+bounded `get_job` wait instead of rapid polling.
 
 The authenticated MCP connection and object-storage PUT use separate HTTP
 clients. The Scholens Access Key is never attached to the upload request. The

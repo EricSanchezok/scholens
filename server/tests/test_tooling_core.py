@@ -282,6 +282,52 @@ async def test_dispatcher_maps_unknown_tools_and_invalid_arguments() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_query_dispatches_without_invocation_persistence() -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def wait_query(
+        context: ToolExecutionContext,
+        arguments: BaseModel,
+        invocation_key: str,
+    ) -> ToolOutcome:
+        parsed = Arguments.model_validate(arguments)
+        calls.append((parsed.value, invocation_key))
+        return ToolOutcome(payload={"value": parsed.value})
+
+    definition = ToolDefinition[Capabilities](
+        name="wait_query",
+        description="wait",
+        input_model=Arguments,
+        execution=ToolExecutionKind.ASYNC_QUERY,
+        required_permission=WorkspacePermission.READ,
+        behavior=ToolBehavior(read_only=True, idempotent=True),
+        workflow_handler=wait_query,
+    )
+    capabilities = Capabilities(MemoryInvocationGateway())
+    executor = Executor(capabilities)
+    dispatcher = ToolDispatcher(
+        catalog=ToolCatalog(
+            [definition],
+            [ToolProfile(name="conversation", tool_names=frozenset({"wait_query"}))],
+        ),
+        executor=executor,
+    )
+
+    result = await dispatcher.dispatch(
+        name="wait_query",
+        raw_arguments={"value": "same"},
+        context=_context(),
+        access=_access(),
+    )
+
+    assert result.payload == {"value": "same"}
+    assert calls == [("same", "turn-1:wait_query")]
+    assert executor.queries == 0
+    assert executor.commands == 0
+    assert capabilities.tool_invocations.items == {}
+
+
+@pytest.mark.asyncio
 async def test_command_dispatch_is_persistently_replayed() -> None:
     def write(
         capabilities: Capabilities,
@@ -469,12 +515,14 @@ def test_workspace_profiles_share_one_canonical_definition_set() -> None:
     mcp_by_name = {tool.name: tool for tool in mcp}
 
     assert set(mcp_by_name) - set(conversation_by_name) == {"prepare_paper_upload"}
+    assert set(conversation_by_name) - set(mcp_by_name) == {"wait_for_jobs"}
     assert "STOP" not in conversation_by_name
     assert "read_file" not in conversation_by_name
-    assert len(conversation_by_name) == 55
-    assert len(mcp_by_name) == 56
+    assert len(conversation_by_name) == 57
+    assert len(mcp_by_name) == 57
     assert mcp_by_name["resolve_paper_citation"].execution is ToolExecutionKind.WORKFLOW
-    for name, conversation_tool in conversation_by_name.items():
+    for name in set(conversation_by_name) & set(mcp_by_name):
+        conversation_tool = conversation_by_name[name]
         mcp_tool = mcp_by_name[name]
         assert conversation_tool is mcp_tool
         assert (

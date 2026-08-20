@@ -212,7 +212,8 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
             "Scholens. Do not use for paper discovery, DOI/arXiv import, directories, "
             "or paths outside MCP roots. The connector reads only the selected PDF, "
             "uploads its exact bytes directly to secure staging, starts ingestion, and "
-            "returns no local path. Next: poll get_job with the returned job identity."
+            "returns no local path. Next: follow the returned terminal or timed-out job "
+            "guidance instead of rapidly polling."
         ),
         inputSchema={
             "type": "object",
@@ -249,6 +250,16 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
                     "description": (
                         "Stable key for this one logical ingestion. Reuse it after an "
                         "uncertain response; use a new key for a genuinely new import."
+                    ),
+                },
+                "wait_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 240,
+                    "default": 30,
+                    "description": (
+                        "Maximum time to await terminal ingestion status before "
+                        "returning the latest durable snapshot. Use 0 for immediate."
                     ),
                 },
             },
@@ -411,6 +422,7 @@ async def upload_local_paper(
     project_id = arguments.get("project_id")
     add_to_library = arguments.get("add_to_library", True)
     idempotency_key = arguments.get("idempotency_key")
+    wait_seconds = arguments.get("wait_seconds", 30)
     prepare = await remote.call_tool(
         PREPARE_TOOL,
         {
@@ -445,6 +457,7 @@ async def upload_local_paper(
         "source": {"kind": "upload", "upload_id": upload_id},
         "project_id": project_id,
         "add_to_library": add_to_library,
+        "wait_seconds": wait_seconds,
     }
     if idempotency_key is not None:
         source_arguments["idempotency_key"] = idempotency_key

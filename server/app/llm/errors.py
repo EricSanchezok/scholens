@@ -3,14 +3,31 @@
 from __future__ import annotations
 
 import openai
+from pydantic_ai.exceptions import UsageLimitExceeded
 
 from app.llm.backend import LLMUsageSettlementError
 from app.shared.domain import AppError, FailureKind
+from scholens_observability import add_counter
 
 
 def classify_llm_error(error: BaseException, *, stage: str) -> AppError:
     if isinstance(error, AppError):
         return error
+    if isinstance(error, UsageLimitExceeded):
+        add_counter(
+            "scholens.conversation.agent_orchestration_limits",
+            attributes={"stage": stage},
+        )
+        return AppError(
+            code="agent_orchestration_limit_exceeded",
+            message=(
+                "The agent reached its bounded orchestration limit before completing "
+                "the operation."
+            ),
+            kind=FailureKind.CONFLICT,
+            details={"stage": stage},
+            retryable=False,
+        )
     if isinstance(error, openai.APITimeoutError):
         return AppError(
             code="llm_stream_timeout",

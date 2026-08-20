@@ -27,7 +27,7 @@ def test_public_mcp_snapshot_is_current_and_complete() -> None:
 
     assert committed == public_mcp_contract()
     assert committed["endpoint"] == "/mcp"
-    assert len(committed["tools"]) == 56
+    assert len(committed["tools"]) == 57
     assert all(
         tool["output_schema"].get("type") == "object"
         for tool in committed["tools"].values()
@@ -38,6 +38,15 @@ def test_public_mcp_snapshot_is_current_and_complete() -> None:
         "required_permission",
         "behavior",
     }
+    assert committed["tools"]["get_job"]["execution"] == "query"
+    assert (
+        committed["tools"]["get_job"]["input_schema"]["properties"]["wait_seconds"][
+            "default"
+        ]
+        == 30
+    )
+    assert "ingest_papers" in committed["tools"]
+    assert "wait_for_jobs" not in committed["tools"]
 
 
 def test_mcp_metadata_checker_rejects_permission_and_safety_regressions() -> None:

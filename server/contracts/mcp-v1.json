@@ -11184,7 +11184,7 @@
         "read_only": true
       },
       "confirmation_policy": "none",
-      "description": "Use when you know a job UUID and need its exact progress or failure. Do not use when you are searching across jobs. Returns current status, progress code, result, and failure fields. Next: retry only when the reported failure is retryable.",
+      "description": "Use when you know one job UUID and need to await its exact progress or failure. Do not use when you are searching across jobs. Returns terminal status or the latest durable snapshot after a bounded wait. Next: follow next_action and never rapidly poll an active job.",
       "execution": "query",
       "input_schema": {
         "additionalProperties": false,
@@ -11194,12 +11194,20 @@
             "format": "uuid",
             "title": "Job Id",
             "type": "string"
+          },
+          "wait_seconds": {
+            "default": 30,
+            "description": "Maximum time to await terminal job status before returning the latest durable snapshot. Use 0 for an immediate snapshot. Do not implement rapid polling.",
+            "maximum": 240,
+            "minimum": 0,
+            "title": "Wait Seconds",
+            "type": "integer"
           }
         },
         "required": [
           "job_id"
         ],
-        "title": "JobInput",
+        "title": "GetJobInput",
         "type": "object"
       },
       "output_schema": {
@@ -11407,183 +11415,52 @@
             "title": "ExternalSourceProvenance",
             "type": "object"
           },
-          "JobResponse": {
+          "JobWaitMetadata": {
             "properties": {
-              "completed_at": {
-                "anyOf": [
-                  {
-                    "format": "date-time",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Completed At"
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "integer"
               },
-              "created_at": {
-                "format": "date-time",
-                "title": "Created At",
+              "guidance": {
+                "title": "Guidance",
                 "type": "string"
               },
-              "document_id": {
-                "anyOf": [
-                  {
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
+              "next_action": {
+                "enum": [
+                  "use_result",
+                  "inspect_failure",
+                  "stop",
+                  "wait_again"
                 ],
-                "title": "Document Id"
-              },
-              "error_code": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Error Code"
-              },
-              "id": {
-                "format": "uuid",
-                "title": "Id",
+                "title": "Next Action",
                 "type": "string"
               },
-              "operation": {
-                "title": "Operation",
+              "outcome": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled",
+                  "timed_out"
+                ],
+                "title": "Outcome",
                 "type": "string"
               },
-              "progress_code": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Progress Code"
-              },
-              "project_id": {
-                "anyOf": [
-                  {
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Project Id"
-              },
-              "result": {
-                "anyOf": [
-                  {
-                    "additionalProperties": {
-                      "$ref": "#/$defs/JsonValue"
-                    },
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Result"
-              },
-              "started_at": {
-                "anyOf": [
-                  {
-                    "format": "date-time",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Started At"
-              },
-              "status": {
-                "title": "Status",
-                "type": "string"
+              "requested_seconds": {
+                "maximum": 240,
+                "minimum": 0,
+                "title": "Requested Seconds",
+                "type": "integer"
               }
             },
             "required": [
-              "id",
-              "operation",
-              "document_id",
-              "project_id",
-              "status",
-              "progress_code",
-              "error_code",
-              "result",
-              "created_at",
-              "started_at",
-              "completed_at"
+              "outcome",
+              "requested_seconds",
+              "elapsed_ms",
+              "next_action",
+              "guidance"
             ],
-            "title": "JobResponse",
-            "type": "object"
-          },
-          "JobResponseToolStructuredResult": {
-            "properties": {
-              "action": {
-                "anyOf": [
-                  {
-                    "additionalProperties": {
-                      "$ref": "#/$defs/JsonValue"
-                    },
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Action"
-              },
-              "artifacts": {
-                "items": {
-                  "additionalProperties": {
-                    "$ref": "#/$defs/JsonValue"
-                  },
-                  "type": "object"
-                },
-                "title": "Artifacts",
-                "type": "array"
-              },
-              "resource_links": {
-                "items": {
-                  "$ref": "#/$defs/ToolResourceLink"
-                },
-                "title": "Resource Links",
-                "type": "array"
-              },
-              "result": {
-                "$ref": "#/$defs/JobResponse"
-              },
-              "sources": {
-                "items": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/DocumentSourceCandidate"
-                    },
-                    {
-                      "$ref": "#/$defs/ExternalSourceCandidate"
-                    }
-                  ]
-                },
-                "title": "Sources",
-                "type": "array"
-              }
-            },
-            "required": [
-              "result"
-            ],
-            "title": "JobResponseToolStructuredResult",
+            "title": "JobWaitMetadata",
             "type": "object"
           },
           "JsonScalar": {
@@ -11769,11 +11646,194 @@
             ],
             "title": "ToolResourceLink",
             "type": "object"
+          },
+          "WaitableJobResponse": {
+            "properties": {
+              "completed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Completed At"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Document Id"
+              },
+              "error_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Error Code"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "operation": {
+                "title": "Operation",
+                "type": "string"
+              },
+              "progress_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Progress Code"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Project Id"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Result"
+              },
+              "started_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Started At"
+              },
+              "status": {
+                "title": "Status",
+                "type": "string"
+              },
+              "wait": {
+                "$ref": "#/$defs/JobWaitMetadata"
+              }
+            },
+            "required": [
+              "id",
+              "operation",
+              "document_id",
+              "project_id",
+              "status",
+              "progress_code",
+              "error_code",
+              "result",
+              "created_at",
+              "started_at",
+              "completed_at",
+              "wait"
+            ],
+            "title": "WaitableJobResponse",
+            "type": "object"
+          },
+          "WaitableJobResponseToolStructuredResult": {
+            "properties": {
+              "action": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Action"
+              },
+              "artifacts": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Artifacts",
+                "type": "array"
+              },
+              "resource_links": {
+                "items": {
+                  "$ref": "#/$defs/ToolResourceLink"
+                },
+                "title": "Resource Links",
+                "type": "array"
+              },
+              "result": {
+                "$ref": "#/$defs/WaitableJobResponse"
+              },
+              "sources": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/DocumentSourceCandidate"
+                    },
+                    {
+                      "$ref": "#/$defs/ExternalSourceCandidate"
+                    }
+                  ]
+                },
+                "title": "Sources",
+                "type": "array"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "WaitableJobResponseToolStructuredResult",
+            "type": "object"
           }
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/JobResponseToolStructuredResult"
+            "$ref": "#/$defs/WaitableJobResponseToolStructuredResult"
           },
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
@@ -17857,7 +17917,7 @@
         "read_only": false
       },
       "confirmation_policy": "none",
-      "description": "Use when you already know a DOI, arXiv ID, PDF URL, or prepared upload ID. Do not use when you are searching the internet for relevant papers. Returns a durable asynchronous ingestion identity and initial state. Next: poll get_job and then use the returned document UUID.",
+      "description": "Use when you already know a DOI, arXiv ID, PDF URL, or prepared upload ID. Do not use when you are searching the internet for relevant papers. Returns a durable ingestion identity and terminal or timed-out job snapshot. Next: use the result when terminal; otherwise wait for the returned job instead of rapidly polling",
       "execution": "workflow",
       "input_schema": {
         "$defs": {
@@ -18020,6 +18080,14 @@
               }
             ],
             "title": "Source"
+          },
+          "wait_seconds": {
+            "default": 30,
+            "description": "Maximum time to await terminal job status before returning the latest durable snapshot. Use 0 for an immediate snapshot. Do not implement rapid polling.",
+            "maximum": 240,
+            "minimum": 0,
+            "title": "Wait Seconds",
+            "type": "integer"
           }
         },
         "required": [
@@ -18267,6 +18335,54 @@
             "title": "ExternalSourceProvenance",
             "type": "object"
           },
+          "JobWaitMetadata": {
+            "properties": {
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "integer"
+              },
+              "guidance": {
+                "title": "Guidance",
+                "type": "string"
+              },
+              "next_action": {
+                "enum": [
+                  "use_result",
+                  "inspect_failure",
+                  "stop",
+                  "wait_again"
+                ],
+                "title": "Next Action",
+                "type": "string"
+              },
+              "outcome": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled",
+                  "timed_out"
+                ],
+                "title": "Outcome",
+                "type": "string"
+              },
+              "requested_seconds": {
+                "maximum": 240,
+                "minimum": 0,
+                "title": "Requested Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outcome",
+              "requested_seconds",
+              "elapsed_ms",
+              "next_action",
+              "guidance"
+            ],
+            "title": "JobWaitMetadata",
+            "type": "object"
+          },
           "JsonScalar": {
             "anyOf": [
               {
@@ -18305,7 +18421,7 @@
               }
             ]
           },
-          "LibraryPaperIngestionResponse": {
+          "PaperIngestionToolResponse": {
             "properties": {
               "created_at": {
                 "format": "date-time",
@@ -18343,6 +18459,9 @@
                 "format": "uuid",
                 "title": "Id",
                 "type": "string"
+              },
+              "job": {
+                "$ref": "#/$defs/WaitableJobResponse"
               },
               "project_id": {
                 "anyOf": [
@@ -18396,12 +18515,13 @@
               "stage",
               "project_id",
               "document_id",
-              "created_at"
+              "created_at",
+              "job"
             ],
-            "title": "LibraryPaperIngestionResponse",
+            "title": "PaperIngestionToolResponse",
             "type": "object"
           },
-          "LibraryPaperIngestionResponseToolStructuredResult": {
+          "PaperIngestionToolResponseToolStructuredResult": {
             "properties": {
               "action": {
                 "anyOf": [
@@ -18436,7 +18556,7 @@
                 "type": "array"
               },
               "result": {
-                "$ref": "#/$defs/LibraryPaperIngestionResponse"
+                "$ref": "#/$defs/PaperIngestionToolResponse"
               },
               "sources": {
                 "items": {
@@ -18456,7 +18576,7 @@
             "required": [
               "result"
             ],
-            "title": "LibraryPaperIngestionResponseToolStructuredResult",
+            "title": "PaperIngestionToolResponseToolStructuredResult",
             "type": "object"
           },
           "ToolErrorEnvelope": {
@@ -18604,11 +18724,136 @@
             ],
             "title": "ToolResourceLink",
             "type": "object"
+          },
+          "WaitableJobResponse": {
+            "properties": {
+              "completed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Completed At"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Document Id"
+              },
+              "error_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Error Code"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "operation": {
+                "title": "Operation",
+                "type": "string"
+              },
+              "progress_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Progress Code"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Project Id"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Result"
+              },
+              "started_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Started At"
+              },
+              "status": {
+                "title": "Status",
+                "type": "string"
+              },
+              "wait": {
+                "$ref": "#/$defs/JobWaitMetadata"
+              }
+            },
+            "required": [
+              "id",
+              "operation",
+              "document_id",
+              "project_id",
+              "status",
+              "progress_code",
+              "error_code",
+              "result",
+              "created_at",
+              "started_at",
+              "completed_at",
+              "wait"
+            ],
+            "title": "WaitableJobResponse",
+            "type": "object"
           }
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/LibraryPaperIngestionResponseToolStructuredResult"
+            "$ref": "#/$defs/PaperIngestionToolResponseToolStructuredResult"
           },
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
@@ -18618,6 +18863,1266 @@
       },
       "required_permission": "write",
       "title": "Ingest known paper"
+    },
+    "ingest_papers": {
+      "behavior": {
+        "destructive": false,
+        "idempotent": false,
+        "open_world": true,
+        "read_only": false
+      },
+      "confirmation_policy": "none",
+      "description": "Use when you already know between one and fifty paper sources to import together. Do not use when you are discovering papers or need different Project destinations per source. Returns ordered per-source acceptance and terminal or timed-out job snapshots. Next: inspect rejected items and wait once for only the remaining active jobs",
+      "execution": "workflow",
+      "input_schema": {
+        "$defs": {
+          "ArxivPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "arxiv_id": {
+                "description": "A known arXiv identifier such as '1706.03762'. Do not put a search query or paper title here.",
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Arxiv Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "arxiv",
+                "default": "arxiv",
+                "description": "Import one already-known paper by arXiv identifier.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "arxiv_id"
+            ],
+            "title": "ArxivPaperSource",
+            "type": "object"
+          },
+          "DoiPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "doi": {
+                "description": "A known DOI for the paper to import. Supply the canonical identifier, not a title, keywords, or a request to discover papers.",
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Doi",
+                "type": "string"
+              },
+              "kind": {
+                "const": "doi",
+                "default": "doi",
+                "description": "Import one already-known paper by DOI.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "doi"
+            ],
+            "title": "DoiPaperSource",
+            "type": "object"
+          },
+          "UploadPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "upload",
+                "default": "upload",
+                "description": "Ingest bytes already transferred through a prepared upload session.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "upload_id": {
+                "description": "The upload session UUID returned by prepare_paper_upload after the PDF bytes were uploaded with the supplied URL and headers.",
+                "format": "uuid",
+                "title": "Upload Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "upload_id"
+            ],
+            "title": "UploadPaperSource",
+            "type": "object"
+          },
+          "UrlPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "url",
+                "default": "url",
+                "description": "Import one already-known reachable HTTP(S) paper source.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "url": {
+                "description": "The already-known HTTP(S) URL of a PDF or supported paper source. This imports the URL; it does not search the internet.",
+                "maxLength": 2048,
+                "minLength": 1,
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "title": "UrlPaperSource",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "add_to_library": {
+            "description": "When true and a Project is targeted, completed papers are also added to the caller's personal Library. Set false for Project-only ingestion.",
+            "title": "Add To Library",
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A client-generated stable key for this one logical mutation. Reuse the exact key after a timeout or lost response; use a new key for a genuinely new action.",
+            "title": "Idempotency Key"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "description": "The immutable Scholens Project UUID. In a repository-bound workflow, read it from AGENTS.md or README, or obtain it from a Project tool. Never infer it from the mutable Project title.",
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional destination Project applied to every source. Omit it to add the papers only to the caller's personal Library. Upload sources must have been prepared for this exact destination.",
+            "title": "Project Id"
+          },
+          "sources": {
+            "description": "One to fifty already-known paper sources to ingest as one bounded batch. Input order is preserved in the result.",
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "arxiv": "#/$defs/ArxivPaperSource",
+                  "doi": "#/$defs/DoiPaperSource",
+                  "upload": "#/$defs/UploadPaperSource",
+                  "url": "#/$defs/UrlPaperSource"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/DoiPaperSource"
+                },
+                {
+                  "$ref": "#/$defs/ArxivPaperSource"
+                },
+                {
+                  "$ref": "#/$defs/UrlPaperSource"
+                },
+                {
+                  "$ref": "#/$defs/UploadPaperSource"
+                }
+              ]
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          },
+          "wait_seconds": {
+            "default": 30,
+            "description": "Maximum time to await terminal job status before returning the latest durable snapshot. Use 0 for an immediate snapshot. Do not implement rapid polling.",
+            "maximum": 240,
+            "minimum": 0,
+            "title": "Wait Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "IngestPapersInput",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "ActionableJobFailure": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Code",
+                "type": "string"
+              },
+              "required_integration": {
+                "anyOf": [
+                  {
+                    "const": "mineru",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Required Integration"
+              },
+              "retryable": {
+                "title": "Retryable",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "retryable"
+            ],
+            "title": "ActionableJobFailure",
+            "type": "object"
+          },
+          "ArxivPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "arxiv_id": {
+                "description": "A known arXiv identifier such as '1706.03762'. Do not put a search query or paper title here.",
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Arxiv Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "arxiv",
+                "default": "arxiv",
+                "description": "Import one already-known paper by arXiv identifier.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "arxiv_id"
+            ],
+            "title": "ArxivPaperSource",
+            "type": "object"
+          },
+          "BatchPaperIngestionItem": {
+            "properties": {
+              "error_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Error Code"
+              },
+              "index": {
+                "minimum": 0,
+                "title": "Index",
+                "type": "integer"
+              },
+              "ingestion": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LibraryPaperIngestionResponse"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "job": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/WaitableJobResponse"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "source": {
+                "discriminator": {
+                  "mapping": {
+                    "arxiv": "#/$defs/ArxivPaperSource",
+                    "doi": "#/$defs/DoiPaperSource",
+                    "upload": "#/$defs/UploadPaperSource",
+                    "url": "#/$defs/UrlPaperSource"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/DoiPaperSource"
+                  },
+                  {
+                    "$ref": "#/$defs/ArxivPaperSource"
+                  },
+                  {
+                    "$ref": "#/$defs/UrlPaperSource"
+                  },
+                  {
+                    "$ref": "#/$defs/UploadPaperSource"
+                  }
+                ],
+                "title": "Source"
+              },
+              "status": {
+                "enum": [
+                  "accepted",
+                  "rejected"
+                ],
+                "title": "Status",
+                "type": "string"
+              }
+            },
+            "required": [
+              "index",
+              "source",
+              "status"
+            ],
+            "title": "BatchPaperIngestionItem",
+            "type": "object"
+          },
+          "BatchPaperIngestionResponse": {
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/BatchPaperIngestionItem"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "summary": {
+                "$ref": "#/$defs/BatchPaperIngestionSummary"
+              },
+              "wait": {
+                "$ref": "#/$defs/JobBatchWaitMetadata"
+              }
+            },
+            "required": [
+              "items",
+              "summary",
+              "wait"
+            ],
+            "title": "BatchPaperIngestionResponse",
+            "type": "object"
+          },
+          "BatchPaperIngestionResponseToolStructuredResult": {
+            "properties": {
+              "action": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Action"
+              },
+              "artifacts": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Artifacts",
+                "type": "array"
+              },
+              "resource_links": {
+                "items": {
+                  "$ref": "#/$defs/ToolResourceLink"
+                },
+                "title": "Resource Links",
+                "type": "array"
+              },
+              "result": {
+                "$ref": "#/$defs/BatchPaperIngestionResponse"
+              },
+              "sources": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/DocumentSourceCandidate"
+                    },
+                    {
+                      "$ref": "#/$defs/ExternalSourceCandidate"
+                    }
+                  ]
+                },
+                "title": "Sources",
+                "type": "array"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "BatchPaperIngestionResponseToolStructuredResult",
+            "type": "object"
+          },
+          "BatchPaperIngestionSummary": {
+            "properties": {
+              "accepted": {
+                "maximum": 50,
+                "minimum": 0,
+                "title": "Accepted",
+                "type": "integer"
+              },
+              "active": {
+                "maximum": 50,
+                "minimum": 0,
+                "title": "Active",
+                "type": "integer"
+              },
+              "cancelled": {
+                "maximum": 50,
+                "minimum": 0,
+                "title": "Cancelled",
+                "type": "integer"
+              },
+              "completed": {
+                "maximum": 50,
+                "minimum": 0,
+                "title": "Completed",
+                "type": "integer"
+              },
+              "failed": {
+                "maximum": 50,
+                "minimum": 0,
+                "title": "Failed",
+                "type": "integer"
+              },
+              "rejected": {
+                "maximum": 50,
+                "minimum": 0,
+                "title": "Rejected",
+                "type": "integer"
+              },
+              "requested": {
+                "maximum": 50,
+                "minimum": 1,
+                "title": "Requested",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "requested",
+              "accepted",
+              "rejected",
+              "active",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "BatchPaperIngestionSummary",
+            "type": "object"
+          },
+          "DocumentSourceCandidate": {
+            "properties": {
+              "authors": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Authors",
+                "type": "array"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "excerpt": {
+                "title": "Excerpt",
+                "type": "string"
+              },
+              "kind": {
+                "const": "document",
+                "default": "document",
+                "title": "Kind",
+                "type": "string"
+              },
+              "locator": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Locator"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              }
+            },
+            "required": [
+              "document_id",
+              "excerpt"
+            ],
+            "title": "DocumentSourceCandidate",
+            "type": "object"
+          },
+          "DoiPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "doi": {
+                "description": "A known DOI for the paper to import. Supply the canonical identifier, not a title, keywords, or a request to discover papers.",
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Doi",
+                "type": "string"
+              },
+              "kind": {
+                "const": "doi",
+                "default": "doi",
+                "description": "Import one already-known paper by DOI.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "doi"
+            ],
+            "title": "DoiPaperSource",
+            "type": "object"
+          },
+          "ExternalSourceCandidate": {
+            "properties": {
+              "excerpt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt"
+              },
+              "kind": {
+                "const": "external",
+                "default": "external",
+                "title": "Kind",
+                "type": "string"
+              },
+              "provenance": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ExternalSourceProvenance"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              },
+              "url": {
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "title": "ExternalSourceCandidate",
+            "type": "object"
+          },
+          "ExternalSourceProvenance": {
+            "description": "Exact locations used to derive one external source candidate.",
+            "properties": {
+              "excerpt_end": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt End"
+              },
+              "excerpt_path": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt Path"
+              },
+              "excerpt_start": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Excerpt Start"
+              },
+              "url_end": {
+                "title": "Url End",
+                "type": "integer"
+              },
+              "url_origin": {
+                "enum": [
+                  "arguments",
+                  "payload"
+                ],
+                "title": "Url Origin",
+                "type": "string"
+              },
+              "url_path": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "title": "Url Path",
+                "type": "array"
+              },
+              "url_start": {
+                "title": "Url Start",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "url_origin",
+              "url_path",
+              "url_start",
+              "url_end"
+            ],
+            "title": "ExternalSourceProvenance",
+            "type": "object"
+          },
+          "JobBatchWaitMetadata": {
+            "properties": {
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "integer"
+              },
+              "guidance": {
+                "title": "Guidance",
+                "type": "string"
+              },
+              "next_action": {
+                "enum": [
+                  "inspect_items",
+                  "wait_for_remaining"
+                ],
+                "title": "Next Action",
+                "type": "string"
+              },
+              "outcome": {
+                "enum": [
+                  "all_terminal",
+                  "timed_out"
+                ],
+                "title": "Outcome",
+                "type": "string"
+              },
+              "requested_seconds": {
+                "maximum": 240,
+                "minimum": 0,
+                "title": "Requested Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outcome",
+              "requested_seconds",
+              "elapsed_ms",
+              "next_action",
+              "guidance"
+            ],
+            "title": "JobBatchWaitMetadata",
+            "type": "object"
+          },
+          "JobWaitMetadata": {
+            "properties": {
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "integer"
+              },
+              "guidance": {
+                "title": "Guidance",
+                "type": "string"
+              },
+              "next_action": {
+                "enum": [
+                  "use_result",
+                  "inspect_failure",
+                  "stop",
+                  "wait_again"
+                ],
+                "title": "Next Action",
+                "type": "string"
+              },
+              "outcome": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled",
+                  "timed_out"
+                ],
+                "title": "Outcome",
+                "type": "string"
+              },
+              "requested_seconds": {
+                "maximum": 240,
+                "minimum": 0,
+                "title": "Requested Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outcome",
+              "requested_seconds",
+              "elapsed_ms",
+              "next_action",
+              "guidance"
+            ],
+            "title": "JobWaitMetadata",
+            "type": "object"
+          },
+          "JsonScalar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "JsonValue": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/JsonScalar"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonValue"
+                },
+                "type": "object"
+              }
+            ]
+          },
+          "LibraryPaperIngestionResponse": {
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "display_name": {
+                "title": "Display Name",
+                "type": "string"
+              },
+              "document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Document Id"
+              },
+              "failure": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ActionableJobFailure"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Project Id"
+              },
+              "source_kind": {
+                "enum": [
+                  "upload",
+                  "doi",
+                  "arxiv",
+                  "url"
+                ],
+                "title": "Source Kind",
+                "type": "string"
+              },
+              "stage": {
+                "enum": [
+                  "queued",
+                  "downloading",
+                  "parsing",
+                  "extracting_metadata",
+                  "indexing",
+                  "finalizing"
+                ],
+                "title": "Stage",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "queued",
+                  "processing",
+                  "failed"
+                ],
+                "title": "State",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "display_name",
+              "source_kind",
+              "state",
+              "stage",
+              "project_id",
+              "document_id",
+              "created_at"
+            ],
+            "title": "LibraryPaperIngestionResponse",
+            "type": "object"
+          },
+          "ToolErrorEnvelope": {
+            "description": "Compatibility shape retained in the advertised tool output schema.\n\nCurrent ``isError`` results omit ``structuredContent`` and serialize this\nshape under ``content[].text.error`` so strict clients do not validate\nerrors against stale cached output schemas. Retaining the branch keeps old\nstructured error results valid during rolling upgrades.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "correlation_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Correlation Id"
+              },
+              "details": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Details"
+              },
+              "diagnostic_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Diagnostic Id"
+              },
+              "kind": {
+                "title": "Kind",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "remediation": {
+                "title": "Remediation",
+                "type": "string"
+              },
+              "request_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Request Id"
+              },
+              "retryable": {
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "stage": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Stage"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "kind",
+              "retryable",
+              "remediation"
+            ],
+            "title": "ToolErrorEnvelope",
+            "type": "object"
+          },
+          "ToolErrorResultEnvelope": {
+            "description": "The error branch of the advertised output schema (``{error: ...}``).",
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/ToolErrorEnvelope"
+              }
+            },
+            "required": [
+              "error"
+            ],
+            "title": "ToolErrorResultEnvelope",
+            "type": "object"
+          },
+          "ToolResourceLink": {
+            "description": "A stable Scholens resource made available by a tool result.",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "mime_type": {
+                "default": "application/json",
+                "title": "Mime Type",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "uri": {
+                "title": "Uri",
+                "type": "string"
+              }
+            },
+            "required": [
+              "uri",
+              "name"
+            ],
+            "title": "ToolResourceLink",
+            "type": "object"
+          },
+          "UploadPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "upload",
+                "default": "upload",
+                "description": "Ingest bytes already transferred through a prepared upload session.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "upload_id": {
+                "description": "The upload session UUID returned by prepare_paper_upload after the PDF bytes were uploaded with the supplied URL and headers.",
+                "format": "uuid",
+                "title": "Upload Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "upload_id"
+            ],
+            "title": "UploadPaperSource",
+            "type": "object"
+          },
+          "UrlPaperSource": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "url",
+                "default": "url",
+                "description": "Import one already-known reachable HTTP(S) paper source.",
+                "title": "Kind",
+                "type": "string"
+              },
+              "url": {
+                "description": "The already-known HTTP(S) URL of a PDF or supported paper source. This imports the URL; it does not search the internet.",
+                "maxLength": 2048,
+                "minLength": 1,
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "title": "UrlPaperSource",
+            "type": "object"
+          },
+          "WaitableJobResponse": {
+            "properties": {
+              "completed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Completed At"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Document Id"
+              },
+              "error_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Error Code"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "operation": {
+                "title": "Operation",
+                "type": "string"
+              },
+              "progress_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Progress Code"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Project Id"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Result"
+              },
+              "started_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Started At"
+              },
+              "status": {
+                "title": "Status",
+                "type": "string"
+              },
+              "wait": {
+                "$ref": "#/$defs/JobWaitMetadata"
+              }
+            },
+            "required": [
+              "id",
+              "operation",
+              "document_id",
+              "project_id",
+              "status",
+              "progress_code",
+              "error_code",
+              "result",
+              "created_at",
+              "started_at",
+              "completed_at",
+              "wait"
+            ],
+            "title": "WaitableJobResponse",
+            "type": "object"
+          }
+        },
+        "anyOf": [
+          {
+            "$ref": "#/$defs/BatchPaperIngestionResponseToolStructuredResult"
+          },
+          {
+            "$ref": "#/$defs/ToolErrorResultEnvelope"
+          }
+        ],
+        "type": "object"
+      },
+      "required_permission": "write",
+      "title": "Ingest known papers"
     },
     "leave_project": {
       "behavior": {
@@ -32480,7 +33985,7 @@
         "read_only": false
       },
       "confirmation_policy": "none",
-      "description": "Use when a specific failed ingestion job reports a retryable failure. Do not use when the job is active, completed, or requires different source data. Returns the restarted ingestion identity and state. Next: poll get_job using the returned job identity.",
+      "description": "Use when a specific failed ingestion job reports a retryable failure. Do not use when the job is active, completed, or requires different source data. Returns the restarted ingestion identity and terminal or timed-out job snapshot. Next: wait again only when the returned job remains active.",
       "execution": "workflow",
       "input_schema": {
         "additionalProperties": false,
@@ -32505,6 +34010,14 @@
             "format": "uuid",
             "title": "Job Id",
             "type": "string"
+          },
+          "wait_seconds": {
+            "default": 30,
+            "description": "Maximum time to await terminal job status before returning the latest durable snapshot. Use 0 for an immediate snapshot. Do not implement rapid polling.",
+            "maximum": 240,
+            "minimum": 0,
+            "title": "Wait Seconds",
+            "type": "integer"
           }
         },
         "required": [
@@ -32752,6 +34265,54 @@
             "title": "ExternalSourceProvenance",
             "type": "object"
           },
+          "JobWaitMetadata": {
+            "properties": {
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "integer"
+              },
+              "guidance": {
+                "title": "Guidance",
+                "type": "string"
+              },
+              "next_action": {
+                "enum": [
+                  "use_result",
+                  "inspect_failure",
+                  "stop",
+                  "wait_again"
+                ],
+                "title": "Next Action",
+                "type": "string"
+              },
+              "outcome": {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "cancelled",
+                  "timed_out"
+                ],
+                "title": "Outcome",
+                "type": "string"
+              },
+              "requested_seconds": {
+                "maximum": 240,
+                "minimum": 0,
+                "title": "Requested Seconds",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "outcome",
+              "requested_seconds",
+              "elapsed_ms",
+              "next_action",
+              "guidance"
+            ],
+            "title": "JobWaitMetadata",
+            "type": "object"
+          },
           "JsonScalar": {
             "anyOf": [
               {
@@ -32790,7 +34351,7 @@
               }
             ]
           },
-          "LibraryPaperIngestionResponse": {
+          "PaperIngestionToolResponse": {
             "properties": {
               "created_at": {
                 "format": "date-time",
@@ -32828,6 +34389,9 @@
                 "format": "uuid",
                 "title": "Id",
                 "type": "string"
+              },
+              "job": {
+                "$ref": "#/$defs/WaitableJobResponse"
               },
               "project_id": {
                 "anyOf": [
@@ -32881,12 +34445,13 @@
               "stage",
               "project_id",
               "document_id",
-              "created_at"
+              "created_at",
+              "job"
             ],
-            "title": "LibraryPaperIngestionResponse",
+            "title": "PaperIngestionToolResponse",
             "type": "object"
           },
-          "LibraryPaperIngestionResponseToolStructuredResult": {
+          "PaperIngestionToolResponseToolStructuredResult": {
             "properties": {
               "action": {
                 "anyOf": [
@@ -32921,7 +34486,7 @@
                 "type": "array"
               },
               "result": {
-                "$ref": "#/$defs/LibraryPaperIngestionResponse"
+                "$ref": "#/$defs/PaperIngestionToolResponse"
               },
               "sources": {
                 "items": {
@@ -32941,7 +34506,7 @@
             "required": [
               "result"
             ],
-            "title": "LibraryPaperIngestionResponseToolStructuredResult",
+            "title": "PaperIngestionToolResponseToolStructuredResult",
             "type": "object"
           },
           "ToolErrorEnvelope": {
@@ -33089,11 +34654,136 @@
             ],
             "title": "ToolResourceLink",
             "type": "object"
+          },
+          "WaitableJobResponse": {
+            "properties": {
+              "completed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Completed At"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Document Id"
+              },
+              "error_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Error Code"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "operation": {
+                "title": "Operation",
+                "type": "string"
+              },
+              "progress_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Progress Code"
+              },
+              "project_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Project Id"
+              },
+              "result": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Result"
+              },
+              "started_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Started At"
+              },
+              "status": {
+                "title": "Status",
+                "type": "string"
+              },
+              "wait": {
+                "$ref": "#/$defs/JobWaitMetadata"
+              }
+            },
+            "required": [
+              "id",
+              "operation",
+              "document_id",
+              "project_id",
+              "status",
+              "progress_code",
+              "error_code",
+              "result",
+              "created_at",
+              "started_at",
+              "completed_at",
+              "wait"
+            ],
+            "title": "WaitableJobResponse",
+            "type": "object"
           }
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/LibraryPaperIngestionResponseToolStructuredResult"
+            "$ref": "#/$defs/PaperIngestionToolResponseToolStructuredResult"
           },
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"
