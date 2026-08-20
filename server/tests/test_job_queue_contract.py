@@ -5,7 +5,11 @@ import os
 from pathlib import Path
 import subprocess
 
-from scholens_job_contracts import JOB_QUEUE_NAMES, JobQueue
+from scholens_job_contracts import (
+    JOB_QUEUE_NAMES,
+    JOBS_WORKER_QUEUE_NAMES,
+    JobQueue,
+)
 
 ROOT = Path(__file__).parents[2]
 
@@ -57,8 +61,9 @@ def test_jobs_routes_import_the_same_queue_enum() -> None:
     source = (ROOT / "jobs" / "src" / "celery_app.py").read_text(encoding="utf-8")
 
     assert "from scholens_job_contracts import JobQueue" in source
-    for queue in JOB_QUEUE_NAMES:
+    for queue in JOBS_WORKER_QUEUE_NAMES:
         assert f"JobQueue.{queue.name}" in source
+    assert "JobQueue.CONVERSATION" not in source
     assert '"pdf_processing"' not in source
 
 

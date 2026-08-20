@@ -203,6 +203,7 @@ class ConversationResponse(Base):
     )
     trace: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    failure: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     turn: Mapped["ConversationTurn"] = relationship(
         "ConversationTurn",
         back_populates="responses",

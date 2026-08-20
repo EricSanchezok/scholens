@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from app.modules.jobs.infrastructure.client import JobsClient
+from app.helpers.celery_config import get_celery_transport_options
 from app.helpers.redaction import redact_url
 
 
@@ -48,6 +49,7 @@ def test_jobs_client_uses_predefined_iam_sqs_queues(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("AWS_REGION", "ap-southeast-1")
+    monkeypatch.setenv("SQS_CONVERSATION_QUEUE_URL", "https://sqs.example/conversation")
     monkeypatch.setenv("SQS_DOCUMENT_QUEUE_URL", "https://sqs.example/document")
     monkeypatch.setenv("SQS_RESEARCH_QUEUE_URL", "https://sqs.example/research")
     monkeypatch.setenv("SQS_MAINTENANCE_QUEUE_URL", "https://sqs.example/maintenance")
@@ -60,7 +62,14 @@ def test_jobs_client_uses_predefined_iam_sqs_queues(
     options = celery_app.conf.update.call_args.kwargs["broker_transport_options"]
     assert options["visibility_timeout"] == 45 * 60
     assert options["predefined_queues"] == {
+        "conversation": {"url": "https://sqs.example/conversation"},
         "document": {"url": "https://sqs.example/document"},
         "research": {"url": "https://sqs.example/research"},
         "maintenance": {"url": "https://sqs.example/maintenance"},
     }
+
+    conversation_options = get_celery_transport_options(
+        "sqs://",
+        visibility_timeout_seconds=60 * 60,
+    )
+    assert conversation_options["visibility_timeout"] == 60 * 60

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 
@@ -14,6 +15,8 @@ from app.modules.jobs.infrastructure.repository import (
     ReservedJobDispatch,
     job_repository,
 )
+from app.modules.jobs.infrastructure.models import DurableJob
+from sqlalchemy.orm import Session
 from scholens_observability import add_counter, instrumented_span, record_histogram
 
 logger = logging.getLogger(__name__)
@@ -26,10 +29,18 @@ PUBLISH_LEASE = timedelta(
 )
 
 
-def _reserve_dispatches(*, limit: int) -> tuple[ReservedJobDispatch, ...]:
+def _reserve_dispatches(
+    *,
+    limit: int,
+    recover_conversation: Callable[[Session, DurableJob], None] | None,
+) -> tuple[ReservedJobDispatch, ...]:
     """Lease a batch in one short progress transaction."""
     with SessionLocal() as db:
-        recovered_count = job_repository.recover_expired_leases(db, limit=limit)
+        recovered_count = job_repository.recover_expired_leases(
+            db,
+            limit=limit,
+            recover_conversation=recover_conversation,
+        )
         if recovered_count:
             logger.warning(
                 "jobs.leases.recovered",
@@ -78,11 +89,18 @@ def _record_publish_failure(
     return changed
 
 
-def dispatch_pending_jobs_once(*, limit: int = DISPATCH_BATCH_SIZE) -> int:
+def dispatch_pending_jobs_once(
+    *,
+    limit: int = DISPATCH_BATCH_SIZE,
+    recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+) -> int:
     """Publish outside a DB transaction, then persist each delivery outcome."""
     started = monotonic()
     published_count = 0
-    dispatches = _reserve_dispatches(limit=limit)
+    dispatches = _reserve_dispatches(
+        limit=limit,
+        recover_conversation=recover_conversation,
+    )
     with instrumented_span(
         "jobs.outbox.dispatch",
         attributes={"jobs.dispatch.batch_size": len(dispatches)},
@@ -149,11 +167,18 @@ def dispatch_pending_jobs_once(*, limit: int = DISPATCH_BATCH_SIZE) -> int:
     return published_count
 
 
-async def run_job_dispatcher(stop: asyncio.Event) -> None:
+async def run_job_dispatcher(
+    stop: asyncio.Event,
+    *,
+    recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+) -> None:
     """Continuously drain the outbox without blocking the ASGI event loop."""
     while not stop.is_set():
         try:
-            published = await asyncio.to_thread(dispatch_pending_jobs_once)
+            published = await asyncio.to_thread(
+                dispatch_pending_jobs_once,
+                recover_conversation=recover_conversation,
+            )
         except Exception:
             logger.exception("jobs.outbox.dispatch_failed")
             published = 0

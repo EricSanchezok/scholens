@@ -610,7 +610,7 @@ class ScholensConversationAgent:
                             )
                     self._settle_usage(
                         result=result,
-                        turn_id=request.turn_id,
+                        response_id=request.response_id,
                         profile=profile,
                     )
                     usage_settled = True
@@ -644,7 +644,9 @@ class ScholensConversationAgent:
                     prompt_tokens=0,
                     completion_tokens=0,
                     total_tokens=0,
-                    idempotency_key=f"conversation:{request.turn_id}:agent-unknown",
+                    idempotency_key=(
+                        f"conversation:{request.response_id}:agent-unknown"
+                    ),
                     status="unknown",
                 )
             record_histogram(
@@ -1256,7 +1258,7 @@ Initial server-validated answer material:
     def _settle_usage(
         *,
         result: Any,
-        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
         profile: Any,
     ) -> None:
         usage = result.usage
@@ -1276,7 +1278,7 @@ Initial server-validated answer material:
             cache_hit_tokens=usage.cache_read_tokens,
             cache_miss_tokens=0,
             total_tokens=total,
-            idempotency_key=f"conversation:{turn_id}:agent",
+            idempotency_key=f"conversation:{response_id}:agent",
         )
         add_counter(
             "scholens.llm.requests",

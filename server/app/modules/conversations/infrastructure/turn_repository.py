@@ -449,7 +449,7 @@ class TurnRepository:
                 message="Conversation response not found",
                 kind=FailureKind.NOT_FOUND,
             )
-        if response.status == "completed":
+        if response.status != "running":
             return response
         response.status = "completed"
         response.content = sanitize_for_postgres(content)
@@ -458,6 +458,7 @@ class TurnRepository:
             trace.model_dump(mode="json") if trace is not None else None
         )
         response.duration_ms = max(0, duration_ms)
+        response.failure = None
         response.turn.selected_response_id = response.id
         db.flush()
         return response
@@ -471,6 +472,7 @@ class TurnRepository:
         user_id: int,
         status: str,
         duration_ms: int,
+        failure: dict[str, JsonValue] | None = None,
     ) -> None:
         if status not in {"failed", "cancelled"}:
             raise ValueError("unfinished responses may only fail or be cancelled")
@@ -487,7 +489,15 @@ class TurnRepository:
         if response is not None and response.status == "running":
             response.status = status
             response.duration_ms = max(0, duration_ms)
+            response.failure = sanitize_for_postgres(failure)
             response.turn.selected_response_id = response.id
+            db.flush()
+        elif (
+            response is not None
+            and response.status == status == "cancelled"
+            and duration_ms > (response.duration_ms or 0)
+        ):
+            response.duration_ms = duration_ms
             db.flush()
 
     def select_response(

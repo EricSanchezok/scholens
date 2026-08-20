@@ -21865,6 +21865,7 @@
         "$defs": {
           "JobOperation": {
             "enum": [
+              "conversation_generate",
               "pdf_process",
               "pdf_postprocess",
               "document_reflow",

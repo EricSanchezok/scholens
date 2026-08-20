@@ -10,12 +10,14 @@ import {
   upsertConversationTurn,
 } from "./api/conversation-cache";
 import {
+  cancelConversationGeneration,
   createConversation,
   selectConversationBranch,
   selectConversationResponse,
   streamConversationBranch,
   streamConversationRetry,
   streamConversationTurn,
+  subscribeConversationEvents,
   updateConversationContext,
   type ConversationStreamEvent,
   type ConversationTurnCreateRequest,
@@ -25,6 +27,7 @@ import { conversationQueries } from "./api/queries";
 import {
   conversationFailureFromError,
   createLiveTurn,
+  persistedResponseStatus,
   reduceLiveTurn,
   reduceLiveTurnEvents,
   type LiveTurn,
@@ -56,6 +59,7 @@ type StreamSession = {
   rejectAccepted?: (error: unknown) => void;
   pendingLiveTurn?: LiveTurn;
   deltaBuffer?: ConversationDeltaBuffer;
+  durable: boolean;
 };
 
 function sameContext(left: ResearchContext, right: ResearchContext) {
@@ -116,9 +120,21 @@ export function useConversationSession({
   const turnsQuery = useQuery({
     ...conversationQueries.turns(activeConversationId ?? ""),
     enabled: Boolean(activeConversationId),
+    refetchInterval: (query) =>
+      query.state.data?.items.some((turn) =>
+        turn.responses.some((response) => response.status === "running"),
+      )
+        ? 2_000
+        : false,
   });
   const context =
     requestedContext ?? conversationQuery.data?.paper_context ?? defaultContext;
+  const runningTurn = turnsQuery.data?.items.findLast((turn) =>
+    turn.responses.some((response) => response.status === "running"),
+  );
+  const runningResponse = runningTurn?.responses.find(
+    (response) => response.status === "running",
+  );
 
   React.useEffect(() => {
     if (conversationId) setCreatedConversationId(undefined);
@@ -134,6 +150,8 @@ export function useConversationSession({
       discardStreamDeltas(session);
       streamSession.current = null;
       session.controller.abort();
+      submissionInFlight.current = false;
+      setSubmissionPending(false);
     }
   }, [scopeIdentity]);
 
@@ -170,6 +188,39 @@ export function useConversationSession({
   function discardStreamDeltas(session: StreamSession) {
     session.deltaBuffer?.discard();
     session.deltaBuffer = undefined;
+  }
+
+  React.useEffect(() => {
+    const session = streamSession.current;
+    if (!session?.durable) return;
+    const status = persistedResponseStatus(
+      turnsQuery.data?.items,
+      session.turnId,
+      session.responseId,
+    );
+    if (!status || status === "running") return;
+
+    session.superseded = true;
+    streamSession.current = null;
+    discardStreamDeltas(session);
+    session.controller.abort();
+    submissionInFlight.current = false;
+    setSubmissionPending(false);
+    setLiveTurn((current) =>
+      current?.responseId === session.responseId ? null : current,
+    );
+  }, [turnsQuery.data?.items]);
+
+  function updateConnectionState(
+    session: StreamSession,
+    state: "connected" | "reconnecting",
+  ) {
+    if (streamSession.current !== session || session.superseded) return;
+    setLiveTurn((current) =>
+      current?.responseId === session.responseId
+        ? { ...current, connectionState: state }
+        : current,
+    );
   }
 
   function flushStreamDeltas(session: StreamSession) {
@@ -265,7 +316,7 @@ export function useConversationSession({
 
     setLiveTurn((current) => reduceLiveTurn(current, event));
 
-    if (event.type === "error") {
+    if (event.type === "error" || event.type === "cancelled") {
       releaseSubmission(session);
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.turns(session.conversationId),
@@ -273,6 +324,8 @@ export function useConversationSession({
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.detail(session.conversationId),
       });
+      if (streamSession.current === session) streamSession.current = null;
+      discardStreamDeltas(session);
     }
     if (event.type === "complete") {
       releaseSubmission(session);
@@ -292,6 +345,101 @@ export function useConversationSession({
       );
     }
   }
+
+  const recoverRunningGeneration = React.useEffectEvent(() => {
+    if (
+      !activeConversationId ||
+      !runningTurn ||
+      !runningResponse ||
+      streamSession.current
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    const session: StreamSession = {
+      conversationId: activeConversationId,
+      turnId: runningTurn.id,
+      responseId: runningResponse.id,
+      controller,
+      started: true,
+      startNotified: true,
+      ready: false,
+      superseded: false,
+      durable: true,
+    };
+    streamSession.current = session;
+    submissionInFlight.current = true;
+    setSubmissionPending(true);
+    setLiveTurnConversationId(activeConversationId);
+    setLiveTurn({
+      ...createLiveTurn(
+        runningTurn.id,
+        runningResponse.id,
+        runningTurn.user_query,
+        runningResponse.variant_index > 1 ? "retry" : "initial",
+        runningTurn.depth,
+      ),
+      variantIndex: runningResponse.variant_index,
+      content: runningResponse.content ?? "",
+      entries: runningResponse.trace?.entries ?? [],
+      trace: runningResponse.trace,
+      references: runningResponse.references as Record<string, unknown> | null,
+      connectionState: "reconnecting",
+    });
+
+    void subscribeConversationEvents({
+      conversationId: activeConversationId,
+      turnId: runningTurn.id,
+      responseId: runningResponse.id,
+      signal: controller.signal,
+      onEvent: (event) => applyStreamEvent(session, event),
+      onConnectionState: (state) => updateConnectionState(session, state),
+    })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setLiveTurn((current) =>
+          current?.responseId === session.responseId
+            ? {
+                ...current,
+                connectionState: "reconnecting",
+                failure: conversationFailureFromError(error),
+              }
+            : current,
+        );
+      })
+      .finally(() => {
+        if (streamSession.current !== session) return;
+        streamSession.current = null;
+        submissionInFlight.current = false;
+        setSubmissionPending(false);
+        void queryClient.invalidateQueries({
+          queryKey: conversationKeys.turns(activeConversationId),
+        });
+      });
+
+    return () => {
+      if (streamSession.current === session) {
+        session.superseded = true;
+        streamSession.current = null;
+        submissionInFlight.current = false;
+        setSubmissionPending(false);
+        setLiveTurn((current) =>
+          current?.responseId === session.responseId ? null : current,
+        );
+      }
+      discardStreamDeltas(session);
+      controller.abort();
+    };
+  });
+
+  React.useEffect(() => {
+    return recoverRunningGeneration();
+  }, [
+    activeConversationId,
+    runningResponse?.id,
+    runningTurn?.id,
+    // The subscription owns recovery for this immutable response identity.
+  ]);
 
   async function sendMessage(message: string) {
     if (submissionInFlight.current) return;
@@ -346,6 +494,7 @@ export function useConversationSession({
         startNotified: false,
         ready: false,
         superseded: false,
+        durable: false,
       };
       streamSession.current = session;
       setLiveTurnConversationId(nextConversationId);
@@ -372,6 +521,10 @@ export function useConversationSession({
         },
         signal: controller.signal,
         onEvent: (event) => applyStreamEvent(session!, event),
+        onAccepted: (durable) => {
+          session!.durable = durable;
+        },
+        onConnectionState: (state) => updateConnectionState(session!, state),
       });
     } catch (error) {
       if (session) flushStreamDeltas(session);
@@ -473,6 +626,7 @@ export function useConversationSession({
       startNotified: false,
       ready: false,
       superseded: false,
+      durable: false,
     };
     const accepted = new Promise<void>((resolve, reject) => {
       session.resolveAccepted = resolve;
@@ -580,6 +734,10 @@ export function useConversationSession({
             request: { response_id: responseId },
             signal: session.controller.signal,
             onEvent: (event) => applyStreamEvent(session, event),
+            onAccepted: (durable) => {
+              session.durable = durable;
+            },
+            onConnectionState: (state) => updateConnectionState(session, state),
           }),
       });
     } catch {
@@ -607,6 +765,10 @@ export function useConversationSession({
           },
           signal: session.controller.signal,
           onEvent: (event) => applyStreamEvent(session, event),
+          onAccepted: (durable) => {
+            session.durable = durable;
+          },
+          onConnectionState: (state) => updateConnectionState(session, state),
         }),
     });
   }
@@ -649,7 +811,54 @@ export function useConversationSession({
   }
 
   function stop() {
-    streamSession.current?.controller.abort();
+    const session = streamSession.current;
+    if (!session) return;
+    if (!session.durable) {
+      session.controller.abort();
+      return;
+    }
+    void cancelConversationGeneration({
+      conversationId: session.conversationId,
+      turnId: session.turnId,
+      responseId: session.responseId,
+    })
+      .then(async (result) => {
+        session.superseded = true;
+        session.controller.abort();
+        releaseSubmission(session);
+        if (streamSession.current === session) streamSession.current = null;
+        if (result.status === "cancelled") {
+          setLiveTurn((current) =>
+            current?.responseId === session.responseId
+              ? {
+                  ...current,
+                  durationMs: Math.max(0, Date.now() - current.startedAtMs),
+                  state: "cancelled",
+                }
+              : current,
+          );
+        }
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: conversationKeys.turns(session.conversationId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: conversationKeys.detail(session.conversationId),
+          }),
+        ]);
+        if (result.status !== "cancelled") {
+          setLiveTurn((current) =>
+            current?.responseId === session.responseId ? null : current,
+          );
+        }
+      })
+      .catch(() => {
+        setLiveTurn((current) =>
+          current?.responseId === session.responseId
+            ? { ...current, connectionState: "stop_failed" }
+            : current,
+        );
+      });
   }
 
   const conversationBusy = submissionPending || liveTurn?.state === "streaming";

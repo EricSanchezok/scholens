@@ -8,6 +8,9 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from app.modules.identity.infrastructure.sanchezcloud_identity import auth_lifespan
 from app.modules.jobs.infrastructure.dispatcher import run_job_dispatcher
+from app.bootstrap.adapters.conversation_job_recovery import (
+    fail_interrupted_conversation_response,
+)
 from app.observability.diagnostics import close_diagnostic_snapshot_recorder
 from fastapi import FastAPI
 
@@ -20,7 +23,10 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
         mcp_manager = application.state.mcp_session_manager
         await stack.enter_async_context(mcp_manager.run())
         dispatcher = asyncio.create_task(
-            run_job_dispatcher(stop_dispatcher),
+            run_job_dispatcher(
+                stop_dispatcher,
+                recover_conversation=fail_interrupted_conversation_response,
+            ),
             name="jobs-outbox-dispatcher",
         )
         invitation_delivery = None

@@ -419,7 +419,10 @@ rejected and a turn cannot complete without visible final content.
 
 The public Conversation stream exposes item lifecycle events, sanitized
 activity, final-only server-generated references, a persisted `response_ready`
-snapshot, an optional turn-suggestion update, and one terminal event. Raw
+snapshot, an optional turn-suggestion update, and one terminal event. Accepted
+generations run in the dedicated Server-owned Conversation worker. A bounded
+Redis Stream is only a replayable delivery log; PostgreSQL remains authoritative
+for running and terminal Response state. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 
@@ -434,10 +437,14 @@ variants and stale suggestions; edited prompt siblings and their selected
 descendant suffixes remain durable. Agent history contains selected ancestors
 only. Branch creation and selection restore the turn-owned paper context after
 current authorization, and one response may run across the whole Conversation.
-Completed, failed, and cancelled responses persist total duration separately
+Running, completed, failed, and cancelled active-leaf responses are serialized
+so a new browser session can recover an in-flight subscription. Terminal
+responses persist total duration separately
 from their ordered worklog trace. The latest terminal attempt remains selected,
-and the active leaf exposes terminal attempts so safe failure/cancellation state
-and retry survive refresh without publishing raw exceptions.
+and the active leaf exposes terminal attempts so failure/cancellation state and
+retry survive refresh. Stable failure code, kind, retryability, diagnostic ID,
+and correlation ID are product metadata; raw exceptions and provider bodies are
+not.
 
 Reader selections and annotation threads enter that same aggregate through
 typed turn contexts. Personal Reader conversations are paper-scoped. Reader
@@ -494,10 +501,16 @@ verification, and practical use. A retry reuses the turn-owned result.
 Conversation generation has one externally observable acceptance boundary.
 Quota, access, immutable context resolution, rate limiting, and concurrency
 acquisition run before product writes. The following short command atomically
-creates the Turn/Response and selected path; for prompt branches it also restores
-the source turn's paper-context snapshot. A command conflict releases the lease.
-After commit, the first streamed event is `start`, so every later error belongs
-to the persisted active leaf and remains safely retryable after refresh.
+creates the Turn/Response, selected path, DurableJob, and outbox dispatch; for
+prompt branches it also restores the source turn's paper-context snapshot. A
+command conflict releases the lease. `Prefer: respond-async` returns a `202`
+receipt after commit, and subscribers consume `start` and later events from the
+response event endpoint. Disconnecting a subscriber never cancels generation;
+only the authorized cancellation command transitions the running Response and
+job. Event subscriptions may reconnect from `Last-Event-ID`, but generation is
+never automatically replayed. If a worker lease expires, the Response fails as
+`generation_interrupted` because replaying a partially executed model/tool
+sequence is not generally idempotent.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Replay-safe command

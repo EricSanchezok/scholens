@@ -46,6 +46,35 @@ class SqlAlchemyJobsGateway:
 
     def enqueue(self, *, command: EnqueueJobCommand) -> EnqueuedJob:
         base_url = get_webhook_base_url().rstrip("/")
+        task_kwargs: dict[str, JsonValue] = {"request": command.payload}
+        if command.operation is not JobOperation.CONVERSATION_GENERATE:
+            task_kwargs.update(
+                {
+                    "webhook_url": (
+                        f"{base_url}/internal/v1/jobs/{command.job_id}/complete"
+                    ),
+                    "claim_url": (
+                        f"{base_url}/internal/v1/jobs/{command.job_id}/claim"
+                    ),
+                }
+            )
+        if command.operation is JobOperation.DOCUMENT_REFLOW:
+            task_kwargs["credential_url"] = (
+                f"{base_url}/internal/v1/jobs/{command.job_id}"
+                "/integration-credentials/mineru"
+            )
+        if command.operation in {JobOperation.ZOTERO_IMPORT, JobOperation.ZOTERO_SYNC}:
+            task_kwargs.update(
+                {
+                    "credential_url": (
+                        f"{base_url}/internal/v1/jobs/{command.job_id}"
+                        "/integration-credentials/zotero"
+                    ),
+                    "progress_url": (
+                        f"{base_url}/internal/v1/jobs/{command.job_id}/progress"
+                    ),
+                }
+            )
         persisted = job_repository.enqueue(
             self._db,
             request=EnqueueJob(
@@ -59,39 +88,7 @@ class SqlAlchemyJobsGateway:
                 payload=command.payload,
                 task_name=command.task_name,
                 queue=command.queue,
-                task_kwargs={
-                    "request": command.payload,
-                    "webhook_url": (
-                        f"{base_url}/internal/v1/jobs/{command.job_id}/complete"
-                    ),
-                    "claim_url": (
-                        f"{base_url}/internal/v1/jobs/{command.job_id}/claim"
-                    ),
-                    **(
-                        {
-                            "credential_url": (
-                                f"{base_url}/internal/v1/jobs/{command.job_id}"
-                                "/integration-credentials/mineru"
-                            )
-                        }
-                        if command.operation is JobOperation.DOCUMENT_REFLOW
-                        else {}
-                    ),
-                    **(
-                        {
-                            "credential_url": (
-                                f"{base_url}/internal/v1/jobs/{command.job_id}"
-                                "/integration-credentials/zotero"
-                            ),
-                            "progress_url": (
-                                f"{base_url}/internal/v1/jobs/{command.job_id}/progress"
-                            ),
-                        }
-                        if command.operation
-                        in {JobOperation.ZOTERO_IMPORT, JobOperation.ZOTERO_SYNC}
-                        else {}
-                    ),
-                },
+                task_kwargs=task_kwargs,
                 job_id=command.job_id,
             ),
         )
