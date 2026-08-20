@@ -1958,7 +1958,13 @@ def test_environment_catalog_covers_code_references() -> None:
         ROOT / "client" / "src",
     ):
         for path in source_root.rglob("*"):
-            if path.suffix not in {".py", ".js", ".mjs", ".ts", ".tsx"}:
+            if not path.is_file() or path.suffix not in {
+                ".py",
+                ".js",
+                ".mjs",
+                ".ts",
+                ".tsx",
+            }:
                 continue
             source = path.read_text(encoding="utf-8")
             for pattern in code_patterns:
