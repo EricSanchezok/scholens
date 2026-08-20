@@ -25,19 +25,14 @@ const actor = {
 
 async function mockHome(page: Page) {
   await mockBillingUsage(page);
-  await page.route(`${apiPattern}/auth/refresh`, (route) =>
+  await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         access_token: "playwright-access",
+        actor,
         token_type: "bearer",
       }),
-    }),
-  );
-  await page.route(`${apiPattern}/me`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(actor),
     }),
   );
   await page.route(`${apiPattern}/conversations**`, (route) =>

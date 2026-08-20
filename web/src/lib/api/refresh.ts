@@ -1,10 +1,13 @@
 import { clientEnvironment } from "@/lib/env/client";
+import type { components } from "./generated/schema";
 import { clearAccessToken, setAccessToken } from "./access-token";
 import { toApiError } from "./errors";
 
 type TokenResponse = { access_token: string };
+type AuthBootstrapResponse = components["schemas"]["AuthBootstrapResponse"];
 
 let refreshFlight: Promise<string> | undefined;
+let bootstrapFlight: Promise<AuthBootstrapResponse> | undefined;
 const storageLockKey = "scholens-auth-refresh-lock";
 const lockLeaseMs = 10_000;
 
@@ -70,6 +73,27 @@ async function requestRefresh(): Promise<string> {
   return body.access_token;
 }
 
+async function requestBootstrap(): Promise<AuthBootstrapResponse> {
+  const response = await fetch(
+    `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/auth/bootstrap`,
+    { method: "POST", credentials: "include" },
+  );
+  if (!response.ok) {
+    if (response.status === 401) clearAccessToken();
+    throw await toApiError(response);
+  }
+  const body = (await response.json()) as AuthBootstrapResponse;
+  setAccessToken(body.access_token);
+  return body;
+}
+
+export function bootstrapAuthSession(): Promise<AuthBootstrapResponse> {
+  bootstrapFlight ??= withCrossTabRefreshLock(requestBootstrap).finally(() => {
+    bootstrapFlight = undefined;
+  });
+  return bootstrapFlight;
+}
+
 export function refreshAccessToken(): Promise<string> {
   refreshFlight ??= withCrossTabRefreshLock(requestRefresh).finally(() => {
     refreshFlight = undefined;
@@ -79,4 +103,5 @@ export function refreshAccessToken(): Promise<string> {
 
 export function resetRefreshForTests() {
   refreshFlight = undefined;
+  bootstrapFlight = undefined;
 }

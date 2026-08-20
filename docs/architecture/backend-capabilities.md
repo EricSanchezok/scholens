@@ -277,6 +277,9 @@ Authentication, authorization, and attribution are deliberately separate:
 
 - sanchezcloud-identity sessions authenticate browser users; Scholens AccessKeys
   authenticate MCP clients;
+- the Scholens browser bootstrap adapter rotates the shared refresh session and
+  resolves the product Actor in one response without moving either ownership
+  boundary;
 - `WorkspacePermission` and `ToolAccess` determine which catalog tools are
   visible and executable;
 - `Actor` plus Domain policy authorizes the concrete resource;

@@ -13,7 +13,7 @@ async function expectMinimumTouchTargets(locator: Locator) {
 }
 
 async function mockAnonymousSession(page: Page) {
-  await page.route("**/api/v1/auth/refresh", (route) =>
+  await page.route("**/api/v1/auth/bootstrap", (route) =>
     route.fulfill({
       status: 401,
       contentType: "application/json",
@@ -75,7 +75,18 @@ test("preserves the Access Keys destination through sign-in", async ({
   page,
 }) => {
   let signedIn = false;
-  await page.route("**/api/v1/auth/refresh", (route) =>
+  const actor = {
+    id: 7,
+    email: "researcher@example.com",
+    email_verified: true,
+    is_active: true,
+    is_admin: false,
+    is_blocked: false,
+    status: "active",
+    display_name: "Researcher",
+    locale: "en",
+  };
+  await page.route("**/api/v1/auth/bootstrap", (route) =>
     route.fulfill({
       status: signedIn ? 200 : 401,
       contentType: "application/json",
@@ -83,6 +94,7 @@ test("preserves the Access Keys destination through sign-in", async ({
         signedIn
           ? {
               access_token: "playwright-access",
+              actor,
               token_type: "bearer",
             }
           : {
@@ -105,17 +117,7 @@ test("preserves the Access Keys destination through sign-in", async ({
   await page.route("**/api/v1/me", (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        id: 7,
-        email: "researcher@example.com",
-        email_verified: true,
-        is_active: true,
-        is_admin: false,
-        is_blocked: false,
-        status: "active",
-        display_name: "Researcher",
-        locale: "en",
-      }),
+      body: JSON.stringify(actor),
     }),
   );
   await page.route("**/api/v1/me/access-keys", (route) =>

@@ -6,6 +6,7 @@ import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/features/authentication";
 import { QueryProvider } from "@/lib/query/query-provider";
 import { useTranslations } from "next-intl";
+import { WebPerformanceReporter } from "@/lib/observability/web-vitals-reporter";
 
 export function Providers({
   children,
@@ -15,6 +16,7 @@ export function Providers({
     <ThemeProvider>
       <MotionProvider>
         <QueryProvider>
+          <WebPerformanceReporter />
           <AuthProvider>
             <ToastProvider dismissLabel={t("dismiss")}>
               {children}

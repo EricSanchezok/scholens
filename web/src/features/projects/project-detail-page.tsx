@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
+import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
@@ -464,6 +465,7 @@ export function ProjectDetailWorkspace({
     "delete" | "leave" | null
   >(null);
   const projectQuery = useQuery(projectQueries.detail(projectId));
+  usePrimaryContentReady(projectQuery.isSuccess);
   const conversationsQuery = useQuery(
     conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
   );

@@ -76,7 +76,7 @@ error, and submit action must remain usable.
 
 ```text
 bootstrapping
-  ├─ refresh + /me succeed ─────────────> authenticated
+  ├─ /auth/bootstrap succeeds ──────────> authenticated
   ├─ refresh cookie missing/expired ────> anonymous
   └─ network/service failure ───────────> unavailable
 
@@ -89,6 +89,11 @@ must never look like a logged-out account.
 
 - Access tokens live only in module memory.
 - Refresh tokens remain in HttpOnly cookies.
+- Initial session bootstrap rotates the refresh cookie and returns the
+  product-enriched Actor with the access token in one response. The existing
+  `/auth/refresh` and `/me` contracts remain available for protected-request
+  recovery and other clients; Web does not serialize those two network
+  round-trips during startup.
 - Protected requests may refresh once and replay once after a 401.
 - Authentication endpoints never trigger recursive refresh.
 - Refresh is single-flight within one tab and locked across tabs. The fallback

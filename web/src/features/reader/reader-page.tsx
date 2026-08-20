@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
@@ -177,6 +178,7 @@ function ReaderDocumentWorkspace({
     React.useState<ReaderPdfSourceTarget>();
   const projectId = searchParams.get("project") ?? undefined;
   const documentQuery = useQuery(readerQueries.document(documentId));
+  usePrimaryContentReady(documentQuery.isSuccess);
   const projectsQuery = useQuery(readerQueries.projects(documentId, projectId));
   const translation = useReaderTranslation({
     documentId,

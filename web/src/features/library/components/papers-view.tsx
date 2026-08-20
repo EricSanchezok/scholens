@@ -505,36 +505,42 @@ function TagFilter({
   active,
   onChange,
   onManage,
+  onNeedTags,
   tags,
+  tagsLoading,
 }: {
   active: string[];
   onChange: (tagIds: string[]) => void;
   onManage: () => void;
+  onNeedTags: () => void;
   tags: TagItem[];
+  tagsLoading: boolean;
 }) {
   const t = useTranslations("Library.papers.filters");
   const renderBody = (manage: () => void) => (
     <div className="grid gap-1">
-      {tags.map((tag) => (
-        <label
-          className="hover:bg-hover flex min-h-10 items-center gap-3 rounded-[var(--radius-md)] px-2 text-sm"
-          key={tag.id}
-        >
-          <SelectionCheckbox
-            checked={active.includes(tag.id)}
-            label={tag.name}
-            onCheckedChange={(checked) =>
-              onChange(
-                checked
-                  ? [...active, tag.id]
-                  : active.filter((id) => id !== tag.id),
-              )
-            }
-          />
-          {tag.name}
-        </label>
-      ))}
-      {tags.length === 0 && (
+      {tagsLoading && <LoadingState presentation="inline" />}
+      {!tagsLoading &&
+        tags.map((tag) => (
+          <label
+            className="hover:bg-hover flex min-h-10 items-center gap-3 rounded-[var(--radius-md)] px-2 text-sm"
+            key={tag.id}
+          >
+            <SelectionCheckbox
+              checked={active.includes(tag.id)}
+              label={tag.name}
+              onCheckedChange={(checked) =>
+                onChange(
+                  checked
+                    ? [...active, tag.id]
+                    : active.filter((id) => id !== tag.id),
+                )
+              }
+            />
+            {tag.name}
+          </label>
+        ))}
+      {!tagsLoading && tags.length === 0 && (
         <p className="text-secondary p-3 text-center text-sm">{t("noTags")}</p>
       )}
       <div className="border-line mt-1 border-t pt-1">
@@ -552,7 +558,7 @@ function TagFilter({
   return (
     <>
       <div className="hidden sm:block">
-        <Popover>
+        <Popover onOpenChange={(open) => open && onNeedTags()}>
           <PopoverTrigger asChild>
             <Button
               className="bg-subtle hover:border-line rounded-full border-transparent"
@@ -572,6 +578,7 @@ function TagFilter({
         <MobileTagFilter
           activeCount={active.length}
           onManage={onManage}
+          onNeedTags={onNeedTags}
           renderBody={renderBody}
           title={t("tags")}
         />
@@ -583,11 +590,13 @@ function TagFilter({
 function MobileTagFilter({
   activeCount,
   onManage,
+  onNeedTags,
   renderBody,
   title,
 }: {
   activeCount: number;
   onManage: () => void;
+  onNeedTags: () => void;
   renderBody: (onManage: () => void) => React.ReactNode;
   title: string;
 }) {
@@ -599,7 +608,13 @@ function MobileTagFilter({
   }
   return (
     <Sheet onOpenChange={setOpen} open={open}>
-      <Button onClick={() => setOpen(true)} variant="secondary">
+      <Button
+        onClick={() => {
+          onNeedTags();
+          setOpen(true);
+        }}
+        variant="secondary"
+      >
         <Icon glyph={FilterIcon} size={20} tone="secondary" />
         {title}
         {activeCount > 0 && <Badge tone="neutral">{activeCount}</Badge>}
@@ -626,6 +641,7 @@ export function PapersView({
   onDeleteTag,
   onDownload,
   onNext,
+  onNeedTags = () => undefined,
   onOpenDocument,
   onPrevious,
   onRemove,
@@ -641,6 +657,7 @@ export function PapersView({
   paperCount,
   tagIds,
   tags,
+  tagsLoading = false,
 }: {
   attentionCount: number;
   data?: PaperList;
@@ -653,6 +670,7 @@ export function PapersView({
   onDownload: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
   onNext: (cursor: string) => void;
+  onNeedTags?: () => void;
   onPrevious: (cursor: string) => void;
   onRemove: (documentIds: string[]) => Promise<void>;
   onRenameTag: (tagId: string, name: string) => Promise<LibraryTag>;
@@ -667,6 +685,7 @@ export function PapersView({
   paperCount: number;
   tagIds: string[];
   tags: TagItem[];
+  tagsLoading?: boolean;
 }) {
   const t = useTranslations("Library.papers");
   const format = useFormatter();
@@ -700,6 +719,7 @@ export function PapersView({
   }
 
   function beginTagEditing(ids: string[]) {
+    onNeedTags();
     setActionIds(ids);
     const matching = papers.filter((paper) =>
       ids.includes(paper.document.document_id),
@@ -717,6 +737,7 @@ export function PapersView({
   }
 
   function beginTagManagement() {
+    onNeedTags();
     setActionIds([]);
     setInitialTagIds([]);
     setTagManagerOpen(true);
@@ -825,12 +846,14 @@ export function PapersView({
             variants={motionVariants.swap}
           >
             <div className="min-w-0">{search}</div>
-            <div className="flex min-w-0 items-center gap-2 md:contents">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] items-center gap-2 sm:grid-cols-[auto_minmax(11rem,1fr)_auto] md:contents">
               <TagFilter
                 active={tagIds}
                 onChange={onTagFilterChange}
                 onManage={beginTagManagement}
+                onNeedTags={onNeedTags}
                 tags={tags}
+                tagsLoading={tagsLoading}
               />
               <Select
                 onValueChange={(value) => onSortChange(value as PaperSort)}
@@ -838,7 +861,7 @@ export function PapersView({
               >
                 <SelectTrigger
                   aria-label={t("sort.label")}
-                  className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
+                  className="w-full min-w-0 md:w-auto md:min-w-44"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -851,10 +874,12 @@ export function PapersView({
                 </SelectContent>
               </Select>
               {data && (
-                <span className="text-secondary ml-auto shrink-0 text-right text-sm md:ml-2">
-                  {t("count", { count: paperCount })}
+                <span className="text-secondary col-span-2 grid justify-items-end text-right text-sm sm:col-span-1 sm:ml-2 md:ml-2">
+                  <span className="whitespace-nowrap">
+                    {t("count", { count: paperCount })}
+                  </span>
                   {ingestionCount > 0 && (
-                    <span className="block text-xs sm:inline">
+                    <span className="text-xs whitespace-nowrap">
                       {t("ingestionCount", {
                         attentionCount,
                         count: ingestionCount,

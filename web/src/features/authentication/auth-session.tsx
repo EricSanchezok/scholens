@@ -14,9 +14,9 @@ import type { components } from "@/lib/api/generated/schema";
 import {
   ApiError,
   apiClient,
+  bootstrapAuthSession,
   clearAccessToken,
   publicApiClient,
-  refreshAccessToken,
   setAccessToken,
 } from "@/lib/api";
 import { publishAuthEvent, subscribeToAuthEvents } from "./auth-channel";
@@ -67,8 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const bootstrap = useCallback(async () => {
     setStatus("bootstrapping");
     try {
-      await refreshAccessToken();
-      setActor(await fetchActor());
+      const session = await bootstrapAuthSession();
+      setActor(session.actor);
       setStatus("authenticated");
     } catch (error) {
       clearAccessToken();

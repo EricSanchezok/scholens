@@ -236,19 +236,14 @@ const createdAnnotationQuotes: string[] = [];
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
   const annotations: Array<Record<string, unknown>> = [];
-  await page.route(`${apiPattern}/auth/refresh`, (route) =>
+  await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         access_token: "playwright-access",
+        actor,
         token_type: "bearer",
       }),
-    }),
-  );
-  await page.route(`${apiPattern}/me`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(actor),
     }),
   );
   await page.route(`${apiPattern}/conversations**`, (route) =>

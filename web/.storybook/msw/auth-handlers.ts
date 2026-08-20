@@ -61,6 +61,13 @@ export const authHandlers = {
         token_type: "bearer",
       }),
     ),
+    http.post(`${api}/auth/bootstrap`, () =>
+      HttpResponse.json({
+        access_token: "storybook-access",
+        actor,
+        token_type: "bearer",
+      }),
+    ),
     http.get(`${api}/me`, () => HttpResponse.json(actor)),
     http.post(`${api}/auth/logout`, () => HttpResponse.json({ message: "ok" })),
   ],
@@ -98,38 +105,44 @@ export const authHandlers = {
     ),
   ],
   refreshMissing: [
-    http.post(`${api}/auth/refresh`, () => error("auth_session_missing", 401)),
+    http.post(`${api}/auth/bootstrap`, () =>
+      error("auth_session_missing", 401),
+    ),
   ],
   refreshExpired: [
-    http.post(`${api}/auth/refresh`, () => error("auth_session_expired", 401)),
+    http.post(`${api}/auth/bootstrap`, () =>
+      error("auth_session_expired", 401),
+    ),
   ],
   refreshReuse: [
-    http.post(`${api}/auth/refresh`, () => error("auth_session_expired", 401)),
+    http.post(`${api}/auth/bootstrap`, () =>
+      error("auth_session_expired", 401),
+    ),
   ],
   unavailable: [
-    http.post(`${api}/auth/refresh`, () =>
+    http.post(`${api}/auth/bootstrap`, () =>
       error("auth_service_unavailable", 503),
     ),
   ],
-  offline: [http.post(`${api}/auth/refresh`, () => HttpResponse.error())],
+  offline: [http.post(`${api}/auth/bootstrap`, () => HttpResponse.error())],
   slow: [
-    http.post(`${api}/auth/refresh`, async () => {
+    http.post(`${api}/auth/bootstrap`, async () => {
       await delay(1_800);
       return HttpResponse.json({
         access_token: "storybook-access",
+        actor,
         token_type: "bearer",
       });
     }),
-    http.get(`${api}/me`, () => HttpResponse.json(actor)),
   ],
   bootstrapping: [
-    http.post(`${api}/auth/refresh`, async () => {
+    http.post(`${api}/auth/bootstrap`, async () => {
       await delay(300);
       return HttpResponse.json({
         access_token: "storybook-access",
+        actor,
         token_type: "bearer",
       });
     }),
-    http.get(`${api}/me`, () => HttpResponse.json(actor)),
   ],
 };

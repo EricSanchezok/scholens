@@ -21,6 +21,7 @@ _AUTH_FAILURES: dict[str, dict[str, tuple[int, ...]]] = {
     "/api/v1/auth/forgot-password": {"post": (422, 429, 503)},
     "/api/v1/auth/reset-password": {"post": (400, 422, 429, 503)},
     "/api/v1/auth/refresh": {"post": (401, 503)},
+    "/api/v1/auth/bootstrap": {"post": (401, 503)},
     "/api/v1/auth/logout": {"post": (401, 503)},
     "/api/v1/auth/change-password": {"post": (400, 401, 422, 503)},
     "/api/v1/me": {"get": (401, 503)},

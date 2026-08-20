@@ -102,6 +102,13 @@ reviewed secrets. API diagnostic snapshots are written under `api/` and Jobs sna
 under `workers/`; those prefixes are part of the workload IAM contract rather than a
 shared unrestricted diagnostics namespace.
 
+The Web service accepts bounded, same-origin anonymous performance events at
+`/__telemetry/web-performance`. It writes low-cardinality `web_performance` JSON to the
+Web log group without user IDs, content, query strings, raw URLs, or client IPs. The
+production dashboard owns Logs Insights views for navigation and Core Web Vitals p75/p95,
+split by route group, device class, and `CN`/`non-CN`; Cloudflare colo remains a diagnostic
+log field rather than a metric dimension.
+
 Browser upload sessions validate and download the exact S3 object version observed by
 the API. The runtime permissions boundary and API task role therefore grant
 `s3:GetObjectVersion` only for the content bucket's `uploads/*` keys. Worker roles do not
