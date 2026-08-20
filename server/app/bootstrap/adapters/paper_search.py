@@ -315,6 +315,15 @@ class PostgresPaperSearch:
             retrieval_modes[document_id].add("semantic")
 
         ranked_ids = sorted(scores, key=lambda item: (-scores[item], str(item)))
+        if request.sort is PaperSearchSort.RECENT and ranked_ids:
+            ranked_ids = list(
+                self._db.scalars(
+                    select(Document.id)
+                    .where(Document.id.in_(ranked_ids))
+                    .order_by(Document.created_at.desc(), Document.id)
+                ).all()
+            )
+        page_ids = ranked_ids[request.offset : request.offset + request.limit]
         actor_library_entry = aliased(
             LibraryPaper,
             name="actor_library_entry",
@@ -328,17 +337,9 @@ class PostgresPaperSearch:
                     actor_library_entry.user_id == actor.id,
                 ),
             )
-            .where(Document.id.in_(ranked_ids))
+            .where(Document.id.in_(page_ids))
         ).all()
         documents = {document.id: (document, entry) for document, entry in rows}
-        if request.sort is PaperSearchSort.RECENT:
-            ranked_ids.sort(
-                key=lambda item: (
-                    -documents[item][0].created_at.timestamp(),
-                    str(item),
-                )
-            )
-        page_ids = ranked_ids[request.offset : request.offset + request.limit]
         page_rows = [documents[document_id] for document_id in page_ids]
         _visible_total, _semantic_total, semantic_coverage = self._semantic_coverage(
             conditions=conditions
