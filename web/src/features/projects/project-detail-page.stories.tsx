@@ -176,6 +176,40 @@ export const Papers: Story = {
   },
 };
 
+export const PaperSearchResults: Story = {
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: `/projects/${projectId}?view=papers&paper_q=code%20world`,
+        pathname: `/projects/${projectId}`,
+        query: { paper_q: "code world", view: "papers" },
+      },
+    },
+  },
+  loaders: [
+    async () => {
+      window.history.replaceState(
+        {},
+        "",
+        `/projects/${projectId}?view=papers&paper_q=code%20world`,
+      );
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("link", {
+        name: /CWM: An Open-Weights LLM for Code Generation with World Models/,
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("searchbox", { name: "Search project papers" }),
+    ).toHaveValue("code world");
+  },
+};
+
 export const PaperRemovalImpact: Story = {
   parameters: {
     nextjs: {

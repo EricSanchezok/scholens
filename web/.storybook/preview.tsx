@@ -16,6 +16,7 @@ import { QueryProvider } from "../src/lib/query/query-provider";
 import { billingHandlers } from "./msw/billing-handlers";
 import {
   foundationHandler,
+  paperSearchHandler,
   webPerformanceHandler,
   zoteroCollectionsHandler,
   zoteroLibraryItemsHandler,
@@ -26,6 +27,7 @@ import "../src/styles/globals.css";
 initialize({ onUnhandledRequest: "error" }, [
   ...billingHandlers.success,
   webPerformanceHandler,
+  paperSearchHandler,
   zoteroCollectionsHandler,
   zoteroLibraryItemsHandler,
 ]);
@@ -167,7 +169,12 @@ const preview: Preview = {
     controls: { expanded: true },
     layout: "fullscreen",
     msw: {
-      handlers: [foundationHandler, webPerformanceHandler, zoteroStatusHandler],
+      handlers: [
+        foundationHandler,
+        paperSearchHandler,
+        webPerformanceHandler,
+        zoteroStatusHandler,
+      ],
     },
     viewport: {
       options: {

@@ -106,6 +106,41 @@ export const Populated: Story = {
   },
 };
 
+export const HybridSearchResults: Story = {
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: "/library?q=code%20world",
+        pathname: "/library",
+        query: { q: "code world" },
+      },
+    },
+  },
+  loaders: [
+    async () => {
+      window.history.replaceState({}, "", "/library?q=code%20world");
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("link", {
+        name: /CWM: An Open-Weights LLM for Code Generation with World Models/,
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("searchbox", { name: "Search papers" }),
+    ).toHaveValue("code world");
+  },
+};
+
+export const Mobile390HybridSearchResults: Story = {
+  ...HybridSearchResults,
+  globals: { viewport: { value: "mobile", isRotated: false } },
+};
+
 export const Empty: Story = {
   parameters: {
     msw: { handlers: [...authHandlers.success, ...libraryHandlers.empty] },

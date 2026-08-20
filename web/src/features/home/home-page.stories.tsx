@@ -81,6 +81,26 @@ export const Default: Story = {
   },
 };
 
+export const GlobalPaperSearch: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: /Search all papers/ }),
+    );
+    const body = within(document.body);
+    const search = await body.findByRole("searchbox", {
+      name: "Search all papers",
+    });
+    await userEvent.type(search, "code world");
+    await expect(search).toHaveValue("code world");
+    await expect(
+      await body.findByRole("link", {
+        name: /CWM: An Open-Weights LLM for Code Generation with World Models/,
+      }),
+    ).toBeVisible();
+  },
+};
+
 export const ContextPicker: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

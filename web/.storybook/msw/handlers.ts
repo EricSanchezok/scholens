@@ -7,6 +7,7 @@ const zoteroCollectionsUrl =
   "http://127.0.0.1:7301/api/v1/integrations/zotero/collections";
 const zoteroLibraryItemsUrl =
   "http://127.0.0.1:7301/api/v1/integrations/zotero/library-items";
+const paperSearchUrl = "http://127.0.0.1:7301/api/v1/search/papers";
 
 export const webPerformanceHandler = http.post(
   "*/__telemetry/web-performance",
@@ -66,6 +67,37 @@ export const zoteroLibraryItemsHandler = http.get(zoteroLibraryItemsUrl, () =>
     previous_cursor: null,
     remaining_slots: 50,
     total_count: 0,
+  }),
+);
+
+export const paperSearchHandler = http.post(paperSearchUrl, () =>
+  HttpResponse.json({
+    items: [
+      {
+        abstract:
+          "The model learns program semantics from execution traces and uses them to improve code reasoning.",
+        authors: ["Jade Copet", "Quentin Carbonneaux"],
+        created_at: "2026-08-20T08:00:00Z",
+        document_id: "00000000-0000-4000-8000-000000000001",
+        last_accessed_at: "2026-08-20T08:00:00Z",
+        matched_fields: ["title", "abstract"],
+        preview_url: null,
+        publish_date: "2026-08-20T08:00:00Z",
+        retrieval_modes: ["exact", "semantic"],
+        snippets: [
+          {
+            text: "Execution traces provide grounded supervision for a learned code world model.",
+          },
+        ],
+        status: "completed",
+        summary: null,
+        title: "CWM: An Open-Weights LLM for Code Generation with World Models",
+      },
+    ],
+    next_cursor: null,
+    search_mode: "hybrid",
+    semantic_index_coverage: 1,
+    total: 1,
   }),
 );
 
