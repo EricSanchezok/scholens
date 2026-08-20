@@ -27,6 +27,7 @@ import { conversationQueries } from "./api/queries";
 import {
   conversationFailureFromError,
   createLiveTurn,
+  persistedResponseStatus,
   reduceLiveTurn,
   reduceLiveTurnEvents,
   type LiveTurn,
@@ -188,6 +189,27 @@ export function useConversationSession({
     session.deltaBuffer?.discard();
     session.deltaBuffer = undefined;
   }
+
+  React.useEffect(() => {
+    const session = streamSession.current;
+    if (!session?.durable) return;
+    const status = persistedResponseStatus(
+      turnsQuery.data?.items,
+      session.turnId,
+      session.responseId,
+    );
+    if (!status || status === "running") return;
+
+    session.superseded = true;
+    streamSession.current = null;
+    discardStreamDeltas(session);
+    session.controller.abort();
+    submissionInFlight.current = false;
+    setSubmissionPending(false);
+    setLiveTurn((current) =>
+      current?.responseId === session.responseId ? null : current,
+    );
+  }, [turnsQuery.data?.items]);
 
   function updateConnectionState(
     session: StreamSession,

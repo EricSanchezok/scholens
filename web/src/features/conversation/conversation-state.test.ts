@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createLiveTurn,
+  persistedResponseStatus,
   reduceLiveTurn,
   reduceLiveTurnEvents,
 } from "./conversation-state";
@@ -67,6 +68,17 @@ function readyEvent({
 }
 
 describe("Home live conversation state", () => {
+  it("reconciles a detached stream from the canonical persisted response", () => {
+    const turn = readyEvent().turn;
+
+    expect(persistedResponseStatus([turn], turnId, responseId)).toBe(
+      "completed",
+    );
+    expect(
+      persistedResponseStatus([turn], turnId, "missing-response"),
+    ).toBeUndefined();
+  });
+
   it("treats a server cancellation as terminal without fabricating a failure", () => {
     const turn = reduceLiveTurn(
       createLiveTurn(turnId, responseId, "Question"),

@@ -13,6 +13,8 @@ export type ConversationAssistantItem =
   components["schemas"]["ConversationAssistantItem"];
 export type ConversationTurn =
   components["schemas"]["ConversationTurnResponse"];
+export type ConversationResponseStatus =
+  components["schemas"]["ConversationResponseVariantResponse"]["status"];
 export type ProvisionalAssistantItem = Omit<
   ConversationAssistantItem,
   "phase"
@@ -76,6 +78,16 @@ export function createLiveTurn(
     connectionState: "connected",
     state: "streaming",
   };
+}
+
+export function persistedResponseStatus(
+  turns: ConversationTurn[] | undefined,
+  turnId: string,
+  responseId: string,
+): ConversationResponseStatus | undefined {
+  return turns
+    ?.find((turn) => turn.id === turnId)
+    ?.responses.find((response) => response.id === responseId)?.status;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
