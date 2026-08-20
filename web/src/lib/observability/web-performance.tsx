@@ -154,9 +154,9 @@ export function reportRouteNavigationFeedback() {
 
 export function usePrimaryContentReady(ready: boolean) {
   const pathname = usePathname();
-  const reported = React.useRef(false);
+  const reportedPathname = React.useRef<string | undefined>(undefined);
   React.useEffect(() => {
-    if (!ready || reported.current) return;
+    if (!ready || reportedPathname.current === pathname) return;
     const toRoute = performanceRouteGroup(pathname);
     const navigation =
       completedNavigation?.toRoute === toRoute
@@ -169,7 +169,7 @@ export function usePrimaryContentReady(ready: boolean) {
       to_route: toRoute,
       value: performance.now() - (navigation?.startedAt ?? 0),
     });
-    reported.current = true;
+    reportedPathname.current = pathname;
   }, [pathname, ready]);
 }
 
