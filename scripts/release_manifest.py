@@ -26,6 +26,20 @@ IMAGE_PATTERN = re.compile(
 CHECKSUM_PATTERN = re.compile(r"[0-9a-f]{64}")
 SCAN_SEVERITIES = ("CRITICAL", "HIGH")
 DNS_LABEL_PATTERN = re.compile(r"(?!-)[A-Za-z0-9-]{1,63}(?<!-)")
+TASK_DEFINITION_REGISTRATION_FIELDS = (
+    "family",
+    "taskRoleArn",
+    "executionRoleArn",
+    "networkMode",
+    "containerDefinitions",
+    "volumes",
+    "placementConstraints",
+    "requiresCompatibilities",
+    "cpu",
+    "memory",
+    "runtimePlatform",
+    "ephemeralStorage",
+)
 
 
 def _source_root(path: Path) -> Path:
@@ -61,6 +75,56 @@ def _template_parameter_names(path: Path) -> tuple[str, ...]:
     if not in_parameters or not names or len(names) != len(set(names)):
         raise ValueError("CloudFormation template has an invalid Parameters section")
     return tuple(names)
+
+
+def migration_candidate_task_definition(
+    task_definition: object,
+    candidate_image: str,
+) -> dict[str, Any]:
+    """Clone an ECS migration task onto one exact API image digest."""
+    image_match = IMAGE_PATTERN.fullmatch(candidate_image)
+    if image_match is None or image_match.group("component") != "api":
+        raise ValueError(
+            "candidate migration image must be a digest-qualified API image"
+        )
+    if not isinstance(task_definition, dict):
+        raise ValueError("base migration task definition must be an object")
+    containers = task_definition.get("containerDefinitions")
+    if not isinstance(containers, list) or not all(
+        isinstance(container, dict) for container in containers
+    ):
+        raise ValueError("base migration task definition has invalid containers")
+    migration_containers = [
+        container for container in containers if container.get("name") == "migration"
+    ]
+    if len(migration_containers) != 1:
+        raise ValueError(
+            "base migration task definition must contain exactly one migration container"
+        )
+    base_image = migration_containers[0].get("image")
+    if not isinstance(base_image, str) or not base_image:
+        raise ValueError("base migration container image is invalid")
+
+    candidate = {
+        field: task_definition[field]
+        for field in TASK_DEFINITION_REGISTRATION_FIELDS
+        if task_definition.get(field) is not None
+    }
+    candidate_containers: list[dict[str, Any]] = []
+    for container in containers:
+        cloned = dict(container)
+        if cloned.get("image") == base_image:
+            cloned["image"] = candidate_image
+        candidate_containers.append(cloned)
+    candidate["containerDefinitions"] = candidate_containers
+    migrated = next(
+        container
+        for container in candidate_containers
+        if container.get("name") == "migration"
+    )
+    if migrated.get("image") != candidate_image:
+        raise ValueError("candidate migration container image was not replaced")
+    return candidate
 
 
 def _sha256(path: Path) -> str:
@@ -878,6 +942,10 @@ def _parser() -> argparse.ArgumentParser:
     migration_head.add_argument("--source-root", type=Path)
     template_parameters = subparsers.add_parser("template-parameters")
     template_parameters.add_argument("--template", type=Path, required=True)
+    candidate_task = subparsers.add_parser("migration-candidate-task-definition")
+    candidate_task.add_argument("--base-task-definition", type=Path, required=True)
+    candidate_task.add_argument("--api-image", required=True)
+    candidate_task.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -909,6 +977,18 @@ def main() -> int:
         elif args.command == "template-parameters":
             for name in _template_parameter_names(args.template):
                 print(name)
+        elif args.command == "migration-candidate-task-definition":
+            task_definition = json.loads(
+                args.base_task_definition.read_text(encoding="utf-8")
+            )
+            candidate = migration_candidate_task_definition(
+                task_definition,
+                args.api_image,
+            )
+            args.output.write_text(
+                json.dumps(candidate, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
         elif args.command == "create-migration-attestation":
             manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
             runtime_proof = json.loads(args.runtime_proof.read_text(encoding="utf-8"))

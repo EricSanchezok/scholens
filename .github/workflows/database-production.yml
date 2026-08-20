@@ -74,19 +74,13 @@ jobs:
             --stack-name sanchezcloud-scholens-production \
             --query 'Stacks[0].Outputs[?OutputKey==`MigrationTaskDefinitionArn`].OutputValue|[0]' \
             --output text)
-          candidate_image=$(jq -r .images.api release-manifest.json)
+          candidate_image=$(jq -er .images.api release-manifest.json)
           aws ecs describe-task-definition --task-definition "$base_task" \
             --query taskDefinition > base-task.json
-          jq --arg image "$candidate_image" '
-            {
-              family, taskRoleArn, executionRoleArn, networkMode,
-              containerDefinitions, volumes, placementConstraints,
-              requiresCompatibilities, cpu, memory, runtimePlatform,
-              ephemeralStorage
-            }
-            | .containerDefinitions[0].image = $image
-            | with_entries(select(.value != null))
-          ' base-task.json > candidate-task.json
+          python scripts/release_manifest.py migration-candidate-task-definition \
+            --base-task-definition base-task.json \
+            --api-image "$candidate_image" \
+            --output candidate-task.json
           task_definition=$(aws ecs register-task-definition \
             --cli-input-json file://candidate-task.json \
             --query 'taskDefinition.taskDefinitionArn' --output text)
