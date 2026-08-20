@@ -179,6 +179,12 @@ class Document(Base):
     __table_args__ = (
         UniqueConstraint("sha256", name="uq_documents_sha256"),
         Index("ix_documents_ts_vector", "ts_vector", postgresql_using="gin"),
+        Index(
+            "ix_documents_search_text_compact_trgm",
+            "search_text_compact",
+            postgresql_using="gin",
+            postgresql_ops={"search_text_compact": "gin_trgm_ops"},
+        ),
         CheckConstraint(
             "parser_backend IS NULL OR parser_backend IN ('mineru', 'pymupdf4llm', 'markitdown')",
             name="ck_documents_parser_backend",
