@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import type {
@@ -76,16 +76,17 @@ export const projectQueries = {
           : false,
     }),
   papers: (projectId: string, state: ProjectDetailSearchState) =>
-    queryOptions({
+    infiniteQueryOptions({
       queryKey: projectKeys.papers(projectId, state),
-      queryFn: async ({ signal }) => {
+      initialPageParam: undefined as string | undefined,
+      queryFn: async ({ pageParam, signal }) => {
         const { data } = await apiClient.GET(
           "/api/v1/projects/{project_id}/papers",
           {
             params: {
               path: { project_id: projectId },
               query: {
-                cursor: state.paperCursor,
+                cursor: pageParam,
                 limit: 20,
                 load_urls: false,
                 q: state.paperQuery || undefined,
@@ -98,6 +99,7 @@ export const projectQueries = {
         if (!data) throw new Error("Project paper response was empty");
         return data;
       },
+      getNextPageParam: (page) => page.next_cursor ?? undefined,
     }),
   outputs: (projectId: string, state: ProjectDetailSearchState) =>
     queryOptions({

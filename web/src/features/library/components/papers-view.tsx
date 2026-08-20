@@ -27,7 +27,6 @@ import {
   AlertDialogTitle,
   Button,
   Checkbox,
-  CursorPagination,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -108,7 +107,7 @@ function SelectionCheckbox({
 
 function TagPill({ name }: { name: string }) {
   return (
-    <span className="bg-subtle text-secondary inline-flex min-h-7 items-center rounded-full px-2.5 text-xs font-medium">
+    <span className="bg-subtle text-secondary inline-flex min-h-6 items-center rounded-full px-2 text-[0.6875rem] font-medium">
       {name}
     </span>
   );
@@ -124,7 +123,7 @@ function PaperThumbnail({ paper }: { paper: Paper }) {
   return (
     <span
       aria-hidden="true"
-      className="border-line bg-subtle relative block h-20 w-14 shrink-0 overflow-hidden rounded-[var(--radius-md)] border"
+      className="border-line bg-subtle relative block h-16 w-11 shrink-0 overflow-hidden rounded-[var(--radius-md)] border"
       data-paper-thumbnail
     >
       {showPreview ? (
@@ -155,7 +154,7 @@ function IngestionThumbnail() {
   return (
     <span
       aria-hidden="true"
-      className="border-line bg-subtle grid h-20 w-14 shrink-0 place-items-center rounded-[var(--radius-md)] border text-[0.6875rem] font-semibold"
+      className="border-line bg-subtle grid h-16 w-11 shrink-0 place-items-center rounded-[var(--radius-md)] border text-[0.6875rem] font-semibold"
       data-paper-thumbnail
     >
       PDF
@@ -177,7 +176,7 @@ function SelectablePaperThumbnail({
   selectionMode?: boolean;
 }) {
   return (
-    <span className="relative block h-20 w-14 shrink-0">
+    <span className="relative block h-16 w-11 shrink-0">
       <PaperThumbnail paper={paper} />
       <span
         className={cn(
@@ -221,13 +220,57 @@ function PaperDetails({ paper }: { paper: Paper }) {
         {secondary || paper.document.original_filename}
       </span>
       {paper.tags.length > 0 && (
-        <span className="mt-2 flex flex-wrap gap-1.5">
-          {paper.tags.slice(0, 3).map((tag) => (
+        <span className="mt-1.5 flex flex-wrap gap-1">
+          {paper.tags.slice(0, 2).map((tag) => (
             <TagPill key={tag.id} name={tag.name} />
           ))}
         </span>
       )}
     </Link>
+  );
+}
+
+function PaperPreview({ paper }: { paper?: Paper }) {
+  const t = useTranslations("Library.papers.preview");
+  if (!paper) return null;
+  const metadata = paperMetadata(paper);
+  const abstract =
+    paper.metadata_overrides.abstract ??
+    paper.document.abstract ??
+    paper.document.summary;
+  return (
+    <aside
+      aria-label={t("label")}
+      className="border-line sticky top-4 hidden max-h-[calc(100dvh-8rem)] min-w-0 overflow-y-auto border-l pl-5 xl:block"
+    >
+      <div className="flex items-start gap-3">
+        <PaperThumbnail paper={paper} />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm leading-5 font-semibold [overflow-wrap:anywhere]">
+            {metadata.title}
+          </h2>
+          <p className="text-secondary mt-1 line-clamp-2 text-xs leading-5">
+            {metadata.authors.join(" · ") || t("unknownAuthors")}
+          </p>
+        </div>
+      </div>
+      <p className="text-secondary mt-4 text-xs font-medium">{t("abstract")}</p>
+      <p className="text-secondary mt-2 text-sm leading-6">
+        {abstract || t("noAbstract")}
+      </p>
+      {paper.tags.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {paper.tags.map((tag) => (
+            <TagPill key={tag.id} name={tag.name} />
+          ))}
+        </div>
+      )}
+      <Button asChild className="mt-5 w-full" size="sm" variant="secondary">
+        <Link href={`/reader/${paper.document.document_id}` as Route}>
+          {t("openReader")}
+        </Link>
+      </Button>
+    </aside>
   );
 }
 
@@ -622,12 +665,13 @@ export function PapersView({
   ingestions,
   ingestionCount,
   loading,
+  loadingMore = false,
+  hasMore = false,
   onCreateTag,
   onDeleteTag,
   onDownload,
-  onNext,
+  onLoadMore = async () => undefined,
   onOpenDocument,
-  onPrevious,
   onRemove,
   onRenameTag,
   onReplaceTags,
@@ -637,6 +681,7 @@ export function PapersView({
   onSortChange,
   onTagFilterChange,
   search,
+  searchResults,
   sort,
   paperCount,
   tagIds,
@@ -648,12 +693,17 @@ export function PapersView({
   ingestions: PaperIngestionRow[];
   ingestionCount: number;
   loading: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
   onCreateTag: (name: string) => Promise<LibraryTag>;
   onDeleteTag: (tagId: string) => Promise<void>;
   onDownload: (documentId: string) => void;
   onOpenDocument: (documentId: string) => void;
-  onNext: (cursor: string) => void;
-  onPrevious: (cursor: string) => void;
+  onLoadMore?: () => Promise<void>;
+  /** @deprecated Continuous loading replaced cursor buttons. */
+  onNext?: (cursor: string) => void;
+  /** @deprecated Continuous loading replaced cursor buttons. */
+  onPrevious?: (cursor: string) => void;
   onRemove: (documentIds: string[]) => Promise<void>;
   onRenameTag: (tagId: string, name: string) => Promise<LibraryTag>;
   onReplaceTags: (documentIds: string[], tagIds: string[]) => Promise<void>;
@@ -663,6 +713,7 @@ export function PapersView({
   onSortChange: (sort: PaperSort) => void;
   onTagFilterChange: (tagIds: string[]) => void;
   search: React.ReactNode;
+  searchResults?: React.ReactNode;
   sort: PaperSort;
   paperCount: number;
   tagIds: string[];
@@ -676,10 +727,28 @@ export function PapersView({
   const [tagManagerOpen, setTagManagerOpen] = React.useState(false);
   const [removeOpen, setRemoveOpen] = React.useState(false);
   const [actionPending, setActionPending] = React.useState(false);
+  const [previewId, setPreviewId] = React.useState<string>();
+  const loadMoreRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore || loadingMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void onLoadMore();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, onLoadMore]);
 
   const papers = (data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
   );
+  const previewPaper =
+    papers.find((paper) => paper.document.document_id === previewId) ??
+    papers[0];
   const hasRows = papers.length > 0 || ingestions.length > 0;
   const allSelected =
     papers.length > 0 &&
@@ -868,106 +937,209 @@ export function PapersView({
         )}
       </AnimatePresence>
 
-      <div className="mt-4">
-        {loading && <LoadingState label={t("loading")} />}
-        {Boolean(error) && !loading && (
-          <AsyncFeedback
-            action={{ label: t("tryAgain"), onClick: onRetryLoad }}
-            description={t("errorDescription")}
-            state="error"
-            title={t("errorTitle")}
-          />
-        )}
-        {!loading && !error && data && !hasRows && (
-          <AsyncFeedback
-            description={t("emptyDescription")}
-            icon={LibraryIcon}
-            state="empty"
-            title={t("emptyTitle")}
-          />
-        )}
-        {!loading && !error && hasRows && (
-          <>
-            <div className="border-line group/table hidden border-y md:block">
-              <table className="w-full table-fixed border-collapse text-left">
-                <thead className="text-muted text-xs font-medium">
-                  <tr>
-                    <th className="w-20 px-3 py-3">
-                      <span
-                        className={cn(
-                          "motion-control grid w-14 place-items-center",
-                          selected.length > 0
-                            ? "opacity-100"
-                            : "opacity-0 group-focus-within/table:opacity-100 group-hover/table:opacity-100",
-                        )}
-                      >
-                        <SelectionCheckbox
-                          checked={
-                            allSelected
-                              ? true
-                              : selected.length > 0
-                                ? "indeterminate"
-                                : false
-                          }
-                          label={t("selectAll")}
-                          onCheckedChange={toggleAll}
-                        />
-                      </span>
-                    </th>
-                    <th className="px-2 py-3 font-medium">
-                      {t("columns.paper")}
-                    </th>
-                    <th className="w-36 px-3 py-3 font-medium">
-                      {t("columns.added")}
-                    </th>
-                    <th className="w-32 px-3 py-3 font-medium">
-                      {t("columns.published")}
-                    </th>
-                    <th className="w-14 px-2 py-3">
-                      <span className="sr-only">{t("columns.actions")}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-line divide-y">
+      {searchResults ? (
+        <div className="mt-4">{searchResults}</div>
+      ) : (
+        <>
+          <div className="mt-4">
+            {loading && <LoadingState label={t("loading")} />}
+            {Boolean(error) && !loading && (
+              <AsyncFeedback
+                action={{ label: t("tryAgain"), onClick: onRetryLoad }}
+                description={t("errorDescription")}
+                state="error"
+                title={t("errorTitle")}
+              />
+            )}
+            {!loading && !error && data && !hasRows && (
+              <AsyncFeedback
+                description={t("emptyDescription")}
+                icon={LibraryIcon}
+                state="empty"
+                title={t("emptyTitle")}
+              />
+            )}
+            {!loading && !error && hasRows && (
+              <>
+                <div className="hidden min-w-0 gap-6 md:grid xl:grid-cols-[minmax(0,1fr)_19rem]">
+                  <div className="border-line group/table min-w-0 border-y">
+                    <table className="w-full table-fixed border-collapse text-left">
+                      <thead className="text-muted text-xs font-medium">
+                        <tr>
+                          <th className="w-16 px-2 py-2">
+                            <span
+                              className={cn(
+                                "motion-control grid w-11 place-items-center",
+                                selected.length > 0
+                                  ? "opacity-100"
+                                  : "opacity-0 group-focus-within/table:opacity-100 group-hover/table:opacity-100",
+                              )}
+                            >
+                              <SelectionCheckbox
+                                checked={
+                                  allSelected
+                                    ? true
+                                    : selected.length > 0
+                                      ? "indeterminate"
+                                      : false
+                                }
+                                label={t("selectAll")}
+                                onCheckedChange={toggleAll}
+                              />
+                            </span>
+                          </th>
+                          <th className="px-2 py-2 font-medium">
+                            {t("columns.paper")}
+                          </th>
+                          <th className="w-32 px-3 py-2 font-medium">
+                            {t("columns.added")}
+                          </th>
+                          <th className="w-28 px-3 py-2 font-medium">
+                            {t("columns.published")}
+                          </th>
+                          <th className="w-14 px-2 py-3">
+                            <span className="sr-only">
+                              {t("columns.actions")}
+                            </span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-line divide-y">
+                        <AnimatePresence initial={false}>
+                          {ingestions.map((ingestion, index) => (
+                            <BoundedMotionTableRow
+                              key={ingestion.id}
+                              withMotion={index < motionStagger.maximumChildren}
+                            >
+                              <td className="px-2 py-2 align-middle">
+                                <IngestionThumbnail />
+                              </td>
+                              <td className="px-2 py-2 align-middle">
+                                <IngestionDetails ingestion={ingestion} />
+                              </td>
+                              <td className="text-secondary px-3 py-4 align-top text-sm">
+                                {format.dateTime(
+                                  new Date(ingestion.createdAt),
+                                  {
+                                    dateStyle: "medium",
+                                  },
+                                )}
+                              </td>
+                              <td className="text-secondary px-3 py-4 align-top text-sm">
+                                {t("ingestion.pending")}
+                              </td>
+                              <td className="px-2 py-2 align-top">
+                                <IngestionActions
+                                  ingestion={ingestion}
+                                  onCancel={() =>
+                                    onCancelIngestion(ingestion.id)
+                                  }
+                                  onRetry={() => onRetryIngestion(ingestion.id)}
+                                />
+                              </td>
+                            </BoundedMotionTableRow>
+                          ))}
+                        </AnimatePresence>
+                        {papers.map((paper) => {
+                          const id = paper.document.document_id;
+                          const metadata = paperMetadata(paper);
+                          return (
+                            <tr
+                              className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed"
+                              key={id}
+                              onFocusCapture={() => setPreviewId(id)}
+                              onMouseEnter={() => setPreviewId(id)}
+                            >
+                              <td className="px-2 py-2 align-middle">
+                                <SelectablePaperThumbnail
+                                  checked={selected.includes(id)}
+                                  label={t("select", { title: metadata.title })}
+                                  onCheckedChange={(checked) =>
+                                    toggleOne(id, checked)
+                                  }
+                                  paper={paper}
+                                  selectionMode={selected.length > 0}
+                                />
+                              </td>
+                              <td className="px-2 py-2 align-middle">
+                                <PaperDetails paper={paper} />
+                              </td>
+                              <td
+                                className="text-secondary cursor-pointer px-3 py-2 align-middle text-sm"
+                                onClick={() => onOpenDocument(id)}
+                              >
+                                {format.dateTime(new Date(paper.created_at), {
+                                  dateStyle: "medium",
+                                })}
+                              </td>
+                              <td
+                                className="text-secondary cursor-pointer px-3 py-2 align-middle text-sm"
+                                onClick={() => onOpenDocument(id)}
+                              >
+                                {metadata.publishDate
+                                  ? format.dateTime(
+                                      new Date(metadata.publishDate),
+                                      {
+                                        year: "numeric",
+                                      },
+                                    )
+                                  : t("unknown")}
+                              </td>
+                              <td className="px-2 py-2 align-middle">
+                                <PaperActions
+                                  onDownload={() => onDownload(id)}
+                                  onRemove={() => beginRemoval([id])}
+                                  onTags={() => beginTagEditing([id])}
+                                  paper={paper}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaperPreview paper={previewPaper} />
+                </div>
+
+                <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
                   <AnimatePresence initial={false}>
                     {ingestions.map((ingestion, index) => (
-                      <BoundedMotionTableRow
+                      <BoundedMotionListItem
                         key={ingestion.id}
                         withMotion={index < motionStagger.maximumChildren}
                       >
-                        <td className="px-3 py-3 align-middle">
+                        <div className="flex items-start gap-3">
                           <IngestionThumbnail />
-                        </td>
-                        <td className="px-2 py-3 align-middle">
-                          <IngestionDetails ingestion={ingestion} />
-                        </td>
-                        <td className="text-secondary px-3 py-4 align-top text-sm">
-                          {format.dateTime(new Date(ingestion.createdAt), {
-                            dateStyle: "medium",
-                          })}
-                        </td>
-                        <td className="text-secondary px-3 py-4 align-top text-sm">
-                          {t("ingestion.pending")}
-                        </td>
-                        <td className="px-2 py-2 align-top">
+                          <div className="min-w-0 flex-1">
+                            <IngestionDetails ingestion={ingestion} />
+                          </div>
                           <IngestionActions
                             ingestion={ingestion}
                             onCancel={() => onCancelIngestion(ingestion.id)}
                             onRetry={() => onRetryIngestion(ingestion.id)}
                           />
-                        </td>
-                      </BoundedMotionTableRow>
+                        </div>
+                        <div className="text-secondary mt-3 flex gap-3 pl-[4.25rem] text-xs">
+                          <span>
+                            {format.dateTime(new Date(ingestion.createdAt), {
+                              dateStyle: "medium",
+                            })}
+                          </span>
+                          <span>{t("ingestion.pending")}</span>
+                        </div>
+                      </BoundedMotionListItem>
                     ))}
                   </AnimatePresence>
                   {papers.map((paper) => {
                     const id = paper.document.document_id;
                     const metadata = paperMetadata(paper);
                     return (
-                      <tr
-                        className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed"
+                      <li
+                        className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed min-w-0 rounded-[var(--radius-lg)] px-2 py-4"
                         key={id}
                       >
-                        <td className="px-3 py-3 align-middle">
+                        <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-start gap-3">
                           <SelectablePaperThumbnail
                             checked={selected.includes(id)}
                             label={t("select", { title: metadata.title })}
@@ -977,137 +1149,59 @@ export function PapersView({
                             paper={paper}
                             selectionMode={selected.length > 0}
                           />
-                        </td>
-                        <td className="px-2 py-3 align-middle">
-                          <PaperDetails paper={paper} />
-                        </td>
-                        <td
-                          className="text-secondary cursor-pointer px-3 py-3 align-middle text-sm"
-                          onClick={() => onOpenDocument(id)}
-                        >
-                          {format.dateTime(new Date(paper.created_at), {
-                            dateStyle: "medium",
-                          })}
-                        </td>
-                        <td
-                          className="text-secondary cursor-pointer px-3 py-3 align-middle text-sm"
-                          onClick={() => onOpenDocument(id)}
-                        >
-                          {metadata.publishDate
-                            ? format.dateTime(new Date(metadata.publishDate), {
-                                year: "numeric",
-                              })
-                            : t("unknown")}
-                        </td>
-                        <td className="px-2 py-2 align-middle">
+                          <div className="min-w-0" data-paper-content>
+                            <PaperDetails paper={paper} />
+                            <div
+                              className="text-secondary mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs"
+                              data-paper-mobile-metadata
+                            >
+                              <span>
+                                {format.dateTime(new Date(paper.created_at), {
+                                  dateStyle: "medium",
+                                })}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span>
+                                {metadata.publishDate
+                                  ? new Date(
+                                      metadata.publishDate,
+                                    ).getUTCFullYear()
+                                  : t("unknown")}
+                              </span>
+                            </div>
+                          </div>
                           <PaperActions
                             onDownload={() => onDownload(id)}
                             onRemove={() => beginRemoval([id])}
+                            onSelect={() =>
+                              toggleOne(id, !selected.includes(id))
+                            }
                             onTags={() => beginTagEditing([id])}
                             paper={paper}
+                            selected={selected.includes(id)}
                           />
-                        </td>
-                      </tr>
+                        </div>
+                      </li>
                     );
                   })}
-                </tbody>
-              </table>
+                </ul>
+              </>
+            )}
+          </div>
+
+          {data && hasMore && (
+            <div className="flex justify-center py-6" ref={loadMoreRef}>
+              <Button
+                loading={loadingMore}
+                onClick={() => void onLoadMore()}
+                size="sm"
+                variant="ghost"
+              >
+                {loadingMore ? t("loadingMore") : t("loadMore")}
+              </Button>
             </div>
-
-            <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
-              <AnimatePresence initial={false}>
-                {ingestions.map((ingestion, index) => (
-                  <BoundedMotionListItem
-                    key={ingestion.id}
-                    withMotion={index < motionStagger.maximumChildren}
-                  >
-                    <div className="flex items-start gap-3">
-                      <IngestionThumbnail />
-                      <div className="min-w-0 flex-1">
-                        <IngestionDetails ingestion={ingestion} />
-                      </div>
-                      <IngestionActions
-                        ingestion={ingestion}
-                        onCancel={() => onCancelIngestion(ingestion.id)}
-                        onRetry={() => onRetryIngestion(ingestion.id)}
-                      />
-                    </div>
-                    <div className="text-secondary mt-3 flex gap-3 pl-[4.25rem] text-xs">
-                      <span>
-                        {format.dateTime(new Date(ingestion.createdAt), {
-                          dateStyle: "medium",
-                        })}
-                      </span>
-                      <span>{t("ingestion.pending")}</span>
-                    </div>
-                  </BoundedMotionListItem>
-                ))}
-              </AnimatePresence>
-              {papers.map((paper) => {
-                const id = paper.document.document_id;
-                const metadata = paperMetadata(paper);
-                return (
-                  <li
-                    className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed min-w-0 rounded-[var(--radius-lg)] px-2 py-4"
-                    key={id}
-                  >
-                    <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)_auto] items-start gap-3">
-                      <SelectablePaperThumbnail
-                        checked={selected.includes(id)}
-                        label={t("select", { title: metadata.title })}
-                        onCheckedChange={(checked) => toggleOne(id, checked)}
-                        paper={paper}
-                        selectionMode={selected.length > 0}
-                      />
-                      <div className="min-w-0" data-paper-content>
-                        <PaperDetails paper={paper} />
-                        <div
-                          className="text-secondary mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs"
-                          data-paper-mobile-metadata
-                        >
-                          <span>
-                            {format.dateTime(new Date(paper.created_at), {
-                              dateStyle: "medium",
-                            })}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>
-                            {metadata.publishDate
-                              ? new Date(metadata.publishDate).getUTCFullYear()
-                              : t("unknown")}
-                          </span>
-                        </div>
-                      </div>
-                      <PaperActions
-                        onDownload={() => onDownload(id)}
-                        onRemove={() => beginRemoval([id])}
-                        onSelect={() => toggleOne(id, !selected.includes(id))}
-                        onTags={() => beginTagEditing([id])}
-                        paper={paper}
-                        selected={selected.includes(id)}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </div>
-
-      {data && (data.previous_cursor || data.next_cursor) && (
-        <div className="mt-6 flex justify-end">
-          <CursorPagination
-            nextDisabled={!data.next_cursor}
-            nextLabel={t("next")}
-            onNext={() => data.next_cursor && onNext(data.next_cursor)}
-            onPrevious={() =>
-              data.previous_cursor && onPrevious(data.previous_cursor)
-            }
-            previousDisabled={!data.previous_cursor}
-            previousLabel={t("previous")}
-          />
-        </div>
+          )}
+        </>
       )}
 
       <TagManagerDialog

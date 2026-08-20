@@ -151,6 +151,25 @@ caps the documents handled by one invocation and transaction. It relies on
 normal INSERT permissions and the existing tsvector trigger, never runtime
 trigger DDL.
 
+Paper search defaults to `PAPER_SEARCH_BACKEND=postgres_hybrid`. It combines
+compact exact/trigram matching, weighted PostgreSQL full text, and the pinned
+local multilingual embedding model at `SCHOLENS_EMBEDDING_MODEL_PATH`; no query
+or paper text is sent to a model provider. `postgres_fts` selects the same
+authorization-first lexical lanes without semantic retrieval. A missing or
+unavailable model degrades a request to lexical results.
+
+Existing or stale semantic projections are maintained with a bounded dry-run
+first:
+
+```bash
+uv run scholens maintenance backfill-search-embeddings --batch-size 100 --json
+uv run scholens maintenance backfill-search-embeddings --batch-size 100 --apply --yes --json
+```
+
+Repeat the apply command until `candidates` reaches zero. The projection is
+versioned and digest-bound, so a model or source-text change is reindexed
+without rewriting canonical Document content.
+
 The `maintenance fix-annotation-offsets` and
 `maintenance reprocess-contaminated-documents` repairs are also bounded and
 dry-run by default. They act only on locally provable candidates: a unique

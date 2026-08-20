@@ -91,10 +91,18 @@ export const Populated: Story = {
     await expect(
       canvasElement.querySelectorAll("[data-paper-thumbnail]").length,
     ).toBeGreaterThan(0);
+    const continuedTitles = await canvas.findAllByText(
+      "Follow-up reading 1: Attention Is All You Need",
+    );
     await expect(
-      canvas.getByRole("button", { name: "Previous" }),
-    ).toBeDisabled();
-    await expect(canvas.getByRole("button", { name: "Next" })).toBeEnabled();
+      continuedTitles.some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
+    await expect(
+      canvas.queryByRole("button", { name: "Previous" }),
+    ).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole("button", { name: "Next" }),
+    ).not.toBeInTheDocument();
   },
 };
 

@@ -13,6 +13,20 @@ import {
 
 const api = "http://127.0.0.1:7301/api/v1";
 
+const nextLibraryPage = libraryPapers.map((paper, index) => {
+  const suffix = String(index + 101).padStart(12, "0");
+  const documentId = `70000000-0000-4000-8000-${suffix}`;
+  return {
+    ...paper,
+    document: {
+      ...paper.document,
+      document_id: documentId,
+      title: `Follow-up reading ${index + 1}: ${paper.document.title}`,
+    },
+    library_entry_id: `72000000-0000-4000-8000-${suffix}`,
+  };
+});
+
 const populatedHandlers = [
   http.get(`${api}/integrations/zotero/status`, () =>
     HttpResponse.json({
@@ -42,14 +56,15 @@ const populatedHandlers = [
   http.get(`${api}/library/tags`, () =>
     HttpResponse.json({ items: libraryTags, next_cursor: null }),
   ),
-  http.get(`${api}/library/papers`, () =>
-    HttpResponse.json({
-      items: libraryPapers,
-      next_cursor: "next-library-page",
+  http.get(`${api}/library/papers`, ({ request }) => {
+    const cursor = new URL(request.url).searchParams.get("cursor");
+    return HttpResponse.json({
+      items: cursor ? nextLibraryPage : libraryPapers,
+      next_cursor: cursor ? null : "next-library-page",
       previous_cursor: null,
-      total_count: 27,
-    }),
-  ),
+      total_count: 6,
+    });
+  }),
   http.get(`${api}/library/outputs`, () =>
     HttpResponse.json({
       items: libraryOutputs,
@@ -191,9 +206,9 @@ export const libraryHandlers = {
     http.get(`${api}/library/papers`, () =>
       HttpResponse.json({
         items: [processingIngestionEntry, ...libraryPapers],
-        next_cursor: "next-library-page",
+        next_cursor: null,
         previous_cursor: null,
-        total_count: 27,
+        total_count: libraryPapers.length + 1,
       }),
     ),
     ...populatedHandlers,
@@ -202,9 +217,9 @@ export const libraryHandlers = {
     http.get(`${api}/library/papers`, () =>
       HttpResponse.json({
         items: [failedIngestionEntry, ...libraryPapers],
-        next_cursor: "next-library-page",
+        next_cursor: null,
         previous_cursor: null,
-        total_count: 27,
+        total_count: libraryPapers.length + 1,
       }),
     ),
     ...populatedHandlers,

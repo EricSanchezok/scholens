@@ -410,8 +410,10 @@ Create the existing-login roles `scholens_app` and `scholens_migrator` in RDS wi
 passwords exactly matching the generated database secrets. `auth_migrator` remains owned
 by SanchezCloud Identity. Run `database-bootstrap.sql` as the database owner before the
 Identity migration, after the Identity migration, and after the Scholens migration. It is
-idempotent and keeps `auth` and `scholens` ownership separate. The runtime role cannot run
-DDL; the product migrator cannot modify `auth.*`.
+idempotent, installs the reviewed `pg_trgm` and `vector` extensions in `public`, and keeps
+`auth` and `scholens` ownership separate. RDS must expose both extensions before the
+hybrid-search expand migration runs. The runtime role cannot run DDL; the product migrator
+cannot modify `auth.*`.
 
 ## GitHub environments
 

@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from app.bootstrap.adapters.paper_search import (
     PostgresPaperSearch,
+    _compact_query,
     _visibility_condition,
 )
 from app.modules.papers.application.contracts.search import (
@@ -191,6 +192,11 @@ def test_library_visibility_includes_personal_and_project_access() -> None:
     assert "owner_id" in statement
 
 
+def test_compact_query_matches_joined_words_and_unicode_width() -> None:
+    assert _compact_query("Code World-Model") == "codeworldmodel"
+    assert _compact_query("Ｃｏｄｅ　World Model") == "codeworldmodel"
+
+
 def test_personal_library_visibility_excludes_project_membership() -> None:
     statement = str(
         _visibility_condition(
@@ -221,6 +227,7 @@ def test_library_search_compiles_with_distinct_result_and_visibility_rows() -> N
 
     rows = Mock()
     rows.all.return_value = []
+    rows.tuples.return_value = []
 
     def execute(statement: ClauseElement) -> Mock:
         compiled_sql.append(compile_statement(statement))
@@ -228,6 +235,7 @@ def test_library_search_compiles_with_distinct_result_and_visibility_rows() -> N
 
     db.scalar.side_effect = scalar
     db.execute.side_effect = execute
+    db.scalars.side_effect = execute
 
     response = PostgresPaperSearch(db).search(
         actor=_actor(),
@@ -243,12 +251,12 @@ def test_library_search_compiles_with_distinct_result_and_visibility_rows() -> N
 
     assert response.items == []
     assert response.total == 0
-    assert len(compiled_sql) == 2
-    for statement in compiled_sql:
-        assert (
-            "LEFT OUTER JOIN scholens.library_papers AS actor_library_entry"
-            in statement
-        )
+    assert len(compiled_sql) == 5
+    assert any(
+        "LEFT OUTER JOIN scholens.library_papers AS actor_library_entry" in statement
+        for statement in compiled_sql
+    )
+    for statement in [compiled_sql[0], compiled_sql[1], *compiled_sql[3:]]:
         assert (
             "EXISTS (SELECT scholens.library_papers.id "
             "FROM scholens.library_papers "

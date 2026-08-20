@@ -14,10 +14,20 @@ Import the supported surface from `scholens_ai`:
 - `AIThinkingMode`, `AIThinkingEffort`
 - `ProviderConfigurationError`
 - `resolve_profile`, `profile_model_settings`, `build_model`
+- `LocalOnnxTextEmbedder`, `TextEmbedder`, `embed_text`
+- `semantic_document_text`, `semantic_source_digest`
+- `EMBEDDING_MODEL_REVISION`, `EMBEDDING_DIMENSION`
 
 Profile model identifiers always use `provider:model`. Server and Jobs are the
 current consumers. New providers must be added as an explicit adapter rather
 than silently treated as OpenAI-compatible.
+
+The package also owns Scholens' provider-free semantic-search primitive. Image
+builds download the pinned multilingual E5 ONNX artifacts once; Server and Jobs
+load only a configured local artifact directory. The public document-text
+builder intentionally excludes raw full text and produces a bounded,
+digestible title/keywords/summary/abstract projection. Callers own
+authorization, persistence, ranking, retries, and degradation behavior.
 
 OpenAI Platform is not a supported provider and `openai:*` identifiers are
 rejected. The `openai` Python SDK remains a runtime dependency because the

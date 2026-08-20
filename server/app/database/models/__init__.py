@@ -53,6 +53,7 @@ from app.modules.papers.infrastructure.models import (
     LibraryPaperTag,
     Document,
     DocumentPassage,
+    DocumentSearchEmbedding,
     PaperTag,
     UploadReservation,
 )
@@ -124,6 +125,7 @@ __all__ = [
     "OperationJournalEntryModel",
     "Document",
     "DocumentPassage",
+    "DocumentSearchEmbedding",
     "DocumentReflow",
     "DocumentReflowBlock",
     "PaperStatus",

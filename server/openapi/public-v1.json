@@ -6084,6 +6084,22 @@
             ],
             "title": "Next Cursor"
           },
+          "search_mode": {
+            "default": "lexical",
+            "enum": [
+              "hybrid",
+              "lexical"
+            ],
+            "title": "Search Mode",
+            "type": "string"
+          },
+          "semantic_index_coverage": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Semantic Index Coverage",
+            "type": "number"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -6133,6 +6149,35 @@
             "title": "Document Id",
             "type": "string"
           },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
           "last_accessed_at": {
             "format": "date-time",
             "title": "Last Accessed At",
@@ -6168,6 +6213,19 @@
             ],
             "title": "Publish Date"
           },
+          "retrieval_modes": {
+            "items": {
+              "enum": [
+                "exact",
+                "full_text",
+                "fuzzy",
+                "semantic"
+              ],
+              "type": "string"
+            },
+            "title": "Retrieval Modes",
+            "type": "array"
+          },
           "snippets": {
             "items": {
               "$ref": "#/components/schemas/PaperSearchSnippet"
@@ -6178,6 +6236,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           },
           "title": {
             "anyOf": [
@@ -6251,6 +6320,18 @@
         "properties": {
           "searchable_items": {
             "title": "Searchable Items",
+            "type": "integer"
+          },
+          "semantic_index_coverage": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Semantic Index Coverage",
+            "type": "number"
+          },
+          "semantic_items": {
+            "default": 0,
+            "title": "Semantic Items",
             "type": "integer"
           },
           "total_papers": {

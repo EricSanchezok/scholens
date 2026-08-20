@@ -18,9 +18,15 @@ from app.modules.operation_journal.infrastructure import (
 )
 from app.bootstrap.adapters.data_repair_jobs import enqueue_reprocess_job
 from app.modules.papers.application.data_repair import DataRepair
-from app.modules.papers.application.maintenance import PassageMaintenance
+from app.modules.papers.application.maintenance import (
+    PassageMaintenance,
+    SearchEmbeddingMaintenance,
+)
 from app.modules.papers.infrastructure.data_repair import SqlDataRepair
 from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
+from app.modules.papers.infrastructure.search_embedding_maintenance import (
+    SqlSearchEmbeddingBackfill,
+)
 from app.shared.infrastructure import SystemClock
 from sqlalchemy.orm import Session
 
@@ -59,6 +65,13 @@ class OperatorCapabilities:
     def passage_maintenance(self) -> PassageMaintenance:
         return PassageMaintenance(
             SqlPassageBackfill(self._session),
+            journal=self._journal,
+        )
+
+    @cached_property
+    def search_embedding_maintenance(self) -> SearchEmbeddingMaintenance:
+        return SearchEmbeddingMaintenance(
+            SqlSearchEmbeddingBackfill(self._session),
             journal=self._journal,
         )
 

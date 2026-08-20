@@ -144,6 +144,37 @@ async def test_pdf_postprocess_resolves_before_finalize_command() -> None:
 
 
 @pytest.mark.asyncio
+async def test_pdf_postprocess_carries_validated_embedding_into_finalize() -> None:
+    events: list[str] = []
+    callbacks = _Callbacks(events)
+    workflow = PdfPostprocessWorkflow(
+        executor=_Executor(_Capabilities(callbacks)),  # type: ignore[arg-type]
+        reader=_Reader(events),
+        provider=_Provider(events),  # type: ignore[arg-type]
+        operation_factory=OperationContextFactory(),
+    )
+    job_id = uuid4()
+
+    await workflow.complete(
+        actor=_actor(),
+        operation=_operation(),
+        job_id=job_id,
+        payload={
+            "task_id": str(job_id),
+            "embedding": [0.25] * 384,
+            "embedding_model_revision": "multilingual-e5-small-onnx-o4-v1",
+            "embedding_source_digest": "a" * 64,
+        },
+    )
+
+    assert callbacks.resolution is not None
+    assert callbacks.resolution.embedding == [0.25] * 384  # type: ignore[union-attr]
+    assert (  # type: ignore[union-attr]
+        callbacks.resolution.embedding_source_digest == "a" * 64
+    )
+
+
+@pytest.mark.asyncio
 async def test_pdf_postprocess_stops_after_existing_doi_identity_mismatch() -> None:
     events: list[str] = []
     callbacks = _Callbacks(events)

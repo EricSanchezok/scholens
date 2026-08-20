@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 
 from app.shared.domain import JsonValue
 from app.shared.infrastructure.persistence import Base
@@ -235,6 +236,11 @@ class Document(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     ts_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
+    search_text_compact: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default="",
+    )
     page_offset_map: Mapped[dict[int, list[int]] | None] = mapped_column(
         JSONB, nullable=True
     )  # Maps page numbers to text offsets. Useful for re-annotation.
@@ -333,6 +339,35 @@ class LibraryPaper(Base):
         "PaperTag",
         secondary=lambda: LibraryPaperTag.__table__,
         back_populates="library_papers",
+    )
+
+
+class DocumentSearchEmbedding(Base):
+    """Versioned semantic projection for a canonical Document."""
+
+    __tablename__ = "document_search_embeddings"
+    __table_args__ = (
+        Index("ix_document_search_embeddings_revision", "model_revision"),
+        Index(
+            "ix_document_search_embeddings_hnsw_cosine",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    model_revision: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(384), nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )
 
 

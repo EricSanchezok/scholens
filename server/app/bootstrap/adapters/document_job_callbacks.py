@@ -5,6 +5,11 @@ import uuid
 from datetime import datetime, timezone
 
 from scholens_job_contracts import JobQueue
+from scholens_ai import (
+    EMBEDDING_MODEL_REVISION,
+    semantic_document_text,
+    semantic_source_digest,
+)
 
 from app.bootstrap.adapters.upload_repository import (
     upload_reservation_repository,
@@ -19,6 +24,7 @@ from app.modules.integrations.connections.infrastructure.models import (
 from app.database.database import engine
 from app.database.models import (
     Document,
+    DocumentSearchEmbedding,
     DocumentProcessingStatus,
     JobStatus,
     JobOperation,
@@ -101,6 +107,7 @@ from app.bootstrap.adapters.research_annotations import (
 )
 from app.modules.jobs.infrastructure.callback_boundaries import optional_savepoint
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -165,6 +172,8 @@ def _enqueue_pdf_postprocess(
     user_id: int,
     origin_operation_id: uuid.UUID,
     correlation_id: uuid.UUID,
+    semantic_text: str,
+    semantic_digest: str,
 ) -> PersistedJob:
     postprocess_job_id = uuid.uuid4()
     base_url = get_webhook_base_url().rstrip("/")
@@ -187,6 +196,8 @@ def _enqueue_pdf_postprocess(
                 "claim_url": (
                     f"{base_url}/internal/v1/jobs/{postprocess_job_id}/claim"
                 ),
+                "semantic_text": semantic_text,
+                "semantic_source_digest": semantic_digest,
             },
             job_id=postprocess_job_id,
         ),
@@ -471,6 +482,47 @@ def _apply_pdf_postprocess(
         document_id=paper.id,
         raw_content=paper.raw_content,
     )
+
+    if (
+        resolution.embedding is not None
+        and resolution.embedding_model_revision == EMBEDDING_MODEL_REVISION
+        and resolution.embedding_source_digest is not None
+    ):
+        current_semantic_text = semantic_document_text(
+            title=paper.title,
+            keywords=paper.keywords,
+            summary=paper.summary,
+            abstract=paper.abstract,
+        )
+        if (
+            current_semantic_text
+            and semantic_source_digest(current_semantic_text)
+            == resolution.embedding_source_digest
+        ):
+            statement = insert(DocumentSearchEmbedding).values(
+                document_id=paper.id,
+                model_revision=resolution.embedding_model_revision,
+                source_digest=resolution.embedding_source_digest,
+                embedding=resolution.embedding,
+            )
+            db.execute(
+                statement.on_conflict_do_update(
+                    index_elements=(
+                        DocumentSearchEmbedding.document_id,
+                        DocumentSearchEmbedding.model_revision,
+                    ),
+                    set_={
+                        "source_digest": statement.excluded.source_digest,
+                        "embedding": statement.excluded.embedding,
+                        "indexed_at": datetime.now(timezone.utc),
+                    },
+                )
+            )
+        else:
+            logger.info(
+                "document.pdf_postprocess.embedding_stale",
+                extra={"document_id": str(paper.id)},
+            )
 
     candidates: dict[str, object | None] = {
         "doi": resolution.doi,
@@ -1047,6 +1099,12 @@ async def handle_paper_processing_webhook(
                     job_id=job_uuid,
                     result=result,
                 )
+                semantic_text = semantic_document_text(
+                    title=metadata.title,
+                    keywords=metadata.keywords,
+                    summary=metadata.summary,
+                    abstract=metadata.abstract,
+                )
                 postprocess_job = _enqueue_pdf_postprocess(
                     db,
                     ingestion_job_id=job_uuid,
@@ -1054,6 +1112,8 @@ async def handle_paper_processing_webhook(
                     user_id=actor.id,
                     origin_operation_id=operation.trace.operation_id,
                     correlation_id=operation.trace.correlation_id,
+                    semantic_text=semantic_text,
+                    semantic_digest=semantic_source_digest(semantic_text),
                 )
                 changes: list[OperationChange] = []
                 if completed:

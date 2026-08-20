@@ -232,6 +232,7 @@
       "openMenu": "打开导航",
       "closeMenu": "关闭导航",
       "searchConversations": "搜索对话",
+      "searchPapers": "搜索全部论文（⌘K）",
       "comingSoon": "尚未开放"
     },
     "sidebar": {
@@ -513,6 +514,15 @@
       "batchActions": "操作",
       "previous": "上一页",
       "next": "下一页",
+      "loadMore": "加载更多论文",
+      "loadingMore": "正在加载更多论文",
+      "preview": {
+        "label": "论文预览",
+        "abstract": "摘要",
+        "noAbstract": "这篇论文暂时没有摘要。",
+        "unknownAuthors": "作者未知",
+        "openReader": "在阅读器中打开"
+      },
       "sort": {
         "label": "论文排序",
         "added_desc": "最近添加",
@@ -1255,7 +1265,12 @@
         "empty": "项目中还没有论文。",
         "untitled": "未命名论文",
         "unknownAuthors": "暂无作者信息",
-        "openReader": "在 Reader 中打开"
+        "openReader": "在 Reader 中打开",
+        "previewLabel": "项目论文预览",
+        "abstract": "摘要",
+        "noAbstract": "这篇论文暂时没有摘要。",
+        "loadMore": "加载更多论文",
+        "loadingMore": "正在加载更多论文"
       },
       "outputs": {
         "search": "搜索项目产物",
@@ -1736,6 +1751,39 @@
       "instructions": "翻译指令",
       "customInstructions": "自定义指令",
       "instructionsDescription": "可选：指定术语、语气或专有名称，最多 4,000 个字符。"
+    }
+  },
+  "PaperSearch": {
+    "title": "查找论文",
+    "description": "可按标题、主题、论点，或仅凭模糊印象搜索你有权访问的全部论文。",
+    "close": "关闭论文搜索",
+    "inputLabel": "搜索全部论文",
+    "placeholder": "例如：论证执行轨迹能提升代码推理的论文",
+    "hint": "输入你还记得的线索即可；完整标题、连写词、拼写误差和自然语言描述都可以。",
+    "searching": "正在搜索论文",
+    "retry": "重试",
+    "errorTitle": "搜索暂不可用",
+    "errorDescription": "查询内容已保留，请重新搜索。",
+    "emptyTitle": "没有相近结果",
+    "emptyDescription": "请换一个更宽泛的描述或相关概念。",
+    "untitled": "未命名论文",
+    "unknownAuthors": "作者未知",
+    "results": {
+      "loading": "正在搜索论文",
+      "retry": "重试",
+      "errorTitle": "搜索暂不可用",
+      "errorDescription": "查询内容已保留，请重新搜索。",
+      "emptyTitle": "没有相近结果",
+      "emptyDescription": "请换一个更宽泛的描述或相关概念。",
+      "count": "找到 {count} 篇相关论文",
+      "preview": "搜索结果预览",
+      "bestMatch": "匹配内容",
+      "noExcerpt": "打开论文可查看完整内容。",
+      "openReader": "在阅读器中打开",
+      "untitled": "未命名论文",
+      "unknownAuthors": "作者未知",
+      "loadMore": "加载更多结果",
+      "loadingMore": "正在加载更多结果"
     }
   },
   "Errors": {

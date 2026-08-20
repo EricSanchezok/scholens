@@ -7,6 +7,7 @@ ARG RDS_GLOBAL_BUNDLE_URL
 ARG RDS_GLOBAL_BUNDLE_SHA256
 ARG SANCHEZCLOUD_IDENTITY_REVISION
 ARG SANCHEZCLOUD_IDENTITY_ARCHIVE=https://api.github.com/repos/EricSanchezok/sanchezcloud-identity/tarball
+ARG SCHOLENS_EMBEDDING_MODEL_REVISION=614241f622f53c4eeff9890bdc4f31cfecc418b3
 
 RUN apk add --no-cache build-base ca-certificates curl curl-dev \
         "sqlite-libs>=3.53.2-r0" \
@@ -33,8 +34,12 @@ COPY packages/scholens_ai/ /packages/scholens_ai/
 COPY packages/scholens_job_contracts/ /packages/scholens_job_contracts/
 COPY packages/scholens_runtime_contracts/ /packages/scholens_runtime_contracts/
 COPY server/pyproject.toml server/uv.lock server/README.md /app/
-RUN uv sync --frozen --no-dev --no-install-project --no-install-package sanchezcloud-identity \
+RUN uv sync --frozen --no-dev --no-install-project \
+        --no-install-package sanchezcloud-identity \
+        --no-install-package onnxruntime \
     && uv pip install --no-deps /app/sanchezcloud-identity/
+RUN .venv/bin/python -m scholens_ai.download_embeddings /app/models/search \
+        --revision "${SCHOLENS_EMBEDDING_MODEL_REVISION}"
 
 COPY server/app/ /app/app/
 COPY server/migrations/ /app/migrations/
@@ -43,17 +48,21 @@ RUN uv pip install --no-deps /app
 
 FROM ${PYTHON_IMAGE} AS runtime
 
-RUN apk add --no-cache ca-certificates libcurl "sqlite-libs>=3.53.2-r0" \
+RUN apk add --no-cache ca-certificates libcurl py3-onnxruntime \
+        "sqlite-libs>=3.53.2-r0" \
     && adduser -D -u 1000 scholens
 
 WORKDIR /app
 COPY --from=builder /app/.venv/ /app/.venv/
 COPY --from=builder /app/app/ /app/app/
 COPY --from=builder /app/migrations/ /app/migrations/
+COPY --from=builder /app/models/ /app/models/
 COPY --from=builder /app/alembic.ini /app/gunicorn.config.py /app/
 COPY --from=builder /tmp/global-bundle.pem /etc/ssl/certs/global-bundle.pem
 
 ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONPATH=/usr/lib/python3.12/site-packages \
+    SCHOLENS_EMBEDDING_MODEL_PATH=/app/models/search \
     SCHOLENS_SERVER_ROOT=/app \
     ENVIRONMENT=production \
     PORT=8000

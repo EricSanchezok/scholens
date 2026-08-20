@@ -25,7 +25,7 @@ stable primitives; each application owns its product composition.
 
 | Package                                                        | Public import            | Current consumers | Responsibility                                                |
 | -------------------------------------------------------------- | ------------------------ | ----------------- | ------------------------------------------------------------- |
-| [`scholens-ai`](./scholens_ai/README.md)                       | `scholens_ai`            | Server, Jobs      | Provider-neutral AI workload profiles and model construction  |
+| [`scholens-ai`](./scholens_ai/README.md)                       | `scholens_ai`            | Server, Jobs      | AI workload profiles and local semantic embedding primitives  |
 | [`scholens-job-contracts`](./scholens_job_contracts/README.md) | `scholens_job_contracts` | Server, Jobs      | Queue names and callback timing/size limits                     |
 | [`scholens-observability`](./scholens_observability/README.md) | `scholens_observability` | Server, Jobs      | Business-agnostic logs, metrics, traces, and safe diagnostics |
 | [`scholens-runtime-contracts`](./scholens_runtime_contracts/README.md) | `scholens_runtime_contracts` | Server, Jobs | Managed cache and database endpoint validation          |

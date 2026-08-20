@@ -47,6 +47,7 @@ from src.zotero import (
     validate_zotero_callback_payload,
 )
 from scholens_job_contracts import ZOTERO_CALLBACK_HTTP_TIMEOUT_SECONDS
+from scholens_ai import EMBEDDING_MODEL_REVISION, embed_text
 from src.schemas import AudioOverviewRequest
 
 logger = logging.getLogger(__name__)
@@ -712,12 +713,30 @@ def postprocess_pdf_task(
     self,
     callback_url: str,
     claim_url: str | None = None,
+    semantic_text: str | None = None,
+    semantic_source_digest: str | None = None,
 ) -> dict[str, Any]:
     """Trigger idempotent Server-side persistence work under a durable lease."""
     task_id = self.request.id
     if not _claim_job(claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     payload = {"task_id": task_id}
+    if semantic_text and semantic_source_digest:
+        try:
+            embedding = embed_text(semantic_text, kind="passage")
+            if embedding is not None:
+                payload.update(
+                    {
+                        "embedding": embedding,
+                        "embedding_model_revision": EMBEDDING_MODEL_REVISION,
+                        "embedding_source_digest": semantic_source_digest,
+                    }
+                )
+        except Exception:
+            logger.exception(
+                "job.pdf_postprocess.embedding_failed",
+                extra={"job_id": task_id},
+            )
     if not _deliver_webhook(callback_url, payload, task_id=task_id):
         raise RuntimeError("pdf_postprocess_callback_failed")
     return {**payload, "status": "completed"}

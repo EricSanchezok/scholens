@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import type {
@@ -44,16 +44,15 @@ export const libraryQueries = {
         return data;
       },
     }),
-  papers: (
-    state: Pick<LibrarySearchState, "cursor" | "query" | "sort" | "tagIds">,
-  ) =>
-    queryOptions({
+  papers: (state: Pick<LibrarySearchState, "query" | "sort" | "tagIds">) =>
+    infiniteQueryOptions({
       queryKey: libraryKeys.papers(state),
-      queryFn: async ({ signal }) => {
+      initialPageParam: undefined as string | undefined,
+      queryFn: async ({ pageParam, signal }) => {
         const { data } = await apiClient.GET("/api/v1/library/papers", {
           params: {
             query: {
-              cursor: state.cursor,
+              cursor: pageParam,
               limit: 20,
               q: state.query || undefined,
               sort: state.sort as PaperSort,
@@ -65,11 +64,14 @@ export const libraryQueries = {
         if (!data) throw new Error("Library paper response was empty");
         return data;
       },
+      getNextPageParam: (page) => page.next_cursor ?? undefined,
       refetchInterval: (query) =>
-        query.state.data?.items.some(
-          (entry) =>
-            entry.entry_type === "ingestion" &&
-            ["queued", "processing"].includes(entry.ingestion.state),
+        query.state.data?.pages.some((page) =>
+          page.items.some(
+            (entry) =>
+              entry.entry_type === "ingestion" &&
+              ["queued", "processing"].includes(entry.ingestion.state),
+          ),
         )
           ? 2_000
           : false,

@@ -1,5 +1,10 @@
 \set ON_ERROR_STOP on
 
+-- Installed by the database owner before Scholens migrations. Product roles
+-- receive type/function usage through the explicit grants below.
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
 -- SanchezCloud database privilege bootstrap for Scholens.
 -- Required existing LOGIN roles:
 --   auth_migrator_role       owns only auth.*

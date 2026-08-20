@@ -29,7 +29,7 @@ class AppSettings(BaseSettings):
     trusted_proxy_cidr: IPvAnyNetwork | None = None
     client_domain: str = "http://127.0.0.1:7300"
     client_allowed_origins: str | None = None
-    paper_search_backend: Literal["postgres_fts"] = "postgres_fts"
+    paper_search_backend: Literal["postgres_hybrid", "postgres_fts"] = "postgres_hybrid"
     paper_search_cursor_secret: str = Field(
         default="development-only-search-cursor-secret",
         min_length=32,

@@ -69,6 +69,53 @@ def backfill_passages(
     emit(state, payload)
 
 
+@maintenance_group.command("backfill-search-embeddings")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option(
+    "--batch-size",
+    type=click.IntRange(1, 1000),
+    default=100,
+    show_default=True,
+    help="Maximum documents embedded in this invocation and transaction.",
+)
+@click.option(
+    "--apply", is_flag=True, help="Apply changes; otherwise only count candidates."
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt when applying.")
+@click.pass_obj
+@guarded
+def backfill_search_embeddings(
+    state: CliState,
+    actor_email: str,
+    batch_size: int,
+    apply: bool,
+    yes: bool,
+) -> None:
+    actor_user = load_user(actor_email)
+    if apply:
+        confirm("Backfill local semantic-search embeddings?", yes=yes)
+    invoke = executor().command if apply else executor().query
+    result = invoke(
+        lambda capabilities: (
+            capabilities.search_embedding_maintenance.backfill_search_embeddings(
+                actor=current_admin(capabilities, actor_user.id),
+                operation=cli_operation("maintenance.backfill-search-embeddings"),
+                batch_size=batch_size,
+                apply=apply,
+            )
+        )
+    )
+    emit(
+        state,
+        {
+            "status": "changed" if result.indexed_documents else "unchanged",
+            "dry_run": not apply,
+            "candidates": result.candidates,
+            "indexed_documents": result.indexed_documents,
+        },
+    )
+
+
 def _repair_command(
     command_name: str,
     method_name: str,

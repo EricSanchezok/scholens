@@ -1179,7 +1179,7 @@ Resources:
         - Name: SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS
           Value: 'true'
         - Name: PAPER_SEARCH_BACKEND
-          Value: postgres_fts
+          Value: postgres_hybrid
         - Name: CELERY_BROKER_URL
           Value: sqs://
         - Name: SQS_DOCUMENT_QUEUE_URL
