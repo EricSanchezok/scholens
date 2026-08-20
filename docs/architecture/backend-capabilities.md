@@ -306,6 +306,11 @@ leaf, and selecting a response variant does not rewrite the prompt. Jobs persist
 only their origin operation and correlation UUIDs, then callbacks resume a new
 SYSTEM operation after signature and owner verification.
 
+Durable Conversation workers enter through a SYSTEM Job operation, then
+attribute model, tool, citation, and title writes to causally linked AGENT
+resumptions under that Job origin and the retained turn correlation. A Job root
+operation remains SYSTEM-only.
+
 A Conversation title sidecar starts with its first turn and is applied once.
 It never blocks answer persistence or the public `response_ready` event. Later
 turns may retry only while the title remains the default; an explicit user title

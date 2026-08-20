@@ -123,6 +123,11 @@ def test_factory_accepts_each_root_boundary(
             OAuthCallbackOrigin(_request(), "zotero"),
             CredentialRef(CredentialKind.CLOUD_SESSION),
         ),
+        (
+            OperationInitiator.AGENT,
+            JobOrigin(uuid4(), None, None),
+            None,
+        ),
     ],
 )
 def test_factory_rejects_contradictory_root_provenance(
@@ -179,6 +184,25 @@ def test_http_model_work_can_be_attributed_to_an_agent_child() -> None:
     assert child.trace.operation_id == child_id
     assert child.trace.causation_id == root_id
     assert child.initiated_by is OperationInitiator.AGENT
+
+
+def test_job_model_work_can_be_attributed_to_an_agent_resumption() -> None:
+    correlation_id, causation_id, operation_id = uuid4(), uuid4(), uuid4()
+    origin = JobOrigin(uuid4(), None, None)
+
+    operation = _factory(operation_id).resume(
+        correlation_id=correlation_id,
+        causation_id=causation_id,
+        initiated_by=OperationInitiator.AGENT,
+        origin=origin,
+        credential=None,
+    )
+
+    assert operation.trace.operation_id == operation_id
+    assert operation.trace.correlation_id == correlation_id
+    assert operation.trace.causation_id == causation_id
+    assert operation.initiated_by is OperationInitiator.AGENT
+    assert operation.origin is origin
 
 
 def test_child_cannot_switch_origin_or_credential() -> None:
