@@ -79,7 +79,9 @@ is also added to the caller's personal Library by default
 (`add_to_library=true`); pass `add_to_library=false` to keep a Project upload
 Project-only. The tool waits up to 30 seconds by default and returns terminal
 state or the latest durable job snapshot; use its next-action guidance and a
-bounded `get_job` wait instead of rapid polling.
+bounded `get_job` wait instead of rapid polling. The connector's authenticated
+remote-read timeout covers the full 240-second server wait plus transport
+overhead.
 
 The authenticated MCP connection and object-storage PUT use separate HTTP
 clients. The Scholens Access Key is never attached to the upload request. The
