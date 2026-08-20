@@ -43,6 +43,14 @@ the first viewport without a repeated explanatory hero. Explanatory copy
 belongs to empty and unavailable states. Mobile keeps the Workspace app bar as
 the only page-title and primary-action surface.
 
+At phone widths the utility controls are composed rather than compressed:
+search owns the first row, tag and sort controls share a bounded two-column
+row, and the result/import counts occupy a separate right-aligned row. Count
+phrases may separate by semantic line but never wrap character by character.
+The owned tag catalog is requested when filtering or tag management opens;
+assigned tags already present on paper rows remain available without that
+catalog request.
+
 ## Papers
 
 Desktop uses a dense editorial list with an adjacent sticky preview. Its

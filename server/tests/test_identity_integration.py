@@ -3,17 +3,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.container import build_identity_session_bootstrap
 from app.bootstrap.settings import AppSettings
 from app.database import admin_auth
 from app.database.models import AuthUser, Base
 from app.modules.identity.infrastructure import sanchezcloud_identity as runtime
 from app.modules.identity.infrastructure import application_gateway
+from app.modules.identity.infrastructure import session_gateway
 from app.transport.http.public_v1 import auth_dependencies as dependencies
 from app.shared.application import OperationContextFactory
 from app.shared.domain import AppError, FailureKind
 from app.shared.infrastructure import SqlAlchemyApplicationExecutor
 from sanchezcloud_identity.models.user import UserRecord
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import configure_mappers
 
@@ -43,6 +45,20 @@ def _request() -> Request:
             "method": "GET",
             "path": "/",
             "headers": [],
+        }
+    )
+
+
+def _bootstrap_request(*, cookie: str | None = "previous-refresh") -> Request:
+    headers = [(b"user-agent", b"pytest")]
+    if cookie is not None:
+        headers.append((b"cookie", f"scholens_refresh={cookie}".encode()))
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/auth/bootstrap",
+            "headers": headers,
         }
     )
 
@@ -143,6 +159,75 @@ def test_refresh_cookie_is_secure_in_production() -> None:
     config = runtime.build_refresh_cookie_config(environment="production")
 
     assert config.secure is True
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_rotates_cookie_and_returns_product_actor() -> None:
+    from app.transport.http.public_v1 import identity as identity_transport
+
+    profile = SimpleNamespace(locale="zh-CN", is_admin=False, is_blocked=False)
+    response = Response()
+    with (
+        patch.object(
+            runtime.auth_manager,
+            "refresh_token",
+            new=AsyncMock(return_value=("access", "rotated-refresh")),
+        ) as refresh,
+        patch.object(
+            session_gateway,
+            "decode_refresh_token",
+            return_value={"sub": "42"},
+        ),
+        patch.object(
+            application_gateway.user_repository,
+            "get",
+            return_value=SimpleNamespace(
+                id=42,
+                email="reader@example.com",
+                display_name="Reader",
+                status="active",
+                email_verified_at=object(),
+            ),
+        ),
+        patch.object(
+            application_gateway.user_repository,
+            "resolve_profile",
+            return_value=(profile, False),
+        ),
+    ):
+        result = await identity_transport.bootstrap_session(
+            _bootstrap_request(),
+            response,
+            _executor(MagicMock()),
+            OperationContextFactory(),
+            build_identity_session_bootstrap(),
+        )
+
+    assert result.access_token == "access"
+    assert result.actor.id == 42
+    assert result.actor.locale == "zh-CN"
+    refresh.assert_awaited_once_with("previous-refresh", user_agent="pytest")
+    cookie = response.headers["set-cookie"]
+    assert "scholens_refresh=rotated-refresh" in cookie
+    assert "HttpOnly" in cookie
+    assert "Path=/api/v1/auth" in cookie
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_requires_refresh_cookie() -> None:
+    from app.transport.http.public_v1.identity import bootstrap_session
+
+    with pytest.raises(AppError) as exc_info:
+        await bootstrap_session(
+            _bootstrap_request(cookie=None),
+            Response(),
+            _executor(MagicMock()),
+            OperationContextFactory(),
+            build_identity_session_bootstrap(),
+        )
+
+    assert exc_info.value.code == "auth_session_missing"
+    assert exc_info.value.kind is FailureKind.UNAUTHENTICATED
 
 
 def test_auth_config_uses_scholens_lockout_settings() -> None:

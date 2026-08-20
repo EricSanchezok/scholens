@@ -41,6 +41,21 @@ async def get_current_user(
     if identity_user is None:
         return None
 
+    return resolve_actor_from_identity_user(
+        request=request,
+        identity_user=identity_user,
+        executor=executor,
+        operation_factory=operation_factory,
+    )
+
+
+def resolve_actor_from_identity_user(
+    *,
+    request: Request,
+    identity_user: UserRecord,
+    executor: ApplicationExecutor[ApplicationCapabilities],
+    operation_factory: OperationContextFactory,
+) -> Actor:
     identity = AuthenticatedIdentity(
         id=identity_user.id,
         email=identity_user.email,

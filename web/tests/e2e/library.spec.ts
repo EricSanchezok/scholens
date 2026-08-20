@@ -26,19 +26,14 @@ const actor = {
 async function mockLibrary(page: Page) {
   await mockBillingUsage(page);
   let tags = [...libraryTags];
-  await page.route(`${apiPattern}/auth/refresh`, (route) =>
+  await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         access_token: "playwright-access",
+        actor,
         token_type: "bearer",
       }),
-    }),
-  );
-  await page.route(`${apiPattern}/me`, (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify(actor),
     }),
   );
   await page.route(`${apiPattern}/conversations**`, (route) =>
@@ -209,6 +204,67 @@ async function mockLibrary(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await mockLibrary(page);
+});
+
+test("keeps the mobile filter controls readable without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ height: 852, width: 384 });
+  await page.route(`${apiPattern}/library/summary`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        attention_count: 0,
+        ingestion_count: 1,
+        output_count: 8,
+        paper_count: 27,
+      }),
+    }),
+  );
+  await page.goto("/library");
+
+  const tagButton = page.getByRole("button", { name: "Tags" });
+  const sort = page.getByRole("combobox", { name: "Sort papers" });
+  const count = page.getByText("27 papers", { exact: true });
+  await expect(tagButton).toBeVisible();
+  await expect(sort).toBeVisible();
+  await expect(count).toBeVisible();
+
+  const [tagBox, sortBox, countBox, overflow] = await Promise.all([
+    tagButton.boundingBox(),
+    sort.boundingBox(),
+    count.boundingBox(),
+    page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ]);
+  expect(countBox!.y).toBeGreaterThanOrEqual(
+    Math.max(tagBox!.y + tagBox!.height, sortBox!.y + sortBox!.height),
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("loads the tag catalog only when tag controls are requested", async ({
+  page,
+}) => {
+  let tagReads = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "GET" &&
+      new URL(request.url()).pathname.endsWith("/api/v1/library/tags")
+    ) {
+      tagReads += 1;
+    }
+  });
+  await page.goto("/library");
+  await expect(page.getByRole("table")).toBeVisible();
+  expect(tagReads).toBe(0);
+
+  await page.getByRole("button", { name: "Tags" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: libraryTags[0]!.name }),
+  ).toBeVisible();
+  expect(tagReads).toBe(1);
 });
 
 test("supports the Library Papers critical journey", async ({ page }) => {

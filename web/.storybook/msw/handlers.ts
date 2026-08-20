@@ -8,6 +8,11 @@ const zoteroCollectionsUrl =
 const zoteroLibraryItemsUrl =
   "http://127.0.0.1:7301/api/v1/integrations/zotero/library-items";
 
+export const webPerformanceHandler = http.post(
+  "*/__telemetry/web-performance",
+  () => new HttpResponse(null, { status: 204 }),
+);
+
 export const foundationHandler = http.get(apiUrl, async ({ request }) => {
   const scenario = new URL(request.url).searchParams.get("scenario") ?? "";
   const network = scenario.startsWith("slow")

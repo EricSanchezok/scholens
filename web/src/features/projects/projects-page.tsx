@@ -5,6 +5,7 @@ import type { Route } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
@@ -128,6 +129,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
   } | null>(null);
   const projectsQuery = useQuery(projectQueries.list(state));
   const conversationsQuery = useQuery(conversationQueries.list());
+  usePrimaryContentReady(projectsQuery.isSuccess);
 
   const replaceSearch = React.useCallback(
     (patch: Partial<ProjectsSearchState>) => {

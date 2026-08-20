@@ -1,6 +1,15 @@
 """Identity commands independent of HTTP and persistence."""
 
+from typing import Literal
+
+from app.shared.application import Actor
 from pydantic import BaseModel, ConfigDict, PrivateAttr
+
+
+class AuthBootstrapResponse(BaseModel):
+    access_token: str
+    actor: Actor
+    token_type: Literal["bearer"] = "bearer"
 
 
 class SetUserBlockedRequest(BaseModel):

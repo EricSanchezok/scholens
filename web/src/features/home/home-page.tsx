@@ -25,6 +25,7 @@ import { HomeDashboard } from "./components/home-dashboard";
 import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import { useMobileKeyboard } from "./hooks/use-mobile-keyboard";
 import { homeQueries } from "./api/queries";
+import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 
 export function HomeWorkspace({
   actor,
@@ -54,6 +55,7 @@ export function HomeWorkspace({
   const conversationsQuery = useQuery(conversationQueries.list());
   const papersQuery = useQuery(homeQueries.papers());
   const projectsQuery = useQuery(homeQueries.projects());
+  usePrimaryContentReady(conversationsQuery.isSuccess);
   const conversations = conversationsQuery.data?.items ?? [];
   const papers = (papersQuery.data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],

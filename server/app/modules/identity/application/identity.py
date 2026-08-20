@@ -202,6 +202,21 @@ class Identity:
             profile=identity.profile,
         )
 
+    def resolve_session_actor(
+        self,
+        user_id: int,
+        *,
+        operation: OperationContext,
+    ) -> Actor:
+        identity = self._gateway.authenticated_identity(user_id=user_id)
+        if identity is None:
+            raise AppError(
+                code="auth_session_expired",
+                message="The session is unavailable",
+                kind=FailureKind.UNAUTHENTICATED,
+            )
+        return self.resolve_actor(identity, operation=operation)
+
     def lock_current_admin(self, user_id: int) -> Actor:
         """Serialize privileged authorization with admin roster reductions."""
         self._gateway.lock_admin_roster()

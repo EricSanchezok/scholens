@@ -46,18 +46,13 @@ async function railClipRight(locator: Locator) {
 
 async function mockWorkspace(page: Page) {
   await mockBillingUsage(page);
-  await page.route(`${apiPattern}/auth/refresh`, (route) =>
+  await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
     route.fulfill({
       body: JSON.stringify({
         access_token: "playwright-motion",
+        actor,
         token_type: "bearer",
       }),
-      contentType: "application/json",
-    }),
-  );
-  await page.route(`${apiPattern}/me`, (route) =>
-    route.fulfill({
-      body: JSON.stringify(actor),
       contentType: "application/json",
     }),
   );

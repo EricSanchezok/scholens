@@ -119,8 +119,15 @@ from app.bootstrap.adapters.conversation_lifecycle import (
 )
 from app.shared.application import SignedCursorCodec
 from app.modules.identity.application.identity import Identity
+from app.modules.identity.application.sessions import (
+    BootstrapIdentitySession,
+    RefreshCookieSettings,
+)
 from app.modules.identity.infrastructure.application_gateway import (
     SqlAlchemyIdentityGateway,
+)
+from app.modules.identity.infrastructure.session_gateway import (
+    SanchezcloudIdentitySessionGateway,
 )
 from app.modules.access_keys.application.access_keys import AccessKeys
 from app.modules.access_keys.infrastructure import (
@@ -629,6 +636,20 @@ def build_identity(*, db: Session, journal: OperationJournal) -> Identity:
     return Identity(
         SqlAlchemyIdentityGateway(db),
         journal=journal,
+    )
+
+
+def build_identity_session_bootstrap() -> BootstrapIdentitySession:
+    config = sanchezcloud_identity_adapter.refresh_cookie_config
+    return BootstrapIdentitySession(
+        SanchezcloudIdentitySessionGateway(),
+        cookie=RefreshCookieSettings(
+            name=config.name,
+            max_age_seconds=config.max_age_seconds,
+            secure=config.secure,
+            samesite=config.samesite,
+            path=config.path,
+        ),
     )
 
 

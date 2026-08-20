@@ -10,18 +10,6 @@ import type {
 import { libraryKeys } from "./keys";
 
 export const libraryQueries = {
-  conversations: () =>
-    queryOptions({
-      queryKey: libraryKeys.conversations(),
-      queryFn: async ({ signal }) => {
-        const { data } = await apiClient.GET("/api/v1/conversations", {
-          params: { query: { archived: false, limit: 50 } },
-          signal,
-        });
-        if (!data) throw new Error("Conversation list response was empty");
-        return data;
-      },
-    }),
   summary: () =>
     queryOptions({
       queryKey: libraryKeys.summary(),

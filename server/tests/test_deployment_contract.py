@@ -953,7 +953,10 @@ def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> N
     assert "scholens.diagnostic_snapshot.write_failed" in dashboard
     dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]["Fn::Sub"][0]
     rendered_dashboard = re.sub(r"\$\{[^}]+\}", "fixture", dashboard_body)
-    assert len(json.loads(rendered_dashboard)["widgets"]) == 5
+    widgets = json.loads(rendered_dashboard)["widgets"]
+    assert len(widgets) == 7
+    assert "web_performance" in dashboard_body
+    assert "primary_content" in dashboard_body
 
 
 def test_scheduler_and_worker_task_protection_are_cluster_scoped() -> None:
