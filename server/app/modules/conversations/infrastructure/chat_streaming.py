@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -23,6 +24,7 @@ from scholens_observability import (
 )
 
 logger = logging.getLogger(__name__)
+_SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
 
 
 def encode_conversation_sse(event: ConversationStreamEvent) -> str:
@@ -32,6 +34,37 @@ def encode_conversation_sse(event: ConversationStreamEvent) -> str:
         f"event: {event.type}\n"
         f"data: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
     )
+
+
+async def stream_with_keepalive(
+    source: AsyncIterator[str],
+    *,
+    interval_seconds: float = _SSE_KEEPALIVE_INTERVAL_SECONDS,
+) -> AsyncIterator[str]:
+    """Emit SSE comments while awaiting the next typed event without cancelling it."""
+    if interval_seconds <= 0:
+        raise ValueError("SSE keepalive interval must be positive")
+    iterator = source.__aiter__()
+    pending: asyncio.Future[str] | None = asyncio.ensure_future(anext(iterator))
+    try:
+        while pending is not None:
+            done, _ = await asyncio.wait({pending}, timeout=interval_seconds)
+            if not done:
+                yield ": keepalive\n\n"
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                return
+            yield event
+            pending = asyncio.ensure_future(anext(iterator))
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        close = getattr(iterator, "aclose", None)
+        if close is not None:
+            await close()
 
 
 def _decode_conversation_sse(event: str) -> dict[str, object] | None:
@@ -46,6 +79,17 @@ def _decode_conversation_sse(event: str) -> dict[str, object] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _exception_types(error: BaseException) -> list[str]:
+    values: list[str] = []
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        values.append(type(current).__name__)
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return values
+
+
 async def stream_with_stable_error(
     source: AsyncIterator[str],
     *,
@@ -55,6 +99,7 @@ async def stream_with_stable_error(
     response_id: UUID,
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
     diagnostic_context: dict[str, object] | None = None,
+    failure_sink: Callable[[dict[str, JsonValue]], None] | None = None,
 ) -> AsyncIterator[str]:
     """Require one explicit terminal event and preserve stable error semantics."""
     completed = False
@@ -95,6 +140,32 @@ async def stream_with_stable_error(
             correlation_id=context.correlation_id,
             diagnostic_id=str(snapshot_id),
         )
+        durable_failure = cast(
+            dict[str, JsonValue],
+            {
+                "code": error.code,
+                "kind": error.kind.value,
+                "retryable": error.retryable,
+                "diagnostic_id": str(snapshot_id),
+                **(
+                    {"correlation_id": context.correlation_id}
+                    if context.correlation_id is not None
+                    else {}
+                ),
+            },
+        )
+        if failure_sink is not None:
+            try:
+                failure_sink(durable_failure)
+            except Exception as persistence_error:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "conversation.failure.persistence_failed",
+                    exc_info=persistence_error,
+                    response_id=str(response_id),
+                    diagnostic_id=str(snapshot_id),
+                )
         recorder = diagnostic_recorder or NullDiagnosticSnapshotRecorder()
         try:
             recorder.record(
@@ -114,6 +185,15 @@ async def stream_with_stable_error(
                             "kind": error.kind.value,
                             "stage": public_error.stage,
                             "exception_type": type(exc).__name__,
+                            "exception_types": _exception_types(exc),
+                            **(
+                                {"provider_status": error.details["provider_status"]}
+                                if error.details is not None
+                                and isinstance(
+                                    error.details.get("provider_status"), int
+                                )
+                                else {}
+                            ),
                         },
                         "conversation": properties,
                         "runtime": diagnostic_context or {},

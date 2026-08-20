@@ -1,6 +1,10 @@
 """Shared, service-neutral background-job contracts."""
 
-from scholens_job_contracts.queues import JOB_QUEUE_NAMES, JobQueue
+from scholens_job_contracts.queues import (
+    JOB_QUEUE_NAMES,
+    JOBS_WORKER_QUEUE_NAMES,
+    JobQueue,
+)
 from scholens_job_contracts.zotero import (
     MAX_ZOTERO_CALLBACK_BYTES,
     ZOTERO_CALLBACK_HEARTBEAT_SECONDS,
@@ -12,6 +16,7 @@ from scholens_job_contracts.zotero import (
 
 __all__ = [
     "JOB_QUEUE_NAMES",
+    "JOBS_WORKER_QUEUE_NAMES",
     "JobQueue",
     "MAX_ZOTERO_CALLBACK_BYTES",
     "ZOTERO_CALLBACK_HEARTBEAT_SECONDS",

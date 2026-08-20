@@ -641,6 +641,7 @@ Resources:
             - sqs:GetQueueAttributes
             - sqs:SendMessage
             Resource:
+            - Fn::ImportValue: sanchezcloud-scholens-conversation-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-document-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-research-queue-arn
             - Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-arn
@@ -657,6 +658,21 @@ Resources:
             - kms:GenerateDataKey
             Resource:
               Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+          - Effect: Allow
+            Action:
+            - sqs:ChangeMessageVisibility
+            - sqs:DeleteMessage
+            - sqs:GetQueueUrl
+            - sqs:ReceiveMessage
+            Resource:
+              Fn::ImportValue: sanchezcloud-scholens-conversation-queue-arn
+          - Effect: Allow
+            Action: ecs:UpdateTaskProtection
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::ImportValue: sanchezcloud-production-cluster-arn
       Tags:
       - Key: System
         Value: SanchezCloud
@@ -1003,6 +1019,11 @@ Resources:
     Properties:
       LogGroupName: /sanchezcloud/scholens/api
       RetentionInDays: 30
+  ConversationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /sanchezcloud/scholens/conversation-worker
+      RetentionInDays: 30
   DocumentLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1182,6 +1203,9 @@ Resources:
           Value: postgres_fts
         - Name: CELERY_BROKER_URL
           Value: sqs://
+        - Name: SQS_CONVERSATION_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-conversation-queue-url
         - Name: SQS_DOCUMENT_QUEUE_URL
           Value:
             Fn::ImportValue: sanchezcloud-scholens-document-queue-url
@@ -1423,6 +1447,293 @@ Resources:
             awslogs-group:
               Ref: ApiLogGroup
             awslogs-stream-prefix: api
+      - Name: tmp-init
+        Image:
+          Ref: ApiImage
+        Essential: false
+        User: '0'
+        EntryPoint:
+        - /usr/local/bin/python
+        - -c
+        Command:
+        - from pathlib import Path; Path('/tmp').chmod(0o1777)
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+      - Name: adot
+        Image:
+          Ref: AdotImage
+        Essential: false
+        Cpu: 256
+        MemoryReservation: 512
+        Environment:
+        - Name: AOT_CONFIG_CONTENT
+          Value: "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint:
+            0.0.0.0:4317\nprocessors:\n  memory_limiter:\n    check_interval: 1s\n\
+            \    limit_mib: 384\n  batch: {}\nexporters:\n  awsxray: {}\n  awsemf:\n\
+            \    namespace: Scholens/Production\n    log_group_name: /sanchezcloud/scholens/metrics\n\
+            service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      processors:
+            [memory_limiter, batch]\n      exporters: [awsxray]\n    metrics:\n  \
+            \    receivers: [otlp]\n      processors: [memory_limiter, batch]\n  \
+            \    exporters: [awsemf]\n"
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: MetricsLogGroup
+            awslogs-stream-prefix: adot
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
+  ConversationWorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: sanchezcloud-scholens-conversation-worker
+      Cpu: '1024'
+      Memory: '2048'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue: sanchezcloud-scholens-task-execution-role-arn
+      TaskRoleArn:
+        Fn::GetAtt:
+        - ApiTaskRole
+        - Arn
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Volumes:
+      - Name: tmp
+      ContainerDefinitions:
+      - Name: conversation-worker
+        Image:
+          Ref: ApiImage
+        Essential: true
+        Cpu: 768
+        MemoryReservation: 1408
+        Command:
+        - conversation-worker
+        ReadonlyRootFilesystem: true
+        LinuxParameters:
+          InitProcessEnabled: true
+          Capabilities:
+            Drop:
+            - ALL
+        MountPoints:
+        - SourceVolume: tmp
+          ContainerPath: /tmp
+          ReadOnly: false
+        StopTimeout: 120
+        DependsOn:
+        - ContainerName: tmp-init
+          Condition: SUCCESS
+        - ContainerName: adot
+          Condition: START
+        Environment:
+        - Name: ENVIRONMENT
+          Value: production
+        - Name: RELEASE_SHA
+          Value:
+            Ref: ReleaseSha
+        - Name: HOME
+          Value: /tmp
+        - Name: DATABASE_POOL_SIZE
+          Value: '1'
+        - Name: DATABASE_MAX_OVERFLOW
+          Value: '0'
+        - Name: AUTH_PG_SSL_ROOT_CERT
+          Value: /etc/ssl/certs/global-bundle.pem
+        - Name: CLIENT_DOMAIN
+          Value:
+            Fn::Sub: https://${DomainName}
+        - Name: PAPER_SEARCH_BACKEND
+          Value: postgres_fts
+        - Name: CELERY_BROKER_URL
+          Value: sqs://
+        - Name: SQS_CONVERSATION_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-conversation-queue-url
+        - Name: SQS_DOCUMENT_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-document-queue-url
+        - Name: SQS_RESEARCH_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-research-queue-url
+        - Name: SQS_MAINTENANCE_QUEUE_URL
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-maintenance-queue-url
+        - Name: AWS_REGION
+          Value:
+            Ref: AWS::Region
+        - Name: S3_BUCKET_NAME
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-bucket-name
+        - Name: S3_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-content-key-arn
+        - Name: CACHE_HOST
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-endpoint
+        - Name: CACHE_PORT
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-cache-port
+        - Name: CACHE_TLS
+          Value: 'true'
+        - Name: AI_MAX_INTERACTIVE_PER_USER
+          Value: '12'
+        - Name: AI_MAX_BACKGROUND_PER_USER
+          Value: '8'
+        - Name: AI_MAX_AUDIO_PER_USER
+          Value: '4'
+        - Name: AI_RATE_WINDOW_SECONDS
+          Value: '60'
+        - Name: AI_RATE_PER_USER
+          Value: '120'
+        - Name: AI_RATE_PER_IP
+          Value: '120'
+        - Name: AI_CONCURRENCY_TTL_SECONDS
+          Value: '3600'
+        - Name: SCHOLENS_AI_DEEPSEEK_BASE_URL
+          Value: https://api.deepseek.com
+        - Name: SCHOLENS_AI_STANDARD_MODEL
+          Value: deepseek:deepseek-v4-flash
+        - Name: SCHOLENS_AI_STANDARD_THINKING
+          Value: disabled
+        - Name: SCHOLENS_AI_STANDARD_THINKING_EFFORT
+          Value: none
+        - Name: SCHOLENS_AI_DEEP_MODEL
+          Value: deepseek:deepseek-v4-pro
+        - Name: SCHOLENS_AI_DEEP_THINKING
+          Value: enabled
+        - Name: SCHOLENS_AI_DEEP_THINKING_EFFORT
+          Value: max
+        - Name: SCHOLENS_AI_REQUEST_TIMEOUT_SECONDS
+          Value: '120'
+        - Name: SCHOLENS_AI_MAX_OUTPUT_TOKENS
+          Value: '393216'
+        - Name: SCHOLENS_AI_MAX_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_STRUCTURED_RETRIES
+          Value: '2'
+        - Name: SCHOLENS_AI_MAX_INPUT_CHARS
+          Value: '300000'
+        - Name: SCHOLIGHT_MCP_URL
+          Value: https://scholight.sanchezcloud.net/api/mcp
+        - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+          Value: http://127.0.0.1:4317
+        - Name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          Value: DELTA
+        - Name: DIAGNOSTIC_SNAPSHOT_BUCKET
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-bucket-name
+        - Name: DIAGNOSTIC_SNAPSHOT_KMS_KEY_ID
+          Value:
+            Fn::ImportValue: sanchezcloud-scholens-diagnostic-key-arn
+        - Name: DIAGNOSTIC_SUCCESS_SAMPLE_RATE
+          Value: '0.01'
+        - Name: DEBUG
+          Value: 'false'
+        Secrets:
+        - Name: DATABASE_HOST
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:host::'
+            - Secret:
+                Fn::ImportValue:
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_PORT
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:port::'
+            - Secret:
+                Fn::ImportValue:
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_NAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:dbname::'
+            - Secret:
+                Fn::ImportValue:
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue:
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: DATABASE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue:
+                  sanchezcloud-scholens-database-runtime-secret-arn
+        - Name: PAPER_SEARCH_CURSOR_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:paper_search_cursor_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: PROJECT_INVITATION_TOKEN_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:project_invitation_token_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: INTEGRATION_CREDENTIAL_ENCRYPTION_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:integration_credential_encryption_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-core-secret-arn
+        - Name: CACHE_USERNAME
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:username::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-api-cache-secret-arn
+        - Name: CACHE_PASSWORD
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:password::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-api-cache-secret-arn
+        - Name: SCHOLENS_AI_DEEPSEEK_API_KEY
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:deepseek_api_key::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholens-ai-secret-arn
+        - Name: SCHOLIGHT_MCP_DELEGATION_JWT_SECRET
+          ValueFrom:
+            Fn::Sub:
+            - '${Secret}:mcp_delegation_jwt_secret::'
+            - Secret:
+                Fn::ImportValue: sanchezcloud-scholight-mcp-delegation-secret-arn
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-group:
+              Ref: ConversationLogGroup
+            awslogs-stream-prefix: conversation
       - Name: tmp-init
         Image:
           Ref: ApiImage
@@ -2510,6 +2821,48 @@ Resources:
         Value: production
       - Key: ManagedBy
         Value: CloudFormation
+  ConversationWorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: scholens-conversation-worker
+      Cluster:
+        Fn::ImportValue: sanchezcloud-production-cluster-arn
+      TaskDefinition:
+        Ref: ConversationWorkerTaskDefinition
+      DesiredCount:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      EnableECSManagedTags: true
+      EnableExecuteCommand: false
+      PropagateTags: SERVICE
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Weight: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+          - Fn::ImportValue: sanchezcloud-scholens-application-sg-id
+          Subnets:
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-1
+          - Fn::ImportValue: sanchezcloud-production-private-subnet-2
+      Tags:
+      - Key: System
+        Value: SanchezCloud
+      - Key: Product
+        Value: Scholens
+      - Key: Environment
+        Value: production
+      - Key: ManagedBy
+        Value: CloudFormation
   DocumentWorkerService:
     Type: AWS::ECS::Service
     Properties:
@@ -2795,6 +3148,32 @@ Resources:
         ScaleInCooldown: 300
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageMemoryUtilization
+  ConversationWorkerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId:
+        Fn::Join:
+        - /
+        - - service
+          - Fn::ImportValue: sanchezcloud-production-cluster-name
+          - Fn::GetAtt:
+            - ConversationWorkerService
+            - Name
+      MinCapacity:
+        Fn::If:
+        - RunApplication
+        - 1
+        - 0
+      MaxCapacity:
+        Fn::If:
+        - RunApplication
+        - 6
+        - 0
+      RoleARN:
+        Fn::Sub:
+          arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
   DocumentWorkerScalableTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
@@ -2873,6 +3252,49 @@ Resources:
       RoleARN:
         Fn::Sub:
           arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+  ConversationBacklogScaling:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scholens-conversation-backlog-per-task
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId:
+        Ref: ConversationWorkerScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 1
+        ScaleOutCooldown: 30
+        ScaleInCooldown: 900
+        CustomizedMetricSpecification:
+          Metrics:
+          - Id: backlog
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: AWS/SQS
+                MetricName: ApproximateNumberOfMessagesVisible
+                Dimensions:
+                - Name: QueueName
+                  Value: scholens-production-conversation
+            ReturnData: false
+          - Id: running
+            MetricStat:
+              Stat: Average
+              Metric:
+                Namespace: ECS/ContainerInsights
+                MetricName: RunningTaskCount
+                Dimensions:
+                - Name: ClusterName
+                  Value:
+                    Fn::ImportValue: sanchezcloud-production-cluster-name
+                - Name: ServiceName
+                  Value:
+                    Fn::GetAtt:
+                    - ConversationWorkerService
+                    - Name
+            ReturnData: false
+          - Id: backlogpertask
+            Expression: backlog/IF(running<1,1,running)
+            Label: BacklogPerTask
+            ReturnData: true
   DocumentBacklogScaling:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Properties:
@@ -3192,6 +3614,23 @@ Resources:
       TreatMissingData: notBreaching
       AlarmActions:
       - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  ConversationDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-conversation-dlq
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-conversation-dlq
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
   DocumentDlqAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -3239,6 +3678,23 @@ Resources:
       Period: 60
       EvaluationPeriods: 1
       Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  ConversationAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-conversation-oldest-message
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+      - Name: QueueName
+        Value: scholens-production-conversation
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 120
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions:
@@ -3323,9 +3779,9 @@ Resources:
           {
             "widgets": [
               {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"Web and API capacity","region":"${AWS::Region}","metrics":[["AWS/ECS","CPUUtilization","ServiceName","${WebServiceName}","ClusterName","${ClusterName}"],[".","MemoryUtilization",".",".",".","."],["AWS/ECS","CPUUtilization","ServiceName","${ApiServiceName}","ClusterName","${ClusterName}"],[".","MemoryUtilization",".",".",".","."]]}},
-              {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"SQS backlog","region":"${AWS::Region}","metrics":[["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","scholens-production-document"],[".",".",".","scholens-production-research"],[".",".",".","scholens-production-maintenance"]]}},
+              {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"SQS backlog","region":"${AWS::Region}","metrics":[["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","scholens-production-conversation"],[".",".",".","scholens-production-document"],[".",".",".","scholens-production-research"],[".",".",".","scholens-production-maintenance"]]}},
               {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"ALB responses","region":"${AWS::Region}","metrics":[["AWS/ApplicationELB","HTTPCode_ELB_5XX_Count","LoadBalancer","${LoadBalancerName}"],["AWS/ApplicationELB","HTTPCode_Target_5XX_Count","LoadBalancer","${LoadBalancerName}","TargetGroup","${ApiTargetGroupName}"],["AWS/ApplicationELB","UnHealthyHostCount","LoadBalancer","${LoadBalancerName}","TargetGroup","${WebTargetGroupName}"],["AWS/ApplicationELB","UnHealthyHostCount","LoadBalancer","${LoadBalancerName}","TargetGroup","${ApiTargetGroupName}"]]}},
-              {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"Worker tasks","region":"${AWS::Region}","metrics":[["ECS/ContainerInsights","RunningTaskCount","ServiceName","${DocumentServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${ResearchServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${MaintenanceServiceName}","ClusterName","${ClusterName}"]]}},
+              {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"Worker tasks","region":"${AWS::Region}","metrics":[["ECS/ContainerInsights","RunningTaskCount","ServiceName","${ConversationServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${DocumentServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${ResearchServiceName}","ClusterName","${ClusterName}"],[".",".","ServiceName","${MaintenanceServiceName}","ClusterName","${ClusterName}"]]}},
               {"type":"metric","x":0,"y":12,"width":24,"height":6,"properties":{"title":"Dependency and diagnostic failures","region":"${AWS::Region}","metrics":[["Scholens/Production","scholens.dependency.failures","dependency","redis","OTelLib","scholens"],[".",".",".","s3",".","."],[".","scholens.diagnostic_snapshot.write_failed","OTelLib","scholens"]]}},
               {"type":"log","x":0,"y":18,"width":24,"height":6,"properties":{"title":"Web navigation p75 / p95","region":"${AWS::Region}","view":"table","query":"SOURCE '/sanchezcloud/scholens/web' | filter event = 'web_performance' and metric in ['route_feedback', 'route_commit', 'primary_content'] | stats pct(value, 75) as p75, pct(value, 95) as p95, count(*) as samples by metric, to_route, device_class, country_group | sort p95 desc"}},
               {"type":"log","x":0,"y":24,"width":24,"height":6,"properties":{"title":"Core Web Vitals p75 / p95","region":"${AWS::Region}","view":"table","query":"SOURCE '/sanchezcloud/scholens/web' | filter event = 'web_performance' and metric in ['INP', 'LCP', 'CLS', 'TTFB'] | stats pct(value, 75) as p75, pct(value, 95) as p95, count(*) as samples by metric, to_route, device_class, country_group | sort p95 desc"}}
@@ -3340,6 +3796,10 @@ Resources:
           ApiServiceName:
             Fn::GetAtt:
             - ApiService
+            - Name
+          ConversationServiceName:
+            Fn::GetAtt:
+            - ConversationWorkerService
             - Name
           DocumentServiceName:
             Fn::GetAtt:
@@ -3388,6 +3848,11 @@ Outputs:
     Value:
       Fn::GetAtt:
       - ApiService
+      - Name
+  ConversationWorkerServiceName:
+    Value:
+      Fn::GetAtt:
+      - ConversationWorkerService
       - Name
   DocumentWorkerServiceName:
     Value:

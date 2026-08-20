@@ -23,6 +23,7 @@ PayloadT = TypeVar("PayloadT", bound=BaseModel)
 
 class ToolExecutionKind(StrEnum):
     QUERY = "query"
+    ASYNC_QUERY = "async_query"
     COMMAND = "command"
     WORKFLOW = "workflow"
 
@@ -168,6 +169,7 @@ class ToolDefinition(Generic[CapabilitiesT]):
     handler: ToolHandler[CapabilitiesT] | None = None
     workflow_handler: WorkflowToolHandler | None = None
     activity_subject_field: str | None = None
+    allow_repeated_calls: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -185,7 +187,10 @@ class ToolDefinition(Generic[CapabilitiesT]):
         if self.required_permission is None:
             raise ValueError("business tools require one workspace permission")
         if self.behavior is not None:
-            if self.behavior.read_only != (self.execution is ToolExecutionKind.QUERY):
+            if self.behavior.read_only != (
+                self.execution
+                in {ToolExecutionKind.QUERY, ToolExecutionKind.ASYNC_QUERY}
+            ):
                 raise ValueError(
                     f"tool {self.name} read_only behavior conflicts with execution"
                 )
@@ -194,9 +199,14 @@ class ToolDefinition(Generic[CapabilitiesT]):
                 and self.behavior.read_only
             ):
                 raise ValueError("read-only tools cannot require confirmation")
-        if self.execution is ToolExecutionKind.WORKFLOW:
+        if self.execution in {
+            ToolExecutionKind.ASYNC_QUERY,
+            ToolExecutionKind.WORKFLOW,
+        }:
             if self.workflow_handler is None or self.handler is not None:
-                raise ValueError("workflow tools require exactly one workflow handler")
+                raise ValueError(
+                    "async query and workflow tools require exactly one workflow handler"
+                )
             return
         if self.handler is None or self.workflow_handler is not None:
             raise ValueError("query and command tools require exactly one handler")

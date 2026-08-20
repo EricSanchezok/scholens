@@ -84,8 +84,9 @@ prompt branches; the Conversation's selected root and the selected child at
 each depth define the authoritative active path. A monotonic path revision keeps
 pagination from combining different selections. The turn's selected response
 is the sole answer used for model history on that path. References, research
-items, artifacts, worklog trace, and total duration belong to a concrete
-response ID. Follow-up suggestions belong to the turn because retries and
+items, artifacts, worklog trace, total duration, and safe terminal failure
+metadata belong to a concrete response ID. Raw provider bodies and exceptions
+do not. Follow-up suggestions belong to the turn because retries and
 selected response variants share the same next-question context.
 
 Historical prompt edits read the source turn's context as an immutable snapshot;
@@ -93,7 +94,10 @@ that preparation does not own a write. After quota, access, context, rate, and
 capacity checks pass, one Server transaction restores the Conversation's current
 paper context, inserts the new sibling and running response, switches the selected
 path, and increments `path_revision`. Those aggregate fields therefore never
-describe a branch that the streaming client has not accepted.
+describe a branch that the Server has not durably accepted. The same transaction
+creates a `conversation_generate` DurableJob and outbox dispatch whose ID equals
+the Response ID. The job owns delivery and lease state only; it never owns the
+answer or selects the active branch.
 
 A turn also owns its typed paper-context snapshot and Reader context. A
 `paper_selection` captures the
@@ -102,9 +106,11 @@ an `annotation_thread` captures an authorized Research Item reference.
 Arbitrary reference dictionaries and parallel annotation-ID fields are not
 persisted.
 
-Only the active leaf may expose multiple terminal response variants. Its latest
+Only the active leaf may expose its running response and multiple terminal
+response variants. Its latest
 completed, failed, or cancelled attempt remains selected so duration and retry
-position survive refresh; raw failure diagnostics are not product data. Creating
+position survive refresh; stable failure classification and diagnostic IDs are
+product data while raw failure details are not. Creating
 a normal child removes unselected response variants from its parent and clears
 its no-longer-visible suggestions. Editing creates a sibling without deleting
 the source or either subtree; selecting a prompt branch restores its stored

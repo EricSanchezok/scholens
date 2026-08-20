@@ -124,6 +124,10 @@ def test_foundation_owns_retained_data_planes_and_immutable_images() -> None:
         assert queue["VisibilityTimeout"] == 2700
         assert queue["MessageRetentionPeriod"] == 1209600
         assert queue["RedrivePolicy"]["maxReceiveCount"] == 5
+    conversation_queue = resources["ConversationQueue"]["Properties"]
+    assert conversation_queue["VisibilityTimeout"] == 3600
+    assert conversation_queue["MessageRetentionPeriod"] == 1209600
+    assert conversation_queue["RedrivePolicy"]["maxReceiveCount"] == 5
 
     cache = resources["Cache"]["Properties"]
     assert cache["Engine"] == "valkey"
@@ -791,6 +795,7 @@ def test_disabled_application_cannot_be_resurrected_by_autoscaling() -> None:
     assert set(targets) == {
         "WebScalableTarget",
         "ApiScalableTarget",
+        "ConversationWorkerScalableTarget",
         "DocumentWorkerScalableTarget",
         "ResearchWorkerScalableTarget",
         "MaintenanceWorkerScalableTarget",
@@ -1014,6 +1019,7 @@ def test_runtime_uses_private_fargate_services_and_digest_images() -> None:
     assert set(services) == {
         "WebService",
         "ApiService",
+        "ConversationWorkerService",
         "DocumentWorkerService",
         "ResearchWorkerService",
         "MaintenanceWorkerService",
@@ -1036,6 +1042,19 @@ def test_runtime_uses_private_fargate_services_and_digest_images() -> None:
             "FARGATE",
             "FARGATE_SPOT",
         }
+    assert services["ConversationWorkerService"]["Properties"][
+        "CapacityProviderStrategy"
+    ] == [{"CapacityProvider": "FARGATE", "Weight": 1}]
+    conversation_task = resources["ConversationWorkerTaskDefinition"]["Properties"]
+    assert conversation_task["TaskRoleArn"] == {"Fn::GetAtt": ["ApiTaskRole", "Arn"]}
+    conversation_container = next(
+        item
+        for item in conversation_task["ContainerDefinitions"]
+        if item["Name"] == "conversation-worker"
+    )
+    assert conversation_container["Image"] == {"Ref": "ApiImage"}
+    assert conversation_container["Command"] == ["conversation-worker"]
+    assert conversation_container["StopTimeout"] == 120
 
     discovery = resources["ApiDiscoveryService"]
     assert discovery["Type"] == "AWS::ServiceDiscovery::Service"
@@ -1547,6 +1566,7 @@ def test_api_task_can_diagnose_only_the_predefined_sqs_queues() -> None:
     )
 
     assert queues["Resource"] == [
+        {"Fn::ImportValue": "sanchezcloud-scholens-conversation-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-document-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-research-queue-arn"},
         {"Fn::ImportValue": "sanchezcloud-scholens-maintenance-queue-arn"},
@@ -1824,6 +1844,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_07_28_1030_scholens_initial.py",
         "2026_08_16_1200_entitlement_grants_and_cli_origin.py",
         "2026_08_18_1200_project_upload_library_expand.py",
+        "2026_08_20_1200_conversation_failure_metadata.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

@@ -244,7 +244,9 @@ async def test_mcp_lists_catalog_tools_and_dispatches_with_bound_actor() -> None
     tools = listed.json()["result"]["tools"]
     tool_names = {tool["name"] for tool in tools}
     tools_by_name = {tool["name"]: tool for tool in tools}
-    assert len(tool_names) == 56
+    assert len(tool_names) == 57
+    assert "ingest_papers" in tool_names
+    assert "wait_for_jobs" not in tool_names
     assert "finish_tool_use" not in tool_names
     assert "search_papers" not in tool_names
     assert tools_by_name["list_projects"]["title"] == "List Projects"

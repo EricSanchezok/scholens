@@ -11,12 +11,14 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from app.modules.action_confirmations.contracts import ConfirmationChallenge
+from app.modules.jobs.application.contracts import JobResponse
 from app.modules.papers.application.contracts.citation import (
     CitationData,
     CitationResult,
 )
 from app.modules.papers.application.contracts.documents import (
     DocumentMetadataOverrides,
+    LibraryPaperIngestionResponse,
     LibraryOutputSort,
     LibraryOutputResponse,
     LibraryPaperSort,
@@ -73,6 +75,10 @@ CONFIRMATION_DESCRIPTION = (
     "first call. Show the preview to the user and retry with unchanged business "
     "arguments only after approval."
 )
+WAIT_SECONDS_DESCRIPTION = (
+    "Maximum time to await terminal job status before returning the latest durable "
+    "snapshot. Use 0 for an immediate snapshot. Do not implement rapid polling."
+)
 
 ProjectId = Annotated[UUID, Field(description=PROJECT_ID_DESCRIPTION)]
 DocumentId = Annotated[UUID, Field(description=DOCUMENT_ID_DESCRIPTION)]
@@ -88,6 +94,15 @@ class MutationInput(ToolInput):
         min_length=1,
         max_length=200,
         description=IDEMPOTENCY_DESCRIPTION,
+    )
+
+
+class WaitableMutationInput(MutationInput):
+    wait_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=240,
+        description=WAIT_SECONDS_DESCRIPTION,
     )
 
 
@@ -594,7 +609,7 @@ class ReplaceLibraryPaperTagsInput(MutationInput):
     )
 
 
-class IngestPaperInput(MutationInput):
+class IngestPaperInput(WaitableMutationInput):
     source: PaperSource = Field(
         description=(
             "One already-known paper source. Use this for import, never for discovery. "
@@ -620,8 +635,34 @@ class IngestPaperInput(MutationInput):
     )
 
 
-class RetryPaperIngestionInput(MutationInput):
+class RetryPaperIngestionInput(WaitableMutationInput):
     job_id: UUID = Field(description="Failed ingestion job UUID returned by get_job.")
+
+
+class IngestPapersInput(WaitableMutationInput):
+    sources: list[PaperSource] = Field(
+        min_length=1,
+        max_length=50,
+        description=(
+            "One to fifty already-known paper sources to ingest as one bounded batch. "
+            "Input order is preserved in the result."
+        ),
+    )
+    project_id: ProjectId | None = Field(
+        default=None,
+        description=(
+            "Optional destination Project applied to every source. Omit it to add the "
+            "papers only to the caller's personal Library. Upload sources must have "
+            "been prepared for this exact destination."
+        ),
+    )
+    add_to_library: bool = Field(
+        default_factory=lambda: True,
+        description=(
+            "When true and a Project is targeted, completed papers are also added to "
+            "the caller's personal Library. Set false for Project-only ingestion."
+        ),
+    )
 
 
 class CancelPaperIngestionInput(ConfirmedMutationInput):
@@ -646,6 +687,100 @@ class ListJobsInput(ToolInput):
 
 class JobInput(ToolInput):
     job_id: UUID = Field(description="Job UUID returned by an asynchronous tool.")
+
+
+class GetJobInput(JobInput):
+    wait_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=240,
+        description=WAIT_SECONDS_DESCRIPTION,
+    )
+
+
+class WaitForJobsInput(ToolInput):
+    job_ids: list[UUID] = Field(
+        min_length=1,
+        max_length=50,
+        description=(
+            "One to fifty durable job UUIDs to observe together. Pass only active job "
+            "IDs returned by earlier tools."
+        ),
+    )
+    wait_seconds: int = Field(
+        default=120,
+        ge=0,
+        le=240,
+        description=WAIT_SECONDS_DESCRIPTION,
+    )
+
+
+class JobWaitMetadata(BaseModel):
+    outcome: Literal["completed", "failed", "cancelled", "timed_out"]
+    requested_seconds: int = Field(ge=0, le=240)
+    elapsed_ms: int = Field(ge=0)
+    next_action: Literal["use_result", "inspect_failure", "stop", "wait_again"]
+    guidance: str
+
+
+class WaitableJobResponse(JobResponse):
+    wait: JobWaitMetadata
+
+
+class PaperIngestionToolResponse(LibraryPaperIngestionResponse):
+    job: WaitableJobResponse
+
+
+class JobBatchWaitMetadata(BaseModel):
+    outcome: Literal["all_terminal", "timed_out"]
+    requested_seconds: int = Field(ge=0, le=240)
+    elapsed_ms: int = Field(ge=0)
+    next_action: Literal["inspect_items", "wait_for_remaining"]
+    guidance: str
+
+
+class WaitForJobsResponse(BaseModel):
+    items: list[WaitableJobResponse]
+    wait: JobBatchWaitMetadata
+
+
+class BatchPaperIngestionItem(BaseModel):
+    index: int = Field(ge=0)
+    source: PaperSource
+    status: Literal["accepted", "rejected"]
+    ingestion: LibraryPaperIngestionResponse | None = None
+    job: WaitableJobResponse | None = None
+    error_code: str | None = None
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "BatchPaperIngestionItem":
+        if self.status == "accepted" and (
+            self.ingestion is None or self.job is None or self.error_code is not None
+        ):
+            raise ValueError("accepted batch items require ingestion and job results")
+        if self.status == "rejected" and (
+            self.ingestion is not None
+            or self.job is not None
+            or self.error_code is None
+        ):
+            raise ValueError("rejected batch items require only an error code")
+        return self
+
+
+class BatchPaperIngestionSummary(BaseModel):
+    requested: int = Field(ge=1, le=50)
+    accepted: int = Field(ge=0, le=50)
+    rejected: int = Field(ge=0, le=50)
+    active: int = Field(ge=0, le=50)
+    completed: int = Field(ge=0, le=50)
+    failed: int = Field(ge=0, le=50)
+    cancelled: int = Field(ge=0, le=50)
+
+
+class BatchPaperIngestionResponse(BaseModel):
+    items: list[BatchPaperIngestionItem]
+    summary: BatchPaperIngestionSummary
+    wait: JobBatchWaitMetadata
 
 
 class ListAnnotationThreadsInput(DocumentInput):

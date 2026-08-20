@@ -15,6 +15,7 @@ from app.bootstrap.container import (
     build_conversations,
     build_identity,
     build_job_callbacks,
+    build_job_commands,
     build_jobs,
     build_library_tags,
     build_paper_content,
@@ -51,7 +52,7 @@ from app.modules.identity.application.identity import Identity
 from app.modules.identity.application.onboarding import SaveOnboarding
 from app.modules.integrations.zotero.application.zotero import Zotero
 from app.modules.jobs.application.callbacks import JobCallbacks
-from app.modules.jobs.application.jobs import Jobs
+from app.modules.jobs.application.jobs import JobCommandPort, Jobs
 from app.modules.jobs.application.contracts import (
     JobIntegrationCredentialResponse,
     ZoteroJobCredentialResponse,
@@ -254,6 +255,10 @@ class ApplicationCapabilities:
     @cached_property
     def jobs(self) -> Jobs:
         return build_jobs(db=self._session)
+
+    @cached_property
+    def job_commands(self) -> JobCommandPort:
+        return build_job_commands(db=self._session)
 
     @cached_property
     def job_callbacks(self) -> JobCallbacks:

@@ -143,7 +143,7 @@
         },
         "ingestion": {
           "title": "资料导入",
-          "description": "已知来源导入、上传准备和异步任务状态。"
+          "description": "单篇或批量已知来源导入、上传准备和有界任务等待。"
         },
         "annotations": {
           "title": "批注",
@@ -387,6 +387,12 @@
       "failure": {
         "unavailable": "研究服务暂时不可用。你的消息已保存，请稍后再试。",
         "rateLimited": "请求过于频繁。你的消息已保存，请稍后再试。",
+        "timeout": "模型响应超时。你的消息已保存，可以重新尝试。",
+        "invalidResponse": "模型返回了无效响应。你的消息已保存，可以重新尝试。",
+        "contentFiltered": "模型无法处理这些内容，请换一种表述后重试。",
+        "operationLimit": "本次请求超出了模型操作上限，请简化任务后重试。",
+        "configuration": "模型服务配置异常，请将诊断编号提供给支持人员。",
+        "stopFailed": "暂时无法停止 · 仍在后台继续",
         "generic": "回答意外中断。你的消息已保存，可以重新发送。",
         "diagnostic": "诊断编号：{id}"
       },
@@ -396,6 +402,7 @@
       "unknownSource": "研究来源",
       "activity": {
         "thinking": "正在思考…",
+        "reconnecting": "仍在后台继续 · 正在重新连接…",
         "searching": "正在检索你的研究资料…",
         "reading": "正在阅读相关资料…",
         "updatingWorkspace": "正在更新你的工作区…",

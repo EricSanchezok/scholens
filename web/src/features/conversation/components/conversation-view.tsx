@@ -20,6 +20,7 @@ import type {
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
+import { conversationFailureFromValue } from "../conversation-state";
 import type { ComposerValues } from "../schemas";
 import type { UseFormReturn } from "react-hook-form";
 import {
@@ -104,6 +105,7 @@ function AssistantMessage({
   onDocumentSourceOpen,
   durationMs,
   startedAtMs,
+  connectionState,
 }: {
   entries: ConversationTraceEntry[];
   content: string;
@@ -127,6 +129,7 @@ function AssistantMessage({
   ) => void;
   durationMs?: number | null;
   startedAtMs?: number;
+  connectionState?: LiveTurn["connectionState"];
 }) {
   const t = useTranslations("Home.conversation");
   const [sourcesOpen, setSourcesOpen] = React.useState(false);
@@ -172,6 +175,7 @@ function AssistantMessage({
         state={presentationState}
         durationMs={durationMs}
         startedAtMs={startedAtMs}
+        connectionState={connectionState}
       />
       {visibleContent && (
         <MessageContent
@@ -387,6 +391,7 @@ function MessageHistory({
                 variants={readyTurn?.responses}
                 durationMs={liveTurn.durationMs}
                 startedAtMs={liveTurn.startedAtMs}
+                connectionState={liveTurn.connectionState}
               />
             ) : response ? (
               <AssistantMessage
@@ -419,7 +424,11 @@ function MessageHistory({
                         : "complete"
                 }
                 suggestions={turn.suggestions}
-                failure={null}
+                failure={
+                  response.failure
+                    ? conversationFailureFromValue(response.failure)
+                    : null
+                }
                 variants={turn.responses}
                 durationMs={response.duration_ms}
               />
@@ -677,6 +686,7 @@ export function ConversationView({
                       failure={liveTurn.failure}
                       durationMs={liveTurn.durationMs}
                       startedAtMs={liveTurn.startedAtMs}
+                      connectionState={liveTurn.connectionState}
                     />
                   </div>
                 )}

@@ -1,5 +1,6 @@
 import type { components } from "@/lib/api/generated/schema";
 import {
+  ApiError,
   apiClient,
   authenticatedFetch,
   consumeServerSentEvents,
@@ -9,7 +10,7 @@ import {
 import { clientEnvironment } from "@/lib/env/client";
 
 export type ConversationStreamEvent =
-  components["schemas"]["ConversationStreamEventSchema"];
+  components["schemas"]["ConversationSubscriptionEventSchema"];
 export type ConversationTurnCreateRequest =
   components["schemas"]["ConversationTurnCreateRequest"];
 export type ConversationTurnBranchCreateRequest =
@@ -20,6 +21,8 @@ export type ConversationCreateRequest =
   components["schemas"]["ConversationCreateRequest"];
 export type ConversationUpdateRequest =
   components["schemas"]["ConversationUpdateRequest"];
+export type ConversationGenerationAccepted =
+  components["schemas"]["ConversationGenerationAccepted"];
 
 const conversationStreamEventTypes = {
   start: true,
@@ -31,6 +34,7 @@ const conversationStreamEventTypes = {
   response_ready: true,
   suggestions: true,
   complete: true,
+  cancelled: true,
   error: true,
 } satisfies Record<ConversationStreamEvent["type"], true>;
 
@@ -109,6 +113,8 @@ async function streamConversation({
   body,
   signal,
   onEvent,
+  onAccepted,
+  onConnectionState,
 }: {
   path: string;
   body:
@@ -117,6 +123,8 @@ async function streamConversation({
     | ConversationResponseCreateRequest;
   signal: AbortSignal;
   onEvent: (event: ConversationStreamEvent) => void;
+  onAccepted?: (durable: boolean) => void;
+  onConnectionState?: (state: "connected" | "reconnecting") => void;
 }) {
   const response = await authenticatedFetch(
     `${clientEnvironment.NEXT_PUBLIC_API_URL}${path}`,
@@ -124,14 +132,46 @@ async function streamConversation({
       method: "POST",
       credentials: "include",
       headers: {
-        Accept: "text/event-stream",
+        Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
+        Prefer: "respond-async",
       },
       body: JSON.stringify(body),
       signal,
     },
   );
   if (!response.ok) throw await toApiError(response);
+  if (response.status === 202) {
+    const accepted = (await response.json()) as ConversationGenerationAccepted;
+    const expectedTurnId =
+      "turn_id" in body ? body.turn_id : path.split("/")[6];
+    if (
+      accepted.conversation_id !== path.split("/")[4] ||
+      accepted.turn_id !== expectedTurnId ||
+      accepted.response_id !== body.response_id
+    ) {
+      throw new Error("Conversation acceptance response was malformed");
+    }
+    onAccepted?.(true);
+    onEvent({
+      type: "start",
+      conversation_id: accepted.conversation_id,
+      turn_id: accepted.turn_id,
+      response_id: accepted.response_id,
+      variant_index: accepted.variant_index,
+      generation_kind: accepted.generation_kind,
+    });
+    await subscribeConversationEvents({
+      conversationId: accepted.conversation_id,
+      turnId: accepted.turn_id,
+      responseId: accepted.response_id,
+      signal,
+      onEvent,
+      onConnectionState,
+    });
+    return;
+  }
+  onAccepted?.(false);
   let completed = false;
   await consumeServerSentEvents({
     response,
@@ -139,7 +179,11 @@ async function streamConversation({
       if (completed) return;
       const event = parseConversationEventData(message.data);
       onEvent(event);
-      if (event.type === "complete" || event.type === "error") {
+      if (
+        event.type === "complete" ||
+        event.type === "cancelled" ||
+        event.type === "error"
+      ) {
         completed = true;
       }
     },
@@ -149,22 +193,114 @@ async function streamConversation({
   }
 }
 
+function waitForReconnect(signal: AbortSignal, delayMs: number) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timeout);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function isReconnectableSubscriptionError(error: unknown) {
+  return (
+    (error instanceof ApiError && error.status >= 500) ||
+    error instanceof TypeError ||
+    (error instanceof DOMException && error.name === "NetworkError")
+  );
+}
+
+export async function subscribeConversationEvents({
+  conversationId,
+  turnId,
+  responseId,
+  signal,
+  onEvent,
+  onConnectionState,
+}: {
+  conversationId: string;
+  turnId: string;
+  responseId: string;
+  signal: AbortSignal;
+  onEvent: (event: ConversationStreamEvent) => void;
+  onConnectionState?: (state: "connected" | "reconnecting") => void;
+}) {
+  let lastEventId: string | undefined;
+  let reconnectDelayMs = 500;
+  const seenEventIds = new Set<string>();
+  while (!signal.aborted) {
+    try {
+      const response = await authenticatedFetch(
+        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            Accept: "text/event-stream",
+            ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
+          },
+          signal,
+        },
+      );
+      if (!response.ok) throw await toApiError(response);
+      onConnectionState?.("connected");
+      reconnectDelayMs = 500;
+      let terminal = false;
+      await consumeServerSentEvents({
+        response,
+        onEvent: (message) => {
+          if (message.id) {
+            lastEventId = message.id;
+            if (seenEventIds.has(message.id)) return;
+            seenEventIds.add(message.id);
+          }
+          const event = parseConversationEventData(message.data);
+          onEvent(event);
+          terminal = ["complete", "cancelled", "error"].includes(event.type);
+        },
+      });
+      if (terminal) return;
+    } catch (error) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (!isReconnectableSubscriptionError(error)) throw error;
+    }
+    onConnectionState?.("reconnecting");
+    await waitForReconnect(signal, reconnectDelayMs);
+    reconnectDelayMs = Math.min(reconnectDelayMs * 2, 5_000);
+  }
+}
+
 export function streamConversationTurn({
   conversationId,
   request,
   signal,
   onEvent,
+  onAccepted,
+  onConnectionState,
 }: {
   conversationId: string;
   request: ConversationTurnCreateRequest;
   signal: AbortSignal;
   onEvent: (event: ConversationStreamEvent) => void;
+  onAccepted?: (durable: boolean) => void;
+  onConnectionState?: (state: "connected" | "reconnecting") => void;
 }) {
   return streamConversation({
     path: `/api/v1/conversations/${conversationId}/turns`,
     body: request,
     signal,
     onEvent,
+    onAccepted,
+    onConnectionState,
   });
 }
 
@@ -174,18 +310,24 @@ export function streamConversationRetry({
   request,
   signal,
   onEvent,
+  onAccepted,
+  onConnectionState,
 }: {
   conversationId: string;
   turnId: string;
   request: ConversationResponseCreateRequest;
   signal: AbortSignal;
   onEvent: (event: ConversationStreamEvent) => void;
+  onAccepted?: (durable: boolean) => void;
+  onConnectionState?: (state: "connected" | "reconnecting") => void;
 }) {
   return streamConversation({
     path: `/api/v1/conversations/${conversationId}/turns/${turnId}/responses`,
     body: request,
     signal,
     onEvent,
+    onAccepted,
+    onConnectionState,
   });
 }
 
@@ -195,19 +337,42 @@ export function streamConversationBranch({
   request,
   signal,
   onEvent,
+  onAccepted,
+  onConnectionState,
 }: {
   conversationId: string;
   turnId: string;
   request: ConversationTurnBranchCreateRequest;
   signal: AbortSignal;
   onEvent: (event: ConversationStreamEvent) => void;
+  onAccepted?: (durable: boolean) => void;
+  onConnectionState?: (state: "connected" | "reconnecting") => void;
 }) {
   return streamConversation({
     path: `/api/v1/conversations/${conversationId}/turns/${turnId}/branches`,
     body: request,
     signal,
     onEvent,
+    onAccepted,
+    onConnectionState,
   });
+}
+
+export async function cancelConversationGeneration({
+  conversationId,
+  turnId,
+  responseId,
+}: {
+  conversationId: string;
+  turnId: string;
+  responseId: string;
+}) {
+  const response = await authenticatedFetch(
+    `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/cancel`,
+    { method: "POST", credentials: "include" },
+  );
+  if (!response.ok) throw await toApiError(response);
+  return (await response.json()) as components["schemas"]["ConversationGenerationCancellation"];
 }
 
 export async function selectConversationResponse({

@@ -5,6 +5,7 @@ import os
 DEFAULT_CELERY_BROKER_URL = "pyamqp://guest@127.0.0.1:55672//"
 DEFAULT_WEBHOOK_BASE_URL = "http://127.0.0.1:7301"
 SQS_QUEUE_ENVIRONMENT = {
+    "conversation": "SQS_CONVERSATION_QUEUE_URL",
     "document": "SQS_DOCUMENT_QUEUE_URL",
     "research": "SQS_RESEARCH_QUEUE_URL",
     "maintenance": "SQS_MAINTENANCE_QUEUE_URL",
@@ -21,7 +22,11 @@ def get_celery_broker_url(override: str | None = None) -> str:
     return DEFAULT_CELERY_BROKER_URL
 
 
-def get_celery_transport_options(broker_url: str) -> dict[str, object]:
+def get_celery_transport_options(
+    broker_url: str,
+    *,
+    visibility_timeout_seconds: int = 45 * 60,
+) -> dict[str, object]:
     """Build IAM-only SQS transport options or local RabbitMQ confirms."""
     if not broker_url.startswith("sqs://"):
         return {"confirm_publish": True}
@@ -30,7 +35,7 @@ def get_celery_transport_options(broker_url: str) -> dict[str, object]:
         raise RuntimeError(f"missing predefined SQS queues: {', '.join(missing)}")
     return {
         "region": os.getenv("AWS_REGION", "ap-southeast-1"),
-        "visibility_timeout": 45 * 60,
+        "visibility_timeout": visibility_timeout_seconds,
         "wait_time_seconds": 20,
         "polling_interval": 1,
         "predefined_queues": {

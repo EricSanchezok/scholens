@@ -74,7 +74,6 @@ from app.tooling import (
     ToolCatalog,
     ToolDispatcher,
     ToolExecutionContext,
-    ToolExecutionKind,
     ToolOutcome,
 )
 from app.tooling.source_extraction import extract_external_sources
@@ -202,7 +201,7 @@ def _activity_category(
     if connector_set.has_tool(name):
         return "connector"
     definition = catalog.definition_for(access, name)
-    if definition.execution in {ToolExecutionKind.COMMAND, ToolExecutionKind.WORKFLOW}:
+    if definition.behavior is not None and not definition.behavior.read_only:
         return "workspace_action"
     if name.startswith("search_"):
         return "search"
@@ -611,7 +610,7 @@ class ScholensConversationAgent:
                             )
                     self._settle_usage(
                         result=result,
-                        turn_id=request.turn_id,
+                        response_id=request.response_id,
                         profile=profile,
                     )
                     usage_settled = True
@@ -645,7 +644,9 @@ class ScholensConversationAgent:
                     prompt_tokens=0,
                     completion_tokens=0,
                     total_tokens=0,
-                    idempotency_key=f"conversation:{request.turn_id}:agent-unknown",
+                    idempotency_key=(
+                        f"conversation:{request.response_id}:agent-unknown"
+                    ),
                     status="unknown",
                 )
             record_histogram(
@@ -705,7 +706,12 @@ class ScholensConversationAgent:
                 sort_keys=True,
                 default=str,
             )
-            if signature in deps.call_signatures:
+            allow_repeated_call = False
+            if not deps.connector_set.has_tool(name):
+                allow_repeated_call = self._catalog.definition_for(
+                    deps.tool_access, name
+                ).allow_repeated_calls
+            if signature in deps.call_signatures and not allow_repeated_call:
                 self._finish_activity(deps, call_id, succeeded=False)
                 return {
                     "error": {
@@ -1140,6 +1146,13 @@ connector_issues: {connector_issue_line}
 workspace_tools: authorized Scholens workspace tools are available through
 their tool schemas in the conversation profile.
 
+Asynchronous workspace tools accept wait_seconds and already wait server-side
+until terminal status or that deadline. Never busy-poll get_job or list_jobs.
+Use ingest_papers for multiple known sources. If an ingestion result times out,
+call wait_for_jobs once with all active job IDs; if it times out again, repeat it
+only for the IDs that remain active. Do not reissue a mutation merely to observe
+its job.
+
 Initial server-validated answer material:
 {initial_packet.model_dump_json()}
 
@@ -1245,7 +1258,7 @@ Initial server-validated answer material:
     def _settle_usage(
         *,
         result: Any,
-        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
         profile: Any,
     ) -> None:
         usage = result.usage
@@ -1265,7 +1278,7 @@ Initial server-validated answer material:
             cache_hit_tokens=usage.cache_read_tokens,
             cache_miss_tokens=0,
             total_tokens=total,
-            idempotency_key=f"conversation:{turn_id}:agent",
+            idempotency_key=f"conversation:{response_id}:agent",
         )
         add_counter(
             "scholens.llm.requests",

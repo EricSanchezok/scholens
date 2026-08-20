@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -213,24 +214,52 @@ class JobRepository:
         return job
 
     @staticmethod
+    def require_many_for_requester(
+        db: Session,
+        *,
+        job_ids: tuple[uuid.UUID, ...],
+        requested_by_id: int,
+    ) -> list[DurableJob]:
+        jobs = list(
+            db.scalars(
+                select(DurableJob).where(
+                    DurableJob.id.in_(job_ids),
+                    DurableJob.requested_by_id == requested_by_id,
+                )
+            ).all()
+        )
+        jobs_by_id = {job.id: job for job in jobs}
+        if len(jobs_by_id) != len(set(job_ids)):
+            raise AppError(
+                code="job_not_found",
+                message="Job not found",
+                kind=FailureKind.NOT_FOUND,
+            )
+        return [jobs_by_id[job_id] for job_id in job_ids]
+
+    @staticmethod
     def claim(
         db: Session,
         *,
         job_id: uuid.UUID,
         lease: timedelta = DEFAULT_JOB_LEASE,
+        recover_expired: bool = True,
     ) -> DurableJob | None:
         now = datetime.now(UTC)
+        claimable = DurableJob.status == JobStatus.PENDING.value
+        if recover_expired:
+            claimable = or_(
+                claimable,
+                (
+                    (DurableJob.status == JobStatus.RUNNING.value)
+                    & (DurableJob.lease_expires_at < now)
+                ),
+            )
         claimed = db.scalar(
             update(DurableJob)
             .where(
                 DurableJob.id == job_id,
-                or_(
-                    DurableJob.status == JobStatus.PENDING.value,
-                    (
-                        (DurableJob.status == JobStatus.RUNNING.value)
-                        & (DurableJob.lease_expires_at < now)
-                    ),
-                ),
+                claimable,
             )
             .values(
                 status=JobStatus.RUNNING.value,
@@ -242,6 +271,41 @@ class JobRepository:
         )
         db.flush()
         return claimed
+
+    @staticmethod
+    def _fail_interrupted_conversation_job(*, job: DurableJob, now: datetime) -> None:
+        job.status = JobStatus.FAILED.value
+        job.error_code = "generation_interrupted"
+        job.completed_at = now
+        job.lease_expires_at = None
+        job.callback_lease_id = None
+        job.callback_lease_expires_at = None
+
+    @classmethod
+    def interrupt_expired_conversation(
+        cls,
+        db: Session,
+        *,
+        job_id: uuid.UUID,
+    ) -> DurableJob | None:
+        """Fail an abandoned Conversation attempt before a redelivery can replay it."""
+        now = datetime.now(UTC)
+        job = db.scalar(
+            select(DurableJob)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.operation == JobOperation.CONVERSATION_GENERATE.value,
+                DurableJob.status == JobStatus.RUNNING.value,
+                DurableJob.lease_expires_at.is_not(None),
+                DurableJob.lease_expires_at < now,
+            )
+            .with_for_update()
+        )
+        if job is None:
+            return None
+        cls._fail_interrupted_conversation_job(job=job, now=now)
+        db.flush()
+        return job
 
     @staticmethod
     def heartbeat(
@@ -361,8 +425,14 @@ class JobRepository:
         db.flush()
         return True
 
-    @staticmethod
-    def recover_expired_leases(db: Session, *, limit: int) -> int:
+    @classmethod
+    def recover_expired_leases(
+        cls,
+        db: Session,
+        *,
+        limit: int,
+        recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+    ) -> int:
         """Return abandoned jobs to the outbox without creating a second job."""
         now = datetime.now(UTC)
         expired_jobs = list(
@@ -385,6 +455,12 @@ class JobRepository:
                 now=now,
             ):
                 raise RuntimeError("selected_job_is_not_recoverable")
+            if job.operation == JobOperation.CONVERSATION_GENERATE.value:
+                if recover_conversation is None:
+                    raise RuntimeError("conversation_recovery_hook_missing")
+                cls._fail_interrupted_conversation_job(job=job, now=now)
+                recover_conversation(db, job)
+                continue
             job.status = JobStatus.PENDING.value
             job.lease_expires_at = None
             job.callback_lease_id = None

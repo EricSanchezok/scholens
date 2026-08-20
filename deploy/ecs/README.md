@@ -74,7 +74,7 @@ or cluster.
 | Image | Workloads | Notes |
 | --- | --- | --- |
 | `sanchezcloud-scholens-web` | canonical `web/` Next.js standalone server | Public values are baked at build time; browser source maps are removed from the image and stored privately. |
-| `sanchezcloud-scholens-api` | API and one-off product migration | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. |
+| `sanchezcloud-scholens-api` | API, dedicated Conversation worker, and one-off product migration | The entrypoint composes escaped, driver-specific SQLAlchemy and asyncpg RDS URLs from independent secret fields, keeps credentials out of child-process arguments, and enforces `verify-full` TLS. Conversation generation uses its own ECS service and SQS queue, not an API request process. |
 | `sanchezcloud-scholens-jobs` | three queue-specific workers and the one-shot scheduler | Production uses predefined SQS URLs, no result backend, late acknowledgement, long polling, and ECS task protection. |
 
 The API runtime uses a digest-pinned Alpine Python image. The Jobs image builds its
@@ -96,11 +96,13 @@ before the workload starts. The initializer is the only root container and exits
 application code runs; do not make the long-lived API, migration, worker, or scheduler
 container root merely to obtain writable temporary storage.
 
-The pinned ADOT sidecar sends traces to X-Ray and metrics to CloudWatch. Application and
-worker task roles are separate; the execution role can pull images and inject only the
-reviewed secrets. API diagnostic snapshots are written under `api/` and Jobs snapshots
-under `workers/`; those prefixes are part of the workload IAM contract rather than a
-shared unrestricted diagnostics namespace.
+The pinned ADOT sidecar sends traces to X-Ray and metrics to CloudWatch. Jobs worker task
+roles are queue-specific; the Conversation worker shares the API task role because it
+executes the same authorized application/tool capabilities, with additional receive-only
+access to the Conversation queue and ECS task protection. The execution role can pull
+images and inject only the reviewed secrets. API and Conversation diagnostic snapshots
+are written under `api/`, while Jobs snapshots use `workers/`; those prefixes are part of
+the workload IAM contract rather than a shared unrestricted diagnostics namespace.
 
 The Web service accepts bounded, same-origin anonymous performance events at
 `/__telemetry/web-performance`. It writes low-cardinality `web_performance` JSON to the
@@ -578,9 +580,11 @@ repaired by a forward revision or an explicitly approved database recovery opera
   `sslmode=verify-full`. Before adopting a production SLA, the platform owner must review
   capacity and upgrade it to Multi-AZ; public accessibility must also receive a separate
   platform security review.
-- Workers scale on SQS backlog per running task. Scale-in is deliberately slower than
-  scale-out, SQS visibility is 45 minutes, and workers request task protection while a job
-  is active.
+- Workers scale on SQS backlog per running task. The on-demand Conversation service scales
+  1–6 with concurrency one, uses a 60-minute queue visibility timeout, and protects its ECS
+  task while generation is active so browser detachment and ordinary deployments do not
+  terminate accepted work. Jobs workers retain their 45-minute visibility and use
+  Fargate Spot only for scale-out. Scale-in is deliberately slower than scale-out.
 - Queue DLQs, oldest-message age, ALB-generated 5xx, API target 5xx, Redis/S3 dependency
   failures, diagnostic snapshot write failures, and unhealthy target alarms publish to
   the Scholens SNS topic. The dependency and diagnostic alarms use the
