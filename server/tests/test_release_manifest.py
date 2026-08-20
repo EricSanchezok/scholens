@@ -469,3 +469,72 @@ def test_template_parameters_are_read_as_data_from_an_old_release(
         "ReleaseSha",
         "ApplicationEnabled",
     )
+
+
+def test_migration_candidate_task_replaces_the_named_api_workload() -> None:
+    registry = "919651863140.dkr.ecr.ap-southeast-1.amazonaws.com"
+    previous_image = f"{registry}/sanchezcloud-scholens-api@sha256:{'a' * 64}"
+    candidate_image = f"{registry}/sanchezcloud-scholens-api@sha256:{'b' * 64}"
+    sidecar_image = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+    base = {
+        "family": "sanchezcloud-scholens-migration",
+        "taskRoleArn": "task-role",
+        "executionRoleArn": "execution-role",
+        "networkMode": "awsvpc",
+        "containerDefinitions": [
+            {"name": "tmp-init", "image": previous_image, "essential": False},
+            {"name": "migration", "image": previous_image, "essential": True},
+            {"name": "adot", "image": sidecar_image, "essential": False},
+        ],
+        "volumes": [],
+        "requiresCompatibilities": ["FARGATE"],
+        "cpu": "512",
+        "memory": "1024",
+        "revision": 32,
+        "status": "ACTIVE",
+        "taskDefinitionArn": "base-arn",
+    }
+
+    candidate = release_manifest.migration_candidate_task_definition(
+        base,
+        candidate_image,
+    )
+
+    images = {
+        container["name"]: container["image"]
+        for container in candidate["containerDefinitions"]
+    }
+    assert images == {
+        "tmp-init": candidate_image,
+        "migration": candidate_image,
+        "adot": sidecar_image,
+    }
+    assert "taskDefinitionArn" not in candidate
+    assert "revision" not in candidate
+    assert "status" not in candidate
+
+
+@pytest.mark.parametrize(
+    "containers",
+    (
+        [],
+        [{"name": "tmp-init", "image": "old"}],
+        [
+            {"name": "migration", "image": "old"},
+            {"name": "migration", "image": "old"},
+        ],
+    ),
+)
+def test_migration_candidate_task_requires_one_named_migration_container(
+    containers: list[dict[str, str]],
+) -> None:
+    candidate_image = (
+        "919651863140.dkr.ecr.ap-southeast-1.amazonaws.com/"
+        f"sanchezcloud-scholens-api@sha256:{'b' * 64}"
+    )
+
+    with pytest.raises(ValueError, match="exactly one migration container"):
+        release_manifest.migration_candidate_task_definition(
+            {"family": "migration", "containerDefinitions": containers},
+            candidate_image,
+        )

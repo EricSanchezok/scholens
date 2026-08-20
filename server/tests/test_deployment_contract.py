@@ -1628,6 +1628,8 @@ def test_database_workflow_has_bounded_polling_and_failure_diagnostics() -> None
     assert 'test "$log_stream" = "$expected_log_stream"' in workflow
     assert "sanchezcloud-scholens-application-sg-id" in workflow
     assert "TaskSecurityGroupId" not in workflow
+    assert "migration-candidate-task-definition" in workflow
+    assert ".containerDefinitions[0].image" not in workflow
 
 
 def test_foundation_bootstrap_contract_uses_scholight_exports_and_stack_tags() -> None:
