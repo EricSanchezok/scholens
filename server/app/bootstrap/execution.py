@@ -114,6 +114,7 @@ def create_conversation_chat(
     runtime: ScholensConversationAgent,
     operation_factory: OperationContextFactory,
     diagnostic_recorder: DiagnosticSnapshotRecorder,
+    event_store_url: str | None = None,
 ) -> ConversationChat:
     from app.bootstrap.adapters.conversation_chat import (
         DefaultConversationChatGateway,
@@ -126,6 +127,7 @@ def create_conversation_chat(
             operation_factory,
             diagnostic_recorder,
             FollowUpSuggestionGenerator(),
+            event_store_url,
         )
     )
 

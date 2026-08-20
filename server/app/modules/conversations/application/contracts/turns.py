@@ -82,6 +82,12 @@ class ConversationStreamCompleteEvent(BaseModel):
     response_id: uuid.UUID
 
 
+class ConversationStreamCancelledEvent(BaseModel):
+    type: Literal["cancelled"] = "cancelled"
+    turn_id: uuid.UUID
+    response_id: uuid.UUID
+
+
 class ConversationStreamErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     response_id: uuid.UUID
@@ -98,6 +104,7 @@ ConversationStreamEvent = Annotated[
     | ConversationStreamResponseReadyEvent
     | ConversationStreamSuggestionsEvent
     | ConversationStreamCompleteEvent
+    | ConversationStreamCancelledEvent
     | ConversationStreamErrorEvent,
     Field(discriminator="type"),
 ]

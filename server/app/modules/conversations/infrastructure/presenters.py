@@ -30,6 +30,7 @@ def serialize_response(
             or None,
             "trace": response.trace,
             "duration_ms": response.duration_ms,
+            "failure": response.failure,
         }
     )
 
@@ -46,7 +47,7 @@ def serialize_turns(
             [
                 response
                 for response in turn.responses
-                if response.status in {"completed", "failed", "cancelled"}
+                if response.status in {"running", "completed", "failed", "cancelled"}
             ]
             if turn.id == active_leaf_id
             else [

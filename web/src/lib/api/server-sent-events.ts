@@ -1,6 +1,7 @@
 export type ServerSentEvent = {
   data: string;
   event?: string;
+  id?: string;
 };
 
 export function parseServerSentEventBlock(
@@ -14,7 +15,9 @@ export function parseServerSentEventBlock(
   if (!data) return undefined;
   const eventLine = lines.find((line) => line.startsWith("event:"));
   const event = eventLine?.slice(6).trim();
-  return { data, event: event || undefined };
+  const idLine = lines.find((line) => line.startsWith("id:"));
+  const id = idLine?.slice(3).trim();
+  return { data, event: event || undefined, id: id || undefined };
 }
 
 export async function consumeServerSentEvents({

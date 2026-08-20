@@ -67,6 +67,17 @@ function readyEvent({
 }
 
 describe("Home live conversation state", () => {
+  it("treats a server cancellation as terminal without fabricating a failure", () => {
+    const turn = reduceLiveTurn(
+      createLiveTurn(turnId, responseId, "Question"),
+      event({ type: "cancelled", turn_id: turnId }),
+    );
+
+    expect(turn?.state).toBe("cancelled");
+    expect(turn?.failure).toBeNull();
+    expect(turn?.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
   it("classifies one provisional item as progress without duplicating text", () => {
     let turn = createLiveTurn("turn-1", responseId, "Compare the papers");
     turn = reduceLiveTurn(

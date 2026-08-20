@@ -101,6 +101,33 @@ def test_production_database_rejects_unsafe_endpoint(
         _database_url()
 
 
+def test_runtime_entrypoint_executes_dedicated_conversation_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_HOST", "db.example.invalid")
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "sanchezcloud")
+    monkeypatch.setenv("DATABASE_USERNAME", "scholens_app")
+    monkeypatch.setenv("DATABASE_PASSWORD", "secret")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setattr("sys.argv", ["runtime_entrypoint", "conversation-worker"])
+    executed: list[list[str]] = []
+
+    def execute(_program: str, command: list[str]) -> None:
+        executed.append(command)
+
+    monkeypatch.setattr(os, "execvp", execute)
+
+    assert main() == 0
+    assert executed[0][:4] == [
+        "celery",
+        "--app",
+        "app.modules.conversations.infrastructure.celery_app",
+        "worker",
+    ]
+    assert "--queues=conversation" in executed[0]
+
+
 def test_migration_fails_when_identity_ledger_is_not_exact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

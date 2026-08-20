@@ -32,6 +32,11 @@ local expires = tonumber(ARGV[2])
 local limit = tonumber(ARGV[3])
 local member = ARGV[4]
 redis.call('ZREMRANGEBYSCORE', key, '-inf', now)
+if redis.call('ZSCORE', key, member) then
+  redis.call('ZADD', key, expires, member)
+  redis.call('EXPIRE', key, math.ceil((expires - now) / 1000))
+  return 1
+end
 if redis.call('ZCARD', key) >= limit then
   return 0
 end

@@ -66,6 +66,18 @@ def main() -> int:
     os.environ["AUTH_DATABASE_URL"] = identity_database_url
     if command == "api":
         executable = ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]
+    elif command == "conversation-worker":
+        executable = [
+            "celery",
+            "--app",
+            "app.modules.conversations.infrastructure.celery_app",
+            "worker",
+            "--loglevel=info",
+            "--concurrency=1",
+            "--queues=conversation",
+            "--without-gossip",
+            "--without-mingle",
+        ]
     elif command == "migrate":
         release_sha = _release_sha()
         migration = subprocess.run(

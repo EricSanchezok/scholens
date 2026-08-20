@@ -419,6 +419,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Conversation Response */
+        post: operations["cancel_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Subscribe Conversation Response */
+        get: operations["subscribe_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {
         parameters: {
             query?: never;
@@ -2417,6 +2451,81 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ConversationFailureResponse
+         * @description Safe, durable failure metadata available after reconnect or refresh.
+         */
+        ConversationFailureResponse: {
+            /** Code */
+            code: string;
+            /** Correlation Id */
+            correlation_id?: string | null;
+            /** Diagnostic Id */
+            diagnostic_id?: string | null;
+            kind: components["schemas"]["FailureKind"];
+            /** Retryable */
+            retryable: boolean;
+        };
+        /**
+         * ConversationGenerationAccepted
+         * @description Receipt returned after a durable background generation is accepted.
+         */
+        ConversationGenerationAccepted: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Generation Kind
+             * @enum {string}
+             */
+            generation_kind: "initial" | "retry" | "branch";
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * Status
+             * @default running
+             * @constant
+             */
+            status: "running";
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /** Variant Index */
+            variant_index: number;
+        };
+        /**
+         * ConversationGenerationCancellation
+         * @description Authoritative result of an idempotent explicit stop request.
+         */
+        ConversationGenerationCancellation: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "cancelled";
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+        };
         /** ConversationListResponse */
         ConversationListResponse: {
             /** Items */
@@ -2478,6 +2587,7 @@ export interface components {
             content: string | null;
             /** Duration Ms */
             duration_ms?: number | null;
+            failure?: components["schemas"]["ConversationFailureResponse"] | null;
             /**
              * Id
              * Format: uuid
@@ -2560,6 +2670,24 @@ export interface components {
              */
             type: "assistant_item_start";
         };
+        /** ConversationStreamCancelledEvent */
+        ConversationStreamCancelledEvent: {
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "cancelled";
+        };
         /** ConversationStreamCompleteEvent */
         ConversationStreamCompleteEvent: {
             /**
@@ -2599,7 +2727,7 @@ export interface components {
          * ConversationStreamEventSchema
          * @description Public schema for the JSON payload carried by each SSE event.
          */
-        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
             /** References */
@@ -3314,7 +3442,7 @@ export interface components {
          * JobOperation
          * @enum {string}
          */
-        JobOperation: "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
+        JobOperation: "conversation_generate" | "pdf_process" | "pdf_postprocess" | "document_reflow" | "audio_generate" | "data_table_generate" | "zotero_import" | "zotero_sync" | "document_gc" | "storage_delete";
         /** JobResponse */
         JobResponse: {
             /** Completed At */
@@ -6256,7 +6384,9 @@ export interface operations {
     create_conversation_turn_api_v1_conversations__conversation_id__turns_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                prefer?: string | null;
+            };
             path: {
                 conversation_id: string;
             };
@@ -6274,7 +6404,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ConversationStreamEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationGenerationAccepted"];
                 };
             };
             /** @description Validation Error */
@@ -6291,7 +6431,9 @@ export interface operations {
     branch_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__branches_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                prefer?: string | null;
+            };
             path: {
                 conversation_id: string;
                 turn_id: string;
@@ -6310,7 +6452,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ConversationStreamEventSchema"];
                     "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationGenerationAccepted"];
                 };
             };
             /** @description Validation Error */
@@ -6327,7 +6479,9 @@ export interface operations {
     retry_conversation_turn_api_v1_conversations__conversation_id__turns__turn_id__responses_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                prefer?: string | null;
+            };
             path: {
                 conversation_id: string;
                 turn_id: string;
@@ -6339,6 +6493,84 @@ export interface operations {
                 "application/json": components["schemas"]["ConversationResponseCreateRequest"];
             };
         };
+        responses: {
+            /** @description Standard SSE stream of typed conversation events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationStreamEventSchema"];
+                    "text/event-stream": components["schemas"]["ConversationStreamEventSchema"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationGenerationAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+                response_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationGenerationCancellation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscribe_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                turn_id: string;
+                response_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Standard SSE stream of typed conversation events. */
             200: {

@@ -17,6 +17,7 @@ from app.modules.conversations.application.chat import (
     ChatProjectSnapshot,
     ConversationBranchPreparation,
     ConversationContextSnapshot,
+    ConversationGenerationPreparation,
     ConversationChatDataGateway,
     ConversationChatScope,
     ConversationTurnCompletion,
@@ -298,6 +299,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
                 else None
             ),
             duration_ms=response.duration_ms,
+            failure=response.failure,
         )
 
     def start_turn(
@@ -407,7 +409,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             duration_ms=duration_ms,
         )
         citation_ids: tuple[uuid.UUID, ...] = ()
-        if artifacts and prior_status != "completed":
+        if artifacts and prior_status == "running" and response.status == "completed":
             citation_ids = tuple(
                 item.id
                 for item in research_repository.create_citations_for_response(
@@ -420,7 +422,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             )
         return ConversationTurnCompletion(
             response=self._persisted(response),
-            created=prior_status != "completed",
+            created=prior_status == "running" and response.status == "completed",
             citation_ids=citation_ids,
         )
 
@@ -432,6 +434,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
         response_id: uuid.UUID,
         status: str,
         duration_ms: int,
+        failure: dict[str, JsonValue] | None = None,
     ) -> None:
         turn_repository.finish_response(
             self._session,
@@ -440,6 +443,7 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             user_id=actor.id,
             status=status,
             duration_ms=duration_ms,
+            failure=failure,
         )
 
     def save_turn_suggestions(
@@ -549,6 +553,84 @@ class SqlAlchemyConversationChatData(ConversationChatDataGateway):
             ),
             paper_context=self._paper_collection(paper_context),
         )
+
+    def resume_generation(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+        generation_kind: Literal["initial", "retry", "branch"],
+    ) -> ConversationGenerationPreparation:
+        response = turn_repository.require_response(
+            self._session,
+            conversation_id=conversation_id,
+            response_id=response_id,
+            user_id=actor.id,
+        )
+        turn = response.turn
+        if turn.id != turn_id:
+            raise AppError(
+                code="conversation_generation_conflict",
+                message="Conversation generation identifiers do not match",
+                kind=FailureKind.CONFLICT,
+            )
+        paper_context = _PAPER_CONTEXT.validate_python(turn.paper_context)
+        return ConversationGenerationPreparation(
+            request=ConversationTurnCreateRequest.model_validate(
+                {
+                    "turn_id": turn.id,
+                    "response_id": response.id,
+                    "user_query": turn.user_query,
+                    "locale": turn.locale,
+                    "time_zone": turn.time_zone,
+                    "contexts": turn.contexts or [],
+                    "reasoning_level": turn.reasoning_level,
+                }
+            ),
+            turn_start=ConversationTurnStart(
+                turn_id=turn.id,
+                response=self._persisted(response),
+                turn_operation_id=turn.created_operation_id,
+                correlation_id=turn.correlation_id,
+                turn_created=False,
+                response_created=False,
+                generation_kind=generation_kind,
+                suggestions=tuple(turn.suggestions or ()),
+            ),
+            paper_context=self._paper_collection(paper_context),
+        )
+
+    def cancel_generation(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+    ) -> PersistedChatResponse:
+        response = turn_repository.require_response(
+            self._session,
+            conversation_id=conversation_id,
+            response_id=response_id,
+            user_id=actor.id,
+        )
+        if response.turn_id != turn_id:
+            raise AppError(
+                code="conversation_generation_conflict",
+                message="Conversation generation identifiers do not match",
+                kind=FailureKind.CONFLICT,
+            )
+        turn_repository.finish_response(
+            self._session,
+            conversation_id=conversation_id,
+            response_id=response_id,
+            user_id=actor.id,
+            status="cancelled",
+            duration_ms=response.duration_ms or 0,
+        )
+        return self._persisted(response)
 
     def _conversation(
         self,

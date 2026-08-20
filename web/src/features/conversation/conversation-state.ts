@@ -43,6 +43,7 @@ export type LiveTurn = {
   failure: ConversationFailure | null;
   durationMs: number | null;
   startedAtMs: number;
+  connectionState: "connected" | "reconnecting" | "stop_failed";
   state: "streaming" | "ready" | "complete" | "cancelled" | "error";
 };
 
@@ -72,6 +73,7 @@ export function createLiveTurn(
     failure: null,
     durationMs: null,
     startedAtMs,
+    connectionState: "connected",
     state: "streaming",
   };
 }
@@ -205,6 +207,14 @@ export function reduceLiveTurn(
       return current;
     }
     return { ...current, state: "complete" };
+  }
+  if (event.type === "cancelled") {
+    if (event.turn_id !== current.turnId) return current;
+    return {
+      ...current,
+      durationMs: Math.max(0, Date.now() - current.startedAtMs),
+      state: "cancelled",
+    };
   }
   if (event.type === "error") {
     if (current.state === "ready" || current.state === "complete") {

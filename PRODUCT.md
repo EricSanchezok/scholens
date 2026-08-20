@@ -82,6 +82,13 @@ the complete selected suffix, sources, worklog, and authorized context for that
 alternative. The interface may present one path at a time, but refresh and
 other conversation surfaces must agree on which path is active.
 
+An accepted response is Server-owned work, not a browser-session operation.
+Changing routes, switching mobile apps, locking the phone, losing connectivity,
+or reloading may detach the visible subscriber, but must not stop generation.
+Returning to the Conversation resumes the same response. Only the explicit
+Stop action cancels it, and provider or worker failures remain a safe,
+diagnostic-ID-bearing response that the user can retry.
+
 ## Projects are durable knowledge boundaries for external research agents
 
 A Scholens Project may be the paper knowledge base for research that lasts
