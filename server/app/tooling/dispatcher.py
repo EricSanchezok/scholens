@@ -257,6 +257,19 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 lambda capabilities: handler(capabilities, context, arguments),
             )
             return _validate_outcome(definition, outcome)
+        if definition.execution is ToolExecutionKind.ASYNC_QUERY:
+            async_query_handler = definition.workflow_handler
+            assert async_query_handler is not None
+            outcome = await async_query_handler(
+                context,
+                arguments,
+                _invocation_key(
+                    definition=definition,
+                    context=context,
+                    arguments=arguments,
+                ),
+            )
+            return _validate_outcome(definition, outcome)
         if definition.execution is ToolExecutionKind.WORKFLOW:
             workflow_handler = definition.workflow_handler
             assert workflow_handler is not None

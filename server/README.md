@@ -59,14 +59,14 @@ degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
-fully authorized catalog exposes 56 stored-knowledge and management tools:
+fully authorized catalog exposes 57 stored-knowledge and management tools:
 paper retrieval, Project and collaborator management, personal Library and
 tags, known-source ingestion and jobs, annotation discussions, and existing
 research outputs. Narrower Access Keys see only their permitted subset.
 Internet paper discovery and research-output generation are intentionally
-absent. The in-product Conversation Agent selects 55 of the same definitions;
-only the remote upload-preparation primitive is excluded because the in-product
-Agent does not own a filesystem.
+absent. The in-product Conversation Agent also selects 57 definitions: it
+excludes the remote upload-preparation primitive because it does not own a
+filesystem and instead includes the internal-only `wait_for_jobs` tool.
 
 Every tool publishes a title, decision-oriented description, described input
 schema, typed output schema, and truthful MCP behavior annotations. Access Keys
@@ -103,6 +103,17 @@ local path, use the official [`mcp-connector`](../mcp-connector/README.md),
 which replaces that primitive with `upload_local_paper` and never sends the
 path or the Access Key to object storage. Upload claims carry a unique lease
 token so an expired worker cannot consume or release a newer claim.
+
+`ingest_paper`, `retry_paper_ingestion`, `ingest_papers`, and `get_job` accept
+`wait_seconds` with a 30-second default and a 240-second maximum. They return
+immediately when every observed job is terminal; otherwise they return the
+latest durable snapshots with machine-readable next-action guidance at the
+deadline. `0` requests an immediate snapshot. Batch ingestion accepts at most
+50 known sources, limits acceptance to four concurrent operations and one
+45-second wall-clock budget, then observes all accepted jobs under one shared
+deadline. The Conversation-only `wait_for_jobs` defaults to 120 seconds and can
+observe up to 50 active jobs in one call. Waiting uses short owner-scoped reads
+with capped backoff and never retains a database transaction between reads.
 
 ## Start the Application
 

@@ -71,8 +71,8 @@ def test_classifies_wrapped_model_http_errors(
         ),
         (
             UsageLimitExceeded("request limit"),
-            "llm_agent_usage_limit_exceeded",
-            FailureKind.UNPROCESSABLE,
+            "agent_orchestration_limit_exceeded",
+            FailureKind.CONFLICT,
             False,
         ),
     ],

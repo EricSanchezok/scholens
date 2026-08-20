@@ -10,6 +10,7 @@ import json
 import os
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Protocol, cast
 from urllib.parse import unquote, urlparse
@@ -29,12 +30,18 @@ PREPARE_TOOL = "prepare_paper_upload"
 LOCAL_UPLOAD_TOOL = "upload_local_paper"
 _REMOTE_URL_MAX_LENGTH = 2048
 _UPLOAD_URL_MAX_LENGTH = 8192
+MAX_TOOL_WAIT_SECONDS = 240
+REMOTE_TOOL_TIMEOUT_SECONDS = MAX_TOOL_WAIT_SECONDS + 30
 
 ListToolsHandler = Callable[[], Awaitable[list[types.Tool]]]
 CallToolHandler = Callable[[str, dict[str, object]], Awaitable[types.CallToolResult]]
 ListResourcesHandler = Callable[[], Awaitable[list[types.Resource]]]
 ListTemplatesHandler = Callable[[], Awaitable[list[types.ResourceTemplate]]]
 ReadResourceHandler = Callable[[AnyUrl], Awaitable[list[ReadResourceContents]]]
+
+
+def _remote_tool_timeout() -> httpx.Timeout:
+    return httpx.Timeout(REMOTE_TOOL_TIMEOUT_SECONDS, connect=10)
 
 
 class LocalUploadError(ValueError):
@@ -212,7 +219,8 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
             "Scholens. Do not use for paper discovery, DOI/arXiv import, directories, "
             "or paths outside MCP roots. The connector reads only the selected PDF, "
             "uploads its exact bytes directly to secure staging, starts ingestion, and "
-            "returns no local path. Next: poll get_job with the returned job identity."
+            "returns no local path. Next: follow the returned terminal or timed-out job "
+            "guidance instead of rapidly polling."
         ),
         inputSchema={
             "type": "object",
@@ -249,6 +257,16 @@ def _local_upload_tool(remote_tools: Sequence[types.Tool]) -> types.Tool:
                     "description": (
                         "Stable key for this one logical ingestion. Reuse it after an "
                         "uncertain response; use a new key for a genuinely new import."
+                    ),
+                },
+                "wait_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": MAX_TOOL_WAIT_SECONDS,
+                    "default": 30,
+                    "description": (
+                        "Maximum time to await terminal ingestion status before "
+                        "returning the latest durable snapshot. Use 0 for immediate."
                     ),
                 },
             },
@@ -411,6 +429,7 @@ async def upload_local_paper(
     project_id = arguments.get("project_id")
     add_to_library = arguments.get("add_to_library", True)
     idempotency_key = arguments.get("idempotency_key")
+    wait_seconds = arguments.get("wait_seconds", 30)
     prepare = await remote.call_tool(
         PREPARE_TOOL,
         {
@@ -445,6 +464,7 @@ async def upload_local_paper(
         "source": {"kind": "upload", "upload_id": upload_id},
         "project_id": project_id,
         "add_to_library": add_to_library,
+        "wait_seconds": wait_seconds,
     }
     if idempotency_key is not None:
         source_arguments["idempotency_key"] = idempotency_key
@@ -469,7 +489,7 @@ async def _run(*, remote_url: str, access_key: str, roots: Sequence[Path]) -> No
     remote_url = validate_remote_url(remote_url)
     remote_http = httpx.AsyncClient(
         headers={"Authorization": f"Bearer {access_key}"},
-        timeout=httpx.Timeout(60),
+        timeout=_remote_tool_timeout(),
         follow_redirects=False,
     )
     upload_http = httpx.AsyncClient(
@@ -483,7 +503,13 @@ async def _run(*, remote_url: str, access_key: str, roots: Sequence[Path]) -> No
                 remote_write,
                 _session_id,
             ),
-            ClientSession(remote_read, remote_write) as remote,
+            ClientSession(
+                remote_read,
+                remote_write,
+                read_timeout_seconds=timedelta(
+                    seconds=REMOTE_TOOL_TIMEOUT_SECONDS,
+                ),
+            ) as remote,
         ):
             await remote.initialize()
             local: Server[object] = Server(

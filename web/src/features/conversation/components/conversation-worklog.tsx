@@ -85,7 +85,7 @@ function worklogSummary(
     if (failure?.code === "llm_content_filtered") {
       return t("failure.contentFiltered");
     }
-    if (failure?.code === "llm_agent_usage_limit_exceeded") {
+    if (failure?.code === "agent_orchestration_limit_exceeded") {
       return t("failure.operationLimit");
     }
     if (failure?.code === "llm_provider_authentication_failed") {

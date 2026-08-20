@@ -16,6 +16,9 @@ from app.modules.action_confirmations.contracts import ActionImpact
 from app.modules.papers.application.contracts.citation import CitationData
 from app.modules.papers.application.contracts.documents import LibraryPaperUpdateRequest
 from app.modules.papers.application.contracts.documents import LibraryOutputResponse
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperIngestionResponse,
+)
 from app.modules.papers.application.contracts.search import (
     LibraryPaperCollection,
     PaperCollection,
@@ -28,6 +31,7 @@ from app.modules.papers.application.contracts.tags import (
     LibraryTagCreateRequest,
     LibraryTagRenameRequest,
 )
+from app.modules.papers.application.contracts.uploads import PaperSource
 from app.modules.papers.domain.citations import (
     missing_required_fields,
     normalize_style,
@@ -61,7 +65,9 @@ from app.tooling.contracts import (
     ToolResourceLink,
 )
 from app.tooling import workspace_contracts as wc
+from app.tooling.job_waiting import JobWaiter
 from pydantic import BaseModel, TypeAdapter
+from scholens_observability import add_counter
 
 _JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 _OUTPUT_KINDS = {
@@ -69,6 +75,8 @@ _OUTPUT_KINDS = {
     ResearchItemKind.AUDIO_OVERVIEW,
     ResearchItemKind.DATA_TABLE,
 }
+_BATCH_INGESTION_CONCURRENCY = 4
+_BATCH_ACCEPTANCE_TIMEOUT_SECONDS = 45
 
 
 def _json(value: object) -> JsonValue:
@@ -159,6 +167,7 @@ class WorkspaceToolHandlers:
     ) -> None:
         self._executor = executor
         self._ingestion = ingestion
+        self._job_waiter = JobWaiter(executor=executor)
         self._citations = citations
         self._web_base_url = web_base_url.rstrip("/")
         self._knowledge_cursors = SignedCursorCodec(
@@ -1864,36 +1873,21 @@ class WorkspaceToolHandlers:
             parsed.idempotency_key
             or "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest()
         )
-        if parsed.source.kind == "upload":
-            result = await self._ingestion.from_upload_session(
-                actor=context.actor,
-                operation=context.operation,
-                upload_id=parsed.source.upload_id,
-                project_id=parsed.project_id,
-                add_to_library=parsed.add_to_library,
-                idempotency_key=idempotency_key,
-                ip_address=context.client_ip,
-            )
-        else:
-            value = (
-                parsed.source.doi
-                if parsed.source.kind == "doi"
-                else (
-                    parsed.source.arxiv_id
-                    if parsed.source.kind == "arxiv"
-                    else parsed.source.url
-                )
-            )
-            result = await self._ingestion.from_source(
-                actor=context.actor,
-                operation=context.operation,
-                kind=parsed.source.kind,
-                value=value,
-                project_id=parsed.project_id,
-                add_to_library=parsed.add_to_library,
-                idempotency_key=idempotency_key,
-                ip_address=context.client_ip,
-            )
+        result = await self._start_paper_ingestion(
+            context=context,
+            source=parsed.source,
+            project_id=parsed.project_id,
+            add_to_library=parsed.add_to_library,
+            idempotency_key=idempotency_key,
+        )
+        job = await self._job_waiter.wait_for_one(
+            actor=context.actor,
+            job_id=result.id,
+            wait_seconds=parsed.wait_seconds,
+        )
+        response = wc.PaperIngestionToolResponse.model_validate(
+            {**result.model_dump(), "job": job}
+        )
         links = tuple(
             link
             for link in (
@@ -1911,9 +1905,215 @@ class WorkspaceToolHandlers:
             if link is not None
         )
         return ToolOutcome(
-            payload=_json(result),
-            action={"kind": "paper_ingestion_started", "result": _json(result)},
+            payload=_json(response),
+            action={"kind": "paper_ingestion_started", "result": _json(response)},
             resource_links=links,
+        )
+
+    async def _start_paper_ingestion(
+        self,
+        *,
+        context: ToolExecutionContext,
+        source: PaperSource,
+        project_id: UUID | None,
+        add_to_library: bool,
+        idempotency_key: str,
+    ) -> LibraryPaperIngestionResponse:
+        if source.kind == "upload":
+            return await self._ingestion.from_upload_session(
+                actor=context.actor,
+                operation=context.operation,
+                upload_id=source.upload_id,
+                project_id=project_id,
+                add_to_library=add_to_library,
+                idempotency_key=idempotency_key,
+                ip_address=context.client_ip,
+            )
+        value = (
+            source.doi
+            if source.kind == "doi"
+            else (source.arxiv_id if source.kind == "arxiv" else source.url)
+        )
+        return await self._ingestion.from_source(
+            actor=context.actor,
+            operation=context.operation,
+            kind=source.kind,
+            value=value,
+            project_id=project_id,
+            add_to_library=add_to_library,
+            idempotency_key=idempotency_key,
+            ip_address=context.client_ip,
+        )
+
+    async def ingest_papers(
+        self, context: ToolExecutionContext, arguments: BaseModel, invocation_key: str
+    ) -> ToolOutcome:
+        parsed = wc.IngestPapersInput.model_validate(arguments)
+        batch_key = parsed.idempotency_key or (
+            "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest()
+        )
+        semaphore = asyncio.Semaphore(_BATCH_INGESTION_CONCURRENCY)
+
+        async def accept_one(
+            index: int, source: PaperSource
+        ) -> tuple[int, PaperSource, LibraryPaperIngestionResponse | None, str | None]:
+            source_fingerprint = hashlib.sha256(
+                json.dumps(
+                    source.model_dump(mode="json"),
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest()
+            child_key = (
+                "tool-batch:"
+                + hashlib.sha256(
+                    f"{batch_key}:{source_fingerprint}".encode()
+                ).hexdigest()
+            )
+            try:
+                async with semaphore:
+                    ingestion = await self._start_paper_ingestion(
+                        context=context,
+                        source=source,
+                        project_id=parsed.project_id,
+                        add_to_library=parsed.add_to_library,
+                        idempotency_key=child_key,
+                    )
+            except AppError as exc:
+                return index, source, None, exc.code
+            return index, source, ingestion, None
+
+        tasks = [
+            asyncio.create_task(accept_one(index, source))
+            for index, source in enumerate(parsed.sources)
+        ]
+        try:
+            done, pending = await asyncio.wait(
+                tasks,
+                timeout=_BATCH_ACCEPTANCE_TIMEOUT_SECONDS,
+            )
+        except BaseException:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        accepted_by_index: dict[
+            int, tuple[PaperSource, LibraryPaperIngestionResponse]
+        ] = {}
+        rejected_by_index: dict[int, tuple[PaperSource, str]] = {
+            tasks.index(task): (
+                parsed.sources[tasks.index(task)],
+                "batch_ingestion_acceptance_timeout",
+            )
+            for task in pending
+        }
+        for task in done:
+            index, source, ingestion, error_code = task.result()
+            if ingestion is None:
+                assert error_code is not None
+                rejected_by_index[index] = (source, error_code)
+            else:
+                accepted_by_index[index] = (source, ingestion)
+
+        waited = None
+        jobs_by_id: dict[UUID, wc.WaitableJobResponse] = {}
+        if accepted_by_index:
+            accepted_results = [
+                accepted_by_index[index][1] for index in sorted(accepted_by_index)
+            ]
+            waited = await self._job_waiter.wait_for_many(
+                actor=context.actor,
+                job_ids=[result.id for result in accepted_results],
+                wait_seconds=parsed.wait_seconds,
+            )
+            jobs_by_id = {job.id: job for job in waited.items}
+
+        items: list[wc.BatchPaperIngestionItem] = []
+        links_by_uri: dict[str, ToolResourceLink] = {}
+        for index, source in enumerate(parsed.sources):
+            accepted = accepted_by_index.get(index)
+            if accepted is None:
+                _, error_code = rejected_by_index[index]
+                items.append(
+                    wc.BatchPaperIngestionItem(
+                        index=index,
+                        source=source,
+                        status="rejected",
+                        error_code=error_code,
+                    )
+                )
+                continue
+            _, ingestion = accepted
+            job = jobs_by_id[ingestion.id]
+            items.append(
+                wc.BatchPaperIngestionItem(
+                    index=index,
+                    source=source,
+                    status="accepted",
+                    ingestion=ingestion,
+                    job=job,
+                )
+            )
+            if ingestion.document_id is not None:
+                link = _paper_link(ingestion.document_id)
+                links_by_uri[link.uri] = link
+            if ingestion.project_id is not None:
+                link = _project_link(ingestion.project_id)
+                links_by_uri[link.uri] = link
+
+        accepted_jobs = [item.job for item in items if item.job is not None]
+        status_counts = {
+            status: sum(job.status == status for job in accepted_jobs)
+            for status in ("completed", "failed", "cancelled")
+        }
+        active = sum(
+            job.status not in {"completed", "failed", "cancelled"}
+            for job in accepted_jobs
+        )
+        wait = (
+            waited.wait
+            if waited is not None
+            else wc.JobBatchWaitMetadata(
+                outcome="all_terminal",
+                requested_seconds=parsed.wait_seconds,
+                elapsed_ms=0,
+                next_action="inspect_items",
+                guidance="No jobs were accepted; inspect each rejected item.",
+            )
+        )
+        response = wc.BatchPaperIngestionResponse(
+            items=items,
+            summary=wc.BatchPaperIngestionSummary(
+                requested=len(items),
+                accepted=len(accepted_by_index),
+                rejected=len(rejected_by_index),
+                active=active,
+                completed=status_counts["completed"],
+                failed=status_counts["failed"],
+                cancelled=status_counts["cancelled"],
+            ),
+            wait=wait,
+        )
+        add_counter(
+            "scholens.tool.batch_ingestion_items",
+            value=len(accepted_by_index),
+            attributes={"outcome": "accepted"},
+        )
+        add_counter(
+            "scholens.tool.batch_ingestion_items",
+            value=len(rejected_by_index),
+            attributes={"outcome": "rejected"},
+        )
+        return ToolOutcome(
+            payload=_json(response),
+            action={"kind": "paper_ingestions_started", "result": _json(response)},
+            resource_links=tuple(links_by_uri.values()),
         )
 
     async def retry_paper_ingestion(
@@ -1927,9 +2127,17 @@ class WorkspaceToolHandlers:
             idempotency_key=parsed.idempotency_key
             or "tool:" + hashlib.sha256(invocation_key.encode()).hexdigest(),
         )
+        job = await self._job_waiter.wait_for_one(
+            actor=context.actor,
+            job_id=result.id,
+            wait_seconds=parsed.wait_seconds,
+        )
+        response = wc.PaperIngestionToolResponse.model_validate(
+            {**result.model_dump(), "job": job}
+        )
         return ToolOutcome(
-            payload=_json(result),
-            action={"kind": "paper_ingestion_retried", "result": _json(result)},
+            payload=_json(response),
+            action={"kind": "paper_ingestion_retried", "result": _json(response)},
         )
 
     async def cancel_paper_ingestion(
@@ -2019,16 +2227,33 @@ class WorkspaceToolHandlers:
             )
         )
 
-    def get_job(
-        self,
-        capabilities: ApplicationCapabilities,
-        context: ToolExecutionContext,
-        arguments: BaseModel,
+    async def get_job(
+        self, context: ToolExecutionContext, arguments: BaseModel, invocation_key: str
     ) -> ToolOutcome:
-        parsed = wc.JobInput.model_validate(arguments)
+        del invocation_key
+        parsed = wc.GetJobInput.model_validate(arguments)
         return ToolOutcome(
             payload=_json(
-                capabilities.jobs.get(actor=context.actor, job_id=parsed.job_id)
+                await self._job_waiter.wait_for_one(
+                    actor=context.actor,
+                    job_id=parsed.job_id,
+                    wait_seconds=parsed.wait_seconds,
+                )
+            )
+        )
+
+    async def wait_for_jobs(
+        self, context: ToolExecutionContext, arguments: BaseModel, invocation_key: str
+    ) -> ToolOutcome:
+        del invocation_key
+        parsed = wc.WaitForJobsInput.model_validate(arguments)
+        return ToolOutcome(
+            payload=_json(
+                await self._job_waiter.wait_for_many(
+                    actor=context.actor,
+                    job_ids=parsed.job_ids,
+                    wait_seconds=parsed.wait_seconds,
+                )
             )
         )
 

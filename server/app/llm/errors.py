@@ -13,6 +13,7 @@ from pydantic_ai.exceptions import (
 
 from app.llm.backend import LLMUsageSettlementError
 from app.shared.domain import AppError, FailureKind
+from scholens_observability import add_counter
 
 
 def _causes(error: BaseException) -> tuple[BaseException, ...]:
@@ -87,10 +88,17 @@ def classify_llm_error(error: BaseException, *, stage: str) -> AppError:
             retryable=False,
         )
     if isinstance(error, UsageLimitExceeded):
+        add_counter(
+            "scholens.conversation.agent_orchestration_limits",
+            attributes={"stage": stage},
+        )
         return AppError(
-            code="llm_agent_usage_limit_exceeded",
-            message="The response exceeded the model operation limit.",
-            kind=FailureKind.UNPROCESSABLE,
+            code="agent_orchestration_limit_exceeded",
+            message=(
+                "The agent reached its bounded orchestration limit before completing "
+                "the operation."
+            ),
+            kind=FailureKind.CONFLICT,
             details=_details(stage=stage),
             retryable=False,
         )

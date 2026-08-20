@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import UUID
@@ -122,13 +123,22 @@ class JobQueryPort(Protocol):
         document_id: UUID | None,
         operation: JobOperation | None,
         statuses: tuple[JobStatus, ...] | None,
-    ) -> list[JobResponse]: ...
+    ) -> builtins.list[JobResponse]: ...
 
     def get(self, *, requested_by_id: int, job_id: UUID) -> JobResponse: ...
 
 
+class JobBatchQueryPort(JobQueryPort, Protocol):
+    def get_many(
+        self,
+        *,
+        requested_by_id: int,
+        job_ids: tuple[UUID, ...],
+    ) -> builtins.list[JobResponse]: ...
+
+
 class Jobs:
-    def __init__(self, queries: JobQueryPort) -> None:
+    def __init__(self, queries: JobBatchQueryPort) -> None:
         self._queries = queries
 
     def list(
@@ -153,3 +163,11 @@ class Jobs:
 
     def get(self, *, actor: Actor, job_id: UUID) -> JobResponse:
         return self._queries.get(requested_by_id=actor.id, job_id=job_id)
+
+    def get_many(
+        self,
+        *,
+        actor: Actor,
+        job_ids: tuple[UUID, ...],
+    ) -> builtins.list[JobResponse]:
+        return self._queries.get_many(requested_by_id=actor.id, job_ids=job_ids)

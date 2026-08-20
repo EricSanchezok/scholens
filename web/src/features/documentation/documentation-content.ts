@@ -6,7 +6,7 @@ import {
   SOURCE_REPOSITORY_URL,
 } from "@/lib/product";
 
-export const MCP_TOOL_COUNT = 56;
+export const MCP_TOOL_COUNT = 57;
 export const MCP_MAX_LOCAL_PDF_BYTES = 30 * 1024 * 1024;
 export const DEVELOPMENT_CONNECTOR_REF = "main";
 
@@ -78,8 +78,8 @@ export const mcpCapabilityGroups = [
   },
   {
     id: "ingestion",
-    count: 6,
-    summary: "Known-source ingestion, upload preparation, and jobs",
+    count: 7,
+    summary: "Known-source batch ingestion, bounded waiting, uploads, and jobs",
   },
   {
     id: "annotations",

@@ -321,26 +321,29 @@ an external research repository. `create_project` and `get_project` return its
 immutable UUID, `scholens://` URI, Web URL, and ready-to-paste binding Markdown.
 Every later call accepts immutable IDs rather than guessing from titles.
 
-The current shared profile contains 55 tools. With all four workspace
-permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 56
-total. The local stdio bridge hides that transport primitive and supplies
-`upload_local_paper`, so it also presents 56 tools to a fully authorized key;
-narrower keys see only their authorized subset. The surface covers:
+The current shared profile contains 56 tools. With all four workspace
+permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 57
+total. The Conversation profile instead adds the internal-only
+`wait_for_jobs`, also for 57 total. The local stdio bridge hides the remote
+upload primitive and supplies `upload_local_paper`, so it presents 57 tools to
+a fully authorized key; narrower keys see only their authorized subset. The
+surface covers:
 
 | Capability                                                   | Remote tools | Boundary                                                 |
 | ------------------------------------------------------------ | -----------: | -------------------------------------------------------- |
 | Stored paper search, bounded content, citation, and download |            7 | No internet discovery                                    |
 | Projects, papers, membership, invitations, and ownership     |           19 | Resource authorization after coarse Access Key filtering |
 | Personal Library, sharing, and tags                          |           14 | Library state remains user-owned                         |
-| Known-source ingestion, upload preparation, and jobs         |            6 | Asynchronous acceptance and stable idempotency           |
+| Known-source ingestion, upload preparation, and jobs         |            7 | Bounded waiting, batch acceptance, stable idempotency     |
 | Annotation threads and comments                              |            8 | Personal or one-Project audience                         |
 | Existing research outputs                                    |            2 | Read-only; no generation tool                            |
 
 Agent-facing catalog validation requires a human-readable title, typed output,
 behavior annotations, decision-oriented description, and a description on
 every top-level input field. Descriptions state when to use a tool, when not to
-use it, what it returns, and the intended next step. Query, command, and
-external-I/O workflow kinds remain explicit. MCP `readOnlyHint`,
+use it, what it returns, and the intended next step. Synchronous and asynchronous
+query, command, and external-I/O workflow kinds remain explicit internally;
+asynchronous reads remain public MCP queries. MCP `readOnlyHint`,
 `destructiveHint`, `idempotentHint`, and `openWorldHint` reflect actual behavior
 rather than transport method names.
 
@@ -519,6 +522,26 @@ replay row. Conversation write invocation identities include conversation,
 turn, tool-call arguments, and tool name; MCP identities use the authenticated
 token session and JSON-RPC request identity. Replays return the persisted
 result, and conflicting argument reuse returns `tool_invocation_conflict`.
+
+Durable-job tools use bounded server-side observation instead of model-driven
+busy polling. Single ingestion, retry, exact job lookup, and bounded batch
+ingestion accept `wait_seconds` with a 30-second default, `0` for an immediate
+snapshot, and a 240-second maximum. Terminal jobs return immediately; a timeout
+returns the latest owner-authorized snapshot, elapsed time, a stable outcome,
+and machine-readable next-action guidance. Batch ingestion accepts at most 50
+known sources with four-way concurrency and a 45-second acceptance budget,
+then queries every accepted job together under one deadline. The Conversation
+profile alone exposes `wait_for_jobs`, which observes up to 50 jobs with a
+120-second default and may be repeated after a timeout. The MCP profile uses the
+waitable submission and `get_job` contracts but does not expose this internal
+orchestration tool.
+
+The waiter opens one short query per capped-backoff observation and one final
+deadline snapshot; it never holds a database transaction or connection while
+sleeping. Conversation SSE emits comment-only keepalives during silent waits.
+Client cancellation stops observation without cancelling the already-durable
+job. Agent request or tool-call budget exhaustion has the stable
+`agent_orchestration_limit_exceeded` code rather than a generic provider error.
 
 The inbound Streamable HTTP MCP endpoint is `/mcp`, outside the public OpenAPI
 surface. Every request requires a Scholens AccessKey in the Bearer header.

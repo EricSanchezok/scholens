@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from uuid import UUID
 
 from app.helpers.celery_config import get_webhook_base_url
@@ -195,7 +196,7 @@ class SqlAlchemyJobsGateway:
         document_id: UUID | None,
         operation: JobOperation | None,
         statuses: tuple[JobStatus, ...] | None,
-    ) -> list[JobResponse]:
+    ) -> builtins.list[JobResponse]:
         return [
             job_response(job)
             for job in job_repository.list_for_requester(
@@ -216,6 +217,21 @@ class SqlAlchemyJobsGateway:
                 requested_by_id=requested_by_id,
             )
         )
+
+    def get_many(
+        self,
+        *,
+        requested_by_id: int,
+        job_ids: tuple[UUID, ...],
+    ) -> builtins.list[JobResponse]:
+        return [
+            job_response(job)
+            for job in job_repository.require_many_for_requester(
+                self._db,
+                job_ids=job_ids,
+                requested_by_id=requested_by_id,
+            )
+        ]
 
     def payload(
         self,
