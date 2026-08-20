@@ -175,6 +175,7 @@ function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
     durationMs: null,
     startedAtMs: Date.now() - 4_000,
     state: "streaming",
+    connectionState: "connected",
     ...overrides,
   };
 }
@@ -722,6 +723,43 @@ export const ProvisionalResponse: Story = {
         "true",
       );
     });
+  },
+};
+
+export const MobileReconnecting: Story = {
+  globals: { viewport: { value: "mobile", isRotated: false } },
+  args: {
+    turns: [],
+    liveTurn: liveTurn({ connectionState: "reconnecting" }),
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText(
+        "Still running in the background · reconnecting…",
+      ),
+    ).toBeVisible();
+  },
+};
+
+export const MobileReconnectingDark: Story = {
+  ...MobileReconnecting,
+  globals: {
+    appearance: "dark",
+    viewport: { value: "mobile", isRotated: false },
+  },
+};
+
+export const StopCouldNotBeConfirmed: Story = {
+  args: {
+    turns: [],
+    liveTurn: liveTurn({ connectionState: "stop_failed" }),
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText(
+        "Could not stop yet · still running in the background",
+      ),
+    ).toBeVisible();
   },
 };
 

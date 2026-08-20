@@ -1,8 +1,9 @@
 # Development Setup
 
-Four application services can run locally: **server** (API), the new **web** foundation,
-the legacy **client** used only for comparison, and **jobs** (Celery). Storybook runs
-independently for isolated component development. More detail:
+Four application services can run locally: **server** (API plus its dedicated
+Conversation worker), the new **web** foundation, the legacy **client** used only
+for comparison, and **jobs** (Celery). Storybook runs independently for isolated
+component development. More detail:
 [server/README.md](./server/README.md), [web/README.md](./web/README.md),
 [client/README.md](./client/README.md), [jobs/README.md](./jobs/README.md).
 
@@ -27,6 +28,7 @@ this host-port contract.
 | ----------------- | --------- | ------------------------------------------------------- |
 | Web (canonical)   | 7300      | `pnpm dev` in `web/`                                    |
 | Server API        | 7301      | `uv run --frozen --no-sync scholens serve` in `server/` |
+| Conversation worker | none    | `uv run --frozen --no-sync celery --app app.modules.conversations.infrastructure.celery_app worker --loglevel=info --concurrency=1 --queues=conversation --without-gossip --without-mingle` in `server/` |
 | Jobs API          | 7302      | `uv run --frozen --no-sync start` in `jobs/`            |
 | Legacy client     | 7303      | `corepack yarn dev` in `client/`                        |
 | Storybook         | 7306      | `pnpm storybook` in `web/`                              |
@@ -236,7 +238,7 @@ together.
 
 ## Start locally (daily)
 
-The default profile is Server + Web. Add Jobs only for uploads, parsing,
+The default profile is Server API + Conversation worker + Web. Add Jobs only for uploads, parsing,
 background processing, or Zotero synchronization. The legacy client,
 Storybook, and Flower are opt-in profiles.
 
@@ -244,8 +246,9 @@ Use separate terminals:
 
 | Profile | Directory       | Command                                                                          |
 | ------- | --------------- | -------------------------------------------------------------------------------- |
-| Infra   | repository root | `docker compose -f jobs/compose.local.yaml up -d redis` — AI limits on 56379     |
+| Infra   | repository root | `docker compose -f jobs/compose.local.yaml up -d rabbitmq redis` — durable Conversation delivery and AI limits |
 | Default | `server/`       | `uv run --frozen --no-sync scholens serve` — validate local PostgreSQL; API 7301 |
+| Default | `server/`       | `uv run --frozen --no-sync celery --app app.modules.conversations.infrastructure.celery_app worker --loglevel=info --concurrency=1 --queues=conversation --without-gossip --without-mingle` |
 | Default | `web/`          | `pnpm dev` — canonical web on 7300                                               |
 | Jobs    | `jobs/`         | `uv run --frozen --no-sync start` — broker, worker, Beat, and API 7302           |
 | Legacy  | `client/`       | `corepack yarn dev` — comparison UI on 7303                                      |

@@ -307,6 +307,94 @@ def test_active_leaf_serializes_terminal_response_for_refresh_retry(
     assert serialized[0].responses[0].content is None
 
 
+def test_active_leaf_serializes_running_response_for_subscription_recovery() -> None:
+    turn = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        user_query="Long-running question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="deep",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=1,
+    )
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        variant_index=1,
+        status="running",
+    )
+    response.research_items = []
+    turn.responses = [response]
+    turn.selected_response_id = None
+
+    serialized = serialize_turns(
+        [turn],
+        active_leaf_id=turn.id,
+        branch_groups={None: [turn.id]},
+    )
+
+    assert [(item.id, item.status) for item in serialized[0].responses] == [
+        (response.id, "running")
+    ]
+
+
+def test_failed_response_exposes_only_stable_failure_metadata() -> None:
+    turn = ConversationTurn(
+        id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        user_query="Question",
+        contexts=[],
+        paper_context={"kind": "library"},
+        reasoning_level="standard",
+        locale="en",
+        time_zone="UTC",
+        depth=1,
+        branch_index=1,
+    )
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        created_operation_id=uuid.uuid4(),
+        correlation_id=uuid.uuid4(),
+        variant_index=1,
+        status="failed",
+        failure={
+            "code": "llm_request_timeout",
+            "kind": "unavailable",
+            "retryable": True,
+            "diagnostic_id": str(uuid.uuid4()),
+            "correlation_id": str(uuid.uuid4()),
+        },
+    )
+    response.research_items = []
+    turn.responses = [response]
+    turn.selected_response_id = response.id
+
+    failure = (
+        serialize_turns(
+            [turn],
+            active_leaf_id=turn.id,
+            branch_groups={None: [turn.id]},
+        )[0]
+        .responses[0]
+        .failure
+    )
+
+    assert failure is not None
+    assert failure.code == "llm_request_timeout"
+    assert failure.kind == FailureKind.UNAVAILABLE
+    assert failure.retryable is True
+
+
 @pytest.mark.parametrize("status", ["failed", "cancelled"])
 def test_terminal_response_becomes_the_selected_leaf_attempt(status: str) -> None:
     conversation = Conversation(id=uuid.uuid4(), user_id=1)
@@ -333,6 +421,65 @@ def test_terminal_response_becomes_the_selected_leaf_attempt(status: str) -> Non
     assert response.duration_ms == 875
     assert turn.selected_response_id == response.id
     db.flush.assert_called_once()
+
+
+def test_worker_can_finalize_elapsed_duration_after_explicit_cancellation() -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=1)
+    turn = ConversationTurn(id=uuid.uuid4(), conversation_id=conversation.id)
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        status="cancelled",
+        duration_ms=0,
+    )
+    response.turn = turn
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [conversation, response]
+
+    turn_repository.finish_response(
+        db,
+        conversation_id=conversation.id,
+        response_id=response.id,
+        user_id=1,
+        status="cancelled",
+        duration_ms=1_275,
+    )
+
+    assert response.status == "cancelled"
+    assert response.duration_ms == 1_275
+    db.flush.assert_called_once()
+
+
+def test_late_model_completion_cannot_resurrect_a_cancelled_response() -> None:
+    conversation = Conversation(id=uuid.uuid4(), user_id=1)
+    turn = ConversationTurn(id=uuid.uuid4(), conversation_id=conversation.id)
+    response = ConversationResponse(
+        id=uuid.uuid4(),
+        turn_id=turn.id,
+        status="cancelled",
+        content=None,
+        duration_ms=800,
+    )
+    response.turn = turn
+    db = MagicMock(spec=Session)
+    db.scalar.side_effect = [conversation, response]
+
+    result = turn_repository.complete_response(
+        db,
+        conversation_id=conversation.id,
+        response_id=response.id,
+        user_id=1,
+        content="late answer",
+        references=None,
+        trace=None,
+        duration_ms=900,
+    )
+
+    assert result is response
+    assert response.status == "cancelled"
+    assert response.content is None
+    assert response.duration_ms == 800
+    db.flush.assert_not_called()
 
 
 def test_conversation_scope_contract_is_private_and_unified() -> None:
@@ -437,6 +584,28 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
     assert "scope" not in schemas["ConversationTurnResponse"]["properties"]
     assert "user_references" not in schemas["ConversationTurnResponse"]["properties"]
     assert "duration_ms" in variant_properties
+    assert "failure" in variant_properties
+    accepted = app.openapi()["paths"]["/api/v1/conversations/{conversation_id}/turns"][
+        "post"
+    ]["responses"]["202"]
+    assert set(accepted["content"]) == {"application/json"}
+    assert accepted["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationGenerationAccepted"
+    )
+    event_subscription = app.openapi()["paths"][
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/"
+        "{response_id}/events"
+    ]["get"]["responses"]
+    assert "202" not in event_subscription
+    assert set(event_subscription["200"]["content"]) == {"text/event-stream"}
+    assert (
+        event_subscription["200"]["content"]["text/event-stream"]["schema"]["$ref"]
+        == "#/components/schemas/ConversationSubscriptionEventSchema"
+    )
+    subscription_schema = schemas["ConversationSubscriptionEventSchema"]["oneOf"]
+    assert "ConversationStreamCancelledEvent" in {
+        item["$ref"].rsplit("/", maxsplit=1)[-1] for item in subscription_schema
+    }
     create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
     assert "contexts" in create_properties
     assert "mentioned_thread_ids" not in create_properties

@@ -1874,6 +1874,144 @@
         "title": "ConversationDetailResponse",
         "type": "object"
       },
+      "ConversationFailureResponse": {
+        "additionalProperties": false,
+        "description": "Safe, durable failure metadata available after reconnect or refresh.",
+        "properties": {
+          "code": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "diagnostic_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostic Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FailureKind"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "kind",
+          "retryable"
+        ],
+        "title": "ConversationFailureResponse",
+        "type": "object"
+      },
+      "ConversationGenerationAccepted": {
+        "additionalProperties": false,
+        "description": "Receipt returned after a durable background generation is accepted.",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "generation_kind": {
+            "enum": [
+              "initial",
+              "retry",
+              "branch"
+            ],
+            "title": "Generation Kind",
+            "type": "string"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "running",
+            "default": "running",
+            "title": "Status",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "variant_index": {
+            "minimum": 1.0,
+            "title": "Variant Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "turn_id",
+          "response_id",
+          "variant_index",
+          "generation_kind"
+        ],
+        "title": "ConversationGenerationAccepted",
+        "type": "object"
+      },
+      "ConversationGenerationCancellation": {
+        "additionalProperties": false,
+        "description": "Authoritative result of an idempotent explicit stop request.",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "turn_id",
+          "response_id",
+          "status"
+        ],
+        "title": "ConversationGenerationCancellation",
+        "type": "object"
+      },
       "ConversationListResponse": {
         "properties": {
           "items": {
@@ -2037,6 +2175,16 @@
               }
             ],
             "title": "Duration Ms"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationFailureResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "format": "uuid",
@@ -2212,6 +2360,32 @@
         "title": "ConversationStreamAssistantItemStartEvent",
         "type": "object"
       },
+      "ConversationStreamCancelledEvent": {
+        "properties": {
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "cancelled",
+            "default": "cancelled",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "response_id"
+        ],
+        "title": "ConversationStreamCancelledEvent",
+        "type": "object"
+      },
       "ConversationStreamCompleteEvent": {
         "properties": {
           "response_id": {
@@ -2267,7 +2441,7 @@
         "type": "object"
       },
       "ConversationStreamEventSchema": {
-        "description": "Public schema for the JSON payload carried by each SSE event.",
+        "description": "Compatible schema for the existing inline SSE response.",
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
@@ -2446,6 +2620,61 @@
         ],
         "title": "ConversationStreamSuggestionsEvent",
         "type": "object"
+      },
+      "ConversationSubscriptionEventSchema": {
+        "description": "Schema for detachable response subscriptions, including cancellation.",
+        "discriminator": {
+          "mapping": {
+            "activity": "#/components/schemas/ConversationStreamActivityEvent",
+            "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
+            "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
+            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
+            "complete": "#/components/schemas/ConversationStreamCompleteEvent",
+            "error": "#/components/schemas/ConversationStreamErrorEvent",
+            "references": "#/components/schemas/ConversationStreamReferencesEvent",
+            "response_ready": "#/components/schemas/ConversationStreamResponseReadyEvent",
+            "start": "#/components/schemas/ConversationStreamStartEvent",
+            "suggestions": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ConversationStreamStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamActivityEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamReferencesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamResponseReadyEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
+          }
+        ],
+        "title": "ConversationSubscriptionEventSchema"
       },
       "ConversationSummaryResponse": {
         "properties": {
@@ -4516,6 +4745,7 @@
       },
       "JobOperation": {
         "enum": [
+          "conversation_generate",
           "pdf_process",
           "pdf_postprocess",
           "document_reflow",
@@ -11232,6 +11462,22 @@
               "title": "Conversation Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "prefer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefer"
+            }
           }
         ],
         "requestBody": {
@@ -11247,14 +11493,28 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
-                  "type": "string"
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
             "description": "Standard SSE stream of typed conversation events."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationGenerationAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
           },
           "422": {
             "content": {
@@ -11298,6 +11558,22 @@
               "title": "Turn Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "prefer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefer"
+            }
           }
         ],
         "requestBody": {
@@ -11313,14 +11589,28 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
-                  "type": "string"
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
             "description": "Standard SSE stream of typed conversation events."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationGenerationAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
           },
           "422": {
             "content": {
@@ -11364,6 +11654,22 @@
               "title": "Turn Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "prefer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefer"
+            }
           }
         ],
         "requestBody": {
@@ -11379,14 +11685,28 @@
         "responses": {
           "200": {
             "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStreamEventSchema",
-                  "type": "string"
+                  "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
             "description": "Standard SSE stream of typed conversation events."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationGenerationAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
           },
           "422": {
             "content": {
@@ -11405,6 +11725,153 @@
           }
         ],
         "summary": "Retry Conversation Turn"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/cancel": {
+      "post": {
+        "operationId": "cancel_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Response Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationGenerationCancellation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Cancel Conversation Response"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events": {
+      "get": {
+        "operationId": "subscribe_conversation_response_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Response Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSubscriptionEventSchema",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Replayable SSE subscription for an accepted response."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Subscribe Conversation Response"
       }
     },
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {

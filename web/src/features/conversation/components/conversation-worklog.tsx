@@ -72,11 +72,25 @@ function worklogSummary(
   state: LiveTurn["state"],
   sources: number,
   failure: ConversationFailure | null,
+  connectionState: LiveTurn["connectionState"],
   t: ReturnType<typeof useTranslations<"Home.conversation">>,
 ) {
   const operations = activities(entries);
   if (state === "cancelled") return t("activity.stopped");
   if (state === "error") {
+    if (failure?.code === "llm_stream_timeout") return t("failure.timeout");
+    if (failure?.code === "llm_provider_response_invalid") {
+      return t("failure.invalidResponse");
+    }
+    if (failure?.code === "llm_content_filtered") {
+      return t("failure.contentFiltered");
+    }
+    if (failure?.code === "llm_agent_usage_limit_exceeded") {
+      return t("failure.operationLimit");
+    }
+    if (failure?.code === "llm_provider_authentication_failed") {
+      return t("failure.configuration");
+    }
     if (failure?.code?.endsWith("_unavailable")) {
       return t("failure.unavailable");
     }
@@ -87,6 +101,8 @@ function worklogSummary(
     (activity) => activity.state === "running",
   );
   if (state === "streaming") {
+    if (connectionState === "stop_failed") return t("failure.stopFailed");
+    if (connectionState === "reconnecting") return t("activity.reconnecting");
     if (running?.category === "search") return t("activity.searching");
     if (running?.category === "read") return t("activity.reading");
     if (running?.category === "workspace_action") {
@@ -201,6 +217,7 @@ export function ConversationWorklog({
   onOpenChange,
   durationMs,
   startedAtMs,
+  connectionState = "connected",
 }: {
   entries: ConversationTraceEntry[];
   sourceTotal: number;
@@ -211,6 +228,7 @@ export function ConversationWorklog({
   onOpenChange?: (open: boolean) => void;
   durationMs?: number | null;
   startedAtMs?: number;
+  connectionState?: LiveTurn["connectionState"];
 }) {
   const t = useTranslations("Home.conversation");
   const [manualOpen, setManualOpen] = React.useState<boolean | null>(null);
@@ -248,7 +266,14 @@ export function ConversationWorklog({
     state === "error" ||
     state === "streaming" ||
     durationMs != null;
-  const summary = worklogSummary(entries, state, sourceTotal, failure, t);
+  const summary = worklogSummary(
+    entries,
+    state,
+    sourceTotal,
+    failure,
+    connectionState,
+    t,
+  );
   const effectiveDuration =
     durationMs ??
     (state === "streaming" && startedAtMs !== undefined

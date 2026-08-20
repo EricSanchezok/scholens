@@ -82,13 +82,19 @@ class ConversationStreamCompleteEvent(BaseModel):
     response_id: uuid.UUID
 
 
+class ConversationStreamCancelledEvent(BaseModel):
+    type: Literal["cancelled"] = "cancelled"
+    turn_id: uuid.UUID
+    response_id: uuid.UUID
+
+
 class ConversationStreamErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     response_id: uuid.UUID
     error: dict[str, JsonValue]
 
 
-ConversationStreamEvent = Annotated[
+ConversationLegacyStreamEvent = Annotated[
     ConversationStreamStartEvent
     | ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
@@ -102,9 +108,28 @@ ConversationStreamEvent = Annotated[
     Field(discriminator="type"),
 ]
 
+ConversationStreamEvent = Annotated[
+    ConversationStreamStartEvent
+    | ConversationStreamActivityEvent
+    | ConversationStreamAssistantItemStartEvent
+    | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemCompleteEvent
+    | ConversationStreamReferencesEvent
+    | ConversationStreamResponseReadyEvent
+    | ConversationStreamSuggestionsEvent
+    | ConversationStreamCompleteEvent
+    | ConversationStreamCancelledEvent
+    | ConversationStreamErrorEvent,
+    Field(discriminator="type"),
+]
 
-class ConversationStreamEventSchema(RootModel[ConversationStreamEvent]):
-    """Public schema for the JSON payload carried by each SSE event."""
+
+class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
+    """Compatible schema for the existing inline SSE response."""
+
+
+class ConversationSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+    """Schema for detachable response subscriptions, including cancellation."""
 
 
 class ConversationTurnCreateRequest(BaseModel):

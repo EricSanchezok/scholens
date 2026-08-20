@@ -220,6 +220,16 @@ Resources:
       ImageTagMutability: IMMUTABLE
       LifecyclePolicy: {LifecyclePolicyText: "{\"rules\":[{\"rulePriority\":1,\"description\":\"Expire untagged build layers after 30 days\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\"\
           ,\"countUnit\":\"days\",\"countNumber\":30},\"action\":{\"type\":\"expire\"}}]}"}
+  ConversationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-conversation-dlq, SqsManagedSseEnabled: true}
+  ConversationQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Properties: {MessageRetentionPeriod: 1209600, QueueName: scholens-production-conversation, ReceiveMessageWaitTimeSeconds: 20, RedrivePolicy: {deadLetterTargetArn: !GetAtt ConversationDeadLetterQueue.Arn, maxReceiveCount: 5}, SqsManagedSseEnabled: true, VisibilityTimeout: 3600}
   DocumentDeadLetterQueue:
     Type: AWS::SQS::Queue
     DeletionPolicy: RetainExceptOnCreate
@@ -396,6 +406,8 @@ Outputs:
   ContentBucketArn: {Value: !GetAtt ContentBucket.Arn, Export: {Name: sanchezcloud-scholens-content-bucket-arn}}
   DiagnosticBucketName: {Value: !Ref DiagnosticBucket, Export: {Name: sanchezcloud-scholens-diagnostic-bucket-name}}
   DiagnosticBucketArn: {Value: !GetAtt DiagnosticBucket.Arn, Export: {Name: sanchezcloud-scholens-diagnostic-bucket-arn}}
+  ConversationQueueUrl: {Value: !Ref ConversationQueue, Export: {Name: sanchezcloud-scholens-conversation-queue-url}}
+  ConversationQueueArn: {Value: !GetAtt ConversationQueue.Arn, Export: {Name: sanchezcloud-scholens-conversation-queue-arn}}
   DocumentQueueUrl: {Value: !Ref DocumentQueue, Export: {Name: sanchezcloud-scholens-document-queue-url}}
   DocumentQueueArn: {Value: !GetAtt DocumentQueue.Arn, Export: {Name: sanchezcloud-scholens-document-queue-arn}}
   ResearchQueueUrl: {Value: !Ref ResearchQueue, Export: {Name: sanchezcloud-scholens-research-queue-url}}

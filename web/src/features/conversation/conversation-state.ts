@@ -13,6 +13,8 @@ export type ConversationAssistantItem =
   components["schemas"]["ConversationAssistantItem"];
 export type ConversationTurn =
   components["schemas"]["ConversationTurnResponse"];
+export type ConversationResponseStatus =
+  components["schemas"]["ConversationResponseVariantResponse"]["status"];
 export type ProvisionalAssistantItem = Omit<
   ConversationAssistantItem,
   "phase"
@@ -43,6 +45,7 @@ export type LiveTurn = {
   failure: ConversationFailure | null;
   durationMs: number | null;
   startedAtMs: number;
+  connectionState: "connected" | "reconnecting" | "stop_failed";
   state: "streaming" | "ready" | "complete" | "cancelled" | "error";
 };
 
@@ -72,8 +75,19 @@ export function createLiveTurn(
     failure: null,
     durationMs: null,
     startedAtMs,
+    connectionState: "connected",
     state: "streaming",
   };
+}
+
+export function persistedResponseStatus(
+  turns: ConversationTurn[] | undefined,
+  turnId: string,
+  responseId: string,
+): ConversationResponseStatus | undefined {
+  return turns
+    ?.find((turn) => turn.id === turnId)
+    ?.responses.find((response) => response.id === responseId)?.status;
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -205,6 +219,14 @@ export function reduceLiveTurn(
       return current;
     }
     return { ...current, state: "complete" };
+  }
+  if (event.type === "cancelled") {
+    if (event.turn_id !== current.turnId) return current;
+    return {
+      ...current,
+      durationMs: Math.max(0, Date.now() - current.startedAtMs),
+      state: "cancelled",
+    };
   }
   if (event.type === "error") {
     if (current.state === "ready" || current.state === "complete") {

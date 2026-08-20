@@ -11,9 +11,14 @@ from app.bootstrap.execution import (
 from app.modules.conversations.application.chat import ConversationChat
 from app.modules.conversations.application.contracts.turns import (
     ConversationResponseCreateRequest,
+    ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
     ConversationTurnCreateRequest,
     ConversationTurnBranchCreateRequest,
+)
+from app.modules.conversations.application.contracts.conversations import (
+    ConversationGenerationAccepted,
+    ConversationGenerationCancellation,
 )
 from app.shared.application import (
     Actor,
@@ -29,8 +34,8 @@ from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
 )
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi.responses import JSONResponse, StreamingResponse
 
 turn_router = APIRouter()
 
@@ -43,6 +48,9 @@ def _stream_responses() -> dict[int | str, dict[str, object]]:
     return {
         200: {
             "description": "Standard SSE stream of typed conversation events.",
+            # FastAPI uses the additional response model to register every nested
+            # event definition under OpenAPI components. The explicit content
+            # entry below remains the canonical transport media type.
             "model": ConversationStreamEventSchema,
             "content": {
                 "text/event-stream": {
@@ -53,6 +61,31 @@ def _stream_responses() -> dict[int | str, dict[str, object]]:
             },
         }
     }
+
+
+def _subscription_responses() -> dict[int | str, dict[str, object]]:
+    return {
+        200: {
+            "description": "Replayable SSE subscription for an accepted response.",
+            "model": ConversationSubscriptionEventSchema,
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "$ref": (
+                            "#/components/schemas/ConversationSubscriptionEventSchema"
+                        )
+                    }
+                }
+            },
+        }
+    }
+
+
+def _prefers_background(prefer: str | None) -> bool:
+    return any(
+        token.strip().casefold() == "respond-async"
+        for token in (prefer or "").split(",")
+    )
 
 
 def _conversation_operation(
@@ -84,7 +117,9 @@ def get_chat_capabilities(
 
 @turn_router.post(
     "/{conversation_id}/turns",
-    response_class=ConversationEventStreamResponse,
+    response_class=JSONResponse,
+    response_model=ConversationGenerationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
     responses=_stream_responses(),
 )
 async def create_conversation_turn(
@@ -95,7 +130,8 @@ async def create_conversation_turn(
     current_user: Actor = Depends(get_required_user),
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
-) -> ConversationEventStreamResponse:
+    prefer: str | None = Header(default=None),
+) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
         turn_id=turn.turn_id,
@@ -103,6 +139,19 @@ async def create_conversation_turn(
         operation_factory=operation_factory,
     )
     attach_operation_context(http_request, operation, actor_id=str(current_user.id))
+    if _prefers_background(prefer):
+        accepted = await chat.accept(
+            actor=current_user,
+            operation=operation,
+            conversation_id=conversation_id,
+            request=turn,
+            client_ip=http_client_ip(http_request),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=accepted.model_dump(mode="json"),
+            headers={"Preference-Applied": "respond-async"},
+        )
     stream = await chat.stream(
         actor=current_user,
         operation=operation,
@@ -115,7 +164,9 @@ async def create_conversation_turn(
 
 @turn_router.post(
     "/{conversation_id}/turns/{turn_id}/responses",
-    response_class=ConversationEventStreamResponse,
+    response_class=JSONResponse,
+    response_model=ConversationGenerationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
     responses=_stream_responses(),
 )
 async def retry_conversation_turn(
@@ -127,7 +178,8 @@ async def retry_conversation_turn(
     current_user: Actor = Depends(get_required_user),
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
-) -> ConversationEventStreamResponse:
+    prefer: str | None = Header(default=None),
+) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
         turn_id=turn_id,
@@ -135,6 +187,20 @@ async def retry_conversation_turn(
         operation_factory=operation_factory,
     )
     attach_operation_context(http_request, operation, actor_id=str(current_user.id))
+    if _prefers_background(prefer):
+        accepted = await chat.accept_retry(
+            actor=current_user,
+            operation=operation,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response.response_id,
+            client_ip=http_client_ip(http_request),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=accepted.model_dump(mode="json"),
+            headers={"Preference-Applied": "respond-async"},
+        )
     stream = await chat.retry(
         actor=current_user,
         operation=operation,
@@ -148,7 +214,9 @@ async def retry_conversation_turn(
 
 @turn_router.post(
     "/{conversation_id}/turns/{turn_id}/branches",
-    response_class=ConversationEventStreamResponse,
+    response_class=JSONResponse,
+    response_model=ConversationGenerationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
     responses=_stream_responses(),
 )
 async def branch_conversation_turn(
@@ -160,7 +228,8 @@ async def branch_conversation_turn(
     current_user: Actor = Depends(get_required_user),
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
-) -> ConversationEventStreamResponse:
+    prefer: str | None = Header(default=None),
+) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
         turn_id=branch.turn_id,
@@ -168,6 +237,20 @@ async def branch_conversation_turn(
         operation_factory=operation_factory,
     )
     attach_operation_context(http_request, operation, actor_id=str(current_user.id))
+    if _prefers_background(prefer):
+        accepted = await chat.accept_branch(
+            actor=current_user,
+            operation=operation,
+            conversation_id=conversation_id,
+            source_turn_id=turn_id,
+            request=branch,
+            client_ip=http_client_ip(http_request),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=accepted.model_dump(mode="json"),
+            headers={"Preference-Applied": "respond-async"},
+        )
     stream = await chat.branch(
         actor=current_user,
         operation=operation,
@@ -177,3 +260,45 @@ async def branch_conversation_turn(
         client_ip=http_client_ip(http_request),
     )
     return ConversationEventStreamResponse(stream)
+
+
+@turn_router.get(
+    "/{conversation_id}/turns/{turn_id}/responses/{response_id}/events",
+    response_class=ConversationEventStreamResponse,
+    responses=_subscription_responses(),
+)
+async def subscribe_conversation_response(
+    conversation_id: UUID,
+    turn_id: UUID,
+    response_id: UUID,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+) -> ConversationEventStreamResponse:
+    events = await chat.subscribe(
+        actor=current_user,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        response_id=response_id,
+        last_event_id=last_event_id,
+    )
+    return ConversationEventStreamResponse(events)
+
+
+@turn_router.post(
+    "/{conversation_id}/turns/{turn_id}/responses/{response_id}/cancel",
+    response_model=ConversationGenerationCancellation,
+)
+async def cancel_conversation_response(
+    conversation_id: UUID,
+    turn_id: UUID,
+    response_id: UUID,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+) -> ConversationGenerationCancellation:
+    return await chat.cancel(
+        actor=current_user,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        response_id=response_id,
+    )

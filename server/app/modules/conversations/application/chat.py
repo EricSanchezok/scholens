@@ -12,6 +12,10 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationTurnBranchCreateRequest,
     ConversationTurnCreateRequest,
 )
+from app.modules.conversations.application.contracts.conversations import (
+    ConversationGenerationAccepted,
+    ConversationGenerationCancellation,
+)
 from app.modules.conversations.application.contracts.trace import ConversationTrace
 from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.domain import (
@@ -89,6 +93,7 @@ class PersistedChatResponse:
     references: dict[str, JsonValue] | None
     trace: ConversationTrace | None
     duration_ms: int | None
+    failure: dict[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +118,13 @@ class ConversationTurnCompletion:
 @dataclass(frozen=True, slots=True)
 class ConversationBranchPreparation:
     request: ConversationTurnCreateRequest
+    paper_context: PaperCollection
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationGenerationPreparation:
+    request: ConversationTurnCreateRequest
+    turn_start: ConversationTurnStart
     paper_context: PaperCollection
 
 
@@ -190,6 +202,7 @@ class ConversationChatDataGateway(Protocol):
         response_id: UUID,
         status: str,
         duration_ms: int,
+        failure: dict[str, JsonValue] | None = None,
     ) -> None: ...
 
     def save_turn_suggestions(
@@ -218,6 +231,25 @@ class ConversationChatDataGateway(Protocol):
         source_turn_id: UUID,
         request: ConversationTurnBranchCreateRequest,
     ) -> ConversationBranchPreparation: ...
+
+    def resume_generation(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        generation_kind: Literal["initial", "retry", "branch"],
+    ) -> ConversationGenerationPreparation: ...
+
+    def cancel_generation(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+    ) -> PersistedChatResponse: ...
 
 
 class ConversationChatData:
@@ -398,6 +430,7 @@ class ConversationChatData:
         response_id: UUID,
         status: str,
         duration_ms: int,
+        failure: dict[str, JsonValue] | None = None,
     ) -> None:
         self._gateway.finish_response(
             actor=actor,
@@ -405,6 +438,7 @@ class ConversationChatData:
             response_id=response_id,
             status=status,
             duration_ms=duration_ms,
+            failure=failure,
         )
 
     def save_turn_suggestions(
@@ -452,8 +486,105 @@ class ConversationChatData:
             request=request,
         )
 
+    def resume_generation(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        generation_kind: Literal["initial", "retry", "branch"],
+    ) -> ConversationGenerationPreparation:
+        return self._gateway.resume_generation(
+            actor=actor,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+            generation_kind=generation_kind,
+        )
+
+    def cancel_generation(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+    ) -> PersistedChatResponse:
+        return self._gateway.cancel_generation(
+            actor=actor,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+        )
+
 
 class ConversationChatGateway(Protocol):
+    async def accept(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        request: ConversationTurnCreateRequest,
+        client_ip: str,
+        generation_kind: Literal["initial", "retry", "branch"] = "initial",
+        branch_from_turn_id: UUID | None = None,
+        paper_context_snapshot: PaperCollection | None = None,
+    ) -> ConversationGenerationAccepted: ...
+
+    async def resume(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        generation_kind: Literal["initial", "retry", "branch"],
+    ) -> AsyncIterator[str]: ...
+
+    async def accept_retry(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        client_ip: str,
+    ) -> ConversationGenerationAccepted: ...
+
+    async def accept_branch(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        request: ConversationTurnBranchCreateRequest,
+        client_ip: str,
+    ) -> ConversationGenerationAccepted: ...
+
+    async def subscribe(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        last_event_id: str | None,
+    ) -> AsyncIterator[str]: ...
+
+    async def cancel(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+    ) -> ConversationGenerationCancellation: ...
+
     async def stream(
         self,
         *,
@@ -492,6 +623,118 @@ class ConversationChatGateway(Protocol):
 class ConversationChat:
     def __init__(self, gateway: ConversationChatGateway) -> None:
         self._gateway = gateway
+
+    async def accept(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        request: ConversationTurnCreateRequest,
+        client_ip: str,
+        generation_kind: Literal["initial", "retry", "branch"] = "initial",
+        branch_from_turn_id: UUID | None = None,
+        paper_context_snapshot: PaperCollection | None = None,
+    ) -> ConversationGenerationAccepted:
+        return await self._gateway.accept(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            request=request,
+            client_ip=client_ip,
+            generation_kind=generation_kind,
+            branch_from_turn_id=branch_from_turn_id,
+            paper_context_snapshot=paper_context_snapshot,
+        )
+
+    async def resume(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        generation_kind: Literal["initial", "retry", "branch"],
+    ) -> AsyncIterator[str]:
+        return await self._gateway.resume(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+            generation_kind=generation_kind,
+        )
+
+    async def accept_retry(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        client_ip: str,
+    ) -> ConversationGenerationAccepted:
+        return await self._gateway.accept_retry(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+            client_ip=client_ip,
+        )
+
+    async def accept_branch(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        source_turn_id: UUID,
+        request: ConversationTurnBranchCreateRequest,
+        client_ip: str,
+    ) -> ConversationGenerationAccepted:
+        return await self._gateway.accept_branch(
+            actor=actor,
+            operation=operation,
+            conversation_id=conversation_id,
+            source_turn_id=source_turn_id,
+            request=request,
+            client_ip=client_ip,
+        )
+
+    async def subscribe(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+        last_event_id: str | None,
+    ) -> AsyncIterator[str]:
+        return await self._gateway.subscribe(
+            actor=actor,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+            last_event_id=last_event_id,
+        )
+
+    async def cancel(
+        self,
+        *,
+        actor: Actor,
+        conversation_id: UUID,
+        turn_id: UUID,
+        response_id: UUID,
+    ) -> ConversationGenerationCancellation:
+        return await self._gateway.cancel(
+            actor=actor,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            response_id=response_id,
+        )
 
     async def stream(
         self,
