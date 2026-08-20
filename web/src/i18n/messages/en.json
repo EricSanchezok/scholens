@@ -143,7 +143,7 @@
         },
         "ingestion": {
           "title": "Ingestion",
-          "description": "Known-source ingestion, upload preparation, and asynchronous job status."
+          "description": "Single or batch known-source ingestion, upload preparation, and bounded job waiting."
         },
         "annotations": {
           "title": "Annotations",
@@ -388,6 +388,12 @@
       "failure": {
         "unavailable": "Research service is temporarily unavailable. Your message is saved; try again shortly.",
         "rateLimited": "You’re sending requests too quickly. Your message is saved; try again shortly.",
+        "timeout": "The model took too long to respond. Your message is saved; try again.",
+        "invalidResponse": "The model returned an invalid response. Your message is saved; try again.",
+        "contentFiltered": "The model could not process this content. Rephrase the request and try again.",
+        "operationLimit": "This request exceeded the model operation limit. Simplify it and try again.",
+        "configuration": "The model service is not configured correctly. Share the diagnostic ID with support.",
+        "stopFailed": "Could not stop yet · still running in the background",
         "generic": "The response stopped unexpectedly. Your message is saved; try again.",
         "diagnostic": "Diagnostic ID: {id}"
       },
@@ -397,6 +403,7 @@
       "unknownSource": "Research source",
       "activity": {
         "thinking": "Thinking…",
+        "reconnecting": "Still running in the background · reconnecting…",
         "searching": "Searching your research…",
         "reading": "Reading relevant sources…",
         "updatingWorkspace": "Updating your workspace…",

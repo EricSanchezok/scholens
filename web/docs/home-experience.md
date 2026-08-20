@@ -15,7 +15,10 @@ the deliberately deferred boundaries.
 - Conversations, papers, projects, and message history are server state owned
   by TanStack Query. Composer input uses React Hook Form and Zod; its form state
   is owned by `HomeWorkspace` so responsive composition changes never discard
-  an unsent draft. Sidebar, picker, and in-progress stream state remain local.
+  an unsent draft. Sidebar and picker state remain local. An in-progress
+  subscriber is local, but accepted generation and its terminal state are
+  Server-owned and survive route changes, backgrounding, reload, and offline
+  intervals.
 - Desktop and mobile share one navigation model, actor state, conversation
   state, and `AppShell` boundary, but use device-appropriate compositions. The
   desktop sidebar is 264 px when expanded and 64 px when collapsed. Phones use
@@ -79,10 +82,14 @@ Home consumes only the public conversation, project, library-paper, and actor
 contracts. It does not import from `client/` and does not define duplicate wire
 DTOs.
 
-Conversation creation and continuation use one standard SSE decoder. The
-stream accepts `start`, the stable-ID `assistant_item_start → delta → complete`
+Conversation creation and continuation request `Prefer: respond-async`. A
+successful `202` receipt identifies the persisted Turn/Response, after which
+the Web app follows its detachable SSE endpoint with `Last-Event-ID`. A legacy
+inline `200` SSE response remains a compatible fallback. Both paths use one
+standard SSE decoder. The stream accepts `start`, the stable-ID
+`assistant_item_start → delta → complete`
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
-`complete`, and `error`. A provisional assistant item is rendered immediately,
+`complete`, `cancelled`, and `error`. A provisional assistant item is rendered immediately,
 then atomically classified as `progress` or `final` by its completion event;
 `response_ready` supplies the complete persisted turn snapshot, and an optional
 `suggestions` event may supplement it before `complete` closes the stream. The
@@ -99,9 +106,12 @@ progress text separates batches. Model reasoning, provider heartbeats, raw tool
 names, arguments, and return payloads are not product UI. Only final items may
 publish references. `response_ready` releases the Composer and completed-answer
 actions without waiting for a GET refetch, conversation title, or suggestion
-sidecar. `complete` and `error` are terminal. The user may abort an
-active stream; the Web app never automatically retries turn or response
-creation. Once
+sidecar. `complete`, `cancelled`, and `error` are terminal. A dropped
+subscription reconnects with bounded backoff and event-ID deduplication; it
+never creates a second Turn or retries model generation. Unmounting or changing
+routes aborts only the local subscription. Stop is a separate authorized Server
+cancellation and the UI discloses when that cancellation cannot yet be
+confirmed. Once
 a turn is accepted into the optimistic transcript, the Composer clears
 immediately and its send action becomes the standard stop-square action for
 the lifetime of that stream. A failure before optimistic acceptance preserves
@@ -109,8 +119,10 @@ the draft; a later stream failure preserves the submitted user message in the
 transcript instead of restoring duplicate text to the Composer.
 Capacity dependency outages are returned as `unavailable`, not as a user quota
 exhaustion. The interface preserves the failed user message, explains that it
-was saved, and retains the public diagnostic ID without exposing provider or
-Redis details.
+was saved, and retains stable failure code, retryability, correlation ID, and
+public diagnostic ID across refresh without exposing provider bodies, raw
+exceptions, or Redis details. Provider timeouts, invalid output, filtering,
+operation limits, and configuration failures have distinct localized copy.
 
 Visible assistant deltas are coalesced to at most one browser animation-frame
 commit, so a fast provider cannot force repeated Markdown layout between
@@ -180,13 +192,13 @@ never overwritten by title generation.
 
 ## State coverage
 
-| Surface      | Deterministic coverage                                                                                                                      |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Home data    | populated, loading/slow, empty, and recoverable error                                                                                       |
-| Navigation   | expanded, collapsed, mobile bottom bar and full-screen history hub, search, active conversation                                             |
-| Context      | entire library and selected project/paper sources, including search                                                                         |
-| Conversation | direct answer, tool activity, timed result, prompt edit/branch, partial failure, refresh-safe retry, references, complete, cancelled, error |
-| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check                                                        |
+| Surface      | Deterministic coverage                                                                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Home data    | populated, loading/slow, empty, and recoverable error                                                                                                                   |
+| Navigation   | expanded, collapsed, mobile bottom bar and full-screen history hub, search, active conversation                                                                         |
+| Context      | entire library and selected project/paper sources, including search                                                                                                     |
+| Conversation | direct answer, tool activity, timed result, prompt edit/branch, partial failure, reconnecting, stop failure, refresh-safe retry, references, complete, cancelled, error |
+| Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check                                                                                    |
 
 The Figma conversation-state frames and Storybook stories map one-to-one:
 
@@ -204,6 +216,9 @@ The Figma conversation-state frames and Storybook stories map one-to-one:
 | Timed direct answer       | `Conversation View / Timed Direct Answer`            |
 | Error                     | `Conversation View / Error`                          |
 | Failed leaf after refresh | `Conversation View / Failed Leaf After Refresh`      |
+| Mobile reconnecting       | `Conversation View / Mobile Reconnecting`            |
+| Mobile reconnecting dark  | `Conversation View / Mobile Reconnecting Dark`       |
+| Stop not confirmed        | `Conversation View / Stop Could Not Be Confirmed`    |
 | Latest answer actions     | `Conversation View / Latest Answer Actions`          |
 | Retried variants          | `Conversation View / Retried Response Versions`      |
 | Prompt branch pager       | `Conversation View / Prompt Branch Pager`            |

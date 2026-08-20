@@ -1,7 +1,7 @@
 """hybrid paper search projections (expand)
 
 Revision ID: f15a6d4273c14bd4ad7ec7780cf765e0
-Revises: 8a8f20189e5c45c5aceb09eb45dd8e87
+Revises: 4d8c9e5ab761
 Create Date: 2026-08-20 12:00:00+00:00
 """
 
@@ -12,7 +12,7 @@ import pgvector.sqlalchemy
 import sqlalchemy as sa
 
 revision: str = "f15a6d4273c14bd4ad7ec7780cf765e0"
-down_revision: str | None = "8a8f20189e5c45c5aceb09eb45dd8e87"
+down_revision: str | None = "4d8c9e5ab761"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -8,15 +8,24 @@ from mcp import types
 from mcp.shared.exceptions import McpError
 
 from scholens_mcp_connector.cli import (
+    MAX_TOOL_WAIT_SECONDS,
     LocalUploadError,
     _local_upload_tool,
     _remote_ingestion_error_with_retry,
+    _remote_tool_timeout,
     local_tool_surface,
     resolve_local_pdf,
     upload_local_paper,
     validate_remote_url,
     validate_upload_url,
 )
+
+
+def test_remote_timeout_covers_the_maximum_tool_wait() -> None:
+    timeout = _remote_tool_timeout()
+    assert timeout.connect == 10
+    assert timeout.read is not None
+    assert timeout.read >= MAX_TOOL_WAIT_SECONDS + 30
 
 
 def _pdf(path: Path) -> Path:
@@ -101,6 +110,10 @@ def test_local_upload_tool_preserves_ingestion_output_and_truthful_hints() -> No
     assert local.annotations is not None
     assert local.annotations.idempotentHint is False
     assert local.inputSchema["properties"]["path"]["description"]
+    assert (
+        local.inputSchema["properties"]["wait_seconds"]["maximum"]
+        == MAX_TOOL_WAIT_SECONDS
+    )
 
 
 def test_read_only_remote_surface_does_not_advertise_local_upload() -> None:
@@ -198,6 +211,7 @@ async def test_local_upload_sends_bytes_and_metadata_but_never_the_path(
                 "source": {"kind": "upload", "upload_id": upload_id},
                 "project_id": project_id,
                 "add_to_library": True,
+                "wait_seconds": 30,
                 "idempotency_key": "import-private-paper-v1",
             },
         ),
@@ -257,6 +271,7 @@ async def test_uncertain_ingestion_returns_exact_last_step_retry(
             "idempotency_key": "stable-import",
             "project_id": None,
             "add_to_library": True,
+            "wait_seconds": 30,
             "source": {"kind": "upload", "upload_id": upload_id},
         },
         "retry_tool": "ingest_paper",

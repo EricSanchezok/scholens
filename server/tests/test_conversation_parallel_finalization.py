@@ -9,7 +9,10 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from app.bootstrap.adapters.conversation_chat import stream_conversation_agent
+from app.bootstrap.adapters.conversation_chat import (
+    DefaultConversationChatGateway,
+    stream_conversation_agent,
+)
 from app.helpers.ai_limits import AILimitExceeded
 from app.modules.conversations.application.chat import (
     ConversationChatScope,
@@ -33,6 +36,8 @@ from app.modules.papers.application.contracts.search import LibraryPaperCollecti
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ConversationScopeType
+from app.shared.domain.enums import JobOperation
+from scholens_job_contracts import JobQueue
 
 
 def _payload(event: str) -> dict[str, Any]:
@@ -228,9 +233,11 @@ class _Conversations:
 class _Executor:
     def __init__(self, chat_data: _ChatData) -> None:
         self.chat_data = chat_data
+        self.job_commands = SimpleNamespace(enqueue=lambda **kwargs: kwargs["command"])
         self.capabilities = SimpleNamespace(
             conversation_chat_data=chat_data,
             conversations=_Conversations(chat_data),
+            job_commands=self.job_commands,
         )
         self.command_calls = 0
 
@@ -278,6 +285,151 @@ def _patch_stream_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "app.bootstrap.adapters.conversation_chat.track_event", lambda *_, **__: None
     )
+
+
+@pytest.mark.asyncio
+async def test_async_acceptance_persists_response_and_outbox_in_one_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = ConversationTurnCreateRequest(
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        user_query="Question",
+        locale="en",
+        time_zone="UTC",
+    )
+    chat_data = _ChatData(request)
+    executor = _Executor(chat_data)
+    enqueued: list[object] = []
+    executor.job_commands.enqueue = lambda **kwargs: enqueued.append(kwargs["command"])
+
+    async def no_op(*_: object, **__: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", no_op
+    )
+    operation = SimpleNamespace(
+        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
+        origin="test",
+        credential=None,
+    )
+    gateway = DefaultConversationChatGateway(
+        executor,
+        _FailingRuntime(asyncio.Event()),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        _SuggestionGenerator(asyncio.Event(), asyncio.Event()),
+    )
+
+    accepted = await gateway.accept(
+        actor=Actor(
+            id=7,
+            email="reader@example.com",
+            status="active",
+            email_verified=True,
+        ),
+        operation=operation,
+        conversation_id=uuid4(),
+        request=request,
+        client_ip="127.0.0.1",
+    )
+
+    assert executor.command_calls == 1
+    assert accepted.response_id == request.response_id
+    assert len(enqueued) == 1
+    command = enqueued[0]
+    assert command.job_id == request.response_id
+    assert command.operation is JobOperation.CONVERSATION_GENERATE
+    assert command.queue is JobQueue.CONVERSATION
+    assert command.payload["response_id"] == str(request.response_id)
+
+
+@pytest.mark.asyncio
+async def test_terminal_acceptance_replay_releases_its_idempotent_capacity_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = ConversationTurnCreateRequest(
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        user_query="Question",
+        locale="en",
+        time_zone="UTC",
+    )
+    chat_data = _ChatData(request)
+    original_start = chat_data.start_turn
+
+    def completed_start(**kwargs: object) -> ConversationTurnStart:
+        started = original_start(**kwargs)
+        return ConversationTurnStart(
+            turn_id=started.turn_id,
+            response=PersistedChatResponse(
+                id=request.response_id,
+                turn_id=request.turn_id,
+                variant_index=1,
+                status="completed",
+                content="Answer",
+                references=None,
+                trace=None,
+                duration_ms=100,
+            ),
+            turn_operation_id=started.turn_operation_id,
+            correlation_id=started.correlation_id,
+            turn_created=False,
+            response_created=False,
+            generation_kind="initial",
+            suggestions=(),
+        )
+
+    chat_data.start_turn = completed_start  # type: ignore[method-assign]
+    executor = _Executor(chat_data)
+    released: list[object] = []
+
+    async def no_op(*_: object, **__: object) -> None:
+        return None
+
+    async def release(lease: object) -> None:
+        released.append(lease)
+
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", no_op
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.conversation_chat.release_concurrency", release
+    )
+    gateway = DefaultConversationChatGateway(
+        executor,
+        _FailingRuntime(asyncio.Event()),
+        SimpleNamespace(),
+        SimpleNamespace(),
+        _SuggestionGenerator(asyncio.Event(), asyncio.Event()),
+    )
+
+    await gateway.accept(
+        actor=Actor(
+            id=7,
+            email="reader@example.com",
+            status="active",
+            email_verified=True,
+        ),
+        operation=SimpleNamespace(
+            trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
+            origin="test",
+            credential=None,
+        ),
+        conversation_id=uuid4(),
+        request=request,
+        client_ip="127.0.0.1",
+    )
+
+    assert len(released) == 1
+    assert released[0].member == str(request.response_id)
 
 
 @pytest.mark.asyncio

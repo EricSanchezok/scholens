@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from app.database.models import (
+    ConversationResponse,
     DurableJob,
     JobDispatch,
     JobDispatchStatus,
@@ -185,6 +186,96 @@ def test_expired_worker_lease_requeues_the_existing_dispatch() -> None:
     assert dispatch.status == JobDispatchStatus.PENDING.value
     assert dispatch.published_at is None
     db.flush.assert_called_once()
+
+
+def test_expired_conversation_generation_fails_instead_of_replaying_the_turn() -> None:
+    from app.bootstrap.adapters.conversation_job_recovery import (
+        fail_interrupted_conversation_response,
+    )
+
+    job = _job(status=JobStatus.RUNNING)
+    job.operation = JobOperation.CONVERSATION_GENERATE.value
+    job.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    dispatch = JobDispatch(
+        job_id=job.id,
+        task_name=(
+            "app.bootstrap.adapters.conversation_worker.generate_conversation_response"
+        ),
+        queue="conversation",
+        kwargs={"request": {"response_id": str(job.id)}},
+        status=JobDispatchStatus.PUBLISHED.value,
+        published_at=datetime.now(UTC),
+    )
+    job.dispatch = dispatch
+    response = MagicMock(spec=ConversationResponse)
+    response.status = "running"
+    response.failure = None
+    response.turn = MagicMock()
+    response.turn.selected_response_id = None
+    result = MagicMock()
+    result.all.return_value = [job]
+    db = MagicMock(spec=Session)
+    db.scalars.return_value = result
+    db.get.return_value = response
+
+    recovered = job_repository.recover_expired_leases(
+        db,
+        limit=10,
+        recover_conversation=fail_interrupted_conversation_response,
+    )
+
+    assert recovered == 1
+    assert job.status == JobStatus.FAILED.value
+    assert job.error_code == "generation_interrupted"
+    assert response.status == "failed"
+    assert response.failure["code"] == "generation_interrupted"
+    assert response.failure["retryable"] is True
+    assert response.turn.selected_response_id is response.id
+    assert dispatch.status == JobDispatchStatus.PUBLISHED.value
+    db.flush.assert_called_once()
+
+
+def test_conversation_redelivery_interrupts_expired_lease_before_claiming() -> None:
+    from app.bootstrap.adapters.conversation_worker import (
+        ConversationGenerationTaskRequest,
+        _claim,
+    )
+
+    request = ConversationGenerationTaskRequest(
+        conversation_id=uuid4(),
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        generation_kind="initial",
+    )
+    interrupted = _job(status=JobStatus.FAILED)
+    interrupted.id = request.response_id
+    interrupted.operation = JobOperation.CONVERSATION_GENERATE.value
+    db = MagicMock(spec=Session)
+    transaction = MagicMock()
+    transaction.__enter__.return_value = db
+    transaction.__exit__.return_value = False
+
+    with (
+        patch(
+            "app.bootstrap.adapters.conversation_worker.SessionLocal",
+        ) as session_factory,
+        patch.object(
+            job_repository,
+            "interrupt_expired_conversation",
+            return_value=interrupted,
+        ) as interrupt,
+        patch.object(job_repository, "claim") as claim,
+        patch(
+            "app.bootstrap.adapters.conversation_worker._release_concurrency"
+        ) as release,
+    ):
+        session_factory.begin.return_value = transaction
+        result = _claim(request)
+
+    assert result is None
+    interrupt.assert_called_once_with(db, job_id=request.response_id)
+    claim.assert_not_called()
+    release.assert_called_once_with(user_id=7, response_id=request.response_id)
 
 
 def test_publish_failure_keeps_dispatch_pending_for_retry() -> None:

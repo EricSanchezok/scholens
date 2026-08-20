@@ -109,6 +109,7 @@ def test_production_doctor_checks_predefined_sqs_queues(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     queue_urls = {
+        "SQS_CONVERSATION_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/conversation",
         "SQS_DOCUMENT_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/document",
         "SQS_RESEARCH_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/research",
         "SQS_MAINTENANCE_QUEUE_URL": "https://sqs.ap-southeast-1.amazonaws.com/123/maintenance",
@@ -127,9 +128,9 @@ def test_production_doctor_checks_predefined_sqs_queues(
     assert result == {
         "reachable": True,
         "transport": "sqs",
-        "queues": ["document", "maintenance", "research"],
+        "queues": ["conversation", "document", "maintenance", "research"],
     }
-    assert client.get_queue_attributes.call_count == 3
+    assert client.get_queue_attributes.call_count == 4
     assert {
         call.kwargs["QueueUrl"] for call in client.get_queue_attributes.call_args_list
     } == set(queue_urls.values())

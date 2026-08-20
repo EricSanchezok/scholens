@@ -471,6 +471,11 @@ def build_jobs(*, db: Session) -> Jobs:
     return Jobs(SqlAlchemyJobsGateway(db))
 
 
+def build_job_commands(*, db: Session) -> SqlAlchemyJobsGateway:
+    """Return the transaction-bound durable enqueue adapter."""
+    return SqlAlchemyJobsGateway(db)
+
+
 def build_job_callback_protection() -> ProtectJobCallback:
     from app.modules.jobs.infrastructure.authentication import (
         SqlAlchemyCallbackNonceStore,

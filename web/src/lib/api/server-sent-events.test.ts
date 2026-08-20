@@ -6,9 +6,9 @@ describe("server-sent event parsing", () => {
   it("preserves event names and joins multiline data", () => {
     expect(
       parseServerSentEventBlock(
-        ': keep-alive\nevent: delta\ndata: {"text":\ndata: "hello"}',
+        ': keep-alive\nid: 42-0\nevent: delta\ndata: {"text":\ndata: "hello"}',
       ),
-    ).toEqual({ event: "delta", data: '{"text":\n"hello"}' });
+    ).toEqual({ event: "delta", id: "42-0", data: '{"text":\n"hello"}' });
   });
 
   it("ignores comments without payload data", () => {

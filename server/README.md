@@ -59,14 +59,14 @@ degrade without OpenAlex; upload, arXiv, and direct PDF URL ingestion bypass it.
 ## Inbound Scholens MCP
 
 `/mcp` is the authenticated Streamable HTTP endpoint for external Agents. Its
-fully authorized catalog exposes 56 stored-knowledge and management tools:
+fully authorized catalog exposes 57 stored-knowledge and management tools:
 paper retrieval, Project and collaborator management, personal Library and
 tags, known-source ingestion and jobs, annotation discussions, and existing
 research outputs. Narrower Access Keys see only their permitted subset.
 Internet paper discovery and research-output generation are intentionally
-absent. The in-product Conversation Agent selects 55 of the same definitions;
-only the remote upload-preparation primitive is excluded because the in-product
-Agent does not own a filesystem.
+absent. The in-product Conversation Agent also selects 57 definitions: it
+excludes the remote upload-preparation primitive because it does not own a
+filesystem and instead includes the internal-only `wait_for_jobs` tool.
 
 Every tool publishes a title, decision-oriented description, described input
 schema, typed output schema, and truthful MCP behavior annotations. Access Keys
@@ -104,16 +104,43 @@ which replaces that primitive with `upload_local_paper` and never sends the
 path or the Access Key to object storage. Upload claims carry a unique lease
 token so an expired worker cannot consume or release a newer claim.
 
+`ingest_paper`, `retry_paper_ingestion`, `ingest_papers`, and `get_job` accept
+`wait_seconds` with a 30-second default and a 240-second maximum. They return
+immediately when every observed job is terminal; otherwise they return the
+latest durable snapshots with machine-readable next-action guidance at the
+deadline. `0` requests an immediate snapshot. Batch ingestion accepts at most
+50 known sources, limits acceptance to four concurrent operations and one
+45-second wall-clock budget, then observes all accepted jobs under one shared
+deadline. The Conversation-only `wait_for_jobs` defaults to 120 seconds and can
+observe up to 50 active jobs in one call. Waiting uses short owner-scoped reads
+with capped backoff and never retains a database transaction between reads.
+
 ## Start the Application
 
-1. Start the jobs service (RabbitMQ + Celery worker) in a separate terminal:
+1. Start local RabbitMQ and Redis:
+
+```bash
+docker compose -f ../jobs/compose.local.yaml up -d rabbitmq redis
+```
+
+2. Start the Server-owned Conversation worker in a separate terminal:
+
+```bash
+uv run --frozen --no-sync celery \
+  --app app.modules.conversations.infrastructure.celery_app worker \
+  --loglevel=info --concurrency=1 --queues=conversation \
+  --without-gossip --without-mingle
+```
+
+3. Start the optional Jobs service when testing uploads or other Jobs-owned
+queues:
 
 ```bash
 cd ../jobs
 uv run --frozen --no-sync start
 ```
 
-2. Start the API server:
+4. Start the API server:
 
 ```bash
 uv run --frozen --no-sync scholens serve
@@ -252,11 +279,21 @@ Conversation mutation; after acceptance, `start` is necessarily the first SSE
 event and any later failure is a persisted terminal response. Reusing a Turn ID
 is idempotent only when every immutable input and its tree position match;
 otherwise the whole acceptance command returns `conversation_turn_conflict`.
+Clients that send `Prefer: respond-async` receive `202` only after the running
+Response, DurableJob, and outbox dispatch commit atomically. The dedicated
+Server-owned `conversation` worker then generates outside the browser request.
+`GET /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events`
+replays the bounded Redis event log from `Last-Event-ID` and reconciles terminal
+state from PostgreSQL; Redis is never canonical. Route changes, mobile
+backgrounding, reload, and connectivity loss therefore detach only a subscriber.
+`POST .../responses/{response_id}/cancel` is the sole user cancellation boundary
+and conditionally cancels both Response and job. The legacy no-Preference path
+retains inline SSE compatibility.
 Selecting the already-active branch is a storage and journal no-op. Consumers
 must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
 `assistant_item_complete`, `activity`, `references`, `response_ready`,
-`suggestions`, `complete`, and `error` events and treat `complete` or `error`
-as terminal. `response_ready` carries the complete persisted turn snapshot and
+`suggestions`, `complete`, `cancelled`, and `error` events and treat those last
+three as terminal. `response_ready` carries the complete persisted turn snapshot and
 unblocks response actions; `suggestions` is an optional late sidecar update.
 Assistant items begin as
 provisional and are authoritatively classified on completion as `progress` or
@@ -293,10 +330,14 @@ stream retains a bounded two-second sidecar tail before `complete`.
 Completed, failed, and cancelled responses persist their total `duration_ms`;
 the latest terminal attempt remains selected, and the active leaf serializes
 all terminal attempts so failure/cancellation and retry survive refresh. Raw
-exception text remains private diagnostics. The ordered trace remains separate
+exception text and provider bodies remain private diagnostics; safe failure
+code, kind, retryability, diagnostic ID, and correlation ID remain on the
+Response. An abandoned conversation-worker lease fails the attempt as
+`generation_interrupted` instead of replaying a potentially non-idempotent
+model/tool sequence. The ordered trace remains separate
 inspectable progress rather than a timing store.
-There is no private delimiter. Clients may abort the request, but must not
-automatically retry this non-idempotent operation.
+There is no private delimiter. Clients may reconnect the event subscription,
+but must not automatically retry this non-idempotent generation.
 
 Paper ingestion has a separate operation-scoped idempotency contract. Staged
 PDF uploads and DOI/arXiv/direct-PDF sources return `202` only after the canonical Library

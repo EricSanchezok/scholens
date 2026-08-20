@@ -1,4 +1,4 @@
-# 0029 — Local hybrid retrieval for stored papers
+# 0030 — Local hybrid retrieval for stored papers
 
 Status: Accepted
 Date: 2026-08-20

@@ -186,7 +186,9 @@ Production requires:
 
 - SQS through `CELERY_BROKER_URL=sqs://` and the three predefined
   `SQS_DOCUMENT_QUEUE_URL`, `SQS_RESEARCH_QUEUE_URL`, and
-  `SQS_MAINTENANCE_QUEUE_URL` values
+  `SQS_MAINTENANCE_QUEUE_URL` values. The shared contract also defines
+  `conversation`, but that queue is owned and consumed only by the Server-image
+  Conversation worker; Jobs must never subscribe to it.
 - the shared cache through strict `CACHE_HOST`, `CACHE_PORT`, `CACHE_USERNAME`,
   `CACHE_PASSWORD`, and `CACHE_TLS=true` fields
 - S3 credentials and bucket names

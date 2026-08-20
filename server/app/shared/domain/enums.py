@@ -57,6 +57,7 @@ class JobStatus(str, Enum):
 
 
 class JobOperation(str, Enum):
+    CONVERSATION_GENERATE = "conversation_generate"
     PDF_PROCESS = "pdf_process"
     PDF_POSTPROCESS = "pdf_postprocess"
     DOCUMENT_REFLOW = "document_reflow"

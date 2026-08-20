@@ -272,6 +272,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         conversation_runtime,
         operation_context_factory,
         application.state.diagnostic_snapshot_recorder,
+        runtime_settings.resolved_cache_url,
     )
     application.state.onboarding_finisher = create_onboarding_finisher()
     application.state.billing_usage_workflow = create_billing_usage_workflow(
@@ -314,6 +315,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             "Content-Disposition",
             "X-Correlation-ID",
             "X-Request-ID",
+            "Preference-Applied",
         ],
         allow_credentials=True,
         max_age=600,

@@ -76,7 +76,7 @@ def _unused_handler(*_args: object, **_kwargs: object) -> ToolOutcome:
     raise AssertionError("the runtime must use ToolDispatcher")
 
 
-def _catalog() -> ToolCatalog[Any]:
+def _catalog(*, allow_repeated_calls: bool = False) -> ToolCatalog[Any]:
     return ToolCatalog(
         [
             ToolDefinition(
@@ -87,6 +87,7 @@ def _catalog() -> ToolCatalog[Any]:
                 required_permission=WorkspacePermission.READ,
                 handler=_unused_handler,
                 activity_subject_field="query",
+                allow_repeated_calls=allow_repeated_calls,
             )
         ],
         [
@@ -205,9 +206,10 @@ async def _events(
     time_zone: str = "Asia/Shanghai",
     scope: ConversationChatScope | None = None,
     connector_set: ResolvedConnectorToolSet | None = None,
+    allow_repeated_calls: bool = False,
 ) -> list[ConversationAgentStreamEvent]:
     runtime = ScholensConversationAgent(
-        catalog=_catalog(),
+        catalog=_catalog(allow_repeated_calls=allow_repeated_calls),
         dispatcher=dispatcher,  # type: ignore[arg-type]
         connector_tools=_ConnectorTools(connector_set),  # type: ignore[arg-type]
         operation_factory=OperationContextFactory(),
@@ -684,6 +686,47 @@ async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
     assert [activity.state for activity in _activities(trace)] == [
         "succeeded",
         "failed",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeatable_tool_call_can_dispatch_with_identical_arguments() -> None:
+    async def repeated_answer(
+        messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        result_count = sum(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        )
+        if result_count < 2:
+            sequence = result_count + 1
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"same topic"}',
+                    tool_call_id=f"wait-{sequence}",
+                )
+            }
+            return
+        yield "Both bounded waits completed."
+
+    dispatcher = _Dispatcher()
+    events = await _events(
+        model=FunctionModel(stream_function=repeated_answer),
+        dispatcher=dispatcher,
+        query="Wait twice when needed",
+        locale="en",
+        time_zone="UTC",
+        allow_repeated_calls=True,
+    )
+
+    assert len(dispatcher.calls) == 2
+    trace = _result(events).trace
+    assert isinstance(trace, ConversationTrace)
+    assert [activity.state for activity in _activities(trace)] == [
+        "succeeded",
+        "succeeded",
     ]
 
 

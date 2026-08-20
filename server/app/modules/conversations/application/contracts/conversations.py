@@ -13,6 +13,7 @@ from app.shared.domain import (
     WorkspacePermission,
     ordered_workspace_permissions,
 )
+from app.shared.domain import FailureKind
 from app.shared.domain.enums import ConversationScopeType
 from pydantic import (
     BaseModel,
@@ -188,6 +189,18 @@ class ConversationToolPermissionsResponse(BaseModel):
     permissions: OrderedWorkspacePermissions
 
 
+class ConversationFailureResponse(BaseModel):
+    """Safe, durable failure metadata available after reconnect or refresh."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1, max_length=80)
+    kind: FailureKind
+    retryable: bool
+    diagnostic_id: UUID | None = None
+    correlation_id: UUID | None = None
+
+
 class ConversationResponseVariantResponse(BaseModel):
     id: UUID
     variant_index: int
@@ -197,6 +210,31 @@ class ConversationResponseVariantResponse(BaseModel):
     artifacts: list[CitationSnapshot] | None
     trace: ConversationTrace | None
     duration_ms: int | None = Field(default=None, ge=0)
+    failure: ConversationFailureResponse | None = None
+
+
+class ConversationGenerationAccepted(BaseModel):
+    """Receipt returned after a durable background generation is accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: UUID
+    turn_id: UUID
+    response_id: UUID
+    variant_index: int = Field(ge=1)
+    generation_kind: Literal["initial", "retry", "branch"]
+    status: Literal["running"] = "running"
+
+
+class ConversationGenerationCancellation(BaseModel):
+    """Authoritative result of an idempotent explicit stop request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: UUID
+    turn_id: UUID
+    response_id: UUID
+    status: Literal["completed", "failed", "cancelled"]
 
 
 class ConversationTurnBranchResponse(BaseModel):

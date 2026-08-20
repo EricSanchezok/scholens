@@ -1,5 +1,6 @@
 """Post-header chat failures use one stable public event."""
 
+import asyncio
 import json
 from unittest.mock import MagicMock
 
@@ -7,6 +8,7 @@ import pytest
 from uuid import UUID
 from app.modules.conversations.infrastructure.chat_streaming import (
     encode_conversation_sse,
+    stream_with_keepalive,
     stream_with_stable_error,
 )
 from app.modules.conversations.application.contracts.turns import (
@@ -27,6 +29,22 @@ def _payload(event: str) -> dict[str, object]:
     value = json.loads(data)
     assert isinstance(value, dict)
     return value
+
+
+@pytest.mark.asyncio
+async def test_keepalive_comment_does_not_cancel_pending_event() -> None:
+    release = asyncio.Event()
+
+    async def delayed_stream():
+        await release.wait()
+        yield "typed-event"
+
+    stream = stream_with_keepalive(delayed_stream(), interval_seconds=0.001)
+    assert await anext(stream) == ": keepalive\n\n"
+    release.set()
+    assert await anext(stream) == "typed-event"
+    with pytest.raises(StopAsyncIteration):
+        await anext(stream)
 
 
 @pytest.mark.asyncio

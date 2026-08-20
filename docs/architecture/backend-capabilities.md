@@ -321,26 +321,29 @@ an external research repository. `create_project` and `get_project` return its
 immutable UUID, `scholens://` URI, Web URL, and ready-to-paste binding Markdown.
 Every later call accepts immutable IDs rather than guessing from titles.
 
-The current shared profile contains 55 tools. With all four workspace
-permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 56
-total. The local stdio bridge hides that transport primitive and supplies
-`upload_local_paper`, so it also presents 56 tools to a fully authorized key;
-narrower keys see only their authorized subset. The surface covers:
+The current shared profile contains 56 tools. With all four workspace
+permissions, the remote HTTP MCP profile adds `prepare_paper_upload`, for 57
+total. The Conversation profile instead adds the internal-only
+`wait_for_jobs`, also for 57 total. The local stdio bridge hides the remote
+upload primitive and supplies `upload_local_paper`, so it presents 57 tools to
+a fully authorized key; narrower keys see only their authorized subset. The
+surface covers:
 
 | Capability                                                   | Remote tools | Boundary                                                 |
 | ------------------------------------------------------------ | -----------: | -------------------------------------------------------- |
 | Stored paper search, bounded content, citation, and download |            7 | No internet discovery                                    |
 | Projects, papers, membership, invitations, and ownership     |           19 | Resource authorization after coarse Access Key filtering |
 | Personal Library, sharing, and tags                          |           14 | Library state remains user-owned                         |
-| Known-source ingestion, upload preparation, and jobs         |            6 | Asynchronous acceptance and stable idempotency           |
+| Known-source ingestion, upload preparation, and jobs         |            7 | Bounded waiting, batch acceptance, stable idempotency     |
 | Annotation threads and comments                              |            8 | Personal or one-Project audience                         |
 | Existing research outputs                                    |            2 | Read-only; no generation tool                            |
 
 Agent-facing catalog validation requires a human-readable title, typed output,
 behavior annotations, decision-oriented description, and a description on
 every top-level input field. Descriptions state when to use a tool, when not to
-use it, what it returns, and the intended next step. Query, command, and
-external-I/O workflow kinds remain explicit. MCP `readOnlyHint`,
+use it, what it returns, and the intended next step. Synchronous and asynchronous
+query, command, and external-I/O workflow kinds remain explicit internally;
+asynchronous reads remain public MCP queries. MCP `readOnlyHint`,
 `destructiveHint`, `idempotentHint`, and `openWorldHint` reflect actual behavior
 rather than transport method names.
 
@@ -416,7 +419,10 @@ rejected and a turn cannot complete without visible final content.
 
 The public Conversation stream exposes item lifecycle events, sanitized
 activity, final-only server-generated references, a persisted `response_ready`
-snapshot, an optional turn-suggestion update, and one terminal event. Raw
+snapshot, an optional turn-suggestion update, and one terminal event. Accepted
+generations run in the dedicated Server-owned Conversation worker. A bounded
+Redis Stream is only a replayable delivery log; PostgreSQL remains authoritative
+for running and terminal Response state. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 
@@ -431,10 +437,14 @@ variants and stale suggestions; edited prompt siblings and their selected
 descendant suffixes remain durable. Agent history contains selected ancestors
 only. Branch creation and selection restore the turn-owned paper context after
 current authorization, and one response may run across the whole Conversation.
-Completed, failed, and cancelled responses persist total duration separately
+Running, completed, failed, and cancelled active-leaf responses are serialized
+so a new browser session can recover an in-flight subscription. Terminal
+responses persist total duration separately
 from their ordered worklog trace. The latest terminal attempt remains selected,
-and the active leaf exposes terminal attempts so safe failure/cancellation state
-and retry survive refresh without publishing raw exceptions.
+and the active leaf exposes terminal attempts so failure/cancellation state and
+retry survive refresh. Stable failure code, kind, retryability, diagnostic ID,
+and correlation ID are product metadata; raw exceptions and provider bodies are
+not.
 
 Reader selections and annotation threads enter that same aggregate through
 typed turn contexts. Personal Reader conversations are paper-scoped. Reader
@@ -491,10 +501,16 @@ verification, and practical use. A retry reuses the turn-owned result.
 Conversation generation has one externally observable acceptance boundary.
 Quota, access, immutable context resolution, rate limiting, and concurrency
 acquisition run before product writes. The following short command atomically
-creates the Turn/Response and selected path; for prompt branches it also restores
-the source turn's paper-context snapshot. A command conflict releases the lease.
-After commit, the first streamed event is `start`, so every later error belongs
-to the persisted active leaf and remains safely retryable after refresh.
+creates the Turn/Response, selected path, DurableJob, and outbox dispatch; for
+prompt branches it also restores the source turn's paper-context snapshot. A
+command conflict releases the lease. `Prefer: respond-async` returns a `202`
+receipt after commit, and subscribers consume `start` and later events from the
+response event endpoint. Disconnecting a subscriber never cancels generation;
+only the authorized cancellation command transitions the running Response and
+job. Event subscriptions may reconnect from `Last-Event-ID`, but generation is
+never automatically replayed. If a worker lease expires, the Response fails as
+`generation_interrupted` because replaying a partially executed model/tool
+sequence is not generally idempotent.
 
 `ToolDispatcher` validates arguments and executes each tool through a fresh
 `ApplicationExecutor` operation. Query tools never commit. Replay-safe command
@@ -506,6 +522,26 @@ replay row. Conversation write invocation identities include conversation,
 turn, tool-call arguments, and tool name; MCP identities use the authenticated
 token session and JSON-RPC request identity. Replays return the persisted
 result, and conflicting argument reuse returns `tool_invocation_conflict`.
+
+Durable-job tools use bounded server-side observation instead of model-driven
+busy polling. Single ingestion, retry, exact job lookup, and bounded batch
+ingestion accept `wait_seconds` with a 30-second default, `0` for an immediate
+snapshot, and a 240-second maximum. Terminal jobs return immediately; a timeout
+returns the latest owner-authorized snapshot, elapsed time, a stable outcome,
+and machine-readable next-action guidance. Batch ingestion accepts at most 50
+known sources with four-way concurrency and a 45-second acceptance budget,
+then queries every accepted job together under one deadline. The Conversation
+profile alone exposes `wait_for_jobs`, which observes up to 50 jobs with a
+120-second default and may be repeated after a timeout. The MCP profile uses the
+waitable submission and `get_job` contracts but does not expose this internal
+orchestration tool.
+
+The waiter opens one short query per capped-backoff observation and one final
+deadline snapshot; it never holds a database transaction or connection while
+sleeping. Conversation SSE emits comment-only keepalives during silent waits.
+Client cancellation stops observation without cancelling the already-durable
+job. Agent request or tool-call budget exhaustion has the stable
+`agent_orchestration_limit_exceeded` code rather than a generic provider error.
 
 The inbound Streamable HTTP MCP endpoint is `/mcp`, outside the public OpenAPI
 surface. Every request requires a Scholens AccessKey in the Bearer header.
