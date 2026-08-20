@@ -13,7 +13,7 @@ from celery import Task
 from pydantic import BaseModel, ConfigDict
 from redis import Redis
 from redis.exceptions import RedisError
-from scholens_observability import add_counter, build_snapshot, log_event
+from scholens_observability import add_counter, bind_context, build_snapshot, log_event
 
 from app.database.database import SessionLocal
 from app.bootstrap.adapters.conversation_job_recovery import (
@@ -270,36 +270,51 @@ async def _run_generation(
         ),
         credential=None,
     )
-    source = await runtime.chat.resume(
-        actor=claimed.actor,
-        operation=operation,
-        conversation_id=request.conversation_id,
-        turn_id=request.turn_id,
-        response_id=request.response_id,
-        generation_kind=request.generation_kind,
-    )
-    store = ConversationEventStore(runtime.settings.resolved_cache_url)
-
-    async def drain() -> None:
-        async for _frame in store.publish(
+    with bind_context(
+        service="scholens-conversation-worker",
+        environment=runtime.settings.environment,
+        release=runtime.settings.release_sha,
+        operation_id=str(operation.trace.operation_id),
+        correlation_id=str(operation.trace.correlation_id),
+        causation_id=str(operation.trace.causation_id),
+        actor_id=str(claimed.actor.id),
+        origin=operation.origin.kind,
+        component="conversation_generation",
+        stage="conversation_stream",
+        conversation_id=str(request.conversation_id),
+        turn_id=str(request.turn_id),
+        job_id=str(request.response_id),
+    ):
+        source = await runtime.chat.resume(
+            actor=claimed.actor,
+            operation=operation,
+            conversation_id=request.conversation_id,
+            turn_id=request.turn_id,
             response_id=request.response_id,
-            source=source,
-        ):
-            pass
+            generation_kind=request.generation_kind,
+        )
+        store = ConversationEventStore(runtime.settings.resolved_cache_url)
 
-    generation = asyncio.create_task(
-        drain(),
-        name=f"conversation-generation:{request.response_id}",
-    )
-    monitor = asyncio.create_task(
-        _monitor(request.response_id, generation),
-        name=f"conversation-generation-monitor:{request.response_id}",
-    )
-    try:
-        await generation
-    finally:
-        monitor.cancel()
-        await asyncio.gather(monitor, return_exceptions=True)
+        async def drain() -> None:
+            async for _frame in store.publish(
+                response_id=request.response_id,
+                source=source,
+            ):
+                pass
+
+        generation = asyncio.create_task(
+            drain(),
+            name=f"conversation-generation:{request.response_id}",
+        )
+        monitor = asyncio.create_task(
+            _monitor(request.response_id, generation),
+            name=f"conversation-generation-monitor:{request.response_id}",
+        )
+        try:
+            await generation
+        finally:
+            monitor.cancel()
+            await asyncio.gather(monitor, return_exceptions=True)
 
 
 def generate_conversation_response(

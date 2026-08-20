@@ -111,6 +111,16 @@ export const DesktopExpanded: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("complementary")).toBeVisible();
+    const search = canvas.getByRole("button", {
+      name: "Search all papers (⌘K)",
+    });
+    await expect(search).toBeVisible();
+    await expect(search).toHaveClass("size-8");
+    await expect(
+      within(
+        canvas.getByRole("navigation", { name: "Open navigation" }),
+      ).queryByRole("button", { name: "Search all papers (⌘K)" }),
+    ).not.toBeInTheDocument();
     await expect(canvas.getByRole("link", { name: "Library" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -154,6 +164,11 @@ export const DesktopCollapsed: Story = {
     );
     await expect(
       canvas.getByRole("button", { name: "Expand sidebar" }),
+    ).toBeVisible();
+    await expect(
+      within(
+        canvas.getByRole("navigation", { name: "Open navigation" }),
+      ).getByRole("button", { name: "Search all papers (⌘K)" }),
     ).toBeVisible();
     await expect(sidebar).toHaveStyle({ width: "64px" });
     await expect(getComputedStyle(sidebar).transitionProperty).not.toContain(

@@ -303,7 +303,7 @@ Resources:
       UserId: scholens-api
       UserName: scholens-api
       Engine: valkey
-      AccessString: on ~scholens:rate:* ~scholens:concurrency:* ~scholens:translation:* +@all -@dangerous
+      AccessString: on ~scholens:rate:* ~scholens:concurrency:* ~scholens:translation:* ~scholens:conversation-events:* +@all -@dangerous
       AuthenticationMode:
         Type: password
         Passwords:
