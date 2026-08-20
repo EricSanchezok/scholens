@@ -1061,6 +1061,7 @@ def test_python_runtime_images_keep_their_hardened_runtime_contract() -> None:
         r"ARG PYTHON_IMAGE=python:3\.12\.\d+-alpine3\.23@sha256:[0-9a-f]{64}",
         server,
     )
+    assert server.count('"sqlite-libs>=3.53.2-r0"') == 2
     assert re.search(
         r"ARG RUNTIME_IMAGE=gcr\.io/distroless/python3-debian12:nonroot"
         r"@sha256:[0-9a-f]{64}",

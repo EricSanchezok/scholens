@@ -9,6 +9,7 @@ ARG SANCHEZCLOUD_IDENTITY_REVISION
 ARG SANCHEZCLOUD_IDENTITY_ARCHIVE=https://api.github.com/repos/EricSanchezok/sanchezcloud-identity/tarball
 
 RUN apk add --no-cache build-base ca-certificates curl curl-dev \
+        "sqlite-libs>=3.53.2-r0" \
     && python -m pip install --no-cache-dir uv==0.9.2
 
 WORKDIR /app
@@ -42,7 +43,7 @@ RUN uv pip install --no-deps /app
 
 FROM ${PYTHON_IMAGE} AS runtime
 
-RUN apk add --no-cache ca-certificates libcurl \
+RUN apk add --no-cache ca-certificates libcurl "sqlite-libs>=3.53.2-r0" \
     && adduser -D -u 1000 scholens
 
 WORKDIR /app
