@@ -348,6 +348,8 @@ jobs:
             --env SCHOLENS_AI_DEEPSEEK_API_KEY=ci-not-a-real-key \
             scholens-jobs:ci python -c \
             "import os, ssl, grpc, onnxruntime, pycurl, pymupdf, pymupdf4llm, src.tasks; assert os.getuid() != 0; assert not os.path.exists('/bin/sh'); assert not os.path.exists('/usr/bin/perl'); assert not os.path.exists('/usr/local/bin/pip'); assert ssl.create_default_context().get_ca_certs()"
+          docker run --rm scholens-jobs:ci python -c \
+            "from scholens_ai import LocalOnnxTextEmbedder; vector = LocalOnnxTextEmbedder().embed_query('code world model'); assert len(vector) == 384; assert 0.99 < sum(value * value for value in vector) < 1.01"
           docker run --rm scholens-jobs:ci celery --version
       - name: Build canonical Web image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6

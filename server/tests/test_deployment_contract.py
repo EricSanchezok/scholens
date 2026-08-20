@@ -1074,6 +1074,7 @@ def test_python_runtime_images_keep_their_hardened_runtime_contract() -> None:
     assert "not os.path.exists('/usr/bin/perl')" in workflow
     assert "not os.path.exists('/bin/sh')" in workflow
     assert "not os.path.exists('/usr/local/bin/pip')" in workflow
+    assert "LocalOnnxTextEmbedder().embed_query('code world model')" in workflow
 
 
 def test_jobs_builder_consumes_the_pinned_embedding_model_revision() -> None:
@@ -1086,6 +1087,14 @@ def test_jobs_builder_consumes_the_pinned_embedding_model_revision() -> None:
     download_command = "-m scholens_ai.download_embeddings"
     assert revision_arg in builder
     assert builder.index(revision_arg) < builder.index(download_command)
+
+
+def test_shared_embedding_runtime_stays_on_the_hardened_onnx_version() -> None:
+    pyproject = (ROOT / "packages" / "scholens_ai" / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"onnxruntime==1.23.0"' in pyproject
 
 
 def test_read_only_python_tasks_initialize_writable_temporary_storage() -> None:
