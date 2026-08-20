@@ -48,6 +48,33 @@ async def test_keepalive_comment_does_not_cancel_pending_event() -> None:
 
 
 @pytest.mark.asyncio
+async def test_keepalive_drives_the_source_from_one_task_for_its_whole_lifecycle() -> (
+    None
+):
+    release = asyncio.Event()
+    source_task: asyncio.Task[object] | None = None
+
+    async def task_bound_stream():
+        nonlocal source_task
+        source_task = asyncio.current_task()
+        try:
+            yield "first"
+            await release.wait()
+            assert asyncio.current_task() is source_task
+            yield "second"
+        finally:
+            assert asyncio.current_task() is source_task
+
+    stream = stream_with_keepalive(task_bound_stream(), interval_seconds=0.001)
+    assert await anext(stream) == "first"
+    assert await anext(stream) == ": keepalive\n\n"
+    release.set()
+    assert await anext(stream) == "second"
+    with pytest.raises(StopAsyncIteration):
+        await anext(stream)
+
+
+@pytest.mark.asyncio
 async def test_stream_failure_is_redacted_and_recorded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

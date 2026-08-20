@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from collections.abc import AsyncIterator, Callable
 from typing import cast
 from uuid import UUID, uuid4
@@ -25,6 +26,12 @@ from scholens_observability import (
 
 logger = logging.getLogger(__name__)
 _SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0
+_STREAM_END = object()
+
+
+@dataclass(frozen=True, slots=True)
+class _StreamFailure:
+    error: BaseException
 
 
 def encode_conversation_sse(event: ConversationStreamEvent) -> str:
@@ -44,27 +51,50 @@ async def stream_with_keepalive(
     """Emit SSE comments while awaiting the next typed event without cancelling it."""
     if interval_seconds <= 0:
         raise ValueError("SSE keepalive interval must be positive")
-    iterator = source.__aiter__()
-    pending: asyncio.Future[str] | None = asyncio.ensure_future(anext(iterator))
+
+    queue: asyncio.Queue[object] = asyncio.Queue(maxsize=1)
+
+    async def pump() -> None:
+        iterator = source.__aiter__()
+        outcome: object = _STREAM_END
+        try:
+            async for event in iterator:
+                await queue.put(event)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as error:
+            outcome = _StreamFailure(error)
+        finally:
+            close = getattr(iterator, "aclose", None)
+            if close is not None:
+                try:
+                    await close()
+                except asyncio.CancelledError:
+                    raise
+                except BaseException as error:
+                    if outcome is _STREAM_END:
+                        outcome = _StreamFailure(error)
+        await queue.put(outcome)
+
+    producer = asyncio.create_task(pump(), name="conversation-stream-pump")
     try:
-        while pending is not None:
-            done, _ = await asyncio.wait({pending}, timeout=interval_seconds)
-            if not done:
+        while True:
+            try:
+                async with asyncio.timeout(interval_seconds):
+                    item = await queue.get()
+            except TimeoutError:
                 yield ": keepalive\n\n"
                 continue
-            try:
-                event = pending.result()
-            except StopAsyncIteration:
+
+            if item is _STREAM_END:
                 return
-            yield event
-            pending = asyncio.ensure_future(anext(iterator))
+            if isinstance(item, _StreamFailure):
+                raise item.error
+            yield cast(str, item)
     finally:
-        if pending is not None and not pending.done():
-            pending.cancel()
-            await asyncio.gather(pending, return_exceptions=True)
-        close = getattr(iterator, "aclose", None)
-        if close is not None:
-            await close()
+        if not producer.done():
+            producer.cancel()
+        await asyncio.gather(producer, return_exceptions=True)
 
 
 def _decode_conversation_sse(event: str) -> dict[str, object] | None:
