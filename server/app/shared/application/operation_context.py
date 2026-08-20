@@ -387,6 +387,12 @@ def _validate_initiator(
             if is_root
             else {OperationInitiator.AGENT, OperationInitiator.SYSTEM}
         )
+    elif isinstance(origin, JobOrigin):
+        allowed = (
+            {OperationInitiator.SYSTEM}
+            if is_root
+            else {OperationInitiator.AGENT, OperationInitiator.SYSTEM}
+        )
     elif isinstance(origin, CliOrigin):
         allowed = {OperationInitiator.USER, OperationInitiator.SYSTEM}
     else:
