@@ -760,11 +760,11 @@ export const MobileStreamingLongTokenOverflow: Story = {
     const messageContent = canvas
       .getByText(/WhereDoesKnowledgeLive/)
       .closest("[data-message-content]");
-    if (messageContent) {
-      await expect(messageContent.scrollWidth).toBeLessThanOrEqual(
-        messageContent.clientWidth + 1,
-      );
-    }
+    await expect(messageContent).not.toBeNull();
+    if (!messageContent) return;
+    await expect(messageContent.scrollWidth).toBeLessThanOrEqual(
+      messageContent.clientWidth + 1,
+    );
   },
 };
 

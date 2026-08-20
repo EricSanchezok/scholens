@@ -363,7 +363,7 @@ function ReflowBlock({
             block.kind === "equation" &&
               "my-1 max-w-full text-[0.98rem] leading-relaxed",
             block.kind === "caption" &&
-              "text-secondary mx-auto max-w-[var(--layout-reading-caption)] px-3 text-center font-sans text-sm leading-6",
+              "text-secondary mx-auto max-w-[60rem] px-3 text-center font-sans text-sm leading-6",
           )}
         >
           <span className="sr-only">{labels.original}</span>

@@ -29,10 +29,6 @@
       "$type": "dimension",
       "$value": { "value": 1104, "unit": "px" }
     },
-    "reading-caption": {
-      "$type": "dimension",
-      "$value": { "value": 960, "unit": "px" }
-    },
     "conversation-lane": {
       "$type": "dimension",
       "$value": { "value": 832, "unit": "px" }

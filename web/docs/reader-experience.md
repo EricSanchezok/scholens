@@ -175,11 +175,12 @@ neutral selection or warning feedback colors.
 
 The document toolbar exposes an explicit PDF/AI reflow switch. Reflow is a
 continuous, single-column academic Markdown reading surface with a bounded,
-tokenized measure — the article column caps at `layout.reading-column`
-(1104 px) and figure captions at `layout.reading-caption` (960 px), both
-defined in `src/design-system/tokens/dimensions.json` — plus semantic block
-types, overflow-contained tables and code, authorized lazy image assets,
-Light and Dark support, and mobile safe-area padding. Wide display equations
+tokenized measure — the article column caps at `layout.reading-column`, while
+figure captions remain intentionally narrower within the Reader feature. The
+shared measure is defined in `src/design-system/tokens/dimensions.json`; the
+surface also provides semantic block types, overflow-contained tables and code,
+authorized lazy image assets, Light and Dark support, and mobile safe-area
+padding. Wide display equations
 scroll horizontally inside their block, and tall equation glyphs are never
 vertically clipped by that scroll container. Reflow does not preserve PDF page
 whitespace or restart layout at page boundaries. Every block retains ordered
