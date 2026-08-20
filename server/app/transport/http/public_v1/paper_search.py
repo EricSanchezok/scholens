@@ -45,10 +45,11 @@ async def search_papers_endpoint(
         "knowledge_base_search",
         user_id=str(current_user.id),
         properties={
-            "query": request.query,
             "total": results.total,
             "limit": request.limit,
             "has_cursor": request.cursor is not None,
+            "query_length": len(request.query),
+            "search_mode": results.search_mode,
         },
     )
     return results

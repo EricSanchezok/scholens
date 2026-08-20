@@ -20,7 +20,6 @@ export const projectKeys = {
       "papers",
       state.paperQuery,
       state.paperSort,
-      state.paperCursor,
     ] as const,
   outputs: (projectId: string, state: ProjectDetailSearchState) =>
     [

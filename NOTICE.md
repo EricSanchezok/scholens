@@ -10,3 +10,8 @@ Copyright in the upstream work and in later modifications remains with the
 respective contributors recorded in the repository history. This notice does
 not imply affiliation with, sponsorship by, or endorsement from the upstream
 project or the owners of its names and trademarks.
+
+Production Server and Jobs images include the
+[`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small)
+embedding model at the repository revision recorded in their Dockerfiles. The
+model is distributed by its respective contributors under the MIT License.

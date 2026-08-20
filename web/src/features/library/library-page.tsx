@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { AddIcon } from "@/design-system/icons/semantic-icons";
 import type { Route } from "next";
 import dynamic from "next/dynamic";
@@ -24,6 +29,10 @@ import { useAuthSession, type Actor } from "@/features/authentication";
 import { conversationQueries } from "@/features/conversation";
 import { integrationQueries } from "@/features/integrations";
 import { useSettingsNavigation } from "@/features/settings";
+import {
+  PaperSearchResults,
+  paperSearchQueries,
+} from "@/features/paper-search";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 import {
@@ -113,6 +122,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     () => parseLibrarySearch(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
+  const paperSearchActive = parsed.query.trim().length >= 2;
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -176,15 +186,24 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     ...libraryQueries.tags(),
     enabled: tagsRequested,
   });
-  const papersQuery = useQuery({
+  const papersQuery = useInfiniteQuery({
     ...libraryQueries.papers({
-      cursor: parsed.cursor,
       query: parsed.query,
       sort: parsed.sort,
       tagIds: parsed.tagIds,
     }),
-    enabled: parsed.tab === "papers",
+    enabled: parsed.tab === "papers" && !paperSearchActive,
   });
+  const paperSearchQuery = useInfiniteQuery({
+    ...paperSearchQueries.infiniteResults(parsed.query, {
+      kind: "personal_library",
+    }),
+    enabled: parsed.tab === "papers" && paperSearchActive,
+  });
+  const paperSearchResults = React.useMemo(
+    () => paperSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [paperSearchQuery.data?.pages],
+  );
   const outputsQuery = useQuery({
     ...libraryQueries.outputs({
       cursor: parsed.cursor,
@@ -195,11 +214,19 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     enabled: parsed.tab === "outputs",
   });
   usePrimaryContentReady(
-    parsed.tab === "papers" ? papersQuery.isSuccess : outputsQuery.isSuccess,
+    parsed.tab === "papers"
+      ? paperSearchActive
+        ? paperSearchQuery.isSuccess
+        : papersQuery.isSuccess
+      : outputsQuery.isSuccess,
   );
   const zoteroStatus = useQuery({
     ...zoteroQueries.status(),
-    enabled: zoteroOpen || papersQuery.isSuccess || outputsQuery.isSuccess,
+    enabled:
+      zoteroOpen ||
+      papersQuery.isSuccess ||
+      paperSearchQuery.isSuccess ||
+      outputsQuery.isSuccess,
   });
   const zoteroOperationId =
     zoteroOperation?.id ??
@@ -207,9 +234,18 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       ? (zoteroStatus.data.active_operation_id ?? undefined)
       : undefined);
   const paperEntries = React.useMemo(
-    () => papersQuery.data?.items ?? [],
-    [papersQuery.data?.items],
+    () => papersQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [papersQuery.data?.pages],
   );
+  const paperList = React.useMemo(() => {
+    const lastPage = papersQuery.data?.pages.at(-1);
+    if (!lastPage) return undefined;
+    return {
+      ...lastPage,
+      items: paperEntries,
+      previous_cursor: null,
+    };
+  }, [paperEntries, papersQuery.data?.pages]);
   const ingestion = usePaperIngestions(paperEntries, {
     onWillIngest: () => {
       if (parsed.cursor) replaceSearch({ cursor: undefined });
@@ -432,12 +468,14 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
           <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
             <PapersView
               attentionCount={summaryQuery.data?.attention_count ?? 0}
-              key={`${parsed.query}:${parsed.sort}:${parsed.cursor ?? ""}:${parsed.tagIds.join(",")}`}
-              data={papersQuery.data}
+              key={`${parsed.query}:${parsed.sort}:${parsed.tagIds.join(",")}`}
+              data={paperList}
               error={papersQuery.error}
               ingestions={ingestion.rows}
               ingestionCount={summaryQuery.data?.ingestion_count ?? 0}
               loading={papersQuery.isPending}
+              loadingMore={papersQuery.isFetchingNextPage}
+              hasMore={papersQuery.hasNextPage}
               onCreateTag={(name) => createTagMutation.mutateAsync(name)}
               onDeleteTag={(tagId) => deleteTagMutation.mutateAsync(tagId)}
               onRenameTag={(tagId, name) =>
@@ -452,12 +490,13 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               onCancelIngestion={(id) =>
                 void runAction(() => ingestion.cancel(id))
               }
-              onNext={(cursor) => replaceSearch({ cursor })}
+              onLoadMore={() =>
+                papersQuery.fetchNextPage().then(() => undefined)
+              }
               onNeedTags={() => setTagsRequested(true)}
               onOpenDocument={(documentId) =>
                 router.push(`/reader/${documentId}` as Route)
               }
-              onPrevious={(cursor) => replaceSearch({ cursor })}
               onRemove={(documentIds) =>
                 runAction(() => removeMutation.mutateAsync(documentIds))
               }
@@ -488,6 +527,22 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                   }
                   value={parsed.query}
                 />
+              }
+              searchResults={
+                paperSearchActive ? (
+                  <PaperSearchResults
+                    error={paperSearchQuery.error}
+                    hasMore={paperSearchQuery.hasNextPage}
+                    loading={paperSearchQuery.isPending}
+                    loadingMore={paperSearchQuery.isFetchingNextPage}
+                    onLoadMore={() =>
+                      paperSearchQuery.fetchNextPage().then(() => undefined)
+                    }
+                    onRetry={() => void paperSearchQuery.refetch()}
+                    papers={paperSearchResults}
+                    total={paperSearchQuery.data?.pages[0]?.total}
+                  />
+                ) : undefined
               }
               paperCount={summaryQuery.data?.paper_count ?? 0}
               sort={parsed.sort as PaperSort}

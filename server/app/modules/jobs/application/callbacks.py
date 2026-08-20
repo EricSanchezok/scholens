@@ -72,6 +72,9 @@ class PdfPostprocessResolution:
     publisher: str | None = None
     publish_date: str | None = None
     field_provenance: dict[str, JsonValue] | None = None
+    embedding: list[float] | None = None
+    embedding_model_revision: str | None = None
+    embedding_source_digest: str | None = None
 
 
 @runtime_checkable

@@ -42,6 +42,10 @@ and the shared Conversation feature.
   probes the Server's collaborative-annotation impact contract; if Project
   threads exist, the member must confirm the reported thread and comment
   counts before the destructive retry is sent.
+- Project paper browsing uses the same dense rows, progressive continuation,
+  desktop preview, and hybrid retrieval language as Library, with the search
+  collection restricted to the authorized Project UUID. It does not load the
+  full Project into browser memory or implement a route-local search index.
 - Outputs use the canonical Research Item kinds. Types without a dedicated
   viewer are truthful list rows rather than fake links.
 - Archive is not exposed because there is no archived-project collection or
@@ -59,9 +63,11 @@ and the shared Conversation feature.
   mismatch, treats expired/revoked/authority failures as terminal, and exposes
   retry only for connection or service failure.
 
-List search, sort, and cursor live in the URL. Detail view, selected
+List search and sort live in the URL. Detail view, selected
 conversation, chat disclosure, and namespaced paper/output filters also live in
-the URL. `panel=chat` means the responsive Project conversation is open;
+the URL. Project and output lists retain opaque URL cursors; Project-paper
+continuations live in TanStack Query and append in place. `panel=chat` means the
+responsive Project conversation is open;
 omitting `panel` fully collapses it without deleting `conversation`. Closing the
 panel keeps the mounted draft and selected conversation. Server resources use
 TanStack Query; forms use React Hook Form and Zod; dialog and menu disclosure
@@ -112,8 +118,11 @@ independent action target and is always discoverable on touch layouts.
   queries.
 - Project activity is the latest relevant Project metadata, paper membership,
   current-member conversation, or visible Project output timestamp.
-- `GET /api/v1/projects/{projectId}/papers` supports search, sort, pagination,
-  and exposes the Project relationship's `added_at`.
+- `GET /api/v1/projects/{projectId}/papers` supports browse sorting and keyset
+  pagination and exposes the Project relationship's `added_at`. Queries of two
+  or more characters use `POST /api/v1/search/papers` with a Project selection
+  collection so fuzzy, full-text, and semantic ranking stay shared with
+  Library.
 - `GET /api/v1/projects/{projectId}/outputs` applies the same search, kind,
   sort, visibility, and cursor semantics as Library Outputs while restricting
   the collection to one authorized Project.

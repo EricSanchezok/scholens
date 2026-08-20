@@ -33,7 +33,11 @@ The PDF worker follows one explicit, local-first pipeline:
    (`mineru-result.zip`).
 5. Extract metadata with DeepSeek unless the caller supplied authoritative
    metadata, as Zotero imports do.
-6. Send the result and token usage to Server through an HMAC-signed webhook.
+6. Build the bounded title/keywords/summary/abstract semantic projection with
+   the pinned local multilingual embedding model. Embedding failure is
+   non-fatal and leaves lexical search available.
+7. Send the result, optional versioned embedding, and token usage to Server
+   through an HMAC-signed webhook.
 
 The worker also sends a signed stage projection and heartbeat at bounded
 intervals. Public progress is limited to `queued`, `parsing`, `extracting`,
@@ -43,6 +47,10 @@ boundaries. Revocation uses `terminate=False`: pending work can be skipped, and
 running work exits cooperatively without killing a worker process. Soft and hard
 task limits bound the complete workflow so a lost provider response cannot
 leave a Library row processing forever.
+
+The production image stores the pinned search model at
+`SCHOLENS_EMBEDDING_MODEL_PATH`. It never downloads a model at task execution
+time and never sends the semantic projection to a remote provider.
 
 Local engines (`pymupdf4llm`, `markitdown`) are CPU-only, run in-process with
 a bounded time budget per engine, and never send document content off-host.

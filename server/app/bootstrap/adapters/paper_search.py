@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import logging
+from typing import Literal
+import unicodedata
 from uuid import UUID
+
+from scholens_ai import EMBEDDING_MODEL_REVISION, try_local_embedder
 
 from app.helpers.s3 import s3_service
 from app.modules.papers.application.contracts.search import (
@@ -20,6 +25,7 @@ from app.modules.papers.application.contracts.search import (
 from app.modules.papers.infrastructure.models import (
     Document,
     DocumentPassage,
+    DocumentSearchEmbedding,
     LibraryPaper,
 )
 from app.modules.papers.infrastructure.access import accessible_document_condition
@@ -29,8 +35,12 @@ from app.modules.projects.infrastructure.models import (
     ProjectPaper,
 )
 from app.shared.application import Actor
-from sqlalchemy import ColumnElement, and_, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session, aliased
+
+logger = logging.getLogger(__name__)
+
+RetrievalMode = Literal["exact", "full_text", "fuzzy", "semantic"]
 
 
 def _visibility_condition(
@@ -98,9 +108,10 @@ def _matching_fields(document: Document, query: str, *, has_passage: bool) -> li
 
 
 def _fallback_snippet(document: Document, query: str) -> PaperSearchSnippet | None:
-    if not document.raw_content:
+    content = document.raw_content or document.abstract or document.summary
+    if not content:
         return None
-    lines = document.raw_content.splitlines()
+    lines = content.splitlines()
     needle = query.casefold()
     for index, line in enumerate(lines):
         if needle in line.casefold():
@@ -111,7 +122,12 @@ def _fallback_snippet(document: Document, query: str) -> PaperSearchSnippet | No
                 start_line=start + 1,
                 end_line=end,
             )
-    return None
+    return PaperSearchSnippet(text=content[:1_200])
+
+
+def _compact_query(query: str) -> str:
+    normalized = unicodedata.normalize("NFKC", query).casefold()
+    return "".join(character for character in normalized if character.isalnum())
 
 
 def _matching_passages(
@@ -165,10 +181,48 @@ def _matching_passages(
 
 
 class PostgresPaperSearch:
-    """Replaceable FTS implementation behind the PaperSearchPort."""
+    """Authorization-first exact, fuzzy, full-text, and semantic retrieval."""
 
-    def __init__(self, db: Session) -> None:
+    _CANDIDATE_LIMIT = 500
+    _RRF_K = 60
+
+    def __init__(self, db: Session, *, semantic: bool = True) -> None:
         self._db = db
+        self._semantic = semantic
+
+    def _filters(
+        self,
+        *,
+        actor: Actor,
+        request: PaperSearchQuery,
+    ) -> list[ColumnElement[bool]]:
+        conditions = [_visibility_condition(actor=actor, collection=request.collection)]
+        if request.filters.published_from is not None:
+            conditions.append(Document.publish_date >= request.filters.published_from)
+        if request.filters.published_to is not None:
+            conditions.append(Document.publish_date <= request.filters.published_to)
+        return conditions
+
+    def _semantic_coverage(
+        self,
+        *,
+        conditions: list[ColumnElement[bool]],
+    ) -> tuple[int, int, float]:
+        total = int(
+            self._db.scalar(select(func.count(Document.id)).where(*conditions)) or 0
+        )
+        semantic = int(
+            self._db.scalar(
+                select(func.count(DocumentSearchEmbedding.document_id))
+                .join(Document, Document.id == DocumentSearchEmbedding.document_id)
+                .where(
+                    *conditions,
+                    DocumentSearchEmbedding.model_revision == EMBEDDING_MODEL_REVISION,
+                )
+            )
+            or 0
+        )
+        return total, semantic, semantic / total if total else 0
 
     def search(
         self,
@@ -176,16 +230,105 @@ class PostgresPaperSearch:
         actor: Actor,
         request: PaperSearchQuery,
     ) -> PaperSearchResponse:
+        conditions = self._filters(actor=actor, request=request)
         text_query = func.websearch_to_tsquery("pg_catalog.english", request.query)
-        visibility = _visibility_condition(
-            actor=actor,
-            collection=request.collection,
+        compact_query = _compact_query(request.query)
+        similarity = func.similarity(Document.search_text_compact, compact_query)
+        contains_query = Document.search_text_compact.contains(compact_query)
+
+        fuzzy_candidates: list[tuple[UUID, bool]] = (
+            [
+                (document_id, bool(exact))
+                for document_id, exact in self._db.execute(
+                    select(Document.id, contains_query.label("contains_query"))
+                    .where(
+                        *conditions,
+                        or_(contains_query, similarity >= 0.08),
+                    )
+                    .order_by(
+                        case((contains_query, 0), else_=1),
+                        similarity.desc(),
+                        Document.id,
+                    )
+                    .limit(self._CANDIDATE_LIMIT)
+                ).tuples()
+            ]
+            if compact_query
+            else []
         )
+        full_text_ids = list(
+            self._db.scalars(
+                select(Document.id)
+                .where(*conditions, Document.ts_vector.op("@@")(text_query))
+                .order_by(
+                    func.ts_rank_cd(Document.ts_vector, text_query).desc(),
+                    Document.id,
+                )
+                .limit(self._CANDIDATE_LIMIT)
+            ).all()
+        )
+
+        semantic_ids: list[UUID] = []
+        embedder = try_local_embedder() if self._semantic else None
+        if embedder is not None:
+            try:
+                query_embedding = embedder.embed_query(request.query)
+                semantic_ids = list(
+                    self._db.scalars(
+                        select(Document.id)
+                        .join(
+                            DocumentSearchEmbedding,
+                            DocumentSearchEmbedding.document_id == Document.id,
+                        )
+                        .where(
+                            *conditions,
+                            DocumentSearchEmbedding.model_revision
+                            == EMBEDDING_MODEL_REVISION,
+                        )
+                        .order_by(
+                            DocumentSearchEmbedding.embedding.cosine_distance(
+                                query_embedding
+                            ),
+                            Document.id,
+                        )
+                        .limit(self._CANDIDATE_LIMIT)
+                    ).all()
+                )
+            except Exception:
+                logger.exception("paper.search.semantic_lane_failed")
+
+        scores: defaultdict[UUID, float] = defaultdict(float)
+        retrieval_modes: defaultdict[UUID, set[RetrievalMode]] = defaultdict(set)
+
+        for rank, (document_id, exact) in enumerate(fuzzy_candidates, start=1):
+            scores[document_id] += (1.2 if exact else 0.65) / (self._RRF_K + rank)
+            if exact:
+                scores[document_id] += 1
+                retrieval_modes[document_id].add("exact")
+            else:
+                retrieval_modes[document_id].add("fuzzy")
+        for rank, document_id in enumerate(full_text_ids, start=1):
+            scores[document_id] += 1.1 / (self._RRF_K + rank)
+            retrieval_modes[document_id].add("full_text")
+        for rank, document_id in enumerate(semantic_ids, start=1):
+            scores[document_id] += 1 / (self._RRF_K + rank)
+            retrieval_modes[document_id].add("semantic")
+
+        ranked_ids = sorted(scores, key=lambda item: (-scores[item], str(item)))
+        if request.sort is PaperSearchSort.RECENT and ranked_ids:
+            ranked_ids = list(
+                self._db.scalars(
+                    select(Document.id)
+                    .where(Document.id.in_(ranked_ids))
+                    .order_by(Document.created_at.desc(), Document.id)
+                ).all()
+            )
+        page_ids = ranked_ids[request.offset : request.offset + request.limit]
         actor_library_entry = aliased(
             LibraryPaper,
             name="actor_library_entry",
         )
-        statement = (
+        rows = self._db.execute(
             select(Document, actor_library_entry)
             .outerjoin(
                 actor_library_entry,
@@ -194,42 +337,14 @@ class PostgresPaperSearch:
                     actor_library_entry.user_id == actor.id,
                 ),
             )
-            .where(
-                visibility,
-                Document.ts_vector.op("@@")(text_query),
-            )
-        )
-        if request.filters.published_from is not None:
-            statement = statement.where(
-                Document.publish_date >= request.filters.published_from
-            )
-        if request.filters.published_to is not None:
-            statement = statement.where(
-                Document.publish_date <= request.filters.published_to
-            )
-        rank = func.ts_rank_cd(Document.ts_vector, text_query)
-        if request.sort is PaperSearchSort.RECENT:
-            statement = statement.order_by(
-                Document.created_at.desc(),
-                Document.id,
-            )
-        else:
-            statement = statement.order_by(
-                rank.desc(),
-                actor_library_entry.last_accessed_at.desc().nullslast(),
-                Document.id,
-            )
-
-        total = int(
-            self._db.scalar(
-                select(func.count()).select_from(statement.order_by(None).subquery())
-            )
-            or 0
-        )
-        rows = self._db.execute(
-            statement.offset(request.offset).limit(request.limit)
+            .where(Document.id.in_(page_ids))
         ).all()
-        document_ids = [document.id for document, _entry in rows]
+        documents = {document.id: (document, entry) for document, entry in rows}
+        page_rows = [documents[document_id] for document_id in page_ids]
+        _visible_total, _semantic_total, semantic_coverage = self._semantic_coverage(
+            conditions=conditions
+        )
+        document_ids = [document.id for document, _entry in page_rows]
         passages = _matching_passages(
             self._db,
             document_ids=document_ids,
@@ -237,8 +352,9 @@ class PostgresPaperSearch:
         )
 
         items: list[PaperSearchResult] = []
-        for document, library_entry in rows:
+        for document, library_entry in page_rows:
             snippets = passages.get(document.id, [])
+            has_matching_passage = bool(snippets)
             if not snippets:
                 fallback = _fallback_snippet(document, request.query)
                 if fallback is not None:
@@ -249,6 +365,10 @@ class PostgresPaperSearch:
                     title=document.title,
                     authors=document.authors,
                     abstract=document.abstract,
+                    summary=document.summary,
+                    keywords=document.keywords or [],
+                    doi=document.doi,
+                    journal=document.journal,
                     status=(
                         library_entry.status
                         if library_entry is not None
@@ -269,24 +389,30 @@ class PostgresPaperSearch:
                     matched_fields=_matching_fields(
                         document,
                         request.query,
-                        has_passage=bool(snippets),
+                        has_passage=has_matching_passage,
                     ),
+                    retrieval_modes=sorted(retrieval_modes[document.id]),
                     snippets=snippets,
                 )
             )
-        return PaperSearchResponse(items=items, total=total)
+        return PaperSearchResponse(
+            items=items,
+            total=len(ranked_ids),
+            search_mode="hybrid" if semantic_ids else "lexical",
+            semantic_index_coverage=semantic_coverage,
+        )
 
     def stats(
         self,
         *,
         actor: Actor,
     ) -> PaperSearchStats:
-        total = int(
-            self._db.scalar(
-                select(func.count(Document.id)).where(
-                    accessible_document_condition(user_id=actor.id)
-                )
-            )
-            or 0
+        total, semantic, coverage = self._semantic_coverage(
+            conditions=[accessible_document_condition(user_id=actor.id)]
         )
-        return PaperSearchStats(total_papers=total, searchable_items=total)
+        return PaperSearchStats(
+            total_papers=total,
+            searchable_items=total,
+            semantic_items=semantic,
+            semantic_index_coverage=coverage,
+        )

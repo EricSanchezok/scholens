@@ -22,7 +22,7 @@ Home's conversation or composer implementation.
 
 | State                                                       | Owner                    |
 | ----------------------------------------------------------- | ------------------------ |
-| active tab, query, tag/kind filters, sort, cursor           | URL search parameters    |
+| active tab, query, tag/kind filters, sort                   | URL search parameters    |
 | papers, outputs, summary, tags, projects, ingestion jobs    | TanStack Query           |
 | Zotero collections, library pages, operations, status       | TanStack Query           |
 | source import fields                                        | React Hook Form + Zod    |
@@ -30,8 +30,11 @@ Home's conversation or composer implementation.
 | shell collapse and mobile navigation disclosure             | Workspace Shell boundary |
 
 Search is debounced by 250 ms and query requests receive an abort signal. A
-filter, sort, tab, or page transition clears row selection. Cursor navigation is
-Previous/Next only; cursors are opaque and never decoded by the Web.
+filter, sort, or tab transition clears row selection. Paper browse and search
+use separate infinite TanStack queries and progressively append pages as the
+collection approaches the viewport; a visible Load more action remains the
+keyboard, reduced-motion, and observer fallback. Opaque continuation cursors
+are never decoded by the Web. Outputs retain explicit Previous/Next navigation.
 
 Desktop Library chrome is a compact 44 px workbench header: the page title,
 Papers/Outputs tabs with counts, and Add papers action share one row. Search,
@@ -50,8 +53,9 @@ catalog request.
 
 ## Papers
 
-Desktop uses a semantic table. Its search, user-tag filter, sort, and result
-count share one utility row. Every paper owns a stable portrait thumbnail slot
+Desktop uses a dense editorial list with an adjacent sticky preview. Its
+search, user-tag filter, sort, and result count share one utility row. Every
+paper owns a stable portrait thumbnail slot
 that consumes the Server-provided `preview_url` and falls back to a document
 preview without shifting the text columns. The selection control reuses that
 same slot: on pointer devices it appears on row hover or keyboard focus and
@@ -69,7 +73,19 @@ authors and institutions stay on one clipped secondary line, and added and
 published dates stay in the same content column immediately after the paper's
 text metadata. They are not positioned beneath the full thumbnail row. Long
 titles and uninterrupted identifiers must not create horizontal page
-scrolling; desktop table titles remain a single line.
+scrolling; desktop row titles remain a single line. Selecting or focusing a
+completed paper updates the preview with its abstract or summary, keywords,
+bibliographic metadata, and one explicit Reader action without navigating away.
+The preview collapses below desktop width so mobile remains a single reading
+column.
+
+Two or more query characters switch the paper collection to the shared hybrid
+search contract. Exact title/author/DOI matches, whitespace-insensitive and
+typo-tolerant matches, full-text passages, and local multilingual semantic
+similarity are fused into one relevance order. Results explain why they match
+through metadata, abstract/summary context, and bounded snippets. Semantic
+index coverage is additive: missing or failed embeddings fall back to lexical
+retrieval and never hide otherwise matching papers.
 
 The Library collection uses one flat editorial surface rather than placing a
 table inside a rounded card. Search and non-select filters remain compact pills;

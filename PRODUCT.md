@@ -59,6 +59,23 @@ as one system rather than a collection of separately themed tools.
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
+## Stored research should remain findable as it grows
+
+Library and Project collections are working research memory, not archival page
+tables. A researcher should be able to recover a paper from an exact title,
+joined or misspelled terms, or an approximate description of its subject and
+claim without remembering the original wording. Search must preserve scope and
+permissions, make relevance understandable, and degrade to lexical retrieval
+rather than returning an error when semantic indexing is temporarily
+incomplete.
+
+Browsing should support recognition as well as recall. Dense rows, stable
+thumbnails, useful metadata, and an adjacent preview let researchers scan many
+papers without opening each one. Long collections load progressively in the
+same reading flow; their primary interaction must not require repeated manual
+page changes. These expectations apply consistently to the personal Library,
+the papers inside a Project, and the workspace-wide paper search.
+
 ## External scholarly catalogs use user-owned credentials
 
 OpenAlex access belongs to the researcher who connects it. Scholens does not

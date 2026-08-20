@@ -14,7 +14,7 @@ from app.modules.jobs.application.callbacks import (
     JobCompletionResult,
     PdfPostprocessResolution,
 )
-from app.modules.jobs.application.contracts import JobCallbackIdentity
+from app.modules.jobs.application.contracts import PdfPostprocessCallback
 from app.modules.papers.application.citations import CitationMetadataPatch
 from app.modules.papers.domain.citations import (
     CitationFields,
@@ -74,7 +74,7 @@ class PdfPostprocessWorkflow:
         payload: dict[str, object],
     ) -> JobCompletionResult:
         try:
-            callback = JobCallbackIdentity.model_validate(payload)
+            callback = PdfPostprocessCallback.model_validate(payload)
         except ValidationError as exc:
             raise AppError(
                 code="job_callback_invalid",
@@ -87,7 +87,7 @@ class PdfPostprocessWorkflow:
             job_id=job_id,
             callback_task_id=callback.task_id,
         )
-        resolution = (
+        metadata_resolution = (
             PdfPostprocessResolution()
             if snapshot.terminal
             else await asyncio.to_thread(
@@ -96,6 +96,16 @@ class PdfPostprocessWorkflow:
                 operation,
                 _require_fields(snapshot),
             )
+        )
+        resolution = PdfPostprocessResolution(
+            doi=metadata_resolution.doi,
+            journal=metadata_resolution.journal,
+            publisher=metadata_resolution.publisher,
+            publish_date=metadata_resolution.publish_date,
+            field_provenance=metadata_resolution.field_provenance,
+            embedding=callback.embedding,
+            embedding_model_revision=callback.embedding_model_revision,
+            embedding_source_digest=callback.embedding_source_digest,
         )
         finalize_operation = self._operation_factory.child(
             operation,

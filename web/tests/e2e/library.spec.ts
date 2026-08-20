@@ -102,6 +102,41 @@ async function mockLibrary(page: Page) {
       }),
     });
   });
+  await page.route(`${apiPattern}/search/papers`, (route) => {
+    const paper = libraryPapers[1]!;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            abstract:
+              "Retrieval-augmented generation combines parametric and non-parametric memory.",
+            authors: paper.document.authors,
+            created_at: paper.document.created_at,
+            document_id: paper.document.document_id,
+            keywords: ["retrieval-augmented generation"],
+            last_accessed_at: paper.last_accessed_at,
+            matched_fields: ["title", "abstract"],
+            preview_url: null,
+            publish_date: null,
+            retrieval_modes: ["full_text", "semantic"],
+            snippets: [
+              {
+                text: "Retrieval-augmented generation for knowledge-intensive tasks.",
+              },
+            ],
+            status: paper.document.processing_status,
+            summary: null,
+            title: paper.document.title,
+          },
+        ],
+        next_cursor: null,
+        search_mode: "hybrid",
+        semantic_index_coverage: 1,
+        total: 1,
+      }),
+    });
+  });
   await page.route(`${apiPattern}/library/outputs**`, (route) => {
     const cursor = new URL(route.request().url()).searchParams.get("cursor");
     return route.fulfill({
@@ -276,22 +311,29 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   });
   await expect(page.getByText("1 paper selected")).toHaveCount(0);
 
-  const searchRequest = page.waitForRequest((request) => {
-    const url = new URL(request.url());
-    return (
-      url.pathname.endsWith("/library/papers") &&
-      url.searchParams.get("q") === "retrieval"
-    );
+  const searchbox = page.getByRole("searchbox", { name: "Search papers" });
+  const searchRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/api/v1/search/papers"),
+  );
+  await searchbox.fill("retrieval");
+  expect((await searchRequest).postDataJSON()).toEqual({
+    collection: { kind: "personal_library" },
+    limit: 50,
+    query: "retrieval",
+    sort: "relevance",
   });
-  await page
-    .getByRole("searchbox", { name: "Search papers" })
-    .fill("retrieval");
-  await searchRequest;
   await expect(page).toHaveURL(/q=retrieval/);
-
-  await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(page).toHaveURL(/cursor=next-library-page/);
-  await expect(page.getByRole("button", { name: "Previous" })).toBeEnabled();
+  await expect(
+    page.getByRole("link", {
+      name: /Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks/,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Next" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Previous" })).toHaveCount(0);
+  await searchbox.fill("");
+  await expect(page).not.toHaveURL(/q=retrieval/);
 
   await page.getByRole("button", { name: "Add papers" }).click();
   const dialog = page.getByRole("dialog");

@@ -1096,6 +1096,27 @@ def test_python_runtime_images_keep_their_hardened_runtime_contract() -> None:
     assert "not os.path.exists('/usr/bin/perl')" in workflow
     assert "not os.path.exists('/bin/sh')" in workflow
     assert "not os.path.exists('/usr/local/bin/pip')" in workflow
+    assert "LocalOnnxTextEmbedder().embed_query('code world model')" in workflow
+
+
+def test_jobs_builder_consumes_the_pinned_embedding_model_revision() -> None:
+    jobs = (ROOT / "jobs" / "Dockerfile").read_text(encoding="utf-8")
+    builder = jobs.split("FROM ${PYTHON_IMAGE} AS builder", maxsplit=1)[1].split(
+        "FROM ${RUNTIME_IMAGE} AS runtime", maxsplit=1
+    )[0]
+
+    revision_arg = "ARG SCHOLENS_EMBEDDING_MODEL_REVISION\n"
+    download_command = "-m scholens_ai.download_embeddings"
+    assert revision_arg in builder
+    assert builder.index(revision_arg) < builder.index(download_command)
+
+
+def test_shared_embedding_runtime_stays_on_the_hardened_onnx_version() -> None:
+    pyproject = (ROOT / "packages" / "scholens_ai" / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"onnxruntime==1.23.0"' in pyproject
 
 
 def test_read_only_python_tasks_initialize_writable_temporary_storage() -> None:
@@ -1845,6 +1866,8 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_16_1200_entitlement_grants_and_cli_origin.py",
         "2026_08_18_1200_project_upload_library_expand.py",
         "2026_08_20_1200_conversation_failure_metadata.py",
+        "2026_08_20_1200_hybrid_paper_search_expand.py",
+        "2026_08_20_1230_search_embedding_timestamps_expand.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

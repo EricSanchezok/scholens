@@ -585,12 +585,25 @@ data or responsibility.
 
 ## Replaceable search
 
-`PaperSearchPort` is the stable application boundary. The current
-`postgres_fts` adapter ranks accessible document metadata and passages using
-PostgreSQL full-text search. `PAPER_SEARCH_BACKEND` is validated at startup.
-A future embedding or hybrid implementation is added as another adapter and
-selected only in the composition root; HTTP, Agent, and MCP contracts do not
-change.
+`PaperSearchPort` is the stable application boundary. The default
+`postgres_hybrid` adapter applies authorization before candidate retrieval,
+then fuses four PostgreSQL lanes with reciprocal-rank fusion: compact exact
+matching for joined terms, trigram tolerance, weighted full-text metadata and
+passages, and cosine distance over a local multilingual E5 projection. The
+embedding model and its tokenizer are pinned image artifacts; queries and paper
+text do not leave Scholens for semantic retrieval. `postgres_fts` remains an
+explicit lexical-only degradation backend, and semantic runtime failure falls
+back within the hybrid adapter without failing the search request.
+
+`Document.search_text_compact` and `DocumentSearchEmbedding` are derived search
+projections. The latter is keyed by document and model revision and carries a
+digest of the bounded title/keywords/summary/abstract source. PDF completion
+may upsert the current embedding, while the bounded, repeatable
+`maintenance backfill-search-embeddings` command finds missing or stale digests
+for existing documents. Retrieval responses report their active mode and
+semantic coverage; raw user queries are not written to analytics telemetry.
+`PAPER_SEARCH_BACKEND` is validated at startup. HTTP, Agent, and MCP consumers
+continue to depend only on the application port and public search contract.
 
 The search collection named `library` is a computed access view, not a synonym
 for `LibraryPaper` membership. It contains the user's personal-library papers

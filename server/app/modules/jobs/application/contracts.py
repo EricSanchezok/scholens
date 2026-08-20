@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import datetime
 from typing import Annotated, Literal
@@ -69,6 +70,42 @@ class JobProgressRequest(BaseModel):
 
 class JobCallbackIdentity(BaseModel):
     task_id: UUID
+
+
+class PdfPostprocessCallback(JobCallbackIdentity):
+    model_config = ConfigDict(extra="forbid")
+
+    embedding: list[float] | None = Field(
+        default=None,
+        min_length=384,
+        max_length=384,
+    )
+    embedding_model_revision: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+    )
+    embedding_source_digest: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+
+    @model_validator(mode="after")
+    def validate_embedding_projection(self) -> PdfPostprocessCallback:
+        values = (
+            self.embedding,
+            self.embedding_model_revision,
+            self.embedding_source_digest,
+        )
+        if any(value is not None for value in values) and not all(
+            value is not None for value in values
+        ):
+            raise ValueError("embedding projection fields must be supplied together")
+        if self.embedding is not None and not all(
+            math.isfinite(value) for value in self.embedding
+        ):
+            raise ValueError("embedding values must be finite")
+        return self
 
 
 class JobFailureCallback(JobCallbackIdentity):

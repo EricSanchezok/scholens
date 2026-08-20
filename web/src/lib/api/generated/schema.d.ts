@@ -3963,6 +3963,17 @@ export interface components {
             items: components["schemas"]["PaperSearchResult"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /**
+             * Search Mode
+             * @default lexical
+             * @enum {string}
+             */
+            search_mode: "hybrid" | "lexical";
+            /**
+             * Semantic Index Coverage
+             * @default 0
+             */
+            semantic_index_coverage: number;
             /** Total */
             total: number;
         };
@@ -3982,6 +3993,12 @@ export interface components {
              * Format: uuid
              */
             document_id: string;
+            /** Doi */
+            doi?: string | null;
+            /** Journal */
+            journal?: string | null;
+            /** Keywords */
+            keywords?: string[];
             /**
              * Last Accessed At
              * Format: date-time
@@ -3993,10 +4010,14 @@ export interface components {
             preview_url?: string | null;
             /** Publish Date */
             publish_date: string | null;
+            /** Retrieval Modes */
+            retrieval_modes?: ("exact" | "full_text" | "fuzzy" | "semantic")[];
             /** Snippets */
             snippets?: components["schemas"]["PaperSearchSnippet"][];
             /** Status */
             status: string;
+            /** Summary */
+            summary?: string | null;
             /** Title */
             title: string | null;
         };
@@ -4018,6 +4039,16 @@ export interface components {
         PaperSearchStats: {
             /** Searchable Items */
             searchable_items: number;
+            /**
+             * Semantic Index Coverage
+             * @default 0
+             */
+            semantic_index_coverage: number;
+            /**
+             * Semantic Items
+             * @default 0
+             */
+            semantic_items: number;
             /** Total Papers */
             total_papers: number;
         };

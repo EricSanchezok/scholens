@@ -9,6 +9,7 @@ import {
   RepositoryIcon,
   SignOutIcon,
   MenuIcon,
+  SearchIcon,
   SettingsIcon,
   UsageIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -42,6 +43,7 @@ import {
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import { useMotionPreference } from "@/design-system/motion/motion-provider";
 import type { Actor } from "@/features/authentication";
+import { GlobalPaperSearch } from "@/features/paper-search";
 import {
   formatDateOnly,
   SettingsDialog,
@@ -594,6 +596,7 @@ function MobileNavigation({
   onOpenSettings,
   onOpenUsage,
   onSignOut,
+  onSearchPapers,
   onSelect,
   controller,
   onDeleteConversation,
@@ -608,6 +611,7 @@ function MobileNavigation({
   onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
+  onSearchPapers: () => void;
   onSelect: () => void;
   controller: ConversationListController;
   onDeleteConversation: (
@@ -677,6 +681,14 @@ function MobileNavigation({
               value={query}
             />
           </div>
+          <IconButton
+            className="bg-surface size-12 min-h-12 rounded-full"
+            label={t("navigation.searchPapers")}
+            onClick={onSearchPapers}
+            variant="ghost"
+          >
+            <Icon glyph={SearchIcon} size={20} />
+          </IconButton>
           <AccountMenu
             actor={actor}
             billingUsage={billingUsage}
@@ -887,6 +899,7 @@ function Sidebar({
   onOpenSettings,
   onOpenUsage,
   onSignOut,
+  onSearchPapers,
   onSelect,
   controller,
   onDeleteConversation,
@@ -904,6 +917,7 @@ function Sidebar({
   onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
+  onSearchPapers: () => void;
   onSelect?: () => void;
   controller: ConversationListController;
   onDeleteConversation: (
@@ -966,6 +980,12 @@ function Sidebar({
             href="/"
             label={t("navigation.newChat")}
             onSelect={onSelect}
+          />
+          <SidebarControl
+            collapsed={collapsed}
+            glyph={SearchIcon}
+            label={t("navigation.searchPapers")}
+            onSelect={onSearchPapers}
           />
           <SidebarControl
             active={activeDestination === "library"}
@@ -1067,6 +1087,7 @@ export function WorkspaceShell({
 }) {
   const t = useTranslations("WorkspaceShell");
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [paperSearchOpen, setPaperSearchOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] =
     React.useState<ConversationDialogTarget>();
   const [renameTarget, setRenameTarget] =
@@ -1180,6 +1201,17 @@ export function WorkspaceShell({
 
   React.useEffect(() => stopRailAnimations, [stopRailAnimations]);
 
+  React.useEffect(() => {
+    function openPaperSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaperSearchOpen(true);
+      }
+    }
+    window.addEventListener("keydown", openPaperSearch);
+    return () => window.removeEventListener("keydown", openPaperSearch);
+  }, []);
+
   return (
     <div
       className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden"
@@ -1227,6 +1259,7 @@ export function WorkspaceShell({
             onRequestMobileRename={(conversation, returnFocus) =>
               setRenameTarget({ conversation, returnFocus })
             }
+            onSearchPapers={() => setPaperSearchOpen(true)}
             onSignOut={onSignOut}
             signingOut={signingOut}
           />
@@ -1272,6 +1305,10 @@ export function WorkspaceShell({
               setRenameTarget({ conversation, returnFocus })
             }
             onSelect={() => setMobileOpen(false)}
+            onSearchPapers={() => {
+              setMobileOpen(false);
+              setPaperSearchOpen(true);
+            }}
             onSignOut={onSignOut}
             signingOut={signingOut}
           />
@@ -1315,6 +1352,10 @@ export function WorkspaceShell({
         )}
       </div>
       <SettingsDialog />
+      <GlobalPaperSearch
+        onOpenChange={setPaperSearchOpen}
+        open={paperSearchOpen}
+      />
       <ConversationActionDialogs
         controller={conversationController}
         deleteTarget={deleteTarget}

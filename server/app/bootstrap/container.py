@@ -185,11 +185,13 @@ def build_action_confirmations(*, db: Session) -> ActionConfirmations:
 
 def build_paper_search(
     *,
-    backend: Literal["postgres_fts"],
+    backend: Literal["postgres_hybrid", "postgres_fts"],
     db: Session,
 ) -> PaperSearchPort:
+    if backend == "postgres_hybrid":
+        return PostgresPaperSearch(db, semantic=True)
     if backend == "postgres_fts":
-        return PostgresPaperSearch(db)
+        return PostgresPaperSearch(db, semantic=False)
     raise ValueError(f"Unsupported paper search backend: {backend}")
 
 
@@ -503,6 +505,7 @@ def build_job_callbacks(
         DataTableWebhookData,
         DocumentReflowWebhookData,
         JobCallbackIdentity,
+        PdfPostprocessCallback,
         PdfProcessingWebhookData,
         StorageDeleteCallback,
     )
@@ -526,7 +529,7 @@ def build_job_callbacks(
                 PdfProcessingWebhookData, PdfProcessCompletion(db)
             ),
             JobOperation.PDF_POSTPROCESS: RegisteredJobCallback(
-                JobCallbackIdentity, PdfPostprocessCompletion(db)
+                PdfPostprocessCallback, PdfPostprocessCompletion(db)
             ),
             JobOperation.DOCUMENT_GC: RegisteredJobCallback(
                 JobCallbackIdentity, DocumentGcCompletion(db)

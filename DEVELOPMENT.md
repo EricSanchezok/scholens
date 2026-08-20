@@ -210,6 +210,10 @@ SCHOLENS_MIGRATION_DATABASE_URL='postgresql+psycopg2://scholens_migrator:<local-
 
 Create roles and schemas with a local database administrator following the
 [sanchezcloud-identity handbook](https://github.com/EricSanchezok/sanchezcloud-identity/blob/main/docs/guides/local-development.md).
+Before applying Scholens migrations, that administrator must install
+`pg_trgm` and `vector` in the shared database's `public` schema. The database
+image therefore needs pgvector support; the product migrator deliberately
+cannot install extensions.
 `scholens_migrator` owns and migrates the product schema; `scholens_app` is the
 runtime role and must not own schemas. Alembic intentionally refuses to migrate
 a `scholens` schema owned by another role. Never use the server's daily runtime

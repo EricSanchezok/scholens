@@ -259,7 +259,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+        image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: migration-test-password
@@ -348,6 +348,8 @@ jobs:
             --env SCHOLENS_AI_DEEPSEEK_API_KEY=ci-not-a-real-key \
             scholens-jobs:ci python -c \
             "import os, ssl, grpc, onnxruntime, pycurl, pymupdf, pymupdf4llm, src.tasks; assert os.getuid() != 0; assert not os.path.exists('/bin/sh'); assert not os.path.exists('/usr/bin/perl'); assert not os.path.exists('/usr/local/bin/pip'); assert ssl.create_default_context().get_ca_certs()"
+          docker run --rm scholens-jobs:ci python -c \
+            "from scholens_ai import LocalOnnxTextEmbedder; vector = LocalOnnxTextEmbedder().embed_query('code world model'); assert len(vector) == 384; assert 0.99 < sum(value * value for value in vector) < 1.01"
           docker run --rm scholens-jobs:ci celery --version
       - name: Build canonical Web image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6

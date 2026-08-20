@@ -46,9 +46,7 @@ const meta = {
     onDeleteTag: async () => undefined,
     onCancelIngestion: () => undefined,
     onDownload: () => undefined,
-    onNext: () => undefined,
     onOpenDocument: () => undefined,
-    onPrevious: () => undefined,
     onRemove: async () => undefined,
     onRenameTag: async (id: string, name: string) => ({
       color: null,

@@ -10,6 +10,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Identity,
@@ -22,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 
 from app.shared.domain import JsonValue
 from app.shared.infrastructure.persistence import Base
@@ -177,6 +179,12 @@ class Document(Base):
     __table_args__ = (
         UniqueConstraint("sha256", name="uq_documents_sha256"),
         Index("ix_documents_ts_vector", "ts_vector", postgresql_using="gin"),
+        Index(
+            "ix_documents_search_text_compact_trgm",
+            "search_text_compact",
+            postgresql_using="gin",
+            postgresql_ops={"search_text_compact": "gin_trgm_ops"},
+        ),
         CheckConstraint(
             "parser_backend IS NULL OR parser_backend IN ('mineru', 'pymupdf4llm', 'markitdown')",
             name="ck_documents_parser_backend",
@@ -235,6 +243,17 @@ class Document(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     ts_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
+    search_text_compact: Mapped[str | None] = mapped_column(
+        Text,
+        Computed(
+            "regexp_replace("
+            "lower(coalesce(title, '') || ' ' || coalesce(doi, '')), "
+            "'[^[:alnum:]]', '', 'g'"
+            ")",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     page_offset_map: Mapped[dict[int, list[int]] | None] = mapped_column(
         JSONB, nullable=True
     )  # Maps page numbers to text offsets. Useful for re-annotation.
@@ -333,6 +352,35 @@ class LibraryPaper(Base):
         "PaperTag",
         secondary=lambda: LibraryPaperTag.__table__,
         back_populates="library_papers",
+    )
+
+
+class DocumentSearchEmbedding(Base):
+    """Versioned semantic projection for a canonical Document."""
+
+    __tablename__ = "document_search_embeddings"
+    __table_args__ = (
+        Index("ix_document_search_embeddings_revision", "model_revision"),
+        Index(
+            "ix_document_search_embeddings_hnsw_cosine",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    model_revision: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(384), nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )
 
 

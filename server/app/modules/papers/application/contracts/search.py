@@ -118,12 +118,19 @@ class PaperSearchResult(BaseModel):
     title: str | None
     authors: list[str] | None
     abstract: str | None
+    summary: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    doi: str | None = None
+    journal: str | None = None
     status: str
     publish_date: PublicUtcDateTime | None
     created_at: datetime
     last_accessed_at: datetime
     preview_url: str | None = None
     matched_fields: list[str] = Field(default_factory=list)
+    retrieval_modes: list[Literal["exact", "full_text", "fuzzy", "semantic"]] = Field(
+        default_factory=list
+    )
     snippets: list[PaperSearchSnippet] = Field(default_factory=list)
 
 
@@ -131,8 +138,12 @@ class PaperSearchResponse(BaseModel):
     items: list[PaperSearchResult]
     total: int
     next_cursor: str | None = None
+    search_mode: Literal["hybrid", "lexical"] = "lexical"
+    semantic_index_coverage: float = Field(default=0, ge=0, le=1)
 
 
 class PaperSearchStats(BaseModel):
     total_papers: int
     searchable_items: int
+    semantic_items: int = 0
+    semantic_index_coverage: float = Field(default=0, ge=0, le=1)

@@ -232,6 +232,7 @@
       "openMenu": "Open navigation",
       "closeMenu": "Close navigation",
       "searchConversations": "Search conversations",
+      "searchPapers": "Search all papers (⌘K)",
       "comingSoon": "Not available yet"
     },
     "sidebar": {
@@ -520,6 +521,15 @@
       "batchActions": "Actions",
       "previous": "Previous",
       "next": "Next",
+      "loadMore": "Load more papers",
+      "loadingMore": "Loading more papers",
+      "preview": {
+        "label": "Paper preview",
+        "abstract": "Abstract",
+        "noAbstract": "No abstract is available for this paper.",
+        "unknownAuthors": "Unknown authors",
+        "openReader": "Open in Reader"
+      },
       "sort": {
         "label": "Sort papers",
         "added_desc": "Newest added",
@@ -1262,7 +1272,12 @@
         "empty": "No papers in this project yet.",
         "untitled": "Untitled paper",
         "unknownAuthors": "Authors unavailable",
-        "openReader": "Open in Reader"
+        "openReader": "Open in Reader",
+        "previewLabel": "Project paper preview",
+        "abstract": "Abstract",
+        "noAbstract": "No abstract is available for this paper.",
+        "loadMore": "Load more papers",
+        "loadingMore": "Loading more papers"
       },
       "outputs": {
         "search": "Search project outputs",
@@ -1743,6 +1758,39 @@
       "instructions": "Translation instructions",
       "customInstructions": "Custom instructions",
       "instructionsDescription": "Optional guidance for terminology, tone, or names. Up to 4,000 characters."
+    }
+  },
+  "PaperSearch": {
+    "title": "Find a paper",
+    "description": "Search every paper you can access by title, topic, argument, or a rough description.",
+    "close": "Close paper search",
+    "inputLabel": "Search all papers",
+    "placeholder": "e.g. a paper arguing that execution traces improve code reasoning",
+    "hint": "Describe what you remember. Exact titles, joined words, typos, and natural-language clues all work.",
+    "searching": "Searching your papers",
+    "retry": "Try again",
+    "errorTitle": "Search is unavailable",
+    "errorDescription": "Your query is preserved. Try the search again.",
+    "emptyTitle": "No close matches",
+    "emptyDescription": "Try a broader description or a related concept.",
+    "untitled": "Untitled paper",
+    "unknownAuthors": "Unknown authors",
+    "results": {
+      "loading": "Searching your papers",
+      "retry": "Try again",
+      "errorTitle": "Search is unavailable",
+      "errorDescription": "Your query is preserved. Try the search again.",
+      "emptyTitle": "No close matches",
+      "emptyDescription": "Try a broader description or a related concept.",
+      "count": "{count, plural, one {# matching paper} other {# matching papers}}",
+      "preview": "Search result preview",
+      "bestMatch": "Matching passage",
+      "noExcerpt": "Open the paper to review its content.",
+      "openReader": "Open in Reader",
+      "untitled": "Untitled paper",
+      "unknownAuthors": "Unknown authors",
+      "loadMore": "Load more matches",
+      "loadingMore": "Loading more matches"
     }
   },
   "Errors": {

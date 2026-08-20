@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -72,6 +77,10 @@ import {
   type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import {
+  PaperSearchResults,
+  paperSearchQueries,
+} from "@/features/paper-search";
 import { ApiError } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
 import {
@@ -255,18 +264,24 @@ function ProjectPaperRow({
   canRemove,
   onActionTrigger,
   onRemove,
+  onPreview,
   paper,
   projectId,
 }: {
   canRemove: boolean;
   onActionTrigger: (trigger: HTMLButtonElement) => void;
   onRemove: (paper: ProjectPaper) => void;
+  onPreview?: (paper: ProjectPaper) => void;
   paper: ProjectPaper;
   projectId: string;
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <div className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-2">
+    <div
+      className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-1"
+      onFocusCapture={() => onPreview?.(paper)}
+      onMouseEnter={() => onPreview?.(paper)}
+    >
       <Link
         className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
@@ -299,6 +314,41 @@ function ProjectPaperRow({
         </DropdownMenu>
       )}
     </div>
+  );
+}
+
+function ProjectPaperPreview({
+  paper,
+  projectId,
+}: {
+  paper?: ProjectPaper;
+  projectId: string;
+}) {
+  const t = useTranslations("Projects.detail.papers");
+  if (!paper) return null;
+  return (
+    <aside
+      aria-label={t("previewLabel")}
+      className="border-line sticky top-4 hidden max-h-[calc(100dvh-8rem)] min-w-0 overflow-y-auto border-l pl-5 xl:block"
+    >
+      <h2 className="text-base leading-6 font-semibold [overflow-wrap:anywhere]">
+        {paper.title || t("untitled")}
+      </h2>
+      <p className="text-secondary mt-2 text-xs leading-5">
+        {paper.authors?.join(" · ") || t("unknownAuthors")}
+      </p>
+      <p className="text-secondary mt-5 text-xs font-medium">{t("abstract")}</p>
+      <p className="text-secondary mt-2 text-sm leading-6">
+        {paper.abstract || t("noAbstract")}
+      </p>
+      <Button asChild className="mt-5 w-full" size="sm" variant="secondary">
+        <Link
+          href={`/reader/${paper.document_id}?project=${projectId}` as Route}
+        >
+          {t("openReader")}
+        </Link>
+      </Button>
+    </aside>
   );
 }
 
@@ -452,6 +502,8 @@ export function ProjectDetailWorkspace({
       parseProjectDetailSearch(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
+  const paperSearchActive =
+    state.view === "papers" && state.paperQuery.trim().length >= 2;
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
@@ -461,6 +513,9 @@ export function ProjectDetailWorkspace({
     React.useState<PaperRemovalImpact | null>(null);
   const paperRemovalTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const mobileChatTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const paperLoadMoreRef = React.useRef<HTMLDivElement>(null);
+  const [projectPaperPreviewId, setProjectPaperPreviewId] =
+    React.useState<string>();
   const [destructive, setDestructive] = React.useState<
     "delete" | "leave" | null
   >(null);
@@ -470,10 +525,52 @@ export function ProjectDetailWorkspace({
     conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
   );
   const sidebarConversationsQuery = useQuery(conversationQueries.list());
-  const papersQuery = useQuery({
+  const papersQuery = useInfiniteQuery({
     ...projectQueries.papers(projectId, state),
-    enabled: state.view === "papers" || state.view === "overview",
+    enabled:
+      (state.view === "papers" || state.view === "overview") &&
+      !paperSearchActive,
   });
+  const paperSearchQuery = useInfiniteQuery({
+    ...paperSearchQueries.infiniteResults(state.paperQuery, {
+      kind: "selection",
+      project_ids: [projectId],
+    }),
+    enabled: state.view === "papers" && paperSearchActive,
+  });
+  const projectPapers = React.useMemo(
+    () => papersQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [papersQuery.data?.pages],
+  );
+  const projectPaperSearchResults = React.useMemo(
+    () => paperSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [paperSearchQuery.data?.pages],
+  );
+  const projectPaperPreview =
+    projectPapers.find(
+      (paper) => paper.document_id === projectPaperPreviewId,
+    ) ?? projectPapers[0];
+  React.useEffect(() => {
+    const target = paperLoadMoreRef.current;
+    if (
+      !target ||
+      paperSearchActive ||
+      !papersQuery.hasNextPage ||
+      papersQuery.isFetchingNextPage
+    ) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void papersQuery.fetchNextPage();
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [paperSearchActive, papersQuery]);
   const outputsQuery = useQuery({
     ...projectQueries.outputs(projectId, state),
     enabled: state.view === "outputs" || state.view === "overview",
@@ -879,7 +976,7 @@ export function ProjectDetailWorkspace({
                       </Button>
                     </div>
                     <div className="divide-line-subtle border-line-subtle min-w-0 divide-y border-y">
-                      {papersQuery.data?.items.slice(0, 3).map((paper) => (
+                      {projectPapers.slice(0, 3).map((paper) => (
                         <ProjectPaperRow
                           canRemove={project.capabilities.manage_papers}
                           key={paper.document_id}
@@ -891,12 +988,11 @@ export function ProjectDetailWorkspace({
                           projectId={projectId}
                         />
                       ))}
-                      {!papersQuery.isPending &&
-                        papersQuery.data?.items.length === 0 && (
-                          <p className="text-muted py-12 text-center text-sm">
-                            {t("detail.papers.empty")}
-                          </p>
-                        )}
+                      {!papersQuery.isPending && projectPapers.length === 0 && (
+                        <p className="text-muted py-12 text-center text-sm">
+                          {t("detail.papers.empty")}
+                        </p>
+                      )}
                     </div>
                   </section>
                   <div className="grid min-w-0 gap-10">
@@ -978,64 +1074,85 @@ export function ProjectDetailWorkspace({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="divide-line-subtle border-line-subtle mt-5 divide-y border-y">
-                  {papersQuery.isPending ? (
-                    <div className="py-6">
-                      <LoadingState />
+                {paperSearchActive ? (
+                  <div className="mt-5">
+                    <PaperSearchResults
+                      error={paperSearchQuery.error}
+                      hasMore={paperSearchQuery.hasNextPage}
+                      loading={paperSearchQuery.isPending}
+                      loadingMore={paperSearchQuery.isFetchingNextPage}
+                      onLoadMore={() =>
+                        paperSearchQuery.fetchNextPage().then(() => undefined)
+                      }
+                      onRetry={() => void paperSearchQuery.refetch()}
+                      papers={projectPaperSearchResults}
+                      total={paperSearchQuery.data?.pages[0]?.total}
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-5 grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+                    <div className="divide-line-subtle border-line-subtle min-w-0 divide-y border-y">
+                      {papersQuery.isPending ? (
+                        <div className="py-6">
+                          <LoadingState />
+                        </div>
+                      ) : papersQuery.isError ? (
+                        <div className="py-6">
+                          <AsyncFeedback
+                            action={{
+                              label: t("feedback.retry"),
+                              onClick: () => void papersQuery.refetch(),
+                            }}
+                            state="error"
+                          />
+                        </div>
+                      ) : projectPapers.length === 0 ? (
+                        <p className="text-muted py-12 text-center text-sm">
+                          {t("detail.papers.empty")}
+                        </p>
+                      ) : (
+                        projectPapers.map((paper) => (
+                          <ProjectPaperRow
+                            canRemove={project.capabilities.manage_papers}
+                            key={paper.document_id}
+                            onActionTrigger={(trigger) => {
+                              paperRemovalTriggerRef.current = trigger;
+                            }}
+                            onPreview={(paper) =>
+                              setProjectPaperPreviewId(paper.document_id)
+                            }
+                            onRemove={(paper) =>
+                              void requestPaperRemoval(paper)
+                            }
+                            paper={paper}
+                            projectId={projectId}
+                          />
+                        ))
+                      )}
                     </div>
-                  ) : papersQuery.isError ? (
-                    <div className="py-6">
-                      <AsyncFeedback
-                        action={{
-                          label: t("feedback.retry"),
-                          onClick: () => void papersQuery.refetch(),
-                        }}
-                        state="error"
-                      />
-                    </div>
-                  ) : papersQuery.data.items.length === 0 ? (
-                    <p className="text-muted py-12 text-center text-sm">
-                      {t("detail.papers.empty")}
-                    </p>
-                  ) : (
-                    papersQuery.data.items.map((paper) => (
-                      <ProjectPaperRow
-                        canRemove={project.capabilities.manage_papers}
-                        key={paper.document_id}
-                        onActionTrigger={(trigger) => {
-                          paperRemovalTriggerRef.current = trigger;
-                        }}
-                        onRemove={(paper) => void requestPaperRemoval(paper)}
-                        paper={paper}
-                        projectId={projectId}
-                      />
-                    ))
-                  )}
-                </div>
-                {papersQuery.data &&
-                  (papersQuery.data.previous_cursor ||
-                    papersQuery.data.next_cursor) && (
-                    <div className="mt-5 flex justify-end">
-                      <CursorPagination
-                        nextDisabled={!papersQuery.data.next_cursor}
-                        nextLabel={t("pagination.next")}
-                        onNext={() =>
-                          papersQuery.data.next_cursor &&
-                          replaceSearch({
-                            paperCursor: papersQuery.data.next_cursor,
-                          })
-                        }
-                        onPrevious={() =>
-                          papersQuery.data.previous_cursor &&
-                          replaceSearch({
-                            paperCursor: papersQuery.data.previous_cursor,
-                          })
-                        }
-                        previousDisabled={!papersQuery.data.previous_cursor}
-                        previousLabel={t("pagination.previous")}
-                      />
-                    </div>
-                  )}
+                    <ProjectPaperPreview
+                      paper={projectPaperPreview}
+                      projectId={projectId}
+                    />
+                  </div>
+                )}
+                {!paperSearchActive && papersQuery.hasNextPage && (
+                  <div
+                    className="mt-5 flex justify-center"
+                    ref={paperLoadMoreRef}
+                  >
+                    <Button
+                      loading={papersQuery.isFetchingNextPage}
+                      onClick={() => void papersQuery.fetchNextPage()}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      {papersQuery.isFetchingNextPage
+                        ? t("detail.papers.loadingMore")
+                        : t("detail.papers.loadMore")}
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent className="mt-5" value="outputs">

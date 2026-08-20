@@ -91,11 +91,54 @@ export const Populated: Story = {
     await expect(
       canvasElement.querySelectorAll("[data-paper-thumbnail]").length,
     ).toBeGreaterThan(0);
+    const continuedTitles = await canvas.findAllByText(
+      "Follow-up reading 1: Attention Is All You Need",
+    );
     await expect(
-      canvas.getByRole("button", { name: "Previous" }),
-    ).toBeDisabled();
-    await expect(canvas.getByRole("button", { name: "Next" })).toBeEnabled();
+      continuedTitles.some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
+    await expect(
+      canvas.queryByRole("button", { name: "Previous" }),
+    ).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole("button", { name: "Next" }),
+    ).not.toBeInTheDocument();
   },
+};
+
+export const HybridSearchResults: Story = {
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: "/library?q=code%20world",
+        pathname: "/library",
+        query: { q: "code world" },
+      },
+    },
+  },
+  loaders: [
+    async () => {
+      window.history.replaceState({}, "", "/library?q=code%20world");
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole("link", {
+        name: /CWM: An Open-Weights LLM for Code Generation with World Models/,
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("searchbox", { name: "Search papers" }),
+    ).toHaveValue("code world");
+  },
+};
+
+export const Mobile390HybridSearchResults: Story = {
+  ...HybridSearchResults,
+  globals: { viewport: { value: "mobile", isRotated: false } },
 };
 
 export const Empty: Story = {
