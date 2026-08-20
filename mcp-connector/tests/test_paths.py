@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 
 import httpx
@@ -248,27 +249,28 @@ async def test_uncertain_ingestion_returns_exact_last_step_retry(
         )
 
     assert result.isError is True
-    assert result.structuredContent == {
-        "error": {
-            "code": "local_pdf_ingestion_unavailable",
-            "details": {
-                "retry_arguments": {
-                    "idempotency_key": "stable-import",
-                    "project_id": None,
-                    "add_to_library": True,
-                    "source": {"kind": "upload", "upload_id": upload_id},
-                },
-                "retry_tool": "ingest_paper",
-                "upload_id": upload_id,
-            },
-            "message": "The ingestion response was unavailable after the PDF transfer",
-            "remediation": (
-                "The PDF transfer completed. Do not upload the file again. Call "
-                "ingest_paper with details.retry_arguments exactly as returned; this "
-                "preserves both the upload session and idempotency identity."
-            ),
-        }
+    assert result.structuredContent is None
+    error = json.loads(result.content[0].text)["error"]
+    assert error["code"] == "local_pdf_ingestion_unavailable"
+    assert error["details"] == {
+        "retry_arguments": {
+            "idempotency_key": "stable-import",
+            "project_id": None,
+            "add_to_library": True,
+            "source": {"kind": "upload", "upload_id": upload_id},
+        },
+        "retry_tool": "ingest_paper",
+        "upload_id": upload_id,
     }
+    assert (
+        error["message"]
+        == "The ingestion response was unavailable after the PDF transfer"
+    )
+    assert error["remediation"] == (
+        "The PDF transfer completed. Do not upload the file again. Call "
+        "ingest_paper with details.retry_arguments exactly as returned; this "
+        "preserves both the upload session and idempotency identity."
+    )
 
 
 def test_remote_ingestion_error_preserves_code_and_attaches_retry() -> None:
@@ -277,11 +279,72 @@ def test_remote_ingestion_error_preserves_code_and_attaches_retry() -> None:
         "idempotency_key": "stable-import",
     }
     remote = types.CallToolResult(
+        content=[
+            types.TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "error": {
+                            "code": "paper_upload_unavailable",
+                            "details": {"diagnostic_id": "diagnostic-id"},
+                            "message": "Staging is temporarily unavailable",
+                            "remediation": "Retry after a short delay.",
+                        }
+                    },
+                    separators=(",", ":"),
+                ),
+            )
+        ],
+        isError=True,
+    )
+
+    result = _remote_ingestion_error_with_retry(
+        remote,
+        upload_id="upload-id",
+        source_arguments=source_arguments,
+    )
+
+    assert result.structuredContent is None
+    error = json.loads(result.content[0].text)["error"]
+    assert error["code"] == "paper_upload_unavailable"
+    assert error["details"] == {
+        "remote_details": {"diagnostic_id": "diagnostic-id"},
+        "retry_arguments": source_arguments,
+        "retry_tool": "ingest_paper",
+        "upload_id": "upload-id",
+    }
+    assert error["message"] == "Staging is temporarily unavailable"
+    assert error["remediation"].startswith("Retry after a short delay.")
+
+
+def test_remote_ingestion_error_falls_back_when_text_has_no_error_envelope() -> None:
+    source_arguments: dict[str, object] = {
+        "source": {"kind": "upload", "upload_id": "upload-id"},
+    }
+    remote = types.CallToolResult(
+        content=[types.TextContent(type="text", text="not an error envelope")],
+        isError=True,
+    )
+
+    result = _remote_ingestion_error_with_retry(
+        remote,
+        upload_id="upload-id",
+        source_arguments=source_arguments,
+    )
+
+    assert result.structuredContent is None
+    error = json.loads(result.content[0].text)["error"]
+    assert error["code"] == "local_pdf_ingestion_unavailable"
+    assert error["details"]["retry_tool"] == "ingest_paper"
+    assert error["details"]["upload_id"] == "upload-id"
+
+
+def test_remote_ingestion_error_accepts_legacy_structured_envelope() -> None:
+    remote = types.CallToolResult(
         content=[],
         structuredContent={
             "error": {
                 "code": "paper_upload_unavailable",
-                "details": {"diagnostic_id": "diagnostic-id"},
                 "message": "Staging is temporarily unavailable",
                 "remediation": "Retry after a short delay.",
             }
@@ -292,15 +355,9 @@ def test_remote_ingestion_error_preserves_code_and_attaches_retry() -> None:
     result = _remote_ingestion_error_with_retry(
         remote,
         upload_id="upload-id",
-        source_arguments=source_arguments,
+        source_arguments={"source": {"kind": "upload", "upload_id": "upload-id"}},
     )
 
-    assert result.structuredContent is not None
-    error = result.structuredContent["error"]
+    error = json.loads(result.content[0].text)["error"]
     assert error["code"] == "paper_upload_unavailable"
-    assert error["details"] == {
-        "remote_details": {"diagnostic_id": "diagnostic-id"},
-        "retry_arguments": source_arguments,
-        "retry_tool": "ingest_paper",
-        "upload_id": "upload-id",
-    }
+    assert error["message"] == "Staging is temporarily unavailable"

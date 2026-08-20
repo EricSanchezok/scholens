@@ -190,7 +190,9 @@ class CitationMetadataProvider:
             "journal": _optional_string(findings.get("journal")),
             "publisher": _optional_string(findings.get("publisher")),
             "doi": doi,
-            "publish_date": parsed_date.isoformat() if parsed_date else None,
+            # Keep provider patches date-only at the public boundary while the
+            # canonical validator remains compatible with legacy ISO datetimes.
+            "publish_date": parsed_date.date().isoformat() if parsed_date else None,
         }
         filled: dict[str, object] = {
             field_name: value
@@ -284,7 +286,7 @@ def _merge_enriched(
     publication_date = enriched.publication_date
     if not publish_date and publication_date:
         parsed = parse_publication_date(str(publication_date))
-        publish_date = parsed.isoformat() if parsed is not None else None
+        publish_date = parsed.date().isoformat() if parsed is not None else None
     return journal or enriched_journal, publisher or enriched_publisher, publish_date
 
 

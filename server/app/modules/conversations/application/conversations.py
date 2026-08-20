@@ -194,7 +194,6 @@ class Conversations:
                     if request.context_document_id
                     else None
                 ),
-                "limit": request.limit,
             },
             separators=(",", ":"),
             sort_keys=True,

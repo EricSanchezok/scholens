@@ -113,3 +113,66 @@ async def test_rate_limit_maps_partial_redis_failure_to_unavailable(
         "scholens.dependency.failures",
         attributes={"dependency": "redis"},
     )
+
+
+@pytest.mark.asyncio
+async def test_concurrency_limits_default_to_worker_aligned_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Defaults must match the recommended production limits (8/12/4/120/3600)."""
+    for key in (
+        "AI_MAX_INTERACTIVE_PER_USER",
+        "AI_MAX_BACKGROUND_PER_USER",
+        "AI_MAX_AUDIO_PER_USER",
+        "AI_RATE_PER_USER",
+        "AI_RATE_PER_IP",
+        "AI_CONCURRENCY_TTL_SECONDS",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    client = AsyncMock()
+    client.eval.return_value = 1
+    monkeypatch.setattr(ai_limits, "_redis_client", lambda _url=None: client)
+
+    await ai_limits.acquire_concurrency(
+        user_id=42,
+        category="background",
+        operation_id="job-1",
+    )
+    args = client.eval.call_args.args
+    assert args[5] == 8  # background default
+    assert args[4] - args[3] == 3_600_000  # TTL default
+
+    client.eval.reset_mock()
+    await ai_limits.acquire_concurrency(
+        user_id=42,
+        category="interactive",
+        operation_id="job-2",
+    )
+    assert client.eval.call_args.args[5] == 12  # interactive default
+
+    client.eval.reset_mock()
+    await ai_limits.acquire_concurrency(
+        user_id=42,
+        category="audio",
+        operation_id="job-3",
+    )
+    assert client.eval.call_args.args[5] == 4  # audio default
+
+    # Default AI_RATE_PER_USER is 120: a count of 120 must not exceed it.
+    client.eval.reset_mock()
+    client.eval.side_effect = [120, 1]
+    await ai_limits.enforce_rate_limit(
+        user_id=42,
+        ip_address="203.0.113.10",
+        feature="chat",
+    )
+
+    # Default AI_RATE_PER_IP is 120: a count of 120 must not exceed it.
+    client.eval.reset_mock()
+    client.eval.side_effect = [1, 120]
+    await ai_limits.enforce_rate_limit(
+        user_id=42,
+        ip_address="203.0.113.10",
+        feature="chat",
+    )

@@ -123,7 +123,7 @@ class AccessKeys:
                 kind=FailureKind.INVALID_ARGUMENT,
             )
         now = self._clock.now()
-        decoded = self._decode_cursor(actor=actor, limit=limit, cursor=cursor)
+        decoded = self._decode_cursor(actor=actor, cursor=cursor)
         direction = (
             decoded.direction if decoded is not None else AccessKeyListDirection.OLDER
         )
@@ -153,7 +153,6 @@ class AccessKeys:
             previous_cursor=(
                 self._encode_cursor(
                     actor=actor,
-                    limit=limit,
                     direction=AccessKeyListDirection.NEWER,
                     position=AccessKeyListPosition(
                         created_at=page[0].created_at,
@@ -166,7 +165,6 @@ class AccessKeys:
             next_cursor=(
                 self._encode_cursor(
                     actor=actor,
-                    limit=limit,
                     direction=AccessKeyListDirection.OLDER,
                     position=AccessKeyListPosition(
                         created_at=page[-1].created_at,
@@ -294,7 +292,6 @@ class AccessKeys:
         self,
         *,
         actor: Actor,
-        limit: int,
         cursor: str | None,
     ) -> AccessKeyListCursor | None:
         if cursor is None:
@@ -302,7 +299,7 @@ class AccessKeys:
         try:
             direction_raw, created_at_raw, id_raw = self._cursors.decode_keyset(
                 cursor=cursor,
-                fingerprint=self._cursor_binding(actor, limit=limit),
+                fingerprint=self._cursor_binding(actor),
                 arity=3,
             )
             created_at = datetime.fromisoformat(created_at_raw)
@@ -326,12 +323,11 @@ class AccessKeys:
         self,
         *,
         actor: Actor,
-        limit: int,
         direction: AccessKeyListDirection,
         position: AccessKeyListPosition,
     ) -> str:
         return self._cursors.encode_keyset(
-            fingerprint=self._cursor_binding(actor, limit=limit),
+            fingerprint=self._cursor_binding(actor),
             values=(
                 direction.value,
                 position.created_at.isoformat(),
@@ -340,11 +336,10 @@ class AccessKeys:
         )
 
     @staticmethod
-    def _cursor_binding(actor: Actor, *, limit: int) -> str:
-        return (
-            f"{ACCESS_KEY_CURSOR_FINGERPRINT}:v2:{actor.id}:"
-            f"created_at-desc:id-desc:limit={limit}"
-        )
+    def _cursor_binding(actor: Actor) -> str:
+        # keyset pagination positions on (created_at, id); limit is a page-size
+        # preference, not a filter, so it must not bind the cursor.
+        return f"{ACCESS_KEY_CURSOR_FINGERPRINT}:v2:{actor.id}:created_at-desc:id-desc"
 
 
 def _require_permissions(

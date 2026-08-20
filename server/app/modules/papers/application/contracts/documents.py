@@ -20,6 +20,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    ValidationError,
     WithJsonSchema,
     field_validator,
 )
@@ -118,6 +119,40 @@ class DocumentUpdate(BaseModel):
                 "publish_date must be a valid date (YYYY-MM-DD, YYYY-MM, or YYYY)"
             )
         return parsed
+
+    @classmethod
+    def validate_lenient(
+        cls,
+        updates: dict[str, object],
+    ) -> tuple[DocumentUpdate, tuple[str, ...]]:
+        """Validate canonical metadata updates, dropping invalid fields.
+
+        Trusted writer callbacks (PDF postprocess resolution, citation
+        metadata enrichment) converge on ``DocumentUpdate``. One invalid
+        enhanced field (for example a malformed ``publish_date`` from an
+        external provider) must never fail the whole callback: invalid fields
+        are dropped, the remaining fields still apply, and the caller logs
+        which fields were dropped.
+        """
+        remaining = dict(updates)
+        dropped: list[str] = []
+        while True:
+            try:
+                return cls.model_validate(remaining), tuple(dropped)
+            except ValidationError as exc:
+                invalid = {
+                    location[0]
+                    for error in exc.errors()
+                    if (location := error.get("loc"))
+                    and isinstance(location[0], str)
+                    and location[0] in remaining
+                }
+                if not invalid:
+                    raise
+                dropped.extend(sorted(invalid))
+                remaining = {
+                    key: value for key, value in remaining.items() if key not in invalid
+                }
 
 
 class DocumentMetadataOverrides(BaseModel):

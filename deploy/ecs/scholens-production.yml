@@ -1215,19 +1215,19 @@ Resources:
         - Name: JOB_DISPATCH_PUBLISH_LEASE_SECONDS
           Value: '30'
         - Name: AI_MAX_INTERACTIVE_PER_USER
-          Value: '8'
+          Value: '12'
         - Name: AI_MAX_BACKGROUND_PER_USER
-          Value: '4'
+          Value: '8'
         - Name: AI_MAX_AUDIO_PER_USER
-          Value: '2'
+          Value: '4'
         - Name: AI_RATE_WINDOW_SECONDS
           Value: '60'
         - Name: AI_RATE_PER_USER
-          Value: '60'
+          Value: '120'
         - Name: AI_RATE_PER_IP
           Value: '120'
         - Name: AI_CONCURRENCY_TTL_SECONDS
-          Value: '7200'
+          Value: '3600'
         - Name: SCHOLENS_AI_DEEPSEEK_BASE_URL
           Value: https://api.deepseek.com
         - Name: SCHOLENS_AI_STANDARD_MODEL

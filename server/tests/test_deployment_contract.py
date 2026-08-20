@@ -1178,6 +1178,23 @@ def test_api_scaling_respects_the_shared_rds_connection_budget() -> None:
     assert parameters["RdsConnectionAlarmThreshold"]["Default"] == 75
 
 
+def test_production_ai_limits_match_worker_aligned_runtime_defaults() -> None:
+    template = load_template("scholens-production.yml")
+    container = template["Resources"]["ApiTaskDefinition"]["Properties"][
+        "ContainerDefinitions"
+    ][0]
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+
+    expected = {
+        "AI_MAX_INTERACTIVE_PER_USER": "12",
+        "AI_MAX_BACKGROUND_PER_USER": "8",
+        "AI_MAX_AUDIO_PER_USER": "4",
+        "AI_RATE_PER_USER": "120",
+        "AI_CONCURRENCY_TTL_SECONDS": "3600",
+    }
+    assert {name: environment[name] for name in expected} == expected
+
+
 def test_api_mail_secret_contract_contains_only_aliyun_credentials() -> None:
     template = load_template("scholens-production.yml")
     container = template["Resources"]["ApiTaskDefinition"]["Properties"][

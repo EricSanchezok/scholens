@@ -11,6 +11,7 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 import requests
+from pydantic import ValidationError
 
 from app.bootstrap.capabilities import ApplicationCapabilities
 from app.modules.integrations.zotero.application.contracts import (
@@ -473,14 +474,37 @@ class ZoteroBackgroundWorkflow:
                 kind=FailureKind.NOT_FOUND,
             )
         kind = payload.get("operation")
-        callback = (
-            ZoteroImportWebhookData.model_validate(payload)
-            if kind == "import"
-            else ZoteroSyncWebhookData.model_validate(payload)
-            if kind == "sync"
-            else None
-        )
-        if callback is None or callback.task_id != job_id:
+        callback: ZoteroImportWebhookData | ZoteroSyncWebhookData | None
+        invalid_callback = False
+        try:
+            callback = (
+                ZoteroImportWebhookData.model_validate(payload)
+                if kind == "import"
+                else ZoteroSyncWebhookData.model_validate(payload)
+                if kind == "sync"
+                else None
+            )
+        except ValidationError:
+            callback = None
+            invalid_callback = True
+        raw_task_id = payload.get("task_id")
+        try:
+            callback_task_id = UUID(str(raw_task_id)) if raw_task_id else None
+        except ValueError:
+            callback_task_id = None
+        if callback_task_id is not None and callback_task_id != job_id:
+            raise AppError(
+                code="job_callback_mismatch",
+                message="Zotero job callback does not match",
+                kind=FailureKind.CONFLICT,
+            )
+        if callback is None and not invalid_callback:
+            raise AppError(
+                code="job_callback_mismatch",
+                message="Zotero job callback does not match",
+                kind=FailureKind.CONFLICT,
+            )
+        if callback is not None and callback.task_id != job_id:
             raise AppError(
                 code="job_callback_mismatch",
                 message="Zotero job callback does not match",
@@ -499,6 +523,22 @@ class ZoteroBackgroundWorkflow:
             operation,
             initiated_by=OperationInitiator.SYSTEM,
         )
+        if invalid_callback:
+            changed = self._executor.command(
+                lambda capabilities: capabilities.zotero.fail_background_operation(
+                    actor=actor,
+                    operation=outcome_operation,
+                    operation_id=job_id,
+                    claim_id=claim_id,
+                    error_code="zotero_callback_payload_invalid",
+                )
+            )
+            return (
+                {"accepted": True, "status": "failed"}
+                if changed
+                else {"accepted": False}
+            )
+        assert callback is not None
         heartbeat_stop = asyncio.Event()
         heartbeat_lost = asyncio.Event()
         heartbeat_task = asyncio.create_task(

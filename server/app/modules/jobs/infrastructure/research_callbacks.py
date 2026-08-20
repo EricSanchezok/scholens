@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+from typing import Literal
 from app.database.models import (
     JobOperation,
     ResearchAudioOverview,
@@ -16,6 +17,7 @@ from app.shared.domain import AppError, FailureKind
 from app.llm.token_credits import llm_usage_context, settle_token_usage
 from app.modules.jobs.application.callbacks import (
     JobHandlerResult,
+    JobPostCommitAction,
     ReleaseJobConcurrency,
     SettleJobUsage,
 )
@@ -33,6 +35,7 @@ from app.modules.jobs.application.contracts import (
     JobClaimResponse,
     TokenUsageEventPayload,
 )
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 
@@ -83,6 +86,47 @@ def _validate_callback(
         )
 
 
+def _research_failure_result(
+    *,
+    db: Session,
+    job_id: uuid.UUID,
+    error_code: str,
+    user_id: int | None,
+    release_categories: tuple[Literal["audio", "background"], ...],
+    usage_events: list[TokenUsageEventPayload],
+) -> JobHandlerResult:
+    """Mark a research callback job failed while still releasing its leases.
+
+    A malformed payload or a missing result must not raise: raising skips the
+    job-completion post-commit and leaks the audio/background concurrency
+    leases for up to the TTL. Fail the job and release deterministically.
+    """
+    try:
+        _, changed = job_repository.fail(
+            db,
+            job_id=job_id,
+            error_code=error_code,
+        )
+    except AppError as exc:
+        if exc.code != "job_not_found":
+            raise
+        changed = False
+    post_commit: list[JobPostCommitAction] = []
+    if user_id is not None:
+        if usage_events:
+            post_commit.append(
+                SettleJobUsage(user_id=user_id, events=tuple(usage_events))
+            )
+        post_commit.extend(
+            ReleaseJobConcurrency(user_id=user_id, category=category, job_id=job_id)
+            for category in release_categories
+        )
+    return JobHandlerResult(
+        value=JobClaimResponse(claimed=changed),
+        post_commit=tuple(post_commit),
+    )
+
+
 async def complete_audio_job(
     job_id: uuid.UUID,
     webhook: AudioOverviewWebhookData,
@@ -102,10 +146,27 @@ async def complete_audio_job(
             error_code=webhook.error or "audio_generation_failed",
         )
     else:
-        task_payload = AudioOverviewTaskPayload.model_validate(job.payload)
+        try:
+            task_payload = AudioOverviewTaskPayload.model_validate(job.payload)
+        except ValidationError:
+            return _research_failure_result(
+                db=db,
+                job_id=job_id,
+                error_code="audio_callback_payload_invalid",
+                user_id=job.requested_by_id,
+                release_categories=("audio", "background"),
+                usage_events=webhook.usage_events,
+            )
         result = webhook.result
         if result is None:
-            raise RuntimeError("validated_audio_callback_without_result")
+            return _research_failure_result(
+                db=db,
+                job_id=job_id,
+                error_code="audio_callback_result_missing",
+                user_id=job.requested_by_id,
+                release_categories=("audio", "background"),
+                usage_events=webhook.usage_events,
+            )
         if result.research_item_id != task_payload.research_item_id:
             raise AppError(
                 code="job_callback_mismatch",
@@ -203,10 +264,27 @@ async def complete_data_table_job(
             error_code=webhook.error or "data_table_processing_failed",
         )
     else:
-        task_payload = DataTableTaskPayload.model_validate(job.payload)
+        try:
+            task_payload = DataTableTaskPayload.model_validate(job.payload)
+        except ValidationError:
+            return _research_failure_result(
+                db=db,
+                job_id=job_id,
+                error_code="data_table_callback_payload_invalid",
+                user_id=job.requested_by_id,
+                release_categories=("background",),
+                usage_events=webhook.usage_events,
+            )
         result = webhook.result
         if result is None:
-            raise RuntimeError("validated_data_table_callback_without_result")
+            return _research_failure_result(
+                db=db,
+                job_id=job_id,
+                error_code="data_table_callback_result_missing",
+                user_id=job.requested_by_id,
+                release_categories=("background",),
+                usage_events=webhook.usage_events,
+            )
         if result.research_item_id != task_payload.research_item_id:
             raise AppError(
                 code="job_callback_mismatch",

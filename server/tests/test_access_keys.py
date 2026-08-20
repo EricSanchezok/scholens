@@ -426,22 +426,26 @@ def test_active_capacity_and_stable_keyset_pagination() -> None:
     tampered_cursor = ("A" if first.next_cursor[0] != "A" else "B") + first.next_cursor[
         1:
     ]
-    for actor, limit, cursor in (
-        (_actor(8), 4, first.next_cursor),
-        (_actor(), 5, first.next_cursor),
-        (_actor(), 4, tampered_cursor),
+    for actor, cursor in (
+        (_actor(8), first.next_cursor),
+        (_actor(), tampered_cursor),
     ):
         with pytest.raises(AppError) as invalid:
-            access_keys.list(actor=actor, limit=limit, cursor=cursor)
+            access_keys.list(actor=actor, limit=4, cursor=cursor)
         assert invalid.value.code == "access_key_cursor_invalid"
         assert invalid.value.kind is FailureKind.INVALID_ARGUMENT
+
+    # Page size is a preference, not a filter: the same cursor must remain
+    # valid when the caller changes limit between pages.
+    resized = access_keys.list(actor=_actor(), limit=5, cursor=first.next_cursor)
+    assert [item.id for item in resized.items] == expected[4:9]
 
     invalid_direction = SignedCursorCodec(
         "x" * 32,
         revision="access-keys-v2",
         error_code="access_key_cursor_invalid",
     ).encode_keyset(
-        fingerprint="access-key-management:v2:7:created_at-desc:id-desc:limit=4",
+        fingerprint="access-key-management:v2:7:created_at-desc:id-desc",
         values=("sideways", NOW.isoformat(), str(created_ids[0])),
     )
     with pytest.raises(AppError) as malformed:

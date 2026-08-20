@@ -34,6 +34,7 @@ from app.tooling.workspace import build_workspace_tool_catalog
 from app.transport.mcp.server import build_mcp_transport
 from httpx import ASGITransport, AsyncClient
 from mcp.server.transport_security import TransportSecuritySettings
+import json
 import pytest
 from pydantic import BaseModel, ConfigDict
 from starlette.applications import Starlette
@@ -487,7 +488,8 @@ async def test_mcp_tool_call_enforces_the_same_permission_snapshot() -> None:
                 },
             )
 
-    error = response.json()["result"]["structuredContent"]["error"]
+    error = json.loads(response.json()["result"]["content"][0]["text"])["error"]
+    assert "structuredContent" not in response.json()["result"]
     assert error["kind"] == "not_found"
     assert error["code"] == "tool_not_found"
     assert error["message"] == "Tool not found"
@@ -527,7 +529,8 @@ async def test_mcp_maps_application_errors_to_structured_tool_errors() -> None:
 
     result = response.json()["result"]
     assert result["isError"] is True
-    error = result["structuredContent"]["error"]
+    assert "structuredContent" not in result
+    error = json.loads(result["content"][0]["text"])["error"]
     assert error["kind"] == "permission_denied"
     assert error["code"] == "project_access_denied"
     assert error["message"] == "Project access denied"

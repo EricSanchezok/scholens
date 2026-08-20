@@ -6,14 +6,25 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.bootstrap.adapters.project_gateway import SqlAlchemyProjectGateway
+from app.modules.papers.application.contracts.documents import (
+    LibraryOutputResponse,
+    LibraryOutputSort,
+)
 from app.modules.projects.application.invitation_tokens import (
     ProjectInvitationTokenCodec,
 )
-from app.modules.projects.application.contracts import ProjectResponse, ProjectSort
+from app.modules.projects.application.contracts import (
+    ProjectPaperSort,
+    ProjectPaperSummaryResponse,
+    ProjectResponse,
+    ProjectSort,
+)
 from app.modules.projects.application.projects import (
+    ProjectOutputPage,
     ProjectPage,
     ProjectPageDirection,
     ProjectPagePosition,
+    ProjectPaperPage,
     Projects,
 )
 from app.shared.application import Actor, SignedCursorCodec
@@ -118,6 +129,115 @@ def test_project_cursor_rejects_cross_query_reuse(
         projects.list(**arguments)  # type: ignore[arg-type]
 
     assert raised.value.code == "project_cursor_invalid"
+
+
+def test_project_cursor_survives_page_size_changes() -> None:
+    """Page size is a preference, not a filter: the same keyset cursor must
+    remain valid when the caller changes limit between pages."""
+    first_id = uuid4()
+    second_id = uuid4()
+    gateway = MagicMock()
+    gateway.list_projects.side_effect = [
+        _page(item_id=first_id, has_more=True),
+        _page(item_id=second_id, has_more=False),
+    ]
+    projects = _projects(gateway=gateway)
+
+    first = projects.list(actor=_actor(), query="retrieval", limit=1)
+    resized = projects.list(
+        actor=_actor(),
+        query="retrieval",
+        limit=50,
+        cursor=first.next_cursor,
+    )
+
+    assert resized.total_count == 2
+    assert gateway.list_projects.call_args_list[1].kwargs["position"].id == first_id
+    assert gateway.list_projects.call_args_list[1].kwargs["limit"] == 50
+
+
+def _paper_page(*, item_id: UUID, has_more: bool) -> ProjectPaperPage:
+    return ProjectPaperPage(
+        items=[ProjectPaperSummaryResponse.model_construct(document_id=item_id)],
+        positions=[ProjectPagePosition(key="2026-08-13T10:00:00+00:00", id=item_id)],
+        has_more=has_more,
+        total_count=2,
+    )
+
+
+def _output_page(*, item_id: UUID, has_more: bool) -> ProjectOutputPage:
+    return ProjectOutputPage(
+        items=[LibraryOutputResponse.model_construct()],
+        positions=[ProjectPagePosition(key="2026-08-13T10:00:00+00:00", id=item_id)],
+        has_more=has_more,
+        total_count=2,
+    )
+
+
+def test_project_documents_cursor_survives_page_size_changes() -> None:
+    """Page size is a preference, not a filter: the same keyset cursor must
+    remain valid when the caller changes limit between document pages."""
+    first_id = uuid4()
+    second_id = uuid4()
+    gateway = MagicMock()
+    gateway.list_documents.side_effect = [
+        _paper_page(item_id=first_id, has_more=True),
+        _paper_page(item_id=second_id, has_more=False),
+    ]
+    projects = _projects(gateway=gateway)
+    project_id = uuid4()
+
+    first = projects.documents(
+        actor=_actor(),
+        project_id=project_id,
+        load_urls=False,
+        sort=ProjectPaperSort.ADDED_DESC,
+        limit=1,
+    )
+    resized = projects.documents(
+        actor=_actor(),
+        project_id=project_id,
+        load_urls=False,
+        sort=ProjectPaperSort.ADDED_DESC,
+        limit=50,
+        cursor=first.next_cursor,
+    )
+
+    assert resized.total_count == 2
+    assert gateway.list_documents.call_args_list[1].kwargs["position"].id == first_id
+    assert gateway.list_documents.call_args_list[1].kwargs["limit"] == 50
+
+
+def test_project_outputs_cursor_survives_page_size_changes() -> None:
+    """Page size is a preference, not a filter: the same keyset cursor must
+    remain valid when the caller changes limit between output pages."""
+    first_id = uuid4()
+    second_id = uuid4()
+    gateway = MagicMock()
+    gateway.list_outputs.side_effect = [
+        _output_page(item_id=first_id, has_more=True),
+        _output_page(item_id=second_id, has_more=False),
+    ]
+    projects = _projects(gateway=gateway)
+    project_id = uuid4()
+
+    first = projects.outputs(
+        actor=_actor(),
+        project_id=project_id,
+        sort=LibraryOutputSort.UPDATED_DESC,
+        limit=1,
+    )
+    resized = projects.outputs(
+        actor=_actor(),
+        project_id=project_id,
+        sort=LibraryOutputSort.UPDATED_DESC,
+        limit=50,
+        cursor=first.next_cursor,
+    )
+
+    assert resized.total_count == 2
+    assert gateway.list_outputs.call_args_list[1].kwargs["position"].id == first_id
+    assert gateway.list_outputs.call_args_list[1].kwargs["limit"] == 50
 
 
 def test_project_list_uses_one_aggregate_projection_query() -> None:

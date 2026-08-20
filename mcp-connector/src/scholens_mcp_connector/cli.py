@@ -299,7 +299,6 @@ def _local_error_result(
                 text=json.dumps({"error": error}, separators=(",", ":")),
             )
         ],
-        structuredContent={"error": error},
         isError=True,
     )
 
@@ -326,16 +325,39 @@ def _ingestion_retry_result(
     )
 
 
+def _error_from_result(result: types.CallToolResult) -> dict[str, object] | None:
+    """Read the error envelope across old and current server representations."""
+    structured = result.structuredContent
+    structured_error = structured.get("error") if isinstance(structured, dict) else None
+    if isinstance(structured_error, dict):
+        return cast(dict[str, object], structured_error)
+    for block in result.content:
+        if not isinstance(block, types.TextContent):
+            continue
+        try:
+            payload = json.loads(block.text)
+        except (TypeError, ValueError):
+            continue
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            return cast(dict[str, object], error)
+    return None
+
+
 def _remote_ingestion_error_with_retry(
     result: types.CallToolResult,
     *,
     upload_id: str,
     source_arguments: dict[str, object],
 ) -> types.CallToolResult:
-    """Preserve the Scholens error while attaching a safe exact-step continuation."""
-    structured = result.structuredContent
-    remote_error = structured.get("error") if isinstance(structured, dict) else None
-    if not isinstance(remote_error, dict):
+    """Preserve the Scholens error while attaching a safe exact-step continuation.
+
+    Current servers carry JSON errors only in text so strict clients skip schema
+    validation; older servers used ``structuredContent``. Accept both during
+    rolling upgrades, then return the current text-only representation.
+    """
+    remote_error = _error_from_result(result)
+    if remote_error is None:
         return _ingestion_retry_result(
             upload_id=upload_id,
             source_arguments=source_arguments,
@@ -368,7 +390,6 @@ def _remote_ingestion_error_with_retry(
                 text=json.dumps({"error": error}, separators=(",", ":")),
             )
         ],
-        structuredContent={"error": error},
         isError=True,
     )
 

@@ -81,8 +81,12 @@ def complete_document_reflow(
         return JobHandlerResult(value={"accepted": False})
 
     usage = tuple(callback.usage_events)
-    if callback.status == "failed":
-        error_code = callback.error or "document_reflow_failed"
+    if callback.status == "failed" or callback.result is None:
+        error_code = (
+            callback.error or "document_reflow_failed"
+            if callback.status == "failed"
+            else "document_reflow_result_missing"
+        )
         _, changed = job_repository.fail(
             db,
             job_id=job_id,
@@ -108,8 +112,6 @@ def complete_document_reflow(
         )
 
     result = callback.result
-    if result is None:
-        raise RuntimeError("validated_reflow_callback_without_result")
     indexes = [block.index for block in result.blocks]
     block_ids = [block.id for block in result.blocks]
     asset_ids = [asset.id for asset in result.assets]

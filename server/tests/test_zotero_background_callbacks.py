@@ -110,6 +110,63 @@ def test_internal_callback_caps_annotation_content() -> None:
         ZoteroSyncWebhookData.model_validate(payload)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["import", "sync"])
+async def test_invalid_callback_payload_fails_claimed_job(kind: str) -> None:
+    zotero = MagicMock()
+    zotero.claim_background_operation.return_value = SimpleNamespace(
+        acquired=True,
+        claim_id=uuid4(),
+    )
+    zotero.fail_background_operation.return_value = True
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(integrations=MagicMock(), zotero=zotero)
+        ),
+        operations=MagicMock(),
+        operation_factory=OperationContextFactory(),
+    )
+    job_id = uuid4()
+
+    result = await workflow.complete(
+        actor=_actor(),
+        operation=_operation(),
+        job_id=job_id,
+        payload={"operation": kind},
+    )
+
+    assert result == {"accepted": True, "status": "failed"}
+    assert zotero.claim_background_operation.call_args.kwargs["operation_id"] == job_id
+    assert (
+        zotero.fail_background_operation.call_args.kwargs["error_code"]
+        == "zotero_callback_payload_invalid"
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalid_callback_with_other_task_id_does_not_claim_job() -> None:
+    zotero = MagicMock()
+    workflow = ZoteroBackgroundWorkflow(
+        executor=_Executor(  # type: ignore[arg-type]
+            SimpleNamespace(integrations=MagicMock(), zotero=zotero)
+        ),
+        operations=MagicMock(),
+        operation_factory=OperationContextFactory(),
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        await workflow.complete(
+            actor=_actor(),
+            operation=_operation(),
+            job_id=uuid4(),
+            payload={"operation": "sync", "task_id": str(uuid4())},
+        )
+
+    assert exc_info.value.code == "job_callback_mismatch"
+    assert exc_info.value.kind is FailureKind.CONFLICT
+    zotero.claim_background_operation.assert_not_called()
+
+
 def test_auto_import_cursor_stops_before_transient_middle_failure() -> None:
     callback = ZoteroSyncWebhookData.model_validate(
         {

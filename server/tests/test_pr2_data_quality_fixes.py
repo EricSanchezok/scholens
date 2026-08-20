@@ -30,11 +30,56 @@ def test_document_update_keeps_datetime_and_none() -> None:
     assert DocumentUpdate(publish_date=None).publish_date is None
 
 
+def test_document_update_accepts_iso_datetime_strings() -> None:
+    # Regression: citation providers produced "2025-02-03T00:00:00" via
+    # datetime.isoformat() round-trips, which parse_publication_date rejected,
+    # making the PDF postprocess callback 500 and leaking concurrency leases.
+    update = DocumentUpdate(publish_date="2025-02-03T00:00:00")
+    assert update.publish_date == datetime(2025, 2, 3, 0, 0, 0)
+
+
 def test_document_update_rejects_invalid_date_strings() -> None:
     with pytest.raises(ValidationError):
         DocumentUpdate(publish_date="not-a-date")
     with pytest.raises(ValidationError):
         DocumentUpdate(publish_date="2017-13-01")
+
+
+def test_document_update_validate_lenient_drops_only_invalid_fields() -> None:
+    update, dropped = DocumentUpdate.validate_lenient(
+        {
+            "journal": "A Journal",
+            "publish_date": "not-a-date",
+        }
+    )
+    assert dropped == ("publish_date",)
+    assert update.journal == "A Journal"
+    assert update.publish_date is None
+
+
+def test_document_update_validate_lenient_keeps_valid_updates_untouched() -> None:
+    update, dropped = DocumentUpdate.validate_lenient(
+        {
+            "doi": "10.1000/example",
+            "publish_date": "2025-02-03",
+        }
+    )
+    assert dropped == ()
+    assert update.doi == "10.1000/example"
+    assert update.publish_date == datetime(2025, 2, 3)
+
+
+def test_document_update_validate_lenient_reports_only_top_level_fields() -> None:
+    update, dropped = DocumentUpdate.validate_lenient(
+        {
+            "journal": "A Journal",
+            "field_provenance": {"publish_date": object()},
+        }
+    )
+
+    assert dropped == ("field_provenance",)
+    assert update.journal == "A Journal"
+    assert "field_provenance" not in update.model_dump(exclude_unset=True)
 
 
 def test_document_response_serializes_publish_date_as_rfc3339_utc() -> None:
