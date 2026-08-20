@@ -4,7 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 const apiPattern = "**/api/v1";
 
 async function mockAnonymousSession(page: Page) {
-  await page.route(`${apiPattern}/auth/refresh`, async (route) => {
+  await page.route(`${apiPattern}/auth/bootstrap`, async (route) => {
     await route.fulfill({
       status: 401,
       contentType: "application/json",

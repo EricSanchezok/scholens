@@ -25,6 +25,7 @@ runtime behavior, accessibility, data contracts, and component APIs.
 | [Component development](./component-development.md)         | Creating or importing a component                                      |
 | [Design tokens](./design-tokens.md)                         | Changing color, spacing, radius, theme, or Figma variables             |
 | [Motion system](./motion.md)                                | Designing animation, transitions, layout continuity, or reduced motion |
+| [Web performance](./performance.md)                         | Changing navigation feedback, RUM, bundles, or performance budgets     |
 | [Internationalization](./internationalization.md)           | Adding UI copy, locale behavior, formatting, or another language       |
 | [Authentication foundation](./authentication-foundation.md) | Building auth UI, session behavior, responsive auth layout, or mocks   |
 | [Home experience](./home-experience.md)                     | Changing the Home shell, composer, recents, or conversation stream     |

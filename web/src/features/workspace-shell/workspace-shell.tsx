@@ -53,6 +53,11 @@ import type { components } from "@/lib/api/generated/schema";
 import { DOCUMENTATION_PATH, SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import {
+  beginRouteNavigation,
+  reportRouteNavigationFeedback,
+  useRouteNavigationPending,
+} from "@/lib/observability/web-performance";
+import {
   AskIcon,
   LibraryIcon,
   NewConversationIcon,
@@ -89,6 +94,71 @@ function actorName(actor: Actor) {
   return actor.display_name?.trim() || actor.email.split("@")[0] || actor.email;
 }
 
+function isPrimaryNavigationClick(event: React.MouseEvent<HTMLAnchorElement>) {
+  return (
+    event.button === 0 &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    !event.defaultPrevented
+  );
+}
+
+function NavigationPendingIndicator({
+  href,
+  label,
+}: {
+  href: string;
+  label: string;
+}) {
+  const pending = useRouteNavigationPending(href);
+  React.useEffect(() => {
+    if (pending) reportRouteNavigationFeedback();
+  }, [pending]);
+  return (
+    <>
+      <span aria-live="polite" className="sr-only">
+        {pending ? label : ""}
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "bg-primary pointer-events-none absolute top-1.5 right-1.5 size-1.5 rounded-full opacity-0",
+          pending && "opacity-100",
+        )}
+        data-navigation-pending={pending || undefined}
+      />
+    </>
+  );
+}
+
+function SidebarLinkContent({
+  collapsed,
+  glyph,
+  href,
+  label,
+}: {
+  collapsed: boolean;
+  glyph: IconGlyph;
+  href: string;
+  label: string;
+}) {
+  return (
+    <>
+      <span className="grid size-6 shrink-0 place-items-center">
+        <Icon glyph={glyph} size={20} tone="primary" />
+      </span>
+      {!collapsed && (
+        <span className="settled-content-enter text-sidebar-label truncate">
+          {label}
+        </span>
+      )}
+      <NavigationPendingIndicator href={href} label={label} />
+    </>
+  );
+}
+
 function SidebarControl({
   collapsed,
   label,
@@ -113,24 +183,27 @@ function SidebarControl({
   const control = href ? (
     <Link
       aria-current={active ? "page" : undefined}
-      aria-label={collapsed ? accessibleLabel : undefined}
+      aria-label={accessibleLabel}
       className={cn(
-        "motion-control hover:bg-hover flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
+        "motion-control hover:bg-hover active:bg-pressed relative flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         active && "bg-hover",
       )}
       href={href as Route}
-      onClick={onSelect}
+      onClick={(event) => {
+        if (!isPrimaryNavigationClick(event)) return;
+        beginRouteNavigation(href);
+        onSelect?.();
+      }}
+      prefetch
     >
-      <span className="grid size-6 shrink-0 place-items-center">
-        <Icon glyph={glyph} size={20} tone="primary" />
-      </span>
-      {!collapsed && (
-        <span className="settled-content-enter text-sidebar-label truncate">
-          {label}
-        </span>
-      )}
+      <SidebarLinkContent
+        collapsed={collapsed}
+        glyph={glyph}
+        href={href}
+        label={label}
+      />
     </Link>
   ) : (
     <button
@@ -632,109 +705,120 @@ function MobileNavigation({
   );
 }
 
+function MobileDestinationContent({
+  active,
+  glyph,
+  href,
+  label,
+}: {
+  active: boolean;
+  glyph: IconGlyph;
+  href: string;
+  label: string;
+}) {
+  const pending = useRouteNavigationPending(href);
+  const selected = active || pending;
+  React.useEffect(() => {
+    if (pending) reportRouteNavigationFeedback();
+  }, [pending]);
+  return (
+    <>
+      <span
+        className={cn(
+          "relative grid size-8 place-items-center rounded-full",
+          selected && "bg-primary",
+        )}
+        data-selected-indicator={selected || undefined}
+      >
+        <Icon
+          glyph={glyph}
+          size={20}
+          tone={selected ? "inverse" : "secondary"}
+        />
+        {pending && (
+          <span
+            aria-hidden="true"
+            className="bg-canvas absolute -top-0.5 -right-0.5 size-2 rounded-full border border-current"
+            data-navigation-pending
+          />
+        )}
+      </span>
+      <span className={selected ? "text-foreground font-semibold" : ""}>
+        {label}
+      </span>
+      <span aria-live="polite" className="sr-only">
+        {pending ? label : ""}
+      </span>
+    </>
+  );
+}
+
+function MobileDestinationLink({
+  active,
+  glyph,
+  href,
+  label,
+}: {
+  active: boolean;
+  glyph: IconGlyph;
+  href: string;
+  label: string;
+}) {
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      aria-label={label}
+      className={cn(
+        "active:bg-pressed flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] px-1 text-xs font-medium",
+        keyboardFocusRing,
+        active ? "text-foreground" : "text-secondary",
+      )}
+      href={href as Route}
+      onClick={(event) => {
+        if (isPrimaryNavigationClick(event)) beginRouteNavigation(href);
+      }}
+      prefetch
+    >
+      <MobileDestinationContent
+        active={active}
+        glyph={glyph}
+        href={href}
+        label={label}
+      />
+    </Link>
+  );
+}
+
 function MobileTabBar({
   activeDestination,
 }: {
   activeDestination: WorkspaceDestination;
 }) {
   const t = useTranslations("WorkspaceShell.navigation");
-  const itemClassName = cn(
-    "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[var(--radius-md)] px-1 text-xs font-medium",
-    keyboardFocusRing,
-  );
-
   return (
     <nav
       aria-label={t("primary")}
       className="grid h-14 shrink-0 grid-cols-3 lg:hidden"
       data-testid="mobile-tab-bar"
     >
-      <Link
-        aria-current={activeDestination === "ask" ? "page" : undefined}
-        className={cn(
-          itemClassName,
-          activeDestination === "ask" ? "text-foreground" : "text-secondary",
-        )}
+      <MobileDestinationLink
+        active={activeDestination === "ask"}
+        glyph={AskIcon}
         href="/"
-      >
-        <span
-          className={cn(
-            "grid size-8 place-items-center rounded-full",
-            activeDestination === "ask" && "bg-primary",
-          )}
-          data-selected-indicator={
-            activeDestination === "ask" ? true : undefined
-          }
-        >
-          <Icon
-            glyph={AskIcon}
-            size={20}
-            tone={activeDestination === "ask" ? "inverse" : "secondary"}
-          />
-        </span>
-        <span className={activeDestination === "ask" ? "font-semibold" : ""}>
-          {t("ask")}
-        </span>
-      </Link>
-      <Link
-        aria-current={activeDestination === "library" ? "page" : undefined}
-        className={cn(
-          itemClassName,
-          activeDestination === "library"
-            ? "text-foreground"
-            : "text-secondary",
-        )}
-        href={"/library" as Route}
-      >
-        <span
-          className={cn(
-            "grid size-8 place-items-center rounded-full",
-            activeDestination === "library" && "bg-primary",
-          )}
-          data-selected-indicator={
-            activeDestination === "library" ? true : undefined
-          }
-        >
-          <Icon
-            glyph={LibraryIcon}
-            size={20}
-            tone={activeDestination === "library" ? "inverse" : "secondary"}
-          />
-        </span>
-        <span
-          className={activeDestination === "library" ? "font-semibold" : ""}
-        >
-          {t("library")}
-        </span>
-      </Link>
-      <Link
-        aria-current={activeDestination === "projects" ? "page" : undefined}
-        className={cn(
-          itemClassName,
-          activeDestination === "projects"
-            ? "text-foreground"
-            : "text-secondary",
-        )}
-        href={"/projects" as Route}
-      >
-        <span
-          className={cn(
-            "grid size-8 place-items-center rounded-full",
-            activeDestination === "projects" && "bg-primary",
-          )}
-        >
-          <Icon
-            glyph={ProjectIcon}
-            size={20}
-            tone={activeDestination === "projects" ? "inverse" : "secondary"}
-          />
-        </span>
-        <span
-          className={activeDestination === "projects" ? "font-semibold" : ""}
-        >
-          {t("projects")}
-        </span>
-      </Link>
+        label={t("ask")}
+      />
+      <MobileDestinationLink
+        active={activeDestination === "library"}
+        glyph={LibraryIcon}
+        href="/library"
+        label={t("library")}
+      />
+      <MobileDestinationLink
+        active={activeDestination === "projects"}
+        glyph={ProjectIcon}
+        href="/projects"
+        label={t("projects")}
+      />
     </nav>
   );
 }

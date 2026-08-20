@@ -69,29 +69,34 @@ def document_response(document: Document) -> DocumentResponse:
     )
 
 
+def _library_paper_payload(entry: LibraryPaper) -> dict[str, Any]:
+    return {
+        "library_entry_id": entry.id,
+        "user_id": entry.user_id,
+        "status": entry.status,
+        "last_accessed_at": entry.last_accessed_at,
+        "metadata_overrides": entry.metadata_overrides,
+        "is_public": entry.is_public,
+        "preview_url": (
+            s3_service.generate_presigned_url(entry.document.preview_s3_key)
+            if entry.document.preview_s3_key
+            else None
+        ),
+        "tags": [
+            {"id": tag.id, "name": tag.name, "color": tag.color} for tag in entry.tags
+        ],
+        "document": document_response(entry.document),
+        "created_at": entry.created_at,
+        "updated_at": entry.updated_at,
+    }
+
+
 def library_paper_response(entry: LibraryPaper) -> LibraryPaperResponse:
-    return LibraryPaperResponse.model_validate(
-        {
-            "library_entry_id": entry.id,
-            "user_id": entry.user_id,
-            "status": entry.status,
-            "last_accessed_at": entry.last_accessed_at,
-            "metadata_overrides": entry.metadata_overrides,
-            "is_public": entry.is_public,
-            "preview_url": (
-                s3_service.generate_presigned_url(entry.document.preview_s3_key)
-                if entry.document.preview_s3_key
-                else None
-            ),
-            "tags": [
-                {"id": tag.id, "name": tag.name, "color": tag.color}
-                for tag in entry.tags
-            ],
-            "document": document_response(entry.document),
-            "created_at": entry.created_at,
-            "updated_at": entry.updated_at,
-        }
-    )
+    return LibraryPaperResponse.model_validate(_library_paper_payload(entry))
+
+
+def library_paper_list_response(entry: LibraryPaper) -> LibraryPaperListPaperEntry:
+    return LibraryPaperListPaperEntry.model_validate(_library_paper_payload(entry))
 
 
 def library_ingestion_response(
@@ -363,11 +368,7 @@ class SqlAlchemyPaperLibraryGateway:
                     )
                 )
             else:
-                responses.append(
-                    LibraryPaperListPaperEntry.model_validate(
-                        library_paper_response(entry).model_dump()
-                    )
-                )
+                responses.append(library_paper_list_response(entry))
         positions = [
             LibraryPagePosition(
                 key=self._paper_key(entry, sort=sort),

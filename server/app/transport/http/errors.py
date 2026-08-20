@@ -144,7 +144,12 @@ def _normalize_http_error(
             message="Invalid email or password",
             headers=headers,
         )
-    if endpoint == "refresh" and exc.status_code in {400, 401, 403, 404}:
+    if endpoint in {"bootstrap", "refresh"} and exc.status_code in {
+        400,
+        401,
+        403,
+        404,
+    }:
         code = (
             "auth_session_missing"
             if "missing" in detail_text

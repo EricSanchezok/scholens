@@ -21,6 +21,8 @@ upgrade, and troubleshooting rules are canonical in the
 The sanchezcloud-identity routers are mounted by the bootstrap composition root:
 
 - `/api/v1/auth/*`: register, verify email, login, refresh, logout, password reset
+- `/api/v1/auth/bootstrap`: rotate the browser refresh session and return the
+  access token plus the product-enriched Actor in one additive response
 - `/api/v1/me/profile`: shared identity profile operations
 - `/api/v1/me`: shared identity enriched with Scholens profile state
 
@@ -28,6 +30,13 @@ Protected endpoints require `Authorization: Bearer <access-token>`. Scholens
 keeps access tokens in browser memory. Refresh tokens are rotated in the
 host-only `scholens_refresh` cookie with `HttpOnly`, `SameSite=Strict`, and
 `Secure` enabled in production; JavaScript never receives them.
+
+Bootstrap is a Scholens application workflow: the sanchezcloud-identity adapter
+validates the refresh subject, product access is resolved before rotation, and
+the adapter then atomically rotates the shared session. This ordering prevents
+a downstream profile failure from consuming a refresh token without returning
+its successor cookie. Existing `/auth/refresh` and `/me` contracts remain
+independently callable.
 
 ## Required configuration
 

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AddIcon } from "@/design-system/icons/semantic-icons";
 import type { Route } from "next";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
@@ -20,11 +21,12 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
+import { conversationQueries } from "@/features/conversation";
 import { integrationQueries } from "@/features/integrations";
 import { useSettingsNavigation } from "@/features/settings";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import { usePrimaryContentReady } from "@/lib/observability/web-performance";
 import {
-  ZoteroLibraryDialog,
   ZoteroOperationStatus,
   clearZoteroCallbackParams,
   shouldOpenZoteroLibrary,
@@ -43,7 +45,6 @@ import {
   removeLibraryPapers,
   replaceLibraryTagAssignments,
 } from "./api";
-import { AddPapersDialog } from "./components/add-papers-dialog";
 import { OutputsView } from "./components/outputs-view";
 import { PapersView } from "./components/papers-view";
 import {
@@ -55,6 +56,15 @@ import {
   type PaperSort,
 } from "./library-search";
 import { usePaperIngestions } from "./use-paper-ingestions";
+
+const loadAddPapersDialog = () =>
+  import("./components/add-papers-dialog").then(
+    (module) => module.AddPapersDialog,
+  );
+const AddPapersDialog = dynamic(loadAddPapersDialog, { ssr: false });
+const loadZoteroLibraryDialog = () =>
+  import("@/features/zotero").then((module) => module.ZoteroLibraryDialog);
+const ZoteroLibraryDialog = dynamic(loadZoteroLibraryDialog, { ssr: false });
 
 function useDebouncedValue(value: string, delay: number) {
   const [debounced, setDebounced] = React.useState(value);
@@ -109,14 +119,11 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const [zoteroOpen, setZoteroOpen] = React.useState(() =>
     shouldOpenZoteroLibrary(searchParams.toString()),
   );
+  const [tagsRequested, setTagsRequested] = React.useState(
+    parsed.tagIds.length > 0,
+  );
   const [zoteroOperation, setZoteroOperation] =
     React.useState<ZoteroOperation>();
-  const zoteroStatus = useQuery(zoteroQueries.status());
-  const zoteroOperationId =
-    zoteroOperation?.id ??
-    (zoteroStatus.data?.active_operation_kind === "import"
-      ? (zoteroStatus.data.active_operation_id ?? undefined)
-      : undefined);
   const [pendingMineruRetry, setPendingMineruRetry] = React.useState<string>();
   const resumingMineruRetry = React.useRef(false);
   const runAction = React.useCallback(
@@ -129,6 +136,10 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     },
     [t, toast],
   );
+
+  React.useEffect(() => {
+    if (zoteroOpen) void loadZoteroLibraryDialog();
+  }, [zoteroOpen]);
 
   const replaceSearch = React.useCallback(
     (patch: Partial<LibrarySearchState>) => {
@@ -159,9 +170,12 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     }
   }, [router, searchParams, toast, zoteroT]);
 
-  const conversationsQuery = useQuery(libraryQueries.conversations());
+  const conversationsQuery = useQuery(conversationQueries.list());
   const summaryQuery = useQuery(libraryQueries.summary());
-  const tagsQuery = useQuery(libraryQueries.tags());
+  const tagsQuery = useQuery({
+    ...libraryQueries.tags(),
+    enabled: tagsRequested,
+  });
   const papersQuery = useQuery({
     ...libraryQueries.papers({
       cursor: parsed.cursor,
@@ -180,6 +194,18 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     }),
     enabled: parsed.tab === "outputs",
   });
+  usePrimaryContentReady(
+    parsed.tab === "papers" ? papersQuery.isSuccess : outputsQuery.isSuccess,
+  );
+  const zoteroStatus = useQuery({
+    ...zoteroQueries.status(),
+    enabled: zoteroOpen || papersQuery.isSuccess || outputsQuery.isSuccess,
+  });
+  const zoteroOperationId =
+    zoteroOperation?.id ??
+    (zoteroStatus.data?.active_operation_kind === "import"
+      ? (zoteroStatus.data.active_operation_id ?? undefined)
+      : undefined);
   const paperEntries = React.useMemo(
     () => papersQuery.data?.items ?? [],
     [papersQuery.data?.items],
@@ -330,6 +356,9 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
         <IconButton
           label={t("addPapers.open")}
           onClick={() => setAddOpen(true)}
+          onFocus={() => void loadAddPapersDialog()}
+          onPointerDown={() => void loadAddPapersDialog()}
+          onPointerEnter={() => void loadAddPapersDialog()}
           variant="ghost"
         >
           <Icon glyph={AddIcon} size={24} />
@@ -372,6 +401,9 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
             <Button
               className="hidden lg:inline-flex"
               onClick={() => setAddOpen(true)}
+              onFocus={() => void loadAddPapersDialog()}
+              onPointerDown={() => void loadAddPapersDialog()}
+              onPointerEnter={() => void loadAddPapersDialog()}
             >
               <Icon glyph={AddIcon} size={20} tone="inverse" />
               {t("addPapers.open")}
@@ -421,6 +453,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 void runAction(() => ingestion.cancel(id))
               }
               onNext={(cursor) => replaceSearch({ cursor })}
+              onNeedTags={() => setTagsRequested(true)}
               onOpenDocument={(documentId) =>
                 router.push(`/reader/${documentId}` as Route)
               }
@@ -460,6 +493,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               sort={parsed.sort as PaperSort}
               tagIds={parsed.tagIds}
               tags={tagsQuery.data?.items ?? []}
+              tagsLoading={tagsQuery.isPending && tagsRequested}
             />
           </TabsContent>
           <TabsContent className="mt-4 grid min-w-0 gap-4" value="outputs">
