@@ -446,6 +446,12 @@ function Preview({
       <p className="text-secondary mt-1 text-xs">
         {item.publication || t("unknown")}
       </p>
+      {item.doi ? (
+        <p className="text-secondary mt-2 text-xs [overflow-wrap:anywhere]">
+          <span className="text-muted font-medium">{t("columns.doi")}</span>{" "}
+          {item.doi}
+        </p>
+      ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="text-muted text-xs">
           {t(personalLabels ? "columns.personalStatus" : "columns.status")}
@@ -659,7 +665,7 @@ export function PaperCollectionWorkbench({
           {width === undefined ? null : (
             <div role="rowgroup">
               {compact ? (
-                <div className="sr-only" role="row">
+                <div aria-rowindex={1} className="sr-only" role="row">
                   <span role="columnheader">{t("columns.thumbnail")}</span>
                   <span role="columnheader">{t("columns.paper")}</span>
                   {actions ? (
@@ -669,6 +675,7 @@ export function PaperCollectionWorkbench({
               ) : (
                 <div
                   className="bg-surface text-muted sticky top-0 z-10 grid h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold"
+                  aria-rowindex={1}
                   role="row"
                   style={{ gridTemplateColumns }}
                 >
@@ -712,6 +719,7 @@ export function PaperCollectionWorkbench({
                 if (!item) return null;
                 return (
                   <div
+                    aria-rowindex={virtualRow.index + 2}
                     className="border-line-subtle hover:bg-hover focus-within:bg-hover data-[current=true]:bg-subtle absolute top-0 left-0 w-full border-b"
                     data-current={preview?.id === item.id}
                     data-index={virtualRow.index}

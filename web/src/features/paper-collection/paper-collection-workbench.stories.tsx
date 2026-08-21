@@ -159,6 +159,10 @@ async function expectCompactTableSemantics(canvasElement: HTMLElement) {
   const table = await canvas.findByRole("table");
   await waitFor(() => expect(table).toHaveAttribute("aria-colcount", "3"));
   const headers = within(table).getAllByRole("columnheader");
+  await expect(within(table).getAllByRole("row")[0]).toHaveAttribute(
+    "aria-rowindex",
+    "1",
+  );
   await expect(headers).toHaveLength(3);
   await expect(headers.map((header) => header.textContent)).toEqual([
     "Paper thumbnail",
@@ -171,6 +175,7 @@ async function expectCompactTableSemantics(canvasElement: HTMLElement) {
     ),
   );
   const rows = within(table).getAllByRole("row").slice(1);
+  await expect(rows[0]).toHaveAttribute("aria-rowindex", "2");
   rows.forEach((row) =>
     expect(within(row).getAllByRole("cell")).toHaveLength(3),
   );
@@ -207,6 +212,9 @@ export const Library: Story = {
     const preview = canvas.getByRole("complementary", {
       name: "Paper details",
     });
+    await expect(
+      within(preview).getByText("10.48550/arXiv.2608.12001"),
+    ).toBeVisible();
     await userEvent.click(
       within(preview).getByRole("button", {
         name: /Reading status for.*Memory as a Controlled Process/,
