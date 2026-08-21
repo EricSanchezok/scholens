@@ -1064,9 +1064,21 @@ def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> N
     assert diagnostic_alarm["Dimensions"] == [{"Name": "OTelLib", "Value": "scholens"}]
     assert diagnostic_alarm["Threshold"] == 1
 
+    avatar_alarm = resources["SharedAvatarReadFailureAlarm"]["Properties"]
+    assert avatar_alarm["Namespace"] == "Scholens/Production"
+    assert avatar_alarm["MetricName"] == "scholens.shared_avatar.read_failed"
+    assert avatar_alarm["Dimensions"] == [{"Name": "OTelLib", "Value": "scholens"}]
+    assert avatar_alarm["Statistic"] == "Sum"
+    assert avatar_alarm["Period"] == 300
+    assert avatar_alarm["Threshold"] == 1
+    assert avatar_alarm["AlarmActions"] == [
+        {"Fn::ImportValue": "sanchezcloud-scholens-alert-topic-arn"}
+    ]
+
     dashboard = str(resources["Dashboard"])
     assert "HTTPCode_Target_5XX_Count" in dashboard
     assert "scholens.dependency.failures" in dashboard
+    assert "scholens.shared_avatar.read_failed" in dashboard
     assert "scholens.diagnostic_snapshot.write_failed" in dashboard
     dashboard_body = resources["Dashboard"]["Properties"]["DashboardBody"]["Fn::Sub"][0]
     rendered_dashboard = re.sub(r"\$\{[^}]+\}", "fixture", dashboard_body)
@@ -1309,6 +1321,10 @@ def test_production_uses_the_unified_migration_cli_and_gunicorn_runtime() -> Non
     )
     assert '["scholens", "db", "upgrade", "--yes", "--json"]' in entrypoint
     assert '["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]' in entrypoint
+    assert "_assert_shared_avatar_runtime_privileges(database_url)" in entrypoint
+    assert entrypoint.index(
+        "_assert_shared_avatar_runtime_privileges(database_url)"
+    ) < (entrypoint.index('"SCHOLENS_MIGRATION_PROOF="'))
 
 
 def test_api_scaling_respects_the_shared_rds_connection_budget() -> None:

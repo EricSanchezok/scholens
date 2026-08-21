@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -31,7 +32,11 @@ from app.transport.http.public_v1.avatar_presenters import (
     present_project_collaborators,
 )
 from app.transport.http.public_v1.identity import get_my_avatar
-from sanchezcloud_identity.exceptions import AvatarNotFoundError
+from sanchezcloud_identity.exceptions import (
+    AvatarNotFoundError,
+    AvatarStorageError,
+    DBError,
+)
 
 NOW = datetime(2026, 8, 21, 10, 0, tzinfo=UTC)
 AVATAR = AvatarReference(
@@ -284,6 +289,44 @@ async def test_upstream_failures_are_not_cached() -> None:
         await reader.get(42)
     assert await reader.get(42) == AVATAR
     assert manager.get.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "expected_stage"),
+    [
+        (DBError("temporary"), "identity_database"),
+        (AvatarStorageError("temporary"), "avatar_storage"),
+        (RuntimeError("temporary"), "identity_adapter"),
+    ],
+)
+async def test_upstream_failures_emit_sanitized_low_cardinality_diagnostics(
+    failure: Exception,
+    expected_stage: str,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counters: list[tuple[str, int]] = []
+    monkeypatch.setattr(
+        "app.modules.identity.infrastructure.shared_avatars.add_counter",
+        lambda name, value=1: counters.append((name, value)),
+    )
+    manager = MagicMock()
+    manager.get = AsyncMock(side_effect=failure)
+    reader = SanchezCloudSharedAvatarReader(manager, max_concurrency=1)
+
+    with caplog.at_level(logging.WARNING), pytest.raises(SharedAvatarUnavailableError):
+        await reader.get(42)
+
+    record = next(
+        record
+        for record in caplog.records
+        if record.message == "shared_avatar_read_failed"
+    )
+    assert record.failure_stage == expected_stage
+    assert record.exception_type == type(failure).__name__
+    assert not hasattr(record, "user_id")
+    assert counters == [("scholens.shared_avatar.read_failed", 1)]
 
 
 @pytest.mark.asyncio

@@ -575,6 +575,13 @@ an immutable manifest. Publishing alone never changes production. An authorized 
 then runs the protected migration workflow when the release contains a new revision and
 deploys only after its attestation becomes current.
 
+A release that changes runtime grants in `database-bootstrap.sql`, including a
+grant-only release with no schema revision, requires the database owner to apply that
+file idempotently before the protected migration workflow. The migration task audits
+that `scholens_app` has `SELECT` and no write privilege on
+`auth.user_avatars` before it emits an attestation; missing or over-broad access therefore
+blocks deployment instead of surfacing later as a fail-soft avatar fallback.
+
 Every new migration is appended to the linear history and classified in
 `server/migrations/policy.json`. The protected migration workflow rejects a candidate when
 the live history is not its exact prefix, when any applied migration checksum changed, or
@@ -611,8 +618,8 @@ repaired by a forward revision or an explicitly approved database recovery opera
   terminate accepted work. Jobs workers retain their 45-minute visibility and use
   Fargate Spot only for scale-out. Scale-in is deliberately slower than scale-out.
 - Queue DLQs, oldest-message age, ALB-generated 5xx, API target 5xx, Redis/S3 dependency
-  failures, diagnostic snapshot write failures, and unhealthy target alarms publish to
-  the Scholens SNS topic. The dependency and diagnostic alarms use the
+  failures, shared-avatar read failures, diagnostic snapshot write failures, and unhealthy
+  target alarms publish to the Scholens SNS topic. The dependency and diagnostic alarms use the
   `Scholens/Production` OpenTelemetry metrics and fire on the first failure in five
   minutes; the API target alarm fires at five responses in five minutes. Production
   application exporters send Counter and Histogram instruments with delta temporality so

@@ -13,6 +13,7 @@ from scholens_runtime_contracts import (
     EndpointConfigurationError,
     validate_database_endpoint,
 )
+from sqlalchemy import create_engine, text
 
 
 def _database_url() -> str:
@@ -56,6 +57,40 @@ def _release_sha() -> str:
     if re.fullmatch(r"[0-9a-f]{40}", release_sha) is None:
         raise RuntimeError("missing or invalid release SHA")
     return release_sha
+
+
+def _assert_shared_avatar_runtime_privileges(database_url: str) -> None:
+    """Require the read-only Identity avatar grant before release attestation."""
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            privileges = connection.execute(
+                text(
+                    """
+                    SELECT
+                      has_table_privilege(
+                        'scholens_app', 'auth.user_avatars', 'SELECT'
+                      ),
+                      has_table_privilege(
+                        'scholens_app', 'auth.user_avatars', 'INSERT'
+                      ),
+                      has_table_privilege(
+                        'scholens_app', 'auth.user_avatars', 'UPDATE'
+                      ),
+                      has_table_privilege(
+                        'scholens_app', 'auth.user_avatars', 'DELETE'
+                      )
+                    """
+                )
+            ).one()
+    except Exception:
+        raise RuntimeError("could not audit shared avatar runtime privileges") from None
+    finally:
+        engine.dispose()
+
+    can_select, can_insert, can_update, can_delete = privileges
+    if can_select is not True or any((can_insert, can_update, can_delete)):
+        raise RuntimeError("shared avatar runtime privileges must be SELECT-only")
 
 
 def main() -> int:
@@ -106,6 +141,7 @@ def main() -> int:
             raise RuntimeError(
                 "installed auth schema must exactly match the release contract"
             )
+        _assert_shared_avatar_runtime_privileges(database_url)
         proof = {
             "contract_version": 1,
             "release_sha": release_sha,

@@ -3,15 +3,18 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from unittest.mock import MagicMock
 
 import pytest
 
 from app.bootstrap.runtime_entrypoint import (
+    _assert_shared_avatar_runtime_privileges,
     _database_url,
     _identity_database_url,
     _release_sha,
     main,
 )
+from sanchezcloud_identity import AUTH_SCHEMA_VERSION
 
 
 def test_database_url_escapes_credentials_and_requires_tls(monkeypatch) -> None:
@@ -53,6 +56,52 @@ def test_release_sha_must_be_an_exact_commit(monkeypatch) -> None:
 
     monkeypatch.setenv("RELEASE_SHA", "a" * 40)
     assert _release_sha() == "a" * 40
+
+
+@pytest.mark.parametrize(
+    "privileges",
+    [
+        (False, False, False, False),
+        (True, True, False, False),
+        (True, False, True, False),
+        (True, False, False, True),
+    ],
+)
+def test_shared_avatar_runtime_privilege_audit_rejects_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    privileges: tuple[bool, bool, bool, bool],
+) -> None:
+    engine = MagicMock()
+    connection = engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value.one.return_value = privileges
+    monkeypatch.setattr(
+        "app.bootstrap.runtime_entrypoint.create_engine",
+        lambda _database_url: engine,
+    )
+
+    with pytest.raises(RuntimeError, match="SELECT-only"):
+        _assert_shared_avatar_runtime_privileges("postgresql://fixture")
+
+    engine.dispose.assert_called_once_with()
+
+
+def test_shared_avatar_runtime_privilege_audit_accepts_read_only_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = MagicMock()
+    connection = engine.connect.return_value.__enter__.return_value
+    connection.execute.return_value.one.return_value = (True, False, False, False)
+    monkeypatch.setattr(
+        "app.bootstrap.runtime_entrypoint.create_engine",
+        lambda _database_url: engine,
+    )
+
+    _assert_shared_avatar_runtime_privileges("postgresql://fixture")
+
+    statement = str(connection.execute.call_args.args[0])
+    assert "auth.user_avatars" in statement
+    assert "scholens_app" in statement
+    engine.dispose.assert_called_once_with()
 
 
 def test_production_database_accepts_only_rds_hostname(monkeypatch) -> None:
@@ -173,3 +222,47 @@ def test_migration_fails_when_identity_ledger_is_not_exact(
     ]
     assert "secret" not in repr(commands)
     assert os.environ["AUTH_DATABASE_URL"].startswith("postgresql://")
+
+
+def test_migration_emits_no_proof_when_avatar_runtime_privileges_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("DATABASE_HOST", "db.example.invalid")
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "sanchezcloud")
+    monkeypatch.setenv("DATABASE_USERNAME", "scholens_migrator")
+    monkeypatch.setenv("DATABASE_PASSWORD", "secret")
+    monkeypatch.setenv("RELEASE_SHA", "a" * 40)
+    monkeypatch.setattr("sys.argv", ["runtime_entrypoint", "migrate"])
+    results = iter(
+        (
+            subprocess.CompletedProcess(
+                [],
+                0,
+                stdout=json.dumps(
+                    {
+                        "up_to_date": True,
+                        "current_revisions": ["head"],
+                        "expected_revisions": ["head"],
+                    }
+                ),
+            ),
+            subprocess.CompletedProcess([], 0),
+            subprocess.CompletedProcess([], 0, stdout=f"{AUTH_SCHEMA_VERSION}\n"),
+        )
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: next(results))
+
+    def reject_privilege_drift(_database_url: str) -> None:
+        raise RuntimeError("shared avatar runtime privileges must be SELECT-only")
+
+    monkeypatch.setattr(
+        "app.bootstrap.runtime_entrypoint._assert_shared_avatar_runtime_privileges",
+        reject_privilege_drift,
+    )
+
+    with pytest.raises(RuntimeError, match="SELECT-only"):
+        main()
+
+    assert "SCHOLENS_MIGRATION_PROOF=" not in capsys.readouterr().out
