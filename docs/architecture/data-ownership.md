@@ -24,6 +24,10 @@ product schema.
   `HttpOnly`, and `SameSite=Strict`.
 - Identity managers own password, token, and refresh-session behavior. Scholens must not query
   or mutate `auth.refresh_tokens` directly.
+- The explicit local-only `dev seed-test-account` fixture delegates identity
+  creation, verification, password hashing/reset, and session revocation to the
+  pinned Identity SDK. It accepts only synthetic addresses against the exact
+  shared-local runtime database and is never invoked by application startup.
 - Product profiles, roles, administrators, blocks, subscriptions, quota, and usage remain in
   `scholens.*`.
 - `subscriptions` records payment state only. Internal Researcher access lives

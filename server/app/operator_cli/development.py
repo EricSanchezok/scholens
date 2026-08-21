@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import subprocess
@@ -28,6 +29,11 @@ from app.operator_cli.common import (
 
 RESET_PHRASE = "RESET-SCHOLENS-LOCAL"
 _ROLE_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
+_SYNTHETIC_EMAIL_DOMAINS = {
+    "example.com",
+    "example.net",
+    "example.org",
+}
 
 
 def _require_reset_url(value: str, *, variable: str) -> None:
@@ -41,6 +47,37 @@ def _require_reset_url(value: str, *, variable: str) -> None:
         or bool(parsed.params or parsed.query or parsed.fragment)
     ):
         raise ValueError(f"{variable} must target exactly 127.0.0.1:55432/sanchezcloud")
+
+
+def _require_local_test_account_target(database_url: str, *, email: str) -> None:
+    if os.getenv("ENVIRONMENT", "development").casefold() != "development":
+        raise ValueError("Test-account seeding is available only in development")
+    parsed = urlparse(database_url)
+    if (
+        parsed.scheme not in {"postgres", "postgresql", "postgresql+psycopg2"}
+        or parsed.hostname != "127.0.0.1"
+        or parsed.port != 55432
+        or parsed.path != "/sanchezcloud"
+        or parsed.username != "scholens_app"
+        or bool(parsed.params or parsed.query or parsed.fragment)
+    ):
+        raise ValueError(
+            "Test-account seeding requires scholens_app at exactly "
+            "127.0.0.1:55432/sanchezcloud"
+        )
+    domain = email.rpartition("@")[2].casefold()
+    if domain not in _SYNTHETIC_EMAIL_DOMAINS:
+        raise ValueError("Test-account email must use a reserved synthetic domain")
+
+
+def _password_callback(
+    _context: click.Context,
+    _parameter: click.Parameter,
+    value: str | None,
+) -> str | None:
+    if value is not None and len(value) < 12:
+        raise click.BadParameter("must contain at least 12 characters")
+    return value
 
 
 def _auth_snapshot(database_url: str) -> dict[str, object]:
@@ -110,6 +147,117 @@ def _apply_local_grants(admin_url: str) -> None:
 @click.group("dev", cls=OutputGroup)
 def development_group() -> None:
     """Prepare verified accounts and reset only local product data."""
+
+
+@development_group.command("seed-test-account")
+@click.option(
+    "--email",
+    default="developer@example.com",
+    show_default=True,
+    callback=email_callback,
+)
+@click.option("--display-name", default="Local Developer", show_default=True)
+@click.option(
+    "--password",
+    envvar="SCHOLENS_DEV_TEST_PASSWORD",
+    prompt=True,
+    hide_input=True,
+    confirmation_prompt=True,
+    callback=_password_callback,
+    help=(
+        "Synthetic-account password. Prefer SCHOLENS_DEV_TEST_PASSWORD or the "
+        "hidden prompt instead of a command-line value."
+    ),
+)
+@click.option(
+    "--bootstrap-admin",
+    is_flag=True,
+    help="Grant administrator access only when no Scholens administrator exists.",
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.pass_obj
+@guarded
+def seed_test_account(
+    state: CliState,
+    email: str,
+    display_name: str,
+    password: str,
+    bootstrap_admin: bool,
+    yes: bool,
+) -> None:
+    """Create or repair one verified synthetic account in shared-local Identity."""
+    from app.modules.identity.application.identity import AuthenticatedIdentity
+    from app.operator_cli.local_test_account import seed_local_test_identity
+    from app.shared.domain import AppError
+
+    database_url = os.getenv("AUTH_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
+    _require_local_test_account_target(database_url, email=email)
+    confirm(
+        f"Seed verified local test account {email}? Existing sessions may be revoked.",
+        yes=yes,
+    )
+    result = asyncio.run(
+        seed_local_test_identity(
+            database_url=database_url,
+            email=email,
+            password=password,
+            display_name=display_name,
+            jwt_secret=os.getenv(
+                "AUTH_JWT_SECRET",
+                "development-only-scholens-auth-secret",
+            ),
+        )
+    )
+    actor = executor().command(
+        lambda capabilities: capabilities.identity.resolve_actor(
+            AuthenticatedIdentity(
+                id=result.user_id,
+                email=result.email,
+                display_name=display_name,
+                status="active",
+                email_verified=True,
+            ),
+            operation=cli_operation("dev.seed-test-account", system=True),
+        )
+    )
+    admin_bootstrapped = False
+    if bootstrap_admin and not actor.is_admin:
+        try:
+            admin_result = executor().command(
+                lambda capabilities: capabilities.identity.bootstrap_admin(
+                    operation=cli_operation(
+                        "dev.seed-test-account.bootstrap-admin",
+                        system=True,
+                    ),
+                    user_id=result.user_id,
+                )
+            )
+            admin_bootstrapped = admin_result.changed
+        except AppError as exc:
+            if exc.code != "admin_bootstrap_closed":
+                raise
+            raise ValueError(
+                "Another Scholens administrator already exists; use users grant-admin "
+                "with an explicit administrator actor"
+            ) from exc
+    changed = result.changed or admin_bootstrapped
+    payload = {
+        "changed": changed,
+        "created": result.created,
+        "email": result.email,
+        "email_verified": result.verified,
+        "password_changed": result.password_changed,
+        "profile_changed": result.profile_changed,
+        "is_admin": actor.is_admin or admin_bootstrapped,
+    }
+    emit(
+        state,
+        payload,
+        human=(
+            f"{result.email}: {'changed' if changed else 'unchanged'}; "
+            f"verified; admin={'yes' if payload['is_admin'] else 'no'}"
+        ),
+    )
 
 
 @development_group.command("bootstrap-account")

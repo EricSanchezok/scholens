@@ -178,6 +178,15 @@ caps the documents handled by one invocation and transaction. It relies on
 normal INSERT permissions and the existing tsvector trigger, never runtime
 trigger DDL.
 
+`dev seed-test-account` is the local Identity-fixture exception. It is explicit,
+never part of Server startup, accepts only reserved synthetic addresses, and
+refuses production or any database other than the registered shared-local
+runtime target. Identity creation, verification, and password replacement go
+through the pinned SanchezCloud Identity SDK; Scholens creates only its owned
+product profile and optional first administrator state through application
+services. Matching credentials remain unchanged so repeat runs do not revoke a
+working browser session.
+
 Paper search defaults to `PAPER_SEARCH_BACKEND=postgres_hybrid`. It combines
 compact exact/trigram matching, weighted PostgreSQL full text, and the pinned
 local multilingual embedding model at `SCHOLENS_EMBEDDING_MODEL_PATH`; no query
