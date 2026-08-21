@@ -18,6 +18,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
   keyboardFocusRing,
@@ -277,6 +278,8 @@ function ColumnManager({
         <DropdownMenuLabel>{t("columnsMenu.title")}</DropdownMenuLabel>
         {ALL_COLUMNS.map((column) => {
           const checked = preferences.visible_columns.includes(column);
+          const visibleIndex = preferences.visible_columns.indexOf(column);
+          const columnLabel = t(`columns.${column}`);
           return (
             <React.Fragment key={column}>
               <DropdownMenuCheckboxItem
@@ -284,19 +287,35 @@ function ColumnManager({
                 onCheckedChange={(value) => toggle(column, value === true)}
                 onSelect={(event) => event.preventDefault()}
               >
-                {t(`columns.${column}`)}
+                {columnLabel}
               </DropdownMenuCheckboxItem>
               {checked ? (
                 <DropdownMenuGroup className="flex justify-end gap-1 px-2 pb-1">
                   <DropdownMenuItem
+                    aria-label={t("columnsMenu.moveUpColumn", {
+                      column: columnLabel,
+                    })}
                     className="min-h-8 px-2 text-xs"
-                    onSelect={() => move(column, -1)}
+                    disabled={visibleIndex === 0}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      move(column, -1);
+                    }}
                   >
                     {t("columnsMenu.moveUp")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
+                    aria-label={t("columnsMenu.moveDownColumn", {
+                      column: columnLabel,
+                    })}
                     className="min-h-8 px-2 text-xs"
-                    onSelect={() => move(column, 1)}
+                    disabled={
+                      visibleIndex === preferences.visible_columns.length - 1
+                    }
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      move(column, 1);
+                    }}
                   >
                     {t("columnsMenu.moveDown")}
                   </DropdownMenuItem>
@@ -305,6 +324,8 @@ function ColumnManager({
             </React.Fragment>
           );
         })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem>{t("columnsMenu.done")}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -545,6 +566,10 @@ export function PaperCollectionWorkbench({
       );
     return preferences.visible_columns.filter((column) => column === "status");
   }, [listWidth, preferences.visible_columns]);
+  const compact = listWidth < 640;
+  const columnCount = compact
+    ? 2 + (actions ? 1 : 0)
+    : 1 + effectiveColumns.length + (leading ? 1 : 0) + (actions ? 1 : 0);
   // TanStack Virtual owns a mutable scroll controller by design.
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
@@ -595,42 +620,50 @@ export function PaperCollectionWorkbench({
         data-paper-collection-split=""
       >
         <div
-          aria-colcount={
-            1 + effectiveColumns.length + (leading ? 1 : 0) + (actions ? 1 : 0)
-          }
+          aria-colcount={columnCount}
           aria-rowcount={items.length + 1}
           className="min-w-0"
           role="table"
         >
           <div role="rowgroup">
-            <div
-              className="bg-surface text-muted sticky top-0 z-10 hidden h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold sm:grid"
-              role="row"
-              style={{ gridTemplateColumns }}
-            >
-              {leading ? (
-                <span role="columnheader">
-                  <span className="sr-only">{t("columns.selection")}</span>
-                </span>
-              ) : null}
-              <span role="columnheader">{t("columns.paper")}</span>
-              {effectiveColumns.map((column) => (
-                <span key={column} role="columnheader">
-                  {t(
-                    column === "status" && personalLabels
-                      ? "columns.personalStatus"
-                      : column === "tags" && personalLabels
-                        ? "columns.personalTags"
-                        : `columns.${column}`,
-                  )}
-                </span>
-              ))}
-              {actions ? (
-                <span role="columnheader">
-                  <span className="sr-only">{t("columns.actions")}</span>
-                </span>
-              ) : null}
-            </div>
+            {compact ? (
+              <div className="sr-only" role="row">
+                <span role="columnheader">{t("columns.thumbnail")}</span>
+                <span role="columnheader">{t("columns.paper")}</span>
+                {actions ? (
+                  <span role="columnheader">{t("columns.actions")}</span>
+                ) : null}
+              </div>
+            ) : (
+              <div
+                className="bg-surface text-muted sticky top-0 z-10 grid h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold"
+                role="row"
+                style={{ gridTemplateColumns }}
+              >
+                {leading ? (
+                  <span role="columnheader">
+                    <span className="sr-only">{t("columns.selection")}</span>
+                  </span>
+                ) : null}
+                <span role="columnheader">{t("columns.paper")}</span>
+                {effectiveColumns.map((column) => (
+                  <span key={column} role="columnheader">
+                    {t(
+                      column === "status" && personalLabels
+                        ? "columns.personalStatus"
+                        : column === "tags" && personalLabels
+                          ? "columns.personalTags"
+                          : `columns.${column}`,
+                    )}
+                  </span>
+                ))}
+                {actions ? (
+                  <span role="columnheader">
+                    <span className="sr-only">{t("columns.actions")}</span>
+                  </span>
+                ) : null}
+              </div>
+            )}
           </div>
           <div
             className="max-h-[min(42rem,calc(100dvh-12rem))] overflow-auto"
@@ -646,7 +679,6 @@ export function PaperCollectionWorkbench({
                 if (!item) return null;
                 return (
                   <div
-                    aria-selected={preview?.id === item.id}
                     className="border-line-subtle hover:bg-hover focus-within:bg-hover data-[current=true]:bg-subtle absolute top-0 left-0 w-full border-b"
                     data-current={preview?.id === item.id}
                     data-index={virtualRow.index}
@@ -659,93 +691,109 @@ export function PaperCollectionWorkbench({
                     role="row"
                     style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
-                    <div
-                      className="hidden h-16 items-center gap-3 px-2 sm:grid"
-                      style={{ gridTemplateColumns }}
-                    >
-                      {leading ? <div role="cell">{leading(item)}</div> : null}
-                      <div className="min-w-0" role="cell">
-                        <Link
-                          className={cn(
-                            "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--radius-sm)]",
-                            keyboardFocusRing,
-                          )}
-                          href={item.href}
-                        >
+                    {compact ? (
+                      <div
+                        className={cn(
+                          "grid min-h-28 gap-3 px-3 py-3",
+                          actions
+                            ? "grid-cols-[2.25rem_minmax(0,1fr)_auto]"
+                            : "grid-cols-[2.25rem_minmax(0,1fr)]",
+                        )}
+                      >
+                        <div role="cell">
                           <PaperThumbnail item={item} />
-                          <span className="min-w-0">
-                            <span className="line-clamp-2 text-xs leading-4 font-semibold [overflow-wrap:anywhere]">
+                        </div>
+                        <div className="min-w-0" role="cell">
+                          <Link
+                            className={cn(
+                              "min-w-0 rounded-[var(--radius-sm)]",
+                              keyboardFocusRing,
+                            )}
+                            href={item.href}
+                          >
+                            <span className="line-clamp-2 text-sm leading-5 font-semibold">
                               {item.title}
                             </span>
-                            {item.snippet ? (
-                              <span className="text-secondary mt-0.5 line-clamp-1 block text-[0.6875rem]">
-                                {item.snippet}
-                              </span>
-                            ) : null}
-                          </span>
-                        </Link>
-                      </div>
-                      {effectiveColumns.map((column) => (
-                        <div
-                          className="text-secondary min-w-0 truncate text-xs"
-                          key={column}
-                          role="cell"
-                        >
-                          {column === "status" ? (
+                            <span className="text-secondary mt-1 block truncate text-xs">
+                              {item.authors.join(" · ") ||
+                                t("preview.unknownAuthors")}
+                            </span>
+                          </Link>
+                          <span className="mt-2 flex items-center gap-2">
                             <StatusControl
                               item={item}
                               onChange={onStatusChange}
                               personalLabels={personalLabels}
                             />
-                          ) : column === "tags" ? (
                             <TagButtons item={item} onTagClick={onTagClick} />
-                          ) : column === "authors" ? (
-                            item.authors.join(" · ") ||
-                            t("preview.unknownAuthors")
-                          ) : column === "publication" ? (
-                            item.publication || t("unknown")
-                          ) : column === "last_opened" ? (
-                            item.lastOpened || t("neverOpened")
-                          ) : column === "added_at" ? (
-                            item.addedAt || t("unknown")
-                          ) : (
-                            item.doi || "—"
-                          )}
+                          </span>
                         </div>
-                      ))}
-                      {actions ? <div role="cell">{actions(item)}</div> : null}
-                    </div>
-                    <div className="grid min-h-28 grid-cols-[2.25rem_minmax(0,1fr)_auto] gap-3 px-3 py-3 sm:hidden">
-                      <div role="cell">
-                        <PaperThumbnail item={item} />
+                        {actions ? (
+                          <div role="cell">{actions(item)}</div>
+                        ) : null}
                       </div>
-                      <div className="min-w-0" role="cell">
-                        <Link
-                          className={cn(
-                            "min-w-0 rounded-[var(--radius-sm)]",
-                            keyboardFocusRing,
-                          )}
-                          href={item.href}
-                        >
-                          <span className="line-clamp-2 text-sm leading-5 font-semibold">
-                            {item.title}
-                          </span>
-                          <span className="text-secondary mt-1 block truncate text-xs">
-                            {item.authors.join(" · ") ||
-                              t("preview.unknownAuthors")}
-                          </span>
-                        </Link>
-                        <span className="mt-2 flex items-center gap-2">
-                          <StatusControl
-                            item={item}
-                            onChange={onStatusChange}
-                            personalLabels={personalLabels}
-                          />
-                          <TagButtons item={item} onTagClick={onTagClick} />
-                        </span>
+                    ) : (
+                      <div
+                        className="grid h-16 items-center gap-3 px-2"
+                        style={{ gridTemplateColumns }}
+                      >
+                        {leading ? (
+                          <div role="cell">{leading(item)}</div>
+                        ) : null}
+                        <div className="min-w-0" role="cell">
+                          <Link
+                            className={cn(
+                              "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--radius-sm)]",
+                              keyboardFocusRing,
+                            )}
+                            href={item.href}
+                          >
+                            <PaperThumbnail item={item} />
+                            <span className="min-w-0">
+                              <span className="line-clamp-2 text-xs leading-4 font-semibold [overflow-wrap:anywhere]">
+                                {item.title}
+                              </span>
+                              {item.snippet ? (
+                                <span className="text-secondary mt-0.5 line-clamp-1 block text-[0.6875rem]">
+                                  {item.snippet}
+                                </span>
+                              ) : null}
+                            </span>
+                          </Link>
+                        </div>
+                        {effectiveColumns.map((column) => (
+                          <div
+                            className="text-secondary min-w-0 truncate text-xs"
+                            key={column}
+                            role="cell"
+                          >
+                            {column === "status" ? (
+                              <StatusControl
+                                item={item}
+                                onChange={onStatusChange}
+                                personalLabels={personalLabels}
+                              />
+                            ) : column === "tags" ? (
+                              <TagButtons item={item} onTagClick={onTagClick} />
+                            ) : column === "authors" ? (
+                              item.authors.join(" · ") ||
+                              t("preview.unknownAuthors")
+                            ) : column === "publication" ? (
+                              item.publication || t("unknown")
+                            ) : column === "last_opened" ? (
+                              item.lastOpened || t("neverOpened")
+                            ) : column === "added_at" ? (
+                              item.addedAt || t("unknown")
+                            ) : (
+                              item.doi || "—"
+                            )}
+                          </div>
+                        ))}
+                        {actions ? (
+                          <div role="cell">{actions(item)}</div>
+                        ) : null}
                       </div>
-                      {actions ? <div role="cell">{actions(item)}</div> : null}
-                    </div>
+                    )}
                   </div>
                 );
               })}

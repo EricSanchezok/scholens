@@ -1786,6 +1786,7 @@
     "columns": {
       "actions": "操作",
       "paper": "论文",
+      "thumbnail": "论文缩略图",
       "selection": "选择",
       "status": "状态",
       "personalStatus": "我的状态",
@@ -1821,7 +1822,10 @@
       "label": "配置列",
       "title": "显示列",
       "moveUp": "上移",
-      "moveDown": "下移"
+      "moveDown": "下移",
+      "moveUpColumn": "将{column}上移",
+      "moveDownColumn": "将{column}下移",
+      "done": "完成"
     },
     "moreTags": "另有 {count} 个标签",
     "preferencesSaveFailed": "无法保存论文列表偏好。",

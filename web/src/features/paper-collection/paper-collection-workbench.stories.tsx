@@ -154,6 +154,28 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function expectCompactTableSemantics(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  const table = await canvas.findByRole("table");
+  await waitFor(() => expect(table).toHaveAttribute("aria-colcount", "3"));
+  const headers = within(table).getAllByRole("columnheader");
+  await expect(headers).toHaveLength(3);
+  await expect(headers.map((header) => header.textContent)).toEqual([
+    "Paper thumbnail",
+    "Paper",
+    "Actions",
+  ]);
+  const rows = within(table).getAllByRole("row").slice(1);
+  await expect(rows.length).toBeGreaterThan(0);
+  rows.forEach((row) =>
+    expect(within(row).getAllByRole("cell")).toHaveLength(3),
+  );
+  await expect(
+    canvas.queryByRole("checkbox", { name: "Select paper" }),
+  ).not.toBeInTheDocument();
+  await expect(table.querySelector("[aria-selected]")).toBeNull();
+}
+
 export const Library: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -239,7 +261,19 @@ export const Narrow: Story = {
 };
 
 export const Mobile: Story = {
-  parameters: { viewport: { defaultViewport: "mobile1" } },
+  args: {
+    leading: () => <input aria-label="Select paper" type="checkbox" />,
+  },
+  parameters: { viewport: { defaultViewport: "mobile" } },
+  play: async ({ canvasElement }) => expectCompactTableSemantics(canvasElement),
+};
+
+export const SmallMobile: Story = {
+  args: {
+    leading: () => <input aria-label="Select paper" type="checkbox" />,
+  },
+  parameters: { viewport: { defaultViewport: "smallMobile" } },
+  play: async ({ canvasElement }) => expectCompactTableSemantics(canvasElement),
 };
 
 const oldPreviewUrl = "https://preview.example/old-signed-url.png";
@@ -328,15 +362,70 @@ export const QueuedPreferenceUpdates: Story = {
   },
 };
 
+export const KeyboardColumnReordering: Story = {
+  parameters: { msw: { handlers: queuedPreferenceHandlers } },
+  play: async ({ canvasElement }) => {
+    queuedPreferenceRequestCount = 0;
+    queuedPersistedPreferences = {
+      ...preferences,
+      visible_columns: [...preferences.visible_columns],
+    };
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Configure columns" }),
+    );
+
+    await expect(
+      body.getByRole("menuitem", { name: "Move Status up" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await expect(
+      body.getByRole("menuitem", { name: "Move Last opened down" }),
+    ).toHaveAttribute("aria-disabled", "true");
+
+    body.getByRole("menuitemcheckbox", { name: "Authors" }).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const moveAuthorsUp = body.getByRole("menuitem", {
+      name: "Move Authors up",
+    });
+    await expect(moveAuthorsUp).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(
+        body.getByRole("menuitem", { name: "Move Authors up" }),
+      ).toHaveFocus(),
+    );
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() => expect(queuedPreferenceRequestCount).toBe(2));
+    await waitFor(() =>
+      expect(queuedPersistedPreferences.visible_columns).toEqual([
+        "authors",
+        "status",
+        "tags",
+        "publication",
+        "last_opened",
+      ]),
+    );
+    await expect(
+      body.getByRole("menuitem", { name: "Move Authors up" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await expect(body.getByRole("menu")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(body.queryByRole("menu")).toBeNull());
+  },
+};
+
 export const FailedPreferenceUpdateBeforeInitialQuery: Story = {
   parameters: { msw: { handlers: failingPreferenceHandlers } },
   play: async ({ canvasElement }) => {
     failedPreferenceRequestCount = 0;
     const canvas = within(canvasElement);
     const body = within(canvasElement.ownerDocument.body);
-    await userEvent.click(
-      await canvas.findByRole("button", { name: "Configure columns" }),
-    );
+    const trigger = await canvas.findByRole("button", {
+      name: "Configure columns",
+    });
+    await userEvent.click(trigger);
     const doi = await body.findByRole("menuitemcheckbox", { name: "DOI" });
     await userEvent.click(doi);
     await userEvent.click(
@@ -352,9 +441,10 @@ export const FailedPreferenceUpdateBeforeInitialQuery: Story = {
     await expect(
       body.getByRole("menuitemcheckbox", { name: "Authors" }),
     ).toHaveAttribute("aria-checked", "true");
-    await userEvent.click(
-      body.getAllByRole("menuitem", { name: "Move up" })[0]!,
-    );
+    await expect(
+      body.getByRole("menuitem", { name: "Move Status up" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(body.getByRole("menuitem", { name: "Done" }));
     await waitFor(() => expect(body.queryByRole("menu")).toBeNull());
   },
 };

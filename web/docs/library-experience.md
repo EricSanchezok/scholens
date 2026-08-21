@@ -68,22 +68,27 @@ signed URL retries automatically in both the row and details preview. Preference
 writes are serialized per account preference key; rapid edits preserve their
 order, and only server-confirmed data can be a rollback source. Before the
 initial query resolves, a failed write restores the documented defaults and
-refetches instead of retaining optimistic state. Selection remains an
+refetches instead of retaining optimistic state. Column move controls name
+their target for assistive technology, disable impossible boundary moves, and
+keep the menu open for consecutive keyboard reordering. Selection remains an
 independent leading control. Entering selection replaces the utility row with
 the batch toolbar above the collection.
 
 Below the desktop breakpoint, Papers uses a compact stacked row rather than
 compressing the table. Long titles wrap to at most two lines and uninterrupted
-identifiers do not create horizontal page scrolling. When the collection
-container is below 1040 px, lower-priority right-side columns and the preview
-temporarily disappear without rewriting the stored preference; mobile exposes
-neither column management nor preview. Selecting or focusing a paper updates
-the preview with its full title, authors, publication, DOI, personal status,
-tags, abstract or summary, and keywords. Hover provides a temporary preview;
-focus or pointer activation persists the current row so moving the pointer away
-does not discard the user's context. Summary Markdown is rendered as restrained
-editorial content rather than exposed source syntax. The preview never repeats
-navigation.
+identifiers do not create horizontal page scrolling. Compact mode renders only
+its active two-or-three-column semantic structure (named thumbnail, paper
+details, and optional row actions), rather than keeping a hidden desktop table;
+desktop-only selection controls therefore do not create phantom mobile columns.
+When the collection container is below 1040 px, lower-priority right-side
+columns and the preview temporarily disappear without rewriting the stored
+preference; mobile exposes neither column management nor preview. Selecting or
+focusing a paper updates the preview with its full title, authors, publication,
+DOI, personal status, tags, abstract or summary, and keywords. Hover provides a
+temporary preview; focus or pointer activation persists the current row so
+moving the pointer away does not discard the user's context. Summary Markdown
+is rendered as restrained editorial content rather than exposed source syntax.
+The preview never repeats navigation.
 
 Two or more query characters switch the paper collection to the shared hybrid
 search contract. Exact title/author/DOI matches, whitespace-insensitive and

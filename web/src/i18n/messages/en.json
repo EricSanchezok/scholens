@@ -1786,6 +1786,7 @@
     "columns": {
       "actions": "Actions",
       "paper": "Paper",
+      "thumbnail": "Paper thumbnail",
       "selection": "Selection",
       "status": "Status",
       "personalStatus": "My status",
@@ -1821,7 +1822,10 @@
       "label": "Configure columns",
       "title": "Visible columns",
       "moveUp": "Move up",
-      "moveDown": "Move down"
+      "moveDown": "Move down",
+      "moveUpColumn": "Move {column} up",
+      "moveDownColumn": "Move {column} down",
+      "done": "Done"
     },
     "moreTags": "{count} more tags",
     "preferencesSaveFailed": "Paper list preferences could not be saved.",
