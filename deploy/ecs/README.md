@@ -427,6 +427,15 @@ idempotent, installs the reviewed `pg_trgm` and `vector` extensions in `public`,
 hybrid-search expand migration runs. The runtime role cannot run DDL; the product migrator
 cannot modify `auth.*`.
 
+The API runtime is the sole Scholens workload allowed to read shared avatars. Its
+database extension is exactly `SELECT` on `auth.user_avatars`; its object access is
+exactly `s3:GetObject` below the retained Account Center bucket's
+`auth/avatars/v1/*` prefix; and KMS decrypt is constrained by S3 service and that
+encryption context. Workers, schedulers, migration tasks, and the browser receive no
+avatar bucket or key permission. `SHARED_AVATAR_BUCKET` is derived from the retained
+account bucket name and the API signs 15-minute GET views; CloudFormation never creates,
+writes, deletes, or deploys that shared resource from Scholens.
+
 ## GitHub environments
 
 Create four protected environments. Configure deployment branches so every environment

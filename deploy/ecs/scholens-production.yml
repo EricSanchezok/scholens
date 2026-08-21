@@ -637,6 +637,21 @@ Resources:
             Resource:
               Fn::ImportValue: sanchezcloud-scholens-content-key-arn
           - Effect: Allow
+            Action: s3:GetObject
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:s3:::sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}/auth/avatars/v1/*
+          - Effect: Allow
+            Action: kms:Decrypt
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*
+            Condition:
+              StringEquals:
+                kms:ViaService:
+                  Fn::Sub: s3.${AWS::Region}.${AWS::URLSuffix}
+              StringLike:
+                kms:EncryptionContext:aws:s3:arn:
+                  Fn::Sub: arn:${AWS::Partition}:s3:::sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}/auth/avatars/v1/*
+          - Effect: Allow
             Action:
             - sqs:GetQueueAttributes
             - sqs:SendMessage
@@ -1195,6 +1210,11 @@ Resources:
           Value: '5'
         - Name: AUTH_ACCOUNT_LOCKOUT_DURATION_MINUTES
           Value: '15'
+        - Name: SHARED_AVATAR_BUCKET
+          Value:
+            Fn::Sub: sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}
+        - Name: SHARED_AVATAR_URL_TTL_SECONDS
+          Value: '900'
         - Name: SCHOLENS_ALIYUN_DM_FROM_ALIAS
           Value: Scholens
         - Name: SCHOLENS_ALIYUN_DM_REPLY_TO_ADDRESS

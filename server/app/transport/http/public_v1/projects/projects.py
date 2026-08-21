@@ -5,9 +5,13 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.container import build_shared_avatar_reader
 from app.bootstrap.execution import get_application_executor
+from app.modules.identity.application import SharedAvatarReader
+from app.modules.projects.application.avatar_contracts import (
+    AvatarProjectCollaboratorListResponse,
+)
 from app.modules.projects.application.contracts import (
-    ProjectCollaboratorListResponse,
     ProjectCollaboratorResponse,
     ProjectCollaboratorUpdateRequest,
     ProjectCreateRequest,
@@ -23,6 +27,11 @@ from app.transport.http.public_v1.auth_dependencies import (
     get_required_user,
 )
 from fastapi import APIRouter, Depends, Query, Response, status
+
+from app.transport.http.public_v1.avatar_presenters import (
+    present_project_collaborators,
+)
+from starlette.concurrency import run_in_threadpool
 
 projects_router = APIRouter()
 
@@ -128,21 +137,24 @@ def delete_project(
 
 @projects_router.get(
     "/{project_id}/members",
-    response_model=ProjectCollaboratorListResponse,
+    response_model=AvatarProjectCollaboratorListResponse,
 )
-def get_project_collaborators(
+async def get_project_collaborators(
     project_id: UUID,
     executor: ApplicationExecutor[ApplicationCapabilities] = Depends(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
-) -> ProjectCollaboratorListResponse:
-    return executor.query(
+    avatar_reader: SharedAvatarReader = Depends(build_shared_avatar_reader),
+) -> AvatarProjectCollaboratorListResponse:
+    response = await run_in_threadpool(
+        executor.query,
         lambda capabilities: capabilities.projects.members(
             actor=current_user,
             project_id=project_id,
-        )
+        ),
     )
+    return await present_project_collaborators(response, avatar_reader)
 
 
 @projects_router.patch(

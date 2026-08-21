@@ -12,6 +12,12 @@ import type {
   ReaderDocument,
 } from "../reader-types";
 
+const fixtureAvatar = {
+  expires_at: "2026-08-21T10:15:00Z",
+  url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23272b35'/%3E%3Ccircle cx='32' cy='25' r='13' fill='%23d9b08c'/%3E%3Cpath d='M10 64c2-17 10-25 22-25s20 8 22 25' fill='%2386a8e7'/%3E%3C/svg%3E",
+  version: "11111111-1111-1111-1111-111111111111",
+};
+
 const selection: ReaderSelection = {
   kind: "paper_selection",
   document_id: "10000000-0000-4000-8000-000000000001",
@@ -119,9 +125,15 @@ function annotationSummary(item: ReaderAnnotation): ReaderAnnotationSummary {
     capabilities: thread.capabilities,
     color: thread.color,
     comment_count: thread.comment_count,
-    comments: thread.comments,
+    comments: thread.comments.map((comment, index) => ({
+      ...comment,
+      created_by: {
+        ...comment.created_by,
+        avatar: index === 0 ? fixtureAvatar : null,
+      },
+    })),
     created_at: item.created_at,
-    created_by: item.created_by,
+    created_by: { ...item.created_by, avatar: fixtureAvatar },
     id: item.id,
     last_activity_at: thread.last_activity_at,
     mode: thread.mode,

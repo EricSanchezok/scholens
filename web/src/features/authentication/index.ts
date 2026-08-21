@@ -4,5 +4,6 @@ export * from "./authentication-components";
 export * from "./authentication-mode";
 export * from "./authentication-page";
 export * from "./error-messages";
+export * from "./profile-avatar";
 export * from "./return-to";
 export * from "./schemas";

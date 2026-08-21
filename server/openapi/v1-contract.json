@@ -192,6 +192,9 @@
       "delete",
       "patch"
     ],
+    "/api/v1/me/avatar": [
+      "get"
+    ],
     "/api/v1/me/integrations": [
       "get"
     ],

@@ -18,6 +18,13 @@ Resources:
         Statement:
         - {Action: ['s3:AbortMultipartUpload', 's3:DeleteObject', 's3:GetObject', 's3:ListBucket', 's3:PutObject'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-content-${AWS::AccountId}-${AWS::Region}', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-content-${AWS::AccountId}-${AWS::Region}/*', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}', !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-diagnostics-${AWS::AccountId}-${AWS::Region}/*']}
         - {Action: 's3:GetObjectVersion', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-content-${AWS::AccountId}-${AWS::Region}/uploads/*'}
+        - {Action: 's3:GetObject', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}/auth/avatars/v1/*'}
+        - Action: kms:Decrypt
+          Effect: Allow
+          Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+          Condition:
+            StringEquals: {kms:ViaService: !Sub 's3.${AWS::Region}.${AWS::URLSuffix}'}
+            StringLike: {kms:EncryptionContext:aws:s3:arn: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}/auth/avatars/v1/*'}
         - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
         - {Action: ['sqs:ChangeMessageVisibility', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes', 'sqs:GetQueueUrl', 'sqs:ReceiveMessage', 'sqs:SendMessage'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:scholens-production-*'}
         - {Action: 'ecs:UpdateTaskProtection', Condition: {ArnEquals: {'ecs:cluster': !ImportValue sanchezcloud-production-cluster-arn}}, Effect: Allow, Resource: '*'}

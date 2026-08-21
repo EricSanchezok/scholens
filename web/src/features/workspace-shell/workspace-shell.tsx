@@ -42,7 +42,7 @@ import {
 } from "@/components/ui";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import { useMotionPreference } from "@/design-system/motion/motion-provider";
-import type { Actor } from "@/features/authentication";
+import { CurrentUserAvatar, type Actor } from "@/features/authentication";
 import { conversationQueries } from "@/features/conversation";
 import { GlobalSearch } from "@/features/paper-search";
 import {
@@ -425,15 +425,14 @@ function AccountMenu({
             <Icon glyph={SettingsIcon} size={20} tone="primary" />
           ) : (
             <>
-              <span
+              <CurrentUserAvatar
                 className={cn(
-                  "bg-pressed grid shrink-0 place-items-center rounded-full font-medium",
                   collapsed ? "text-caption size-8" : "size-10 text-sm",
                 )}
                 data-account-avatar
-              >
-                {initial}
-              </span>
+                fallback={initial}
+                sizes={collapsed ? "32px" : "40px"}
+              />
               {!collapsed && (
                 <span className="min-w-0 flex-1 text-left">
                   <span className="text-sidebar-label block truncate leading-5 font-normal">
@@ -460,12 +459,12 @@ function AccountMenu({
         sideOffset={collapsed || settingsTrigger ? 8 : 4}
       >
         <DropdownMenuLabel className="flex items-center gap-3 px-2.5 py-3">
-          <span
-            className="bg-pressed text-foreground grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold"
+          <CurrentUserAvatar
+            className="text-foreground size-10 text-sm font-semibold"
             data-account-avatar
-          >
-            {initial}
-          </span>
+            fallback={initial}
+            sizes="40px"
+          />
           <span className="min-w-0">
             <span className="text-foreground block truncate text-sm leading-5">
               {name}
@@ -583,9 +582,11 @@ function MobileActorIdentity({ actor }: { actor: Actor }) {
   const name = actorName(actor);
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">
-      <span className="bg-pressed grid size-12 shrink-0 place-items-center rounded-full text-sm font-medium">
-        {name.slice(0, 1).toUpperCase()}
-      </span>
+      <CurrentUserAvatar
+        className="size-12 text-sm"
+        fallback={name.slice(0, 1).toUpperCase()}
+        sizes="48px"
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-lg leading-6 font-semibold tracking-[-0.01em]">
           {name}

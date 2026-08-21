@@ -16,6 +16,7 @@ import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
+  Avatar,
   Button,
   AlertDialog,
   AlertDialogAction,
@@ -615,18 +616,18 @@ export function ReaderAnnotationPanel({
                       >
                         {editingCommentId === item.id ? (
                           <>
-                            <span
-                              aria-hidden
-                              className="bg-pressed text-secondary grid size-7 place-items-center rounded-full text-xs font-medium"
-                            >
-                              {(
+                            <Avatar
+                              className="size-7 text-xs"
+                              fallback={(
                                 item.created_by.display_name ??
                                 t("unknownAuthor")
                               )
                                 .trim()
                                 .charAt(0)
                                 .toLocaleUpperCase()}
-                            </span>
+                              sizes="28px"
+                              source={item.created_by.avatar}
+                            />
                             <div className="min-w-0">
                               <Textarea
                                 className="min-h-16 text-sm"
@@ -667,18 +668,18 @@ export function ReaderAnnotationPanel({
                           </>
                         ) : (
                           <>
-                            <span
-                              aria-hidden
-                              className="bg-pressed text-secondary grid size-7 place-items-center rounded-full text-xs font-medium"
-                            >
-                              {(
+                            <Avatar
+                              className="size-7 text-xs"
+                              fallback={(
                                 item.created_by.display_name ??
                                 t("unknownAuthor")
                               )
                                 .trim()
                                 .charAt(0)
                                 .toLocaleUpperCase()}
-                            </span>
+                              sizes="28px"
+                              source={item.created_by.avatar}
+                            />
                             <div className="min-w-0">
                               <div className="flex min-h-7 items-center gap-1.5 text-xs">
                                 <span className="truncate font-medium">

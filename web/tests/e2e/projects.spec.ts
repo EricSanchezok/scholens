@@ -450,6 +450,9 @@ test("shows the complete Project collaboration roster", async ({ page }) => {
   await expect(collaboration.getByText("2 members")).toBeVisible();
   await expect(collaboration.getByText("Eric Sanchez")).toBeVisible();
   await expect(collaboration.getByText("Mina Park")).toBeVisible();
+  await expect(
+    collaboration.locator('[data-avatar-state="image"]'),
+  ).toHaveCount(1);
 });
 
 test("opens Project Chat as a full-height mobile panel", async ({ page }) => {

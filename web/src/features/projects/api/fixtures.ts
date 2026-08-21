@@ -5,13 +5,18 @@ type Paper = components["schemas"]["ProjectPaperSummaryResponse"];
 type Output = components["schemas"]["LibraryOutputResponse"];
 type Conversation = components["schemas"]["ConversationSummaryResponse"];
 type LibraryPaper = components["schemas"]["LibraryPaperListPaperEntry"];
-type ProjectMember = components["schemas"]["ProjectCollaboratorResponse"];
+type ProjectMember = components["schemas"]["AvatarProjectCollaboratorResponse"];
 type ProjectInvitation = components["schemas"]["ProjectInvitationResponse"];
 
 const owner = {
   display_name: "Eric Sanchez",
   email: "eric@example.com",
   id: 7,
+};
+const fixtureAvatar = {
+  expires_at: "2026-08-21T10:15:00Z",
+  url: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23272b35'/%3E%3Ccircle cx='32' cy='25' r='13' fill='%23d9b08c'/%3E%3Cpath d='M10 64c2-17 10-25 22-25s20 8 22 25' fill='%2386a8e7'/%3E%3C/svg%3E",
+  version: "11111111-1111-1111-1111-111111111111",
 };
 const capabilities = {
   contribute_research: true,
@@ -80,6 +85,7 @@ export const projectFixtures: Project[] = [
 
 export const projectMemberFixtures: ProjectMember[] = [
   {
+    avatar: fixtureAvatar,
     display_name: owner.display_name,
     email: owner.email,
     is_owner: true,

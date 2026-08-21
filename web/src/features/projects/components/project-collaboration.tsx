@@ -4,12 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
-import { Button } from "@/components/ui";
+import { Avatar, Button } from "@/components/ui";
 import type { components } from "@/lib/api/generated/schema";
 import { projectQueries } from "../api";
 
 type Project = components["schemas"]["ProjectResponse"];
-type ProjectMember = components["schemas"]["ProjectCollaboratorResponse"];
+type ProjectMember = components["schemas"]["AvatarProjectCollaboratorResponse"];
 
 function memberInitial(member: ProjectMember) {
   return member.display_name.trim().charAt(0).toUpperCase() || "?";
@@ -74,12 +74,12 @@ export function ProjectCollaboration({
                 className="flex min-w-0 items-center gap-3 py-3"
                 key={member.user_id}
               >
-                <span
-                  aria-hidden="true"
-                  className="bg-pressed grid size-8 shrink-0 place-items-center rounded-full text-sm font-medium"
-                >
-                  {memberInitial(member)}
-                </span>
+                <Avatar
+                  className="size-8 text-sm"
+                  fallback={memberInitial(member)}
+                  sizes="32px"
+                  source={member.avatar}
+                />
                 <span className="text-secondary min-w-0 truncate text-sm">
                   {member.display_name}
                 </span>

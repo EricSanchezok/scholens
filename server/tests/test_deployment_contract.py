@@ -912,6 +912,74 @@ def test_api_version_locked_upload_reads_are_allowed_by_role_and_boundary() -> N
     }
 
 
+def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
+    avatar_prefix = (
+        "arn:${AWS::Partition}:s3:::sanchezcloud-account-avatars-"
+        "${AWS::AccountId}-${AWS::Region}/auth/avatars/v1/*"
+    )
+    bootstrap = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    boundary = bootstrap["RuntimeTaskPermissionsBoundary"]["Properties"][
+        "PolicyDocument"
+    ]["Statement"]
+    boundary_object = next(
+        statement
+        for statement in boundary
+        if statement.get("Resource") == {"Fn::Sub": avatar_prefix}
+    )
+    assert _actions(boundary_object) == {"s3:GetObject"}
+
+    expected_condition = {
+        "StringEquals": {
+            "kms:ViaService": {"Fn::Sub": "s3.${AWS::Region}.${AWS::URLSuffix}"}
+        },
+        "StringLike": {"kms:EncryptionContext:aws:s3:arn": {"Fn::Sub": avatar_prefix}},
+    }
+    boundary_decrypt = next(
+        statement
+        for statement in boundary
+        if _actions(statement) == {"kms:Decrypt"}
+        and statement.get("Condition") == expected_condition
+    )
+    assert boundary_decrypt["Resource"] == {
+        "Fn::Sub": ("arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*")
+    }
+
+    resources = load_template("scholens-production.yml")["Resources"]
+    api_statements = _policy_statements(resources["ApiTaskRole"])
+    api_object = next(
+        statement
+        for statement in api_statements
+        if statement.get("Resource") == {"Fn::Sub": avatar_prefix}
+    )
+    assert _actions(api_object) == {"s3:GetObject"}
+    assert any(
+        _actions(statement) == {"kms:Decrypt"}
+        and statement.get("Condition") == expected_condition
+        for statement in api_statements
+    )
+    for role_name in (
+        "DocumentWorkerTaskRole",
+        "ResearchWorkerTaskRole",
+        "MaintenanceWorkerTaskRole",
+        "MigrationTaskRole",
+        "SchedulerTaskRole",
+    ):
+        assert "sanchezcloud-account-avatars" not in str(resources[role_name])
+
+    api_container = next(
+        container
+        for container in resources["ApiTaskDefinition"]["Properties"][
+            "ContainerDefinitions"
+        ]
+        if container["Name"] == "api"
+    )
+    environment = {item["Name"]: item["Value"] for item in api_container["Environment"]}
+    assert environment["SHARED_AVATAR_BUCKET"] == {
+        "Fn::Sub": "sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}"
+    }
+    assert environment["SHARED_AVATAR_URL_TTL_SECONDS"] == "900"
+
+
 def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> None:
     resources = load_template("scholens-production.yml")["Resources"]
     for task_definition, workload in (
@@ -1363,6 +1431,8 @@ def test_database_contract_shares_auth_and_isolates_scholens() -> None:
     assert "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE auth.users" not in bootstrap
     assert "GRANT SELECT, INSERT, UPDATE ON TABLE auth.user_clients" in bootstrap
     assert "GRANT SELECT, INSERT ON TABLE auth.security_events" in bootstrap
+    assert "GRANT SELECT ON TABLE auth.user_avatars" in bootstrap
+    assert "INSERT, UPDATE, DELETE ON TABLE auth.user_avatars" not in bootstrap
     assert "security_events_id_seq" in bootstrap
     assert 'FOR ROLE :"auth_migrator_role"' not in bootstrap
     assert (
@@ -1723,6 +1793,15 @@ def test_candidate_identity_compatibility_workflow_is_standardized() -> None:
     assert "AUTH_SCHEMA_VERSION" in workflow
     assert "sanchezcloud-identity migrate" in workflow
     assert "audit-database-role --profile product-runtime" in workflow
+    assert "REVOKE SELECT ON auth.user_avatars FROM scholens_app" in workflow
+    assert workflow.count("-f deploy/ecs/database-bootstrap.sql") == 3
+    assert (
+        "has_table_privilege('scholens_app', 'auth.user_avatars', 'SELECT')" in workflow
+    )
+    assert (
+        "has_table_privilege('scholens_app', 'auth.user_avatars', "
+        "'INSERT,UPDATE,DELETE')" in workflow
+    )
     assert "app_role=scholens_app" in workflow
     assert "SANCHEZCLOUD_IDENTITY_REVISION" in workflow
     assert "CLOUD_AUTH_READ_TOKEN" not in workflow

@@ -1,6 +1,8 @@
 import { delay, http, HttpResponse } from "msw";
 
 const api = "http://127.0.0.1:7301/api/v1";
+const profileAvatar =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23272b35'/%3E%3Ccircle cx='32' cy='25' r='13' fill='%23d9b08c'/%3E%3Cpath d='M10 64c2-17 10-25 22-25s20 8 22 25' fill='%2386a8e7'/%3E%3C/svg%3E";
 const error = (code: string, status: number, message = code) =>
   HttpResponse.json(
     {
@@ -69,6 +71,13 @@ export const authHandlers = {
       }),
     ),
     http.get(`${api}/me`, () => HttpResponse.json(actor)),
+    http.get(`${api}/me/avatar`, () =>
+      HttpResponse.json({
+        expires_at: "2026-08-21T10:15:00Z",
+        url: profileAvatar,
+        version: "11111111-1111-1111-1111-111111111111",
+      }),
+    ),
     http.post(`${api}/auth/logout`, () => HttpResponse.json({ message: "ok" })),
   ],
   invalidCredentials: [

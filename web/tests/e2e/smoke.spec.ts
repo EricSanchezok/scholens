@@ -10,6 +10,8 @@ import {
 import { mockBillingUsage } from "./billing-fixture";
 
 const apiPattern = "**/api/v1";
+const avatarUrl =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23272b35'/%3E%3Ccircle cx='32' cy='25' r='13' fill='%23d9b08c'/%3E%3Cpath d='M10 64c2-17 10-25 22-25s20 8 22 25' fill='%2386a8e7'/%3E%3C/svg%3E";
 type ConversationTurn = (typeof homeTurns)[number];
 const firstPaper = homePapers[0]!.document;
 const actor = {
@@ -33,6 +35,16 @@ async function mockHome(page: Page) {
         access_token: "playwright-access",
         actor,
         token_type: "bearer",
+      }),
+    }),
+  );
+  await page.route(`${apiPattern}/me/avatar`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        expires_at: "2099-08-21T10:15:00Z",
+        url: avatarUrl,
+        version: "11111111-1111-1111-1111-111111111111",
       }),
     }),
   );
@@ -109,6 +121,9 @@ test("account menu exposes live usage and direct Settings destinations", async (
 }) => {
   await page.goto("/");
   const accountMenu = page.getByRole("button", { name: "Open account menu" });
+  await expect(
+    accountMenu.locator('[data-avatar-state="image"]'),
+  ).toBeVisible();
   await accountMenu.click();
   const menu = page.getByRole("menu");
   await expect(menu.getByText("Researcher")).toBeVisible();
