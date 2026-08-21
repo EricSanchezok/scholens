@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -120,7 +121,7 @@ class AnnotationThreadSummaryResponse(BaseModel):
     resolved_by: ResearchCreatorResponse | None
     resolved_at: datetime | None
     capabilities: AnnotationThreadCapabilities
-    comments: list[AnnotationCommentResponse]
+    comments: Sequence[AnnotationCommentResponse]
 
 
 class AnnotationThreadListResponse(BaseModel):

@@ -385,6 +385,9 @@ recolor requires a click and then replaces that menu with a vertical palette,
 never a hover-triggered submenu overlapping destructive actions. Per-comment
 edit and delete remain in each comment's semantic overflow menu. Reply drafts
 remain scoped to their thread and survive failed requests.
+Comment authors use their shared profile avatar when available. The image is
+decorative beside the visible author name, keeps the existing 28 px footprint,
+and falls back to the localized author initial when absent or expired.
 These thread and comment menus consume the shared collection-row and overflow
 contract in [Component Development](./component-development.md); touch does not
 depend on hover, while fine-pointer controls reveal on row hover or focus.
@@ -403,8 +406,12 @@ resolved thread must be reopened before receiving another reply. Personal
 highlights and comment-free Project marks are deleted rather than resolved.
 
 The Annotations query polls every ten seconds only while the panel is visible
-and the document is focused. Window focus and every successful local mutation
-invalidate it immediately. The feature does not imply WebSocket delivery,
+and the document is focused. Outside that active poll it refreshes before the
+earliest avatar URL expires, and checks missing avatars again within fifteen
+minutes. The Server's bounded identity adapter cache reuses still-safe signed
+views across those annotation polls and coalesces concurrent reads for the same
+user. Window focus and every successful local mutation invalidate the query
+immediately. The feature does not imply WebSocket delivery,
 mentions, notifications, unread counts, reactions, or recursive replies.
 
 ## Contextual conversations

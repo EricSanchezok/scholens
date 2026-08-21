@@ -208,6 +208,12 @@ SCHOLENS_MIGRATION_DATABASE_URL='postgresql+psycopg2://scholens_migrator:<local-
   uv run scholens db status
 ```
 
+Shared profile avatars are optional locally. Leave `SHARED_AVATAR_BUCKET`
+empty for deterministic initial fallbacks. To exercise real images, configure
+only the isolated non-production avatar bucket and AWS credentials explicitly;
+never point local Scholens at the production shared-avatar bucket. Scholens does
+not start MinIO for avatars.
+
 Create roles and schemas with a local database administrator following the
 [sanchezcloud-identity handbook](https://github.com/EricSanchezok/sanchezcloud-identity/blob/main/docs/guides/local-development.md).
 Before applying Scholens migrations, that administrator must install

@@ -8,6 +8,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import {
+  Avatar,
   Button,
   Checkbox,
   Dialog,
@@ -37,7 +38,7 @@ import { projectKeys } from "../api/keys";
 import { projectQueries } from "../api/queries";
 
 type Project = components["schemas"]["ProjectResponse"];
-type Member = components["schemas"]["ProjectCollaboratorResponse"];
+type Member = components["schemas"]["AvatarProjectCollaboratorResponse"];
 type Invitation = components["schemas"]["ProjectInvitationResponse"];
 type Permissions = components["schemas"]["ProjectPermissionSet"];
 
@@ -169,12 +170,12 @@ function MemberRow({
     <article className="border-line grid gap-3 border-t py-4 first:border-t-0 first:pt-0">
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="bg-pressed grid size-9 shrink-0 place-items-center rounded-full text-sm font-medium"
-          >
-            {initial}
-          </span>
+          <Avatar
+            className="size-9 text-sm"
+            fallback={initial}
+            sizes="36px"
+            source={member.avatar}
+          />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">
               {member.display_name}

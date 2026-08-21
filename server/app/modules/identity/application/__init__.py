@@ -1,6 +1,11 @@
 """Identity application contracts."""
 
 from .contracts import AuthBootstrapResponse, SetUserBlockedRequest
+from .avatars import (
+    SharedAvatarNotFoundError,
+    SharedAvatarReader,
+    SharedAvatarUnavailableError,
+)
 from .identity import AuthenticatedIdentity, Identity, LockedIdentity, LocalIdentity
 from .onboarding_contracts import CreateOnboardingRequest, OnboardingResponse
 from .sessions import BootstrapIdentitySession
@@ -15,4 +20,7 @@ __all__ = [
     "LocalIdentity",
     "OnboardingResponse",
     "SetUserBlockedRequest",
+    "SharedAvatarNotFoundError",
+    "SharedAvatarReader",
+    "SharedAvatarUnavailableError",
 ]

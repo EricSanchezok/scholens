@@ -50,6 +50,10 @@ service without spending menu width on the license label.
   Theme.
 - Account presents the authenticated Actor's shared identity as read-only,
   current-browser Sign out, and one external SanchezCloud Account action.
+  The avatar is the private shared profile image managed by Account Center;
+  missing, loading, expired, or unavailable images retain the same initials and
+  geometry. The signed view refreshes before expiry and a missing image is
+  checked again within fifteen minutes.
   Profile, email, and password editing are never exposed in Scholens.
   `https://myaccount.sanchezcloud.net` is the canonical destination and
   `NEXT_PUBLIC_ACCOUNT_CENTER_URL` may override it for an explicit environment.

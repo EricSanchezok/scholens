@@ -8,7 +8,7 @@ import { AsyncFeedback } from "@/components/feedback";
 import { Button, LinkButton } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { LinkIcon, SignOutIcon } from "@/design-system/icons/semantic-icons";
-import { useAuthSession } from "@/features/authentication";
+import { CurrentUserAvatar, useAuthSession } from "@/features/authentication";
 import { SettingsPanelHeader } from "./settings-layout";
 
 function actorName(displayName: string | null | undefined, email: string) {
@@ -52,11 +52,13 @@ export function AccountPanel({
               {t("account.profile")}
             </h3>
             <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-              <span className="bg-primary text-primary-foreground grid size-16 shrink-0 place-items-center rounded-full text-xl font-semibold">
-                {actorName(actor.display_name, actor.email)
+              <CurrentUserAvatar
+                className="bg-primary text-primary-foreground size-16 text-xl font-semibold"
+                fallback={actorName(actor.display_name, actor.email)
                   .slice(0, 1)
                   .toUpperCase()}
-              </span>
+                sizes="64px"
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xl font-semibold tracking-[-0.015em]">
                   {actorName(actor.display_name, actor.email)}

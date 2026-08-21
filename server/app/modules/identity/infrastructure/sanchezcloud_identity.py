@@ -225,6 +225,12 @@ async def auth_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     production = os.getenv("ENVIRONMENT", "development").lower() == "production"
     email_settings.validate_configuration(required=production)
     if production:
+        from app.modules.identity.infrastructure.shared_avatars import (
+            SharedAvatarSettings,
+        )
+
+        if not SharedAvatarSettings().configured:
+            raise RuntimeError("SHARED_AVATAR_BUCKET must be set in production")
         if settings.jwt_secret == _DEVELOPMENT_JWT_SECRET:
             raise RuntimeError("AUTH_JWT_SECRET must be set in production")
         if len(settings.jwt_secret.encode("utf-8")) < 32:

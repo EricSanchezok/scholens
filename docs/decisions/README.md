@@ -65,6 +65,7 @@ change what the accepted record decided.
 - [ADR 0031: Explicit local synthetic identity fixture](./0031-local-synthetic-identity-fixture.md)
 - [ADR 0032: Manifest-driven curated Web themes](./0032-manifest-driven-curated-web-themes.md)
 - [ADR 0033: Segmented cross-page PDF anchors](./0033-segmented-cross-page-pdf-anchors.md)
+- [ADR 0034: Read-only shared profile avatars](./0034-read-only-shared-profile-avatars.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

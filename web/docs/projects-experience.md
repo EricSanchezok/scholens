@@ -102,7 +102,9 @@ returned by `GET /members`, including the owner, plus the total member count.
 Members with `manage_collaborators` also get a quiet Manage action that opens
 the existing collaborator dialog. The roster query is shared with that dialog
 through the Projects TanStack Query keys, so collaborator changes update both
-surfaces without a duplicate member model. Below the desktop breakpoint the
+surfaces without a duplicate member model. Accepted members show their shared
+profile avatar when available and otherwise keep the deterministic initial; the
+same read-only avatar view is used in the management dialog. Below the desktop breakpoint the
 sections stack in one column in reading order: papers, outputs, collaboration.
 
 Desktop Projects uses the same compact workbench density as Library. The list

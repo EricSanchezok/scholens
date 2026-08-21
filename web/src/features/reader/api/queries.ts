@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
+import { nextAvatarRefreshInterval } from "@/lib/query/avatar-refresh";
 import type { components } from "@/lib/api/generated/schema";
 
 type CreateAnnotationRequest =
@@ -92,13 +93,21 @@ export const readerQueries = {
         if (!data) throw new Error("Reader annotation response was empty");
         return data;
       },
-      refetchInterval: () =>
-        pollWhenVisible &&
-        typeof document !== "undefined" &&
-        document.visibilityState === "visible" &&
-        document.hasFocus()
-          ? 10_000
-          : false,
+      refetchInterval: (query) => {
+        const avatarInterval = nextAvatarRefreshInterval(
+          query.state.data?.items.flatMap((annotation) => [
+            annotation.created_by.avatar,
+            annotation.resolved_by?.avatar,
+            ...annotation.comments.map((comment) => comment.created_by.avatar),
+          ]) ?? [],
+        );
+        return pollWhenVisible &&
+          typeof document !== "undefined" &&
+          document.visibilityState === "visible" &&
+          document.hasFocus()
+          ? Math.min(10_000, avatarInterval)
+          : avatarInterval;
+      },
       refetchOnWindowFocus: true,
     }),
 };

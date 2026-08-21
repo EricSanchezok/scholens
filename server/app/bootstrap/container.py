@@ -154,6 +154,8 @@ from app.shared.domain import FailureKind
 from app.modules.identity.infrastructure import (
     sanchezcloud_identity as sanchezcloud_identity_adapter,
 )
+from app.modules.identity.application import SharedAvatarReader
+from app.modules.identity.infrastructure.shared_avatars import get_shared_avatar_reader
 from app.modules.papers.application.topics import PaperTopics
 from app.modules.papers.infrastructure.topics import SqlAlchemyPaperTopics
 from app.modules.integrations.zotero.application.zotero import Zotero
@@ -699,6 +701,10 @@ def build_identity_session_bootstrap() -> BootstrapIdentitySession:
             path=config.path,
         ),
     )
+
+
+def build_shared_avatar_reader() -> SharedAvatarReader:
+    return get_shared_avatar_reader()
 
 
 def build_access_keys(

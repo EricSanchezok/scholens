@@ -5,10 +5,14 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.bootstrap.capabilities import ApplicationCapabilities
+from app.bootstrap.container import build_shared_avatar_reader
 from app.bootstrap.execution import get_application_executor
+from app.modules.identity.application import SharedAvatarReader
+from app.modules.research.application.avatar_contracts import (
+    AvatarAnnotationThreadListResponse,
+)
 from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
-    AnnotationThreadListResponse,
     CreateAnnotationCommentRequest,
     CreateAnnotationThreadRequest,
     DeleteResearchItemResponse,
@@ -29,6 +33,11 @@ from app.transport.http.public_v1.auth_dependencies import (
     get_required_user,
 )
 from fastapi import APIRouter, Depends, Query, Response, status
+
+from app.transport.http.public_v1.avatar_presenters import (
+    present_annotation_threads,
+)
+from starlette.concurrency import run_in_threadpool
 
 document_research_router = APIRouter()
 project_research_router = APIRouter()
@@ -75,9 +84,9 @@ def list_project_research_items(
 
 @document_research_router.get(
     "/{document_id}/annotation-threads",
-    response_model=AnnotationThreadListResponse,
+    response_model=AvatarAnnotationThreadListResponse,
 )
-def list_annotation_threads(
+async def list_annotation_threads(
     document_id: UUID,
     project_id: UUID | None = Query(default=None),
     audience: AnnotationAudienceFilter | None = Query(default=None),
@@ -90,8 +99,10 @@ def list_annotation_threads(
         get_application_executor
     ),
     current_user: Actor = Depends(get_required_user),
-) -> AnnotationThreadListResponse:
-    return executor.query(
+    avatar_reader: SharedAvatarReader = Depends(build_shared_avatar_reader),
+) -> AvatarAnnotationThreadListResponse:
+    response = await run_in_threadpool(
+        executor.query,
         lambda capabilities: capabilities.research_items.list_annotation_threads(
             actor=current_user,
             document_id=document_id,
@@ -99,8 +110,9 @@ def list_annotation_threads(
             audience=audience,
             mode=mode,
             status=annotation_status,
-        )
+        ),
     )
+    return await present_annotation_threads(response, avatar_reader)
 
 
 @document_research_router.post(

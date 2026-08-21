@@ -990,6 +990,23 @@ export interface paths {
         patch: operations["update_access_key_api_v1_me_access_keys__access_key_id__patch"];
         trace?: never;
     };
+    "/api/v1/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Avatar */
+        get: operations["get_my_avatar_api_v1_me_avatar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/integrations": {
         parameters: {
             query?: never;
@@ -2051,13 +2068,6 @@ export interface components {
             role: string;
             status: components["schemas"]["AnnotationThreadStatus"];
         };
-        /** AnnotationThreadListResponse */
-        AnnotationThreadListResponse: {
-            /** Items */
-            items: components["schemas"]["AnnotationThreadSummaryResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
-        };
         /**
          * AnnotationThreadMode
          * @enum {string}
@@ -2068,49 +2078,6 @@ export interface components {
          * @enum {string}
          */
         AnnotationThreadStatus: "open" | "resolved";
-        /** AnnotationThreadSummaryResponse */
-        AnnotationThreadSummaryResponse: {
-            /** Audience */
-            audience: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
-            capabilities: components["schemas"]["AnnotationThreadCapabilities"];
-            color: components["schemas"]["AnnotationColor"];
-            /** Comment Count */
-            comment_count: number;
-            /** Comments */
-            comments: components["schemas"]["AnnotationCommentResponse"][];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            created_by: components["schemas"]["ResearchCreatorResponse"];
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Last Activity At
-             * Format: date-time
-             */
-            last_activity_at: string;
-            mode: components["schemas"]["AnnotationThreadMode"];
-            /** Position */
-            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
-            /** Quote Text */
-            quote_text: string;
-            /** Resolved At */
-            resolved_at: string | null;
-            resolved_by: components["schemas"]["ResearchCreatorResponse"] | null;
-            /** Role */
-            role: string;
-            status: components["schemas"]["AnnotationThreadStatus"];
-            /**
-             * Target Document Id
-             * Format: uuid
-             */
-            target_document_id: string;
-        };
         /** AnnotationThreadTurnContext */
         AnnotationThreadTurnContext: {
             /**
@@ -2217,6 +2184,139 @@ export interface components {
             author_position?: string | null;
             /** Institutions */
             institutions?: components["schemas"]["Institution"][] | null;
+        };
+        /** AvatarAnnotationCommentResponse */
+        AvatarAnnotationCommentResponse: {
+            /** Can Delete */
+            can_delete: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Content */
+            content: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["AvatarResearchCreatorResponse"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Role */
+            role: string;
+            /**
+             * Thread Id
+             * Format: uuid
+             */
+            thread_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AvatarAnnotationThreadListResponse */
+        AvatarAnnotationThreadListResponse: {
+            /** Items */
+            items: components["schemas"]["AvatarAnnotationThreadSummaryResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** AvatarAnnotationThreadSummaryResponse */
+        AvatarAnnotationThreadSummaryResponse: {
+            /** Audience */
+            audience: components["schemas"]["PersonalResearchAudience"] | components["schemas"]["ProjectResearchAudience"];
+            capabilities: components["schemas"]["AnnotationThreadCapabilities"];
+            color: components["schemas"]["AnnotationColor"];
+            /** Comment Count */
+            comment_count: number;
+            /** Comments */
+            comments: components["schemas"]["AvatarAnnotationCommentResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            created_by: components["schemas"]["AvatarResearchCreatorResponse"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            mode: components["schemas"]["AnnotationThreadMode"];
+            /** Position */
+            position: (components["schemas"]["PdfTextPosition"] | components["schemas"]["ParsedTextPosition"]) | null;
+            /** Quote Text */
+            quote_text: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            resolved_by: components["schemas"]["AvatarResearchCreatorResponse"] | null;
+            /** Role */
+            role: string;
+            status: components["schemas"]["AnnotationThreadStatus"];
+            /**
+             * Target Document Id
+             * Format: uuid
+             */
+            target_document_id: string;
+        };
+        /** AvatarProjectCollaboratorListResponse */
+        AvatarProjectCollaboratorListResponse: {
+            /** Items */
+            items: components["schemas"]["AvatarProjectCollaboratorResponse"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** AvatarProjectCollaboratorResponse */
+        AvatarProjectCollaboratorResponse: {
+            avatar?: components["schemas"]["AvatarReference"] | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Is Owner */
+            is_owner: boolean;
+            /** Joined At */
+            joined_at: string | null;
+            permissions: components["schemas"]["ProjectPermissionSet"];
+            /** User Id */
+            user_id: number;
+        };
+        /**
+         * AvatarReference
+         * @description A versioned, short-lived URL safe to expose to an authorized caller.
+         */
+        AvatarReference: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Url */
+            url: string;
+            /**
+             * Version
+             * Format: uuid
+             */
+            version: string;
+        };
+        /** AvatarResearchCreatorResponse */
+        AvatarResearchCreatorResponse: {
+            avatar?: components["schemas"]["AvatarReference"] | null;
+            /** Display Name */
+            display_name: string | null;
+            /** Id */
+            id: number | null;
         };
         /** Biblio */
         Biblio: {
@@ -4424,13 +4524,6 @@ export interface components {
             read: boolean;
             /** Transfer */
             transfer: boolean;
-        };
-        /** ProjectCollaboratorListResponse */
-        ProjectCollaboratorListResponse: {
-            /** Items */
-            items: components["schemas"]["ProjectCollaboratorResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
         };
         /** ProjectCollaboratorResponse */
         ProjectCollaboratorResponse: {
@@ -8066,6 +8159,40 @@ export interface operations {
             };
         };
     };
+    get_my_avatar_api_v1_me_avatar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarReference"];
+                };
+            };
+            /** @description The user has no shared avatar. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The shared avatar service is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_integrations_api_v1_me_integrations_get: {
         parameters: {
             query?: never;
@@ -8595,7 +8722,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnnotationThreadListResponse"];
+                    "application/json": components["schemas"]["AvatarAnnotationThreadListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9447,7 +9574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectCollaboratorListResponse"];
+                    "application/json": components["schemas"]["AvatarProjectCollaboratorListResponse"];
                 };
             };
             /** @description Validation Error */

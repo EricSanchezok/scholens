@@ -1,5 +1,8 @@
 from app.bootstrap.capabilities import ApplicationCapabilities
-from app.bootstrap.container import build_identity_session_bootstrap
+from app.bootstrap.container import (
+    build_identity_session_bootstrap,
+    build_shared_avatar_reader,
+)
 from app.bootstrap.execution import (
     get_application_executor,
     get_operation_context_factory,
@@ -7,10 +10,14 @@ from app.bootstrap.execution import (
 from app.modules.identity.application import (
     AuthBootstrapResponse,
     BootstrapIdentitySession,
+    SharedAvatarNotFoundError,
+    SharedAvatarReader,
+    SharedAvatarUnavailableError,
 )
 from app.shared.application import (
     Actor,
     ApplicationExecutor,
+    AvatarReference,
     CredentialKind,
     CredentialRef,
     HttpOrigin,
@@ -24,7 +31,7 @@ from app.transport.http.observability import (
     ensure_request_id,
 )
 from app.transport.http.public_v1.auth_dependencies import get_required_user
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response, status
 
 router = APIRouter()
 
@@ -85,3 +92,34 @@ async def get_me(
     actor: Actor = Depends(get_required_user),
 ) -> Actor:
     return actor
+
+
+@router.get(
+    "/me/avatar",
+    response_model=AvatarReference,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "The user has no shared avatar."},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "The shared avatar service is unavailable."
+        },
+    },
+)
+async def get_my_avatar(
+    actor: Actor = Depends(get_required_user),
+    avatar_reader: SharedAvatarReader = Depends(build_shared_avatar_reader),
+) -> AvatarReference:
+    try:
+        avatar = await avatar_reader.get(actor.id)
+    except SharedAvatarNotFoundError as exc:
+        raise AppError(
+            code="shared_avatar_not_found",
+            message="Shared avatar not found",
+            kind=FailureKind.NOT_FOUND,
+        ) from exc
+    except SharedAvatarUnavailableError as exc:
+        raise AppError(
+            code="shared_avatar_unavailable",
+            message="Shared avatar service unavailable",
+            kind=FailureKind.UNAVAILABLE,
+        ) from exc
+    return avatar

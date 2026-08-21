@@ -34,16 +34,24 @@ import {
 } from "./msw/handlers";
 import "../src/styles/globals.css";
 
-initialize({ onUnhandledRequest: "error" }, [
-  ...billingHandlers.success,
-  webPerformanceHandler,
-  conversationSearchHandler,
-  paperSearchHandler,
-  libraryTagsHandler,
-  ...paperListPreferencesHandlers,
-  zoteroCollectionsHandler,
-  zoteroLibraryItemsHandler,
-]);
+initialize(
+  {
+    onUnhandledRequest(request, print) {
+      if (new URL(request.url).pathname.startsWith("/@id/virtual:")) return;
+      print.error();
+    },
+  },
+  [
+    ...billingHandlers.success,
+    webPerformanceHandler,
+    conversationSearchHandler,
+    paperSearchHandler,
+    libraryTagsHandler,
+    ...paperListPreferencesHandlers,
+    zoteroCollectionsHandler,
+    zoteroLibraryItemsHandler,
+  ],
+);
 
 const messages = { en, "zh-CN": zhCN } as const;
 const isStorybookTest =

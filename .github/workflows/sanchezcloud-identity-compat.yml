@@ -136,8 +136,19 @@ jobs:
             -v auth_migrator_role=auth_migrator \
             -v product_migrator_role=scholens_migrator \
             -f deploy/ecs/database-bootstrap.sql
+          psql -h 127.0.0.1 -U postgres -d sanchezcloud -v ON_ERROR_STOP=1 -c \
+            "REVOKE SELECT ON auth.user_avatars FROM scholens_app;"
           AUTH_DATABASE_URL=postgresql://scholens_app:scholens-app-password@127.0.0.1:5432/sanchezcloud \
             server/.venv/bin/sanchezcloud-identity audit-database-role --profile product-runtime
+          psql -h 127.0.0.1 -U postgres -d sanchezcloud \
+            -v app_role=scholens_app \
+            -v auth_migrator_role=auth_migrator \
+            -v product_migrator_role=scholens_migrator \
+            -f deploy/ecs/database-bootstrap.sql
+          test "$(psql -h 127.0.0.1 -U postgres -d sanchezcloud -Atc \
+            "SELECT has_table_privilege('scholens_app', 'auth.user_avatars', 'SELECT')")" = t
+          test "$(psql -h 127.0.0.1 -U postgres -d sanchezcloud -Atc \
+            "SELECT has_table_privilege('scholens_app', 'auth.user_avatars', 'INSERT,UPDATE,DELETE')")" = f
       - name: Build Scholens with the candidate SDK
         env:
           DOCKER_BUILDKIT: "1"

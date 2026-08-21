@@ -24,6 +24,11 @@ product schema.
   `HttpOnly`, and `SameSite=Strict`.
 - Identity managers own password, token, and refresh-session behavior. Scholens must not query
   or mutate `auth.refresh_tokens` directly.
+- Account Center remains the only avatar management surface. The Scholens API may read
+  `auth.user_avatars` through the pinned Identity SDK solely to mint short-lived private GET
+  views for already-authorized users; it never stores an avatar reference in `scholens.*`,
+  writes the Identity table, proxies image bytes, or exposes the view through MCP, jobs, or
+  the shared Actor.
 - The explicit local-only `dev seed-test-account` fixture delegates identity
   creation, verification, password hashing/reset, and session revocation to the
   pinned Identity SDK. It accepts only synthetic addresses against the exact
@@ -61,8 +66,9 @@ pairs so corrupted rows cannot silently enter the dispatcher.
 - `scholens_migrator` owns only `scholens`, reads the Identity schema ledger, and may reference
   `auth.users` during product migrations.
 - `scholens_app` owns nothing. It receives minimum Identity core DML, the existing append-only
-  security-event capability, and Scholens runtime DML. It cannot write migration ledgers, execute
-  DDL, alter another schema, or update/delete operation-journal entries.
+  security-event capability, read-only shared-avatar references, and Scholens runtime DML. It
+  cannot write avatar references or migration ledgers, execute DDL, alter another schema, or
+  update/delete operation-journal entries.
 
 `deploy/ecs/database-bootstrap.sql` is the reviewed grant contract. It does not create login
 roles or persist credentials. The required order is:
@@ -73,7 +79,8 @@ roles or persist credentials. The required order is:
 4. Scholens validates the Identity version and migrates `scholens.*` as `scholens_migrator`;
 5. the database owner reapplies runtime grants;
 6. CI audits `scholens_app` with the Identity `product-runtime` profile and separately verifies
-   Scholens DML, append-only journal behavior, and cross-schema denials.
+   the Scholens avatar-read extension, Scholens DML, append-only journal behavior, and
+   cross-schema denials.
 
 A Scholens deployment never bundles or executes Identity migrations. Identity
 compatibility remains an independent required check before its schema version

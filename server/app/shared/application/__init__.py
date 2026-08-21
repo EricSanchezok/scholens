@@ -1,6 +1,7 @@
 """Framework-independent application contracts."""
 
 from .actor import Actor
+from .avatar import AvatarReference
 from .clock import Clock
 from .cursors import SignedCursorCodec
 from .executor import ApplicationExecutor
@@ -27,6 +28,7 @@ from .operation_context import (
 __all__ = [
     "Actor",
     "ApplicationExecutor",
+    "AvatarReference",
     "ErrorEnvelope",
     "Clock",
     "CliOrigin",

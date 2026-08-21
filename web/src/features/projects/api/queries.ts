@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
+import { nextAvatarRefreshInterval } from "@/lib/query/avatar-refresh";
 import type {
   ProjectDetailSearchState,
   ProjectsSearchState,
@@ -53,6 +54,10 @@ export const projectQueries = {
         if (!data) throw new Error("Project member response was empty");
         return data;
       },
+      refetchInterval: (query) =>
+        nextAvatarRefreshInterval(
+          query.state.data?.items.map((member) => member.avatar) ?? [],
+        ),
     }),
   invitations: (projectId: string) =>
     queryOptions({

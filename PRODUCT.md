@@ -59,6 +59,20 @@ as one system rather than a collection of separately themed tools.
 Access control remains an invariant. Contextual flexibility must never allow an
 agent to reach information the current user is not permitted to access.
 
+## Shared identity should look consistent across SanchezCloud
+
+An avatar chosen in SanchezCloud Account Center is the user's profile image in
+Scholens wherever the interface already represents that person: the workspace
+account control, Account settings, Project membership, and annotation comments.
+Scholens does not offer a second avatar editor or retain a product-specific
+copy. Missing or temporarily unavailable images preserve the same initials and
+layout, and an avatar failure must not block research or collaboration.
+
+Other people's avatars appear only after Scholens has authorized the containing
+Project or annotation view. Private storage references and expiring access
+credentials are presentation details; they do not become durable research data
+or expand the MCP identity surface.
+
 ## Stored research should remain findable as it grows
 
 Library and Project collections are working research memory, not archival page
