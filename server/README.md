@@ -254,7 +254,12 @@ standard Server-Sent Events named `start`, `delta`, `complete`, and `error`.
 The server re-authorizes the paper before durable-result lookup, persists only
 the source hash and translated result, and uses Redis only for capacity and
 single-flight coordination. A durable result hit does not consume Token Credits
-or provider capacity.
+or provider capacity. The provider receives the paper title as non-translated
+domain context and the exact source in an untrusted data envelope. Its
+revisioned academic prompt prioritizes claim fidelity and established
+terminology, protects notation and citations, conservatively removes only
+unmistakable PDF-selection furniture or reading-order intrusions, and disables
+that cleanup for server-owned reflow blocks.
 
 Document reflow is exposed at `GET /api/v1/papers/{document_id}/reflow` and is
 requested explicitly with `POST /api/v1/papers/{document_id}/reflow/attempts`.

@@ -57,6 +57,7 @@ class TranslationStreamSpec:
     source_language: str
     target_language: str
     custom_instructions: str | None
+    context_kind: str = "selection"
 
 
 class TranslationStreamProvider(Protocol):
