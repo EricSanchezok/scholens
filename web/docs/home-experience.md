@@ -21,10 +21,11 @@ the deliberately deferred boundaries.
   intervals.
 - Desktop and mobile share one navigation model, actor state, conversation
   state, and `AppShell` boundary, but use device-appropriate compositions. The
-  desktop sidebar is 264 px when expanded and 64 px when collapsed. Phones use
+  desktop sidebar is 288 px when expanded, 320 px on ultrawide viewports, and
+  64 px when collapsed. Phones use
   a persistent bottom bar for Ask, Library, and Projects. Their full-screen,
-  opaque navigation hub is reserved for the account identity, conversation
-  search, and pinned/recent history; it does not render the desktop Sidebar
+  opaque navigation hub is reserved for the account identity, unified search,
+  and complete conversation history; it does not render the desktop Sidebar
   inside a narrow drawer. The hub closes with a directional return control
   rather than a dismiss-style X. Search, Settings, and New conversation remain
   anchored in one bottom utility row above the safe area.
@@ -45,13 +46,16 @@ the deliberately deferred boundaries.
   horizontal insets rather than adding a second, narrower message measure.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
-  Global paper search is a compact header action beside the collapse control in
-  the expanded rail; the collapsed rail places the same action below New chat so
-  it remains reachable without relying on the keyboard shortcut.
+  Unified workspace search is a compact header action beside the collapse
+  control in the expanded rail; the collapsed rail places the same action below
+  New chat so it remains reachable without relying on `Command/Ctrl+K`. Every
+  desktop and mobile launcher opens the same dialog, initially focused on the
+  Conversation tab; switching to Papers preserves the current keyword.
 - Desktop sidebar density remains subordinate to the reading surface: primary
-  navigation uses 40 px rows with 20 px semantic glyphs in 24 px fixed slots, conversation
-  history uses 36 px rows so its contextual action retains a full desktop hit
-  target, and the account trigger uses a 48 px row. Expanded
+  navigation uses 40 px rows with 20 px semantic glyphs in 24 px fixed slots,
+  conversation history uses 48 px two-line rows so title, research context,
+  relative update time, and contextual actions can be scanned independently,
+  and the account trigger uses a 48 px row. Expanded
   sidebar navigation, conversation titles, and the actor name share the 13 px
   `type.sidebar` role; the product label retains the 14 px UI role and the email
   retains the 11 px caption role. The account trigger preserves its full hit
@@ -70,11 +74,24 @@ the deliberately deferred boundaries.
   it deletes the active conversation, only the `conversation` URL parameter is
   removed so the Reader document, Project, panel, and other navigation state
   remain intact.
+- `WorkspaceShell` owns a workspace-wide infinite conversation query. It shows
+  every pinned conversation, then non-pinned history grouped as Today,
+  Yesterday, Previous 7 days, Previous 30 days, and month. The history region
+  scrolls independently between fixed navigation and account regions and
+  continues loading with an intersection sentinel plus a keyboard-operable
+  fallback. If a URL opens an old conversation that is not loaded yet, a
+  temporary Current conversation group keeps it visible; normal pagination
+  removes that duplicate once the canonical row arrives. Reader and Project
+  context panels retain their own narrower conversation queries.
 - The phone navigation hub fills the viewport and owns an opaque sidebar
   surface above a lower stacking-level backdrop. Its history is independently
   scrollable between fixed account and utility regions. Visible controls retain
   at least 48 px touch targets even though typography and glyphs follow the
   compact sidebar hierarchy.
+- The phone utility search control is a launcher, not an in-memory title
+  filter. The unified search dialog is full-screen on phones and uses the same
+  Server queries, tabs, result semantics, loading/error/empty states, and
+  keyboard behavior as desktop.
 - Deferred destinations retain their product names in the visible navigation;
   availability is disclosed through the disabled control and its tooltip, not
   implementation-plan copy.
@@ -191,14 +208,17 @@ list. Document and external sources share the same evidence rows; only external
 sources navigate away, and they open in a new tab.
 The Server replaces the default Sidebar title once after the first successful
 assistant reply. Follow-up turns do not regenerate it, and user renames are
-never overwritten by title generation.
+never overwritten by title generation. If optional model title generation
+fails or times out, the Server derives a cleaned title of at most 60 characters
+from the first user question. The administrator-only, idempotent maintenance
+command applies the same fallback to legacy default-titled conversations.
 
 ## State coverage
 
 | Surface      | Deterministic coverage                                                                                                                                                  |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Home data    | populated, loading/slow, empty, and recoverable error                                                                                                                   |
-| Navigation   | expanded, collapsed, mobile bottom bar and full-screen history hub, search, active conversation                                                                         |
+| Navigation   | 288 px desktop, 320 px ultrawide, collapsed, full paginated history, old active conversation, mobile full-screen hub, unified search, active conversation               |
 | Context      | entire library and selected project/paper sources, including search                                                                                                     |
 | Conversation | direct answer, tool activity, timed result, prompt edit/branch, partial failure, reconnecting, stop failure, refresh-safe retry, references, complete, cancelled, error |
 | Presentation | English, Simplified Chinese, Light, Dark, 1440 px, 390 px, and 320 px overflow check                                                                                    |

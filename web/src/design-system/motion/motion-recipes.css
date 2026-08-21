@@ -159,7 +159,7 @@
 }
 
 .motion-rail-chrome[data-collapsed="true"] {
-  clip-path: inset(0 calc(var(--layout-sidebar) - 4rem) 0 0);
+  clip-path: inset(0 calc(var(--workspace-sidebar-width) - 4rem) 0 0);
 }
 
 .motion-popup {

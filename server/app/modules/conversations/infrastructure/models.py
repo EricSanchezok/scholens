@@ -80,6 +80,16 @@ class ConversationTurn(Base):
             unique=True,
             postgresql_where=text("parent_turn_id IS NULL"),
         ),
+        Index(
+            "ix_conversation_turns_user_query_trgm",
+            text("lower(user_query) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_conversation_turns_user_query_fts",
+            text("to_tsvector('pg_catalog.simple', user_query)"),
+            postgresql_using="gin",
+        ),
         CheckConstraint("depth >= 1", name="ck_conversation_turns_depth"),
         CheckConstraint(
             "branch_index >= 1",
@@ -174,6 +184,16 @@ class ConversationResponse(Base):
             "status IN ('running', 'completed', 'failed', 'cancelled')",
             name="ck_conversation_responses_status",
         ),
+        Index(
+            "ix_conversation_responses_content_trgm",
+            text("lower(coalesce(content, '')) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_conversation_responses_content_fts",
+            text("to_tsvector('pg_catalog.simple', coalesce(content, ''))"),
+            postgresql_using="gin",
+        ),
         CheckConstraint(
             "duration_ms IS NULL OR duration_ms >= 0",
             name="ck_conversation_responses_duration_ms",
@@ -267,6 +287,16 @@ class Conversation(Base):
             "updated_at",
         ),
         Index("ix_conversations_user_pinned", "user_id", "pinned_at"),
+        Index(
+            "ix_conversations_title_trgm",
+            text("lower(title) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_conversations_scope_label_trgm",
+            text("lower(coalesce(scope_label_snapshot, '')) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

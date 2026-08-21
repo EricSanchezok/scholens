@@ -1892,6 +1892,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_20_1200_conversation_failure_metadata.py",
         "2026_08_20_1200_hybrid_paper_search_expand.py",
         "2026_08_20_1230_search_embedding_timestamps_expand.py",
+        "2026_08_21_1630_conversation_search_indexes.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline
@@ -2050,7 +2051,7 @@ def test_waf_large_body_exceptions_are_path_scoped() -> None:
         "^/api/v1/projects(?:/[^/]+(?:/data-tables)?)?$",
         "^/api/v1/me/onboarding$",
         "^/api/v1/(?:papers|projects)/[^/]+/audio-overviews$",
-        "^/api/v1/search/(?:papers|research)$",
+        "^/api/v1/search/(?:conversations|papers|research)$",
     ]
     assert str(standard["ScopeDownStatement"]).count("LargeBodyPathSet") == 1
     assert str(standard["ScopeDownStatement"]).count("ContentFreeTextPathSet") == 1

@@ -19,7 +19,8 @@ import {
 } from "@/design-system/generated/motion-metadata";
 import Link from "next/link";
 import type { Route } from "next";
-import { useFormatter, useTranslations } from "next-intl";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useFormatter, useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -31,7 +32,6 @@ import {
   DropdownMenuTrigger,
   IconButton,
   keyboardFocusRing,
-  SearchField,
   Sheet,
   SheetContent,
   SheetTitle,
@@ -43,7 +43,8 @@ import {
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
 import { useMotionPreference } from "@/design-system/motion/motion-provider";
 import type { Actor } from "@/features/authentication";
-import { GlobalPaperSearch } from "@/features/paper-search";
+import { conversationQueries } from "@/features/conversation";
+import { GlobalSearch } from "@/features/paper-search";
 import {
   formatDateOnly,
   SettingsDialog,
@@ -86,6 +87,14 @@ export type MobileViewportState = {
 };
 
 type ConversationSummary = components["schemas"]["ConversationSummaryResponse"];
+type ConversationListResponse =
+  components["schemas"]["ConversationListResponse"];
+
+type ConversationHistoryGroup = {
+  key: string;
+  title: string;
+  items: ConversationSummary[];
+};
 
 type RailFlipSnapshot = {
   chromeClipPath: string;
@@ -105,6 +114,69 @@ function isPrimaryNavigationClick(event: React.MouseEvent<HTMLAnchorElement>) {
     !event.shiftKey &&
     !event.defaultPrevented
   );
+}
+
+function startOfLocalDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+export function groupConversationHistory(
+  conversations: ConversationSummary[],
+  locale: string,
+  labels: {
+    today: string;
+    yesterday: string;
+    previous7Days: string;
+    previous30Days: string;
+  },
+  now = new Date(),
+): ConversationHistoryGroup[] {
+  const today = startOfLocalDay(now);
+  const monthFormat = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric",
+  });
+  const groups = new Map<string, ConversationHistoryGroup>();
+
+  for (const conversation of conversations) {
+    const updatedAt = new Date(conversation.updated_at);
+    const ageInDays = Math.floor(
+      (today.getTime() - startOfLocalDay(updatedAt).getTime()) / 86_400_000,
+    );
+    let key: string;
+    let title: string;
+    if (ageInDays <= 0) {
+      key = "today";
+      title = labels.today;
+    } else if (ageInDays === 1) {
+      key = "yesterday";
+      title = labels.yesterday;
+    } else if (ageInDays < 7) {
+      key = "previous-7-days";
+      title = labels.previous7Days;
+    } else if (ageInDays < 30) {
+      key = "previous-30-days";
+      title = labels.previous30Days;
+    } else {
+      key = `${updatedAt.getFullYear()}-${updatedAt.getMonth()}`;
+      title = monthFormat.format(updatedAt);
+    }
+    const group = groups.get(key) ?? { key, title, items: [] };
+    group.items.push(conversation);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+export function flattenConversationPages(pages: ConversationListResponse[]) {
+  const seen = new Set<string>();
+  return pages
+    .flatMap((page) => page.items)
+    .filter((conversation) => {
+      if (seen.has(conversation.id)) return false;
+      seen.add(conversation.id);
+      return true;
+    });
 }
 
 function NavigationPendingIndicator({
@@ -586,17 +658,171 @@ function MobileConversationGroup({
   );
 }
 
+function ConversationHistoryPagination({
+  hasNextPage,
+  isFetchingNextPage,
+  isError,
+  onLoadMore,
+  onRetry,
+}: {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  isError: boolean;
+  onLoadMore: () => void;
+  onRetry: () => void;
+}) {
+  const t = useTranslations("WorkspaceShell.sidebar");
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasNextPage || isFetchingNextPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) onLoadMore();
+      },
+      { rootMargin: "160px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, onLoadMore]);
+
+  if (isError) {
+    return (
+      <button
+        className={cn(
+          "text-secondary hover:bg-hover mt-2 w-full rounded-[var(--radius-lg)] px-3 py-2 text-left text-xs",
+          keyboardFocusRing,
+        )}
+        onClick={onRetry}
+        type="button"
+      >
+        {t("historyError")} · {t("retry")}
+      </button>
+    );
+  }
+  if (!hasNextPage && !isFetchingNextPage) return null;
+  return (
+    <div className="py-2" ref={sentinelRef}>
+      <button
+        className={cn(
+          "text-secondary hover:bg-hover w-full rounded-[var(--radius-lg)] px-3 py-2 text-xs",
+          keyboardFocusRing,
+        )}
+        disabled={isFetchingNextPage}
+        onClick={onLoadMore}
+        type="button"
+      >
+        {isFetchingNextPage ? t("loadingMore") : t("loadMore")}
+      </button>
+    </div>
+  );
+}
+
+function ConversationHistory({
+  activeConversationId,
+  conversations,
+  currentConversation,
+  controller,
+  hasNextPage,
+  isError,
+  isFetchingNextPage,
+  mobile = false,
+  onDeleteConversation,
+  onLoadMore,
+  onRequestMobileRename,
+  onRetry,
+  onSelect,
+}: {
+  activeConversationId?: string;
+  conversations: ConversationSummary[];
+  currentConversation?: ConversationSummary;
+  controller: ConversationListController;
+  hasNextPage: boolean;
+  isError: boolean;
+  isFetchingNextPage: boolean;
+  mobile?: boolean;
+  onDeleteConversation: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
+  onLoadMore: () => void;
+  onRequestMobileRename: (
+    conversation: ConversationSummary,
+    returnFocus: HTMLButtonElement | null,
+  ) => void;
+  onRetry: () => void;
+  onSelect?: () => void;
+}) {
+  const t = useTranslations("WorkspaceShell.sidebar");
+  const locale = useLocale();
+  const pinned = conversations.filter((item) => item.pinned_at);
+  const historyGroups = groupConversationHistory(
+    conversations.filter((item) => !item.pinned_at),
+    locale,
+    {
+      today: t("today"),
+      yesterday: t("yesterday"),
+      previous7Days: t("previous7Days"),
+      previous30Days: t("previous30Days"),
+    },
+  );
+  const Group = mobile ? MobileConversationGroup : ConversationGroup;
+  const shared = {
+    activeConversationId,
+    controller,
+    onDelete: onDeleteConversation,
+    onRequestMobileRename,
+    onSelect: onSelect ?? (() => undefined),
+  };
+
+  return (
+    <>
+      {currentConversation && (
+        <Group {...shared} items={[currentConversation]} title={t("current")} />
+      )}
+      <Group {...shared} items={pinned} title={t("pinned")} />
+      {historyGroups.map((group) => (
+        <Group
+          {...shared}
+          items={group.items}
+          key={group.key}
+          title={group.title}
+        />
+      ))}
+      {conversations.length === 0 && !currentConversation && !isError && (
+        <p className="text-secondary px-2 py-4 text-xs leading-5">
+          {t("empty")}
+        </p>
+      )}
+      <ConversationHistoryPagination
+        hasNextPage={hasNextPage}
+        isError={isError}
+        isFetchingNextPage={isFetchingNextPage}
+        onLoadMore={onLoadMore}
+        onRetry={onRetry}
+      />
+    </>
+  );
+}
+
 function MobileNavigation({
   actor,
   billingUsage,
   conversations,
+  currentConversation,
   activeConversationId,
+  hasNextPage,
+  isError,
+  isFetchingNextPage,
   signingOut,
   onOpenAccount,
   onOpenSettings,
   onOpenUsage,
   onSignOut,
-  onSearchPapers,
+  onLoadMore,
+  onRetry,
+  onSearch,
   onSelect,
   controller,
   onDeleteConversation,
@@ -605,13 +831,19 @@ function MobileNavigation({
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
   conversations: ConversationSummary[];
+  currentConversation?: ConversationSummary;
   activeConversationId?: string;
+  hasNextPage: boolean;
+  isError: boolean;
+  isFetchingNextPage: boolean;
   signingOut: boolean;
   onOpenAccount: () => void;
   onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
-  onSearchPapers: () => void;
+  onLoadMore: () => void;
+  onRetry: () => void;
+  onSearch: () => void;
   onSelect: () => void;
   controller: ConversationListController;
   onDeleteConversation: (
@@ -624,15 +856,6 @@ function MobileNavigation({
   ) => void;
 }) {
   const t = useTranslations("WorkspaceShell");
-  const [query, setQuery] = React.useState("");
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const matching = normalizedQuery
-    ? conversations.filter((conversation) =>
-        conversation.title.toLocaleLowerCase().includes(normalizedQuery),
-      )
-    : conversations;
-  const pinned = matching.filter((item) => item.pinned_at).slice(0, 3);
-  const recent = matching.filter((item) => !item.pinned_at).slice(0, 12);
 
   return (
     <aside className="flex h-full flex-col overflow-hidden bg-[var(--color-bg-sidebar)] pt-[env(safe-area-inset-top)]">
@@ -643,52 +866,39 @@ function MobileNavigation({
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
         data-scrollbar-gutter="stable"
       >
-        <MobileConversationGroup
+        <ConversationHistory
           activeConversationId={activeConversationId}
-          items={pinned}
+          conversations={conversations}
           controller={controller}
-          onDelete={onDeleteConversation}
+          currentConversation={currentConversation}
+          hasNextPage={hasNextPage}
+          isError={isError}
+          isFetchingNextPage={isFetchingNextPage}
+          mobile
+          onDeleteConversation={onDeleteConversation}
+          onLoadMore={onLoadMore}
           onRequestMobileRename={onRequestMobileRename}
+          onRetry={onRetry}
           onSelect={onSelect}
-          title={t("sidebar.pinned")}
         />
-        <MobileConversationGroup
-          activeConversationId={activeConversationId}
-          items={recent}
-          controller={controller}
-          onDelete={onDeleteConversation}
-          onRequestMobileRename={onRequestMobileRename}
-          onSelect={onSelect}
-          title={t("sidebar.conversations")}
-        />
-        {matching.length === 0 && (
-          <p className="text-secondary px-3 py-8 text-center text-sm">
-            {normalizedQuery ? t("sidebar.noMatches") : t("sidebar.empty")}
-          </p>
-        )}
       </div>
       <div
         className="shrink-0 bg-[var(--color-bg-sidebar)] px-3 pt-2 pb-[max(var(--space-3),env(safe-area-inset-bottom))]"
         data-testid="mobile-navigation-tools"
       >
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <SearchField
-              aria-label={t("navigation.searchConversations")}
-              className="bg-surface h-12 rounded-full border-transparent text-base"
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder={t("navigation.searchConversations")}
-              value={query}
-            />
-          </div>
-          <IconButton
-            className="bg-surface size-12 min-h-12 rounded-full"
-            label={t("navigation.searchPapers")}
-            onClick={onSearchPapers}
-            variant="ghost"
+          <button
+            aria-label={t("navigation.search")}
+            className={cn(
+              "bg-surface text-secondary hover:bg-hover flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full px-4 text-left text-base",
+              keyboardFocusRing,
+            )}
+            onClick={onSearch}
+            type="button"
           >
-            <Icon glyph={SearchIcon} size={20} />
-          </IconButton>
+            <Icon glyph={SearchIcon} size={20} tone="secondary" />
+            <span className="truncate">{t("navigation.searchShort")}</span>
+          </button>
           <AccountMenu
             actor={actor}
             billingUsage={billingUsage}
@@ -890,16 +1100,22 @@ function Sidebar({
   actor,
   billingUsage,
   conversations,
+  currentConversation,
   activeConversationId,
   activeDestination,
   collapsed,
+  hasNextPage,
+  isError,
+  isFetchingNextPage,
   signingOut,
   onCollapsedChange,
   onOpenAccount,
   onOpenSettings,
   onOpenUsage,
   onSignOut,
-  onSearchPapers,
+  onLoadMore,
+  onRetry,
+  onSearch,
   onSelect,
   controller,
   onDeleteConversation,
@@ -908,16 +1124,22 @@ function Sidebar({
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
   conversations: ConversationSummary[];
+  currentConversation?: ConversationSummary;
   activeConversationId?: string;
   activeDestination: WorkspaceDestination;
   collapsed: boolean;
+  hasNextPage: boolean;
+  isError: boolean;
+  isFetchingNextPage: boolean;
   signingOut: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onOpenAccount: () => void;
   onOpenSettings: () => void;
   onOpenUsage: () => void;
   onSignOut: () => Promise<void>;
-  onSearchPapers: () => void;
+  onLoadMore: () => void;
+  onRetry: () => void;
+  onSearch: () => void;
   onSelect?: () => void;
   controller: ConversationListController;
   onDeleteConversation: (
@@ -930,8 +1152,6 @@ function Sidebar({
   ) => void;
 }) {
   const t = useTranslations("WorkspaceShell");
-  const pinned = conversations.filter((item) => item.pinned_at).slice(0, 3);
-  const recent = conversations.filter((item) => !item.pinned_at).slice(0, 7);
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -939,7 +1159,7 @@ function Sidebar({
         aria-label={t("navigation.sidebar")}
         className={cn(
           "flex h-full shrink-0 flex-col overflow-hidden px-3 pt-3 pb-[max(var(--space-1),env(safe-area-inset-bottom))]",
-          collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
+          collapsed ? "w-16" : "w-[var(--workspace-sidebar-width)]",
         )}
       >
         <div className="relative mb-3 flex h-10 shrink-0 items-center justify-end">
@@ -960,15 +1180,15 @@ function Sidebar({
                 <TooltipTrigger asChild>
                   <IconButton
                     className="hover:bg-hover size-8 min-h-8 bg-transparent"
-                    label={t("navigation.searchPapers")}
-                    onClick={onSearchPapers}
+                    label={t("navigation.search")}
+                    onClick={onSearch}
                     variant="ghost"
                   >
                     <Icon glyph={SearchIcon} size={20} tone="secondary" />
                   </IconButton>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  {t("navigation.searchPapers")}
+                  {t("navigation.search")}
                 </TooltipContent>
               </Tooltip>
             )}
@@ -1004,8 +1224,8 @@ function Sidebar({
             <SidebarControl
               collapsed
               glyph={SearchIcon}
-              label={t("navigation.searchPapers")}
-              onSelect={onSearchPapers}
+              label={t("navigation.search")}
+              onSelect={onSearch}
             />
           )}
           <SidebarControl
@@ -1028,31 +1248,20 @@ function Sidebar({
             className="mt-3 min-h-0 flex-1 overflow-y-auto"
             data-scrollbar-gutter="stable"
           >
-            <ConversationGroup
+            <ConversationHistory
               activeConversationId={activeConversationId}
-              items={pinned}
+              conversations={conversations}
               controller={controller}
-              onDelete={onDeleteConversation}
+              currentConversation={currentConversation}
+              hasNextPage={hasNextPage}
+              isError={isError}
+              isFetchingNextPage={isFetchingNextPage}
+              onDeleteConversation={onDeleteConversation}
+              onLoadMore={onLoadMore}
               onRequestMobileRename={onRequestMobileRename}
+              onRetry={onRetry}
               onSelect={onSelect}
-              title={t("sidebar.pinned")}
             />
-            <div className={pinned.length > 0 ? "mt-2" : undefined}>
-              <ConversationGroup
-                activeConversationId={activeConversationId}
-                items={recent}
-                controller={controller}
-                onDelete={onDeleteConversation}
-                onRequestMobileRename={onRequestMobileRename}
-                onSelect={onSelect}
-                title={t("sidebar.recent")}
-              />
-            </div>
-            {pinned.length === 0 && recent.length === 0 && (
-              <p className="text-secondary px-2 py-1 text-xs leading-5">
-                {t("sidebar.empty")}
-              </p>
-            )}
           </div>
         )}
         {collapsed && <div className="flex-1" />}
@@ -1073,7 +1282,6 @@ function Sidebar({
 
 export function WorkspaceShell({
   actor,
-  conversations,
   activeConversationId,
   activeDestination,
   collapsed,
@@ -1090,7 +1298,6 @@ export function WorkspaceShell({
   children,
 }: {
   actor: Actor;
-  conversations: ConversationSummary[];
   activeConversationId?: string;
   activeDestination: WorkspaceDestination;
   collapsed: boolean;
@@ -1108,7 +1315,8 @@ export function WorkspaceShell({
 }) {
   const t = useTranslations("WorkspaceShell");
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [paperSearchOpen, setPaperSearchOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const searchReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const [deleteTarget, setDeleteTarget] =
     React.useState<ConversationDialogTarget>();
   const [renameTarget, setRenameTarget] =
@@ -1117,6 +1325,35 @@ export function WorkspaceShell({
   const conversationController = useConversationListController({
     activeConversationId,
   });
+  const conversationListQuery = useInfiniteQuery(
+    conversationQueries.infiniteList(),
+  );
+  const conversations = React.useMemo(() => {
+    return flattenConversationPages(conversationListQuery.data?.pages ?? []);
+  }, [conversationListQuery.data?.pages]);
+  const activeConversationLoaded =
+    !activeConversationId ||
+    conversations.some(
+      (conversation) => conversation.id === activeConversationId,
+    );
+  const activeConversationQuery = useQuery({
+    ...conversationQueries.detail(activeConversationId ?? ""),
+    enabled: Boolean(activeConversationId && !activeConversationLoaded),
+  });
+  const currentConversation = activeConversationLoaded
+    ? undefined
+    : activeConversationQuery.data;
+  const loadMoreConversations = React.useCallback(() => {
+    if (
+      conversationListQuery.hasNextPage &&
+      !conversationListQuery.isFetchingNextPage
+    ) {
+      void conversationListQuery.fetchNextPage();
+    }
+  }, [conversationListQuery]);
+  const retryConversations = React.useCallback(() => {
+    void conversationListQuery.refetch();
+  }, [conversationListQuery]);
   const { setSection: setSettingsSection } = useSettingsNavigation();
   const {
     ready: motionReady,
@@ -1124,6 +1361,7 @@ export function WorkspaceShell({
     skipAnimations,
   } = useMotionPreference();
   const mobileSheetRef = React.useRef<HTMLDivElement>(null);
+  const mobileMenuTriggerRef = React.useRef<HTMLButtonElement>(null);
   const localMobileDockRef = React.useRef<HTMLDivElement>(null);
   const desktopRailChromeRef = React.useRef<HTMLDivElement>(null);
   const desktopContentRef = React.useRef<HTMLDivElement>(null);
@@ -1222,20 +1460,41 @@ export function WorkspaceShell({
 
   React.useEffect(() => stopRailAnimations, [stopRailAnimations]);
 
+  const openSearch = React.useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      searchReturnFocusRef.current = document.activeElement;
+    }
+    setSearchOpen(true);
+  }, []);
+
+  const handleSearchOpenChange = React.useCallback((nextOpen: boolean) => {
+    setSearchOpen(nextOpen);
+    if (nextOpen) return;
+    const returnTarget = searchReturnFocusRef.current;
+    searchReturnFocusRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (returnTarget?.isConnected) returnTarget.focus();
+      else mobileMenuTriggerRef.current?.focus();
+    });
+  }, []);
+
   React.useEffect(() => {
-    function openPaperSearch(event: KeyboardEvent) {
+    function openSearch(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setPaperSearchOpen(true);
+        if (document.activeElement instanceof HTMLElement) {
+          searchReturnFocusRef.current = document.activeElement;
+        }
+        setSearchOpen(true);
       }
     }
-    window.addEventListener("keydown", openPaperSearch);
-    return () => window.removeEventListener("keydown", openPaperSearch);
+    window.addEventListener("keydown", openSearch);
+    return () => window.removeEventListener("keydown", openSearch);
   }, []);
 
   return (
     <div
-      className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden"
+      className="bg-canvas fixed inset-0 flex min-h-0 overflow-hidden [--workspace-sidebar-width:var(--layout-sidebar)] 2xl:[--workspace-sidebar-width:var(--layout-sidebar-wide)]"
       data-workspace-shell=""
       style={
         shellViewportHeight
@@ -1251,13 +1510,13 @@ export function WorkspaceShell({
       <div
         className={cn(
           "relative z-10 hidden shrink-0 lg:block",
-          collapsed ? "w-16" : "w-[var(--layout-sidebar)]",
+          collapsed ? "w-16" : "w-[var(--workspace-sidebar-width)]",
         )}
         data-motion-rail-frame=""
       >
         <div
           aria-hidden="true"
-          className="motion-rail-chrome border-line bg-canvas pointer-events-none absolute inset-y-0 left-0 w-[var(--layout-sidebar)] border-r"
+          className="motion-rail-chrome border-line bg-canvas pointer-events-none absolute inset-y-0 left-0 w-[var(--workspace-sidebar-width)] border-r"
           data-collapsed={collapsed}
           ref={desktopRailChromeRef}
         />
@@ -1270,6 +1529,10 @@ export function WorkspaceShell({
             collapsed={collapsed}
             conversations={conversations}
             controller={conversationController}
+            currentConversation={currentConversation}
+            hasNextPage={Boolean(conversationListQuery.hasNextPage)}
+            isError={conversationListQuery.isError}
+            isFetchingNextPage={conversationListQuery.isFetchingNextPage}
             onCollapsedChange={handleCollapsedChange}
             onDeleteConversation={(conversation, returnFocus) =>
               setDeleteTarget({ conversation, returnFocus })
@@ -1277,10 +1540,12 @@ export function WorkspaceShell({
             onOpenAccount={() => setSettingsSection("account")}
             onOpenSettings={() => setSettingsSection("general")}
             onOpenUsage={() => setSettingsSection("usage")}
+            onLoadMore={loadMoreConversations}
             onRequestMobileRename={(conversation, returnFocus) =>
               setRenameTarget({ conversation, returnFocus })
             }
-            onSearchPapers={() => setPaperSearchOpen(true)}
+            onRetry={retryConversations}
+            onSearch={openSearch}
             onSignOut={onSignOut}
             signingOut={signingOut}
           />
@@ -1307,6 +1572,10 @@ export function WorkspaceShell({
             billingUsage={billingUsage}
             conversations={conversations}
             controller={conversationController}
+            currentConversation={currentConversation}
+            hasNextPage={Boolean(conversationListQuery.hasNextPage)}
+            isError={conversationListQuery.isError}
+            isFetchingNextPage={conversationListQuery.isFetchingNextPage}
             onDeleteConversation={(conversation, returnFocus) =>
               setDeleteTarget({ conversation, returnFocus })
             }
@@ -1322,13 +1591,15 @@ export function WorkspaceShell({
               setMobileOpen(false);
               setSettingsSection("usage");
             }}
+            onLoadMore={loadMoreConversations}
             onRequestMobileRename={(conversation, returnFocus) =>
               setRenameTarget({ conversation, returnFocus })
             }
             onSelect={() => setMobileOpen(false)}
-            onSearchPapers={() => {
+            onRetry={retryConversations}
+            onSearch={() => {
               setMobileOpen(false);
-              setPaperSearchOpen(true);
+              openSearch();
             }}
             onSignOut={onSignOut}
             signingOut={signingOut}
@@ -1346,6 +1617,7 @@ export function WorkspaceShell({
               <IconButton
                 label={t("navigation.openMenu")}
                 onClick={() => setMobileOpen(true)}
+                ref={mobileMenuTriggerRef}
                 variant="ghost"
               >
                 <Icon glyph={MenuIcon} size={24} />
@@ -1373,9 +1645,10 @@ export function WorkspaceShell({
         )}
       </div>
       <SettingsDialog />
-      <GlobalPaperSearch
-        onOpenChange={setPaperSearchOpen}
-        open={paperSearchOpen}
+      <GlobalSearch
+        conversations={conversations}
+        onOpenChange={handleSearchOpenChange}
+        open={searchOpen}
       />
       <ConversationActionDialogs
         controller={conversationController}

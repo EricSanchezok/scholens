@@ -33,6 +33,13 @@ class Project(Base):
     """A lightweight shared paper collection with one explicit owner."""
 
     __tablename__ = "projects"
+    __table_args__ = (
+        Index(
+            "ix_projects_title_trgm",
+            text("lower(title) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

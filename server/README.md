@@ -191,6 +191,8 @@ first:
 ```bash
 uv run scholens maintenance backfill-search-embeddings --batch-size 100 --json
 uv run scholens maintenance backfill-search-embeddings --batch-size 100 --apply --yes --json
+uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --json
+uv run scholens maintenance backfill-conversation-titles --actor-email admin@example.com --batch-size 100 --apply --yes --json
 ```
 
 Repeat the apply command until `candidates` reaches zero. The projection is

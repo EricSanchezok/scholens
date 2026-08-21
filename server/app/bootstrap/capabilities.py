@@ -13,6 +13,8 @@ from app.bootstrap.container import (
     build_citation_metadata,
     build_conversation_chat_data,
     build_conversations,
+    build_conversation_search,
+    build_conversation_title_maintenance,
     build_identity,
     build_job_callbacks,
     build_job_commands,
@@ -48,6 +50,10 @@ from app.modules.action_confirmations.application import ActionConfirmations
 from app.modules.integrations.connections.application import Integrations
 from app.modules.conversations.application.chat import ConversationChatData
 from app.modules.conversations.application.conversations import Conversations
+from app.modules.conversations.application.search import SearchConversations
+from app.modules.conversations.application.title_maintenance import (
+    ConversationTitleMaintenance,
+)
 from app.modules.identity.application.identity import Identity
 from app.modules.identity.application.onboarding import SaveOnboarding
 from app.modules.integrations.zotero.application.zotero import Zotero
@@ -317,6 +323,20 @@ class ApplicationCapabilities:
         return build_conversations(
             db=self._session,
             cursor_secret=self._settings.paper_search_cursor_secret,
+            journal=self._journal,
+        )
+
+    @cached_property
+    def conversation_search(self) -> SearchConversations:
+        return build_conversation_search(
+            db=self._session,
+            cursor_secret=self._settings.paper_search_cursor_secret,
+        )
+
+    @cached_property
+    def conversation_title_maintenance(self) -> ConversationTitleMaintenance:
+        return build_conversation_title_maintenance(
+            db=self._session,
             journal=self._journal,
         )
 

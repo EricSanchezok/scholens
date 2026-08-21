@@ -176,4 +176,25 @@ describe("conversation list cache", () => {
     expect(next?.items).toEqual([second]);
     expect(next?.next_cursor).toBe("next-page");
   });
+
+  it("updates and removes summaries across infinite pages", () => {
+    const infinite = {
+      pageParams: [undefined, "next-page"],
+      pages: [
+        { items: [first], next_cursor: "next-page" },
+        { items: [second], next_cursor: null },
+      ],
+    };
+
+    const updated = updateConversationSummary(infinite, second.id, {
+      title: "Renamed on page two",
+    });
+    expect(updated?.pages[0]?.items[0]?.title).toBe("First");
+    expect(updated?.pages[1]?.items[0]?.title).toBe("Renamed on page two");
+    expect(updated?.pageParams).toEqual([undefined, "next-page"]);
+
+    const removed = removeConversationSummary(updated, first.id);
+    expect(removed?.pages[0]?.items).toEqual([]);
+    expect(removed?.pages[1]?.items).toHaveLength(1);
+  });
 });

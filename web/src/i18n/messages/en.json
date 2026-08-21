@@ -231,16 +231,27 @@
       "expand": "Expand sidebar",
       "openMenu": "Open navigation",
       "closeMenu": "Close navigation",
+      "search": "Search conversations and papers (⌘K)",
+      "searchShort": "Search",
       "searchConversations": "Search conversations",
       "searchPapers": "Search all papers (⌘K)",
       "comingSoon": "Not available yet"
     },
     "sidebar": {
       "pinned": "Pinned",
+      "current": "Current conversation",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "previous7Days": "Previous 7 days",
+      "previous30Days": "Previous 30 days",
       "conversations": "Conversations",
       "recent": "Recent",
       "empty": "Your conversations will appear here.",
       "noMatches": "No matching conversations",
+      "loadMore": "Load earlier conversations",
+      "loadingMore": "Loading…",
+      "historyError": "Conversation history could not be loaded",
+      "retry": "Try again",
       "conversationContext": "Research context",
       "openActions": "Open actions for {title}",
       "openNewTab": "Open in new tab",
@@ -1792,6 +1803,43 @@
       "loadMore": "Load more matches",
       "loadingMore": "Loading more matches"
     }
+  },
+  "GlobalSearch": {
+    "title": "Search Scholens",
+    "description": "Return to a conversation or find a paper across your research workspace.",
+    "close": "Close search",
+    "inputLabel": "Search conversations or papers",
+    "conversationPlaceholder": "Search conversation titles, questions, and answers",
+    "paperPlaceholder": "Describe a paper by title, topic, argument, or clue",
+    "scopeLabel": "Search scope",
+    "tabs": {
+      "conversations": "Conversations",
+      "papers": "Papers"
+    },
+    "recentConversations": "Recent conversations",
+    "noRecentConversations": "Your conversations will appear here after you start researching.",
+    "paperHint": "Describe what you remember. Exact titles, joined words, typos, and natural-language clues all work.",
+    "searchingConversations": "Searching conversations",
+    "searchingPapers": "Searching papers",
+    "retry": "Try again",
+    "errorTitle": "Search is unavailable",
+    "errorDescription": "Your query is preserved. Try the search again.",
+    "conversationEmptyTitle": "No matching conversations",
+    "conversationEmptyDescription": "Try a title, a question you asked, or a phrase from an answer.",
+    "paperEmptyTitle": "No close paper matches",
+    "paperEmptyDescription": "Try a broader description or a related concept.",
+    "conversationCount": "{count, plural, one {# matching conversation} other {# matching conversations}}",
+    "paperCount": "{count, plural, one {# matching paper} other {# matching papers}}",
+    "matches": {
+      "title": "Title match",
+      "scope": "Research context match",
+      "user_query": "Question match",
+      "assistant_response": "Answer match"
+    },
+    "untitled": "Untitled paper",
+    "unknownAuthors": "Unknown authors",
+    "loadMore": "Load more matches",
+    "loadingMore": "Loading more matches"
   },
   "Errors": {
     "unexpected": {

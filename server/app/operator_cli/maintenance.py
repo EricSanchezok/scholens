@@ -116,6 +116,45 @@ def backfill_search_embeddings(
     )
 
 
+@maintenance_group.command("backfill-conversation-titles")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option(
+    "--batch-size",
+    type=click.IntRange(1, 5000),
+    default=100,
+    show_default=True,
+    help="Maximum default-titled conversations processed in this invocation.",
+)
+@click.option(
+    "--apply", is_flag=True, help="Apply changes; otherwise only count candidates."
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt when applying.")
+@click.pass_obj
+@guarded
+def backfill_conversation_titles(
+    state: CliState,
+    actor_email: str,
+    batch_size: int,
+    apply: bool,
+    yes: bool,
+) -> None:
+    actor_user = load_user(actor_email)
+    if apply:
+        confirm("Backfill legacy default conversation titles?", yes=yes)
+    invoke = executor().command if apply else executor().query
+    result = invoke(
+        lambda capabilities: (
+            capabilities.conversation_title_maintenance.backfill_default_titles(
+                actor=current_admin(capabilities, actor_user.id),
+                operation=cli_operation("maintenance.backfill-conversation-titles"),
+                batch_size=batch_size,
+                apply=apply,
+            )
+        )
+    )
+    emit(state, {"dry_run": not apply, **asdict(result)})
+
+
 def _repair_command(
     command_name: str,
     method_name: str,

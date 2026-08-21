@@ -236,7 +236,6 @@ function ReaderDocumentWorkspace({
         : { scopeId: documentId, scopeType: "paper" },
     ),
   );
-  const sidebarConversationsQuery = useQuery(conversationQueries.list());
 
   const rawPage = parsePositiveInteger(searchParams.get("page"));
   const pageNumber = Math.min(rawPage, pageCount);
@@ -804,7 +803,6 @@ function ReaderDocumentWorkspace({
       activeDestination="library"
       actor={actor}
       collapsed={collapsed}
-      conversations={sidebarConversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span className="block truncate text-sm font-medium">{title}</span>
       }

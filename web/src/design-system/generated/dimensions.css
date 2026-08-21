@@ -12,7 +12,8 @@
   --icon-stroke: 1.5;
   --layout-conversation-lane: 832px;
   --layout-reading-column: 1104px;
-  --layout-sidebar: 264px;
+  --layout-sidebar-wide: 320px;
+  --layout-sidebar: 288px;
   --opacity-disabled: 0.38;
   --radius-2xl: 24px;
   --radius-full: 999px;

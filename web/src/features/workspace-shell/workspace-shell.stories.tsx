@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 import * as React from "react";
 
 import { actor, authHandlers } from "../../../.storybook/msw/auth-handlers";
@@ -39,20 +39,54 @@ const conversations: Conversation[] = [
   },
 ];
 
+const longHistoryConversations: Conversation[] = Array.from(
+  { length: 65 },
+  (_, index) => ({
+    ...conversations[0]!,
+    id: `76000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    pinned_at:
+      index < 4
+        ? new Date(Date.now() - index * 86_400_000).toISOString()
+        : null,
+    scope_label: index % 3 === 0 ? "CWM Agent survey" : "Memory systems",
+    title: `Conversation ${index + 1}: a descriptive research question`,
+    updated_at: new Date(Date.now() - index * 86_400_000).toISOString(),
+  }),
+);
+
 const longIdentityActor = {
   ...actor,
   display_name: "EricSanchez",
   email: "niexiaohangeric@163.com",
 };
 
+const conversationListHandler = http.get(
+  "http://127.0.0.1:7301/api/v1/conversations",
+  () => HttpResponse.json({ items: conversations, next_cursor: null }),
+);
+
+async function findConversationRow(
+  canvasElement: HTMLElement,
+  conversationId = conversations[0]!.id,
+) {
+  await waitFor(() =>
+    expect(
+      canvasElement.querySelector(
+        `[data-conversation-row="${conversationId}"]`,
+      ),
+    ).not.toBeNull(),
+  );
+  return canvasElement.querySelector<HTMLElement>(
+    `[data-conversation-row="${conversationId}"]`,
+  )!;
+}
+
 function ShellStory({
   activeDestination = "library",
   storyActor = actor,
-  storyConversations = conversations,
 }: {
   activeDestination?: "ask" | "library" | "projects";
   storyActor?: typeof actor;
-  storyConversations?: Conversation[];
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
   return (
@@ -60,7 +94,6 @@ function ShellStory({
       activeDestination={activeDestination}
       actor={storyActor}
       collapsed={collapsed}
-      conversations={storyConversations}
       mobileHeaderCenter={
         <span className="block truncate text-base font-semibold">Library</span>
       }
@@ -91,7 +124,11 @@ const meta = {
   parameters: {
     layout: "fullscreen",
     msw: {
-      handlers: [...billingHandlers.success, ...authHandlers.success],
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        conversationListHandler,
+      ],
     },
     nextjs: { appDirectory: true },
   },
@@ -112,14 +149,16 @@ export const DesktopExpanded: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("complementary")).toBeVisible();
     const search = canvas.getByRole("button", {
-      name: "Search all papers (⌘K)",
+      name: "Search conversations and papers (⌘K)",
     });
     await expect(search).toBeVisible();
     await expect(search).toHaveClass("size-8");
     await expect(
       within(
         canvas.getByRole("navigation", { name: "Open navigation" }),
-      ).queryByRole("button", { name: "Search all papers (⌘K)" }),
+      ).queryByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
     ).not.toBeInTheDocument();
     await expect(canvas.getByRole("link", { name: "Library" })).toHaveAttribute(
       "aria-current",
@@ -135,7 +174,7 @@ export const DesktopLongContent: Story = {
     const account = canvas.getByRole("button", { name: "Open account menu" });
     const name = within(account).getByText(longIdentityActor.display_name);
     const email = within(account).getByText(longIdentityActor.email);
-    const conversation = canvas.getByText(conversations[0]!.title);
+    const conversation = await canvas.findByText(conversations[0]!.title);
     const newChat = within(
       canvas.getByRole("link", { name: "New chat" }),
     ).getByText("New chat");
@@ -146,6 +185,164 @@ export const DesktopLongContent: Story = {
     await expect(email).toHaveStyle({ fontSize: "11px" });
     await expect(email).toBeVisible();
     await expect(email.scrollWidth).toBeLessThanOrEqual(email.clientWidth);
+  },
+};
+
+export const DesktopUltrawide: Story = {
+  globals: { viewport: { value: "ultrawide", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole("complementary")).toHaveStyle({
+      width: "320px",
+    });
+  },
+};
+
+export const UnifiedSearchKeyboard: Story = {
+  play: async ({ canvasElement }) => {
+    const trigger = within(canvasElement).getByRole("button", {
+      name: "Search conversations and papers (⌘K)",
+    });
+    trigger.focus();
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+    const body = within(document.body);
+    const search = await body.findByRole("searchbox", {
+      name: "Search conversations or papers",
+    });
+    await userEvent.type(search, "memory");
+    const result = await body.findByRole("link", {
+      name: /Comparing memory retrieval strategies/,
+    });
+    search.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect(result).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(
+        body.queryByRole("dialog", { name: "Search Scholens" }),
+      ).not.toBeInTheDocument(),
+    );
+    await expect(trigger).toHaveFocus();
+  },
+};
+
+export const UnifiedSearchLoading: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        conversationListHandler,
+        http.post(
+          "http://127.0.0.1:7301/api/v1/search/conversations",
+          async () => {
+            await delay("infinite");
+            return HttpResponse.json({
+              items: [],
+              next_cursor: null,
+              total: 0,
+            });
+          },
+        ),
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
+    );
+    const body = within(document.body);
+    await userEvent.type(
+      await body.findByRole("searchbox", {
+        name: "Search conversations or papers",
+      }),
+      "memory",
+    );
+    await expect(
+      await body.findByRole("status", { name: "Searching conversations" }),
+    ).toBeVisible();
+  },
+};
+
+export const UnifiedSearchError: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        conversationListHandler,
+        http.post("http://127.0.0.1:7301/api/v1/search/conversations", () =>
+          HttpResponse.json({ detail: "Unavailable" }, { status: 503 }),
+        ),
+      ],
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
+    );
+    const body = within(document.body);
+    await userEvent.type(
+      await body.findByRole("searchbox", {
+        name: "Search conversations or papers",
+      }),
+      "memory",
+    );
+    await expect(
+      await body.findByText("Search is unavailable", {}, { timeout: 2500 }),
+    ).toBeVisible();
+  },
+};
+
+export const UnifiedSearchIme: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(
+      within(canvasElement).getByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
+    );
+    const body = within(document.body);
+    const search = await body.findByRole("searchbox", {
+      name: "Search conversations or papers",
+    });
+    await fireEvent.compositionStart(search, { data: "记" });
+    await fireEvent.change(search, { target: { value: "记忆" } });
+    await new Promise((resolve) => window.setTimeout(resolve, 320));
+    await expect(body.getByText("Recent conversations")).toBeVisible();
+    await fireEvent.compositionEnd(search, { data: "记忆" });
+    await expect(
+      await body.findByRole("link", {
+        name: /Comparing memory retrieval strategies/,
+      }),
+    ).toBeVisible();
+  },
+};
+
+export const LongPaginatedHistory: Story = {
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        http.get(
+          "http://127.0.0.1:7301/api/v1/conversations",
+          ({ request }) => {
+            const cursor = new URL(request.url).searchParams.get("cursor");
+            const start = cursor ? 50 : 0;
+            return HttpResponse.json({
+              items: longHistoryConversations.slice(start, start + 50),
+              next_cursor:
+                start + 50 < longHistoryConversations.length
+                  ? "history-page-two"
+                  : null,
+            });
+          },
+        ),
+      ],
+    },
   },
 };
 
@@ -168,20 +365,23 @@ export const DesktopCollapsed: Story = {
     await expect(
       within(
         canvas.getByRole("navigation", { name: "Open navigation" }),
-      ).getByRole("button", { name: "Search all papers (⌘K)" }),
+      ).getByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
     ).toBeVisible();
     await expect(sidebar).toHaveStyle({ width: "64px" });
     await expect(getComputedStyle(sidebar).transitionProperty).not.toContain(
       "width",
     );
     await expect(getComputedStyle(railContent).transform).toBe("none");
-    await expect(getComputedStyle(railChrome).clipPath).toContain("200px");
+    await expect(getComputedStyle(railChrome).clipPath).toContain("224px");
     await expect(railContent.getAnimations()).toHaveLength(0);
     await expect(railChrome.getAnimations()).toHaveLength(0);
   },
 };
 
 const conversationMutationHandlers = [
+  conversationListHandler,
   http.patch(
     "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
     async ({ request }) => {
@@ -215,11 +415,8 @@ export const ConversationActions: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
-    const row = canvasElement.querySelector(
-      `[data-conversation-row="${conversations[0]!.id}"]`,
-    );
-    await expect(row).not.toBeNull();
-    await userEvent.hover(row as Element);
+    const row = await findConversationRow(canvasElement);
+    await userEvent.hover(row);
     const trigger = canvas.getByRole("button", {
       name: `Open actions for ${conversations[0]!.title}`,
     });
@@ -248,7 +445,7 @@ export const ConversationActions: Story = {
       ).not.toBeInTheDocument(),
     );
 
-    await userEvent.hover(row as Element);
+    await userEvent.hover(row);
     const restoredTrigger = canvas.getByRole("button", {
       name: `Open actions for ${conversations[0]!.title}`,
     });
@@ -271,10 +468,8 @@ export const ConversationDelete: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
-    const row = canvasElement.querySelector(
-      `[data-conversation-row="${conversations[0]!.id}"]`,
-    );
-    await userEvent.hover(row as Element);
+    const row = await findConversationRow(canvasElement);
+    await userEvent.hover(row);
     await userEvent.click(
       canvas.getByRole("button", {
         name: `Open actions for ${conversations[0]!.title}`,
@@ -300,6 +495,7 @@ export const ConversationRenameFailure: Story = {
       handlers: [
         ...billingHandlers.success,
         ...authHandlers.success,
+        conversationListHandler,
         http.patch(
           "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
           () => HttpResponse.json({ detail: "Rename failed" }, { status: 503 }),
@@ -310,8 +506,8 @@ export const ConversationRenameFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
-    const row = canvasElement.querySelector("[data-conversation-row]");
-    await userEvent.hover(row as Element);
+    const row = await findConversationRow(canvasElement);
+    await userEvent.hover(row);
     await userEvent.click(
       canvas.getByRole("button", { name: /Open actions for/ }),
     );
@@ -336,6 +532,7 @@ export const ConversationDeleteFailure: Story = {
       handlers: [
         ...billingHandlers.success,
         ...authHandlers.success,
+        conversationListHandler,
         http.delete(
           "http://127.0.0.1:7301/api/v1/conversations/:conversationId",
           () => HttpResponse.json({ detail: "Delete failed" }, { status: 503 }),
@@ -346,8 +543,8 @@ export const ConversationDeleteFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
-    const row = canvasElement.querySelector("[data-conversation-row]");
-    await userEvent.hover(row as Element);
+    const row = await findConversationRow(canvasElement);
+    await userEvent.hover(row);
     await userEvent.click(
       canvas.getByRole("button", { name: /Open actions for/ }),
     );
@@ -359,7 +556,7 @@ export const ConversationDeleteFailure: Story = {
       within(dialog).getByRole("button", { name: "Delete" }),
     );
     await expect(dialog).toBeVisible();
-    await expect(row as Element).toBeInTheDocument();
+    await expect(row).toBeInTheDocument();
     await expect(
       await body.findByText("Conversation could not be updated. Try again."),
     ).toBeVisible();
@@ -367,24 +564,35 @@ export const ConversationDeleteFailure: Story = {
 };
 
 export const ConversationPermissions: Story = {
-  args: {
-    storyConversations: [
-      {
-        ...conversations[0]!,
-        capabilities: {
-          ...conversations[0]!.capabilities,
-          delete: false,
-          pin: false,
-          rename: false,
-        },
-      },
-    ],
+  parameters: {
+    msw: {
+      handlers: [
+        ...billingHandlers.success,
+        ...authHandlers.success,
+        http.get("http://127.0.0.1:7301/api/v1/conversations", () =>
+          HttpResponse.json({
+            items: [
+              {
+                ...conversations[0]!,
+                capabilities: {
+                  ...conversations[0]!.capabilities,
+                  delete: false,
+                  pin: false,
+                  rename: false,
+                },
+              },
+            ],
+            next_cursor: null,
+          }),
+        ),
+      ],
+    },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
-    const row = canvasElement.querySelector("[data-conversation-row]");
-    await userEvent.hover(row as Element);
+    const row = await findConversationRow(canvasElement);
+    await userEvent.hover(row);
     await userEvent.click(
       canvas.getByRole("button", { name: /Open actions for/ }),
     );
@@ -457,7 +665,13 @@ export const AccountMenuUsage: Story = {
 
 export const AccountMenuLoading: Story = {
   parameters: {
-    msw: { handlers: [...billingHandlers.loading, ...authHandlers.success] },
+    msw: {
+      handlers: [
+        ...billingHandlers.loading,
+        ...authHandlers.success,
+        conversationListHandler,
+      ],
+    },
   },
   play: async ({ canvasElement }) => {
     await userEvent.click(
@@ -472,7 +686,11 @@ export const AccountMenuLoading: Story = {
 export const AccountMenuUnavailable: Story = {
   parameters: {
     msw: {
-      handlers: [...billingHandlers.unavailable, ...authHandlers.success],
+      handlers: [
+        ...billingHandlers.unavailable,
+        ...authHandlers.success,
+        conversationListHandler,
+      ],
     },
   },
   play: async ({ canvasElement }) => {
@@ -533,12 +751,22 @@ export const MobileNavigation: Story = {
     const dialog = within(document.body).getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(
-      within(dialog).getByRole("searchbox", {
-        name: "Search conversations",
-      }),
+      within(dialog).getByRole("link", { name: "New chat" }),
     ).toBeVisible();
     await expect(
-      within(dialog).getByRole("link", { name: "New chat" }),
+      within(dialog).getByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
+    ).toBeVisible();
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Search conversations and papers (⌘K)",
+      }),
+    );
+    await expect(
+      await within(document.body).findByRole("dialog", {
+        name: "Search Scholens",
+      }),
     ).toBeVisible();
   },
 };
@@ -564,7 +792,9 @@ export const MobileConversationRename: Story = {
       name: "Open navigation",
     });
     await userEvent.click(
-      within(navigation).getByRole("button", { name: /Open actions for/ }),
+      await within(navigation).findByRole("button", {
+        name: /Open actions for/,
+      }),
     );
     await userEvent.click(
       await body.findByRole("menuitem", { name: "Rename" }),

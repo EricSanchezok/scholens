@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+import re
 
 from app.llm.backend import HistoryMessage, TextContent
 from app.llm.base import BaseLLMClient
 
 logger = logging.getLogger(__name__)
+
+_FALLBACK_TITLE_LIMIT = 60
 
 _SYSTEM_PROMPT = """
 You summarize conversations as concise, descriptive titles. Return plain text
@@ -22,6 +25,17 @@ Generate a title for this conversation:
 
 Title:
 """.strip()
+
+
+def fallback_conversation_title(user_query: str) -> str:
+    """Derive a stable, readable title when the optional LLM sidecar fails."""
+    plain = re.sub(r"[`#>*_~\[\]{}()]", " ", user_query)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    if not plain:
+        return "Untitled question"
+    if len(plain) <= _FALLBACK_TITLE_LIMIT:
+        return plain
+    return f"{plain[: _FALLBACK_TITLE_LIMIT - 1].rstrip()}…"
 
 
 def should_generate_initial_title(

@@ -24,6 +24,7 @@ from app.llm.conversation_agent import (
     ScholensConversationAgent,
 )
 from app.llm.conversation_titles import (
+    fallback_conversation_title,
     initial_conversation_title_generator,
 )
 from app.llm.follow_up_suggestions import SuggestionSeed
@@ -447,6 +448,7 @@ async def stream_conversation_agent(
         raise RuntimeError("Conversation response is already in progress")
     suggestion_task: asyncio.Task[tuple[str, str, str] | None] | None = None
     title_task: asyncio.Task[str | None] | None = None
+    title_seed: str | None = None
 
     diagnostic_context: dict[str, object] = {
         "stage": "agent",
@@ -464,7 +466,7 @@ async def stream_conversation_agent(
     }
 
     async def produce_response() -> AsyncGenerator[str, None]:
-        nonlocal suggestion_task, title_task
+        nonlocal suggestion_task, title_seed, title_task
         prior_history = executor.query(
             lambda capabilities: capabilities.conversation_chat_data.history(
                 actor=current_user,
@@ -494,13 +496,12 @@ async def stream_conversation_agent(
                 name=f"conversation-suggestions:{request.turn_id}",
             )
         if turn_start.turn_created and conversation_scope.title_is_default:
+            title_seed = (
+                prior_history[0].content if prior_history else request.user_query
+            )
             title_task = asyncio.create_task(
                 _generate_initial_title(
-                    user_query=(
-                        prior_history[0].content
-                        if prior_history
-                        else request.user_query
-                    ),
+                    user_query=title_seed,
                     conversation_id=conversation_id,
                 ),
                 name=f"conversation-title:{conversation_id}",
@@ -613,23 +614,31 @@ async def stream_conversation_agent(
                             suggestions=list(suggestions),
                         )
                     )
-            if title_task is not None and title_task in done:
-                title = title_task.result()
-                if title is not None:
+            if title_task is not None and title_seed is not None:
+                title: str | None = None
+                if title_task in done and not title_task.cancelled():
                     try:
-                        await _apply_initial_title(
-                            title=title,
-                            executor=executor,
-                            actor=current_user,
-                            conversation_id=conversation_id,
-                            operation=operation,
-                            operation_factory=operation_factory,
-                        )
+                        title = title_task.result()
                     except Exception:
                         logger.exception(
-                            "conversation.title_persistence.failed",
+                            "conversation.title_generation.failed",
                             extra={"conversation_id": str(conversation_id)},
                         )
+                title = title or fallback_conversation_title(title_seed)
+                try:
+                    await _apply_initial_title(
+                        title=title,
+                        executor=executor,
+                        actor=current_user,
+                        conversation_id=conversation_id,
+                        operation=operation,
+                        operation_factory=operation_factory,
+                    )
+                except Exception:
+                    logger.exception(
+                        "conversation.title_persistence.failed",
+                        extra={"conversation_id": str(conversation_id)},
+                    )
 
         scope_items = scope_snapshot or []
         track_event(

@@ -168,7 +168,7 @@ export function ConversationListItem({
   if (!mobile && editing) {
     return (
       <form
-        className="group/interactive-row bg-hover flex min-h-9 min-w-0 items-center gap-1 rounded-[var(--radius-lg)] px-1"
+        className="group/interactive-row bg-hover flex min-h-12 min-w-0 items-center gap-1 rounded-[var(--radius-lg)] px-1"
         onBlur={() => {
           requestAnimationFrame(() => {
             if (!formRef.current?.contains(document.activeElement)) {
@@ -223,7 +223,7 @@ export function ConversationListItem({
     <div
       className={cn(
         "motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)]",
-        mobile ? "min-h-16 px-1 py-1" : "min-h-9 px-1",
+        mobile ? "min-h-16 px-1 py-1" : "min-h-12 px-1 py-0.5",
         current && (mobile ? "bg-surface" : "bg-hover"),
       )}
       data-current={current ? "" : undefined}
@@ -236,32 +236,30 @@ export function ConversationListItem({
           keyboardFocusRing,
           mobile
             ? "flex min-h-14 items-center px-2 py-2"
-            : "text-sidebar-label flex h-8 items-center gap-2 px-1",
+            : "flex min-h-11 items-start gap-2 px-1 py-1.5",
         )}
         href={href as Route}
         onClick={onNavigate}
       >
         {!mobile && conversation.pinned_at && (
-          <Icon glyph={PinIcon} size={16} tone="secondary" />
+          <span className="mt-0.5 shrink-0">
+            <Icon glyph={PinIcon} size={16} tone="secondary" />
+          </span>
         )}
         <span className="min-w-0 flex-1">
           <span
-            className={cn("block truncate", mobile && "text-base leading-6")}
+            className={cn(
+              "block truncate",
+              mobile ? "text-base leading-6" : "text-sidebar-label leading-5",
+            )}
           >
             {conversation.title}
           </span>
-          {mobile && (
-            <span className="text-secondary block truncate text-xs leading-5">
-              {formatRelativeTime(conversation.updated_at)}
-              {conversation.scope_label && ` · ${conversation.scope_label}`}
-            </span>
-          )}
-        </span>
-        {!mobile && conversation.scope_label && (
-          <span className="text-caption text-secondary max-w-[4rem] truncate">
-            {conversation.scope_label}
+          <span className="text-caption text-secondary block truncate leading-4">
+            {conversation.scope_label && `${conversation.scope_label} · `}
+            {formatRelativeTime(conversation.updated_at)}
           </span>
-        )}
+        </span>
       </Link>
       {actions}
     </div>

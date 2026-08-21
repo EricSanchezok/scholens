@@ -2270,6 +2270,107 @@
         "title": "ConversationScopeType",
         "type": "string"
       },
+      "ConversationSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "limit": {
+            "default": 30,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 2,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "ConversationSearchRequest",
+        "type": "object"
+      },
+      "ConversationSearchResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationSearchResult"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ConversationSearchResponse",
+        "type": "object"
+      },
+      "ConversationSearchResult": {
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/ConversationSummaryResponse"
+          },
+          "matched_field": {
+            "enum": [
+              "title",
+              "scope",
+              "user_query",
+              "assistant_response"
+            ],
+            "title": "Matched Field",
+            "type": "string"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          }
+        },
+        "required": [
+          "conversation",
+          "matched_field"
+        ],
+        "title": "ConversationSearchResult",
+        "type": "object"
+      },
       "ConversationStreamActivityEvent": {
         "properties": {
           "activity": {
@@ -16976,6 +17077,49 @@
           }
         ],
         "summary": "Delete Research Item"
+      }
+    },
+    "/api/v1/search/conversations": {
+      "post": {
+        "operationId": "search_conversations_api_v1_search_conversations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Search Conversations"
       }
     },
     "/api/v1/search/papers": {

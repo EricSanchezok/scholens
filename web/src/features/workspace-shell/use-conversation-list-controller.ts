@@ -17,7 +17,7 @@ import {
   removeConversationSummary,
   updateConversation,
   updateConversationSummary,
-  type ConversationListResponse,
+  type ConversationListCache,
   type ConversationUpdateRequest,
 } from "@/features/conversation";
 import type { components } from "@/lib/api/generated/schema";
@@ -31,10 +31,7 @@ type ConversationUpdate = {
   request: ConversationUpdateRequest;
 };
 
-type ConversationListSnapshot = [
-  QueryKey,
-  ConversationListResponse | undefined,
-][];
+type ConversationListSnapshot = [QueryKey, ConversationListCache | undefined][];
 
 export type ConversationListController = {
   deleteConversation: (conversation: ConversationSummary) => Promise<void>;
@@ -71,10 +68,10 @@ export function useConversationListController({
       updateConversation(conversationId, request),
     onMutate: async ({ conversationId, optimisticPatch }) => {
       await queryClient.cancelQueries({ queryKey: conversationKeys.lists() });
-      const snapshots = queryClient.getQueriesData<ConversationListResponse>({
+      const snapshots = queryClient.getQueriesData<ConversationListCache>({
         queryKey: conversationKeys.lists(),
       });
-      queryClient.setQueriesData<ConversationListResponse>(
+      queryClient.setQueriesData<ConversationListCache>(
         { queryKey: conversationKeys.lists() },
         (current) =>
           updateConversationSummary(current, conversationId, optimisticPatch),
@@ -87,7 +84,7 @@ export function useConversationListController({
       }
     },
     onSuccess: (conversation) => {
-      queryClient.setQueriesData<ConversationListResponse>(
+      queryClient.setQueriesData<ConversationListCache>(
         { queryKey: conversationKeys.lists() },
         (current) =>
           updateConversationSummary(current, conversation.id, conversation),
@@ -107,7 +104,7 @@ export function useConversationListController({
   const deleteMutation = useMutation({
     mutationFn: deleteConversation,
     onSuccess: (_result, conversationId) => {
-      queryClient.setQueriesData<ConversationListResponse>(
+      queryClient.setQueriesData<ConversationListCache>(
         { queryKey: conversationKeys.lists() },
         (current) => removeConversationSummary(current, conversationId),
       );
