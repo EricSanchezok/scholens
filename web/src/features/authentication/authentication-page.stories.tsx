@@ -62,6 +62,9 @@ export const SignIn: Story = {
     await expect(
       await canvas.findByRole("heading", { name: "Welcome back" }),
     ).toBeVisible();
+    await expect(
+      canvasElement.querySelector('[data-product-mark="micro"]'),
+    ).not.toBeNull();
     await expect(canvas.getByLabelText("Email address")).toHaveAttribute(
       "autocomplete",
       "email",

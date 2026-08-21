@@ -512,10 +512,9 @@ test("lets an explicit full-motion preference override the OS setting", async ({
   expect(collapseFrame.skewY).toBeCloseTo(0, 4);
   expect(collapseFrame.translateX).toBeGreaterThan(0);
   expect(collapseFrame.translateX).toBeLessThan(200);
-  await expect(sidebar.getByText("Scholens", { exact: true })).toHaveCSS(
-    "transform",
-    "none",
-  );
+  await expect(
+    sidebar.getByRole("navigation", { name: "Open navigation" }),
+  ).toHaveCSS("transform", "none");
   await expect(
     page.getByRole("heading", { name: "What are you working on?" }),
   ).toHaveCSS("transform", "none");

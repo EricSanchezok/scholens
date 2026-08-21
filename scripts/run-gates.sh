@@ -133,6 +133,7 @@ run_web() {
   require_command pnpm
   (
     cd "$REPOSITORY_ROOT/web"
+    pnpm brand:check
     pnpm tokens:check
     pnpm api:check
     pnpm i18n:check
