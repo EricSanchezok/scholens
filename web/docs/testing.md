@@ -136,6 +136,11 @@ pre-hydration system appearance, retired-preference fallback, and resolved
 theme variables. Do not expand the complete product suite to every browser or
 duplicate every story for each theme.
 
+The Theme provider also has an SSR-to-hydration unit regression with a
+test-only second-theme registry. It must prove that a persisted non-default
+theme is adopted after hydration without a recoverable hydration error; do not
+add a fake production theme merely to exercise this boundary.
+
 Motion bundle acceptance uses production output rather than development or
 Storybook chunks. Build clean `main` and the candidate with the same Node 22
 and pnpm 10.11.0 toolchain, request each route from `next start`, deduplicate

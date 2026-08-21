@@ -13,6 +13,7 @@ import {
 import {
   type ColorScheme,
   type ColorSchemePreference,
+  defaultThemeName,
   type ThemeName,
 } from "@/design-system/generated/theme-metadata";
 import {
@@ -78,13 +79,23 @@ function ThemeProviderRoot({
     () => true,
     () => false,
   );
-  const [theme, setThemeState] = useState<ThemeName>(
+  const [persistedTheme, setThemeState] = useState<ThemeName>(
     initialTheme ?? storedTheme,
   );
-  const [colorSchemePreference, setColorSchemePreferenceState] =
+  const [persistedColorSchemePreference, setColorSchemePreferenceState] =
     useState<ColorSchemePreference>(
       initialColorSchemePreference ?? storedColorSchemePreference,
     );
+  // Keep the server and first hydration render identical. The inline script
+  // owns the root attributes before paint; React adopts persisted state once
+  // useSyncExternalStore reports that hydration has completed.
+  const hydrationTheme = initialTheme ?? defaultThemeName;
+  const hydrationColorSchemePreference =
+    initialColorSchemePreference ?? "system";
+  const theme = ready ? persistedTheme : hydrationTheme;
+  const colorSchemePreference = ready
+    ? persistedColorSchemePreference
+    : hydrationColorSchemePreference;
   const systemIsDark = useSyncExternalStore(
     subscribeToSystemScheme,
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,

@@ -184,6 +184,11 @@ the original glyphs.
 - Appearance preference values: `system`, `light`, or `dark`.
 - Preferences are stored in localStorage and cookies.
 - The inline initialization script resolves appearance before paint.
+- The React provider exposes only explicit initial props or `default`/`system`
+  during the server and first hydration snapshot, then adopts persisted
+  preferences after hydration. The inline script remains responsible for the
+  root element before paint, so this deterministic boundary does not add a
+  flash.
 - Unsupported or retired theme values fall back to the manifest default.
 - Settings shows Theme choices only when the manifest contains two or more
   themes.
