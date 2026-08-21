@@ -7,9 +7,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.modules.papers.application.contracts.documents import (
+    LibraryPaperTagResponse,
     LibraryOutputResponse,
     PublicUtcDateTime,
 )
+from app.shared.domain.enums import PaperStatus
 
 
 class ProjectSort(StrEnum):
@@ -22,6 +24,7 @@ class ProjectPaperSort(StrEnum):
     ADDED_DESC = "added_desc"
     TITLE_ASC = "title_asc"
     PUBLISHED_DESC = "published_desc"
+    PERSONAL_ACTIVITY_DESC = "personal_activity_desc"
 
 
 class ProjectInvitationDeliveryStatus(StrEnum):
@@ -180,7 +183,13 @@ class ProjectPaperSummaryResponse(BaseModel):
     doi: str | None
     publish_date: PublicUtcDateTime | None
     file_url: str | None
+    preview_url: str | None = None
+    summary: str | None = None
+    keywords: list[str] = Field(default_factory=list)
     in_library: bool
+    personal_status: PaperStatus | None = None
+    personal_tags: list[LibraryPaperTagResponse] = Field(default_factory=list)
+    personal_last_accessed_at: datetime | None = None
 
 
 class ProjectPaperListResponse(BaseModel):

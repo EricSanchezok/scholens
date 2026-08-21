@@ -36,6 +36,7 @@ from app.modules.papers.infrastructure.models import (
 from app.modules.papers.infrastructure.models import LibraryPaperTag
 from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.domain.enums import JobStatus
+from app.shared.domain.enums import PaperStatus
 from app.modules.jobs.application.failures import actionable_job_failure
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -173,6 +174,7 @@ class SqlAlchemyPaperLibraryGateway:
         user_id: int,
         query: str | None,
         tag_ids: tuple[UUID, ...],
+        statuses: tuple[PaperStatus, ...] = (),
         sort: LibraryPaperSort,
         limit: int,
         direction: LibraryPageDirection,
@@ -191,6 +193,12 @@ class SqlAlchemyPaperLibraryGateway:
                 datetime.fromisoformat(position.key) if position is not None else None
             )
             natural_ascending = sort is LibraryPaperSort.ADDED_ASC
+        elif sort is LibraryPaperSort.LAST_ACCESSED_DESC:
+            key = LibraryPaper.last_accessed_at
+            cursor_key = (
+                datetime.fromisoformat(position.key) if position is not None else None
+            )
+            natural_ascending = False
         elif sort in {
             LibraryPaperSort.PUBLISHED_ASC,
             LibraryPaperSort.PUBLISHED_DESC,
@@ -229,9 +237,13 @@ class SqlAlchemyPaperLibraryGateway:
                     )
                 )
             )
+        if statuses:
+            filters.append(
+                LibraryPaper.status.in_([status.value for status in statuses])
+            )
 
         active_standalone_reservations: list[UploadReservation] = []
-        if not tag_ids:
+        if not tag_ids and not statuses:
             reservation_filters = [
                 DurableJob.requested_by_id == user_id,
                 DurableJob.project_id.is_(None),
@@ -543,6 +555,8 @@ class SqlAlchemyPaperLibraryGateway:
     def _paper_key(entry: LibraryPaper, *, sort: LibraryPaperSort) -> str:
         if sort in {LibraryPaperSort.ADDED_ASC, LibraryPaperSort.ADDED_DESC}:
             return entry.created_at.isoformat()
+        if sort is LibraryPaperSort.LAST_ACCESSED_DESC:
+            return entry.last_accessed_at.isoformat()
         if sort in {
             LibraryPaperSort.PUBLISHED_ASC,
             LibraryPaperSort.PUBLISHED_DESC,

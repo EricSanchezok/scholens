@@ -29,6 +29,7 @@ from app.bootstrap.container import (
     build_paper_ingestion,
     build_paper_upload_sessions,
     build_paper_library,
+    build_paper_list_preferences,
     build_passage_maintenance,
     build_paper_search,
     build_paper_search_access,
@@ -75,6 +76,7 @@ from app.modules.papers.application.downloads import GetPaperDownload
 from app.modules.papers.application.ingestion import IngestPaper
 from app.modules.papers.application.upload_sessions import PaperUploadSessions
 from app.modules.papers.application.library import PaperLibrary
+from app.modules.papers.application.preferences import PaperListPreferences
 from app.modules.papers.application.maintenance import PassageMaintenance
 from app.modules.papers.application.search import (
     GetPaperSearchStats,
@@ -223,6 +225,13 @@ class ApplicationCapabilities:
         return build_paper_library(
             db=self._session,
             cursor_secret=self._settings.paper_search_cursor_secret,
+            journal=self._journal,
+        )
+
+    @cached_property
+    def paper_list_preferences(self) -> PaperListPreferences:
+        return build_paper_list_preferences(
+            db=self._session,
             journal=self._journal,
         )
 

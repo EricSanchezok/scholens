@@ -26,6 +26,7 @@ from app.modules.papers.application.contracts.documents import LibraryOutputSort
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ResearchItemKind
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
+from app.shared.domain.enums import PaperStatus
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
@@ -91,6 +92,8 @@ def get_project_papers(
     project_id: UUID,
     load_urls: bool = False,
     q: str | None = Query(default=None, max_length=240),
+    personal_statuses: list[PaperStatus] = Query(default=[]),
+    personal_tag_ids: list[UUID] = Query(default=[]),
     sort: ProjectPaperSort = ProjectPaperSort.ADDED_DESC,
     cursor: str | None = Query(default=None, min_length=1, max_length=2048),
     limit: int = Query(default=20, ge=1, le=100),
@@ -105,6 +108,8 @@ def get_project_papers(
             project_id=project_id,
             load_urls=load_urls,
             query=q,
+            personal_statuses=tuple(personal_statuses),
+            personal_tag_ids=tuple(personal_tag_ids),
             sort=sort,
             cursor=cursor,
             limit=limit,

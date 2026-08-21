@@ -83,9 +83,13 @@ from app.modules.papers.infrastructure.discovery import (
 from app.modules.papers.application.details import GetPaperDetails
 from app.modules.papers.application.citations import CitationMetadata
 from app.modules.papers.application.library import PaperLibrary
+from app.modules.papers.application.preferences import PaperListPreferences
 from app.modules.papers.infrastructure.details import SqlAlchemyPaperDetails
 from app.modules.papers.infrastructure.library_gateway import (
     SqlAlchemyPaperLibraryGateway,
+)
+from app.modules.papers.infrastructure.preferences import (
+    SqlAlchemyPaperListPreferences,
 )
 from app.modules.papers.application.maintenance import PassageMaintenance
 from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
@@ -403,6 +407,15 @@ def build_paper_library(
             error_code="library_cursor_invalid",
             error_kind=FailureKind.INVALID_ARGUMENT,
         ),
+        journal=journal,
+    )
+
+
+def build_paper_list_preferences(
+    *, db: Session, journal: OperationJournal
+) -> PaperListPreferences:
+    return PaperListPreferences(
+        gateway=SqlAlchemyPaperListPreferences(db),
         journal=journal,
     )
 

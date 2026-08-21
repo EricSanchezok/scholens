@@ -30,7 +30,7 @@ describe("Projects URL state", () => {
   it("keeps detail collections independently addressable", () => {
     const state = parseProjectDetailSearch(
       new URLSearchParams(
-        "view=outputs&conversation=c1&panel=chat&paper_q=attention&paper_sort=title_asc&paper_cursor=p1&output_q=citation&output_kind=citation&output_kind=data_table&output_sort=title_asc&output_cursor=o1",
+        "view=outputs&conversation=c1&panel=chat&paper_q=attention&paper_sort=personal_activity_desc&paper_status=reading&paper_status=completed&paper_tag=tag-one&paper_cursor=p1&output_q=citation&output_kind=citation&output_kind=data_table&output_sort=title_asc&output_cursor=o1",
       ),
     );
     expect(

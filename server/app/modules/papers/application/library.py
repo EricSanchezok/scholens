@@ -45,6 +45,7 @@ from app.shared.application import SignedCursorCodec
 from app.shared.application.operation_context import OperationContext
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ResearchItemKind
+from app.shared.domain.enums import PaperStatus
 
 
 class LibraryPageDirection(StrEnum):
@@ -106,6 +107,7 @@ class PaperLibraryGateway(Protocol):
         user_id: int,
         query: str | None,
         tag_ids: tuple[UUID, ...],
+        statuses: tuple[PaperStatus, ...] = (),
         sort: LibraryPaperSort,
         limit: int,
         direction: LibraryPageDirection,
@@ -204,18 +206,23 @@ class PaperLibrary:
         actor: Actor,
         query: str | None = None,
         tag_ids: tuple[UUID, ...] = (),
+        statuses: tuple[PaperStatus, ...] = (),
         sort: LibraryPaperSort = LibraryPaperSort.ADDED_DESC,
         cursor: str | None = None,
         limit: int = 20,
     ) -> LibraryPaperListResponse:
         normalized_query = query.strip() if query and query.strip() else None
         normalized_tags = tuple(sorted(set(tag_ids), key=str))
+        normalized_statuses = tuple(
+            sorted(set(statuses), key=lambda value: value.value)
+        )
         direction, position = self._decode_cursor(
             actor=actor,
             collection="papers",
             filters={
                 "q": normalized_query,
                 "tag_ids": [str(tag_id) for tag_id in normalized_tags],
+                "statuses": [status.value for status in normalized_statuses],
                 "sort": sort.value,
             },
             cursor=cursor,
@@ -224,6 +231,7 @@ class PaperLibrary:
             user_id=actor.id,
             query=normalized_query,
             tag_ids=normalized_tags,
+            statuses=normalized_statuses,
             sort=sort,
             limit=limit,
             direction=direction,
@@ -237,6 +245,7 @@ class PaperLibrary:
                 filters={
                     "q": normalized_query,
                     "tag_ids": [str(tag_id) for tag_id in normalized_tags],
+                    "statuses": [status.value for status in normalized_statuses],
                     "sort": sort.value,
                 },
                 page=page,
@@ -249,6 +258,7 @@ class PaperLibrary:
                 filters={
                     "q": normalized_query,
                     "tag_ids": [str(tag_id) for tag_id in normalized_tags],
+                    "statuses": [status.value for status in normalized_statuses],
                     "sort": sort.value,
                 },
                 page=page,

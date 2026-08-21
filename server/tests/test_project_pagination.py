@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,6 +9,7 @@ from app.bootstrap.adapters.project_gateway import SqlAlchemyProjectGateway
 from app.modules.papers.application.contracts.documents import (
     LibraryOutputResponse,
     LibraryOutputSort,
+    PaperStatus,
 )
 from app.modules.projects.application.invitation_tokens import (
     ProjectInvitationTokenCodec,
@@ -206,6 +207,79 @@ def test_project_documents_cursor_survives_page_size_changes() -> None:
     assert resized.total_count == 2
     assert gateway.list_documents.call_args_list[1].kwargs["position"].id == first_id
     assert gateway.list_documents.call_args_list[1].kwargs["limit"] == 50
+
+
+def test_project_documents_cursor_is_bound_to_personal_filters() -> None:
+    gateway = MagicMock()
+    gateway.list_documents.return_value = _paper_page(
+        item_id=uuid4(),
+        has_more=True,
+    )
+    projects = _projects(gateway=gateway)
+    project_id = uuid4()
+    tag_id = uuid4()
+
+    first = projects.documents(
+        actor=_actor(),
+        project_id=project_id,
+        load_urls=False,
+        personal_statuses=(PaperStatus.reading,),
+        personal_tag_ids=(tag_id,),
+        limit=1,
+    )
+
+    assert first.next_cursor is not None
+    with pytest.raises(AppError, match="cursor") as raised:
+        projects.documents(
+            actor=_actor(),
+            project_id=project_id,
+            load_urls=False,
+            personal_statuses=(PaperStatus.completed,),
+            personal_tag_ids=(tag_id,),
+            cursor=first.next_cursor,
+            limit=1,
+        )
+
+    assert raised.value.code == "project_cursor_invalid"
+
+
+def test_project_personal_filters_are_actor_scoped_before_counting() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.execute.return_value.all.return_value = []
+    tag_id = uuid4()
+
+    with patch("app.bootstrap.adapters.project_gateway.project_repository.get_access"):
+        page = SqlAlchemyProjectGateway(
+            db,
+            invitation_tokens=ProjectInvitationTokenCodec(
+                "project-pagination-test-secret-32-bytes"
+            ),
+        ).list_documents(
+            actor=_actor(7),
+            project_id=uuid4(),
+            load_urls=False,
+            query=None,
+            personal_statuses=(PaperStatus.reading,),
+            personal_tag_ids=(tag_id,),
+            sort=ProjectPaperSort.PERSONAL_ACTIVITY_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+
+    assert page.total_count == 0
+    count_sql = str(
+        db.scalar.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    page_sql = str(
+        db.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    for statement in (count_sql, page_sql):
+        assert "library_papers.user_id = 7" in statement
+        assert "library_papers.status IN ('reading')" in statement
+        assert tag_id.hex in statement
+        assert "paper_tags.user_id = 7" in statement
 
 
 def test_project_outputs_cursor_survives_page_size_changes() -> None:

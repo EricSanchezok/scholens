@@ -91,6 +91,12 @@ export const projectQueries = {
                 load_urls: false,
                 q: state.paperQuery || undefined,
                 sort: state.paperSort,
+                personal_statuses: state.paperStatuses.length
+                  ? state.paperStatuses
+                  : undefined,
+                personal_tag_ids: state.paperTagIds.length
+                  ? state.paperTagIds
+                  : undefined,
               },
             },
             signal,

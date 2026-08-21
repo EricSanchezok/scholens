@@ -1892,6 +1892,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_20_1200_conversation_failure_metadata.py",
         "2026_08_20_1200_hybrid_paper_search_expand.py",
         "2026_08_20_1230_search_embedding_timestamps_expand.py",
+        "2026_08_21_1200_paper_list_preferences.py",
         "2026_08_21_1630_conversation_search_indexes.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
@@ -2102,6 +2103,7 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         "PUT /api/v1/me/integrations/{provider}",
         "PATCH /api/v1/me/profile",
         "PUT /api/v1/me/profile",
+        "PUT /api/v1/me/paper-list-preferences",
         "POST /api/v1/projects/{project_id}/invitations",
         "PATCH /api/v1/projects/{project_id}/members/{user_id}",
         "POST /api/v1/projects/{project_id}/papers",

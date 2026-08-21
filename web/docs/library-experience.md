@@ -22,8 +22,9 @@ Home's conversation or composer implementation.
 
 | State                                                       | Owner                    |
 | ----------------------------------------------------------- | ------------------------ |
-| active tab, query, tag/kind filters, sort                   | URL search parameters    |
+| active tab, query, status/tag/kind filters, sort            | URL search parameters    |
 | papers, outputs, summary, tags, projects, ingestion jobs    | TanStack Query           |
+| ordered paper columns and preview disclosure                | account preference API   |
 | Zotero collections, library pages, operations, status       | TanStack Query           |
 | source import fields                                        | React Hook Form + Zod    |
 | selected rows, Zotero selection, open dialogs, upload queue | feature-local state      |
@@ -53,31 +54,25 @@ catalog request.
 
 ## Papers
 
-Desktop uses a dense editorial list with an adjacent sticky preview. Its
-search, user-tag filter, sort, and result count share one utility row. Every
-paper owns a stable portrait thumbnail slot
-that consumes the Server-provided `preview_url` and falls back to a document
-preview without shifting the text columns. The selection control reuses that
-same slot: on pointer devices it appears on row hover or keyboard focus and
-remains visible while selected. It is not a permanently visible checkbox
-column. Entering selection replaces the utility row with a batch toolbar above
-the collection. Both desktop toolbars occupy the same 44 px layout slot so the
-collection does not move when selection starts. Batch actions are never placed
-in a detached bar below the list.
+Desktop uses the shared full-width `paper-collection` workbench: a flat semantic
+table with a sticky header, quiet dividers, fixed 64 px virtual rows, and an
+adjacent 320–400 px details preview. Default columns are Paper, Status, Tags,
+Authors, Publication, and Last opened. Added and DOI are optional; every column
+except Paper can be hidden and the visible columns can be reordered. Column
+order and preview disclosure are account-scoped and shared with Project Papers;
+sort and filters remain URL state. Every paper owns a stable 36×52 px portrait
+thumbnail slot that consumes `preview_url` and falls back without shifting the
+text columns. Selection remains an independent leading control. Entering
+selection replaces the utility row with the batch toolbar above the collection.
 
-Below the desktop breakpoint, Papers uses a dedicated stacked list rather than
-compressing the table. Mobile has no hover dependency: the row action menu
-starts selection, after which thumbnail slots expose checkboxes and the compact
-batch toolbar remains above the collection. Titles wrap to at most two lines,
-authors and institutions stay on one clipped secondary line, and added and
-published dates stay in the same content column immediately after the paper's
-text metadata. They are not positioned beneath the full thumbnail row. Long
-titles and uninterrupted identifiers must not create horizontal page
-scrolling; desktop row titles remain a single line. Selecting or focusing a
-completed paper updates the preview with its abstract or summary, keywords,
-bibliographic metadata, and one explicit Reader action without navigating away.
-The preview collapses below desktop width so mobile remains a single reading
-column.
+Below the desktop breakpoint, Papers uses a compact stacked row rather than
+compressing the table. Long titles wrap to at most two lines and uninterrupted
+identifiers do not create horizontal page scrolling. When the collection
+container is below 1040 px, lower-priority right-side columns and the preview
+temporarily disappear without rewriting the stored preference; mobile exposes
+neither column management nor preview. Selecting or focusing a paper updates
+the preview with its full title, authors, publication, DOI, personal status,
+tags, abstract or summary, and keywords. The preview never repeats navigation.
 
 Two or more query characters switch the paper collection to the shared hybrid
 search contract. Exact title/author/DOI matches, whitespace-insensitive and
@@ -97,10 +92,19 @@ visual contract also applies to Outputs so switching tabs does not change the
 page's interface dialect.
 
 Paper and tag rows follow the shared collection-row and nested-action contract
-in [Component Development](./component-development.md). A paper title is the
-desktop table's only keyboard navigation Link; date cells only extend the
-pointer hit region, while selection and overflow controls remain independent.
-Touch layouts keep overflow actions visible and never depend on hover.
+in [Component Development](./component-development.md). The row's main content
+region is the only Reader Link; status, tag, selection, column, and overflow
+controls are siblings and never trigger navigation. Touch layouts keep overflow
+actions visible and never depend on hover.
+
+Reading state is `todo`, `reading`, or `completed` and is editable in place.
+Status filters use OR semantics, tag filters use OR semantics, and combining
+the two groups uses AND semantics. The default sort remains Recently added;
+Last activity is an additional stable keyset sort. Browse and hybrid-search
+results share the same rows, preview, personal metadata controls, and filter
+semantics. The fixed-height virtualizer retains only the viewport plus overscan
+while cursor pagination continues to append logical results, so loading 1,000
+papers does not create 1,000 row elements.
 
 Library tags are explicit user-owned organizational labels, not model-generated
 keywords. Papers without assigned labels show no synthetic tags; the filter
@@ -235,12 +239,19 @@ repository action-feedback contract and semantic tokens.
 
 Canonical Figma file: [Scholens — Product Design, Library](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=214-2).
 
-Papers acceptance lives in section `974:1831` and maps to
-`Features/Library/Papers` stories:
+The former Papers section `974:1831` is archived. Current workbench acceptance
+lives in section `1172:1885` and maps to
+`Features/Paper Collection/Workbench` plus Library ingestion stories:
 
 | Acceptance state             | Figma node                         | Story                                                             |
 | ---------------------------- | ---------------------------------- | ----------------------------------------------------------------- |
-| desktop populated            | `974:1834`                         | `Populated`                                                       |
+| desktop Library populated    | `1172:1886`                        | `Library`                                                         |
+| Project personal metadata    | `1172:1887`                        | `ProjectPapers`                                                   |
+| narrow / mobile              | `1172:1888`, `1172:1889`           | `Narrow`, `Mobile`                                                |
+| dark                         | `1172:1890`                        | `Dark`                                                            |
+| filters / column management  | `1172:1891`                        | `Library` interaction                                             |
+| search snippets              | runtime shared state               | `SearchResults`                                                   |
+| 1,000-row virtualization     | runtime performance acceptance     | `ThousandPapers`                                                  |
 | desktop empty/loading/error  | `974:1919`, `974:1967`, `974:2012` | `Empty`, `Loading`, `Error`                                       |
 | multi-select                 | `974:2060`                         | `MultiSelect`                                                     |
 | processing stages / retry    | `974:2153`, `974:2241`             | `Processing`, `FailedWithRetry`                                   |

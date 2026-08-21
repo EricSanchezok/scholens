@@ -547,7 +547,8 @@
         "added_asc": "Oldest added",
         "published_desc": "Newest published",
         "published_asc": "Oldest published",
-        "title_asc": "Title A–Z"
+        "title_asc": "Title A–Z",
+        "last_accessed_desc": "Recently active"
       },
       "actions": {
         "open": "Actions for {title}",
@@ -1272,6 +1273,7 @@
         "sortAdded": "Recently added",
         "sortTitle": "Title A–Z",
         "sortPublished": "Publication date",
+        "sortActivity": "Recently active",
         "add": "Add papers",
         "openMenu": "Open paper actions",
         "remove": "Remove from project",
@@ -1779,6 +1781,50 @@
       "customInstructions": "Custom instructions",
       "instructionsDescription": "Optional guidance for terminology, tone, or names. Up to 4,000 characters."
     }
+  },
+  "PaperCollection": {
+    "columns": {
+      "actions": "Actions",
+      "paper": "Paper",
+      "selection": "Selection",
+      "status": "Status",
+      "personalStatus": "My status",
+      "tags": "Tags",
+      "personalTags": "My tags",
+      "authors": "Authors",
+      "publication": "Publication",
+      "last_opened": "Last opened",
+      "added_at": "Added",
+      "doi": "DOI"
+    },
+    "status": {
+      "label": "Reading status",
+      "personalLabel": "My reading status",
+      "todo": "To read",
+      "reading": "Reading",
+      "completed": "Read",
+      "notInLibrary": "Not in Library"
+    },
+    "preview": {
+      "label": "Paper details",
+      "close": "Close paper details",
+      "open": "Show paper details",
+      "abstract": "Abstract",
+      "summary": "Summary",
+      "keywords": "Keywords",
+      "unknownAuthors": "Unknown authors",
+      "noAbstract": "No abstract or summary is available."
+    },
+    "columnsMenu": {
+      "label": "Configure columns",
+      "title": "Visible columns",
+      "moveUp": "Move up",
+      "moveDown": "Move down"
+    },
+    "moreTags": "{count} more tags",
+    "preferencesSaveFailed": "Paper list preferences could not be saved.",
+    "neverOpened": "Never",
+    "unknown": "Unknown"
   },
   "PaperSearch": {
     "title": "Find a paper",

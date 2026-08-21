@@ -15,6 +15,9 @@ from app.database.models import (
     ProjectInvitation,
     ProjectPaper,
     ResearchItem,
+    LibraryPaper,
+    LibraryPaperTag,
+    PaperTag,
 )
 from app.helpers.s3 import s3_service
 from app.bootstrap.adapters.upload_repository import (
@@ -62,8 +65,11 @@ from app.modules.projects.application.invitation_tokens import (
 )
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
-from app.shared.domain.enums import ResearchAudienceType, ResearchItemKind
-from app.modules.papers.application.contracts.documents import LibraryOutputSort
+from app.shared.domain.enums import PaperStatus, ResearchAudienceType, ResearchItemKind
+from app.modules.papers.application.contracts.documents import (
+    LibraryOutputSort,
+    LibraryPaperTagResponse,
+)
 from app.modules.papers.application.library import (
     LibraryPageDirection,
     LibraryPagePosition,
@@ -75,7 +81,7 @@ from app.modules.projects.application.contracts import (
     ProjectOwnerResponse,
 )
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session, joinedload, load_only
+from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 
 
 def _collaborator_response(collaborator: object) -> ProjectCollaboratorResponse:
@@ -645,6 +651,8 @@ class SqlAlchemyProjectGateway:
         project_id: UUID,
         load_urls: bool,
         query: str | None,
+        personal_statuses: tuple[PaperStatus, ...],
+        personal_tag_ids: tuple[UUID, ...],
         sort: ProjectPaperSort,
         limit: int,
         direction: ProjectPageDirection,
@@ -664,11 +672,34 @@ class SqlAlchemyProjectGateway:
                     func.lower(func.coalesce(Document.abstract, "")).like(pattern),
                 )
             )
+        if personal_statuses:
+            filters.append(
+                LibraryPaper.status.in_([status.value for status in personal_statuses])
+            )
+        if personal_tag_ids:
+            filters.append(
+                LibraryPaper.id.in_(
+                    select(LibraryPaperTag.library_paper_id)
+                    .join(PaperTag, PaperTag.id == LibraryPaperTag.tag_id)
+                    .where(
+                        LibraryPaperTag.tag_id.in_(personal_tag_ids),
+                        PaperTag.user_id == actor.id,
+                    )
+                )
+            )
         count_filters = tuple(filters)
         key: Any
-        if sort is ProjectPaperSort.TITLE_ASC:
+        cursor_key: object | None
+        if sort is ProjectPaperSort.PERSONAL_ACTIVITY_DESC:
+            key = func.coalesce(
+                LibraryPaper.last_accessed_at,
+                ProjectPaper.created_at,
+            )
+            cursor_key = datetime.fromisoformat(position.key) if position else None
+            natural_ascending = False
+        elif sort is ProjectPaperSort.TITLE_ASC:
             key = func.lower(func.coalesce(Document.title, Document.original_filename))
-            cursor_key: object | None = position.key if position else None
+            cursor_key = position.key if position else None
             natural_ascending = True
         elif sort is ProjectPaperSort.PUBLISHED_DESC:
             key = func.coalesce(
@@ -702,13 +733,27 @@ class SqlAlchemyProjectGateway:
             self._db.scalar(
                 select(func.count(ProjectPaper.id))
                 .join(Document, Document.id == ProjectPaper.document_id)
+                .outerjoin(
+                    LibraryPaper,
+                    and_(
+                        LibraryPaper.document_id == Document.id,
+                        LibraryPaper.user_id == actor.id,
+                    ),
+                )
                 .where(*count_filters)
             )
             or 0
         )
         statement = (
-            select(ProjectPaper, Document)
+            select(ProjectPaper, Document, LibraryPaper)
             .join(Document, Document.id == ProjectPaper.document_id)
+            .outerjoin(
+                LibraryPaper,
+                and_(
+                    LibraryPaper.document_id == Document.id,
+                    LibraryPaper.user_id == actor.id,
+                ),
+            )
             .where(*filters)
             .order_by(order, id_order)
             .limit(limit + 1)
@@ -726,7 +771,11 @@ class SqlAlchemyProjectGateway:
                     Document.doi,
                     Document.publish_date,
                     Document.s3_object_key,
+                    Document.preview_s3_key,
+                    Document.summary,
+                    Document.keywords,
                 ),
+                selectinload(LibraryPaper.tags),
             )
         )
         rows = list(self._db.execute(statement).all())
@@ -735,19 +784,19 @@ class SqlAlchemyProjectGateway:
         if direction is ProjectPageDirection.BACKWARD:
             rows.reverse()
         papers = [row.Document for row in rows]
-        library_document_ids = set(
-            project_document_repository.get_library_document_ids(
-                self._db,
-                document_ids=[paper.id for paper in papers],
-                user=actor,
-            )
-        )
         file_urls = (
             s3_service.generate_presigned_urls(
                 {str(paper.id): paper.s3_object_key for paper in papers}
             )
             if load_urls
             else {}
+        )
+        preview_urls = s3_service.generate_presigned_urls(
+            {
+                str(paper.id): paper.preview_s3_key
+                for paper in papers
+                if paper.preview_s3_key
+            }
         )
         items = [
             ProjectPaperSummaryResponse(
@@ -757,21 +806,55 @@ class SqlAlchemyProjectGateway:
                 abstract=paper.abstract,
                 authors=paper.authors,
                 institutions=paper.institutions,
-                status="reading",
+                status=(
+                    library_entry.status if library_entry is not None else "reading"
+                ),
                 journal=paper.journal,
                 publisher=paper.publisher,
                 doi=paper.doi,
                 publish_date=paper.publish_date,
                 file_url=file_urls.get(str(paper.id)),
-                in_library=paper.id in library_document_ids,
+                preview_url=preview_urls.get(str(paper.id)),
+                summary=paper.summary,
+                keywords=paper.keywords or [],
+                in_library=library_entry is not None,
+                personal_status=(
+                    library_entry.status if library_entry is not None else None
+                ),
+                personal_tags=(
+                    [
+                        LibraryPaperTagResponse(
+                            id=tag.id,
+                            name=tag.name,
+                            color=tag.color,
+                        )
+                        for tag in library_entry.tags
+                    ]
+                    if library_entry is not None
+                    else []
+                ),
+                personal_last_accessed_at=(
+                    library_entry.last_accessed_at
+                    if library_entry is not None
+                    else None
+                ),
             )
-            for row, paper in zip(rows, papers, strict=True)
+            for row, paper, library_entry in (
+                (row, row.Document, row.LibraryPaper) for row in rows
+            )
         ]
         positions: list[ProjectPagePosition] = []
         for row in rows:
             association = row.ProjectPaper
             paper = row.Document
-            if sort is ProjectPaperSort.TITLE_ASC:
+            library_entry = row.LibraryPaper
+            if sort is ProjectPaperSort.PERSONAL_ACTIVITY_DESC:
+                position_key = (
+                    library_entry.last_accessed_at
+                    if library_entry is not None
+                    else association.created_at
+                ).isoformat()
+            elif sort is ProjectPaperSort.TITLE_ASC:
                 position_key = (paper.title or paper.original_filename).lower()
             elif sort is ProjectPaperSort.PUBLISHED_DESC:
                 position_key = (

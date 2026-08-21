@@ -1043,6 +1043,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/paper-list-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Paper List Preferences */
+        get: operations["get_paper_list_preferences_api_v1_me_paper_list_preferences_get"];
+        /** Update Paper List Preferences */
+        put: operations["update_paper_list_preferences_api_v1_me_paper_list_preferences_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/profile": {
         parameters: {
             query?: never;
@@ -3774,7 +3792,7 @@ export interface components {
          * LibraryPaperSort
          * @enum {string}
          */
-        LibraryPaperSort: "added_desc" | "added_asc" | "published_desc" | "published_asc" | "title_asc";
+        LibraryPaperSort: "added_desc" | "added_asc" | "published_desc" | "published_asc" | "title_asc" | "last_accessed_desc";
         /** LibraryPaperTagResponse */
         LibraryPaperTagResponse: {
             /** Color */
@@ -3976,8 +3994,37 @@ export interface components {
              */
             source: components["schemas"]["DoiPaperSource"] | components["schemas"]["ArxivPaperSource"] | components["schemas"]["UrlPaperSource"] | components["schemas"]["UploadPaperSource"];
         };
+        /**
+         * PaperListColumn
+         * @enum {string}
+         */
+        PaperListColumn: "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
+        /** PaperListPreferencesResponse */
+        PaperListPreferencesResponse: {
+            /** Preview Open */
+            preview_open: boolean;
+            /** Visible Columns */
+            visible_columns: components["schemas"]["PaperListColumn"][];
+        };
+        /** PaperListPreferencesUpdateRequest */
+        PaperListPreferencesUpdateRequest: {
+            /** Preview Open */
+            preview_open: boolean;
+            /** Visible Columns */
+            visible_columns: components["schemas"]["PaperListColumn"][];
+        };
         /** PaperSearchFilters */
         PaperSearchFilters: {
+            /**
+             * Personal Statuses
+             * @description Optional personal Library statuses matched with OR semantics.
+             */
+            personal_statuses?: components["schemas"]["PaperStatus"][];
+            /**
+             * Personal Tag Ids
+             * @description Optional personal Library tag identifiers matched with OR semantics.
+             */
+            personal_tag_ids?: string[];
             /**
              * Published From
              * @description Optional inclusive earliest publication timestamp.
@@ -4055,6 +4102,11 @@ export interface components {
             last_accessed_at: string;
             /** Matched Fields */
             matched_fields?: string[];
+            /** Personal Last Accessed At */
+            personal_last_accessed_at?: string | null;
+            personal_status?: components["schemas"]["PaperStatus"] | null;
+            /** Personal Tags */
+            personal_tags?: components["schemas"]["LibraryPaperTagResponse"][];
             /** Preview Url */
             preview_url?: string | null;
             /** Publish Date */
@@ -4578,7 +4630,7 @@ export interface components {
          * ProjectPaperSort
          * @enum {string}
          */
-        ProjectPaperSort: "added_desc" | "title_asc" | "published_desc";
+        ProjectPaperSort: "added_desc" | "title_asc" | "published_desc" | "personal_activity_desc";
         /** ProjectPaperSummaryResponse */
         ProjectPaperSummaryResponse: {
             /** Abstract */
@@ -4605,12 +4657,23 @@ export interface components {
             institutions: string[] | null;
             /** Journal */
             journal: string | null;
+            /** Keywords */
+            keywords?: string[];
+            /** Personal Last Accessed At */
+            personal_last_accessed_at?: string | null;
+            personal_status?: components["schemas"]["PaperStatus"] | null;
+            /** Personal Tags */
+            personal_tags?: components["schemas"]["LibraryPaperTagResponse"][];
+            /** Preview Url */
+            preview_url?: string | null;
             /** Publish Date */
             publish_date: string | null;
             /** Publisher */
             publisher: string | null;
             /** Status */
             status: string;
+            /** Summary */
+            summary?: string | null;
             /** Title */
             title: string | null;
         };
@@ -7447,6 +7510,7 @@ export interface operations {
             query?: {
                 q?: string | null;
                 tag_ids?: string[] | null;
+                statuses?: components["schemas"]["PaperStatus"][] | null;
                 sort?: components["schemas"]["LibraryPaperSort"];
                 cursor?: string | null;
                 limit?: number;
@@ -8141,6 +8205,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OnboardingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_paper_list_preferences_api_v1_me_paper_list_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperListPreferencesResponse"];
+                };
+            };
+        };
+    };
+    update_paper_list_preferences_api_v1_me_paper_list_preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaperListPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperListPreferencesResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9452,6 +9569,8 @@ export interface operations {
             query?: {
                 load_urls?: boolean;
                 q?: string | null;
+                personal_statuses?: components["schemas"]["PaperStatus"][];
+                personal_tag_ids?: string[];
                 sort?: components["schemas"]["ProjectPaperSort"];
                 cursor?: string | null;
                 limit?: number;

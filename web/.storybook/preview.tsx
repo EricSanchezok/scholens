@@ -24,6 +24,8 @@ import { billingHandlers } from "./msw/billing-handlers";
 import {
   conversationSearchHandler,
   foundationHandler,
+  libraryTagsHandler,
+  paperListPreferencesHandlers,
   paperSearchHandler,
   webPerformanceHandler,
   zoteroCollectionsHandler,
@@ -37,6 +39,8 @@ initialize({ onUnhandledRequest: "error" }, [
   webPerformanceHandler,
   conversationSearchHandler,
   paperSearchHandler,
+  libraryTagsHandler,
+  ...paperListPreferencesHandlers,
   zoteroCollectionsHandler,
   zoteroLibraryItemsHandler,
 ]);
@@ -194,6 +198,8 @@ const preview: Preview = {
     msw: {
       handlers: [
         foundationHandler,
+        libraryTagsHandler,
+        ...paperListPreferencesHandlers,
         paperSearchHandler,
         webPerformanceHandler,
         zoteroStatusHandler,

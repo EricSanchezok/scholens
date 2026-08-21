@@ -9,7 +9,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.modules.papers.application.contracts.documents import PublicUtcDateTime
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperTagResponse,
+    PublicUtcDateTime,
+)
+from app.shared.domain.enums import PaperStatus
 
 
 class LibraryPaperCollection(BaseModel):
@@ -71,6 +75,26 @@ class PaperSearchFilters(BaseModel):
         default=None,
         description="Optional inclusive latest publication timestamp.",
     )
+    personal_statuses: list[PaperStatus] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Optional personal Library statuses matched with OR semantics.",
+    )
+    personal_tag_ids: list[UUID] = Field(
+        default_factory=list,
+        max_length=120,
+        description="Optional personal Library tag identifiers matched with OR semantics.",
+    )
+
+    @field_validator("personal_statuses", "personal_tag_ids")
+    @classmethod
+    def reject_duplicates(
+        cls,
+        value: list[PaperStatus] | list[UUID],
+    ) -> list[PaperStatus] | list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("personal metadata filters must be unique")
+        return value
 
     @model_validator(mode="after")
     def validate_date_range(self) -> PaperSearchFilters:
@@ -127,6 +151,9 @@ class PaperSearchResult(BaseModel):
     created_at: datetime
     last_accessed_at: datetime
     preview_url: str | None = None
+    personal_status: PaperStatus | None = None
+    personal_tags: list[LibraryPaperTagResponse] = Field(default_factory=list)
+    personal_last_accessed_at: datetime | None = None
     matched_fields: list[str] = Field(default_factory=list)
     retrieval_modes: list[Literal["exact", "full_text", "fuzzy", "semantic"]] = Field(
         default_factory=list

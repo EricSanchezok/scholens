@@ -52,6 +52,7 @@ class LibraryPaperSort(StrEnum):
     PUBLISHED_DESC = "published_desc"
     PUBLISHED_ASC = "published_asc"
     TITLE_ASC = "title_asc"
+    LAST_ACCESSED_DESC = "last_accessed_desc"
 
 
 class LibraryOutputSort(StrEnum):

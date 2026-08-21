@@ -5590,7 +5590,8 @@
           "added_asc",
           "published_desc",
           "published_asc",
-          "title_asc"
+          "title_asc",
+          "last_accessed_desc"
         ],
         "title": "LibraryPaperSort",
         "type": "string"
@@ -6321,9 +6322,84 @@
         "title": "PaperIngestionRequest",
         "type": "object"
       },
+      "PaperListColumn": {
+        "enum": [
+          "status",
+          "tags",
+          "authors",
+          "publication",
+          "last_opened",
+          "added_at",
+          "doi"
+        ],
+        "title": "PaperListColumn",
+        "type": "string"
+      },
+      "PaperListPreferencesResponse": {
+        "properties": {
+          "preview_open": {
+            "title": "Preview Open",
+            "type": "boolean"
+          },
+          "visible_columns": {
+            "items": {
+              "$ref": "#/components/schemas/PaperListColumn"
+            },
+            "title": "Visible Columns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "visible_columns",
+          "preview_open"
+        ],
+        "title": "PaperListPreferencesResponse",
+        "type": "object"
+      },
+      "PaperListPreferencesUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "preview_open": {
+            "title": "Preview Open",
+            "type": "boolean"
+          },
+          "visible_columns": {
+            "items": {
+              "$ref": "#/components/schemas/PaperListColumn"
+            },
+            "title": "Visible Columns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "visible_columns",
+          "preview_open"
+        ],
+        "title": "PaperListPreferencesUpdateRequest",
+        "type": "object"
+      },
       "PaperSearchFilters": {
         "additionalProperties": false,
         "properties": {
+          "personal_statuses": {
+            "description": "Optional personal Library statuses matched with OR semantics.",
+            "items": {
+              "$ref": "#/components/schemas/PaperStatus"
+            },
+            "maxItems": 3,
+            "title": "Personal Statuses",
+            "type": "array"
+          },
+          "personal_tag_ids": {
+            "description": "Optional personal Library tag identifiers matched with OR semantics.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 120,
+            "title": "Personal Tag Ids",
+            "type": "array"
+          },
           "published_from": {
             "anyOf": [
               {
@@ -6542,6 +6618,35 @@
               "type": "string"
             },
             "title": "Matched Fields",
+            "type": "array"
+          },
+          "personal_last_accessed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Last Accessed At"
+          },
+          "personal_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personal_tags": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryPaperTagResponse"
+            },
+            "title": "Personal Tags",
             "type": "array"
           },
           "preview_url": {
@@ -7720,7 +7825,8 @@
         "enum": [
           "added_desc",
           "title_asc",
-          "published_desc"
+          "published_desc",
+          "personal_activity_desc"
         ],
         "title": "ProjectPaperSort",
         "type": "string"
@@ -7813,6 +7919,53 @@
             ],
             "title": "Journal"
           },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "personal_last_accessed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Last Accessed At"
+          },
+          "personal_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "personal_tags": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryPaperTagResponse"
+            },
+            "title": "Personal Tags",
+            "type": "array"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
           "publish_date": {
             "anyOf": [
               {
@@ -7839,6 +7992,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
           },
           "title": {
             "anyOf": [
@@ -13421,6 +13585,25 @@
           },
           {
             "in": "query",
+            "name": "statuses",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/PaperStatus"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Statuses"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -14432,6 +14615,76 @@
           }
         ],
         "summary": "Complete Onboarding"
+      }
+    },
+    "/api/v1/me/paper-list-preferences": {
+      "get": {
+        "operationId": "get_paper_list_preferences_api_v1_me_paper_list_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperListPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Paper List Preferences",
+        "tags": [
+          "papers"
+        ]
+      },
+      "put": {
+        "operationId": "update_paper_list_preferences_api_v1_me_paper_list_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaperListPreferencesUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperListPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Paper List Preferences",
+        "tags": [
+          "papers"
+        ]
       }
     },
     "/api/v1/me/profile": {
@@ -16686,6 +16939,33 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "personal_statuses",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/PaperStatus"
+              },
+              "title": "Personal Statuses",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "personal_tag_ids",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "title": "Personal Tag Ids",
+              "type": "array"
             }
           },
           {
