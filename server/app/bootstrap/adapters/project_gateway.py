@@ -818,9 +818,10 @@ class SqlAlchemyProjectGateway:
                 abstract=paper.abstract,
                 authors=paper.authors,
                 institutions=paper.institutions,
-                status=(
-                    library_entry.status if library_entry is not None else "reading"
-                ),
+                # Preserve the historical project-paper field for existing
+                # HTTP and MCP consumers. Personal reading state is additive
+                # and belongs exclusively to ``personal_status`` below.
+                status="reading",
                 journal=paper.journal,
                 publisher=paper.publisher,
                 doi=paper.doi,

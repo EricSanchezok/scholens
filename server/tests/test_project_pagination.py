@@ -386,7 +386,11 @@ def test_project_document_urls_are_signed_only_when_independently_requested() ->
     )
     row = SimpleNamespace(
         Document=paper,
-        LibraryPaper=None,
+        LibraryPaper=SimpleNamespace(
+            last_accessed_at=now,
+            status=PaperStatus.completed,
+            tags=[],
+        ),
         ProjectPaper=SimpleNamespace(id=association_id, created_at=now),
     )
     db.execute.return_value.all.return_value = [row]
@@ -423,6 +427,8 @@ def test_project_document_urls_are_signed_only_when_independently_requested() ->
         sign.assert_not_called()
         assert unsigned.items[0].file_url is None
         assert unsigned.items[0].preview_url is None
+        assert unsigned.items[0].status == "reading"
+        assert unsigned.items[0].personal_status is PaperStatus.completed
 
         preview_only = gateway.list_documents(
             actor=_actor(),
