@@ -181,8 +181,9 @@ async function expectCompactTableSemantics(canvasElement: HTMLElement) {
 }
 
 export const Library: Story = {
-  play: async ({ canvasElement }) => {
+  play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
     const paperLink = await canvas.findByRole("link", {
       name: /Memory as a Controlled Process/,
     });
@@ -206,6 +207,20 @@ export const Library: Story = {
     const preview = canvas.getByRole("complementary", {
       name: "Paper details",
     });
+    await userEvent.click(
+      within(preview).getByRole("button", {
+        name: /Reading status for.*Memory as a Controlled Process/,
+      }),
+    );
+    await userEvent.click(body.getByRole("menuitem", { name: "Read" }));
+    await expect(args.onStatusChange).toHaveBeenCalledWith(
+      items[0],
+      "completed",
+    );
+    await userEvent.click(
+      within(preview).getByRole("button", { name: "Memory" }),
+    );
+    await expect(args.onTagClick).toHaveBeenCalledWith(items[0]!.tags[0]);
     const longTitleLink = canvas.getByRole("link", {
       name: /A deliberately long research paper title/,
     });

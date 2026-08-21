@@ -165,6 +165,13 @@ function StatusControl({
       <span className="text-secondary text-xs">{t("status.notInLibrary")}</span>
     );
   }
+  if (!onChange) {
+    return (
+      <span className="bg-subtle inline-flex h-7 items-center rounded-full px-2 text-xs">
+        {t(`status.${item.status}`)}
+      </span>
+    );
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -207,16 +214,28 @@ function TagButtons({
   if (!item.inLibrary) return <span className="text-secondary text-xs">—</span>;
   return (
     <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-      {item.tags.slice(0, 2).map((tag) => (
-        <button
-          className="bg-subtle hover:bg-hover max-w-20 truncate rounded-[var(--radius-sm)] px-1.5 py-1 text-[0.6875rem] font-medium"
-          key={tag.id}
-          onClick={() => onTagClick?.(tag)}
-          type="button"
-        >
-          {tag.name}
-        </button>
-      ))}
+      {item.tags.slice(0, 2).map((tag) =>
+        onTagClick ? (
+          <button
+            className={cn(
+              "bg-subtle hover:bg-hover max-w-20 truncate rounded-[var(--radius-sm)] px-1.5 py-1 text-[0.6875rem] font-medium",
+              keyboardFocusRing,
+            )}
+            key={tag.id}
+            onClick={() => onTagClick(tag)}
+            type="button"
+          >
+            {tag.name}
+          </button>
+        ) : (
+          <span
+            className="bg-subtle max-w-20 truncate rounded-[var(--radius-sm)] px-1.5 py-1 text-[0.6875rem] font-medium"
+            key={tag.id}
+          >
+            {tag.name}
+          </span>
+        ),
+      )}
       {item.tags.length > 2 ? (
         <span
           aria-label={t("moreTags", { count: item.tags.length - 2 })}
@@ -386,10 +405,14 @@ const previewMarkdownComponents: Components = {
 function Preview({
   item,
   onClose,
+  onStatusChange,
+  onTagClick,
   personalLabels,
 }: {
   item: PaperCollectionItem;
   onClose: () => void;
+  onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
+  onTagClick?: (tag: PaperCollectionTag) => void;
   personalLabels: boolean;
 }) {
   const t = useTranslations("PaperCollection");
@@ -427,10 +450,14 @@ function Preview({
         <span className="text-muted text-xs">
           {t(personalLabels ? "columns.personalStatus" : "columns.status")}
         </span>
-        <StatusControl item={item} personalLabels={personalLabels} />
+        <StatusControl
+          item={item}
+          onChange={onStatusChange}
+          personalLabels={personalLabels}
+        />
       </div>
       <div className="mt-3 flex flex-wrap gap-1">
-        <TagButtons item={item} />
+        <TagButtons item={item} onTagClick={onTagClick} />
       </div>
       <p className="text-secondary mt-5 text-xs font-medium">
         {t(item.summary ? "preview.summary" : "preview.abstract")}
@@ -815,6 +842,8 @@ export function PaperCollectionWorkbench({
                 preview_open: false,
               }))
             }
+            onStatusChange={onStatusChange}
+            onTagClick={onTagClick}
             personalLabels={personalLabels}
           />
         ) : null}
