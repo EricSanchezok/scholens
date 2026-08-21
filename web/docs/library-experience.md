@@ -24,7 +24,7 @@ Home's conversation or composer implementation.
 | ----------------------------------------------------------- | ------------------------ |
 | active tab, query, status/tag/kind filters, sort            | URL search parameters    |
 | papers, outputs, summary, tags, projects, ingestion jobs    | TanStack Query           |
-| ordered paper columns and preview disclosure                | account preference API   |
+| ordered paper columns, column widths, and preview layout    | account preference API   |
 | Zotero collections, library pages, operations, status       | TanStack Query           |
 | source import fields                                        | React Hook Form + Zod    |
 | selected rows, Zotero selection, open dialogs, upload queue | feature-local state      |
@@ -57,10 +57,14 @@ catalog request.
 
 Desktop uses the shared full-width `paper-collection` workbench: a flat semantic
 table with a sticky header, quiet dividers, fixed 64 px virtual rows, and an
-adjacent 320–400 px details preview. Default columns are Paper, Status, Tags,
-Authors, Publication, and Last opened. Added and DOI are optional; every column
-except Paper can be hidden and the visible columns can be reordered. Column
-order and preview disclosure are account-scoped and shared with Project Papers;
+adjacent details preview that defaults to 512 px and can be resized from 400 to
+720 px while preserving at least 640 px for the collection. The table and
+preview consume the remaining viewport height instead of stopping at an
+arbitrary content cap; each side scrolls only when its own content exceeds that
+space. Default columns are Paper, Status, Tags, Authors, Publication, and Last
+opened. Added and DOI are optional; every column except Paper can be hidden and
+the visible columns can be reordered. Column order, per-column widths, preview
+width, and preview disclosure are account-scoped and shared with Project Papers;
 sort and filters remain URL state. Every paper owns a stable 36×52 px portrait
 thumbnail slot that consumes `preview_url` and falls back without shifting the
 text columns. A failed short-lived preview URL is remembered by URL, so a newly
@@ -70,9 +74,15 @@ order, and only server-confirmed data can be a rollback source. Before the
 initial query resolves, a failed write restores the documented defaults and
 refetches instead of retaining optimistic state. Column move controls name
 their target for assistive technology, disable impossible boundary moves, and
-keep the menu open for consecutive keyboard reordering. Selection remains an
-independent leading control. Entering selection replaces the utility row with
-the batch toolbar above the collection.
+keep the popover open for consecutive keyboard reordering. Column header edges
+and the table-preview divider expose pointer and keyboard separators with
+bounded values; completed adjustments persist once rather than writing on every
+pointer movement. Expanding columns beyond the available table space creates a
+local horizontal scroller whose header remains aligned with its rows. The column
+popover groups visibility and ordering for each column on one row and offers one
+reset for all stored widths. Selection remains an independent leading control.
+Entering selection replaces the utility row with the batch toolbar above the
+collection.
 
 Below the desktop breakpoint, Papers uses a compact stacked row rather than
 compressing the table. Long titles wrap to at most two lines and uninterrupted
@@ -88,7 +98,8 @@ DOI, personal status, tags, abstract or summary, and keywords. Hover provides a
 temporary preview; focus or pointer activation persists the current row so
 moving the pointer away does not discard the user's context. Summary Markdown
 is rendered as restrained editorial content rather than exposed source syntax.
-The preview never repeats navigation.
+The preview presents the portrait beside core metadata so the abstract or
+summary starts earlier, and never repeats navigation.
 
 Two or more query characters switch the paper collection to the shared hybrid
 search contract. Exact title/author/DOI matches, whitespace-insensitive and

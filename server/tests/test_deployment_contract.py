@@ -2006,6 +2006,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_20_1230_search_embedding_timestamps_expand.py",
         "2026_08_21_1200_paper_list_preferences.py",
         "2026_08_21_1630_conversation_search_indexes.py",
+        "2026_08_22_1015_paper_list_layout_sizes.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline

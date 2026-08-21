@@ -6,6 +6,8 @@ import type { components } from "@/lib/api/generated/schema";
 export type PaperListPreferences =
   components["schemas"]["PaperListPreferencesResponse"];
 export type PaperCollectionColumn = components["schemas"]["PaperListColumn"];
+export type PaperCollectionSizedColumn =
+  components["schemas"]["PaperListSizedColumn"];
 export type PaperStatus = components["schemas"]["PaperStatus"];
 
 export const paperListPreferencesKey = [
@@ -14,8 +16,19 @@ export const paperListPreferencesKey = [
 ] as const;
 
 export const defaultPaperListPreferences = {
+  column_widths: [
+    { column: "paper", width: 360 },
+    { column: "status", width: 96 },
+    { column: "tags", width: 160 },
+    { column: "authors", width: 176 },
+    { column: "publication", width: 144 },
+    { column: "last_opened", width: 120 },
+    { column: "added_at", width: 120 },
+    { column: "doi", width: 160 },
+  ],
   visible_columns: ["status", "tags", "authors", "publication", "last_opened"],
   preview_open: true,
+  preview_width: 512,
 } satisfies PaperListPreferences;
 
 export const paperCollectionTagsQuery = () =>

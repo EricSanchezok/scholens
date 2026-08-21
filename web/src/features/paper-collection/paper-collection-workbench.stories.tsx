@@ -16,12 +16,16 @@ import {
   PaperCollectionWorkbench,
   type PaperCollectionItem,
 } from "./paper-collection-workbench";
-import type { PaperListPreferences } from "./api";
+import { defaultPaperListPreferences, type PaperListPreferences } from "./api";
 
-const preferences = {
+const preferences: PaperListPreferences = {
+  ...defaultPaperListPreferences,
+  column_widths: defaultPaperListPreferences.column_widths.map((width) => ({
+    ...width,
+  })),
   preview_open: true,
   visible_columns: ["status", "tags", "authors", "publication", "last_opened"],
-} as const;
+};
 
 const preferenceHandlers = [
   http.get("*/api/v1/me/paper-list-preferences", () =>
@@ -199,6 +203,25 @@ export const Library: Story = {
     await expect(
       canvas.getByRole("heading", { name: "Key findings" }),
     ).toBeVisible();
+    const paperResize = canvas.getByRole("separator", {
+      name: "Resize Paper column",
+    });
+    await expect(paperResize).toHaveAttribute("aria-valuenow", "360");
+    paperResize.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await waitFor(() =>
+      expect(paperResize).toHaveAttribute("aria-valuenow", "368"),
+    );
+    const previewResize = canvas.getByRole("separator", {
+      name: "Resize paper details",
+    });
+    await expect(previewResize).toHaveAttribute("aria-valuenow", "512");
+    previewResize.focus();
+    await expect(previewResize).toHaveFocus();
+    fireEvent.keyDown(previewResize, { key: "ArrowRight" });
+    await waitFor(() =>
+      expect(previewResize).toHaveAttribute("aria-valuenow", "504"),
+    );
     const status = canvas.getAllByRole("button", {
       name: /Reading status for/,
     })[0]!;
@@ -283,6 +306,23 @@ export const Dark: Story = {
 
 export const Chinese: Story = {
   globals: { locale: "zh-CN" },
+};
+
+export const ColumnConfiguration: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Configure columns" }),
+    );
+    await expect(
+      await body.findByRole("heading", { name: "Visible columns" }),
+    ).toBeVisible();
+    await expect(body.getAllByRole("checkbox")).toHaveLength(7);
+    await expect(
+      body.getByRole("button", { name: "Reset all widths" }),
+    ).toBeVisible();
+  },
 };
 
 export const Narrow: Story = {
@@ -372,12 +412,8 @@ export const QueuedPreferenceUpdates: Story = {
     await userEvent.click(
       await canvas.findByRole("button", { name: "Configure columns" }),
     );
-    await userEvent.click(
-      await body.findByRole("menuitemcheckbox", { name: "DOI" }),
-    );
-    await userEvent.click(
-      body.getByRole("menuitemcheckbox", { name: "Authors" }),
-    );
+    await userEvent.click(await body.findByRole("checkbox", { name: "DOI" }));
+    await userEvent.click(body.getByRole("checkbox", { name: "Authors" }));
 
     await waitFor(() => expect(queuedPreferenceRequestCount).toBe(2));
     await waitFor(() =>
@@ -389,11 +425,12 @@ export const QueuedPreferenceUpdates: Story = {
         "doi",
       ]),
     );
+    await expect(body.getByRole("checkbox", { name: "DOI" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await expect(
-      body.getByRole("menuitemcheckbox", { name: "DOI" }),
-    ).toHaveAttribute("aria-checked", "true");
-    await expect(
-      body.getByRole("menuitemcheckbox", { name: "Authors" }),
+      body.getByRole("checkbox", { name: "Authors" }),
     ).toHaveAttribute("aria-checked", "false");
     await userEvent.keyboard("{Escape}");
   },
@@ -414,22 +451,20 @@ export const KeyboardColumnReordering: Story = {
     );
 
     await expect(
-      body.getByRole("menuitem", { name: "Move Status up" }),
-    ).toHaveAttribute("aria-disabled", "true");
+      body.getByRole("button", { name: "Move Status up" }),
+    ).toBeDisabled();
     await expect(
-      body.getByRole("menuitem", { name: "Move Last opened down" }),
-    ).toHaveAttribute("aria-disabled", "true");
+      body.getByRole("button", { name: "Move Last opened down" }),
+    ).toBeDisabled();
 
-    body.getByRole("menuitemcheckbox", { name: "Authors" }).focus();
-    await userEvent.keyboard("{ArrowDown}");
-    const moveAuthorsUp = body.getByRole("menuitem", {
+    const moveAuthorsUp = body.getByRole("button", {
       name: "Move Authors up",
     });
-    await expect(moveAuthorsUp).toHaveFocus();
+    moveAuthorsUp.focus();
     await userEvent.keyboard("{Enter}");
     await waitFor(() =>
       expect(
-        body.getByRole("menuitem", { name: "Move Authors up" }),
+        body.getByRole("button", { name: "Move Authors up" }),
       ).toHaveFocus(),
     );
     await userEvent.keyboard("{Enter}");
@@ -445,11 +480,17 @@ export const KeyboardColumnReordering: Story = {
       ]),
     );
     await expect(
-      body.getByRole("menuitem", { name: "Move Authors up" }),
-    ).toHaveAttribute("aria-disabled", "true");
-    await expect(body.getByRole("menu")).toBeInTheDocument();
+      body.getByRole("button", { name: "Move Authors up" }),
+    ).toBeDisabled();
+    await expect(
+      body.getByRole("heading", { name: "Visible columns" }),
+    ).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(body.queryByRole("menu")).toBeNull());
+    await waitFor(() =>
+      expect(
+        body.queryByRole("heading", { name: "Visible columns" }),
+      ).toBeNull(),
+    );
   },
 };
 
@@ -463,26 +504,29 @@ export const FailedPreferenceUpdateBeforeInitialQuery: Story = {
       name: "Configure columns",
     });
     await userEvent.click(trigger);
-    const doi = await body.findByRole("menuitemcheckbox", { name: "DOI" });
+    const doi = await body.findByRole("checkbox", { name: "DOI" });
     await userEvent.click(doi);
-    await userEvent.click(
-      body.getByRole("menuitemcheckbox", { name: "Authors" }),
-    );
+    await userEvent.click(body.getByRole("checkbox", { name: "Authors" }));
     await waitFor(() => expect(failedPreferenceRequestCount).toBe(2));
     await body.findAllByText("Paper list preferences could not be saved.");
     await waitFor(() =>
-      expect(
-        body.getByRole("menuitemcheckbox", { name: "DOI" }),
-      ).toHaveAttribute("aria-checked", "false"),
+      expect(body.getByRole("checkbox", { name: "DOI" })).toHaveAttribute(
+        "aria-checked",
+        "false",
+      ),
     );
     await expect(
-      body.getByRole("menuitemcheckbox", { name: "Authors" }),
+      body.getByRole("checkbox", { name: "Authors" }),
     ).toHaveAttribute("aria-checked", "true");
     await expect(
-      body.getByRole("menuitem", { name: "Move Status up" }),
-    ).toHaveAttribute("aria-disabled", "true");
-    await userEvent.click(body.getByRole("menuitem", { name: "Done" }));
-    await waitFor(() => expect(body.queryByRole("menu")).toBeNull());
+      body.getByRole("button", { name: "Move Status up" }),
+    ).toBeDisabled();
+    await userEvent.click(trigger);
+    await waitFor(() =>
+      expect(
+        body.queryByRole("heading", { name: "Visible columns" }),
+      ).toBeNull(),
+    );
   },
 };
 

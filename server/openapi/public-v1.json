@@ -6542,11 +6542,40 @@
         "title": "PaperListColumn",
         "type": "string"
       },
+      "PaperListColumnWidth": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "$ref": "#/components/schemas/PaperListSizedColumn"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "column",
+          "width"
+        ],
+        "title": "PaperListColumnWidth",
+        "type": "object"
+      },
       "PaperListPreferencesResponse": {
         "properties": {
+          "column_widths": {
+            "items": {
+              "$ref": "#/components/schemas/PaperListColumnWidth"
+            },
+            "title": "Column Widths",
+            "type": "array"
+          },
           "preview_open": {
             "title": "Preview Open",
             "type": "boolean"
+          },
+          "preview_width": {
+            "title": "Preview Width",
+            "type": "integer"
           },
           "visible_columns": {
             "items": {
@@ -6558,7 +6587,9 @@
         },
         "required": [
           "visible_columns",
-          "preview_open"
+          "preview_open",
+          "column_widths",
+          "preview_width"
         ],
         "title": "PaperListPreferencesResponse",
         "type": "object"
@@ -6566,9 +6597,36 @@
       "PaperListPreferencesUpdateRequest": {
         "additionalProperties": false,
         "properties": {
+          "column_widths": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PaperListColumnWidth"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Widths"
+          },
           "preview_open": {
             "title": "Preview Open",
             "type": "boolean"
+          },
+          "preview_width": {
+            "anyOf": [
+              {
+                "maximum": 720.0,
+                "minimum": 400.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Width"
           },
           "visible_columns": {
             "items": {
@@ -6584,6 +6642,20 @@
         ],
         "title": "PaperListPreferencesUpdateRequest",
         "type": "object"
+      },
+      "PaperListSizedColumn": {
+        "enum": [
+          "paper",
+          "status",
+          "tags",
+          "authors",
+          "publication",
+          "last_opened",
+          "added_at",
+          "doi"
+        ],
+        "title": "PaperListSizedColumn",
+        "type": "string"
       },
       "PaperSearchFilters": {
         "additionalProperties": false,

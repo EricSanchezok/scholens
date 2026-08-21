@@ -7,8 +7,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.papers.application.preferences import (
+    DEFAULT_PAPER_LIST_COLUMN_WIDTHS,
     DEFAULT_PAPER_LIST_COLUMNS,
+    DEFAULT_PAPER_LIST_PREVIEW_WIDTH,
     PaperListColumn,
+    PaperListSizedColumn,
     PaperListPreferences,
     PaperListPreferencesRecord,
     PaperListPreferencesUpdateRequest,
@@ -83,6 +86,10 @@ def test_paper_list_preferences_default_and_ordered_update() -> None:
     defaults = preferences.get(actor=_actor(7))
     assert defaults.visible_columns == list(DEFAULT_PAPER_LIST_COLUMNS)
     assert defaults.preview_open is True
+    assert {item.column: item.width for item in defaults.column_widths} == (
+        DEFAULT_PAPER_LIST_COLUMN_WIDTHS
+    )
+    assert defaults.preview_width == DEFAULT_PAPER_LIST_PREVIEW_WIDTH
 
     updated = preferences.update(
         actor=_actor(7),
@@ -102,6 +109,10 @@ def test_paper_list_preferences_default_and_ordered_update() -> None:
         PaperListColumn.AUTHORS,
     ]
     assert updated.preview_open is False
+    assert {item.column: item.width for item in updated.column_widths} == (
+        DEFAULT_PAPER_LIST_COLUMN_WIDTHS
+    )
+    assert updated.preview_width == DEFAULT_PAPER_LIST_PREVIEW_WIDTH
     assert len(journal.entries) == 1
 
 
@@ -127,6 +138,49 @@ def test_paper_list_preferences_are_isolated_and_read_across_sessions() -> None:
     assert second_session.get(actor=_actor(8)).preview_open is True
 
 
+def test_paper_list_preferences_merge_partial_layout_sizes() -> None:
+    gateway = _Gateway()
+    first_session = _preferences(gateway, _Journal())
+    second_session = _preferences(gateway, _Journal())
+
+    first_session.update(
+        actor=_actor(7),
+        operation=_operation(),
+        request=PaperListPreferencesUpdateRequest.model_validate(
+            {
+                "visible_columns": ["status", "authors"],
+                "preview_open": True,
+                "column_widths": [
+                    {"column": "authors", "width": 304},
+                    {"column": "paper", "width": 520},
+                ],
+                "preview_width": 640,
+            }
+        ),
+    )
+    updated = second_session.update(
+        actor=_actor(7),
+        operation=_operation(),
+        request=PaperListPreferencesUpdateRequest.model_validate(
+            {
+                "visible_columns": ["status"],
+                "preview_open": False,
+                "column_widths": [{"column": "status", "width": 144}],
+            }
+        ),
+    )
+
+    widths = {item.column: item.width for item in updated.column_widths}
+    assert widths[PaperListSizedColumn.PAPER] == 520
+    assert widths[PaperListSizedColumn.STATUS] == 144
+    assert widths[PaperListSizedColumn.AUTHORS] == 304
+    assert (
+        widths[PaperListSizedColumn.TAGS]
+        == DEFAULT_PAPER_LIST_COLUMN_WIDTHS[PaperListSizedColumn.TAGS]
+    )
+    assert updated.preview_width == 640
+
+
 @pytest.mark.parametrize(
     "visible_columns",
     [
@@ -142,5 +196,34 @@ def test_paper_list_preferences_reject_invalid_columns(
             {
                 "visible_columns": visible_columns,
                 "preview_open": True,
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "column_widths,preview_width",
+    [
+        (
+            [
+                {"column": "paper", "width": 360},
+                {"column": "paper", "width": 420},
+            ],
+            512,
+        ),
+        ([{"column": "status", "width": 40}], 512),
+        ([], 900),
+    ],
+)
+def test_paper_list_preferences_reject_invalid_layout_sizes(
+    column_widths: list[dict[str, object]],
+    preview_width: int,
+) -> None:
+    with pytest.raises(ValidationError):
+        PaperListPreferencesUpdateRequest.model_validate(
+            {
+                "visible_columns": ["status"],
+                "preview_open": True,
+                "column_widths": column_widths,
+                "preview_width": preview_width,
             }
         )

@@ -848,6 +848,19 @@ export function PapersView({
   ) : null;
   const workbenchVisible =
     !loading && !error && hasRows && workbenchItems.length > 0;
+  const paginationControl =
+    data && hasMore ? (
+      <div className="flex justify-center py-6" ref={loadMoreRef}>
+        <Button
+          loading={loadingMore}
+          onClick={() => void onLoadMore()}
+          size="sm"
+          variant="ghost"
+        >
+          {loadingMore ? t("loadingMore") : t("loadMore")}
+        </Button>
+      </div>
+    ) : null;
 
   return (
     <>
@@ -913,6 +926,7 @@ export function PapersView({
                         tagIds.includes(tag.id) ? tagIds : [...tagIds, tag.id],
                       )
                     }
+                    tableFooter={paginationControl}
                     toolbar={collectionToolbar}
                   />
                 ) : null}
@@ -920,18 +934,7 @@ export function PapersView({
             )}
           </div>
 
-          {data && hasMore && (
-            <div className="flex justify-center py-6" ref={loadMoreRef}>
-              <Button
-                loading={loadingMore}
-                onClick={() => void onLoadMore()}
-                size="sm"
-                variant="ghost"
-              >
-                {loadingMore ? t("loadingMore") : t("loadMore")}
-              </Button>
-            </div>
-          )}
+          {!workbenchVisible ? paginationControl : null}
         </>
       )}
 
