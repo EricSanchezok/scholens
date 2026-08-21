@@ -217,6 +217,10 @@ function TagButtons({
       {item.tags.slice(0, 2).map((tag) =>
         onTagClick ? (
           <button
+            aria-label={t("tagFilterLabel", {
+              tag: tag.name,
+              title: item.title,
+            })}
             className={cn(
               "bg-subtle hover:bg-hover max-w-20 truncate rounded-[var(--radius-sm)] px-1.5 py-1 text-[0.6875rem] font-medium",
               keyboardFocusRing,

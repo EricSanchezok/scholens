@@ -1827,6 +1827,7 @@
       "moveDownColumn": "Move {column} down",
       "done": "Done"
     },
+    "tagFilterLabel": "Filter by {tag} for {title}",
     "moreTags": "{count} more tags",
     "preferencesSaveFailed": "Paper list preferences could not be saved.",
     "neverOpened": "Never",

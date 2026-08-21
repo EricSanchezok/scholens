@@ -1827,6 +1827,7 @@
       "moveDownColumn": "将{column}下移",
       "done": "完成"
     },
+    "tagFilterLabel": "按《{title}》的“{tag}”标签筛选",
     "moreTags": "另有 {count} 个标签",
     "preferencesSaveFailed": "无法保存论文列表偏好。",
     "neverOpened": "从未",

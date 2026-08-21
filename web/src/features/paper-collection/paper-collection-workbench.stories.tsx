@@ -226,7 +226,9 @@ export const Library: Story = {
       "completed",
     );
     await userEvent.click(
-      within(preview).getByRole("button", { name: "Memory" }),
+      within(preview).getByRole("button", {
+        name: /Filter by Memory.*Memory as a Controlled Process/,
+      }),
     );
     await expect(args.onTagClick).toHaveBeenCalledWith(items[0]!.tags[0]);
     const longTitleLink = canvas.getByRole("link", {
