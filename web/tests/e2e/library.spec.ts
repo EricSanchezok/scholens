@@ -416,7 +416,9 @@ test("keeps Library chrome fixed while switching between Papers and Outputs", as
 
     await page.getByRole("tab", { name: /^Outputs/ }).click();
     await expect(page).toHaveURL(/tab=outputs/);
-    await expect(page.getByText("Architecture notes")).toBeVisible();
+    await expect(
+      page.getByRole("table").getByText("Architecture notes"),
+    ).toBeVisible();
     const after = {
       addPapers: await addPapers.boundingBox(),
       header: await header.boundingBox(),
