@@ -1800,6 +1800,8 @@
     "status": {
       "label": "Reading status",
       "personalLabel": "My reading status",
+      "controlLabel": "Reading status for {title}",
+      "personalControlLabel": "My reading status for {title}",
       "todo": "To read",
       "reading": "Reading",
       "completed": "Read",

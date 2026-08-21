@@ -786,6 +786,53 @@ export function ProjectDetailWorkspace({
       project={project}
     />
   );
+  const projectPaperToolbar = (
+    <div className="grid min-w-0 gap-2 xl:grid-cols-[minmax(18rem,36rem)_auto_13rem_minmax(0,1fr)] xl:items-center">
+      <ProjectSearchField
+        key={state.paperQuery}
+        label={t("detail.papers.search")}
+        onChange={(paperQuery) =>
+          replaceSearch({ paperCursor: undefined, paperQuery })
+        }
+        value={state.paperQuery}
+      />
+      <PaperCollectionFilters
+        onStatusesChange={(paperStatuses) =>
+          replaceSearch({ paperCursor: undefined, paperStatuses })
+        }
+        onTagIdsChange={(paperTagIds) =>
+          replaceSearch({ paperCursor: undefined, paperTagIds })
+        }
+        statuses={state.paperStatuses}
+        tagIds={state.paperTagIds}
+        tags={personalTagsQuery.data?.items ?? projectPaperTags}
+      />
+      <Select
+        onValueChange={(paperSort: ProjectPaperSort) =>
+          replaceSearch({ paperCursor: undefined, paperSort })
+        }
+        value={state.paperSort}
+      >
+        <SelectTrigger aria-label={t("detail.papers.sortLabel")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="added_desc">
+            {t("detail.papers.sortAdded")}
+          </SelectItem>
+          <SelectItem value="title_asc">
+            {t("detail.papers.sortTitle")}
+          </SelectItem>
+          <SelectItem value="published_desc">
+            {t("detail.papers.sortPublished")}
+          </SelectItem>
+          <SelectItem value="personal_activity_desc">
+            {t("detail.papers.sortActivity")}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
 
   return (
     <WorkspaceShell
@@ -1089,137 +1136,99 @@ export function ProjectDetailWorkspace({
               </TabsContent>
 
               <TabsContent className="mt-5" value="papers">
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_13rem]">
-                  <ProjectSearchField
-                    key={state.paperQuery}
-                    label={t("detail.papers.search")}
-                    onChange={(paperQuery) =>
-                      replaceSearch({ paperCursor: undefined, paperQuery })
-                    }
-                    value={state.paperQuery}
-                  />
-                  <PaperCollectionFilters
-                    onStatusesChange={(paperStatuses) =>
-                      replaceSearch({ paperCursor: undefined, paperStatuses })
-                    }
-                    onTagIdsChange={(paperTagIds) =>
-                      replaceSearch({ paperCursor: undefined, paperTagIds })
-                    }
-                    statuses={state.paperStatuses}
-                    tagIds={state.paperTagIds}
-                    tags={personalTagsQuery.data?.items ?? projectPaperTags}
-                  />
-                  <Select
-                    onValueChange={(paperSort: ProjectPaperSort) =>
-                      replaceSearch({ paperCursor: undefined, paperSort })
-                    }
-                    value={state.paperSort}
-                  >
-                    <SelectTrigger aria-label={t("detail.papers.sortLabel")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="added_desc">
-                        {t("detail.papers.sortAdded")}
-                      </SelectItem>
-                      <SelectItem value="title_asc">
-                        {t("detail.papers.sortTitle")}
-                      </SelectItem>
-                      <SelectItem value="published_desc">
-                        {t("detail.papers.sortPublished")}
-                      </SelectItem>
-                      <SelectItem value="personal_activity_desc">
-                        {t("detail.papers.sortActivity")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 {paperSearchActive ? (
-                  <div className="mt-5">
-                    <PaperSearchResults
-                      error={paperSearchQuery.error}
-                      hasMore={paperSearchQuery.hasNextPage}
-                      loading={paperSearchQuery.isPending}
-                      loadingMore={paperSearchQuery.isFetchingNextPage}
-                      onLoadMore={() =>
-                        paperSearchQuery.fetchNextPage().then(() => undefined)
-                      }
-                      onRetry={() => void paperSearchQuery.refetch()}
-                      onTagClick={(tagId) =>
-                        replaceSearch({
-                          paperCursor: undefined,
-                          paperTagIds: state.paperTagIds.includes(tagId)
-                            ? state.paperTagIds
-                            : [...state.paperTagIds, tagId],
-                        })
-                      }
-                      papers={projectPaperSearchResults}
-                      readerProjectId={projectId}
-                      total={paperSearchQuery.data?.pages[0]?.total}
-                    />
-                  </div>
+                  <PaperSearchResults
+                    error={paperSearchQuery.error}
+                    hasMore={paperSearchQuery.hasNextPage}
+                    loading={paperSearchQuery.isPending}
+                    loadingMore={paperSearchQuery.isFetchingNextPage}
+                    onLoadMore={() =>
+                      paperSearchQuery.fetchNextPage().then(() => undefined)
+                    }
+                    onRetry={() => void paperSearchQuery.refetch()}
+                    onTagClick={(tagId) =>
+                      replaceSearch({
+                        paperCursor: undefined,
+                        paperTagIds: state.paperTagIds.includes(tagId)
+                          ? state.paperTagIds
+                          : [...state.paperTagIds, tagId],
+                      })
+                    }
+                    papers={projectPaperSearchResults}
+                    readerProjectId={projectId}
+                    toolbar={projectPaperToolbar}
+                    total={paperSearchQuery.data?.pages[0]?.total}
+                  />
                 ) : papersQuery.isPending ? (
-                  <div className="mt-5 py-6">
-                    <LoadingState />
-                  </div>
+                  <>
+                    {projectPaperToolbar}
+                    <div className="mt-5 py-6">
+                      <LoadingState />
+                    </div>
+                  </>
                 ) : papersQuery.isError ? (
-                  <div className="mt-5 py-6">
-                    <AsyncFeedback
-                      action={{
-                        label: t("feedback.retry"),
-                        onClick: () => void papersQuery.refetch(),
-                      }}
-                      state="error"
-                    />
-                  </div>
+                  <>
+                    {projectPaperToolbar}
+                    <div className="mt-5 py-6">
+                      <AsyncFeedback
+                        action={{
+                          label: t("feedback.retry"),
+                          onClick: () => void papersQuery.refetch(),
+                        }}
+                        state="error"
+                      />
+                    </div>
+                  </>
                 ) : projectPapers.length === 0 ? (
-                  <p className="text-muted mt-5 py-12 text-center text-sm">
-                    {t("detail.papers.empty")}
-                  </p>
+                  <>
+                    {projectPaperToolbar}
+                    <p className="text-muted mt-5 py-12 text-center text-sm">
+                      {t("detail.papers.empty")}
+                    </p>
+                  </>
                 ) : (
-                  <div className="mt-5">
-                    <PaperCollectionWorkbench
-                      actions={(item) => {
-                        const paper = projectPaperById.get(item.id);
-                        return paper && project.capabilities.manage_papers ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <OverflowMenuButton
-                                label={t("detail.papers.openMenu")}
-                                visibility="contextual"
-                              />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                destructive
-                                onSelect={() => void requestPaperRemoval(paper)}
-                              >
-                                <Icon glyph={DeleteIcon} size={16} />
-                                {t("detail.papers.remove")}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : null;
-                      }}
-                      items={projectWorkbenchItems}
-                      onStatusChange={(item, status) => {
-                        if (item.inLibrary)
-                          statusMutation.mutate({
-                            documentId: item.id,
-                            status,
-                          });
-                      }}
-                      onTagClick={(tag) =>
-                        replaceSearch({
-                          paperCursor: undefined,
-                          paperTagIds: state.paperTagIds.includes(tag.id)
-                            ? state.paperTagIds
-                            : [...state.paperTagIds, tag.id],
-                        })
-                      }
-                      personalLabels
-                    />
-                  </div>
+                  <PaperCollectionWorkbench
+                    actions={(item) => {
+                      const paper = projectPaperById.get(item.id);
+                      return paper && project.capabilities.manage_papers ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <OverflowMenuButton
+                              label={t("detail.papers.openMenu")}
+                              visibility="contextual"
+                            />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              destructive
+                              onSelect={() => void requestPaperRemoval(paper)}
+                            >
+                              <Icon glyph={DeleteIcon} size={16} />
+                              {t("detail.papers.remove")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null;
+                    }}
+                    items={projectWorkbenchItems}
+                    onStatusChange={(item, status) => {
+                      if (item.inLibrary)
+                        statusMutation.mutate({
+                          documentId: item.id,
+                          status,
+                        });
+                    }}
+                    onTagClick={(tag) =>
+                      replaceSearch({
+                        paperCursor: undefined,
+                        paperTagIds: state.paperTagIds.includes(tag.id)
+                          ? state.paperTagIds
+                          : [...state.paperTagIds, tag.id],
+                      })
+                    }
+                    personalLabels
+                    toolbar={projectPaperToolbar}
+                  />
                 )}
                 {!paperSearchActive && papersQuery.hasNextPage && (
                   <div

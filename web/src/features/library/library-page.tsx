@@ -563,28 +563,31 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 />
               }
               searchResults={
-                paperSearchActive ? (
-                  <PaperSearchResults
-                    error={paperSearchQuery.error}
-                    hasMore={paperSearchQuery.hasNextPage}
-                    loading={paperSearchQuery.isPending}
-                    loadingMore={paperSearchQuery.isFetchingNextPage}
-                    onLoadMore={() =>
-                      paperSearchQuery.fetchNextPage().then(() => undefined)
-                    }
-                    onRetry={() => void paperSearchQuery.refetch()}
-                    onTagClick={(tagId) =>
-                      replaceSearch({
-                        cursor: undefined,
-                        tagIds: parsed.tagIds.includes(tagId)
-                          ? parsed.tagIds
-                          : [...parsed.tagIds, tagId],
-                      })
-                    }
-                    papers={paperSearchResults}
-                    total={paperSearchQuery.data?.pages[0]?.total}
-                  />
-                ) : undefined
+                paperSearchActive
+                  ? (toolbar) => (
+                      <PaperSearchResults
+                        error={paperSearchQuery.error}
+                        hasMore={paperSearchQuery.hasNextPage}
+                        loading={paperSearchQuery.isPending}
+                        loadingMore={paperSearchQuery.isFetchingNextPage}
+                        onLoadMore={() =>
+                          paperSearchQuery.fetchNextPage().then(() => undefined)
+                        }
+                        onRetry={() => void paperSearchQuery.refetch()}
+                        onTagClick={(tagId) =>
+                          replaceSearch({
+                            cursor: undefined,
+                            tagIds: parsed.tagIds.includes(tagId)
+                              ? parsed.tagIds
+                              : [...parsed.tagIds, tagId],
+                          })
+                        }
+                        papers={paperSearchResults}
+                        toolbar={toolbar}
+                        total={paperSearchQuery.data?.pages[0]?.total}
+                      />
+                    )
+                  : undefined
               }
               paperCount={summaryQuery.data?.paper_count ?? 0}
               sort={parsed.sort as PaperSort}

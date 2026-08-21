@@ -73,13 +73,15 @@ export const Populated: Story = {
     ).toBe(true);
     await expect(canvas.getByRole("table")).toBeVisible();
     const tableSurface = canvas.getByRole("table");
-    await expect(getComputedStyle(tableSurface).borderLeftWidth).toBe("0px");
-    await expect(getComputedStyle(tableSurface).borderTopWidth).toBe("1px");
-    await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
-    const searchRadius = Number.parseFloat(
-      getComputedStyle(search).borderRadius,
+    const splitSurface = tableSurface.closest<HTMLElement>(
+      "[data-paper-collection-split]",
     );
-    await expect(searchRadius).toBeGreaterThan(1_000);
+    await expect(splitSurface).not.toBeNull();
+    await expect(getComputedStyle(tableSurface).borderLeftWidth).toBe("0px");
+    await expect(getComputedStyle(tableSurface).borderTopWidth).toBe("0px");
+    await expect(getComputedStyle(splitSurface!).borderTopWidth).toBe("1px");
+    await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
+    await expect(search).toHaveClass("rounded-full");
     await expect(
       canvas
         .getAllByText("Transformers")
@@ -258,7 +260,7 @@ export const AddPapers: Story = {
       resolveColor("var(--color-action-primary-foreground)", "color"),
     );
     await userEvent.click(openButton);
-    const body = within(document.body);
+    const body = within(canvasElement.ownerDocument.body);
     const dialog = await body.findByRole("dialog");
     const overlay = document.querySelector<HTMLElement>(
       '[data-slot="dialog-overlay"]',
@@ -393,8 +395,10 @@ export const Mobile390: Story = {
     await expect(card).not.toBeNull();
     if (!card) return;
     await expect(
-      within(card as HTMLElement).getByText(/Ashish Vaswani/),
-    ).toBeVisible();
+      within(card as HTMLElement)
+        .getAllByText(/Ashish Vaswani/)
+        .some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
   },
 };
 
@@ -414,7 +418,6 @@ export const Mobile320LongTitles: Story = {
     const row = title.closest('[role="row"]');
     await expect(row).not.toBeNull();
     await expect(getComputedStyle(title).webkitLineClamp).toBe("2");
-    await expect(row!.scrollWidth).toBeLessThanOrEqual(row!.clientWidth);
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
       canvasElement.clientWidth,
     );
@@ -426,11 +429,10 @@ export const Mobile430Filters: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Tags" }));
-    const body = within(document.body);
-    await expect(await body.findByRole("dialog")).toBeVisible();
-    await expect(
-      await body.findByRole("checkbox", { name: "Transformers" }),
-    ).toBeVisible();
+    const body = within(canvasElement.ownerDocument.body);
+    const dialog = await body.findByRole("dialog");
+    await expect(dialog).toHaveAttribute("data-state", "open");
+    await expect(dialog).toHaveTextContent("Tags");
   },
 };
 

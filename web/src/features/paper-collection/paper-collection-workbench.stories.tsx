@@ -36,6 +36,8 @@ const items: PaperCollectionItem[] = [
     keywords: ["memory", "agents", "retrieval"],
     lastOpened: "Today, 14:32",
     publication: "arXiv · 2026",
+    summary:
+      "## Key findings\n\n**Controlled memory** improves retrieval quality.\n\n- Stable updates\n- Inspectable decisions",
     status: "reading",
     tags: [
       { id: "memory", name: "Memory" },
@@ -82,6 +84,12 @@ const meta = {
     items,
     onStatusChange: fn(),
     onTagClick: fn(),
+    toolbar: (
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="text-secondary text-sm">Search and filters</span>
+        <span className="text-secondary ml-auto text-xs">3 papers</span>
+      </div>
+    ),
   },
   parameters: {
     layout: "fullscreen",
@@ -111,8 +119,11 @@ export const Library: Story = {
       "href",
       "/reader/00000000-0000-4000-8000-000000000001",
     );
+    await expect(
+      canvas.getByRole("heading", { name: "Key findings" }),
+    ).toBeVisible();
     const status = canvas.getAllByRole("button", {
-      name: "Reading status",
+      name: /Reading status for/,
     })[0]!;
     await userEvent.click(status);
     await expect(paperLink).toHaveAttribute(
@@ -120,6 +131,25 @@ export const Library: Story = {
       "/reader/00000000-0000-4000-8000-000000000001",
     );
     await userEvent.keyboard("{Escape}");
+
+    const preview = canvas.getByRole("complementary", {
+      name: "Paper details",
+    });
+    const longTitleLink = canvas.getByRole("link", {
+      name: /A deliberately long research paper title/,
+    });
+    await userEvent.hover(longTitleLink);
+    await expect(
+      within(preview).getByRole("heading", {
+        name: /A deliberately long research paper title/,
+      }),
+    ).toBeVisible();
+    await userEvent.unhover(longTitleLink);
+    await expect(
+      within(preview).getByRole("heading", {
+        name: /Memory as a Controlled Process/,
+      }),
+    ).toBeVisible();
   },
 };
 

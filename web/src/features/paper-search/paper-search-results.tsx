@@ -24,6 +24,7 @@ export function PaperSearchResults({
   onTagClick,
   papers,
   readerProjectId,
+  toolbar,
   total,
 }: {
   error?: unknown;
@@ -35,6 +36,7 @@ export function PaperSearchResults({
   onTagClick?: (tagId: string) => void;
   papers: PaperSearchResult[];
   readerProjectId?: string;
+  toolbar?: React.ReactNode;
   total?: number;
 }) {
   const t = useTranslations("PaperSearch.results");
@@ -131,9 +133,6 @@ export function PaperSearchResults({
 
   return (
     <div className="min-w-0">
-      <p className="text-secondary mb-3 text-xs">
-        {t("count", { count: total ?? papers.length })}
-      </p>
       <PaperCollectionWorkbench
         items={items}
         onStatusChange={(item, status) => {
@@ -143,6 +142,14 @@ export function PaperSearchResults({
         }}
         onTagClick={(tag) => onTagClick?.(tag.id)}
         personalLabels
+        toolbar={
+          <div className="flex min-w-0 items-center gap-3">
+            {toolbar ? <div className="min-w-0 flex-1">{toolbar}</div> : null}
+            <p className="text-secondary shrink-0 text-xs">
+              {t("count", { count: total ?? papers.length })}
+            </p>
+          </div>
+        }
       />
       {hasMore ? (
         <div className="flex justify-center py-6" ref={loadMoreRef}>

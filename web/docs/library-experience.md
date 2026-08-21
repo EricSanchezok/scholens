@@ -39,10 +39,11 @@ are never decoded by the Web. Outputs retain explicit Previous/Next navigation.
 
 Desktop Library chrome is a compact 44 px workbench header: the page title,
 Papers/Outputs tabs with counts, and Add papers action share one row. Search,
-filters, sorting, and result count follow after 16 px so research content enters
-the first viewport without a repeated explanatory hero. Explanatory copy
-belongs to empty and unavailable states. Mobile keeps the Workspace app bar as
-the only page-title and primary-action surface.
+filters, sorting, result count, preview disclosure, and column management share
+one compact utility row after 16 px so research content enters the first
+viewport without a repeated explanatory hero or a second controls band.
+Explanatory copy belongs to empty and unavailable states. Mobile keeps the
+Workspace app bar as the only page-title and primary-action surface.
 
 At phone widths the utility controls are composed rather than compressed:
 search owns the first row, tag and sort controls share a bounded two-column
@@ -72,7 +73,11 @@ container is below 1040 px, lower-priority right-side columns and the preview
 temporarily disappear without rewriting the stored preference; mobile exposes
 neither column management nor preview. Selecting or focusing a paper updates
 the preview with its full title, authors, publication, DOI, personal status,
-tags, abstract or summary, and keywords. The preview never repeats navigation.
+tags, abstract or summary, and keywords. Hover provides a temporary preview;
+focus or pointer activation persists the current row so moving the pointer away
+does not discard the user's context. Summary Markdown is rendered as restrained
+editorial content rather than exposed source syntax. The preview never repeats
+navigation.
 
 Two or more query characters switch the paper collection to the shared hybrid
 search contract. Exact title/author/DOI matches, whitespace-insensitive and
@@ -85,11 +90,12 @@ retrieval and never hide otherwise matching papers.
 The Library collection uses one flat editorial surface rather than placing a
 table inside a rounded card. Search and non-select filters remain compact pills;
 sorting uses the same light-line Select surface as forms and Reader. The
-collection owns only its top and bottom boundary, while rows are separated by
-quiet dividers and reveal a local hover surface. Mobile keeps the same border
-ownership with one divided list instead of a stack of repeated cards. This
-visual contract also applies to Outputs so switching tabs does not change the
-page's interface dialect.
+table and preview share one continuous top boundary; the preview's quiet
+vertical divider begins at that boundary instead of intersecting an independent
+table rule. Rows are separated by quiet dividers and reveal a local hover
+surface. Mobile keeps the same border ownership with one divided list instead
+of a stack of repeated cards. This visual contract also applies to Outputs so
+switching tabs does not change the page's interface dialect.
 
 Paper and tag rows follow the shared collection-row and nested-action contract
 in [Component Development](./component-development.md). The row's main content

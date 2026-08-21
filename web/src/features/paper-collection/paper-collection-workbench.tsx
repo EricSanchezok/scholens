@@ -6,6 +6,9 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import {
   Button,
@@ -137,7 +140,10 @@ function StatusControl({
       <DropdownMenuTrigger asChild>
         <Button
           aria-label={t(
-            personalLabels ? "status.personalLabel" : "status.label",
+            personalLabels
+              ? "status.personalControlLabel"
+              : "status.controlLabel",
+            { title: item.title },
           )}
           className="h-7 min-h-7 rounded-full px-2 text-xs"
           variant="secondary"
@@ -224,13 +230,15 @@ function ColumnManager({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton
+        <Button
+          aria-label={t("columnsMenu.label")}
           className="hidden sm:inline-flex"
-          label={t("columnsMenu.label")}
+          size="sm"
           variant="ghost"
         >
           <Icon glyph={OutlineIcon} size={20} />
-        </IconButton>
+          <span className="hidden xl:inline">{t("columnsMenu.label")}</span>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>{t("columnsMenu.title")}</DropdownMenuLabel>
@@ -271,6 +279,57 @@ function ColumnManager({
   );
 }
 
+const previewMarkdownComponents: Components = {
+  h1: ({ children }) => (
+    <h4 className="text-foreground text-sm leading-5 font-semibold">
+      {children}
+    </h4>
+  ),
+  h2: ({ children }) => (
+    <h4 className="text-foreground text-sm leading-5 font-semibold">
+      {children}
+    </h4>
+  ),
+  h3: ({ children }) => (
+    <h4 className="text-foreground text-sm leading-5 font-semibold">
+      {children}
+    </h4>
+  ),
+  p: ({ children }) => <p className="text-pretty">{children}</p>,
+  ul: ({ children }) => (
+    <ul className="marker:text-muted list-disc space-y-1.5 pl-4">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="marker:text-muted list-decimal space-y-1.5 pl-4">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="pl-0.5">{children}</li>,
+  strong: ({ children }) => (
+    <strong className="text-foreground font-semibold">{children}</strong>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-line-strong border-l pl-3">
+      {children}
+    </blockquote>
+  ),
+  a: ({ children, href }) => (
+    <a
+      className="decoration-line-strong hover:decoration-foreground underline underline-offset-2"
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="bg-surface rounded-[var(--radius-xs)] px-1 py-0.5 text-[0.9em] [overflow-wrap:anywhere]">
+      {children}
+    </code>
+  ),
+};
+
 function Preview({
   item,
   onClose,
@@ -284,9 +343,10 @@ function Preview({
   return (
     <aside
       aria-label={t("preview.label")}
-      className="border-line bg-surface min-w-0 overflow-y-auto border-l px-5 py-4"
+      className="border-line-subtle bg-subtle max-h-[min(42.5rem,calc(100dvh-12rem))] min-w-0 overflow-y-auto border-l px-5 pb-5"
+      data-paper-collection-preview=""
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex h-10 items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">{t("preview.label")}</h2>
         <IconButton
           label={t("preview.close")}
@@ -301,7 +361,7 @@ function Preview({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt=""
-          className="border-line bg-subtle mt-4 h-36 w-24 rounded-[var(--radius-sm)] border object-cover object-top"
+          className="border-line bg-surface mt-3 h-36 w-24 rounded-[var(--radius-sm)] border object-cover object-top"
           src={item.previewUrl}
         />
       ) : null}
@@ -326,9 +386,18 @@ function Preview({
       <p className="text-secondary mt-5 text-xs font-medium">
         {t(item.summary ? "preview.summary" : "preview.abstract")}
       </p>
-      <p className="text-secondary mt-2 text-sm leading-6">
-        {item.summary || item.abstract || t("preview.noAbstract")}
-      </p>
+      <div
+        className="text-secondary mt-2 text-sm leading-6 [overflow-wrap:anywhere] [&>*+*]:mt-3"
+        data-paper-preview-markdown=""
+      >
+        <ReactMarkdown
+          components={previewMarkdownComponents}
+          remarkPlugins={[remarkGfm]}
+          skipHtml
+        >
+          {item.summary || item.abstract || t("preview.noAbstract")}
+        </ReactMarkdown>
+      </div>
       {item.keywords.length ? (
         <p className="text-secondary mt-5 text-xs leading-5">
           <span className="font-medium">{t("preview.keywords")}</span>{" "}
@@ -341,18 +410,22 @@ function Preview({
 
 export function PaperCollectionWorkbench({
   actions,
+  beforeTable,
   items,
   leading,
   onStatusChange,
   onTagClick,
   personalLabels = false,
+  toolbar,
 }: {
   actions?: (item: PaperCollectionItem) => React.ReactNode;
+  beforeTable?: React.ReactNode;
   items: PaperCollectionItem[];
   leading?: (item: PaperCollectionItem) => React.ReactNode;
   onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
   onTagClick?: (tag: PaperCollectionTag) => void;
   personalLabels?: boolean;
+  toolbar?: React.ReactNode;
 }) {
   const t = useTranslations("PaperCollection");
   const toast = useToast();
@@ -392,20 +465,31 @@ export function PaperCollectionWorkbench({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const width = useElementWidth(rootRef);
   const [previewId, setPreviewId] = React.useState<string>();
-  const preview = items.find((item) => item.id === previewId) ?? items[0];
+  const [hoveredPreviewId, setHoveredPreviewId] = React.useState<string>();
+  const preview =
+    items.find((item) => item.id === hoveredPreviewId) ??
+    items.find((item) => item.id === previewId) ??
+    items[0];
   const previewVisible = Boolean(
     preview && preferences.preview_open && width >= 1040,
   );
+  const listWidth = Math.max(0, width - (previewVisible ? 384 : 0));
   const effectiveColumns = React.useMemo(() => {
-    if (width >= 1040) return preferences.visible_columns;
-    if (width >= 840)
+    if (listWidth >= 1200) return preferences.visible_columns;
+    if (listWidth >= 1020)
       return preferences.visible_columns.filter(
         (column) => !["last_opened", "added_at", "doi"].includes(column),
       );
-    return preferences.visible_columns.filter((column) =>
-      ["status", "tags", "publication"].includes(column),
-    );
-  }, [preferences.visible_columns, width]);
+    if (listWidth >= 900)
+      return preferences.visible_columns.filter((column) =>
+        ["status", "tags", "publication"].includes(column),
+      );
+    if (listWidth >= 700)
+      return preferences.visible_columns.filter((column) =>
+        ["status", "tags"].includes(column),
+      );
+    return preferences.visible_columns.filter((column) => column === "status");
+  }, [listWidth, preferences.visible_columns]);
   // TanStack Virtual owns a mutable scroll controller by design.
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
@@ -418,35 +502,49 @@ export function PaperCollectionWorkbench({
   const virtualItems = rowVirtualizer.getVirtualItems();
   return (
     <div className="min-w-0" ref={rootRef}>
-      <div className="mb-2 flex justify-end gap-1">
-        {!preferences.preview_open && width >= 1040 ? (
-          <IconButton
-            label={t("preview.open")}
-            onClick={() =>
-              mutation.mutate({ ...preferences, preview_open: true })
-            }
-            variant="ghost"
-          >
-            <Icon glyph={OpenPanelIcon} size={20} />
-          </IconButton>
-        ) : null}
-        <ColumnManager
-          preferences={preferences}
-          update={(next) => mutation.mutate(next)}
-        />
+      <div
+        className="mb-3 flex min-h-11 min-w-0 items-center gap-2"
+        data-paper-collection-toolbar=""
+      >
+        {toolbar ? (
+          <div className="min-w-0 flex-1">{toolbar}</div>
+        ) : (
+          <div className="flex-1" />
+        )}
+        <div className="hidden shrink-0 items-center gap-1 sm:flex">
+          {!preferences.preview_open && width >= 1040 ? (
+            <Button
+              aria-label={t("preview.open")}
+              onClick={() =>
+                mutation.mutate({ ...preferences, preview_open: true })
+              }
+              size="sm"
+              variant="ghost"
+            >
+              <Icon glyph={OpenPanelIcon} size={20} />
+              <span className="hidden xl:inline">{t("preview.open")}</span>
+            </Button>
+          ) : null}
+          <ColumnManager
+            preferences={preferences}
+            update={(next) => mutation.mutate(next)}
+          />
+        </div>
       </div>
+      {beforeTable}
       <div
         className={cn(
-          "grid min-w-0",
+          "border-line grid min-w-0 items-start border-t",
           previewVisible && "grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
         )}
+        data-paper-collection-split=""
       >
         <div
           aria-colcount={
             1 + effectiveColumns.length + (leading ? 1 : 0) + (actions ? 1 : 0)
           }
           aria-rowcount={items.length + 1}
-          className="border-line min-w-0 border-y"
+          className="min-w-0"
           role="table"
         >
           <div role="rowgroup">
@@ -485,7 +583,7 @@ export function PaperCollectionWorkbench({
             role="rowgroup"
           >
             <div
-              className="relative min-w-[42rem] sm:min-w-0"
+              className="relative w-full min-w-0"
               style={{ height: rowVirtualizer.getTotalSize() }}
             >
               {virtualItems.map((virtualRow) => {
@@ -493,17 +591,21 @@ export function PaperCollectionWorkbench({
                 if (!item) return null;
                 return (
                   <div
-                    className="border-line-subtle hover:bg-hover focus-within:bg-hover absolute top-0 left-0 w-full border-b"
+                    aria-selected={preview?.id === item.id}
+                    className="border-line-subtle hover:bg-hover focus-within:bg-hover data-[current=true]:bg-subtle absolute top-0 left-0 w-full border-b"
+                    data-current={preview?.id === item.id}
                     data-index={virtualRow.index}
                     key={item.id}
                     onFocusCapture={() => setPreviewId(item.id)}
-                    onMouseEnter={() => setPreviewId(item.id)}
+                    onMouseEnter={() => setHoveredPreviewId(item.id)}
+                    onMouseLeave={() => setHoveredPreviewId(undefined)}
+                    onPointerDownCapture={() => setPreviewId(item.id)}
                     ref={rowVirtualizer.measureElement}
+                    role="row"
                     style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
                     <div
                       className="hidden h-16 items-center gap-3 px-2 sm:grid"
-                      role="row"
                       style={{ gridTemplateColumns }}
                     >
                       {leading ? <div role="cell">{leading(item)}</div> : null}
@@ -558,10 +660,7 @@ export function PaperCollectionWorkbench({
                       ))}
                       {actions ? <div role="cell">{actions(item)}</div> : null}
                     </div>
-                    <div
-                      className="grid min-h-28 grid-cols-[2.25rem_minmax(0,1fr)_auto] gap-3 px-3 py-3 sm:hidden"
-                      role="row"
-                    >
+                    <div className="grid min-h-28 grid-cols-[2.25rem_minmax(0,1fr)_auto] gap-3 px-3 py-3 sm:hidden">
                       <div role="cell">
                         <PaperThumbnail item={item} />
                       </div>

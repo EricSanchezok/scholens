@@ -16926,6 +16926,16 @@
           },
           {
             "in": "query",
+            "name": "load_preview_urls",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Load Preview Urls",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "q",
             "required": false,
             "schema": {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -192,6 +194,7 @@ def test_project_documents_cursor_survives_page_size_changes() -> None:
         actor=_actor(),
         project_id=project_id,
         load_urls=False,
+        load_preview_urls=False,
         sort=ProjectPaperSort.ADDED_DESC,
         limit=1,
     )
@@ -199,6 +202,7 @@ def test_project_documents_cursor_survives_page_size_changes() -> None:
         actor=_actor(),
         project_id=project_id,
         load_urls=False,
+        load_preview_urls=False,
         sort=ProjectPaperSort.ADDED_DESC,
         limit=50,
         cursor=first.next_cursor,
@@ -223,6 +227,7 @@ def test_project_documents_cursor_is_bound_to_personal_filters() -> None:
         actor=_actor(),
         project_id=project_id,
         load_urls=False,
+        load_preview_urls=False,
         personal_statuses=(PaperStatus.reading,),
         personal_tag_ids=(tag_id,),
         limit=1,
@@ -234,11 +239,51 @@ def test_project_documents_cursor_is_bound_to_personal_filters() -> None:
             actor=_actor(),
             project_id=project_id,
             load_urls=False,
+            load_preview_urls=False,
             personal_statuses=(PaperStatus.completed,),
             personal_tag_ids=(tag_id,),
             cursor=first.next_cursor,
             limit=1,
         )
+
+    assert raised.value.code == "project_cursor_invalid"
+
+
+@pytest.mark.parametrize(
+    ("changed_argument", "value"),
+    [("load_urls", True), ("load_preview_urls", True)],
+)
+def test_project_documents_cursor_is_bound_to_url_loading_contract(
+    changed_argument: str,
+    value: bool,
+) -> None:
+    gateway = MagicMock()
+    gateway.list_documents.return_value = _paper_page(
+        item_id=uuid4(),
+        has_more=True,
+    )
+    projects = _projects(gateway=gateway)
+    project_id = uuid4()
+
+    first = projects.documents(
+        actor=_actor(),
+        project_id=project_id,
+        load_urls=False,
+        load_preview_urls=False,
+        limit=1,
+    )
+    arguments = {
+        "actor": _actor(),
+        "project_id": project_id,
+        "load_urls": False,
+        "load_preview_urls": False,
+        "cursor": first.next_cursor,
+        "limit": 1,
+    }
+    arguments[changed_argument] = value
+
+    with pytest.raises(AppError, match="cursor") as raised:
+        projects.documents(**arguments)
 
     assert raised.value.code == "project_cursor_invalid"
 
@@ -259,6 +304,7 @@ def test_project_personal_filters_are_actor_scoped_before_counting() -> None:
             actor=_actor(7),
             project_id=uuid4(),
             load_urls=False,
+            load_preview_urls=False,
             query=None,
             personal_statuses=(PaperStatus.reading,),
             personal_tag_ids=(tag_id,),
@@ -280,6 +326,89 @@ def test_project_personal_filters_are_actor_scoped_before_counting() -> None:
         assert "library_papers.status IN ('reading')" in statement
         assert tag_id.hex in statement
         assert "paper_tags.user_id = 7" in statement
+
+
+def test_project_document_urls_are_signed_only_when_independently_requested() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    document_id = uuid4()
+    association_id = uuid4()
+    now = datetime.now(timezone.utc)
+    paper = SimpleNamespace(
+        id=document_id,
+        title="Preview contract",
+        original_filename="preview-contract.pdf",
+        abstract=None,
+        authors=[],
+        institutions=[],
+        journal=None,
+        publisher=None,
+        doi=None,
+        publish_date=None,
+        s3_object_key="papers/original.pdf",
+        preview_s3_key="previews/page-1.png",
+        summary=None,
+        keywords=[],
+    )
+    row = SimpleNamespace(
+        Document=paper,
+        LibraryPaper=None,
+        ProjectPaper=SimpleNamespace(id=association_id, created_at=now),
+    )
+    db.execute.return_value.all.return_value = [row]
+    gateway = SqlAlchemyProjectGateway(
+        db,
+        invitation_tokens=ProjectInvitationTokenCodec(
+            "project-pagination-test-secret-32-bytes"
+        ),
+    )
+
+    with (
+        patch("app.bootstrap.adapters.project_gateway.project_repository.get_access"),
+        patch(
+            "app.bootstrap.adapters.project_gateway.s3_service.generate_presigned_urls",
+            side_effect=lambda objects: {
+                key: f"https://signed.example/{object_key}"
+                for key, object_key in objects.items()
+            },
+        ) as sign,
+    ):
+        unsigned = gateway.list_documents(
+            actor=_actor(),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=False,
+            query=None,
+            personal_statuses=(),
+            personal_tag_ids=(),
+            sort=ProjectPaperSort.ADDED_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+        sign.assert_not_called()
+        assert unsigned.items[0].file_url is None
+        assert unsigned.items[0].preview_url is None
+
+        preview_only = gateway.list_documents(
+            actor=_actor(),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=True,
+            query=None,
+            personal_statuses=(),
+            personal_tag_ids=(),
+            sort=ProjectPaperSort.ADDED_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+
+    sign.assert_called_once_with({str(document_id): "previews/page-1.png"})
+    assert preview_only.items[0].file_url is None
+    assert preview_only.items[0].preview_url == (
+        "https://signed.example/previews/page-1.png"
+    )
 
 
 def test_project_outputs_cursor_survives_page_size_changes() -> None:

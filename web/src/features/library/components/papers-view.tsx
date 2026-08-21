@@ -569,7 +569,7 @@ export function PapersView({
   onStatusFilterChange?: (statuses: FilterStatus[]) => void;
   onTagFilterChange: (tagIds: string[]) => void;
   search: React.ReactNode;
-  searchResults?: React.ReactNode;
+  searchResults?: (toolbar: React.ReactNode) => React.ReactNode;
   sort: PaperSort;
   paperCount: number;
   tagIds: string[];
@@ -693,146 +693,170 @@ export function PapersView({
     }
   }
 
-  return (
-    <>
-      <AnimatePresence initial={false} mode="popLayout">
-        {selected.length > 0 ? (
-          <MotionPresence
-            animate="animate"
-            aria-label={t("selectionToolbar")}
-            className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
-            exit="exit"
-            initial="initial"
-            key="selection-toolbar"
-            role="toolbar"
-            variants={motionVariants.swap}
+  const collectionToolbar = (
+    <AnimatePresence initial={false} mode="popLayout">
+      {selected.length > 0 ? (
+        <MotionPresence
+          animate="animate"
+          aria-label={t("selectionToolbar")}
+          className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
+          exit="exit"
+          initial="initial"
+          key="selection-toolbar"
+          role="toolbar"
+          variants={motionVariants.swap}
+        >
+          <span className="mr-auto min-w-0 text-sm font-semibold">
+            {t("selected", { count: selected.length })}
+          </span>
+          <Button
+            className="md:h-8 md:min-h-8"
+            onClick={() => setSelected([])}
+            size="sm"
+            variant="ghost"
           >
-            <span className="mr-auto min-w-0 text-sm font-semibold">
-              {t("selected", { count: selected.length })}
-            </span>
+            {t("clearSelection")}
+          </Button>
+          <div className="hidden items-center gap-2 sm:flex">
             <Button
               className="md:h-8 md:min-h-8"
-              onClick={() => setSelected([])}
+              onClick={() => beginTagEditing(selected)}
               size="sm"
-              variant="ghost"
+              variant="secondary"
             >
-              {t("clearSelection")}
+              {t("actions.tags")}
             </Button>
-            <div className="hidden items-center gap-2 sm:flex">
-              <Button
-                className="md:h-8 md:min-h-8"
-                onClick={() => beginTagEditing(selected)}
-                size="sm"
-                variant="secondary"
-              >
+            <Button
+              className="md:h-8 md:min-h-8"
+              disabled
+              size="sm"
+              title={t("actions.notAvailable")}
+              variant="secondary"
+            >
+              {t("actions.projectUnavailable")}
+            </Button>
+            <Button
+              className="md:h-8 md:min-h-8"
+              onClick={() => beginRemoval(selected)}
+              size="sm"
+              variant="danger"
+            >
+              {t("actions.remove")}
+            </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="sm:hidden" size="sm" variant="secondary">
+                {t("batchActions")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
+                <Icon glyph={TagIcon} size={16} tone="secondary" />
                 {t("actions.tags")}
-              </Button>
-              <Button
-                className="md:h-8 md:min-h-8"
-                disabled
-                size="sm"
-                title={t("actions.notAvailable")}
-                variant="secondary"
-              >
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <Icon glyph={ProjectIcon} size={16} tone="secondary" />
                 {t("actions.projectUnavailable")}
-              </Button>
-              <Button
-                className="md:h-8 md:min-h-8"
-                onClick={() => beginRemoval(selected)}
-                size="sm"
-                variant="danger"
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                destructive
+                onSelect={() => beginRemoval(selected)}
               >
+                <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                 {t("actions.remove")}
-              </Button>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="sm:hidden" size="sm" variant="secondary">
-                  {t("batchActions")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
-                  <Icon glyph={TagIcon} size={16} tone="secondary" />
-                  {t("actions.tags")}
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled>
-                  <Icon glyph={ProjectIcon} size={16} tone="secondary" />
-                  {t("actions.projectUnavailable")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  destructive
-                  onSelect={() => beginRemoval(selected)}
-                >
-                  <Icon glyph={DeleteIcon} size={16} tone="secondary" />
-                  {t("actions.remove")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </MotionPresence>
-        ) : (
-          <MotionPresence
-            animate="animate"
-            className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center"
-            exit="exit"
-            initial="initial"
-            key="utility-toolbar"
-            variants={motionVariants.swap}
-          >
-            <div className="min-w-0">{search}</div>
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] items-center gap-2 sm:grid-cols-[auto_auto_minmax(11rem,1fr)_auto] md:contents">
-              <StatusFilter active={statuses} onChange={onStatusFilterChange} />
-              <TagFilter
-                active={tagIds}
-                onChange={onTagFilterChange}
-                onManage={beginTagManagement}
-                onNeedTags={onNeedTags}
-                tags={tags}
-                tagsLoading={tagsLoading}
-              />
-              <Select
-                onValueChange={(value) => onSortChange(value as PaperSort)}
-                value={sort}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </MotionPresence>
+      ) : (
+        <MotionPresence
+          animate="animate"
+          className="grid min-w-0 gap-2 xl:grid-cols-[minmax(18rem,36rem)_auto_auto_minmax(11rem,13rem)_minmax(8rem,1fr)] xl:items-center"
+          exit="exit"
+          initial="initial"
+          key="utility-toolbar"
+          variants={motionVariants.swap}
+        >
+          <div className="min-w-0">{search}</div>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] items-center gap-2 sm:grid-cols-[auto_auto_minmax(11rem,1fr)_auto] xl:contents">
+            <StatusFilter active={statuses} onChange={onStatusFilterChange} />
+            <TagFilter
+              active={tagIds}
+              onChange={onTagFilterChange}
+              onManage={beginTagManagement}
+              onNeedTags={onNeedTags}
+              tags={tags}
+              tagsLoading={tagsLoading}
+            />
+            <Select
+              onValueChange={(value) => onSortChange(value as PaperSort)}
+              value={sort}
+            >
+              <SelectTrigger
+                aria-label={t("sort.label")}
+                className="w-full min-w-0 xl:w-auto xl:min-w-44"
               >
-                <SelectTrigger
-                  aria-label={t("sort.label")}
-                  className="w-full min-w-0 md:w-auto md:min-w-44"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAPER_SORTS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {t(`sort.${option}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {data && (
-                <span className="text-secondary col-span-2 grid justify-items-end text-right text-sm sm:col-span-1 sm:ml-2 md:ml-2">
-                  <span className="whitespace-nowrap">
-                    {t("count", { count: paperCount })}
-                  </span>
-                  {ingestionCount > 0 && (
-                    <span className="text-xs whitespace-nowrap">
-                      {t("ingestionCount", {
-                        attentionCount,
-                        count: ingestionCount,
-                      })}
-                    </span>
-                  )}
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAPER_SORTS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {t(`sort.${option}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {data && !searchResults && (
+              <span className="text-secondary col-span-2 grid justify-items-end text-right text-sm sm:col-span-1 sm:ml-2 xl:ml-2">
+                <span className="whitespace-nowrap">
+                  {t("count", { count: paperCount })}
                 </span>
-              )}
-            </div>
-          </MotionPresence>
-        )}
-      </AnimatePresence>
+                {ingestionCount > 0 && (
+                  <span className="text-xs whitespace-nowrap">
+                    {t("ingestionCount", {
+                      attentionCount,
+                      count: ingestionCount,
+                    })}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </MotionPresence>
+      )}
+    </AnimatePresence>
+  );
+  const ingestionList = ingestions.length ? (
+    <div className="border-line mb-3 border-y">
+      {ingestions.map((ingestion) => (
+        <div
+          className="border-line-subtle grid min-h-16 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 border-b px-2 py-2 last:border-b-0"
+          data-ingestion-row=""
+          key={ingestion.id}
+        >
+          <IngestionThumbnail />
+          <IngestionDetails ingestion={ingestion} />
+          <IngestionActions
+            ingestion={ingestion}
+            onCancel={() => onCancelIngestion(ingestion.id)}
+            onRetry={() => onRetryIngestion(ingestion.id)}
+          />
+        </div>
+      ))}
+    </div>
+  ) : null;
+  const workbenchVisible =
+    !loading && !error && hasRows && workbenchItems.length > 0;
 
+  return (
+    <>
       {searchResults ? (
-        <div className="mt-4">{searchResults}</div>
+        searchResults(collectionToolbar)
       ) : (
         <>
-          <div className="mt-4">
+          {!workbenchVisible ? collectionToolbar : null}
+          <div className={workbenchVisible ? undefined : "mt-4"}>
             {loading && <LoadingState label={t("loading")} />}
             {Boolean(error) && !loading && (
               <AsyncFeedback
@@ -852,25 +876,7 @@ export function PapersView({
             )}
             {!loading && !error && hasRows && (
               <>
-                {ingestions.length ? (
-                  <div className="border-line mb-3 border-y">
-                    {ingestions.map((ingestion) => (
-                      <div
-                        className="border-line-subtle grid min-h-16 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 border-b px-2 py-2 last:border-b-0"
-                        data-ingestion-row=""
-                        key={ingestion.id}
-                      >
-                        <IngestionThumbnail />
-                        <IngestionDetails ingestion={ingestion} />
-                        <IngestionActions
-                          ingestion={ingestion}
-                          onCancel={() => onCancelIngestion(ingestion.id)}
-                          onRetry={() => onRetryIngestion(ingestion.id)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                {!workbenchItems.length ? ingestionList : null}
                 {workbenchItems.length ? (
                   <PaperCollectionWorkbench
                     actions={(item) => {
@@ -888,6 +894,7 @@ export function PapersView({
                         />
                       ) : null;
                     }}
+                    beforeTable={ingestionList}
                     items={workbenchItems}
                     leading={(item) => (
                       <SelectionCheckbox
@@ -906,6 +913,7 @@ export function PapersView({
                         tagIds.includes(tag.id) ? tagIds : [...tagIds, tag.id],
                       )
                     }
+                    toolbar={collectionToolbar}
                   />
                 ) : null}
               </>

@@ -89,6 +89,7 @@ export const projectQueries = {
                 cursor: pageParam,
                 limit: 20,
                 load_urls: false,
+                load_preview_urls: true,
                 q: state.paperQuery || undefined,
                 sort: state.paperSort,
                 personal_statuses: state.paperStatuses.length

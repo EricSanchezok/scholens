@@ -1800,6 +1800,8 @@
     "status": {
       "label": "阅读状态",
       "personalLabel": "我的阅读状态",
+      "controlLabel": "《{title}》的阅读状态",
+      "personalControlLabel": "《{title}》中我的阅读状态",
       "todo": "待读",
       "reading": "阅读中",
       "completed": "已读",

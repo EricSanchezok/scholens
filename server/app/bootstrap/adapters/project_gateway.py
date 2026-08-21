@@ -650,6 +650,7 @@ class SqlAlchemyProjectGateway:
         actor: Actor,
         project_id: UUID,
         load_urls: bool,
+        load_preview_urls: bool,
         query: str | None,
         personal_statuses: tuple[PaperStatus, ...],
         personal_tag_ids: tuple[UUID, ...],
@@ -791,12 +792,16 @@ class SqlAlchemyProjectGateway:
             if load_urls
             else {}
         )
-        preview_urls = s3_service.generate_presigned_urls(
-            {
-                str(paper.id): paper.preview_s3_key
-                for paper in papers
-                if paper.preview_s3_key
-            }
+        preview_urls = (
+            s3_service.generate_presigned_urls(
+                {
+                    str(paper.id): paper.preview_s3_key
+                    for paper in papers
+                    if paper.preview_s3_key
+                }
+            )
+            if load_preview_urls
+            else {}
         )
         items = [
             ProjectPaperSummaryResponse(

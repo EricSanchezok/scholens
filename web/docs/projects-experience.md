@@ -43,9 +43,10 @@ and the shared Conversation feature.
   threads exist, the member must confirm the reported thread and comment
   counts before the destructive retry is sent.
 - Project paper browsing uses the shared full-width, virtualized Paper
-  Collection workbench, personal metadata filters, progressive continuation,
-  desktop preview, and hybrid retrieval language as Library, with the search
-  collection restricted to the authorized Project UUID. Status and tags are
+  Collection workbench, single compact utility row, continuous list/preview
+  boundary, personal metadata filters, progressive continuation, desktop
+  preview, and hybrid retrieval language as Library, with the search collection
+  restricted to the authorized Project UUID. Status and tags are
   always the current actor's private Library metadata and are labeled “My”. A
   Project-only paper is explicitly “Not in Library” and has no fabricated
   personal state. It does not load the full Project into browser memory or
@@ -131,6 +132,9 @@ independent action target and is always discoverable on touch layouts.
   count and pagination. Queries of two or more characters use
   `POST /api/v1/search/papers` with the same personal filters and a Project
   selection collection so fuzzy, full-text, and semantic ranking stay shared.
+  Preview and source-file URL signing are independent: the Web requests
+  `load_preview_urls=true` and leaves `load_urls=false`, while omitted flags and
+  MCP access sign neither URL. Both flags participate in cursor validation.
 - `GET /api/v1/projects/{projectId}/outputs` applies the same search, kind,
   sort, visibility, and cursor semantics as Library Outputs while restricting
   the collection to one authorized Project.

@@ -9568,6 +9568,7 @@ export interface operations {
         parameters: {
             query?: {
                 load_urls?: boolean;
+                load_preview_urls?: boolean;
                 q?: string | null;
                 personal_statuses?: components["schemas"]["PaperStatus"][];
                 personal_tag_ids?: string[];
