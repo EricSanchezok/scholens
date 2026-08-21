@@ -44,13 +44,6 @@
       "verifiedVersion": "sha256:c0147099ca28a03f63e922b81177adb3e50667ca4da9370dc0ff3ed2558ef5de"
     },
     {
-      "path": "web/brand/source/scholens-raven-micro.svg",
-      "source": "Repository-authored optical reduction of the selected Scholens raven",
-      "license": "Project-owned artwork",
-      "purpose": "Canonical compact raven and monocle source",
-      "verifiedVersion": "sha256:de6eb773da041621cf6aaf95f7b12d3783f5b6b6155bcec596b419067eefd4ed"
-    },
-    {
       "path": "web/public/brand/icons/icon-192.png",
       "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
       "license": "Project-owned generated artwork",
@@ -70,27 +63,6 @@
       "license": "Project-owned generated artwork",
       "purpose": "Opaque maskable PWA launcher icon",
       "verifiedVersion": "brand-assets-v1:c0147099"
-    },
-    {
-      "path": "web/public/brand/icons/icon-monochrome-512.png",
-      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
-      "license": "Project-owned artwork",
-      "purpose": "Monochrome PWA launcher mask",
-      "verifiedVersion": "brand-assets-v1:de6eb773"
-    },
-    {
-      "path": "web/public/brand/safari-pinned-tab.svg",
-      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
-      "license": "Project-owned artwork",
-      "purpose": "Safari pinned-tab mask",
-      "verifiedVersion": "brand-assets-v1:de6eb773"
-    },
-    {
-      "path": "web/public/brand/scholens-raven-micro.svg",
-      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
-      "license": "Project-owned artwork",
-      "purpose": "Runtime compact product mark mask",
-      "verifiedVersion": "brand-assets-v1:de6eb773"
     },
     {
       "path": "web/public/brand/scholens-raven-portrait-128.png",
@@ -115,10 +87,10 @@
     },
     {
       "path": "web/src/app/favicon.ico",
-      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
-      "license": "Project-owned artwork",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
       "purpose": "Multi-resolution 16, 32, and 48 px browser favicon",
-      "verifiedVersion": "brand-assets-v1:de6eb773"
+      "verifiedVersion": "brand-assets-v1:c0147099"
     },
     {
       "path": "web/src/app/icon.png",

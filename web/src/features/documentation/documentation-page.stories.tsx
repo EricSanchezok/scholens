@@ -26,7 +26,7 @@ export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      canvasElement.querySelector('header [data-product-mark="micro"]'),
+      canvasElement.querySelector('header [data-product-mark="portrait"]'),
     ).not.toBeNull();
     const writeText = fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", {

@@ -1,11 +1,10 @@
 # Scholens product identity assets
 
-Scholens uses one raven character at two optical-detail levels:
+Scholens uses one canonical raven portrait:
 
-- `source/scholens-raven-master.png` is the selected high-detail portrait for
-  surfaces at 64 px and above.
-- `source/scholens-raven-micro.svg` preserves the head, beak, and monocle as a
-  crisp silhouette for browser chrome and compact product marks.
+- `source/scholens-raven-master.png` is the selected portrait for product
+  lockups, browser chrome, launcher artwork, social previews, and native-shell
+  exports.
 
 The portrait was generated with OpenAI ImageGen and selected on 2026-08-21.
 Its SHA-256 is
@@ -17,13 +16,14 @@ recorded at selection time.
 
 - Keep the identity achromatic. Product UI around the asset uses existing
   semantic color tokens; the raster artwork may retain its authored grayscale.
-- Do not shrink the portrait below 64 px. Use the micro mark instead.
+- Compact product marks intentionally use the same portrait at 24 or 32 px.
+- Do not create a separately drawn optical reduction for small sizes.
 - Do not replace the raven with an `S`, independently redraw its expression,
   remove the monocle, or add color accents.
 - Do not pre-round launcher artwork. Operating systems own the final mask.
 - Keep important maskable content inside the central safe circle.
 - Do not edit generated outputs directly. Run `pnpm brand:build` after changing
-  either source and commit the sources and outputs together.
+  the source and commit the source and outputs together.
 
 ## Generated groups
 

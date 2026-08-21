@@ -17,7 +17,7 @@ container, or separate account surface.
 
 The Manifest owns `/` as its `id`, `start_url`, and `scope`, uses standalone
 display without locking orientation, and publishes 192 px, 512 px, Apple Touch,
-favicon, Android maskable, and monochrome artwork. Light and Dark browser theme
+favicon and Android maskable artwork. Light and Dark browser theme
 colors come from the generated semantic token metadata; the selected raven
 master remains in `web/brand/source/`, and committed runtime exports live under
 `web/public/brand/`.

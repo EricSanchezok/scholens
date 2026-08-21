@@ -23,7 +23,6 @@ describe("Web App Manifest", () => {
         expect.objectContaining({ sizes: "192x192" }),
         expect.objectContaining({ sizes: "512x512" }),
         expect.objectContaining({ purpose: "maskable", sizes: "512x512" }),
-        expect.objectContaining({ purpose: "monochrome", sizes: "512x512" }),
       ]),
     );
   });

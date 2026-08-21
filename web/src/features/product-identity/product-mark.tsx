@@ -16,41 +16,23 @@ export function ProductMark({
   size?: ProductMarkSize;
 }) {
   const pixels = markSizes[size];
-
-  if (size === "display") {
-    return (
-      <span
-        aria-hidden="true"
-        className={cn(
-          "inline-block shrink-0 rounded-full bg-cover bg-center",
-          className,
-        )}
-        data-product-mark="portrait"
-        style={{
-          backgroundImage: "url('/brand/scholens-raven-portrait-128.png')",
-          height: pixels,
-          width: pixels,
-        }}
-      />
-    );
-  }
+  const portrait =
+    size === "display"
+      ? "/brand/scholens-raven-portrait-128.png"
+      : "/brand/scholens-raven-portrait-64.png";
 
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-block shrink-0 bg-current", className)}
-      data-product-mark="micro"
+      className={cn(
+        "inline-block shrink-0 rounded-full bg-cover bg-center",
+        className,
+      )}
+      data-product-mark="portrait"
       style={{
+        backgroundImage: `url('${portrait}')`,
         height: pixels,
-        maskImage: "url('/brand/scholens-raven-micro.svg')",
-        maskPosition: "center",
-        maskRepeat: "no-repeat",
-        maskSize: "contain",
         width: pixels,
-        WebkitMaskImage: "url('/brand/scholens-raven-micro.svg')",
-        WebkitMaskPosition: "center",
-        WebkitMaskRepeat: "no-repeat",
-        WebkitMaskSize: "contain",
       }}
     />
   );

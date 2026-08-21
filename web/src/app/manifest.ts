@@ -24,12 +24,6 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/brand/icons/icon-maskable-512.png",
         type: "image/png",
       },
-      {
-        purpose: "monochrome",
-        sizes: "512x512",
-        src: "/brand/icons/icon-monochrome-512.png",
-        type: "image/png",
-      },
     ],
     id: "/",
     name: "Scholens",

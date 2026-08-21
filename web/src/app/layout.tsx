@@ -30,15 +30,6 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Scholens",
     },
     description,
-    icons: {
-      other: [
-        {
-          color: pwaColors.light.textPrimary,
-          rel: "mask-icon",
-          url: "/brand/safari-pinned-tab.svg",
-        },
-      ],
-    },
     manifest: "/manifest.webmanifest",
     metadataBase: new URL(PRODUCTION_APP_ORIGIN),
     openGraph: {
