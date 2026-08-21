@@ -271,8 +271,8 @@ Selection, its Ranges, and all PDF.js text layers:
   browser's exact quote and partitions geometry into ascending, unique page
   segments. The post-pointer overlay paints every segment, while the floating
   toolbar follows the browser focus end of the gesture. Viewport-driven page
-  URL updates are deferred until the gesture ends and never realign the PDF
-  scroller in response to their own route update.
+  URL updates stay deferred until the post-pointer selection commit completes
+  and never realign the PDF scroller in response to their own route update.
 - The committed `selected_text` and overlay rectangles come from that same
   native Range. Partial words, search-highlight nesting, bidirectional text,
   and multi-column DOM order therefore keep the browser's own exact selection
