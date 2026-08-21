@@ -257,6 +257,15 @@ reading, and remains lazy at the visible semantic-block boundary so the product
 does not spend credits on unread text. Author names, affiliations, code,
 equations, and image pixels are not translated; references require opt-in.
 
+Academic translation uses the paper title as disambiguating context, preserves
+scientific modality, quantities, citations, protected technical notation, and
+established terminology, and avoids inventing target-language equivalents for
+terms without a stable convention. A raw PDF selection may contain page
+furniture or unrelated text spliced in by PDF reading order; translation omits
+that material only when it is unmistakable and otherwise preserves uncertain
+content. Reflow blocks are evidence-owned semantic content and never receive
+that selection-noise treatment.
+
 Completed translation is durable and reusable. Its identity includes the
 normalized source, language direction, custom instructions, prompt revision,
 and AI runtime profile revision. A cache hit is free and does not consume a

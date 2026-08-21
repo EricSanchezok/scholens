@@ -251,6 +251,7 @@ class TranslationWorkflow:
                         source_language=prepared.source_language,
                         target_language=prepared.target_language,
                         custom_instructions=prepared.custom_instructions,
+                        context_kind=prepared.context_kind,
                     )
                 ):
                     chunks.append(chunk)

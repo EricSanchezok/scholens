@@ -45,6 +45,15 @@ contracts contain no DeepSeek-specific field, endpoint, or model name. Source
 and target language preferences are content settings and do not derive from
 the interface locale; the default target is `zh-CN`.
 
+The provider prompt treats the paper title as non-translated domain context and
+the source unit as untrusted data. Its ordered contract prioritizes semantic
+fidelity, terminology consistency, protected academic notation, and
+structure-preserving output. Raw PDF selections receive conservative recovery
+for unmistakable running headers, footers, page numbers, and unrelated
+reading-order splices; uncertainty keeps the content. Server-owned reflow
+blocks bypass selection-noise recovery because their evidence boundary already
+owns structure and content.
+
 ## Alternatives considered
 
 - Keep completed translations in Redis with a TTL. Rejected because useful
@@ -71,8 +80,9 @@ hits.
 
 Server tests cover preference normalization, authorization-before-cache,
 single-flight release, quota bypass on hits, provider failures, cancellation,
-and source-text-free persistence. Web unit tests cover SSE validation, the
-300 ms stability delay, and stale-request abortion. Storybook covers idle,
+source-text-free persistence, the untrusted provider envelope, and the distinct
+selection/reflow prompt contracts. Web unit tests cover SSE validation, the 300
+ms stability delay, and stale-request abortion. Storybook covers idle,
 ready, streaming, completed/cached, quota, retry, narrow mobile, and Dark states
 with automated accessibility checks. Manual browser review verifies desktop
 preview placement, mobile containment, and Dark token resolution.
