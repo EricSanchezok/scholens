@@ -63,8 +63,8 @@ prefer container queries so they remain portable. `AuthViewport` supplies
 The browser must be allowed to scroll when a virtual keyboard reduces the
 visual viewport.
 
-Desktop authentication chrome exposes only the Scholens brand and the active
-surface heading. The heading is the mode label; the shell does not repeat
+Desktop authentication chrome exposes only the shared Scholens raven lockup
+and the active surface heading. The heading is the mode label; the shell does not repeat
 sign-in, registration, verification, or recovery state in a detached corner
 badge.
 

@@ -1,4 +1,131 @@
 {
   "version": 1,
-  "assets": []
+  "assets": [
+    {
+      "path": "web/brand/exports/native/scholens-raven-1024.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Platform-neutral 1024 px native-shell handoff",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/brand/exports/native/scholens-raven-128.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Platform-neutral 128 px native-shell handoff",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/brand/exports/native/scholens-raven-256.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Platform-neutral 256 px native-shell handoff",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/brand/exports/native/scholens-raven-512.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Platform-neutral 512 px native-shell handoff",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/brand/exports/native/scholens-raven-64.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Platform-neutral 64 px native-shell handoff",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/brand/source/scholens-raven-master.png",
+      "source": "OpenAI ImageGen output selected by the repository owner on 2026-08-21",
+      "license": "Project-owned generated artwork",
+      "purpose": "Canonical high-detail Scholens raven source",
+      "verifiedVersion": "sha256:c0147099ca28a03f63e922b81177adb3e50667ca4da9370dc0ff3ed2558ef5de"
+    },
+    {
+      "path": "web/brand/source/scholens-raven-micro.svg",
+      "source": "Repository-authored optical reduction of the selected Scholens raven",
+      "license": "Project-owned artwork",
+      "purpose": "Canonical compact raven and monocle source",
+      "verifiedVersion": "sha256:de6eb773da041621cf6aaf95f7b12d3783f5b6b6155bcec596b419067eefd4ed"
+    },
+    {
+      "path": "web/public/brand/icons/icon-192.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "192 px PWA launcher icon",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/public/brand/icons/icon-512.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "512 px PWA launcher icon",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/public/brand/icons/icon-maskable-512.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Opaque maskable PWA launcher icon",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/public/brand/icons/icon-monochrome-512.png",
+      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned artwork",
+      "purpose": "Monochrome PWA launcher mask",
+      "verifiedVersion": "brand-assets-v1:de6eb773"
+    },
+    {
+      "path": "web/public/brand/safari-pinned-tab.svg",
+      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned artwork",
+      "purpose": "Safari pinned-tab mask",
+      "verifiedVersion": "brand-assets-v1:de6eb773"
+    },
+    {
+      "path": "web/public/brand/scholens-raven-micro.svg",
+      "source": "Derived from the repository-authored micro raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned artwork",
+      "purpose": "Runtime compact product mark mask",
+      "verifiedVersion": "brand-assets-v1:de6eb773"
+    },
+    {
+      "path": "web/public/brand/scholens-raven-portrait-128.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "128 px in-product raven portrait",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/public/brand/scholens-raven-portrait-64.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "64 px in-product raven portrait",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/src/app/apple-icon.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Apple touch icon",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/src/app/icon.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "App Router application icon",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    },
+    {
+      "path": "web/src/app/opengraph-image.png",
+      "source": "Derived from the selected OpenAI ImageGen raven by web/scripts/brand-assets.mjs",
+      "license": "Project-owned generated artwork",
+      "purpose": "Open Graph and Twitter social preview",
+      "verifiedVersion": "brand-assets-v1:c0147099"
+    }
+  ]
 }

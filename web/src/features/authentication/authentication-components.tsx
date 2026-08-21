@@ -11,6 +11,7 @@ import {
   SuccessIcon,
   WarningIcon,
 } from "@/design-system/icons/semantic-icons";
+import { ProductLockup } from "@/features/product-identity";
 import { DOCUMENTATION_PATH, SOURCE_REPOSITORY_URL } from "@/lib/product";
 import { cn } from "@/lib/utilities/cn";
 import { AuthViewport } from "./auth-surface";
@@ -24,7 +25,7 @@ export function AuthenticationShell({
   return (
     <AuthViewport className="relative lg:items-center">
       <div className="pointer-events-none fixed top-[max(1.5rem,env(safe-area-inset-top))] left-4 text-lg font-semibold sm:left-8 lg:left-12">
-        Scholens
+        <ProductLockup size="standard" />
       </div>
       <div className="grid w-full gap-8 pt-20 sm:pt-12">
         {children}

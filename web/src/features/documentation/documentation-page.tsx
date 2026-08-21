@@ -13,6 +13,7 @@ import {
   KeyIcon,
   RepositoryIcon,
 } from "@/design-system/icons/semantic-icons";
+import { ProductLockup } from "@/features/product-identity";
 import { useLocalePreference } from "@/i18n/use-locale-preference";
 import {
   ACCESS_KEYS_SETTINGS_PATH,
@@ -85,7 +86,7 @@ function DocumentationHeader() {
           )}
           href="/"
         >
-          <span>Scholens</span>
+          <ProductLockup />
           <span className="text-secondary font-normal">/</span>
           <span className="text-secondary font-medium">{t("header.docs")}</span>
         </Link>

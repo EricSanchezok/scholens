@@ -10,6 +10,10 @@ No canonical Figma frame exists for this route. The user-approved content plan,
 the incumbent Web implementation, and the responsive acceptance states below
 are its design authority.
 
+The sticky header uses the shared compact Scholens raven lockup. It remains a
+single home link followed by the localized Docs suffix; the brand image does
+not add another focus target or compete with documentation wayfinding.
+
 ## Entry points and navigation
 
 Authenticated users reach the guide from the Workspace account menu or the

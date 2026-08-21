@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 7300",
     "build": "pnpm tokens:build && next build",
+    "brand:build": "node scripts/brand-assets.mjs build",
+    "brand:check": "node scripts/brand-assets.mjs check",
     "start": "next start --hostname 127.0.0.1 --port 7300",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -98,6 +100,7 @@
     "prettier-plugin-tailwindcss": "^0.7.2",
     "storybook": "^10.5.5",
     "style-dictionary": "^5.5.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

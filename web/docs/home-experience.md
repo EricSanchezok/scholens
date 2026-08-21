@@ -46,6 +46,9 @@ the deliberately deferred boundaries.
   horizontal insets rather than adding a second, narrower message measure.
 - Collapsing the desktop sidebar changes only its horizontal geometry. The top
   control, navigation rows, and account trigger retain their vertical anchors.
+  The expanded rail renders the shared Scholens raven lockup; the collapsed
+  rail keeps its controls semantically explicit rather than turning the brand
+  mark into a functional glyph.
   Unified workspace search is a compact header action beside the collapse
   control in the expanded rail; the collapsed rail places the same action below
   New chat so it remains reachable without relying on `Command/Ctrl+K`. Every

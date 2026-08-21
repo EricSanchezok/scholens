@@ -7,20 +7,69 @@ import { Providers } from "@/app/providers";
 import { defaultThemeName } from "@/design-system/generated/theme-metadata";
 import { motionInitializationScript } from "@/design-system/motion/motion-script";
 import { themeInitializationScript } from "@/design-system/theme/theme-script";
+import { metadataColors } from "@/design-system/generated/color-metadata";
 import { localeDirection, type AppLocale } from "@/i18n/config";
 import { formats } from "@/i18n/formats";
+import { PRODUCTION_APP_ORIGIN } from "@/lib/product";
 import "@/styles/globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("Metadata");
-  return { title: t("title"), description: t("description") };
+  const title = t("title");
+  const description = t("description");
+  return {
+    applicationName: "Scholens",
+    description,
+    icons: {
+      other: [
+        {
+          color: metadataColors.brandInk,
+          rel: "mask-icon",
+          url: "/brand/safari-pinned-tab.svg",
+        },
+      ],
+    },
+    manifest: "/manifest.webmanifest",
+    metadataBase: new URL(PRODUCTION_APP_ORIGIN),
+    openGraph: {
+      description,
+      images: [
+        {
+          alt: "Scholens raven",
+          height: 630,
+          url: "/opengraph-image.png",
+          width: 1200,
+        },
+      ],
+      siteName: "Scholens",
+      title,
+      type: "website",
+    },
+    title,
+    twitter: {
+      card: "summary_large_image",
+      description,
+      images: ["/opengraph-image.png"],
+      title,
+    },
+  };
 }
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: [
+    {
+      color: metadataColors.canvasLight,
+      media: "(prefers-color-scheme: light)",
+    },
+    {
+      color: metadataColors.canvasDark,
+      media: "(prefers-color-scheme: dark)",
+    },
+  ],
   viewportFit: "cover",
 };
 

@@ -45,6 +45,7 @@ import { useMotionPreference } from "@/design-system/motion/motion-provider";
 import { CurrentUserAvatar, type Actor } from "@/features/authentication";
 import { conversationQueries } from "@/features/conversation";
 import { GlobalSearch } from "@/features/paper-search";
+import { ProductLockup, ProductMark } from "@/features/product-identity";
 import {
   formatDateOnly,
   SettingsDialog,
@@ -861,7 +862,10 @@ function MobileNavigation({
   return (
     <aside className="flex h-full flex-col overflow-hidden bg-[var(--color-bg-sidebar)] pt-[env(safe-area-inset-top)]">
       <div className="flex min-h-20 shrink-0 items-center px-4 pr-16">
-        <MobileActorIdentity actor={actor} />
+        <div className="min-w-0 flex-1">
+          <MobileActorIdentity actor={actor} />
+        </div>
+        <ProductMark className="text-secondary ml-3" />
       </div>
       <div
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
@@ -1164,17 +1168,14 @@ function Sidebar({
         )}
       >
         <div className="relative mb-3 flex h-10 shrink-0 items-center justify-end">
-          <Link
-            aria-hidden={collapsed || undefined}
-            className={cn(
-              "motion-control text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap",
-              collapsed && "pointer-events-none opacity-0",
-            )}
-            href="/"
-            tabIndex={collapsed ? -1 : undefined}
-          >
-            Scholens
-          </Link>
+          {!collapsed && (
+            <Link
+              className="motion-control text-ui absolute left-1 font-semibold tracking-[-0.003em] whitespace-nowrap"
+              href="/"
+            >
+              <ProductLockup />
+            </Link>
+          )}
           <div className="flex items-center gap-1">
             {!collapsed && (
               <Tooltip>
