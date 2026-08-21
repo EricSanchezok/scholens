@@ -28,6 +28,7 @@ from app.modules.papers.application.contracts.documents import (
 )
 from app.shared.application import Actor, ApplicationExecutor, OperationContext
 from app.shared.domain.enums import ResearchItemKind
+from app.shared.domain.enums import PaperStatus
 from app.transport.http.public_v1.auth_dependencies import (
     get_required_operation,
     get_required_user,
@@ -43,6 +44,7 @@ public_document_router = APIRouter()
 def list_library_papers(
     q: Annotated[str | None, Query(max_length=500)] = None,
     tag_ids: Annotated[list[UUID] | None, Query()] = None,
+    statuses: Annotated[list[PaperStatus] | None, Query()] = None,
     sort: LibraryPaperSort = LibraryPaperSort.ADDED_DESC,
     cursor: Annotated[str | None, Query(max_length=2048)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -56,6 +58,7 @@ def list_library_papers(
             actor=current_user,
             query=q,
             tag_ids=tuple(tag_ids or ()),
+            statuses=tuple(statuses or ()),
             sort=sort,
             cursor=cursor,
             limit=limit,

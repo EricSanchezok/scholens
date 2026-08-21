@@ -57,6 +57,7 @@ from app.modules.papers.infrastructure.models import (
     PaperTag,
     UploadReservation,
 )
+from app.modules.papers.infrastructure.preferences import PaperListPreference
 from app.modules.papers.infrastructure.upload_sessions import PaperUploadSession
 from app.modules.billing.infrastructure.usage_models import (
     TokenUsageEvent,
@@ -130,6 +131,7 @@ __all__ = [
     "DocumentReflowBlock",
     "PaperStatus",
     "PaperTag",
+    "PaperListPreference",
     "PaperUploadSession",
     "UploadReservation",
     "Project",

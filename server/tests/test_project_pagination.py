@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,6 +11,7 @@ from app.bootstrap.adapters.project_gateway import SqlAlchemyProjectGateway
 from app.modules.papers.application.contracts.documents import (
     LibraryOutputResponse,
     LibraryOutputSort,
+    PaperStatus,
 )
 from app.modules.projects.application.invitation_tokens import (
     ProjectInvitationTokenCodec,
@@ -29,6 +32,7 @@ from app.modules.projects.application.projects import (
 )
 from app.shared.application import Actor, SignedCursorCodec
 from app.shared.domain import AppError, FailureKind
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 
@@ -191,6 +195,7 @@ def test_project_documents_cursor_survives_page_size_changes() -> None:
         actor=_actor(),
         project_id=project_id,
         load_urls=False,
+        load_preview_urls=False,
         sort=ProjectPaperSort.ADDED_DESC,
         limit=1,
     )
@@ -198,6 +203,7 @@ def test_project_documents_cursor_survives_page_size_changes() -> None:
         actor=_actor(),
         project_id=project_id,
         load_urls=False,
+        load_preview_urls=False,
         sort=ProjectPaperSort.ADDED_DESC,
         limit=50,
         cursor=first.next_cursor,
@@ -206,6 +212,243 @@ def test_project_documents_cursor_survives_page_size_changes() -> None:
     assert resized.total_count == 2
     assert gateway.list_documents.call_args_list[1].kwargs["position"].id == first_id
     assert gateway.list_documents.call_args_list[1].kwargs["limit"] == 50
+
+
+def test_project_documents_cursor_is_bound_to_personal_filters() -> None:
+    gateway = MagicMock()
+    gateway.list_documents.return_value = _paper_page(
+        item_id=uuid4(),
+        has_more=True,
+    )
+    projects = _projects(gateway=gateway)
+    project_id = uuid4()
+    tag_id = uuid4()
+
+    first = projects.documents(
+        actor=_actor(),
+        project_id=project_id,
+        load_urls=False,
+        load_preview_urls=False,
+        personal_statuses=(PaperStatus.reading,),
+        personal_tag_ids=(tag_id,),
+        limit=1,
+    )
+
+    assert first.next_cursor is not None
+    with pytest.raises(AppError, match="cursor") as raised:
+        projects.documents(
+            actor=_actor(),
+            project_id=project_id,
+            load_urls=False,
+            load_preview_urls=False,
+            personal_statuses=(PaperStatus.completed,),
+            personal_tag_ids=(tag_id,),
+            cursor=first.next_cursor,
+            limit=1,
+        )
+
+    assert raised.value.code == "project_cursor_invalid"
+
+
+@pytest.mark.parametrize(
+    ("changed_argument", "value"),
+    [("load_urls", True), ("load_preview_urls", True)],
+)
+def test_project_documents_cursor_is_bound_to_url_loading_contract(
+    changed_argument: str,
+    value: bool,
+) -> None:
+    gateway = MagicMock()
+    gateway.list_documents.return_value = _paper_page(
+        item_id=uuid4(),
+        has_more=True,
+    )
+    projects = _projects(gateway=gateway)
+    project_id = uuid4()
+
+    first = projects.documents(
+        actor=_actor(),
+        project_id=project_id,
+        load_urls=False,
+        load_preview_urls=False,
+        limit=1,
+    )
+    arguments = {
+        "actor": _actor(),
+        "project_id": project_id,
+        "load_urls": False,
+        "load_preview_urls": False,
+        "cursor": first.next_cursor,
+        "limit": 1,
+    }
+    arguments[changed_argument] = value
+
+    with pytest.raises(AppError, match="cursor") as raised:
+        projects.documents(**arguments)
+
+    assert raised.value.code == "project_cursor_invalid"
+
+
+def test_project_personal_filters_are_actor_scoped_before_counting() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.execute.return_value.all.return_value = []
+    tag_id = uuid4()
+
+    with patch("app.bootstrap.adapters.project_gateway.project_repository.get_access"):
+        page = SqlAlchemyProjectGateway(
+            db,
+            invitation_tokens=ProjectInvitationTokenCodec(
+                "project-pagination-test-secret-32-bytes"
+            ),
+        ).list_documents(
+            actor=_actor(7),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=False,
+            query=None,
+            personal_statuses=(PaperStatus.reading,),
+            personal_tag_ids=(tag_id,),
+            sort=ProjectPaperSort.PERSONAL_ACTIVITY_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+
+    assert page.total_count == 0
+    count_sql = str(
+        db.scalar.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    page_sql = str(
+        db.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    for statement in (count_sql, page_sql):
+        assert "library_papers.user_id = 7" in statement
+        assert "library_papers.status IN ('reading')" in statement
+        assert tag_id.hex in statement
+        assert "paper_tags.user_id = 7" in statement
+
+
+def test_project_paper_list_applies_literal_like_pattern_to_every_text_field() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.execute.return_value.all.return_value = []
+
+    with patch("app.bootstrap.adapters.project_gateway.project_repository.get_access"):
+        SqlAlchemyProjectGateway(
+            db,
+            invitation_tokens=ProjectInvitationTokenCodec(
+                "project-pagination-test-secret-32-bytes"
+            ),
+        ).list_documents(
+            actor=_actor(),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=False,
+            query="100%_\\",
+            personal_statuses=(),
+            personal_tag_ids=(),
+            sort=ProjectPaperSort.ADDED_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+
+    statements = [db.scalar.call_args.args[0], db.execute.call_args.args[0]]
+    for statement in statements:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        assert sql.count(" LIKE ") == sql.count(" ESCAPE '\\\\'")
+        assert "%100\\%\\_\\\\%" in compiled.params.values()
+
+
+def test_project_document_urls_are_signed_only_when_independently_requested() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 1
+    document_id = uuid4()
+    association_id = uuid4()
+    now = datetime.now(timezone.utc)
+    paper = SimpleNamespace(
+        id=document_id,
+        title="Preview contract",
+        original_filename="preview-contract.pdf",
+        abstract=None,
+        authors=[],
+        institutions=[],
+        journal=None,
+        publisher=None,
+        doi=None,
+        publish_date=None,
+        s3_object_key="papers/original.pdf",
+        preview_s3_key="previews/page-1.png",
+        summary=None,
+        keywords=[],
+    )
+    row = SimpleNamespace(
+        Document=paper,
+        LibraryPaper=SimpleNamespace(
+            last_accessed_at=now,
+            status=PaperStatus.completed,
+            tags=[],
+        ),
+        ProjectPaper=SimpleNamespace(id=association_id, created_at=now),
+    )
+    db.execute.return_value.all.return_value = [row]
+    gateway = SqlAlchemyProjectGateway(
+        db,
+        invitation_tokens=ProjectInvitationTokenCodec(
+            "project-pagination-test-secret-32-bytes"
+        ),
+    )
+
+    with (
+        patch("app.bootstrap.adapters.project_gateway.project_repository.get_access"),
+        patch(
+            "app.bootstrap.adapters.project_gateway.s3_service.generate_presigned_urls",
+            side_effect=lambda objects: {
+                key: f"https://signed.example/{object_key}"
+                for key, object_key in objects.items()
+            },
+        ) as sign,
+    ):
+        unsigned = gateway.list_documents(
+            actor=_actor(),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=False,
+            query=None,
+            personal_statuses=(),
+            personal_tag_ids=(),
+            sort=ProjectPaperSort.ADDED_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+        sign.assert_not_called()
+        assert unsigned.items[0].file_url is None
+        assert unsigned.items[0].preview_url is None
+        assert unsigned.items[0].status == "reading"
+        assert unsigned.items[0].personal_status is PaperStatus.completed
+
+        preview_only = gateway.list_documents(
+            actor=_actor(),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=True,
+            query=None,
+            personal_statuses=(),
+            personal_tag_ids=(),
+            sort=ProjectPaperSort.ADDED_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+
+    sign.assert_called_once_with({str(document_id): "previews/page-1.png"})
+    assert preview_only.items[0].file_url is None
+    assert preview_only.items[0].preview_url == (
+        "https://signed.example/previews/page-1.png"
+    )
 
 
 def test_project_outputs_cursor_survives_page_size_changes() -> None:
@@ -268,3 +511,30 @@ def test_project_list_uses_one_aggregate_projection_query() -> None:
     assert "conversations" in statement
     assert "research_items.audience_project_id" in statement
     assert "project_collaborators" in statement
+
+
+def test_project_list_applies_literal_like_pattern_to_every_text_field() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.execute.return_value.all.return_value = []
+
+    SqlAlchemyProjectGateway(
+        db,
+        invitation_tokens=ProjectInvitationTokenCodec(
+            "project-pagination-test-secret-32-bytes"
+        ),
+    ).list_projects(
+        user_id=7,
+        query="100%_\\",
+        sort=ProjectSort.ACTIVITY_DESC,
+        limit=20,
+        direction=ProjectPageDirection.FORWARD,
+        position=None,
+    )
+
+    statements = [db.scalar.call_args.args[0], db.execute.call_args.args[0]]
+    for statement in statements:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        assert sql.count(" LIKE ") == sql.count(" ESCAPE '\\\\'")
+        assert "%100\\%\\_\\\\%" in compiled.params.values()

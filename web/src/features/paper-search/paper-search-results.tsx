@@ -1,52 +1,18 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Route } from "next";
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
-import { Button, keyboardFocusRing } from "@/components/ui";
-import { cn } from "@/lib/utilities/cn";
+import { Button } from "@/components/ui";
+import {
+  PaperCollectionWorkbench,
+  updatePaperStatus,
+  type PaperCollectionItem,
+} from "@/features/paper-collection";
 import type { PaperSearchResult } from "./api";
-
-function SearchPreview({ paper }: { paper: PaperSearchResult }) {
-  const t = useTranslations("PaperSearch.results");
-  const excerpt = paper.snippets?.[0]?.text || paper.abstract;
-  return (
-    <aside
-      aria-label={t("preview")}
-      className="border-line sticky top-4 hidden max-h-[calc(100dvh-8rem)] min-w-0 overflow-y-auto border-l pl-5 xl:block"
-    >
-      {paper.preview_url ? (
-        // Server returns a short-lived authenticated object-store URL.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          alt=""
-          className="border-line bg-subtle mx-auto max-h-56 w-auto rounded-[var(--radius-md)] border object-contain"
-          src={paper.preview_url}
-        />
-      ) : null}
-      <h2 className="mt-4 text-base leading-6 font-semibold [overflow-wrap:anywhere]">
-        {paper.title || t("untitled")}
-      </h2>
-      <p className="text-secondary mt-2 text-xs leading-5">
-        {paper.authors?.join(" · ") || t("unknownAuthors")}
-      </p>
-      <p className="text-secondary mt-5 text-xs font-medium">
-        {t("bestMatch")}
-      </p>
-      <p className="text-secondary mt-2 text-sm leading-6">
-        {excerpt || t("noExcerpt")}
-      </p>
-      <Button asChild className="mt-5 w-full" size="sm" variant="secondary">
-        <Link href={`/reader/${paper.document_id}` as Route}>
-          {t("openReader")}
-        </Link>
-      </Button>
-    </aside>
-  );
-}
 
 export function PaperSearchResults({
   error,
@@ -55,7 +21,10 @@ export function PaperSearchResults({
   loadingMore,
   onLoadMore,
   onRetry,
+  onTagClick,
   papers,
+  readerProjectId,
+  toolbar,
   total,
 }: {
   error?: unknown;
@@ -64,14 +33,69 @@ export function PaperSearchResults({
   loadingMore: boolean;
   onLoadMore: () => Promise<void>;
   onRetry: () => void;
+  onTagClick?: (tagId: string) => void;
   papers: PaperSearchResult[];
+  readerProjectId?: string;
+  toolbar?: React.ReactNode;
   total?: number;
 }) {
   const t = useTranslations("PaperSearch.results");
-  const [previewId, setPreviewId] = React.useState<string>();
+  const format = useFormatter();
+  const queryClient = useQueryClient();
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
-  const preview =
-    papers.find((paper) => paper.document_id === previewId) ?? papers[0];
+  const statusMutation = useMutation({
+    mutationFn: ({
+      documentId,
+      status,
+    }: {
+      documentId: string;
+      status: "todo" | "reading" | "completed";
+    }) => updatePaperStatus(documentId, status),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["library"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["paper-search"] }),
+      ]);
+    },
+  });
+  const items = React.useMemo<PaperCollectionItem[]>(
+    () =>
+      papers.map((paper) => ({
+        abstract: paper.abstract ?? undefined,
+        addedAt: format.dateTime(new Date(paper.created_at), {
+          dateStyle: "medium",
+        }),
+        authors: paper.authors ?? [],
+        doi: paper.doi ?? undefined,
+        href: (readerProjectId
+          ? `/reader/${paper.document_id}?project=${readerProjectId}`
+          : `/reader/${paper.document_id}`) as Route,
+        id: paper.document_id,
+        inLibrary: Boolean(paper.personal_status),
+        keywords: paper.keywords ?? [],
+        lastOpened: paper.personal_last_accessed_at
+          ? format.dateTime(new Date(paper.personal_last_accessed_at), {
+              dateStyle: "medium",
+            })
+          : undefined,
+        previewUrl: paper.preview_url ?? undefined,
+        publication: [
+          paper.journal,
+          paper.publish_date
+            ? new Date(paper.publish_date).getUTCFullYear().toString()
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        snippet: paper.snippets?.[0]?.text ?? undefined,
+        status: paper.personal_status ?? undefined,
+        summary: paper.summary ?? undefined,
+        tags: paper.personal_tags ?? [],
+        title: paper.title || t("untitled"),
+      })),
+    [format, papers, readerProjectId, t],
+  );
 
   React.useEffect(() => {
     const target = loadMoreRef.current;
@@ -109,45 +133,24 @@ export function PaperSearchResults({
 
   return (
     <div className="min-w-0">
-      <p className="text-secondary mb-3 text-xs">
-        {t("count", { count: total ?? papers.length })}
-      </p>
-      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
-        <ul className="divide-line border-line min-w-0 divide-y border-y">
-          {papers.map((paper) => {
-            const excerpt = paper.snippets?.[0]?.text || paper.abstract;
-            return (
-              <li
-                className="hover:bg-hover focus-within:bg-hover active:bg-pressed motion-control min-w-0 rounded-[var(--radius-lg)]"
-                key={paper.document_id}
-                onFocusCapture={() => setPreviewId(paper.document_id)}
-                onMouseEnter={() => setPreviewId(paper.document_id)}
-              >
-                <Link
-                  className={cn(
-                    "grid min-w-0 gap-1 px-3 py-3",
-                    keyboardFocusRing,
-                  )}
-                  href={`/reader/${paper.document_id}` as Route}
-                >
-                  <span className="line-clamp-2 text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
-                    {paper.title || t("untitled")}
-                  </span>
-                  <span className="text-secondary truncate text-xs">
-                    {paper.authors?.join(" · ") || t("unknownAuthors")}
-                  </span>
-                  {excerpt ? (
-                    <span className="text-secondary mt-1 line-clamp-2 text-xs leading-5">
-                      {excerpt}
-                    </span>
-                  ) : null}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-        {preview ? <SearchPreview paper={preview} /> : null}
-      </div>
+      <PaperCollectionWorkbench
+        items={items}
+        onStatusChange={(item, status) => {
+          if (item.inLibrary) {
+            statusMutation.mutate({ documentId: item.id, status });
+          }
+        }}
+        onTagClick={(tag) => onTagClick?.(tag.id)}
+        personalLabels
+        toolbar={
+          <div className="flex min-w-0 items-center gap-3">
+            {toolbar ? <div className="min-w-0 flex-1">{toolbar}</div> : null}
+            <p className="text-secondary shrink-0 text-xs">
+              {t("count", { count: total ?? papers.length })}
+            </p>
+          </div>
+        }
+      />
       {hasMore ? (
         <div className="flex justify-center py-6" ref={loadMoreRef}>
           <Button

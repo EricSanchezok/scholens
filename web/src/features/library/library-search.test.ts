@@ -13,6 +13,7 @@ describe("Library URL state", () => {
       kinds: [],
       query: "",
       sort: "added_desc",
+      statuses: [],
       tab: "papers",
       tagIds: [],
     });
@@ -21,17 +22,18 @@ describe("Library URL state", () => {
   it("round-trips repeated Papers filters and cursor state", () => {
     const state = parseLibrarySearch(
       new URLSearchParams(
-        "q=reasoning&sort=published_desc&tag=one&tag=two&cursor=opaque",
+        "q=reasoning&sort=last_accessed_desc&status=reading&status=completed&tag=one&tag=two&cursor=opaque",
       ),
     );
     expect(state).toMatchObject({
       cursor: "opaque",
       query: "reasoning",
-      sort: "published_desc",
+      sort: "last_accessed_desc",
+      statuses: ["reading", "completed"],
       tagIds: ["one", "two"],
     });
     expect(serializeLibrarySearch(state).toString()).toBe(
-      "q=reasoning&sort=published_desc&tag=one&tag=two&cursor=opaque",
+      "q=reasoning&sort=last_accessed_desc&tag=one&tag=two&status=reading&status=completed&cursor=opaque",
     );
   });
 

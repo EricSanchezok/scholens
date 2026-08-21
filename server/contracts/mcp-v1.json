@@ -22792,7 +22792,8 @@
               "added_asc",
               "published_desc",
               "published_asc",
-              "title_asc"
+              "title_asc",
+              "last_accessed_desc"
             ],
             "title": "LibraryPaperSort",
             "type": "string"
@@ -26525,7 +26526,8 @@
             "enum": [
               "added_desc",
               "title_asc",
-              "published_desc"
+              "published_desc",
+              "personal_activity_desc"
             ],
             "title": "ProjectPaperSort",
             "type": "string"
@@ -26831,6 +26833,46 @@
               }
             ]
           },
+          "LibraryPaperTagResponse": {
+            "properties": {
+              "color": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Color"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "color"
+            ],
+            "title": "LibraryPaperTagResponse",
+            "type": "object"
+          },
+          "PaperStatus": {
+            "enum": [
+              "todo",
+              "reading",
+              "completed"
+            ],
+            "title": "PaperStatus",
+            "type": "string"
+          },
           "ProjectPaperListResponse": {
             "properties": {
               "items": {
@@ -27023,6 +27065,56 @@
                 ],
                 "title": "Journal"
               },
+              "keywords": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Keywords",
+                "type": "array"
+              },
+              "personal_last_accessed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Personal Last Accessed At"
+              },
+              "personal_status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PaperStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "personal_tags": {
+                "items": {
+                  "$ref": "#/$defs/LibraryPaperTagResponse"
+                },
+                "title": "Personal Tags",
+                "type": "array"
+              },
+              "preview_url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Preview Url"
+              },
               "publish_date": {
                 "anyOf": [
                   {
@@ -27049,6 +27141,18 @@
               "status": {
                 "title": "Status",
                 "type": "string"
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Summary"
               },
               "title": {
                 "anyOf": [
@@ -36352,6 +36456,25 @@
           "PaperSearchFilters": {
             "additionalProperties": false,
             "properties": {
+              "personal_statuses": {
+                "description": "Optional personal Library statuses matched with OR semantics.",
+                "items": {
+                  "$ref": "#/$defs/PaperStatus"
+                },
+                "maxItems": 3,
+                "title": "Personal Statuses",
+                "type": "array"
+              },
+              "personal_tag_ids": {
+                "description": "Optional personal Library tag identifiers matched with OR semantics.",
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 120,
+                "title": "Personal Tag Ids",
+                "type": "array"
+              },
               "published_from": {
                 "anyOf": [
                   {
@@ -36390,6 +36513,15 @@
               "recent"
             ],
             "title": "PaperSearchSort",
+            "type": "string"
+          },
+          "PaperStatus": {
+            "enum": [
+              "todo",
+              "reading",
+              "completed"
+            ],
+            "title": "PaperStatus",
             "type": "string"
           },
           "ProjectKnowledgeScope": {

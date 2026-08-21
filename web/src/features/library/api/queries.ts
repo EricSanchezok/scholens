@@ -32,7 +32,9 @@ export const libraryQueries = {
         return data;
       },
     }),
-  papers: (state: Pick<LibrarySearchState, "query" | "sort" | "tagIds">) =>
+  papers: (
+    state: Pick<LibrarySearchState, "query" | "sort" | "statuses" | "tagIds">,
+  ) =>
     infiniteQueryOptions({
       queryKey: libraryKeys.papers(state),
       initialPageParam: undefined as string | undefined,
@@ -45,6 +47,7 @@ export const libraryQueries = {
               q: state.query || undefined,
               sort: state.sort as PaperSort,
               tag_ids: state.tagIds.length ? state.tagIds : undefined,
+              statuses: state.statuses.length ? state.statuses : undefined,
             },
           },
           signal,

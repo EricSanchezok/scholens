@@ -320,6 +320,10 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   await searchbox.fill("retrieval");
   expect((await searchRequest).postDataJSON()).toEqual({
     collection: { kind: "personal_library" },
+    filters: {
+      personal_statuses: [],
+      personal_tag_ids: [],
+    },
     limit: 50,
     query: "retrieval",
     sort: "relevance",
@@ -351,9 +355,9 @@ test("supports the Library Papers critical journey", async ({ page }) => {
     source: { doi: "10.48550/arXiv.1706.03762", kind: "doi" },
   });
   await expect(dialog).toHaveCount(0);
-  const papersTable = page.getByRole("table");
-  await expect(papersTable.getByText("agentic-systems.pdf")).toBeVisible();
-  await expect(papersTable.getByText("Reading PDF")).toBeVisible();
+  const ingestionRow = page.locator("[data-ingestion-row]");
+  await expect(ingestionRow.getByText("agentic-systems.pdf")).toBeVisible();
+  await expect(ingestionRow.getByText("Reading PDF")).toBeVisible();
 
   await expect(page).toHaveTitle(/Scholens/);
   await expect
@@ -424,9 +428,9 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
     },
   });
   await expect(dialog).toHaveCount(0);
-  const papersTable = page.getByRole("table");
-  await expect(papersTable.getByText("local-paper.pdf")).toBeVisible();
-  await expect(papersTable.getByText("Waiting to process")).toBeVisible();
+  const ingestionRow = page.locator("[data-ingestion-row]");
+  await expect(ingestionRow.getByText("local-paper.pdf")).toBeVisible();
+  await expect(ingestionRow.getByText("Waiting to process")).toBeVisible();
 
   const cancelRequest = page.waitForRequest(
     (request) =>
@@ -435,9 +439,9 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
         .url()
         .includes("/paper-ingestions/00000000-0000-4000-8000-000000000090"),
   );
-  await papersTable.getByRole("button", { name: "Cancel processing" }).click();
+  await ingestionRow.getByRole("button", { name: "Cancel processing" }).click();
   await cancelRequest;
-  await expect(papersTable.getByText("local-paper.pdf")).toHaveCount(0);
+  await expect(ingestionRow.getByText("local-paper.pdf")).toHaveCount(0);
 });
 
 test("restores URL state and contains each supported phone width", async ({
@@ -451,10 +455,9 @@ test("restores URL state and contains each supported phone width", async ({
   for (const width of [320, 390, 430]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/library");
-    await expect(page.getByRole("table")).toHaveCount(0);
     await expect(
       page
-        .getByRole("listitem")
+        .getByRole("row")
         .filter({ hasText: "Attention Is All You Need", visible: true }),
     ).toBeVisible();
     expect(

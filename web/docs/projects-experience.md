@@ -42,10 +42,15 @@ and the shared Conversation feature.
   probes the Server's collaborative-annotation impact contract; if Project
   threads exist, the member must confirm the reported thread and comment
   counts before the destructive retry is sent.
-- Project paper browsing uses the same dense rows, progressive continuation,
-  desktop preview, and hybrid retrieval language as Library, with the search
-  collection restricted to the authorized Project UUID. It does not load the
-  full Project into browser memory or implement a route-local search index.
+- Project paper browsing uses the shared full-width, virtualized Paper
+  Collection workbench, single compact utility row, continuous list/preview
+  boundary, personal metadata filters, progressive continuation, desktop
+  preview, and hybrid retrieval language as Library, with the search collection
+  restricted to the authorized Project UUID. Status and tags are
+  always the current actor's private Library metadata and are labeled “My”. A
+  Project-only paper is explicitly “Not in Library” and has no fabricated
+  personal state. It does not load the full Project into browser memory or
+  implement a route-local search index.
 - Outputs use the canonical Research Item kinds. Types without a dedicated
   viewer are truthful list rows rather than fake links.
 - Archive is not exposed because there is no archived-project collection or
@@ -85,9 +90,10 @@ Project detail inherits the Library collection language: underlined tabs,
 pill-shaped search, the shared light-line Select surface for sorting and kind,
 quiet separators, local row hover, and unboxed empty states. Paper,
 conversation, output, and member counts live with the project title metadata
-instead of in a separate metric card. The detail canvas uses a narrower
-editorial column (`max-w-5xl`) than the Projects and Library list pages so
-content does not stretch edge to edge on wide monitors.
+instead of in a separate metric card. The Overview and Outputs canvases retain
+the narrower editorial column (`max-w-5xl`). Papers is the intentional
+exception: it uses the full available width for the shared table and details
+preview.
 
 The Overview tab is an editorial two-column composition on desktop: recent
 papers on the left, recent outputs stacked above a Collaboration strip on the
@@ -118,11 +124,17 @@ independent action target and is always discoverable on touch layouts.
   queries.
 - Project activity is the latest relevant Project metadata, paper membership,
   current-member conversation, or visible Project output timestamp.
-- `GET /api/v1/projects/{projectId}/papers` supports browse sorting and keyset
-  pagination and exposes the Project relationship's `added_at`. Queries of two
-  or more characters use `POST /api/v1/search/papers` with a Project selection
-  collection so fuzzy, full-text, and semantic ranking stay shared with
-  Library.
+- `GET /api/v1/projects/{projectId}/papers` supports browse sorting, actor-owned
+  `personal_statuses` / `personal_tag_ids` filters, personal activity sorting,
+  and keyset pagination. It exposes `preview_url`, summary, keywords, and the
+  current actor's optional personal status, tags, and last-access timestamp in
+  addition to the Project relationship's `added_at`. Filtering happens before
+  count and pagination. Queries of two or more characters use
+  `POST /api/v1/search/papers` with the same personal filters and a Project
+  selection collection so fuzzy, full-text, and semantic ranking stay shared.
+  Preview and source-file URL signing are independent: the Web requests
+  `load_preview_urls=true` and leaves `load_urls=false`, while omitted flags and
+  MCP access sign neither URL. Both flags participate in cursor validation.
 - `GET /api/v1/projects/{projectId}/outputs` applies the same search, kind,
   sort, visibility, and cursor semantics as Library Outputs while restricting
   the collection to one authorized Project.
@@ -152,7 +164,9 @@ Canonical Figma file: [Scholens — Product Design](https://www.figma.com/design
 | overview, chat collapsed                    | `1085:1371`              | `Features/Projects/Detail` → `OverviewCollapsed`            |
 | chat expanded                               | `1085:1431`              | `ChatExpanded`                                              |
 | shared history open                         | `1087:1783`              | `ChatExpanded`, Conversation switcher stories               |
-| papers populated / empty                    | `1087:1538`              | `Papers`, `PapersEmpty`                                     |
+| papers populated / empty                    | `1172:1887`              | `Features/Paper Collection/Workbench` → `ProjectPapers`     |
+| paper narrow / mobile / dark                | `1172:1888`–`1172:1890`  | `Narrow`, `Mobile`, `Dark`                                  |
+| paper filters / columns / folded preview    | `1172:1891`              | `Library` interaction and account preference states         |
 | outputs populated / empty                   | `1087:1622`              | `Outputs`, `OutputsEmpty`                                   |
 | manage / Add papers first                   | `1087:1715`              | `Papers`                                                    |
 | mobile 390 project / chat                   | `1088:1874`, `1088:1918` | `MobileChat` and responsive E2E                             |

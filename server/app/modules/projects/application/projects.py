@@ -65,6 +65,7 @@ from app.modules.papers.application.contracts.documents import (
     LibraryOutputSort,
 )
 from app.shared.domain.enums import ResearchItemKind
+from app.shared.domain.enums import PaperStatus
 
 
 class ProjectPageDirection(StrEnum):
@@ -278,7 +279,10 @@ class ProjectGateway(Protocol):
         actor: Actor,
         project_id: UUID,
         load_urls: bool,
+        load_preview_urls: bool,
         query: str | None,
+        personal_statuses: tuple[PaperStatus, ...],
+        personal_tag_ids: tuple[UUID, ...],
         sort: ProjectPaperSort,
         limit: int,
         direction: ProjectPageDirection,
@@ -765,17 +769,27 @@ class Projects:
         actor: Actor,
         project_id: UUID,
         load_urls: bool,
+        load_preview_urls: bool = False,
         query: str | None = None,
+        personal_statuses: tuple[PaperStatus, ...] = (),
+        personal_tag_ids: tuple[UUID, ...] = (),
         sort: ProjectPaperSort = ProjectPaperSort.ADDED_DESC,
         cursor: str | None = None,
         limit: int = 20,
     ) -> ProjectPaperListResponse:
         normalized_query = query.strip() if query and query.strip() else None
+        normalized_statuses = tuple(
+            sorted(set(personal_statuses), key=lambda value: value.value)
+        )
+        normalized_tag_ids = tuple(sorted(set(personal_tag_ids), key=str))
         filters = {
             "project_id": str(project_id),
             "q": normalized_query,
             "sort": sort.value,
             "load_urls": load_urls,
+            "load_preview_urls": load_preview_urls,
+            "personal_statuses": [value.value for value in normalized_statuses],
+            "personal_tag_ids": [str(value) for value in normalized_tag_ids],
         }
         direction, position = self._decode_cursor(
             actor=actor,
@@ -787,7 +801,10 @@ class Projects:
             actor=actor,
             project_id=project_id,
             load_urls=load_urls,
+            load_preview_urls=load_preview_urls,
             query=normalized_query,
+            personal_statuses=normalized_statuses,
+            personal_tag_ids=normalized_tag_ids,
             sort=sort,
             limit=limit,
             direction=direction,

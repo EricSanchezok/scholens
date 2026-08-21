@@ -9,8 +9,12 @@ export const paperSortSchema = z.enum([
   "published_desc",
   "published_asc",
   "title_asc",
+  "last_accessed_desc",
 ]);
 export type PaperSort = z.infer<typeof paperSortSchema>;
+
+export const paperStatusSchema = z.enum(["todo", "reading", "completed"]);
+export type PaperStatus = z.infer<typeof paperStatusSchema>;
 
 export const outputSortSchema = z.enum([
   "updated_desc",
@@ -35,6 +39,7 @@ export type LibrarySearchState = {
   sort: PaperSort | OutputSort;
   tab: LibraryTab;
   tagIds: string[];
+  statuses: PaperStatus[];
 };
 
 function values(params: URLSearchParams, key: string) {
@@ -69,6 +74,10 @@ export function parseLibrarySearch(
           : "added_desc",
     tab,
     tagIds: values(params, "tag"),
+    statuses: values(params, "status").flatMap((value) => {
+      const parsed = paperStatusSchema.safeParse(value);
+      return parsed.success ? [parsed.data] : [];
+    }),
   };
 }
 
@@ -79,6 +88,7 @@ export function serializeLibrarySearch(state: LibrarySearchState) {
   const defaultSort = state.tab === "papers" ? "added_desc" : "updated_desc";
   if (state.sort !== defaultSort) params.set("sort", state.sort);
   state.tagIds.forEach((tagId) => params.append("tag", tagId));
+  state.statuses.forEach((status) => params.append("status", status));
   state.kinds.forEach((kind) => params.append("kind", kind));
   if (state.cursor) params.set("cursor", state.cursor);
   return params;

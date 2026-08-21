@@ -641,12 +641,19 @@ that are reachable through several paths unique. Personal-library listing,
 tags, storage accounting, and ingestion ownership continue to use
 `LibraryPaper`; no Project paper is copied into the personal library.
 
+Personal status and tag filters are applied to an actor-scoped `LibraryPaper`
+projection before search totals and page slicing. Search results expose the
+same optional personal status, tags, and last-access timestamp used by Library
+and Project Papers without changing hybrid ranking, thresholds, or retrieval
+lanes. Tags for a result page are loaded in bulk rather than one query per row.
+
 ## Library collection
 
 The Library exposes two deliberately different collections:
 
 - Papers are personal `LibraryPaper` memberships. Search, tag OR-filtering,
-  stable keyset sorting, removal, download, and ingestion operate on that
+  status OR-filtering, stable keyset sorting (including last access), removal,
+  download, and ingestion operate on that
   membership. Removing a paper removes the personal membership only; shared
   `Document` storage is reclaimed later only when no scope still references it.
   Tags are user-owned resources with create, rename, and delete lifecycle
@@ -659,6 +666,12 @@ The Library exposes two deliberately different collections:
   source audience/title metadata in one response. Annotation threads also carry
   a target Document independently of their personal or Project audience. The
   browser does not join permissions itself.
+
+`GET|PUT /api/v1/me/paper-list-preferences` owns the ordered, duplicate-free
+visible paper columns and shared preview-open flag. Missing storage returns the
+canonical default columns and an open preview. Updates are user-isolated and
+replace the full small preference document; they do not persist browse filters
+or sorting.
 
 `GET /api/v1/library/summary` returns successful Paper and Output counts plus
 the number of current ingestion lifecycles and failed ingestions that require

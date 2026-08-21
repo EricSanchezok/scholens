@@ -2,7 +2,13 @@ import { z } from "zod";
 
 const projectSortSchema = z.enum(["activity_desc", "title_asc", "papers_desc"]);
 const projectViewSchema = z.enum(["overview", "papers", "outputs"]);
-const paperSortSchema = z.enum(["added_desc", "title_asc", "published_desc"]);
+const paperSortSchema = z.enum([
+  "added_desc",
+  "title_asc",
+  "published_desc",
+  "personal_activity_desc",
+]);
+const paperStatusSchema = z.enum(["todo", "reading", "completed"]);
 const outputSortSchema = z.enum([
   "updated_desc",
   "updated_asc",
@@ -35,6 +41,8 @@ export type ProjectDetailSearchState = {
   paperQuery: string;
   paperSort: ProjectPaperSort;
   paperCursor?: string;
+  paperStatuses: z.infer<typeof paperStatusSchema>[];
+  paperTagIds: string[];
   outputQuery: string;
   outputKinds: ProjectOutputKind[];
   outputSort: ProjectOutputSort;
@@ -75,6 +83,12 @@ export function parseProjectDetailSearch(
       .catch("added_desc")
       .parse(params.get("paper_sort")),
     paperCursor: optionalValue(params.get("paper_cursor")),
+    paperStatuses: params
+      .getAll("paper_status")
+      .map((value) => paperStatusSchema.safeParse(value))
+      .filter((result) => result.success)
+      .map((result) => result.data),
+    paperTagIds: params.getAll("paper_tag").filter(Boolean),
     outputQuery: params.get("output_q")?.trim() ?? "",
     outputKinds: params
       .getAll("output_kind")
@@ -97,6 +111,9 @@ export function serializeProjectDetailSearch(state: ProjectDetailSearchState) {
   if (state.paperSort !== "added_desc")
     params.set("paper_sort", state.paperSort);
   if (state.paperCursor) params.set("paper_cursor", state.paperCursor);
+  for (const status of state.paperStatuses)
+    params.append("paper_status", status);
+  for (const tagId of state.paperTagIds) params.append("paper_tag", tagId);
   if (state.outputQuery) params.set("output_q", state.outputQuery);
   for (const kind of state.outputKinds) params.append("output_kind", kind);
   if (state.outputSort !== "updated_desc")

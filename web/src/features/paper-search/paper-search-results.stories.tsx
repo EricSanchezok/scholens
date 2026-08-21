@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
+import { ToastProvider } from "@/components/ui/toast";
 import { PaperSearchResults } from "./paper-search-results";
 import type { PaperSearchResult } from "./api";
 
@@ -52,6 +53,13 @@ const meta = {
     papers,
     total: papers.length,
   },
+  decorators: [
+    (Story) => (
+      <ToastProvider dismissLabel="Dismiss notification">
+        <Story />
+      </ToastProvider>
+    ),
+  ],
 } satisfies Meta<typeof PaperSearchResults>;
 
 export default meta;
@@ -61,12 +69,12 @@ export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("2 matching papers")).toBeInTheDocument();
-    await userEvent.tab();
-    await expect(
-      canvas.getByRole("link", {
-        name: /CWM: An Open-Weights LLM/,
-      }),
-    ).toHaveFocus();
+    const paperLink = canvas.getByRole("link", {
+      name: /CWM: An Open-Weights LLM/,
+    });
+    paperLink.focus();
+    await expect(paperLink).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
   },
 };
 

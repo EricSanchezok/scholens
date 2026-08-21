@@ -933,6 +933,7 @@ def build_mcp_transport(
                             actor=actor,
                             project_id=resource_id,
                             load_urls=False,
+                            load_preview_urls=False,
                             limit=50,
                         ),
                         "members": capabilities.projects.members(

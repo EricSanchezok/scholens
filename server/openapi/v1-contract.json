@@ -203,6 +203,10 @@
     "/api/v1/me/onboarding": [
       "put"
     ],
+    "/api/v1/me/paper-list-preferences": [
+      "get",
+      "put"
+    ],
     "/api/v1/me/profile": [
       "get",
       "patch",

@@ -547,7 +547,8 @@
         "added_asc": "最早添加",
         "published_desc": "最近发表",
         "published_asc": "最早发表",
-        "title_asc": "标题 A–Z"
+        "title_asc": "标题 A–Z",
+        "last_accessed_desc": "最近活动"
       },
       "actions": {
         "open": "《{title}》的操作",
@@ -1272,6 +1273,7 @@
         "sortAdded": "最近添加",
         "sortTitle": "标题 A–Z",
         "sortPublished": "发表日期",
+        "sortActivity": "最近活动",
         "add": "添加论文",
         "openMenu": "打开论文操作",
         "remove": "从项目中移除",
@@ -1779,6 +1781,57 @@
       "customInstructions": "自定义指令",
       "instructionsDescription": "可选：指定术语、语气或专有名称，最多 4,000 个字符。"
     }
+  },
+  "PaperCollection": {
+    "columns": {
+      "actions": "操作",
+      "paper": "论文",
+      "thumbnail": "论文缩略图",
+      "selection": "选择",
+      "status": "状态",
+      "personalStatus": "我的状态",
+      "tags": "标签",
+      "personalTags": "我的标签",
+      "authors": "作者",
+      "publication": "出处",
+      "last_opened": "最近打开",
+      "added_at": "加入时间",
+      "doi": "DOI"
+    },
+    "status": {
+      "label": "阅读状态",
+      "personalLabel": "我的阅读状态",
+      "controlLabel": "《{title}》的阅读状态",
+      "personalControlLabel": "《{title}》中我的阅读状态",
+      "todo": "待读",
+      "reading": "阅读中",
+      "completed": "已读",
+      "notInLibrary": "未加入资料库"
+    },
+    "preview": {
+      "label": "论文详情",
+      "close": "收起论文详情",
+      "open": "显示论文详情",
+      "abstract": "摘要",
+      "summary": "总结",
+      "keywords": "关键词",
+      "unknownAuthors": "作者未知",
+      "noAbstract": "暂无摘要或总结。"
+    },
+    "columnsMenu": {
+      "label": "配置列",
+      "title": "显示列",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "moveUpColumn": "将{column}上移",
+      "moveDownColumn": "将{column}下移",
+      "done": "完成"
+    },
+    "tagFilterLabel": "按《{title}》的“{tag}”标签筛选",
+    "moreTags": "另有 {count} 个标签",
+    "preferencesSaveFailed": "无法保存论文列表偏好。",
+    "neverOpened": "从未",
+    "unknown": "未知"
   },
   "PaperSearch": {
     "title": "查找论文",

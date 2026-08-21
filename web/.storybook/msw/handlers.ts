@@ -10,6 +10,31 @@ const zoteroLibraryItemsUrl =
 const paperSearchUrl = "http://127.0.0.1:7301/api/v1/search/papers";
 const conversationSearchUrl =
   "http://127.0.0.1:7301/api/v1/search/conversations";
+const paperListPreferencesUrl =
+  "http://127.0.0.1:7301/api/v1/me/paper-list-preferences";
+const libraryTagsUrl = "http://127.0.0.1:7301/api/v1/library/tags";
+
+export const paperListPreferencesHandlers = [
+  http.get(paperListPreferencesUrl, () =>
+    HttpResponse.json({
+      preview_open: true,
+      visible_columns: [
+        "status",
+        "tags",
+        "authors",
+        "publication",
+        "last_opened",
+      ],
+    }),
+  ),
+  http.put(paperListPreferencesUrl, async ({ request }) =>
+    HttpResponse.json(await request.json()),
+  ),
+];
+
+export const libraryTagsHandler = http.get(libraryTagsUrl, () =>
+  HttpResponse.json({ items: [] }),
+);
 
 export const webPerformanceHandler = http.post(
   "*/__telemetry/web-performance",

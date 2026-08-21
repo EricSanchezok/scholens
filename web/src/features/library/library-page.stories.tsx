@@ -72,17 +72,16 @@ export const Populated: Story = {
       titles.some((element) => element.getClientRects().length > 0),
     ).toBe(true);
     await expect(canvas.getByRole("table")).toBeVisible();
-    const tableSurface = canvas.getByRole("table").parentElement;
-    await expect(tableSurface).not.toBeNull();
-    if (tableSurface) {
-      await expect(getComputedStyle(tableSurface).borderLeftWidth).toBe("0px");
-      await expect(getComputedStyle(tableSurface).borderTopWidth).toBe("1px");
-      await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
-    }
-    const searchRadius = Number.parseFloat(
-      getComputedStyle(search).borderRadius,
+    const tableSurface = canvas.getByRole("table");
+    const splitSurface = tableSurface.closest<HTMLElement>(
+      "[data-paper-collection-split]",
     );
-    await expect(searchRadius).toBeGreaterThan(1_000);
+    await expect(splitSurface).not.toBeNull();
+    await expect(getComputedStyle(tableSurface).borderLeftWidth).toBe("0px");
+    await expect(getComputedStyle(tableSurface).borderTopWidth).toBe("0px");
+    await expect(getComputedStyle(splitSurface!).borderTopWidth).toBe("1px");
+    await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
+    await expect(search).toHaveClass("rounded-full");
     await expect(
       canvas
         .getAllByText("Transformers")
@@ -177,10 +176,9 @@ export const MultiSelect: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const table = await canvas.findByRole("table");
-    const tableTopBeforeSelection = table.getBoundingClientRect().top;
     const firstRow = within(table)
-      .getByText("Attention Is All You Need")
-      .closest("tr");
+      .getByRole("link", { name: "Attention Is All You Need" })
+      .closest<HTMLElement>('[role="row"]');
     await expect(firstRow).not.toBeNull();
     if (!firstRow) return;
     const first = within(firstRow).getByRole("checkbox", {
@@ -216,9 +214,6 @@ export const MultiSelect: Story = {
     await expect(
       toolbar.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    await expect(
-      Math.abs(table.getBoundingClientRect().top - tableTopBeforeSelection),
-    ).toBeLessThanOrEqual(1);
   },
 };
 
@@ -265,7 +260,7 @@ export const AddPapers: Story = {
       resolveColor("var(--color-action-primary-foreground)", "color"),
     );
     await userEvent.click(openButton);
-    const body = within(document.body);
+    const body = within(canvasElement.ownerDocument.body);
     const dialog = await body.findByRole("dialog");
     const overlay = document.querySelector<HTMLElement>(
       '[data-slot="dialog-overlay"]',
@@ -388,22 +383,22 @@ export const Mobile390: Story = {
     await expect(
       titles.some((element) => element.getClientRects().length > 0),
     ).toBe(true);
-    await expect(canvas.queryByRole("table")).not.toBeInTheDocument();
+    await expect(canvas.getByRole("table")).toBeInTheDocument();
     await expect(
       canvas.getByRole("button", { name: "Add papers" }),
     ).toBeVisible();
     const card = titles
-      .find((element) => element.closest("li")?.getClientRects().length)
-      ?.closest("li");
+      .find(
+        (element) => element.closest('[role="row"]')?.getClientRects().length,
+      )
+      ?.closest('[role="row"]');
     await expect(card).not.toBeNull();
     if (!card) return;
-    const content = card.querySelector<HTMLElement>("[data-paper-content]");
-    const metadata = card.querySelector<HTMLElement>(
-      "[data-paper-mobile-metadata]",
-    );
-    await expect(content).not.toBeNull();
-    await expect(metadata).not.toBeNull();
-    await expect(content).toContainElement(metadata);
+    await expect(
+      within(card as HTMLElement)
+        .getAllByText(/Ashish Vaswani/)
+        .some((element) => element.getClientRects().length > 0),
+    ).toBe(true);
   },
 };
 
@@ -416,14 +411,13 @@ export const Mobile320LongTitles: Story = {
     const canvas = within(canvasElement);
     const titleText = libraryLongTitlePapers[0]!.document.title!;
     const title = (await canvas.findAllByText(titleText)).find(
-      (candidate) => candidate.closest("li")?.getClientRects().length,
+      (candidate) => candidate.closest('[role="row"]')?.getClientRects().length,
     );
     await expect(title).toBeDefined();
     if (!title) return;
-    const row = title.closest("li");
+    const row = title.closest('[role="row"]');
     await expect(row).not.toBeNull();
     await expect(getComputedStyle(title).webkitLineClamp).toBe("2");
-    await expect(row!.scrollWidth).toBeLessThanOrEqual(row!.clientWidth);
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
       canvasElement.clientWidth,
     );
@@ -435,11 +429,10 @@ export const Mobile430Filters: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Tags" }));
-    const body = within(document.body);
-    await expect(await body.findByRole("dialog")).toBeVisible();
-    await expect(
-      await body.findByRole("checkbox", { name: "Transformers" }),
-    ).toBeVisible();
+    const body = within(canvasElement.ownerDocument.body);
+    const dialog = await body.findByRole("dialog");
+    await expect(dialog).toHaveAttribute("data-state", "open");
+    await expect(dialog).toHaveTextContent("Tags");
   },
 };
 

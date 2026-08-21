@@ -22,11 +22,16 @@ from app.modules.papers.application.contracts.search import (
     PaperSearchSort,
     PaperSearchStats,
 )
+from app.modules.papers.application.contracts.documents import (
+    LibraryPaperTagResponse,
+)
 from app.modules.papers.infrastructure.models import (
     Document,
     DocumentPassage,
     DocumentSearchEmbedding,
     LibraryPaper,
+    LibraryPaperTag,
+    PaperTag,
 )
 from app.modules.papers.infrastructure.access import accessible_document_condition
 from app.modules.projects.infrastructure.models import (
@@ -36,7 +41,7 @@ from app.modules.projects.infrastructure.models import (
 )
 from app.shared.application import Actor
 from sqlalchemy import ColumnElement, and_, case, exists, func, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +206,35 @@ class PostgresPaperSearch:
             conditions.append(Document.publish_date >= request.filters.published_from)
         if request.filters.published_to is not None:
             conditions.append(Document.publish_date <= request.filters.published_to)
+        if request.filters.personal_statuses:
+            conditions.append(
+                exists(
+                    select(LibraryPaper.id).where(
+                        LibraryPaper.document_id == Document.id,
+                        LibraryPaper.user_id == actor.id,
+                        LibraryPaper.status.in_(
+                            [value.value for value in request.filters.personal_statuses]
+                        ),
+                    )
+                )
+            )
+        if request.filters.personal_tag_ids:
+            conditions.append(
+                exists(
+                    select(LibraryPaperTag.library_paper_id)
+                    .join(
+                        LibraryPaper,
+                        LibraryPaper.id == LibraryPaperTag.library_paper_id,
+                    )
+                    .join(PaperTag, PaperTag.id == LibraryPaperTag.tag_id)
+                    .where(
+                        LibraryPaper.document_id == Document.id,
+                        LibraryPaper.user_id == actor.id,
+                        LibraryPaperTag.tag_id.in_(request.filters.personal_tag_ids),
+                        PaperTag.user_id == actor.id,
+                    )
+                )
+            )
         return conditions
 
     def _semantic_coverage(
@@ -338,6 +372,7 @@ class PostgresPaperSearch:
                 ),
             )
             .where(Document.id.in_(page_ids))
+            .options(selectinload(actor_library_entry.tags))
         ).all()
         documents = {document.id: (document, entry) for document, entry in rows}
         page_rows = [documents[document_id] for document_id in page_ids]
@@ -384,6 +419,26 @@ class PostgresPaperSearch:
                     preview_url=(
                         s3_service.generate_presigned_url(document.preview_s3_key)
                         if document.preview_s3_key
+                        else None
+                    ),
+                    personal_status=(
+                        library_entry.status if library_entry is not None else None
+                    ),
+                    personal_tags=(
+                        [
+                            LibraryPaperTagResponse(
+                                id=tag.id,
+                                name=tag.name,
+                                color=tag.color,
+                            )
+                            for tag in library_entry.tags
+                        ]
+                        if library_entry is not None
+                        else []
+                    ),
+                    personal_last_accessed_at=(
+                        library_entry.last_accessed_at
+                        if library_entry is not None
                         else None
                     ),
                     matched_fields=_matching_fields(

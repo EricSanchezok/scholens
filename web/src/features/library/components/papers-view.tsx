@@ -14,7 +14,6 @@ import {
 } from "@/design-system/icons/semantic-icons";
 import { useFormatter, useTranslations } from "next-intl";
 import type { Route } from "next";
-import Link from "next/link";
 import * as React from "react";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
@@ -32,7 +31,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   IconButton,
-  keyboardFocusRing,
   OverflowMenuButton,
   Popover,
   PopoverContent,
@@ -50,15 +48,16 @@ import { Badge } from "@/components/ui/display";
 import { Icon } from "@/design-system/icons/icon";
 import {
   AnimatePresence,
-  m,
   MotionPresence,
-  motionStagger,
-  motionTransitions,
   motionVariants,
 } from "@/design-system/motion";
 import type { components } from "@/lib/api/generated/schema";
-import { cn } from "@/lib/utilities/cn";
-import type { PaperSort } from "../library-search";
+import {
+  PaperCollectionWorkbench,
+  type PaperCollectionItem,
+  type PaperStatus,
+} from "@/features/paper-collection";
+import type { PaperSort, PaperStatus as FilterStatus } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
 import { TagManagerDialog, type LibraryTag } from "./tag-manager-dialog";
 
@@ -72,6 +71,7 @@ const PAPER_SORTS: PaperSort[] = [
   "published_desc",
   "published_asc",
   "title_asc",
+  "last_accessed_desc",
 ];
 
 function paperMetadata(paper: Paper) {
@@ -105,51 +105,6 @@ function SelectionCheckbox({
   );
 }
 
-function TagPill({ name }: { name: string }) {
-  return (
-    <span className="bg-subtle text-secondary inline-flex min-h-6 items-center rounded-full px-2 text-[0.6875rem] font-medium">
-      {name}
-    </span>
-  );
-}
-
-function PaperThumbnail({ paper }: { paper: Paper }) {
-  const [failedPreviewUrl, setFailedPreviewUrl] = React.useState<string | null>(
-    null,
-  );
-  const showPreview =
-    Boolean(paper.preview_url) && failedPreviewUrl !== paper.preview_url;
-
-  return (
-    <span
-      aria-hidden="true"
-      className="border-line bg-subtle relative block h-16 w-11 shrink-0 overflow-hidden rounded-[var(--radius-md)] border"
-      data-paper-thumbnail
-    >
-      {showPreview ? (
-        // The preview is a short-lived, authenticated object-store URL.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          alt=""
-          className="size-full object-cover object-top"
-          onError={() => setFailedPreviewUrl(paper.preview_url)}
-          src={paper.preview_url ?? undefined}
-        />
-      ) : (
-        <span className="absolute inset-2.5 flex flex-col gap-1.5 pt-1">
-          <span className="border-line w-4/5 border-t" />
-          <span className="border-line w-full border-t" />
-          <span className="border-line w-3/4 border-t" />
-          <span className="border-line mt-auto w-full border-t" />
-          <span className="text-secondary text-[0.625rem] font-semibold">
-            PDF
-          </span>
-        </span>
-      )}
-    </span>
-  );
-}
-
 function IngestionThumbnail() {
   return (
     <span
@@ -159,118 +114,6 @@ function IngestionThumbnail() {
     >
       PDF
     </span>
-  );
-}
-
-function SelectablePaperThumbnail({
-  checked,
-  label,
-  onCheckedChange,
-  paper,
-  selectionMode = false,
-}: {
-  checked: boolean;
-  label: string;
-  onCheckedChange: (checked: boolean) => void;
-  paper: Paper;
-  selectionMode?: boolean;
-}) {
-  return (
-    <span className="relative block h-16 w-11 shrink-0">
-      <PaperThumbnail paper={paper} />
-      <span
-        className={cn(
-          "motion-control bg-surface absolute inset-0 grid place-items-center rounded-[var(--radius-md)]",
-          checked || selectionMode
-            ? "pointer-events-auto opacity-100"
-            : "pointer-events-none opacity-0 md:pointer-events-auto md:group-focus-within/interactive-row:opacity-100 md:group-hover/interactive-row:opacity-100",
-        )}
-        data-selection-overlay
-      >
-        <SelectionCheckbox
-          checked={checked}
-          label={label}
-          onCheckedChange={onCheckedChange}
-        />
-      </span>
-    </span>
-  );
-}
-
-function PaperDetails({ paper }: { paper: Paper }) {
-  const metadata = paperMetadata(paper);
-  const secondary = [
-    ...metadata.authors.slice(0, 2),
-    ...metadata.institutions.slice(0, 1),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <Link
-      className={cn(
-        "block min-w-0 rounded-[var(--radius-sm)]",
-        keyboardFocusRing,
-      )}
-      href={`/reader/${paper.document.document_id}` as Route}
-    >
-      <span className="motion-control hover:text-secondary line-clamp-2 block text-left text-sm leading-5 font-semibold [overflow-wrap:anywhere] md:line-clamp-1">
-        {metadata.title}
-      </span>
-      <span className="text-secondary mt-1 block truncate text-xs">
-        {secondary || paper.document.original_filename}
-      </span>
-      {paper.tags.length > 0 && (
-        <span className="mt-1.5 flex flex-wrap gap-1">
-          {paper.tags.slice(0, 2).map((tag) => (
-            <TagPill key={tag.id} name={tag.name} />
-          ))}
-        </span>
-      )}
-    </Link>
-  );
-}
-
-function PaperPreview({ paper }: { paper?: Paper }) {
-  const t = useTranslations("Library.papers.preview");
-  if (!paper) return null;
-  const metadata = paperMetadata(paper);
-  const abstract =
-    paper.metadata_overrides.abstract ??
-    paper.document.abstract ??
-    paper.document.summary;
-  return (
-    <aside
-      aria-label={t("label")}
-      className="border-line sticky top-4 hidden max-h-[calc(100dvh-8rem)] min-w-0 overflow-y-auto border-l pl-5 xl:block"
-    >
-      <div className="flex items-start gap-3">
-        <PaperThumbnail paper={paper} />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm leading-5 font-semibold [overflow-wrap:anywhere]">
-            {metadata.title}
-          </h2>
-          <p className="text-secondary mt-1 line-clamp-2 text-xs leading-5">
-            {metadata.authors.join(" · ") || t("unknownAuthors")}
-          </p>
-        </div>
-      </div>
-      <p className="text-secondary mt-4 text-xs font-medium">{t("abstract")}</p>
-      <p className="text-secondary mt-2 text-sm leading-6">
-        {abstract || t("noAbstract")}
-      </p>
-      {paper.tags.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {paper.tags.map((tag) => (
-            <TagPill key={tag.id} name={tag.name} />
-          ))}
-        </div>
-      )}
-      <Button asChild className="mt-5 w-full" size="sm" variant="secondary">
-        <Link href={`/reader/${paper.document.document_id}` as Route}>
-          {t("openReader")}
-        </Link>
-      </Button>
-    </aside>
   );
 }
 
@@ -496,54 +339,6 @@ function IngestionActions({
   );
 }
 
-function BoundedMotionTableRow({
-  children,
-  withMotion,
-}: {
-  children: React.ReactNode;
-  withMotion: boolean;
-}) {
-  if (!withMotion) return <tr>{children}</tr>;
-  return (
-    <m.tr
-      animate="animate"
-      data-motion-list-item
-      exit="exit"
-      initial="initial"
-      layout="position"
-      transition={motionTransitions.layout}
-      variants={motionVariants.listItem}
-    >
-      {children}
-    </m.tr>
-  );
-}
-
-function BoundedMotionListItem({
-  children,
-  withMotion,
-}: {
-  children: React.ReactNode;
-  withMotion: boolean;
-}) {
-  const className = "min-w-0 py-4";
-  if (!withMotion) return <li className={className}>{children}</li>;
-  return (
-    <m.li
-      animate="animate"
-      className={className}
-      data-motion-list-item
-      exit="exit"
-      initial="initial"
-      layout="position"
-      transition={motionTransitions.layout}
-      variants={motionVariants.listItem}
-    >
-      {children}
-    </m.li>
-  );
-}
-
 function TagFilter({
   active,
   onChange,
@@ -630,6 +425,50 @@ function TagFilter({
   );
 }
 
+function StatusFilter({
+  active,
+  onChange,
+}: {
+  active: FilterStatus[];
+  onChange: (statuses: FilterStatus[]) => void;
+}) {
+  const t = useTranslations("PaperCollection");
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          className="bg-subtle hover:border-line rounded-full border-transparent"
+          variant="secondary"
+        >
+          {t("columns.status")}
+          {active.length ? <Badge tone="neutral">{active.length}</Badge> : null}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="grid gap-1">
+        {(["todo", "reading", "completed"] as const).map((status) => (
+          <label
+            className="hover:bg-hover flex min-h-10 items-center gap-3 rounded-[var(--radius-md)] px-2 text-sm"
+            key={status}
+          >
+            <SelectionCheckbox
+              checked={active.includes(status)}
+              label={t(`status.${status}`)}
+              onCheckedChange={(checked) =>
+                onChange(
+                  checked
+                    ? [...active, status]
+                    : active.filter((value) => value !== status),
+                )
+              }
+            />
+            {t(`status.${status}`)}
+          </label>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function MobileTagFilter({
   activeCount,
   onManage,
@@ -687,7 +526,6 @@ export function PapersView({
   onDownload,
   onLoadMore = async () => undefined,
   onNeedTags = () => undefined,
-  onOpenDocument,
   onRemove,
   onRenameTag,
   onReplaceTags,
@@ -695,12 +533,15 @@ export function PapersView({
   onRetryIngestion,
   onRetryLoad,
   onSortChange,
+  onStatusChange = () => undefined,
+  onStatusFilterChange = () => undefined,
   onTagFilterChange,
   search,
   searchResults,
   sort,
   paperCount,
   tagIds,
+  statuses = [],
   tags,
   tagsLoading = false,
 }: {
@@ -715,7 +556,6 @@ export function PapersView({
   onCreateTag: (name: string) => Promise<LibraryTag>;
   onDeleteTag: (tagId: string) => Promise<void>;
   onDownload: (documentId: string) => void;
-  onOpenDocument: (documentId: string) => void;
   onLoadMore?: () => Promise<void>;
   onNeedTags?: () => void;
   onRemove: (documentIds: string[]) => Promise<void>;
@@ -725,12 +565,15 @@ export function PapersView({
   onRetryIngestion: (id: string) => void;
   onRetryLoad: () => void;
   onSortChange: (sort: PaperSort) => void;
+  onStatusChange?: (documentId: string, status: PaperStatus) => void;
+  onStatusFilterChange?: (statuses: FilterStatus[]) => void;
   onTagFilterChange: (tagIds: string[]) => void;
   search: React.ReactNode;
-  searchResults?: React.ReactNode;
+  searchResults?: (toolbar: React.ReactNode) => React.ReactNode;
   sort: PaperSort;
   paperCount: number;
   tagIds: string[];
+  statuses?: FilterStatus[];
   tags: TagItem[];
   tagsLoading?: boolean;
 }) {
@@ -742,7 +585,6 @@ export function PapersView({
   const [tagManagerOpen, setTagManagerOpen] = React.useState(false);
   const [removeOpen, setRemoveOpen] = React.useState(false);
   const [actionPending, setActionPending] = React.useState(false);
-  const [previewId, setPreviewId] = React.useState<string>();
   const loadMoreRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -761,19 +603,46 @@ export function PapersView({
   const papers = (data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
   );
-  const previewPaper =
-    papers.find((paper) => paper.document.document_id === previewId) ??
-    papers[0];
   const hasRows = papers.length > 0 || ingestions.length > 0;
-  const allSelected =
-    papers.length > 0 &&
-    papers.every((paper) => selected.includes(paper.document.document_id));
-
-  function toggleAll(checked: boolean) {
-    setSelected(
-      checked ? papers.map((paper) => paper.document.document_id) : [],
-    );
-  }
+  const paperById = new Map(
+    papers.map((paper) => [paper.document.document_id, paper]),
+  );
+  const workbenchItems: PaperCollectionItem[] = papers.map((paper) => {
+    const metadata = paperMetadata(paper);
+    const publication = [
+      paper.metadata_overrides.journal ?? paper.document.journal,
+      paper.metadata_overrides.publisher ?? paper.document.publisher,
+      metadata.publishDate
+        ? new Date(metadata.publishDate).getUTCFullYear().toString()
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      abstract:
+        paper.metadata_overrides.abstract ??
+        paper.document.abstract ??
+        undefined,
+      addedAt: format.dateTime(new Date(paper.created_at), {
+        dateStyle: "medium",
+      }),
+      authors: metadata.authors,
+      doi: paper.metadata_overrides.doi ?? paper.document.doi ?? undefined,
+      href: `/reader/${paper.document.document_id}` as Route,
+      id: paper.document.document_id,
+      inLibrary: true,
+      keywords: paper.document.keywords ?? [],
+      lastOpened: format.dateTime(new Date(paper.last_accessed_at), {
+        dateStyle: "medium",
+      }),
+      previewUrl: paper.preview_url ?? undefined,
+      publication,
+      status: paper.status,
+      summary: paper.document.summary ?? undefined,
+      tags: paper.tags,
+      title: metadata.title,
+    };
+  });
 
   function toggleOne(documentId: string, checked: boolean) {
     setSelected((current) =>
@@ -824,145 +693,170 @@ export function PapersView({
     }
   }
 
-  return (
-    <>
-      <AnimatePresence initial={false} mode="popLayout">
-        {selected.length > 0 ? (
-          <MotionPresence
-            animate="animate"
-            aria-label={t("selectionToolbar")}
-            className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
-            exit="exit"
-            initial="initial"
-            key="selection-toolbar"
-            role="toolbar"
-            variants={motionVariants.swap}
+  const collectionToolbar = (
+    <AnimatePresence initial={false} mode="popLayout">
+      {selected.length > 0 ? (
+        <MotionPresence
+          animate="animate"
+          aria-label={t("selectionToolbar")}
+          className="border-line bg-subtle flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border p-2 sm:pl-4 md:h-11 md:flex-nowrap md:p-1 md:pl-4"
+          exit="exit"
+          initial="initial"
+          key="selection-toolbar"
+          role="toolbar"
+          variants={motionVariants.swap}
+        >
+          <span className="mr-auto min-w-0 text-sm font-semibold">
+            {t("selected", { count: selected.length })}
+          </span>
+          <Button
+            className="md:h-8 md:min-h-8"
+            onClick={() => setSelected([])}
+            size="sm"
+            variant="ghost"
           >
-            <span className="mr-auto min-w-0 text-sm font-semibold">
-              {t("selected", { count: selected.length })}
-            </span>
+            {t("clearSelection")}
+          </Button>
+          <div className="hidden items-center gap-2 sm:flex">
             <Button
               className="md:h-8 md:min-h-8"
-              onClick={() => setSelected([])}
+              onClick={() => beginTagEditing(selected)}
               size="sm"
-              variant="ghost"
+              variant="secondary"
             >
-              {t("clearSelection")}
+              {t("actions.tags")}
             </Button>
-            <div className="hidden items-center gap-2 sm:flex">
-              <Button
-                className="md:h-8 md:min-h-8"
-                onClick={() => beginTagEditing(selected)}
-                size="sm"
-                variant="secondary"
-              >
+            <Button
+              className="md:h-8 md:min-h-8"
+              disabled
+              size="sm"
+              title={t("actions.notAvailable")}
+              variant="secondary"
+            >
+              {t("actions.projectUnavailable")}
+            </Button>
+            <Button
+              className="md:h-8 md:min-h-8"
+              onClick={() => beginRemoval(selected)}
+              size="sm"
+              variant="danger"
+            >
+              {t("actions.remove")}
+            </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="sm:hidden" size="sm" variant="secondary">
+                {t("batchActions")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
+                <Icon glyph={TagIcon} size={16} tone="secondary" />
                 {t("actions.tags")}
-              </Button>
-              <Button
-                className="md:h-8 md:min-h-8"
-                disabled
-                size="sm"
-                title={t("actions.notAvailable")}
-                variant="secondary"
-              >
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <Icon glyph={ProjectIcon} size={16} tone="secondary" />
                 {t("actions.projectUnavailable")}
-              </Button>
-              <Button
-                className="md:h-8 md:min-h-8"
-                onClick={() => beginRemoval(selected)}
-                size="sm"
-                variant="danger"
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                destructive
+                onSelect={() => beginRemoval(selected)}
               >
+                <Icon glyph={DeleteIcon} size={16} tone="secondary" />
                 {t("actions.remove")}
-              </Button>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="sm:hidden" size="sm" variant="secondary">
-                  {t("batchActions")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => beginTagEditing(selected)}>
-                  <Icon glyph={TagIcon} size={16} tone="secondary" />
-                  {t("actions.tags")}
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled>
-                  <Icon glyph={ProjectIcon} size={16} tone="secondary" />
-                  {t("actions.projectUnavailable")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  destructive
-                  onSelect={() => beginRemoval(selected)}
-                >
-                  <Icon glyph={DeleteIcon} size={16} tone="secondary" />
-                  {t("actions.remove")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </MotionPresence>
-        ) : (
-          <MotionPresence
-            animate="animate"
-            className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center"
-            exit="exit"
-            initial="initial"
-            key="utility-toolbar"
-            variants={motionVariants.swap}
-          >
-            <div className="min-w-0">{search}</div>
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] items-center gap-2 sm:grid-cols-[auto_minmax(11rem,1fr)_auto] md:contents">
-              <TagFilter
-                active={tagIds}
-                onChange={onTagFilterChange}
-                onManage={beginTagManagement}
-                onNeedTags={onNeedTags}
-                tags={tags}
-                tagsLoading={tagsLoading}
-              />
-              <Select
-                onValueChange={(value) => onSortChange(value as PaperSort)}
-                value={sort}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </MotionPresence>
+      ) : (
+        <MotionPresence
+          animate="animate"
+          className="grid min-w-0 gap-2 xl:grid-cols-[minmax(18rem,36rem)_auto_auto_minmax(11rem,13rem)_minmax(8rem,1fr)] xl:items-center"
+          exit="exit"
+          initial="initial"
+          key="utility-toolbar"
+          variants={motionVariants.swap}
+        >
+          <div className="min-w-0">{search}</div>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] items-center gap-2 sm:grid-cols-[auto_auto_minmax(11rem,1fr)_auto] xl:contents">
+            <StatusFilter active={statuses} onChange={onStatusFilterChange} />
+            <TagFilter
+              active={tagIds}
+              onChange={onTagFilterChange}
+              onManage={beginTagManagement}
+              onNeedTags={onNeedTags}
+              tags={tags}
+              tagsLoading={tagsLoading}
+            />
+            <Select
+              onValueChange={(value) => onSortChange(value as PaperSort)}
+              value={sort}
+            >
+              <SelectTrigger
+                aria-label={t("sort.label")}
+                className="w-full min-w-0 xl:w-auto xl:min-w-44"
               >
-                <SelectTrigger
-                  aria-label={t("sort.label")}
-                  className="w-full min-w-0 md:w-auto md:min-w-44"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAPER_SORTS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {t(`sort.${option}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {data && (
-                <span className="text-secondary col-span-2 grid justify-items-end text-right text-sm sm:col-span-1 sm:ml-2 md:ml-2">
-                  <span className="whitespace-nowrap">
-                    {t("count", { count: paperCount })}
-                  </span>
-                  {ingestionCount > 0 && (
-                    <span className="text-xs whitespace-nowrap">
-                      {t("ingestionCount", {
-                        attentionCount,
-                        count: ingestionCount,
-                      })}
-                    </span>
-                  )}
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAPER_SORTS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {t(`sort.${option}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {data && !searchResults && (
+              <span className="text-secondary col-span-2 grid justify-items-end text-right text-sm sm:col-span-1 sm:ml-2 xl:ml-2">
+                <span className="whitespace-nowrap">
+                  {t("count", { count: paperCount })}
                 </span>
-              )}
-            </div>
-          </MotionPresence>
-        )}
-      </AnimatePresence>
+                {ingestionCount > 0 && (
+                  <span className="text-xs whitespace-nowrap">
+                    {t("ingestionCount", {
+                      attentionCount,
+                      count: ingestionCount,
+                    })}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </MotionPresence>
+      )}
+    </AnimatePresence>
+  );
+  const ingestionList = ingestions.length ? (
+    <div className="border-line mb-3 border-y">
+      {ingestions.map((ingestion) => (
+        <div
+          className="border-line-subtle grid min-h-16 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 border-b px-2 py-2 last:border-b-0"
+          data-ingestion-row=""
+          key={ingestion.id}
+        >
+          <IngestionThumbnail />
+          <IngestionDetails ingestion={ingestion} />
+          <IngestionActions
+            ingestion={ingestion}
+            onCancel={() => onCancelIngestion(ingestion.id)}
+            onRetry={() => onRetryIngestion(ingestion.id)}
+          />
+        </div>
+      ))}
+    </div>
+  ) : null;
+  const workbenchVisible =
+    !loading && !error && hasRows && workbenchItems.length > 0;
 
+  return (
+    <>
       {searchResults ? (
-        <div className="mt-4">{searchResults}</div>
+        searchResults(collectionToolbar)
       ) : (
         <>
-          <div className="mt-4">
+          {!workbenchVisible ? collectionToolbar : null}
+          <div className={workbenchVisible ? undefined : "mt-4"}>
             {loading && <LoadingState label={t("loading")} />}
             {Boolean(error) && !loading && (
               <AsyncFeedback
@@ -982,230 +876,46 @@ export function PapersView({
             )}
             {!loading && !error && hasRows && (
               <>
-                <div className="hidden min-w-0 gap-6 md:grid xl:grid-cols-[minmax(0,1fr)_19rem]">
-                  <div className="border-line group/table min-w-0 border-y">
-                    <table className="w-full table-fixed border-collapse text-left">
-                      <thead className="text-muted text-xs font-medium">
-                        <tr>
-                          <th className="w-16 px-2 py-2">
-                            <span
-                              className={cn(
-                                "motion-control grid w-11 place-items-center",
-                                selected.length > 0
-                                  ? "opacity-100"
-                                  : "opacity-0 group-focus-within/table:opacity-100 group-hover/table:opacity-100",
-                              )}
-                            >
-                              <SelectionCheckbox
-                                checked={
-                                  allSelected
-                                    ? true
-                                    : selected.length > 0
-                                      ? "indeterminate"
-                                      : false
-                                }
-                                label={t("selectAll")}
-                                onCheckedChange={toggleAll}
-                              />
-                            </span>
-                          </th>
-                          <th className="px-2 py-2 font-medium">
-                            {t("columns.paper")}
-                          </th>
-                          <th className="w-32 px-3 py-2 font-medium">
-                            {t("columns.added")}
-                          </th>
-                          <th className="w-28 px-3 py-2 font-medium">
-                            {t("columns.published")}
-                          </th>
-                          <th className="w-14 px-2 py-3">
-                            <span className="sr-only">
-                              {t("columns.actions")}
-                            </span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-line divide-y">
-                        <AnimatePresence initial={false}>
-                          {ingestions.map((ingestion, index) => (
-                            <BoundedMotionTableRow
-                              key={ingestion.id}
-                              withMotion={index < motionStagger.maximumChildren}
-                            >
-                              <td className="px-2 py-2 align-middle">
-                                <IngestionThumbnail />
-                              </td>
-                              <td className="px-2 py-2 align-middle">
-                                <IngestionDetails ingestion={ingestion} />
-                              </td>
-                              <td className="text-secondary px-3 py-4 align-top text-sm">
-                                {format.dateTime(
-                                  new Date(ingestion.createdAt),
-                                  {
-                                    dateStyle: "medium",
-                                  },
-                                )}
-                              </td>
-                              <td className="text-secondary px-3 py-4 align-top text-sm">
-                                {t("ingestion.pending")}
-                              </td>
-                              <td className="px-2 py-2 align-top">
-                                <IngestionActions
-                                  ingestion={ingestion}
-                                  onCancel={() =>
-                                    onCancelIngestion(ingestion.id)
-                                  }
-                                  onRetry={() => onRetryIngestion(ingestion.id)}
-                                />
-                              </td>
-                            </BoundedMotionTableRow>
-                          ))}
-                        </AnimatePresence>
-                        {papers.map((paper) => {
-                          const id = paper.document.document_id;
-                          const metadata = paperMetadata(paper);
-                          return (
-                            <tr
-                              className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed"
-                              key={id}
-                              onFocusCapture={() => setPreviewId(id)}
-                              onMouseEnter={() => setPreviewId(id)}
-                            >
-                              <td className="px-2 py-2 align-middle">
-                                <SelectablePaperThumbnail
-                                  checked={selected.includes(id)}
-                                  label={t("select", { title: metadata.title })}
-                                  onCheckedChange={(checked) =>
-                                    toggleOne(id, checked)
-                                  }
-                                  paper={paper}
-                                  selectionMode={selected.length > 0}
-                                />
-                              </td>
-                              <td className="px-2 py-2 align-middle">
-                                <PaperDetails paper={paper} />
-                              </td>
-                              <td
-                                className="text-secondary cursor-pointer px-3 py-2 align-middle text-sm"
-                                onClick={() => onOpenDocument(id)}
-                              >
-                                {format.dateTime(new Date(paper.created_at), {
-                                  dateStyle: "medium",
-                                })}
-                              </td>
-                              <td
-                                className="text-secondary cursor-pointer px-3 py-2 align-middle text-sm"
-                                onClick={() => onOpenDocument(id)}
-                              >
-                                {metadata.publishDate
-                                  ? format.dateTime(
-                                      new Date(metadata.publishDate),
-                                      {
-                                        year: "numeric",
-                                      },
-                                    )
-                                  : t("unknown")}
-                              </td>
-                              <td className="px-2 py-2 align-middle">
-                                <PaperActions
-                                  onDownload={() => onDownload(id)}
-                                  onRemove={() => beginRemoval([id])}
-                                  onTags={() => beginTagEditing([id])}
-                                  paper={paper}
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <PaperPreview paper={previewPaper} />
-                </div>
-
-                <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
-                  <AnimatePresence initial={false}>
-                    {ingestions.map((ingestion, index) => (
-                      <BoundedMotionListItem
-                        key={ingestion.id}
-                        withMotion={index < motionStagger.maximumChildren}
-                      >
-                        <div className="flex items-start gap-3">
-                          <IngestionThumbnail />
-                          <div className="min-w-0 flex-1">
-                            <IngestionDetails ingestion={ingestion} />
-                          </div>
-                          <IngestionActions
-                            ingestion={ingestion}
-                            onCancel={() => onCancelIngestion(ingestion.id)}
-                            onRetry={() => onRetryIngestion(ingestion.id)}
-                          />
-                        </div>
-                        <div className="text-secondary mt-3 flex gap-3 pl-[4.25rem] text-xs">
-                          <span>
-                            {format.dateTime(new Date(ingestion.createdAt), {
-                              dateStyle: "medium",
-                            })}
-                          </span>
-                          <span>{t("ingestion.pending")}</span>
-                        </div>
-                      </BoundedMotionListItem>
-                    ))}
-                  </AnimatePresence>
-                  {papers.map((paper) => {
-                    const id = paper.document.document_id;
-                    const metadata = paperMetadata(paper);
-                    return (
-                      <li
-                        className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed min-w-0 rounded-[var(--radius-lg)] px-2 py-4"
-                        key={id}
-                      >
-                        <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-start gap-3">
-                          <SelectablePaperThumbnail
-                            checked={selected.includes(id)}
-                            label={t("select", { title: metadata.title })}
-                            onCheckedChange={(checked) =>
-                              toggleOne(id, checked)
-                            }
-                            paper={paper}
-                            selectionMode={selected.length > 0}
-                          />
-                          <div className="min-w-0" data-paper-content>
-                            <PaperDetails paper={paper} />
-                            <div
-                              className="text-secondary mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs"
-                              data-paper-mobile-metadata
-                            >
-                              <span>
-                                {format.dateTime(new Date(paper.created_at), {
-                                  dateStyle: "medium",
-                                })}
-                              </span>
-                              <span aria-hidden="true">·</span>
-                              <span>
-                                {metadata.publishDate
-                                  ? new Date(
-                                      metadata.publishDate,
-                                    ).getUTCFullYear()
-                                  : t("unknown")}
-                              </span>
-                            </div>
-                          </div>
-                          <PaperActions
-                            onDownload={() => onDownload(id)}
-                            onRemove={() => beginRemoval([id])}
-                            onSelect={() =>
-                              toggleOne(id, !selected.includes(id))
-                            }
-                            onTags={() => beginTagEditing([id])}
-                            paper={paper}
-                            selected={selected.includes(id)}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                {!workbenchItems.length ? ingestionList : null}
+                {workbenchItems.length ? (
+                  <PaperCollectionWorkbench
+                    actions={(item) => {
+                      const paper = paperById.get(item.id);
+                      return paper ? (
+                        <PaperActions
+                          onDownload={() => onDownload(item.id)}
+                          onRemove={() => beginRemoval([item.id])}
+                          onSelect={() =>
+                            toggleOne(item.id, !selected.includes(item.id))
+                          }
+                          onTags={() => beginTagEditing([item.id])}
+                          paper={paper}
+                          selected={selected.includes(item.id)}
+                        />
+                      ) : null;
+                    }}
+                    beforeTable={ingestionList}
+                    items={workbenchItems}
+                    leading={(item) => (
+                      <SelectionCheckbox
+                        checked={selected.includes(item.id)}
+                        label={t("select", { title: item.title })}
+                        onCheckedChange={(checked) =>
+                          toggleOne(item.id, checked)
+                        }
+                      />
+                    )}
+                    onStatusChange={(item, status) =>
+                      onStatusChange(item.id, status)
+                    }
+                    onTagClick={(tag) =>
+                      onTagFilterChange(
+                        tagIds.includes(tag.id) ? tagIds : [...tagIds, tag.id],
+                      )
+                    }
+                    toolbar={collectionToolbar}
+                  />
+                ) : null}
               </>
             )}
           </div>

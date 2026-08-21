@@ -7,6 +7,7 @@ type PaperCollection =
   | components["schemas"]["LibraryPaperCollection"]
   | components["schemas"]["PersonalLibraryPaperCollection"]
   | components["schemas"]["SelectedPaperCollection"];
+type PaperSearchFilters = components["schemas"]["PaperSearchFilters"];
 
 export const paperSearchKeys = {
   all: ["paper-search"] as const,
@@ -15,14 +16,19 @@ export const paperSearchKeys = {
 };
 
 export const paperSearchQueries = {
-  results: (query: string, collection: PaperCollection) =>
+  results: (
+    query: string,
+    collection: PaperCollection,
+    filters: PaperSearchFilters = {},
+  ) =>
     queryOptions({
       enabled: query.trim().length >= 2,
-      queryKey: paperSearchKeys.results(query, collection),
+      queryKey: [...paperSearchKeys.results(query, collection), filters],
       queryFn: async ({ signal }) => {
         const { data } = await apiClient.POST("/api/v1/search/papers", {
           body: {
             collection,
+            filters,
             limit: 50,
             query: query.trim(),
             sort: "relevance",
@@ -33,15 +39,24 @@ export const paperSearchQueries = {
         return data;
       },
     }),
-  infiniteResults: (query: string, collection: PaperCollection) =>
+  infiniteResults: (
+    query: string,
+    collection: PaperCollection,
+    filters: PaperSearchFilters = {},
+  ) =>
     infiniteQueryOptions({
       enabled: query.trim().length >= 2,
       initialPageParam: undefined as string | undefined,
-      queryKey: [...paperSearchKeys.results(query, collection), "infinite"],
+      queryKey: [
+        ...paperSearchKeys.results(query, collection),
+        filters,
+        "infinite",
+      ],
       queryFn: async ({ pageParam, signal }) => {
         const { data } = await apiClient.POST("/api/v1/search/papers", {
           body: {
             collection,
+            filters,
             cursor: pageParam,
             limit: 50,
             query: query.trim(),

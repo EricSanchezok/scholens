@@ -53,6 +53,7 @@ import {
   removeLibraryPapers,
   replaceLibraryTagAssignments,
 } from "./api";
+import { updatePaperStatus } from "@/features/paper-collection";
 import { OutputsView } from "./components/outputs-view";
 import { PapersView } from "./components/papers-view";
 import {
@@ -189,13 +190,21 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       query: parsed.query,
       sort: parsed.sort,
       tagIds: parsed.tagIds,
+      statuses: parsed.statuses,
     }),
     enabled: parsed.tab === "papers" && !paperSearchActive,
   });
   const paperSearchQuery = useInfiniteQuery({
-    ...paperSearchQueries.infiniteResults(parsed.query, {
-      kind: "personal_library",
-    }),
+    ...paperSearchQueries.infiniteResults(
+      parsed.query,
+      {
+        kind: "personal_library",
+      },
+      {
+        personal_statuses: parsed.statuses,
+        personal_tag_ids: parsed.tagIds,
+      },
+    ),
     enabled: parsed.tab === "papers" && paperSearchActive,
   });
   const paperSearchResults = React.useMemo(
@@ -302,6 +311,24 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       });
     },
   });
+  const statusMutation = useMutation({
+    mutationFn: ({
+      documentId,
+      status,
+    }: {
+      documentId: string;
+      status: "todo" | "reading" | "completed";
+    }) => updatePaperStatus(documentId, status),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [...libraryKeys.all, "papers"],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["paper-search"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
+    },
+  });
   const createTagMutation = useMutation({
     mutationFn: createLibraryTag,
     onSuccess: async () => {
@@ -356,6 +383,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       sort: tab === "outputs" ? "updated_desc" : "added_desc",
       tab,
       tagIds: tab === "papers" ? parsed.tagIds : [],
+      statuses: tab === "papers" ? parsed.statuses : [],
     });
   }
 
@@ -401,7 +429,13 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6">
+      <div
+        className={
+          parsed.tab === "papers"
+            ? "w-full min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-8 lg:pt-6"
+            : "mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6"
+        }
+      >
         <Tabs
           className="min-w-0"
           onValueChange={handleTabChange}
@@ -465,7 +499,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
           <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
             <PapersView
               attentionCount={summaryQuery.data?.attention_count ?? 0}
-              key={`${parsed.query}:${parsed.sort}:${parsed.tagIds.join(",")}`}
+              key={`${parsed.query}:${parsed.sort}:${parsed.statuses.join(",")}:${parsed.tagIds.join(",")}`}
               data={paperList}
               error={papersQuery.error}
               ingestions={ingestion.rows}
@@ -491,9 +525,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 papersQuery.fetchNextPage().then(() => undefined)
               }
               onNeedTags={() => setTagsRequested(true)}
-              onOpenDocument={(documentId) =>
-                router.push(`/reader/${documentId}` as Route)
-              }
               onRemove={(documentIds) =>
                 runAction(() => removeMutation.mutateAsync(documentIds))
               }
@@ -512,6 +543,12 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               onSortChange={(sort: PaperSort) =>
                 replaceSearch({ cursor: undefined, sort })
               }
+              onStatusChange={(documentId, status) =>
+                statusMutation.mutate({ documentId, status })
+              }
+              onStatusFilterChange={(statuses) =>
+                replaceSearch({ cursor: undefined, statuses })
+              }
               onTagFilterChange={(tagIds) =>
                 replaceSearch({ cursor: undefined, tagIds })
               }
@@ -526,24 +563,36 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 />
               }
               searchResults={
-                paperSearchActive ? (
-                  <PaperSearchResults
-                    error={paperSearchQuery.error}
-                    hasMore={paperSearchQuery.hasNextPage}
-                    loading={paperSearchQuery.isPending}
-                    loadingMore={paperSearchQuery.isFetchingNextPage}
-                    onLoadMore={() =>
-                      paperSearchQuery.fetchNextPage().then(() => undefined)
-                    }
-                    onRetry={() => void paperSearchQuery.refetch()}
-                    papers={paperSearchResults}
-                    total={paperSearchQuery.data?.pages[0]?.total}
-                  />
-                ) : undefined
+                paperSearchActive
+                  ? (toolbar) => (
+                      <PaperSearchResults
+                        error={paperSearchQuery.error}
+                        hasMore={paperSearchQuery.hasNextPage}
+                        loading={paperSearchQuery.isPending}
+                        loadingMore={paperSearchQuery.isFetchingNextPage}
+                        onLoadMore={() =>
+                          paperSearchQuery.fetchNextPage().then(() => undefined)
+                        }
+                        onRetry={() => void paperSearchQuery.refetch()}
+                        onTagClick={(tagId) =>
+                          replaceSearch({
+                            cursor: undefined,
+                            tagIds: parsed.tagIds.includes(tagId)
+                              ? parsed.tagIds
+                              : [...parsed.tagIds, tagId],
+                          })
+                        }
+                        papers={paperSearchResults}
+                        toolbar={toolbar}
+                        total={paperSearchQuery.data?.pages[0]?.total}
+                      />
+                    )
+                  : undefined
               }
               paperCount={summaryQuery.data?.paper_count ?? 0}
               sort={parsed.sort as PaperSort}
               tagIds={parsed.tagIds}
+              statuses={parsed.statuses}
               tags={tagsQuery.data?.items ?? []}
               tagsLoading={tagsQuery.isPending && tagsRequested}
             />

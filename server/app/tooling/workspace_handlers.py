@@ -884,6 +884,7 @@ class WorkspaceToolHandlers:
                     actor=context.actor,
                     project_id=parsed.project_id,
                     load_urls=False,
+                    load_preview_urls=False,
                     query=parsed.query,
                     sort=parsed.sort,
                     cursor=parsed.cursor,

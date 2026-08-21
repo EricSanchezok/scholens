@@ -24,6 +24,7 @@ from app.modules.papers.application.contracts.search import (
 )
 from app.modules.papers.application.search import SearchCursorCodec, SearchPapers
 from app.shared.application import Actor
+from app.shared.domain.enums import PaperStatus
 from app.shared.domain import AppError, FailureKind
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
@@ -168,6 +169,42 @@ def test_search_cursor_is_bound_to_the_selected_collection() -> None:
                 limit=1,
                 cursor=first_page.next_cursor,
                 collection=SelectedPaperCollection(document_ids=[uuid4()]),
+            ),
+        )
+
+    assert error.value.code == "search_cursor_expired"
+
+
+def test_search_cursor_is_bound_to_personal_metadata_filters() -> None:
+    backend = _SearchBackend()
+    search = SearchPapers(
+        backend,
+        SearchCursorCodec("x" * 32),
+        _SearchAccess(),
+    )
+    first_page = search(
+        actor=_actor(),
+        request=PaperSearchRequest(
+            query="graph retrieval",
+            limit=1,
+            filters=PaperSearchFilters(
+                personal_statuses=[PaperStatus.reading],
+                personal_tag_ids=[uuid4()],
+            ),
+        ),
+    )
+
+    assert first_page.next_cursor is not None
+    with pytest.raises(AppError) as error:
+        search(
+            actor=_actor(),
+            request=PaperSearchRequest(
+                query="graph retrieval",
+                limit=1,
+                cursor=first_page.next_cursor,
+                filters=PaperSearchFilters(
+                    personal_statuses=[PaperStatus.completed],
+                ),
             ),
         )
 

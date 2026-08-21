@@ -219,6 +219,37 @@ def test_library_list_does_not_replace_a_personal_paper_with_project_work() -> N
     assert "jobs.project_id IS NULL" in reservation_statement
 
 
+def test_library_list_applies_literal_like_pattern_to_every_search_path() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.scalars.return_value.all.return_value = []
+
+    SqlAlchemyPaperLibraryGateway(
+        db,
+        document_removed=MagicMock(),
+        personal_annotations_removed=MagicMock(),
+    ).list(
+        user_id=7,
+        query="100%_\\",
+        tag_ids=(),
+        sort=LibraryPaperSort.ADDED_DESC,
+        limit=20,
+        direction=LibraryPageDirection.FORWARD,
+        position=None,
+    )
+
+    statements = [
+        db.scalar.call_args.args[0],
+        *(call.args[0] for call in db.scalars.call_args_list),
+    ]
+    assert len(statements) == 3
+    for statement in statements:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        assert sql.count(" LIKE ") == sql.count(" ESCAPE '\\\\'")
+        assert "%100\\%\\_\\\\%" in compiled.params.values()
+
+
 def test_library_list_includes_an_unattached_upload_reservation() -> None:
     entry = _entry()
     entry.document.preview_s3_key = None

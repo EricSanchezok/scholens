@@ -3,7 +3,6 @@ import { expect, within } from "storybook/test";
 
 import { authHandlers } from "../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
-import { motionStagger } from "@/design-system/motion";
 import { resetRefreshForTests } from "@/lib/api";
 import { PapersView } from "./components/papers-view";
 import type { PaperIngestionRow } from "./use-paper-ingestions";
@@ -46,7 +45,6 @@ const meta = {
     onDeleteTag: async () => undefined,
     onCancelIngestion: () => undefined,
     onDownload: () => undefined,
-    onOpenDocument: () => undefined,
     onRemove: async () => undefined,
     onRenameTag: async (id: string, name: string) => ({
       color: null,
@@ -282,10 +280,8 @@ export const BoundedLargeQueue: Story = {
     ingestionCount: 10,
   },
   play: async ({ canvasElement }) => {
-    const table = await within(canvasElement).findByRole("table");
-    await expect(table.querySelectorAll("tbody > tr")).toHaveLength(10);
     await expect(
-      table.querySelectorAll("tbody > [data-motion-list-item]"),
-    ).toHaveLength(motionStagger.maximumChildren);
+      canvasElement.querySelectorAll("[data-ingestion-row]"),
+    ).toHaveLength(10);
   },
 };
