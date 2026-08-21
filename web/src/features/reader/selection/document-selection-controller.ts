@@ -37,6 +37,19 @@ function selectionRanges(selection: Selection) {
   return ranges;
 }
 
+function selectionBelongsToDocument(
+  root: HTMLElement,
+  selection: Selection | null,
+) {
+  return Boolean(
+    selection &&
+    selection.rangeCount > 0 &&
+    !selection.isCollapsed &&
+    textLayerForNode(root, selection.anchorNode) &&
+    textLayerForNode(root, selection.focusNode),
+  );
+}
+
 function selectedTextLayers(root: HTMLElement, ranges: Range[]): HTMLElement[] {
   const layers = [...root.querySelectorAll<HTMLElement>(".pdf-text-layer")];
   const selected = new Set<HTMLElement>();
@@ -60,16 +73,30 @@ function selectedTextLayers(root: HTMLElement, ranges: Range[]): HTMLElement[] {
   return layers.filter((layer) => selected.has(layer));
 }
 
+function textBoundaryNodes(layer: HTMLElement) {
+  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+  let first: Text | undefined;
+  let last: Text | undefined;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!(node instanceof Text) || !node.data) continue;
+    first ??= node;
+    last = node;
+  }
+  return first && last ? { first, last } : undefined;
+}
+
 function clippedRangeForLayer(range: Range, layer: HTMLElement) {
   if (!range.intersectsNode(layer)) return undefined;
+  const boundaries = textBoundaryNodes(layer);
+  if (!boundaries) return undefined;
   const layerRange = document.createRange();
   layerRange.selectNodeContents(layer);
   const clipped = range.cloneRange();
   if (range.compareBoundaryPoints(Range.START_TO_START, layerRange) < 0) {
-    clipped.setStart(layerRange.startContainer, layerRange.startOffset);
+    clipped.setStart(boundaries.first, 0);
   }
   if (range.compareBoundaryPoints(Range.END_TO_END, layerRange) > 0) {
-    clipped.setEnd(layerRange.endContainer, layerRange.endOffset);
+    clipped.setEnd(boundaries.last, boundaries.last.data.length);
   }
   return clipped.collapsed ? undefined : clipped;
 }
@@ -92,6 +119,14 @@ function readDocumentSelection(
   if (!text) return undefined;
 
   const ranges = selectionRanges(selection);
+  const boundaryPages = new Set<number>();
+  for (const range of ranges) {
+    for (const node of [range.startContainer, range.endContainer]) {
+      const layer = textLayerForNode(root, node);
+      const pageNumber = layer && pageNumberForLayer(layer);
+      if (pageNumber) boundaryPages.add(pageNumber);
+    }
+  }
   const segments: DocumentSelectionSegment[] = [];
   for (const layer of selectedTextLayers(root, ranges)) {
     const pageNumber = pageNumberForLayer(layer);
@@ -109,7 +144,15 @@ function readDocumentSelection(
     if (rects.length > 0) segments.push({ pageNumber, rects });
   }
   segments.sort((left, right) => left.pageNumber - right.pageNumber);
-  if (segments.length === 0) return undefined;
+  if (
+    segments.length === 0 ||
+    [...boundaryPages].some(
+      (pageNumber) =>
+        !segments.some((segment) => segment.pageNumber === pageNumber),
+    )
+  ) {
+    return undefined;
+  }
 
   const focusLayer = textLayerForNode(root, selection.focusNode);
   const focusPageNumber = focusLayer && pageNumberForLayer(focusLayer);
@@ -184,7 +227,8 @@ export function createDocumentSelectionController({
       !liveSelection &&
       nativeSelection &&
       nativeSelection.rangeCount > 0 &&
-      !nativeSelection.isCollapsed
+      !nativeSelection.isCollapsed &&
+      !selectionBelongsToDocument(root, nativeSelection)
     ) {
       // A live selection outside this document is intentional. Never revive a
       // stale PDF Range, which would snap the viewport back to an older page.
@@ -261,12 +305,18 @@ export function createDocumentSelectionController({
       !nextSelection &&
       nativeSelection &&
       nativeSelection.rangeCount > 0 &&
-      !nativeSelection.isCollapsed
+      !nativeSelection.isCollapsed &&
+      !selectionBelongsToDocument(root, nativeSelection)
     ) {
       lastValidSelection = undefined;
     }
-    if (nextSelection || lastValidSelection) scheduleCommit();
-    else finishGestureLifecycle();
+    if (
+      nextSelection ||
+      lastValidSelection ||
+      selectionBelongsToDocument(root, nativeSelection)
+    ) {
+      scheduleCommit();
+    } else finishGestureLifecycle();
   }
 
   document.addEventListener("pointerdown", handlePointerDown, true);
