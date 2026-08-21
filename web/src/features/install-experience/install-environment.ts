@@ -1,5 +1,9 @@
 export type InstallExperienceStatus =
-  "unsupported" | "manual-ios" | "installable-chromium" | "installed";
+  | "unsupported"
+  | "manual-ios"
+  | "manual-in-app"
+  | "installable-chromium"
+  | "installed";
 
 export type InstallInstructionKind = "ios" | "android" | "in-app";
 
@@ -50,6 +54,7 @@ export function resolveInstallStatus({
 }): InstallExperienceStatus {
   if (installed) return "installed";
   if (environment.instructionKind === "ios") return "manual-ios";
+  if (environment.instructionKind === "in-app") return "manual-in-app";
   if (environment.instructionKind === "android") {
     return "installable-chromium";
   }

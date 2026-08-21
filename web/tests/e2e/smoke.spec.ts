@@ -640,11 +640,17 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
   ).toBeVisible();
   await expect(dock.getByTestId("mobile-tab-bar")).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
-  const dockBefore = await dock.boundingBox();
-  expect(dockBefore).not.toBeNull();
-  expect(Math.round((dockBefore?.y ?? 0) + (dockBefore?.height ?? 0))).toBe(
-    844,
-  );
+  const dockBefore = await dock.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const viewportBottom =
+      (window.visualViewport?.height ?? window.innerHeight) +
+      (window.visualViewport?.offsetTop ?? 0);
+    return {
+      alignedToVisibleViewport: Math.abs(bounds.bottom - viewportBottom) <= 1,
+      height: Math.round(bounds.height),
+    };
+  });
+  expect(dockBefore.alignedToVisibleViewport).toBe(true);
   expect(
     await main.evaluate(
       (element) => element.scrollHeight > element.clientHeight,
@@ -670,16 +676,22 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
   await expect(jumpToLatest).toBeVisible();
   await expect
     .poll(async () => {
-      const box = await dock.boundingBox();
-      return {
-        bottom: Math.round((box?.y ?? 0) + (box?.height ?? 0)),
-        height: Math.round(box?.height ?? 0),
-        keyboardOpen: await dock.getAttribute("data-keyboard-open"),
-      };
+      return dock.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const viewportBottom =
+          (window.visualViewport?.height ?? window.innerHeight) +
+          (window.visualViewport?.offsetTop ?? 0);
+        return {
+          alignedToVisibleViewport:
+            Math.abs(bounds.bottom - viewportBottom) <= 1,
+          height: Math.round(bounds.height),
+          keyboardOpen: element.getAttribute("data-keyboard-open"),
+        };
+      });
     })
     .toEqual({
-      bottom: 844,
-      height: Math.round(dockBefore?.height ?? 0),
+      alignedToVisibleViewport: true,
+      height: dockBefore.height,
       keyboardOpen: null,
     });
   const [dockAfter, mainAfter] = await Promise.all([

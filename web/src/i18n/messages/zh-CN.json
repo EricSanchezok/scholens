@@ -41,7 +41,7 @@
       },
       "in-app": {
         "title": "请在系统浏览器中打开",
-        "description": "微信等内置浏览器无法直接安装 Scholens。",
+        "description": "微信内置浏览器无法直接安装 Scholens。",
         "step1": "打开当前浏览器的页面菜单。",
         "step2": "选择“在浏览器打开”，进入 Safari 或 Chrome。",
         "step3": "再使用浏览器的“添加到主屏幕”或“安装应用”。"

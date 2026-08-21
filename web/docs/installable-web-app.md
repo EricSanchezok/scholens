@@ -10,16 +10,17 @@ container, or separate account surface.
 - iOS Safari uses Share → Add to Home Screen.
 - Android Chrome, Edge, and Samsung Internet use the browser installation event
   when it is available and browser-menu instructions otherwise.
-- WeChat and other in-app browsers receive a route to the system browser rather
-  than a simulated or unsupported install prompt.
+- WeChat's in-app browser receives instructions for continuing in the system
+  browser rather than a simulated or unsupported install prompt.
 - Desktop and unrecognized mobile browsers keep the complete browser product
   without an install control.
 
 The Manifest owns `/` as its `id`, `start_url`, and `scope`, uses standalone
 display without locking orientation, and publishes 192 px, 512 px, Apple Touch,
-favicon, and Android maskable artwork. Light and Dark browser theme colors come
-from the generated semantic token metadata; the app icon source remains in the
-design-system assets.
+favicon, Android maskable, and monochrome artwork. Light and Dark browser theme
+colors come from the generated semantic token metadata; the selected raven
+master remains in `web/brand/source/`, and committed runtime exports live under
+`web/public/brand/`.
 
 ## Installation experience
 

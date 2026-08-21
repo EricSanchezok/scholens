@@ -1,4 +1,4 @@
-# 0031 — Installable Web App as the first mobile distribution boundary
+# 0035 — Installable Web App as the first mobile distribution boundary
 
 Status: Accepted
 Date: 2026-08-20
@@ -23,7 +23,8 @@ Zotero OAuth must not destroy the installed app's authenticated context.
 The canonical `web/` product is Scholens's first mobile distribution boundary.
 It publishes a standards-based Manifest, app artwork, standalone display, and a
 root Service Worker for iOS Safari and Android Chrome, Edge, and Samsung
-Internet. WeChat and similar in-app browsers guide the user to a system browser.
+Internet. Scholens detects WeChat's in-app browser and explains how to continue
+in the system browser.
 
 The Service Worker is strictly network-only. It never caches authorized or
 research content and responds to a failed top-level navigation with a static,
@@ -54,10 +55,11 @@ connection state on return.
 ## Consequences
 
 Mobile browser and installed launches share one feature implementation and
-deployment boundary. The Web team owns Manifest compatibility, icons, standalone safe
-areas, install guidance, service-worker updates, and physical iOS/Android
-acceptance. Users may need to sign in once inside an installed iOS launch and
-must reconnect before accessing any research after an offline cold start.
+deployment boundary. The Web team owns Manifest compatibility, icons,
+standalone safe areas, install guidance, service-worker updates, and physical
+iOS/Android acceptance. Users may need to sign in once inside an installed iOS
+launch and must reconnect before accessing any research after an offline cold
+start.
 
 A future native container or store listing must justify its native-only
 outcomes and record a new boundary. Push and offline paper access likewise need

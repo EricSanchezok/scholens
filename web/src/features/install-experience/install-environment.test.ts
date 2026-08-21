@@ -39,13 +39,18 @@ describe("install environment", () => {
   });
 
   it("guides WeChat users to a system browser", () => {
-    expect(
-      detectInstallEnvironment({
-        maxTouchPoints: 5,
-        platform: "Linux armv8l",
-        userAgent: `${androidChrome} MicroMessenger/8.0`,
-      }),
-    ).toMatchObject({ instructionKind: "in-app", supported: true });
+    const environment = detectInstallEnvironment({
+      maxTouchPoints: 5,
+      platform: "Linux armv8l",
+      userAgent: `${androidChrome} MicroMessenger/8.0`,
+    });
+    expect(environment).toMatchObject({
+      instructionKind: "in-app",
+      supported: true,
+    });
+    expect(resolveInstallStatus({ environment, installed: false })).toBe(
+      "manual-in-app",
+    );
   });
 
   it("hides installation after standalone launch", () => {

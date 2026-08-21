@@ -41,7 +41,7 @@
       },
       "in-app": {
         "title": "Open Scholens in your browser",
-        "description": "In-app browsers such as WeChat cannot install Scholens directly.",
+        "description": "WeChat’s in-app browser cannot install Scholens directly.",
         "step1": "Open the page menu in this browser.",
         "step2": "Choose Open in browser to continue in Safari or Chrome.",
         "step3": "Use that browser’s Add to Home Screen or Install app command."
