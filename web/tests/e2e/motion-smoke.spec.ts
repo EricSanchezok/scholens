@@ -277,6 +277,98 @@ test.beforeEach(async ({ page }) => {
   await mockWorkspace(page);
 });
 
+test("uses one scrollbar contract for native vertical and horizontal regions", async ({
+  browserName,
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("scholens-motion", "full");
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "What are you working on?" }),
+  ).toBeVisible();
+
+  await page.evaluate(() => {
+    const vertical = document.createElement("div");
+    vertical.dataset.scrollbarTest = "vertical";
+    vertical.style.cssText =
+      "position:fixed;inset:0 auto auto 0;width:120px;height:40px;overflow-y:auto";
+    const verticalContent = document.createElement("div");
+    verticalContent.style.height = "160px";
+    vertical.append(verticalContent);
+
+    const horizontal = document.createElement("div");
+    horizontal.dataset.scrollbarTest = "horizontal";
+    horizontal.style.cssText =
+      "position:fixed;inset:48px auto auto 0;width:120px;height:40px;overflow-x:auto";
+    const horizontalContent = document.createElement("div");
+    horizontalContent.style.width = "480px";
+    horizontalContent.style.height = "1px";
+    horizontal.append(horizontalContent);
+
+    document.body.append(vertical, horizontal);
+  });
+
+  const vertical = page.locator('[data-scrollbar-test="vertical"]');
+  const horizontal = page.locator('[data-scrollbar-test="horizontal"]');
+  await vertical.evaluate((element) => {
+    element.scrollTop = 24;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await horizontal.evaluate((element) => {
+    element.scrollLeft = 24;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(vertical).toHaveAttribute("data-scrollbar-active", "");
+  await expect(horizontal).toHaveAttribute("data-scrollbar-active", "");
+
+  const metrics = await vertical.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const track = getComputedStyle(element, "::-webkit-scrollbar");
+    const thumb = getComputedStyle(element, "::-webkit-scrollbar-thumb");
+    const horizontalTrack = getComputedStyle(
+      document.querySelector<HTMLElement>(
+        '[data-scrollbar-test="horizontal"]',
+      )!,
+      "::-webkit-scrollbar",
+    );
+    return {
+      standardColor: style.scrollbarColor,
+      standardWidth: style.scrollbarWidth,
+      thumbBorderLeft: thumb.borderLeftWidth,
+      thumbBorderRight: thumb.borderRightWidth,
+      thumbMinWidth: thumb.minWidth,
+      thumbTransition: thumb.transitionDuration,
+      trackHeight: horizontalTrack.height,
+      trackWidth: track.width,
+    };
+  });
+
+  if (browserName === "firefox") {
+    // Headless Firefox forces its native scrollbar width to `none`, while a
+    // desktop Firefox session consumes the authored `thin` fallback.
+    expect(["none", "thin"]).toContain(metrics.standardWidth);
+    expect(metrics.standardColor).not.toBe("auto");
+  } else {
+    expect(["", "auto"]).toContain(metrics.standardWidth);
+    expect(["", "auto"]).toContain(metrics.standardColor);
+    expect(metrics.trackWidth).toBe("4px");
+    expect(metrics.trackHeight).toBe("4px");
+    expect(metrics.thumbMinWidth).toBe("2px");
+    expect(metrics.thumbBorderLeft).toBe("1px");
+    expect(metrics.thumbBorderRight).toBe("1px");
+    expect(metrics.thumbTransition).toMatch(/^(?:90ms|0?\.09s)$/);
+  }
+
+  await expect(vertical).not.toHaveAttribute("data-scrollbar-active", "", {
+    timeout: 1_500,
+  });
+  await expect(horizontal).not.toHaveAttribute("data-scrollbar-active", "", {
+    timeout: 1_500,
+  });
+});
+
 test("honors system reduced motion before hydration", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() => {

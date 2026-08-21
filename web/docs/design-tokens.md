@@ -125,11 +125,20 @@ third-party brand marks that must preserve their identity. The surrounding UI
 still uses semantic tokens.
 
 Scrollbars are a shared shell primitive, not a page-local decoration. Both
-axes use `dimension.scrollbar.box` for a quiet 6 px track and
-`dimension.scrollbar.thumb` for the 4 px visible thumb. The thumb and hover
-states resolve through `color.scrollbar.*` in Light and Dark; forced-colors
-mode yields to system `Canvas` and `CanvasText`. Native document and element
-scrollbars and Radix `ScrollArea` use the same contract. Stable gutters belong
+axes use `dimension.scrollbar.box` for a quiet 4 px interaction gutter and
+`dimension.scrollbar.thumb` for the 2 px thumb. Native document, element, and
+Radix `ScrollArea` thumbs remain transparent at rest, appear only on the
+scroller receiving input, wait for 500 ms of inactivity, and then fade over the
+deliberate motion duration. The active thumb uses a quiet translucent form of
+`color.scrollbar.thumb`; hover resolves through `color.scrollbar.thumb-hover`;
+WebKit scrollbar pseudo-elements own the exact geometry and motion in Chromium
+and Safari, while a Firefox-only standards-based fallback uses
+`scrollbar-width` and `scrollbar-color` without overriding those pixel
+dimensions or transitions. Radix tracks expose the same
+`data-scrollbar-track` and `data-scrollbar-thumb` contract and retain their
+scrolling state long enough for the shared fade to finish before unmounting.
+Forced-colors mode keeps persistent system `Canvas` and `CanvasText`
+scrollbars. Stable gutters belong
 only to persistent scrolling regions, and horizontal scrolling is opt-in for
 content such as code blocks, tables, or a ScrollArea with an explicit
 horizontal bar; ordinary layouts must wrap or clip rather than widen the page.

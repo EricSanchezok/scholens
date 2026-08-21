@@ -182,6 +182,14 @@ export const AcademicStructure: Story = {
   },
 };
 
+export const ScrollablePanel: Story = {
+  render: (args) => (
+    <div className="h-[720px] overflow-y-auto overscroll-contain">
+      <ReaderReflowView {...args} />
+    </div>
+  ),
+};
+
 export const TallDisplayEquation: Story = {
   args: {
     blocks: [

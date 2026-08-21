@@ -4,6 +4,7 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import * as VisuallyHiddenPrimitive from "@radix-ui/react-visually-hidden";
 import * as React from "react";
 
+import { scrollbarTrackRemovalDelayMs } from "@/design-system/scrollbars/scrollbar-activity";
 import { cn } from "@/lib/utilities/cn";
 
 export const ScrollArea = React.forwardRef<
@@ -12,7 +13,10 @@ export const ScrollArea = React.forwardRef<
 >(({ children, className, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     className={cn("relative overflow-hidden", className)}
+    data-scrollbar-root=""
     ref={ref}
+    scrollHideDelay={scrollbarTrackRemovalDelayMs}
+    type="scroll"
     {...props}
   >
     <ScrollAreaPrimitive.Viewport
@@ -25,15 +29,19 @@ export const ScrollArea = React.forwardRef<
     {(["vertical", "horizontal"] as const).map((orientation) => (
       <ScrollAreaPrimitive.Scrollbar
         className={cn(
-          "flex touch-none p-0.5 select-none",
+          "flex touch-none p-px select-none",
           orientation === "vertical"
             ? "w-[var(--scrollbar-box)]"
             : "h-[var(--scrollbar-box)] flex-col",
         )}
+        data-scrollbar-track=""
         key={orientation}
         orientation={orientation}
       >
-        <ScrollAreaPrimitive.Thumb className="relative flex-1 rounded-full bg-[var(--color-scrollbar-thumb)] hover:bg-[var(--color-scrollbar-thumb-hover)]" />
+        <ScrollAreaPrimitive.Thumb
+          className="relative flex-1 rounded-full"
+          data-scrollbar-thumb=""
+        />
       </ScrollAreaPrimitive.Scrollbar>
     ))}
     <ScrollAreaPrimitive.Corner className="bg-transparent" />

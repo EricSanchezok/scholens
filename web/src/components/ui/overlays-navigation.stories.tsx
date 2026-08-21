@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { useState } from "react";
 
 import { Button, LinkButton } from "./button";
@@ -199,4 +199,44 @@ export const ScrollAndHiddenContent: Story = {
       </div>
     </ScrollArea>
   ),
+  play: async ({ canvasElement }) => {
+    const root = canvasElement.querySelector<HTMLElement>(
+      "[data-scrollbar-root]",
+    );
+    const viewport = root?.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]",
+    );
+    expect(root).toBeInTheDocument();
+    expect(viewport).toBeInTheDocument();
+
+    viewport!.scrollTop = 96;
+    fireEvent.scroll(viewport!);
+
+    await expect(viewport!).toHaveAttribute("data-scrollbar-active");
+    await waitFor(() =>
+      expect(
+        root!.querySelector(
+          '[data-scrollbar-track][data-orientation="vertical"]',
+        ),
+      ).toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(
+        root!.querySelector(
+          '[data-scrollbar-track][data-orientation="vertical"] [data-scrollbar-thumb]',
+        ),
+      ).toBeInTheDocument(),
+    );
+    const track = root!.querySelector<HTMLElement>(
+      '[data-scrollbar-track][data-orientation="vertical"]',
+    )!;
+    const thumb = track.querySelector<HTMLElement>("[data-scrollbar-thumb]")!;
+    await waitFor(() => expect(getComputedStyle(track).opacity).toBe("1"));
+    expect(getComputedStyle(track).width).toBe("4px");
+    expect(getComputedStyle(thumb).width).toBe("2px");
+    await waitFor(
+      () => expect(viewport!).not.toHaveAttribute("data-scrollbar-active"),
+      { timeout: 1_200 },
+    );
+  },
 };

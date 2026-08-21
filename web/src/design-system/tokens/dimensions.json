@@ -39,8 +39,8 @@
     }
   },
   "scrollbar": {
-    "box": { "$type": "dimension", "$value": { "value": 6, "unit": "px" } },
-    "thumb": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } }
+    "box": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } },
+    "thumb": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } }
   },
   "control": {
     "sm": { "$type": "dimension", "$value": { "value": 36, "unit": "px" } },
