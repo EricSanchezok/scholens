@@ -36,7 +36,10 @@ from app.modules.research.application.contracts import (
     CreateAnnotationThreadRequest,
     ProjectResearchAudience,
 )
-from app.modules.research.application.positions import ParsedTextPosition
+from app.modules.research.application.positions import (
+    ParsedTextPosition,
+    PdfTextPosition,
+)
 from app.shared.domain import AppError
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
@@ -403,6 +406,114 @@ def test_annotation_request_uses_immutable_discriminated_audience() -> None:
     with pytest.raises(ValidationError):
         CreateAnnotationThreadRequest.model_validate(
             {"quote_text": "Evidence", "shared": True}
+        )
+
+
+def test_pdf_text_position_accepts_legacy_and_ordered_page_segments() -> None:
+    rect = {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04}
+    legacy = CreateAnnotationThreadRequest.model_validate(
+        {
+            "quote_text": "Legacy",
+            "position": {"kind": "pdf_text", "page_number": 2, "rects": [rect]},
+        }
+    ).position
+    assert isinstance(legacy, PdfTextPosition)
+    assert legacy.segments is None
+
+    cross_page = CreateAnnotationThreadRequest.model_validate(
+        {
+            "quote_text": "Across pages",
+            "position": {
+                "kind": "pdf_text",
+                "page_number": 2,
+                "rects": [rect],
+                "segments": [
+                    {"page_number": 2, "rects": [rect]},
+                    {
+                        "page_number": 3,
+                        "rects": [{"x": 0.2, "y": 0.1, "width": 0.4, "height": 0.04}],
+                    },
+                ],
+            },
+        }
+    ).position
+    assert isinstance(cross_page, PdfTextPosition)
+    assert cross_page.segments is not None
+    assert [segment.page_number for segment in cross_page.segments] == [2, 3]
+
+    with pytest.raises(ValidationError):
+        CreateAnnotationThreadRequest.model_validate(
+            {
+                "quote_text": "Invalid",
+                "position": {
+                    "kind": "pdf_text",
+                    "page_number": 2,
+                    "rects": [rect],
+                    "segments": [
+                        {"page_number": 3, "rects": [rect]},
+                        {"page_number": 2, "rects": [rect]},
+                    ],
+                },
+            }
+        )
+
+    for invalid_segments in (
+        [
+            {"page_number": 2, "rects": [rect]},
+            {"page_number": 2, "rects": [rect]},
+        ],
+        [{"page_number": 3, "rects": [rect]}],
+    ):
+        with pytest.raises(ValidationError):
+            CreateAnnotationThreadRequest.model_validate(
+                {
+                    "quote_text": "Invalid projection",
+                    "position": {
+                        "kind": "pdf_text",
+                        "page_number": 2,
+                        "rects": [rect],
+                        "segments": invalid_segments,
+                    },
+                }
+            )
+
+
+def test_pdf_text_position_caps_total_segment_rectangles() -> None:
+    rect = {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04}
+    first_page_rects = [rect] * 100
+
+    accepted = CreateAnnotationThreadRequest.model_validate(
+        {
+            "quote_text": "Bounded geometry",
+            "position": {
+                "kind": "pdf_text",
+                "page_number": 2,
+                "rects": first_page_rects,
+                "segments": [
+                    {"page_number": 2, "rects": first_page_rects},
+                    {"page_number": 3, "rects": [rect] * 100},
+                ],
+            },
+        }
+    ).position
+    assert isinstance(accepted, PdfTextPosition)
+    assert accepted.segments is not None
+    assert sum(len(segment.rects) for segment in accepted.segments) == 200
+
+    with pytest.raises(ValidationError, match="at most 200 rectangles"):
+        CreateAnnotationThreadRequest.model_validate(
+            {
+                "quote_text": "Oversized geometry",
+                "position": {
+                    "kind": "pdf_text",
+                    "page_number": 2,
+                    "rects": first_page_rects,
+                    "segments": [
+                        {"page_number": 2, "rects": first_page_rects},
+                        {"page_number": 3, "rects": [rect] * 101},
+                    ],
+                },
+            }
         )
 
 

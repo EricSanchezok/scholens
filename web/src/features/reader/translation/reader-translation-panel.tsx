@@ -30,7 +30,7 @@ import {
 } from "@/design-system/icons/semantic-icons";
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
-import type { ReaderSelection } from "../components/pdf-page";
+import type { ReaderSelection } from "../reader-selection";
 import type { TranslationPreferences } from "./api";
 import type { SelectionTranslationState } from "./use-reader-translation";
 import { translationErrorMessageKey } from "./translation-errors";

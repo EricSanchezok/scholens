@@ -851,7 +851,8 @@
       "copying": "Copying",
       "copied": "Copied",
       "copyFailed": "Copy failed",
-      "context": "Selection from page {page}"
+      "context": "Selection from page {page}",
+      "contextRange": "Selection from pages {start}–{end}"
     },
     "translation": {
       "sourceLanguage": "From",
@@ -955,6 +956,7 @@
       "emptyTitle": "No annotations yet",
       "emptyDescription": "Select text in the PDF to highlight it or add a note.",
       "page": "Page {page}",
+      "pageRange": "Pages {start}–{end}",
       "deleteHighlight": "Delete annotation",
       "delete": "Delete",
       "cancel": "Cancel",

@@ -29,7 +29,11 @@ import {
   readerHighlightColorValue,
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
-import type { ReaderSelection } from "./pdf-page";
+import { readerPdfRectsForPage } from "../reader-pdf-position";
+import {
+  readerSelectionFocusPage,
+  type ReaderSelection,
+} from "../reader-selection";
 import type { ReaderAnnotationAudience } from "../reader-types";
 import { useReaderFloatingPosition } from "./use-reader-floating-position";
 import { translationErrorMessageKey } from "../translation/translation-errors";
@@ -131,7 +135,12 @@ export function ReaderSelectionToolbar({
     value: selection.selected_text,
   });
   const rects =
-    selection.anchor.kind === "pdf_text" ? selection.anchor.rects : [];
+    selection.anchor.kind === "pdf_text"
+      ? (readerPdfRectsForPage(
+          selection.anchor,
+          readerSelectionFocusPage(selection),
+        ) ?? selection.anchor.rects)
+      : [];
   const bounds = rects.reduce(
     (current, rect) => ({
       left: Math.min(current.left, rect.x),

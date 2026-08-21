@@ -32,6 +32,18 @@ export default defineConfig({
       testMatch: /theme-smoke\.spec\.ts/,
       use: { ...devices["Desktop Safari"] },
     },
+    {
+      grep: /@selection/,
+      name: "firefox-selection",
+      testMatch: /reader\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      grep: /@selection/,
+      name: "webkit-selection",
+      testMatch: /reader\.spec\.ts/,
+      use: { ...devices["Desktop Safari"] },
+    },
   ],
   webServer: {
     command: "pnpm start",

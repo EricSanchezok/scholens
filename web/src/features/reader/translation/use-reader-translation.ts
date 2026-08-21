@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { ApiError } from "@/lib/api";
-import type { ReaderSelection } from "../components/pdf-page";
+import type { ReaderSelection } from "../reader-selection";
 import {
   streamSelectionTranslation,
   translationKeys,

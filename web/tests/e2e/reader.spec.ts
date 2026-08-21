@@ -232,6 +232,7 @@ function annotationSummary(item: ReturnType<typeof annotationFixture>) {
 }
 
 const createdAnnotationQuotes: string[] = [];
+const createdAnnotationPositions: Array<Record<string, unknown>> = [];
 
 async function mockReader(page: Page) {
   await mockBillingUsage(page);
@@ -295,6 +296,7 @@ async function mockReader(page: Page) {
           quote_text: string;
         };
         createdAnnotationQuotes.push(body.quote_text);
+        createdAnnotationPositions.push(body.position);
         const item = {
           id: "20000000-0000-4000-8000-000000000001",
           kind: "annotation_thread",
@@ -701,8 +703,87 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
   }).toPass({ timeout: 8_000 });
 }
 
+async function beginPdfSelectionGesture(page: Page, startPageNumber: number) {
+  const startLayer = page.locator(
+    `[data-pdf-page-number="${startPageNumber}"] .pdf-text-layer`,
+  );
+  await expect(startLayer.locator(".endOfContent")).toBeAttached();
+  await startLayer.dispatchEvent("pointerdown");
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+}
+
+async function finishPdfSelectionAcrossPages(
+  page: Page,
+  startPageNumber: number,
+  endPageNumber: number,
+) {
+  const startLayer = page.locator(
+    `[data-pdf-page-number="${startPageNumber}"] .pdf-text-layer`,
+  );
+  const endLayer = page.locator(
+    `[data-pdf-page-number="${endPageNumber}"] .pdf-text-layer`,
+  );
+  await expect(startLayer.locator(".endOfContent")).toBeAttached();
+  await expect(endLayer.locator(".endOfContent")).toBeAttached();
+
+  return startLayer.evaluate((layer, endPage) => {
+    const endLayer = document.querySelector<HTMLElement>(
+      `[data-pdf-page-number="${endPage}"] .pdf-text-layer`,
+    );
+    const startSpans = [...layer.querySelectorAll("span")].filter((span) =>
+      span.textContent?.trim(),
+    );
+    const endSpans = [...(endLayer?.querySelectorAll("span") ?? [])].filter(
+      (span) => span.textContent?.trim(),
+    );
+    const start = startSpans.at(-1)?.firstChild;
+    const end = endSpans[0]?.firstChild;
+    if (!start || !end || !endLayer) throw new Error("PDF text was not ready");
+    const range = document.createRange();
+    range.setStart(start, Math.max(0, (start.textContent?.length ?? 0) - 8));
+    range.setEnd(end, Math.min(8, end.textContent?.length ?? 0));
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    const selectedText = selection?.toString() ?? "";
+    endLayer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    return selectedText.trim();
+  }, endPageNumber);
+}
+
+async function selectPdfAcrossPages(
+  page: Page,
+  startPageNumber: number,
+  endPageNumber: number,
+) {
+  await beginPdfSelectionGesture(page, startPageNumber);
+  return finishPdfSelectionAcrossPages(page, startPageNumber, endPageNumber);
+}
+
+async function pdfScrollTop(page: Page, pageNumber: number) {
+  return page
+    .locator(`[data-pdf-page-number="${pageNumber}"]`)
+    .evaluate((surface) => {
+      let ancestor = surface.parentElement;
+      while (ancestor) {
+        const overflowY = getComputedStyle(ancestor).overflowY;
+        if (overflowY === "auto" || overflowY === "scroll") {
+          return ancestor.scrollTop;
+        }
+        ancestor = ancestor.parentElement;
+      }
+      throw new Error("PDF scroll container was not found");
+    });
+}
+
 test.beforeEach(async ({ page }) => {
   createdAnnotationQuotes.length = 0;
+  createdAnnotationPositions.length = 0;
   await mockReader(page);
 });
 
@@ -1022,6 +1103,103 @@ test("preserves an exact partial-span PDF selection", async ({ page }) => {
 
   await yellowHighlight.click();
   await expect.poll(() => createdAnnotationQuotes.at(-1) ?? "").toBe("NLP");
+});
+
+test("@selection preserves and persists one cross-page PDF selection", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+  await page.locator('[data-pdf-page-number="3"]').scrollIntoViewIfNeeded();
+
+  const selectedText = await selectPdfAcrossPages(page, 2, 3);
+  await expect(page.locator("[data-active-selection-overlay]")).toHaveCount(2);
+  const selectedPages = await page
+    .locator("[data-active-selection-overlay]")
+    .evaluateAll((overlays) =>
+      overlays.map((overlay) =>
+        Number(
+          overlay.closest<HTMLElement>("[data-pdf-page-number]")?.dataset
+            .pdfPageNumber,
+        ),
+      ),
+    );
+  expect(selectedPages).toEqual([2, 3]);
+  await expect(
+    page
+      .locator('[data-pdf-page-number="3"]')
+      .getByRole("button", { name: "Highlight selection" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Highlight selection" }).click();
+  await page.getByRole("button", { name: "Yellow highlight" }).click();
+  await expect.poll(() => createdAnnotationQuotes.at(-1)).toBe(selectedText);
+  await expect
+    .poll(() => {
+      const position = createdAnnotationPositions.at(-1) as
+        { segments?: Array<{ page_number: number }> } | undefined;
+      return position?.segments?.map((segment) => segment.page_number);
+    })
+    .toEqual([2, 3]);
+  await expect(
+    page.locator(
+      '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+    ),
+  ).toHaveCount(2);
+});
+
+test("@selection defers visible-page alignment during a cross-page drag", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  const pageTwo = page.locator('[data-pdf-page-number="2"]');
+  const pageThree = page.locator('[data-pdf-page-number="3"]');
+  await expect(pageTwo.locator(":scope > canvas")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
+
+  await beginPdfSelectionGesture(page, 2);
+  await pageThree.scrollIntoViewIfNeeded();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+
+  await expect(pageThree).toBeInViewport();
+  expect(new URL(page.url()).searchParams.get("page")).toBe("2");
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
+  const scrollTopDuringDrag = await pdfScrollTop(page, 3);
+
+  await finishPdfSelectionAcrossPages(page, 2, 3);
+  await expect(page.locator("[data-active-selection-overlay]")).toHaveCount(2);
+  await expect
+    .poll(() =>
+      page
+        .locator("[data-active-selection-overlay]")
+        .evaluateAll((overlays) =>
+          overlays.map((overlay) =>
+            Number(
+              overlay.closest<HTMLElement>("[data-pdf-page-number]")?.dataset
+                .pdfPageNumber,
+            ),
+          ),
+        ),
+    )
+    .toEqual([2, 3]);
+
+  await expect(page).toHaveURL(/page=3/);
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("3");
+  await expect(pageThree).toBeInViewport();
+  await expect
+    .poll(async () =>
+      Math.abs((await pdfScrollTop(page, 3)) - scrollTopDuringDrag),
+    )
+    .toBeLessThanOrEqual(1);
 });
 
 test("keeps PDF selection stable while search highlights are present", async ({

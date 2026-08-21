@@ -3606,6 +3606,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -3617,13 +3645,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -3631,6 +3659,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [
@@ -4626,6 +4672,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -4637,13 +4711,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -4651,6 +4725,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [
@@ -10633,6 +10725,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -10644,13 +10764,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -10658,6 +10778,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [
@@ -17366,6 +17504,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -17377,13 +17543,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -17391,6 +17557,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [
@@ -21460,6 +21644,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -21471,13 +21683,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -21485,6 +21697,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [
@@ -28834,6 +29064,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -28845,13 +29103,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -28859,6 +29117,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [
@@ -40456,6 +40732,34 @@
             "title": "ParsedTextPosition",
             "type": "object"
           },
+          "PdfTextPageSegment": {
+            "additionalProperties": false,
+            "description": "Ordered PDF text geometry belonging to one page.",
+            "properties": {
+              "page_number": {
+                "description": "One-based PDF page containing this rectangle segment.",
+                "minimum": 1,
+                "title": "Page Number",
+                "type": "integer"
+              },
+              "rects": {
+                "description": "Ordered normalized rectangles on this PDF page.",
+                "items": {
+                  "$ref": "#/$defs/PdfTextRect"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Rects",
+                "type": "array"
+              }
+            },
+            "required": [
+              "page_number",
+              "rects"
+            ],
+            "title": "PdfTextPageSegment",
+            "type": "object"
+          },
           "PdfTextPosition": {
             "additionalProperties": false,
             "properties": {
@@ -40467,13 +40771,13 @@
                 "type": "string"
               },
               "page_number": {
-                "description": "One-based PDF page containing every supplied rectangle.",
+                "description": "One-based PDF page containing the first supplied segment.",
                 "minimum": 1,
                 "title": "Page Number",
                 "type": "integer"
               },
               "rects": {
-                "description": "Ordered normalized rectangles covering the exact selected quote.",
+                "description": "Legacy projection of the first page segment.",
                 "items": {
                   "$ref": "#/$defs/PdfTextRect"
                 },
@@ -40481,6 +40785,24 @@
                 "minItems": 1,
                 "title": "Rects",
                 "type": "array"
+              },
+              "segments": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/PdfTextPageSegment"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.",
+                "title": "Segments"
               }
             },
             "required": [

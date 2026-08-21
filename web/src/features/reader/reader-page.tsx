@@ -57,8 +57,11 @@ import {
   PdfPage,
   type ReaderFitMode,
   type ReaderPdfSourceTarget,
-  type ReaderSelection,
 } from "./components/pdf-page";
+import {
+  readerSelectionTurnContext,
+  type ReaderSelection,
+} from "./reader-selection";
 import { PdfThumbnail } from "./components/pdf-thumbnail";
 import {
   useDesktopReaderPanel,
@@ -154,6 +157,11 @@ function ReaderDocumentWorkspace({
     React.useState<string>();
   const [selectedAnnotationId, setSelectedAnnotationId] =
     React.useState<string>();
+  const [annotationNavigation, setAnnotationNavigation] = React.useState<{
+    id: string;
+    request: number;
+  }>();
+  const annotationNavigationRequestRef = React.useRef(0);
   const [previewAnnotationId, setPreviewAnnotationId] =
     React.useState<string>();
   const [annotationAudienceFilter, setAnnotationAudienceFilter] =
@@ -287,7 +295,12 @@ function ReaderDocumentWorkspace({
     conversationId,
     getTurnContexts: () => {
       if (pendingTurnContext) {
-        return [{ ...pendingTurnContext, document_id: documentId }];
+        return [
+          readerSelectionTurnContext({
+            ...pendingTurnContext,
+            document_id: documentId,
+          }),
+        ];
       }
       if (selectedAnnotationId) {
         return [{ kind: "annotation_thread", thread_id: selectedAnnotationId }];
@@ -354,6 +367,7 @@ function ReaderDocumentWorkspace({
     });
     await refreshAnnotations();
     setSelectedAnnotationId(item.id);
+    setAnnotationNavigation(undefined);
     setActiveTextSelection(undefined);
     setAnnotationSelection(undefined);
     setAnnotationInitialComment(undefined);
@@ -374,7 +388,6 @@ function ReaderDocumentWorkspace({
 
   const handleVisiblePageChange = React.useCallback(
     (nextPage: number) => {
-      setActiveTextSelection(undefined);
       updateLocation({ page: nextPage });
     },
     [updateLocation],
@@ -464,8 +477,13 @@ function ReaderDocumentWorkspace({
     updateLocation,
   ]);
 
-  async function openAnnotation(annotationId: string) {
+  function openAnnotation(annotationId: string) {
     setSelectedAnnotationId(annotationId);
+    annotationNavigationRequestRef.current += 1;
+    setAnnotationNavigation({
+      id: annotationId,
+      request: annotationNavigationRequestRef.current,
+    });
     const annotation = annotationsQuery.data?.items.find(
       (item) => item.id === annotationId,
     );
@@ -473,6 +491,12 @@ function ReaderDocumentWorkspace({
     if (position?.page_number)
       updateLocation({ page: position.page_number, panel: "annotations" });
     else updateLocation({ panel: "annotations" });
+  }
+
+  function openAnnotationInPlace(annotationId: string) {
+    setSelectedAnnotationId(annotationId);
+    setAnnotationNavigation(undefined);
+    updateLocation({ panel: "annotations" });
   }
 
   const refreshFileUrl = React.useCallback(
@@ -714,7 +738,7 @@ function ReaderDocumentWorkspace({
       setSelectedAnnotationId(undefined);
       await refreshAnnotations();
     },
-    onAnnotationSelect: (id) => void openAnnotation(id),
+    onAnnotationSelect: openAnnotation,
     onAnnotationPreviewChange: setPreviewAnnotationId,
     onAnnotationStatusChange: async (id, status) => {
       await updateReaderAnnotationThread(id, { status });
@@ -1005,6 +1029,7 @@ function ReaderDocumentWorkspace({
                     <PdfPage
                       activeTextSelection={activeTextSelection}
                       adapter={adapter}
+                      annotationNavigation={annotationNavigation}
                       annotationCommentLabel={(count) =>
                         t("annotations.commentMarker", { count })
                       }
@@ -1016,7 +1041,7 @@ function ReaderDocumentWorkspace({
                       onActiveTextSelectionChange={
                         handleActiveTextSelectionChange
                       }
-                      onAnnotationSelect={(id) => void openAnnotation(id)}
+                      onAnnotationSelect={openAnnotationInPlace}
                       onAskSelection={(selection) => {
                         setPendingTurnContext({
                           ...selection,
