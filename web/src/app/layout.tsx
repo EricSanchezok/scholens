@@ -4,10 +4,12 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
 import { Providers } from "@/app/providers";
-import { defaultThemeName } from "@/design-system/generated/theme-metadata";
+import {
+  defaultThemeName,
+  pwaColors,
+} from "@/design-system/generated/theme-metadata";
 import { motionInitializationScript } from "@/design-system/motion/motion-script";
 import { themeInitializationScript } from "@/design-system/theme/theme-script";
-import { metadataColors } from "@/design-system/generated/color-metadata";
 import { localeDirection, type AppLocale } from "@/i18n/config";
 import { formats } from "@/i18n/formats";
 import { PRODUCTION_APP_ORIGIN } from "@/lib/product";
@@ -25,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
     icons: {
       other: [
         {
-          color: metadataColors.brandInk,
+          color: pwaColors.light.textPrimary,
           rel: "mask-icon",
           url: "/brand/safari-pinned-tab.svg",
         },
@@ -62,11 +64,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   themeColor: [
     {
-      color: metadataColors.canvasLight,
+      color: pwaColors.light.canvas,
       media: "(prefers-color-scheme: light)",
     },
     {
-      color: metadataColors.canvasDark,
+      color: pwaColors.dark.canvas,
       media: "(prefers-color-scheme: dark)",
     },
   ],

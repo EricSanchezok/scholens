@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next";
 
-import { metadataColors } from "@/design-system/generated/color-metadata";
+import { pwaColors } from "@/design-system/generated/theme-metadata";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    background_color: metadataColors.launcherBackground,
+    background_color: pwaColors.light.canvas,
     description: "Read, organize, and ask across your research with Scholens.",
     display: "standalone",
     icons: [
@@ -36,6 +36,6 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     short_name: "Scholens",
     start_url: "/",
-    theme_color: metadataColors.brandInk,
+    theme_color: pwaColors.light.canvas,
   };
 }
