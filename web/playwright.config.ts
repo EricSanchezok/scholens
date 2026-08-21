@@ -22,6 +22,16 @@ export default defineConfig({
       testMatch: /motion-smoke\.spec\.ts/,
       use: { ...devices["Desktop Safari"] },
     },
+    {
+      name: "firefox-theme",
+      testMatch: /theme-smoke\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      name: "webkit-theme",
+      testMatch: /theme-smoke\.spec\.ts/,
+      use: { ...devices["Desktop Safari"] },
+    },
   ],
   webServer: {
     command: "pnpm start",

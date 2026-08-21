@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
 import { Providers } from "@/app/providers";
+import { defaultThemeName } from "@/design-system/generated/theme-metadata";
 import { motionInitializationScript } from "@/design-system/motion/motion-script";
 import { themeInitializationScript } from "@/design-system/theme/theme-script";
 import { localeDirection, type AppLocale } from "@/i18n/config";
@@ -34,7 +35,7 @@ export default async function RootLayout({
       data-color-scheme="light"
       data-motion="full"
       data-motion-preference="system"
-      data-theme="default"
+      data-theme={defaultThemeName}
       dir={localeDirection(locale)}
       lang={locale}
       suppressHydrationWarning

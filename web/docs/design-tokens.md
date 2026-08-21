@@ -5,8 +5,8 @@
 The token graph mirrors the Figma architecture:
 
 ```text
-DTCG primitives
-  -> theme palette aliases
+DTCG theme bundle primitives
+  -> theme palette and expression aliases
   -> Light/Dark semantic aliases
   -> generated CSS variables and TypeScript metadata
   -> Tailwind semantic utilities
@@ -17,11 +17,12 @@ Current source files:
 
 ```text
 src/design-system/tokens/
-├── primitives.json
-├── themes/default.json
+├── themes/
+│   ├── manifest.json
+│   └── default.json
 ├── semantic/light.json
 ├── semantic/dark.json
-├── effects.json
+├── contrast.json
 ├── dimensions.json
 └── motion.json
 
@@ -35,9 +36,10 @@ files under `src/design-system/generated` by hand.
 
 ## Token layers
 
-- **Primitives** contain raw values and have no component meaning.
-- **Theme palette** maps stable palette slots to primitives. A future Ocean
-  theme changes this layer rather than component styles.
+- **Theme bundles** contain their raw primitives, stable palette slots, interface
+  font and weight roles, non-pill radii, icon stroke, and elevation recipes.
+- **The manifest** owns the ordered theme registry and default theme. Runtime,
+  Storybook, generated metadata, and Settings consume that one registry.
 - **Semantic tokens** describe purpose: canvas, surface, text, border, action,
   focus, selection, feedback, annotation, and elevation.
 - **Composite effects** assemble semantic colors and geometry into reusable
@@ -48,6 +50,11 @@ files under `src/design-system/generated` by hand.
 Do not alias semantic tokens to other semantic tokens. Both Light and Dark map
 directly to the theme palette so the graph remains inspectable.
 
+Theme controls visual expression, not product geometry. Spacing, layout widths,
+breakpoints, type sizes, control and touch sizes, focus and scrollbar geometry,
+Reader source typography, pill/circle radii, and motion remain shared across all
+themes. This keeps responsive behavior and accessibility invariant.
+
 ## Editing workflow
 
 1. Identify whether the change is primitive, theme, semantic, or component
@@ -55,8 +62,9 @@ directly to the theme palette so the graph remains inspectable.
    one component.
 2. Update the relevant DTCG source using `$type`, `$value`, and references.
 3. Run `pnpm tokens:build`.
-4. Run `pnpm design:check` to validate appearance parity, references, adapter
-   aliases, and forbidden styling shortcuts.
+4. Run `pnpm design:check` to validate theme and appearance parity, references,
+   contrast, generated selectors, adapter aliases, and forbidden styling
+   shortcuts.
 5. Inspect Light and Dark stories, focus, disabled, feedback, overlay, and long
    content in Storybook.
 6. Run `pnpm tokens:check`, tests, and builds.
@@ -78,7 +86,9 @@ necessary semantic role does not exist, add and document the role instead of
 writing hex, RGB, HSL, a primitive palette value, or a repeated arbitrary
 recipe at the call site.
 
-The Tailwind `@theme` adapter is appended to generated `dimensions.css`. Add or
+The Tailwind `@theme` adapter is appended to generated `dimensions.css`. It maps
+stable color, font, font-weight, radius, type, and shadow utilities to the
+active theme variables. Add or
 rename an alias in `src/design-system/adapters/tailwind.json`; never recreate an
 `@theme` table in global CSS. Typography aliases additionally have small stable
 `@utility` registrations in `src/styles/globals.css`. Their values still come
@@ -174,6 +184,13 @@ the original glyphs.
 - Appearance preference values: `system`, `light`, or `dark`.
 - Preferences are stored in localStorage and cookies.
 - The inline initialization script resolves appearance before paint.
+- Unsupported or retired theme values fall back to the manifest default.
+- Settings shows Theme choices only when the manifest contains two or more
+  themes.
+- Generated metadata exposes `pwaColors.light` and `pwaColors.dark` for the
+  manifest default theme's canvas, primary/secondary foreground, and border.
+  PWA browser chrome consumes this contract instead of theme files or repeated
+  hex values.
 
 Theme and Appearance remain independent. Adding Ocean must not create combined
 `Ocean Light` and `Ocean Dark` mode names.
@@ -189,15 +206,19 @@ reduced-motion contract is in [Motion system](./motion.md).
 
 ## Adding a theme
 
-1. Add `tokens/themes/<theme>.json` using the same palette slots as Default.
-2. Add semantic outputs for that theme and both appearances without changing
-   component token names.
-3. Extend `build-tokens.mjs` and generated `themeNames` metadata.
-4. Add the Theme option to Storybook while keeping Appearance independent.
-5. Validate all component stories and representative feature compositions.
-6. Sync the matching Figma Theme mode and verify its aliases.
+1. Add one self-contained `tokens/themes/<theme>.json` with exactly the same
+   paths and DTCG types as Default, then register its kebab-case ID in
+   `themes/manifest.json`.
+2. Add the English and Simplified Chinese Settings name. Runtime metadata,
+   generated CSS, Storybook controls, and the Settings picker update
+   automatically.
+3. Run token generation and checks, then review Theme Lab plus representative
+   feature compositions in Light and Dark.
+4. Sync the matching Figma Theme mode and verify its aliases.
 
-Do not add a new theme until all semantic roles resolve in both appearances.
+Do not add a new theme until all semantic roles resolve in both appearances,
+the contrast contract passes, and every required font asset is explicitly
+registered. Theme JSON must never load a remote font or runtime stylesheet.
 
 ## Figma synchronization
 

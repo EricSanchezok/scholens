@@ -44,7 +44,8 @@ instead of silently testing another checkout or build.
 
 Use global toolbar controls instead of duplicating entire story files:
 
-- Theme: Default, later additional independent themes.
+- Theme: every manifest-registered curated theme. Theme Lab renders the complete
+  Theme × Appearance matrix and verifies that its computed variables resolve.
 - Appearance: Light and Dark.
 - Locale: English and Simplified Chinese. This toolbar loads the real message
   dictionary through the application provider.
@@ -129,6 +130,11 @@ The three-engine motion smoke also exercises the inverse precedence: explicit
 `reduced` with an OS `no-preference` policy, asserting that conversation
 auto-follow performs one direct write to the latest target rather than a
 smooth requestAnimationFrame sequence.
+
+`theme-smoke.spec.ts` is the corresponding three-engine foundation check for
+pre-hydration system appearance, retired-preference fallback, and resolved
+theme variables. Do not expand the complete product suite to every browser or
+duplicate every story for each theme.
 
 Motion bundle acceptance uses production output rather than development or
 Storybook chunks. Build clean `main` and the candidate with the same Node 22

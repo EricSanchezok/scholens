@@ -39,7 +39,7 @@ export function Icon({
         .filter(Boolean)
         .join(" ")}
       height={size}
-      strokeWidth={1.5}
+      strokeWidth="var(--theme-icon-stroke)"
       width={size}
     />
   );

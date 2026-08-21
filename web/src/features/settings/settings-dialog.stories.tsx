@@ -161,6 +161,9 @@ export const General: Story = {
         name: "Appearance",
       }),
     ).toBeVisible();
+    await expect(
+      body.queryByRole("heading", { level: 3, name: "Theme" }),
+    ).not.toBeInTheDocument();
     await expect(body.getByRole("button", { name: "Light" })).toBeVisible();
     await expect(body.getByRole("button", { name: "Dark" })).toBeVisible();
     await expect(body.getByRole("button", { name: "System" })).toBeVisible();

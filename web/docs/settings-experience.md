@@ -41,9 +41,13 @@ service without spending menu width on the license label.
 
 ## Panel responsibilities
 
-- General is labeled Appearance. It owns application locale,
+- General is labeled Appearance. It owns application locale, curated Theme,
   the visual Light, Dark, and System choices, and the independent System,
-  Reduced, and Full motion preference.
+  Reduced, and Full motion preference. Theme remains independent from
+  Appearance and is stored only in the current browser. A Theme picker is
+  omitted while only Default is registered and appears automatically once a
+  second curated theme ships; Appearance previews always inherit the selected
+  Theme.
 - Account presents the authenticated Actor's shared identity as read-only,
   current-browser Sign out, and one external SanchezCloud Account action.
   Profile, email, and password editing are never exposed in Scholens.
@@ -146,7 +150,7 @@ dialogs, feedback, and semantic Iconoir wrappers remain shared components.
 
 ## Acceptance states
 
-Storybook covers Appearance, Account, Usage, Access Keys, Connections,
+Storybook covers Appearance, the conditional Theme picker, Account, Usage, Access Keys, Connections,
 Translation, 390px mobile, and Dark Chinese states. Account states
 cover direct URL navigation, read-only identity, canonical and overridden
 Account Center, current-session Sign out, mobile, and Dark. The shell account

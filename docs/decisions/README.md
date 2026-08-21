@@ -63,6 +63,7 @@ change what the accepted record decided.
 - [ADR 0029: Detachable Conversation generation](./0029-detachable-conversation-generation.md)
 - [ADR 0030: Local hybrid retrieval for stored papers](./0030-local-hybrid-paper-retrieval.md)
 - [ADR 0031: Explicit local synthetic identity fixture](./0031-local-synthetic-identity-fixture.md)
+- [ADR 0032: Manifest-driven curated Web themes](./0032-manifest-driven-curated-web-themes.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

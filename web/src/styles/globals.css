@@ -1,7 +1,6 @@
 @import "../design-system/generated/dimensions.css";
 @import "../design-system/generated/motion.css";
-@import "../design-system/generated/colors-light.css";
-@import "../design-system/generated/colors-dark.css";
+@import "../design-system/generated/themes.css";
 @import "../design-system/motion/motion-recipes.css";
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
@@ -133,7 +132,7 @@ body {
   overflow-x: clip;
   background: var(--color-bg-canvas);
   color: var(--color-text-primary);
-  font-family: var(--font-geist), "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
 }
 

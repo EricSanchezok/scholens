@@ -1,6 +1,6 @@
 "use client";
 
-import { ThemeProvider } from "@/design-system/theme/theme-provider";
+import { ThemeProvider } from "@/design-system/theme";
 import { MotionProvider } from "@/design-system/motion/motion-provider";
 import { ScrollbarActivity } from "@/design-system/scrollbars/scrollbar-activity";
 import { ToastProvider } from "@/components/ui/toast";

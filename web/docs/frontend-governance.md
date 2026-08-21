@@ -101,12 +101,16 @@ open an empty dialog backed by fixtures or provisional queries.
 2. Decide whether the role is primitive, theme palette, semantic appearance,
    composite effect, or Tailwind adapter. Reuse an existing role when its
    meaning matches.
-3. Update DTCG sources. Light and Dark must expose the same semantic paths and
-   types. Composite effects reference semantic color roles.
+3. Update DTCG sources. Every registered theme must expose the Default theme's
+   paths and types, and Light and Dark must expose the same semantic paths and
+   types. Composite effects reference semantic color roles. Theme changes may
+   alter visual expression but not shared layout, touch, type-size, or motion
+   geometry.
 4. Add a Tailwind alias only in
    `src/design-system/adapters/tailwind.json`; the adapter CSS is generated.
 5. Run `pnpm tokens:build`, `pnpm tokens:check`, and `pnpm design:check`, then
-   review representative Storybook states in Light and Dark.
+   review Theme Lab and representative Storybook states for every affected
+   Theme × Appearance pair.
 6. Sync the agreed role and values to Figma Theme Lab/Variables. Do not repair a
    token mismatch by changing individual frames or component call sites.
 

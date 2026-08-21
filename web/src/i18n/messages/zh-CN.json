@@ -1585,6 +1585,11 @@
       "dark": "深色",
       "system": "跟随系统"
     },
+    "theme": {
+      "options": {
+        "default": "默认"
+      }
+    },
     "motion": {
       "system": {
         "label": "跟随系统",
@@ -1607,6 +1612,8 @@
       "title": "外观",
       "description": "选择 Scholens 的显示、动态效果与界面语言。",
       "interfaceLanguage": "界面语言",
+      "theme": "主题",
+      "themeDescription": "选择精选的视觉表达，不改变 Scholens 的使用方式。",
       "appearance": "外观",
       "motion": "动态效果",
       "motionDescription": "动效用于解释状态与空间关系，不会拖慢你的研究工作。"
