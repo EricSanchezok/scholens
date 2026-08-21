@@ -235,6 +235,24 @@ annotations are append-only in Scholens by their stable Zotero annotation key:
 the integration does not delete or overwrite Scholens annotations and never
 syncs them back to Zotero.
 
+## Mobile distribution starts with the installable Web product
+
+Scholens ships one canonical Web product across desktop and mobile. On phones,
+that product may be installed to the Home Screen and run in its own application
+window; a browser tab and an installed launch remain two entry points into the
+same account, research model, and feature set rather than separate products.
+
+Installation must be offered after a researcher has experienced useful product
+behavior, not as a gate before sign-in or first use. The ordinary mobile browser
+experience remains complete for people who decline installation or open Scholens
+from an in-app browser that cannot install it directly.
+
+Installed delivery does not imply offline research storage. Papers, account
+data, signed URLs, conversations, and derived research content remain
+network-authorized by default. Push notifications, offline paper reading, and
+store-distributed native containers require separate product and privacy
+decisions.
+
 ## Reading transformations preserve the paper as source of truth
 
 Translation and reading reflow are derived views of an authorized paper. They

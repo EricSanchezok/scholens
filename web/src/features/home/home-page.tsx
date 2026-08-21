@@ -8,6 +8,7 @@ import * as React from "react";
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
+import { useInstallExperience } from "@/features/install-experience";
 import {
   ConversationView,
   ReasoningMenu,
@@ -39,6 +40,7 @@ export function HomeWorkspace({
   const toast = useToast();
   const t = useTranslations("Home");
   const { signOut } = useAuthSession();
+  const { recordCoreAction } = useInstallExperience();
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [contextOverrides, setContextOverrides] = React.useState<
@@ -75,6 +77,7 @@ export function HomeWorkspace({
         title: t("conversation.error"),
         description: t("conversation.retryHint"),
       }),
+    onTurnStarted: recordCoreAction,
     reasoningLevel,
     scopeType: "global",
     updateExistingContext: true,

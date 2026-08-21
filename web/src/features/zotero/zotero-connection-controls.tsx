@@ -22,6 +22,13 @@ import {
   zoteroSettingsErrorKey,
 } from "./message-keys";
 import { buildZoteroReturnPath } from "./oauth-return";
+import {
+  cancelPreparedZoteroAuthorization,
+  clearPendingZoteroAuthorization,
+  continueZoteroAuthorization,
+  hasPendingZoteroAuthorization,
+  prepareZoteroAuthorizationWindow,
+} from "./oauth-navigation";
 
 function zoteroErrorCode(error: unknown) {
   return error instanceof ApiError && error.code
@@ -62,16 +69,21 @@ export function ZoteroConnectionControls({
     enabled: Boolean(activeSyncId),
   });
   const connect = useMutation({
-    mutationFn: async () => {
-      const result = await beginZoteroAuthorization(
-        "manage",
-        buildZoteroReturnPath(
-          window.location.pathname,
-          window.location.search,
+    mutationFn: async (authorizationWindow?: Window | null) => {
+      try {
+        const result = await beginZoteroAuthorization(
           "manage",
-        ),
-      );
-      window.location.assign(result.auth_url);
+          buildZoteroReturnPath(
+            window.location.pathname,
+            window.location.search,
+            "manage",
+          ),
+        );
+        continueZoteroAuthorization(result.auth_url, authorizationWindow);
+      } catch (error) {
+        cancelPreparedZoteroAuthorization(authorizationWindow);
+        throw error;
+      }
     },
   });
   const sync = useMutation({
@@ -115,6 +127,26 @@ export function ZoteroConnectionControls({
   }, [queryClient, terminal]);
 
   React.useEffect(() => {
+    if (status.data?.connection_state === "connected") {
+      clearPendingZoteroAuthorization();
+    }
+  }, [status.data?.connection_state]);
+
+  React.useEffect(() => {
+    function resumeAuthorization() {
+      if (document.visibilityState === "hidden") return;
+      if (!hasPendingZoteroAuthorization()) return;
+      void queryClient.invalidateQueries({ queryKey: zoteroKeys.all });
+    }
+    window.addEventListener("focus", resumeAuthorization);
+    document.addEventListener("visibilitychange", resumeAuthorization);
+    return () => {
+      window.removeEventListener("focus", resumeAuthorization);
+      document.removeEventListener("visibilitychange", resumeAuthorization);
+    };
+  }, [queryClient]);
+
+  React.useEffect(() => {
     const intent = searchParams.get("zotero_intent");
     const result = searchParams.get("zotero");
     if (intent !== "manage" || !result) return;
@@ -151,7 +183,7 @@ export function ZoteroConnectionControls({
         ) : null}
         <Button
           loading={connect.isPending}
-          onClick={() => connect.mutate()}
+          onClick={() => connect.mutate(prepareZoteroAuthorizationWindow())}
           size="sm"
         >
           {t("connect")}
@@ -281,7 +313,7 @@ export function ZoteroConnectionControls({
       {invalid ? (
         <Button
           loading={connect.isPending}
-          onClick={() => connect.mutate()}
+          onClick={() => connect.mutate(prepareZoteroAuthorizationWindow())}
           size="sm"
           variant="secondary"
         >

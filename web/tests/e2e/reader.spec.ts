@@ -1128,14 +1128,20 @@ test("@selection preserves and persists one cross-page PDF selection", async ({
       ),
     );
   expect(selectedPages).toEqual([2, 3]);
-  await expect(
-    page
-      .locator('[data-pdf-page-number="3"]')
-      .getByRole("button", { name: "Highlight selection" }),
-  ).toBeVisible();
+  const pageThree = page.locator('[data-pdf-page-number="3"]');
+  const highlightButton = pageThree.getByRole("button", {
+    name: "Highlight selection",
+  });
+  const yellowHighlight = pageThree.getByRole("button", {
+    name: "Yellow highlight",
+  });
+  await expect(highlightButton).toBeVisible();
+  await expect(async () => {
+    await highlightButton.click({ timeout: 1_500 });
+    await expect(yellowHighlight).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Highlight selection" }).click();
-  await page.getByRole("button", { name: "Yellow highlight" }).click();
+  await yellowHighlight.click();
   await expect.poll(() => createdAnnotationQuotes.at(-1)).toBe(selectedText);
   await expect
     .poll(() => {

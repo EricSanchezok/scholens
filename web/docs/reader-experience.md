@@ -6,6 +6,13 @@ contextual conversation entry point. A paper may be opened for personal reading
 or inside one Project without creating another Document record. Reader does not
 own a second conversation protocol or a second Workspace shell.
 
+On a narrow mobile launch, the first successfully rendered PDF shows one quiet
+AI reflow suggestion below the toolbar. It never starts MinerU, changes the
+Reader URL, or replaces the PDF without an explicit user action. Dismissal is a
+versioned device-local boolean. This suggestion takes priority over the
+installable-Web-App promotion so Reader never stacks two onboarding actions at
+the bottom of the phone viewport.
+
 The active desktop acceptance source is Figma
 [`50 — Reader`](https://www.figma.com/design/2T5BuTPMIrM2jsVhgIVYIX/Scholens-%E2%80%94-Product-Design?node-id=390-2).
 The canonical conversation boundary is

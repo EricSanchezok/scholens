@@ -33,6 +33,7 @@ import {
 } from "@/design-system/motion";
 import { ApiError } from "@/lib/api";
 import { useAuthSession, type Actor } from "@/features/authentication";
+import { useInstallExperience } from "@/features/install-experience";
 import {
   conversationKeys,
   conversationQueries,
@@ -63,6 +64,10 @@ import {
   type ReaderSelection,
 } from "./reader-selection";
 import { PdfThumbnail } from "./components/pdf-thumbnail";
+import {
+  ReaderMobileReflowNudge,
+  useReaderMobileReflowNudge,
+} from "./components/reader-mobile-reflow-nudge";
 import {
   useDesktopReaderPanel,
   useDocumentNavigationRail,
@@ -124,6 +129,7 @@ function ReaderDocumentWorkspace({
   const { resolved: resolvedMotion } = useMotionPreference();
   const toast = useToast();
   const { signOut } = useAuthSession();
+  const { recordCoreAction } = useInstallExperience();
   const [collapsed, setCollapsed] = React.useState(true);
   const [signingOut, setSigningOut] = React.useState(false);
   const [adapterState, setAdapterState] = React.useState<{
@@ -317,6 +323,7 @@ function ReaderDocumentWorkspace({
     onTurnStarted: () => {
       setPendingTurnContext(undefined);
       setSelectedAnnotationId(undefined);
+      recordCoreAction();
     },
     reasoningLevel,
     scopeId: projectId ?? documentId,
@@ -668,6 +675,18 @@ function ReaderDocumentWorkspace({
     panel === "details";
   const useDesktopPanel = useDesktopReaderPanel();
   const showDocumentNavigation = useDocumentNavigationRail();
+  const reflowNudge = useReaderMobileReflowNudge(
+    document?.processing_status === "completed" &&
+      readerView === "pdf" &&
+      Boolean(adapter) &&
+      !showDocumentNavigation,
+  );
+
+  React.useEffect(() => {
+    if (document?.processing_status === "completed" && adapter) {
+      recordCoreAction();
+    }
+  }, [adapter, document?.processing_status, recordCoreAction]);
 
   const closeSearch = React.useCallback(() => {
     setSearchOpen(false);
@@ -843,6 +862,7 @@ function ReaderDocumentWorkspace({
       onSignOut={handleSignOut}
       showMobileBottomNavigation={false}
       signingOut={signingOut}
+      suppressInstallPromotion={reflowNudge.visible}
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
         {documentQuery.isPending && (
@@ -1003,6 +1023,17 @@ function ReaderDocumentWorkspace({
                   view={readerView}
                   zoom={zoom}
                 />
+                {reflowNudge.visible ? (
+                  <ReaderMobileReflowNudge
+                    onDismiss={reflowNudge.dismiss}
+                    onOpenReflow={() => {
+                      reflowNudge.dismiss();
+                      closeSearch();
+                      setActiveTextSelection(undefined);
+                      updateLocation({ view: "reflow" });
+                    }}
+                  />
+                ) : null}
                 <div className="flex min-h-0 flex-1">
                   {readerView === "pdf" &&
                     adapter &&

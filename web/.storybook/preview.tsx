@@ -37,7 +37,13 @@ import "../src/styles/globals.css";
 initialize(
   {
     onUnhandledRequest(request, print) {
-      if (new URL(request.url).pathname.startsWith("/@id/virtual:")) return;
+      const pathname = new URL(request.url).pathname;
+      if (
+        pathname.startsWith("/@id/virtual:") ||
+        pathname.startsWith("/brand/")
+      ) {
+        return;
+      }
       print.error();
     },
   },

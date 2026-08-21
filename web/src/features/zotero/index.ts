@@ -23,3 +23,9 @@ export {
   clearZoteroCallbackParams,
   shouldOpenZoteroLibrary,
 } from "./oauth-return";
+export {
+  clearPendingZoteroAuthorization,
+  continueZoteroAuthorization,
+  hasPendingZoteroAuthorization,
+  prepareZoteroAuthorizationWindow,
+} from "./oauth-navigation";

@@ -10,6 +10,7 @@ import {
 } from "@/design-system/generated/theme-metadata";
 import { motionInitializationScript } from "@/design-system/motion/motion-script";
 import { themeInitializationScript } from "@/design-system/theme/theme-script";
+import { ServiceWorkerRegistration } from "@/features/install-experience";
 import { localeDirection, type AppLocale } from "@/i18n/config";
 import { formats } from "@/i18n/formats";
 import { PRODUCTION_APP_ORIGIN } from "@/lib/product";
@@ -23,6 +24,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const description = t("description");
   return {
     applicationName: "Scholens",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: "Scholens",
+    },
     description,
     icons: {
       other: [
@@ -100,6 +106,7 @@ export default async function RootLayout({
         />
       </head>
       <body className={geist.variable}>
+        <ServiceWorkerRegistration />
         <NextIntlClientProvider
           formats={formats}
           locale={locale}
