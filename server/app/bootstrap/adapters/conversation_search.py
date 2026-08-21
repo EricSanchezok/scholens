@@ -36,6 +36,13 @@ from app.shared.application import Actor
 MatchField = Literal["title", "scope", "user_query", "assistant_response"]
 
 
+def _literal_like_pattern(value: str) -> str:
+    """Return a contains pattern that treats SQL LIKE metacharacters literally."""
+
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def _plain_snippet(content: str | None, query: str, *, limit: int = 220) -> str | None:
     if not content:
         return None
@@ -103,7 +110,7 @@ class PostgresConversationSearch:
     ) -> ConversationSearchPage:
         query = request.query.strip()
         normalized = query.casefold()
-        contains_pattern = f"%{normalized}%"
+        contains_pattern = _literal_like_pattern(normalized)
         text_query = func.websearch_to_tsquery("pg_catalog.simple", query)
         active = self._active_turns(actor_id=actor.id)
         scope_label = func.coalesce(
@@ -113,16 +120,16 @@ class PostgresConversationSearch:
             "",
         )
         title_text = func.lower(Conversation.title)
-        title_contains = title_text.like(contains_pattern)
+        title_contains = title_text.like(contains_pattern, escape="\\")
         project_scope_text = func.lower(func.coalesce(Project.title, ""))
         document_scope_text = func.lower(func.coalesce(Document.title, ""))
         snapshot_scope_text = func.lower(
             func.coalesce(Conversation.scope_label_snapshot, "")
         )
         scope_contains = or_(
-            project_scope_text.like(contains_pattern),
-            document_scope_text.like(contains_pattern),
-            snapshot_scope_text.like(contains_pattern),
+            project_scope_text.like(contains_pattern, escape="\\"),
+            document_scope_text.like(contains_pattern, escape="\\"),
+            snapshot_scope_text.like(contains_pattern, escape="\\"),
         )
         title_similarity = func.similarity(title_text, normalized)
         scope_similarity = func.greatest(
@@ -163,7 +170,7 @@ class PostgresConversationSearch:
         ).all()
 
         user_text = func.coalesce(active.c.user_query, "")
-        user_contains = func.lower(user_text).like(contains_pattern)
+        user_contains = func.lower(user_text).like(contains_pattern, escape="\\")
         user_vector = func.to_tsvector("pg_catalog.simple", user_text)
         user_full_text = user_vector.op("@@")(text_query)
         user_rank = func.ts_rank_cd(user_vector, text_query)
@@ -179,7 +186,10 @@ class PostgresConversationSearch:
         ).all()
 
         assistant_text = func.coalesce(ConversationResponse.content, "")
-        assistant_contains = func.lower(assistant_text).like(contains_pattern)
+        assistant_contains = func.lower(assistant_text).like(
+            contains_pattern,
+            escape="\\",
+        )
         assistant_vector = func.to_tsvector("pg_catalog.simple", assistant_text)
         assistant_full_text = assistant_vector.op("@@")(text_query)
         assistant_rank = func.ts_rank_cd(assistant_vector, text_query)

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.bootstrap.adapters.conversation_search import (
     PostgresConversationSearch,
+    _literal_like_pattern,
     _plain_snippet,
 )
 from app.bootstrap.adapters.conversation_repository import conversation_repository
@@ -142,6 +143,40 @@ def test_active_path_query_is_authorized_and_follows_only_selected_branches() ->
     assert "conversations.archived_at IS NULL" in statement
     assert "conversations.selected_root_turn_id" in statement
     assert "selected_child_turn_id" in statement
+
+
+@pytest.mark.parametrize(
+    ("query", "pattern"),
+    [
+        ("memory", "%memory%"),
+        ("100%", "%100\\%%"),
+        ("a_b", "%a\\_b%"),
+        (r"a\\b", r"%a\\\\b%"),
+    ],
+)
+def test_conversation_search_treats_like_metacharacters_as_literal(
+    query: str,
+    pattern: str,
+) -> None:
+    assert _literal_like_pattern(query) == pattern
+
+
+def test_postgres_search_applies_literal_like_pattern_to_every_text_field() -> None:
+    db = MagicMock(spec=Session)
+    db.execute.return_value.all.return_value = []
+    db.scalars.return_value.all.return_value = []
+
+    PostgresConversationSearch(db).search(
+        actor=_actor(),
+        request=ConversationSearchQuery(query="100%_\\", limit=10),
+    )
+
+    statements = [call.args[0] for call in db.execute.call_args_list]
+    assert len(statements) == 3
+    for statement in statements:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        assert " ESCAPE '\\\\'" in str(compiled)
+        assert "%100\\%\\_\\\\%" in compiled.params.values()
 
 
 def test_postgres_search_ranks_metadata_before_messages_and_returns_plain_snippets(
