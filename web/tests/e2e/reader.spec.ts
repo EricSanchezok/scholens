@@ -703,11 +703,19 @@ async function selectPdfPassage(page: Page, pageNumber: number) {
   }).toPass({ timeout: 8_000 });
 }
 
-async function beginPdfSelectionGesture(page: Page, startPageNumber: number) {
-  const startLayer = page.locator(
-    `[data-pdf-page-number="${startPageNumber}"] .pdf-text-layer`,
+async function waitForPdfTextLayer(page: Page, pageNumber: number) {
+  const textLayer = page.locator(
+    `[data-pdf-page-number="${pageNumber}"] .pdf-text-layer`,
   );
-  await expect(startLayer.locator(".endOfContent")).toBeAttached();
+  await expect(
+    textLayer.locator("span").filter({ hasText: /\S/ }).first(),
+  ).toBeAttached({ timeout: 10_000 });
+  await expect(textLayer.locator(".endOfContent")).toBeAttached();
+  return textLayer;
+}
+
+async function beginPdfSelectionGesture(page: Page, startPageNumber: number) {
+  const startLayer = await waitForPdfTextLayer(page, startPageNumber);
   await startLayer.dispatchEvent("pointerdown");
   await page.evaluate(
     () =>
@@ -722,14 +730,8 @@ async function finishPdfSelectionAcrossPages(
   startPageNumber: number,
   endPageNumber: number,
 ) {
-  const startLayer = page.locator(
-    `[data-pdf-page-number="${startPageNumber}"] .pdf-text-layer`,
-  );
-  const endLayer = page.locator(
-    `[data-pdf-page-number="${endPageNumber}"] .pdf-text-layer`,
-  );
-  await expect(startLayer.locator(".endOfContent")).toBeAttached();
-  await expect(endLayer.locator(".endOfContent")).toBeAttached();
+  const startLayer = await waitForPdfTextLayer(page, startPageNumber);
+  await waitForPdfTextLayer(page, endPageNumber);
 
   return startLayer.evaluate((layer, endPage) => {
     const endLayer = document.querySelector<HTMLElement>(
@@ -1055,18 +1057,14 @@ test("creates a persistent document highlight with the full color palette", asyn
 });
 test("preserves an exact partial-span PDF selection", async ({ page }) => {
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);
-  const textLayer = page.locator('[data-pdf-page-number="2"] .pdf-text-layer');
   await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("2");
   await expect(
     page.locator('[data-pdf-page-number="2"] > canvas'),
   ).toBeVisible();
+  const textLayer = await waitForPdfTextLayer(page, 2);
   await expect(
     textLayer.locator("span").filter({ hasText: "The NLP landscape" }),
   ).toBeAttached();
-  // The sentinel is appended only after PDF.js has finished the text-layer
-  // render. Selecting an earlier attached span can race the remaining render
-  // work on a busy browser and exercise a Range the user could never create.
-  await expect(textLayer.locator(".endOfContent")).toBeAttached();
 
   const highlightButton = page.getByRole("button", {
     name: "Highlight selection",
