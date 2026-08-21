@@ -9,6 +9,7 @@ import {
   MotionRuntimeProvider,
   type MotionPreference,
 } from "../src/design-system/motion";
+import { ScrollbarActivity } from "../src/design-system/scrollbars/scrollbar-activity";
 import { formats } from "../src/i18n/formats";
 import en from "../src/i18n/messages/en.json";
 import zhCN from "../src/i18n/messages/zh-CN.json";
@@ -73,6 +74,7 @@ const preview: Preview = {
             key={motion}
             skipAnimations={isStorybookTest}
           >
+            <ScrollbarActivity />
             <MotionRuntimeProvider>
               <QueryProvider>
                 <div

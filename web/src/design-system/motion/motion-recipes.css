@@ -323,6 +323,31 @@
     var(--motion-easing-in-out) infinite;
 }
 
+*::-webkit-scrollbar-thumb {
+  transition: background-color var(--motion-duration-deliberate)
+    var(--motion-easing-exit);
+}
+
+*[data-scrollbar-active]::-webkit-scrollbar-thumb {
+  transition-duration: var(--motion-duration-feedback);
+  transition-timing-function: var(--motion-easing-enter);
+}
+
+[data-scrollbar-root] [data-scrollbar-track] {
+  transition: opacity var(--motion-duration-deliberate)
+    var(--motion-easing-exit);
+}
+
+[data-scrollbar-root] [data-scrollbar-thumb] {
+  transition: background-color var(--motion-duration-feedback)
+    var(--motion-easing-enter);
+}
+
+[data-scrollbar-root]:has([data-scrollbar-active]) [data-scrollbar-track] {
+  transition-duration: var(--motion-duration-feedback);
+  transition-timing-function: var(--motion-easing-enter);
+}
+
 html[data-motion="reduced"]
   :is(
     .motion-popup,
@@ -339,6 +364,11 @@ html[data-motion="reduced"]
 
 html[data-motion="reduced"] :is(.motion-spinner, .motion-skeleton) {
   animation: none;
+}
+
+html[data-motion="reduced"] *::-webkit-scrollbar-thumb,
+html[data-motion="reduced"] [data-scrollbar-root] [data-scrollbar-track] {
+  transition-duration: var(--motion-duration-instant);
 }
 
 html[data-motion="reduced"] .motion-control {
@@ -398,6 +428,14 @@ html[data-motion="reduced"]
 
   :is(html:not([data-motion-preference]), html[data-motion-preference="system"])
     :is(.motion-icon, .motion-progress, .motion-shape) {
+    transition-duration: var(--motion-duration-instant);
+  }
+
+  :is(html:not([data-motion-preference]), html[data-motion-preference="system"])
+    *::-webkit-scrollbar-thumb,
+  :is(html:not([data-motion-preference]), html[data-motion-preference="system"])
+    [data-scrollbar-root]
+    [data-scrollbar-track] {
     transition-duration: var(--motion-duration-instant);
   }
 
