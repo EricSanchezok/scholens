@@ -32,6 +32,7 @@ from app.modules.projects.application.projects import (
 )
 from app.shared.application import Actor, SignedCursorCodec
 from app.shared.domain import AppError, FailureKind
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 
@@ -328,6 +329,39 @@ def test_project_personal_filters_are_actor_scoped_before_counting() -> None:
         assert "paper_tags.user_id = 7" in statement
 
 
+def test_project_paper_list_applies_literal_like_pattern_to_every_text_field() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.execute.return_value.all.return_value = []
+
+    with patch("app.bootstrap.adapters.project_gateway.project_repository.get_access"):
+        SqlAlchemyProjectGateway(
+            db,
+            invitation_tokens=ProjectInvitationTokenCodec(
+                "project-pagination-test-secret-32-bytes"
+            ),
+        ).list_documents(
+            actor=_actor(),
+            project_id=uuid4(),
+            load_urls=False,
+            load_preview_urls=False,
+            query="100%_\\",
+            personal_statuses=(),
+            personal_tag_ids=(),
+            sort=ProjectPaperSort.ADDED_DESC,
+            limit=20,
+            direction=ProjectPageDirection.FORWARD,
+            position=None,
+        )
+
+    statements = [db.scalar.call_args.args[0], db.execute.call_args.args[0]]
+    for statement in statements:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        assert sql.count(" LIKE ") == sql.count(" ESCAPE '\\\\'")
+        assert "%100\\%\\_\\\\%" in compiled.params.values()
+
+
 def test_project_document_urls_are_signed_only_when_independently_requested() -> None:
     db = MagicMock(spec=Session)
     db.scalar.return_value = 1
@@ -471,3 +505,30 @@ def test_project_list_uses_one_aggregate_projection_query() -> None:
     assert "conversations" in statement
     assert "research_items.audience_project_id" in statement
     assert "project_collaborators" in statement
+
+
+def test_project_list_applies_literal_like_pattern_to_every_text_field() -> None:
+    db = MagicMock(spec=Session)
+    db.scalar.return_value = 0
+    db.execute.return_value.all.return_value = []
+
+    SqlAlchemyProjectGateway(
+        db,
+        invitation_tokens=ProjectInvitationTokenCodec(
+            "project-pagination-test-secret-32-bytes"
+        ),
+    ).list_projects(
+        user_id=7,
+        query="100%_\\",
+        sort=ProjectSort.ACTIVITY_DESC,
+        limit=20,
+        direction=ProjectPageDirection.FORWARD,
+        position=None,
+    )
+
+    statements = [db.scalar.call_args.args[0], db.execute.call_args.args[0]]
+    for statement in statements:
+        compiled = statement.compile(dialect=postgresql.dialect())
+        sql = str(compiled)
+        assert sql.count(" LIKE ") == sql.count(" ESCAPE '\\\\'")
+        assert "%100\\%\\_\\\\%" in compiled.params.values()

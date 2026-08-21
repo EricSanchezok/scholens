@@ -66,6 +66,7 @@ from app.modules.projects.application.invitation_tokens import (
 from app.shared.application import Actor
 from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import PaperStatus, ResearchAudienceType, ResearchItemKind
+from app.shared.infrastructure.sql_patterns import literal_contains_pattern
 from app.modules.papers.application.contracts.documents import (
     LibraryOutputSort,
     LibraryPaperTagResponse,
@@ -237,11 +238,13 @@ class SqlAlchemyProjectGateway:
         )
         filters = [membership_filter]
         if query is not None:
-            pattern = f"%{query.lower()}%"
+            pattern = literal_contains_pattern(query.lower())
             filters.append(
                 or_(
-                    func.lower(Project.title).like(pattern),
-                    func.lower(func.coalesce(Project.description, "")).like(pattern),
+                    func.lower(Project.title).like(pattern, escape="\\"),
+                    func.lower(func.coalesce(Project.description, "")).like(
+                        pattern, escape="\\"
+                    ),
                 )
             )
         key: Any
@@ -666,11 +669,15 @@ class SqlAlchemyProjectGateway:
         )
         filters = [ProjectPaper.project_id == project_id]
         if query is not None:
-            pattern = f"%{query.lower()}%"
+            pattern = literal_contains_pattern(query.lower())
             filters.append(
                 or_(
-                    func.lower(func.coalesce(Document.title, "")).like(pattern),
-                    func.lower(func.coalesce(Document.abstract, "")).like(pattern),
+                    func.lower(func.coalesce(Document.title, "")).like(
+                        pattern, escape="\\"
+                    ),
+                    func.lower(func.coalesce(Document.abstract, "")).like(
+                        pattern, escape="\\"
+                    ),
                 )
             )
         if personal_statuses:

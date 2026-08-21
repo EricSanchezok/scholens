@@ -37,6 +37,7 @@ from app.modules.papers.infrastructure.models import LibraryPaperTag
 from app.modules.papers.infrastructure.repository import document_repository
 from app.shared.domain.enums import JobStatus
 from app.shared.domain.enums import PaperStatus
+from app.shared.infrastructure.sql_patterns import literal_contains_pattern
 from app.modules.jobs.application.failures import actionable_job_failure
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -218,14 +219,18 @@ class SqlAlchemyPaperLibraryGateway:
 
         filters = [LibraryPaper.user_id == user_id]
         if query is not None:
-            pattern = f"%{query.lower()}%"
+            pattern = literal_contains_pattern(query.lower())
             filters.append(
                 or_(
-                    title.like(pattern),
-                    func.lower(func.coalesce(Document.abstract, "")).like(pattern),
-                    func.lower(func.coalesce(Document.doi, "")).like(pattern),
+                    title.like(pattern, escape="\\"),
+                    func.lower(func.coalesce(Document.abstract, "")).like(
+                        pattern, escape="\\"
+                    ),
+                    func.lower(func.coalesce(Document.doi, "")).like(
+                        pattern, escape="\\"
+                    ),
                     func.lower(func.array_to_string(Document.authors, " ")).like(
-                        pattern
+                        pattern, escape="\\"
                     ),
                 )
             )
@@ -268,7 +273,7 @@ class SqlAlchemyPaperLibraryGateway:
             if query is not None:
                 reservation_filters.append(
                     func.lower(UploadReservation.display_name).like(
-                        f"%{query.lower()}%"
+                        pattern, escape="\\"
                     )
                 )
             active_standalone_reservations = list(
