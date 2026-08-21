@@ -32,15 +32,9 @@ from app.modules.conversations.application.title_maintenance import (
 from app.modules.conversations.domain import DEFAULT_CONVERSATION_TITLE
 from app.llm.conversation_titles import fallback_conversation_title
 from app.shared.application import Actor
+from app.shared.infrastructure.sql_patterns import literal_contains_pattern
 
 MatchField = Literal["title", "scope", "user_query", "assistant_response"]
-
-
-def _literal_like_pattern(value: str) -> str:
-    """Return a contains pattern that treats SQL LIKE metacharacters literally."""
-
-    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
 
 
 def _plain_snippet(content: str | None, query: str, *, limit: int = 220) -> str | None:
@@ -110,7 +104,7 @@ class PostgresConversationSearch:
     ) -> ConversationSearchPage:
         query = request.query.strip()
         normalized = query.casefold()
-        contains_pattern = _literal_like_pattern(normalized)
+        contains_pattern = literal_contains_pattern(normalized)
         text_query = func.websearch_to_tsquery("pg_catalog.simple", query)
         active = self._active_turns(actor_id=actor.id)
         scope_label = func.coalesce(

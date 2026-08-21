@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.bootstrap.adapters.conversation_search import (
     PostgresConversationSearch,
-    _literal_like_pattern,
     _plain_snippet,
 )
 from app.bootstrap.adapters.conversation_repository import conversation_repository
@@ -34,6 +33,7 @@ from app.modules.conversations.application.search import (
 from app.shared.application import Actor
 from app.shared.domain import AppError
 from app.shared.domain.enums import ConversationScopeType
+from app.shared.infrastructure.sql_patterns import literal_contains_pattern
 
 
 def _actor(user_id: int = 73) -> Actor:
@@ -158,7 +158,7 @@ def test_conversation_search_treats_like_metacharacters_as_literal(
     query: str,
     pattern: str,
 ) -> None:
-    assert _literal_like_pattern(query) == pattern
+    assert literal_contains_pattern(query) == pattern
 
 
 def test_postgres_search_applies_literal_like_pattern_to_every_text_field() -> None:
