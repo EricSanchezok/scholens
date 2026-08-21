@@ -335,7 +335,7 @@ Resources:
       - ^/api/v1/projects(?:/[^/]+(?:/data-tables)?)?$
       - ^/api/v1/me/onboarding$
       - ^/api/v1/(?:papers|projects)/[^/]+/audio-overviews$
-      - ^/api/v1/search/(?:papers|research)$
+      - ^/api/v1/search/(?:conversations|papers|research)$
       Tags:
       - {Key: System, Value: SanchezCloud}
       - {Key: Product, Value: Scholens}

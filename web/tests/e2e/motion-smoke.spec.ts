@@ -430,7 +430,7 @@ test("lets an explicit full-motion preference override the OS setting", async ({
   const expandSidebar = page.getByRole("button", { name: "Expand sidebar" });
   await expect(expandSidebar).toBeVisible();
   await expandSidebar.click();
-  await expect(sidebar).toHaveCSS("width", "264px");
+  await expect(sidebar).toHaveCSS("width", "288px");
   await expect
     .poll(async () => {
       const [transform, clipRight] = await Promise.all([
@@ -470,7 +470,7 @@ test("lets an explicit full-motion preference override the OS setting", async ({
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   await expect(sidebar).toHaveCSS("width", "64px");
   await expect(railContent).toHaveCSS("transform", "none");
-  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(200, 4);
+  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(224, 4);
   expect(
     await railContent.evaluate((element) => element.getAnimations()),
   ).toHaveLength(0);
@@ -514,7 +514,7 @@ test("cancels an active rail FLIP when system motion becomes reduced", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(root).toHaveAttribute("data-motion", "reduced");
   await expect(railContent).toHaveCSS("transform", "none");
-  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(200, 4);
+  await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(224, 4);
   expect(
     await railContent.evaluate((element) => element.getAnimations()),
   ).toHaveLength(0);
@@ -544,7 +544,7 @@ test("commits the Home-to-conversation swap without reduced spatial interpolatio
     "64px",
   );
   await expect(reducedRailContent).toHaveCSS("transform", "none");
-  await expect.poll(() => railClipRight(reducedRailChrome)).toBeCloseTo(200, 4);
+  await expect.poll(() => railClipRight(reducedRailChrome)).toBeCloseTo(224, 4);
   expect(
     await reducedRailContent.evaluate((element) => element.getAnimations()),
   ).toHaveLength(0);

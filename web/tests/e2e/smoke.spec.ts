@@ -11,6 +11,7 @@ import { mockBillingUsage } from "./billing-fixture";
 
 const apiPattern = "**/api/v1";
 type ConversationTurn = (typeof homeTurns)[number];
+const firstPaper = homePapers[0]!.document;
 const actor = {
   id: 7,
   email: "niexiaohangeric@163.com",
@@ -51,6 +52,50 @@ async function mockHome(page: Page) {
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ items: homeProjects, next_cursor: null }),
+    }),
+  );
+  await page.route(`${apiPattern}/search/conversations`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            conversation: homeConversations[0],
+            matched_field: "assistant_response",
+            snippet: "A selected answer about retrieval memory.",
+          },
+        ],
+        next_cursor: null,
+        total: 1,
+      }),
+    }),
+  );
+  await page.route(`${apiPattern}/search/papers`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            created_at: firstPaper.created_at,
+            document_id: firstPaper.document_id,
+            last_accessed_at: homePapers[0]!.last_accessed_at,
+            preview_url: homePapers[0]!.preview_url,
+            publish_date: firstPaper.publish_date,
+            status: firstPaper.processing_status,
+            summary: firstPaper.summary,
+            title: firstPaper.title,
+            abstract: "A paper about retrieval memory.",
+            authors: ["Researcher One"],
+            matched_fields: ["title"],
+            retrieval_modes: ["exact"],
+            snippets: [{ text: "Retrieval memory evidence." }],
+          },
+        ],
+        next_cursor: null,
+        search_mode: "exact",
+        semantic_index_coverage: 1,
+        total: 1,
+      }),
     }),
   );
 }
@@ -135,6 +180,55 @@ test("renders the authenticated Home shell and primary data", async ({
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("opens one keyboard-search surface for conversations and papers", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const trigger = page.getByRole("button", {
+    name: "Search conversations and papers (⌘K)",
+  });
+  await trigger.focus();
+  await page.keyboard.press("Control+K");
+  const dialog = page.getByRole("dialog", { name: "Search Scholens" });
+  await expect(dialog).toBeVisible();
+  const input = dialog.getByRole("searchbox", {
+    name: "Search conversations or papers",
+  });
+  const scopeTabs = dialog.getByRole("tablist", { name: "Search scope" });
+  const [inputBox, scopeTabsBox] = await Promise.all([
+    input.boundingBox(),
+    scopeTabs.boundingBox(),
+  ]);
+  expect(inputBox).not.toBeNull();
+  expect(scopeTabsBox).not.toBeNull();
+  expect(Math.abs(inputBox!.y - scopeTabsBox!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(inputBox!.height - scopeTabsBox!.height)).toBeLessThanOrEqual(
+    1,
+  );
+  await input.fill("memory");
+  const conversationResult = dialog.getByRole("link", {
+    name: new RegExp(homeConversations[0]!.title),
+  });
+  await expect(conversationResult).toBeVisible();
+  await input.press("ArrowDown");
+  await expect(conversationResult).toBeFocused();
+
+  await dialog.getByRole("tab", { name: "Papers" }).click();
+  await expect(
+    dialog.getByRole("link", {
+      name: new RegExp(firstPaper.title ?? "Untitled paper"),
+    }),
+  ).toBeVisible();
+  const accessibility = await new AxeBuilder({ page })
+    .include('[role="dialog"]')
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(trigger).toBeFocused();
 });
 
 test("renders an intentional first-run Home without empty card shells", async ({
@@ -364,7 +458,9 @@ test("opens mobile navigation as a full-screen history hub", async ({
   expect(metrics.contentZ).toBeGreaterThan(metrics.overlayZ);
   const tools = dialog.getByTestId("mobile-navigation-tools");
   await expect(
-    tools.getByRole("searchbox", { name: "Search conversations" }),
+    tools.getByRole("button", {
+      name: "Search conversations and papers (⌘K)",
+    }),
   ).toBeVisible();
   await expect(tools.getByRole("button", { name: "Settings" })).toBeVisible();
   await expect(tools.getByRole("link", { name: "New chat" })).toBeVisible();
@@ -435,7 +531,9 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
   await page.getByRole("button", { name: "Open navigation" }).click();
   const navigationHub = page.getByRole("dialog");
   await expect(
-    navigationHub.getByRole("searchbox", { name: "Search conversations" }),
+    navigationHub.getByRole("button", {
+      name: "Search conversations and papers (⌘K)",
+    }),
   ).toBeVisible();
   await expect(
     navigationHub.getByRole("link", { name: "New chat" }),

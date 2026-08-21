@@ -53,6 +53,24 @@ Public resources use canonical identifiers:
   signed, user-and-filter-bound keyset contract as Library collections.
 - Paper ingestion, Zotero imports, and generated artifacts accept
   `Idempotency-Key`. Reusing a key with a different request returns `409`.
+- `POST /api/v1/search/conversations` is the private lexical history-search
+  contract. Its signed cursor is bound to actor, normalized query, and page
+  size. Results contain the existing conversation summary plus the highest
+  priority matched field and an optional bounded plain-text snippet; telemetry
+  records only query length, result count, cursor presence, and duration.
+
+Conversation search authorizes before retrieval and excludes archived rows.
+A recursive PostgreSQL CTE begins at `selected_root_turn_id` and follows only
+`selected_child_turn_id`; user-message matches therefore come only from the
+visible branch, and assistant matches join only each active turn's
+`selected_response_id`. Current Project or Document titles are the searchable
+scope label, with the durable conversation snapshot as fallback. Title/scope
+trigram expressions provide short-query and typo tolerance, while `simple`
+PostgreSQL full text plus substring matching supports English and Chinese
+message content. Ranking is deterministic: title, scope, user question, then
+assistant response, followed by relevance, update time, and stable ID. This is
+a direct projection over canonical conversation tables, not a second content
+store or semantic index.
 
 The reviewed public surface is stored in
 `server/openapi/v1-contract.json`. A contract test fails whenever a route is

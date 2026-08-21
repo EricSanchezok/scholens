@@ -231,16 +231,27 @@
       "expand": "展开侧栏",
       "openMenu": "打开导航",
       "closeMenu": "关闭导航",
+      "search": "搜索对话与论文（⌘K）",
+      "searchShort": "搜索",
       "searchConversations": "搜索对话",
       "searchPapers": "搜索全部论文（⌘K）",
       "comingSoon": "尚未开放"
     },
     "sidebar": {
       "pinned": "置顶",
+      "current": "当前对话",
+      "today": "今天",
+      "yesterday": "昨天",
+      "previous7Days": "过去 7 天",
+      "previous30Days": "过去 30 天",
       "conversations": "对话",
       "recent": "最近",
       "empty": "对话会显示在这里。",
       "noMatches": "没有匹配的对话",
+      "loadMore": "加载更早的对话",
+      "loadingMore": "正在加载…",
+      "historyError": "无法加载对话历史",
+      "retry": "重试",
       "conversationContext": "研究上下文",
       "openActions": "打开“{title}”的操作菜单",
       "openNewTab": "在新标签页打开",
@@ -1792,6 +1803,43 @@
       "loadMore": "加载更多结果",
       "loadingMore": "正在加载更多结果"
     }
+  },
+  "GlobalSearch": {
+    "title": "搜索 Scholens",
+    "description": "找回历史对话，或在你的研究工作区中查找论文。",
+    "close": "关闭搜索",
+    "inputLabel": "搜索对话或论文",
+    "conversationPlaceholder": "搜索对话标题、提问和回答",
+    "paperPlaceholder": "按标题、主题、论点或线索描述论文",
+    "scopeLabel": "搜索范围",
+    "tabs": {
+      "conversations": "对话",
+      "papers": "论文"
+    },
+    "recentConversations": "最近对话",
+    "noRecentConversations": "开始研究后，你的对话会显示在这里。",
+    "paperHint": "输入你还记得的线索即可；完整标题、连写词、拼写误差和自然语言描述都可以。",
+    "searchingConversations": "正在搜索对话",
+    "searchingPapers": "正在搜索论文",
+    "retry": "重试",
+    "errorTitle": "搜索暂不可用",
+    "errorDescription": "查询内容已保留，请重新搜索。",
+    "conversationEmptyTitle": "没有匹配的对话",
+    "conversationEmptyDescription": "可以尝试对话标题、问过的问题或回答中的一句话。",
+    "paperEmptyTitle": "没有相近的论文",
+    "paperEmptyDescription": "请换一个更宽泛的描述或相关概念。",
+    "conversationCount": "找到 {count} 个相关对话",
+    "paperCount": "找到 {count} 篇相关论文",
+    "matches": {
+      "title": "标题匹配",
+      "scope": "研究上下文匹配",
+      "user_query": "提问匹配",
+      "assistant_response": "回答匹配"
+    },
+    "untitled": "未命名论文",
+    "unknownAuthors": "作者未知",
+    "loadMore": "加载更多结果",
+    "loadingMore": "正在加载更多结果"
   },
   "Errors": {
     "unexpected": {

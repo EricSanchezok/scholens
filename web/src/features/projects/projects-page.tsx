@@ -35,7 +35,6 @@ import {
 } from "@/design-system/motion";
 import { AddIcon, ProjectIcon } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
-import { conversationQueries } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import type { components } from "@/lib/api/generated/schema";
 import {
@@ -128,7 +127,6 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
     project: Project;
   } | null>(null);
   const projectsQuery = useQuery(projectQueries.list(state));
-  const conversationsQuery = useQuery(conversationQueries.list());
   usePrimaryContentReady(projectsQuery.isSuccess);
 
   const replaceSearch = React.useCallback(
@@ -205,7 +203,6 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
       activeDestination="projects"
       actor={actor}
       collapsed={collapsed}
-      conversations={conversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span className="block truncate text-base font-semibold">
           {t("title")}

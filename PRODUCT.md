@@ -99,6 +99,16 @@ the complete selected suffix, sources, worklog, and authorized context for that
 alternative. The interface may present one path at a time, but refresh and
 other conversation surfaces must agree on which path is active.
 
+The workspace sidebar is the durable-history browser rather than a short
+recents teaser. It continuously pages every non-archived conversation the
+current user can access, keeps pinned conversations visible, and groups the
+remainder by activity date. Search is one workspace-wide entry point with
+separate Conversation and Paper result modes: conversation search covers the
+title, current research-context label, and only the selected visible message
+path, while paper search retains its hybrid stored-research retrieval. The two
+result types never mix because they have different ranking meaning and open
+targets. Archived conversations remain outside this first search surface.
+
 An accepted response is Server-owned work, not a browser-session operation.
 Changing routes, switching mobile apps, locking the phone, losing connectivity,
 or reloading may detach the visible subscriber, but must not stop generation.

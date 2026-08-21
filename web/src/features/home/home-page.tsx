@@ -10,7 +10,6 @@ import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import {
   ConversationView,
-  conversationQueries,
   ReasoningMenu,
   ResearchComposer,
   useConversationSession,
@@ -52,11 +51,9 @@ export function HomeWorkspace({
   const measuredMobileKeyboard = useMobileKeyboard(mobileDockRef, !isDesktop);
   const mobileViewport = mobileKeyboardOverride ?? measuredMobileKeyboard;
 
-  const conversationsQuery = useQuery(conversationQueries.list());
   const papersQuery = useQuery(homeQueries.papers());
   const projectsQuery = useQuery(homeQueries.projects());
-  usePrimaryContentReady(conversationsQuery.isSuccess);
-  const conversations = conversationsQuery.data?.items ?? [];
+  usePrimaryContentReady(papersQuery.isSuccess && projectsQuery.isSuccess);
   const papers = (papersQuery.data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
   );
@@ -134,7 +131,6 @@ export function HomeWorkspace({
       activeDestination="ask"
       actor={actor}
       collapsed={collapsed}
-      conversations={conversations}
       onCollapsedChange={setCollapsed}
       onSignOut={handleSignOut}
       signingOut={signingOut}

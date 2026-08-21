@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import { conversationKeys, type ConversationListFilters } from "./keys";
@@ -59,6 +59,48 @@ export const conversationQueries = {
         if (!data) throw new Error("Conversation list response was empty");
         return data;
       },
+    }),
+  infiniteList: (filters: ConversationListFilters = {}) =>
+    infiniteQueryOptions({
+      initialPageParam: undefined as string | undefined,
+      queryKey: conversationKeys.infiniteList(filters),
+      queryFn: async ({ pageParam, signal }) => {
+        const { data } = await apiClient.GET("/api/v1/conversations", {
+          params: {
+            query: {
+              archived: false,
+              context_document_id: filters.contextDocumentId,
+              cursor: pageParam,
+              limit: 50,
+              scope_type: filters.scopeType,
+              scope_id: filters.scopeId,
+            },
+          },
+          signal,
+        });
+        if (!data) throw new Error("Conversation list response was empty");
+        return data;
+      },
+      getNextPageParam: (page) => page.next_cursor ?? undefined,
+    }),
+  infiniteSearch: (query: string) =>
+    infiniteQueryOptions({
+      enabled: query.trim().length >= 2,
+      initialPageParam: undefined as string | undefined,
+      queryKey: conversationKeys.search(query),
+      queryFn: async ({ pageParam, signal }) => {
+        const { data } = await apiClient.POST("/api/v1/search/conversations", {
+          body: {
+            cursor: pageParam,
+            limit: 30,
+            query: query.trim(),
+          },
+          signal,
+        });
+        if (!data) throw new Error("Conversation search response was empty");
+        return data;
+      },
+      getNextPageParam: (page) => page.next_cursor ?? undefined,
     }),
   detail: (conversationId: string) =>
     queryOptions({

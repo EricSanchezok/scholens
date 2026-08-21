@@ -219,6 +219,30 @@ runtime role and must not own schemas. Alembic intentionally refuses to migrate
 a `scholens` schema owned by another role. Never use the server's daily runtime
 command as a migration shortcut.
 
+### Seed a reusable local test account
+
+Use the guarded fixture command instead of repeatedly registering through real
+mail or adding an authentication bypass:
+
+```bash
+cd server
+uv run --frozen --no-sync scholens dev seed-test-account
+```
+
+The hidden prompt requires a password of at least 12 characters. The default
+identity is `developer@example.com` with display name `Local Developer`.
+Alternatively, keep `SCHOLENS_DEV_TEST_PASSWORD` only in ignored `server/.env`
+for repeatable local automation. The command accepts only reserved synthetic
+email domains and refuses every environment except `development` connected as
+`scholens_app` to `127.0.0.1:55432/sanchezcloud`.
+
+The command is idempotent: it creates and verifies a missing Identity account,
+creates its Scholens profile, and leaves matching credentials and sessions
+unchanged. Supplying a different password uses the Identity password-reset path
+and therefore revokes the account's existing sessions. `--bootstrap-admin` is
+optional and works only when Scholens has no administrator yet. Daily startup
+never creates or changes accounts.
+
 ### Repair a prepared checkout
 
 If a checkout moves, a Python virtual environment still references an old

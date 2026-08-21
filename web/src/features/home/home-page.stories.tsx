@@ -81,16 +81,22 @@ export const Default: Story = {
   },
 };
 
-export const GlobalPaperSearch: Story = {
+export const UnifiedSearch: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
-      await canvas.findByRole("button", { name: /Search all papers/ }),
+      await canvas.findByRole("button", {
+        name: /Search conversations and papers/,
+      }),
     );
     const body = within(document.body);
     const search = await body.findByRole("searchbox", {
-      name: "Search all papers",
+      name: "Search conversations or papers",
     });
+    await expect(
+      body.getByRole("tab", { name: "Conversations", selected: true }),
+    ).toBeVisible();
+    await userEvent.click(body.getByRole("tab", { name: "Papers" }));
     await userEvent.type(search, "code world");
     await expect(search).toHaveValue("code world");
     await expect(
@@ -460,7 +466,7 @@ export const MobileNavigationOpen: Story = {
       Number(getComputedStyle(overlay!).zIndex),
     );
     await expect(
-      navigation.getByRole("searchbox", { name: "搜索对话" }),
+      navigation.getByRole("button", { name: "搜索对话与论文（⌘K）" }),
     ).toBeVisible();
     await expect(
       navigation.getByRole("button", { name: "关闭导航" }),

@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -179,6 +180,11 @@ class Document(Base):
     __table_args__ = (
         UniqueConstraint("sha256", name="uq_documents_sha256"),
         Index("ix_documents_ts_vector", "ts_vector", postgresql_using="gin"),
+        Index(
+            "ix_documents_title_trgm",
+            text("lower(title) gin_trgm_ops"),
+            postgresql_using="gin",
+        ),
         Index(
             "ix_documents_search_text_compact_trgm",
             "search_text_compact",

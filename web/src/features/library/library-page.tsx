@@ -26,7 +26,6 @@ import {
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
-import { conversationQueries } from "@/features/conversation";
 import { integrationQueries } from "@/features/integrations";
 import { useSettingsNavigation } from "@/features/settings";
 import {
@@ -180,7 +179,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
     }
   }, [router, searchParams, toast, zoteroT]);
 
-  const conversationsQuery = useQuery(conversationQueries.list());
   const summaryQuery = useQuery(libraryQueries.summary());
   const tagsQuery = useQuery({
     ...libraryQueries.tags(),
@@ -382,7 +380,6 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       activeDestination="library"
       actor={actor}
       collapsed={collapsed}
-      conversations={conversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span className="block truncate text-base font-semibold">
           {t("title")}

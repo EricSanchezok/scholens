@@ -13,6 +13,10 @@ from typing import Literal
 from uuid import UUID
 
 from app.modules.papers.application.search import PaperSearchAccessPort, PaperSearchPort
+from app.modules.conversations.application.search import SearchConversations
+from app.modules.conversations.application.title_maintenance import (
+    ConversationTitleMaintenance,
+)
 from app.modules.papers.application.collection_access import PaperCollectionAccessPort
 from app.modules.papers.application.content import PaperContentCapabilities
 from app.modules.papers.infrastructure.content_gateway import (
@@ -613,6 +617,37 @@ def build_conversations(
             revision="conversation-turns-v1",
             error_code="conversation_turn_cursor_expired",
         ),
+        journal=journal,
+    )
+
+
+def build_conversation_search(
+    *,
+    db: Session,
+    cursor_secret: str,
+) -> SearchConversations:
+    from app.bootstrap.adapters.conversation_search import PostgresConversationSearch
+    from app.modules.conversations.application.search import (
+        ConversationSearchCursorCodec,
+    )
+
+    return SearchConversations(
+        PostgresConversationSearch(db),
+        ConversationSearchCursorCodec(cursor_secret),
+    )
+
+
+def build_conversation_title_maintenance(
+    *,
+    db: Session,
+    journal: OperationJournal,
+) -> ConversationTitleMaintenance:
+    from app.bootstrap.adapters.conversation_search import (
+        SqlConversationTitleBackfill,
+    )
+
+    return ConversationTitleMaintenance(
+        SqlConversationTitleBackfill(db),
         journal=journal,
     )
 

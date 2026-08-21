@@ -327,6 +327,9 @@
     "/api/v1/research-items/{item_id}": [
       "delete"
     ],
+    "/api/v1/search/conversations": [
+      "post"
+    ],
     "/api/v1/search/papers": [
       "post"
     ],

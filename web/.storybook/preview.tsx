@@ -15,6 +15,7 @@ import zhCN from "../src/i18n/messages/zh-CN.json";
 import { QueryProvider } from "../src/lib/query/query-provider";
 import { billingHandlers } from "./msw/billing-handlers";
 import {
+  conversationSearchHandler,
   foundationHandler,
   paperSearchHandler,
   webPerformanceHandler,
@@ -27,6 +28,7 @@ import "../src/styles/globals.css";
 initialize({ onUnhandledRequest: "error" }, [
   ...billingHandlers.success,
   webPerformanceHandler,
+  conversationSearchHandler,
   paperSearchHandler,
   zoteroCollectionsHandler,
   zoteroLibraryItemsHandler,
@@ -181,6 +183,10 @@ const preview: Preview = {
         desktop: {
           name: "Desktop",
           styles: { width: "1440px", height: "900px" },
+        },
+        ultrawide: {
+          name: "Ultrawide desktop",
+          styles: { width: "1920px", height: "1080px" },
         },
         narrowPanel: {
           name: "Narrow panel",

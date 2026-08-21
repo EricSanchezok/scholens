@@ -524,7 +524,6 @@ export function ProjectDetailWorkspace({
   const conversationsQuery = useQuery(
     conversationQueries.list({ scopeId: projectId, scopeType: "project" }),
   );
-  const sidebarConversationsQuery = useQuery(conversationQueries.list());
   const papersQuery = useInfiniteQuery({
     ...projectQueries.papers(projectId, state),
     enabled:
@@ -752,7 +751,6 @@ export function ProjectDetailWorkspace({
       activeDestination="projects"
       actor={actor}
       collapsed={collapsed}
-      conversations={sidebarConversationsQuery.data?.items ?? []}
       mobileHeaderCenter={
         <span
           className="block truncate text-base font-semibold"

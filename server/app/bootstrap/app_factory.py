@@ -16,6 +16,9 @@ from app.transport.http.public_v1.auth import (
 from app.transport.http.public_v1.access_keys import access_keys_router
 from app.transport.http.public_v1.integrations import integrations_router
 from app.transport.http.public_v1.conversations import conversation_router
+from app.transport.http.public_v1.conversation_search import (
+    conversation_search_router,
+)
 from app.transport.http.public_v1.document_uploads import document_upload_router
 from app.transport.http.public_v1.documents import (
     document_router,
@@ -151,6 +154,10 @@ def _public_router() -> APIRouter:
     router.include_router(paper_search_router, prefix="/discovery/papers")
     router.include_router(author_discovery_router, prefix="/discovery")
     router.include_router(search_router, prefix="/search/papers")
+    router.include_router(
+        conversation_search_router,
+        prefix="/search/conversations",
+    )
     router.include_router(research_search_router, prefix="/search/research")
     router.include_router(document_upload_router, prefix="/paper-ingestions")
     router.include_router(document_research_router, prefix="/papers")

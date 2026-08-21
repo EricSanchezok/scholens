@@ -1699,6 +1699,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search Conversations */
+        post: operations["search_conversations_api_v1_search_conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search/papers": {
         parameters: {
             query?: never;
@@ -2637,6 +2654,38 @@ export interface components {
          * @enum {string}
          */
         ConversationScopeType: "global" | "project" | "paper";
+        /** ConversationSearchRequest */
+        ConversationSearchRequest: {
+            /** Cursor */
+            cursor?: string | null;
+            /**
+             * Limit
+             * @default 30
+             */
+            limit: number;
+            /** Query */
+            query: string;
+        };
+        /** ConversationSearchResponse */
+        ConversationSearchResponse: {
+            /** Items */
+            items: components["schemas"]["ConversationSearchResult"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total */
+            total: number;
+        };
+        /** ConversationSearchResult */
+        ConversationSearchResult: {
+            conversation: components["schemas"]["ConversationSummaryResponse"];
+            /**
+             * Matched Field
+             * @enum {string}
+             */
+            matched_field: "title" | "scope" | "user_query" | "assistant_response";
+            /** Snippet */
+            snippet?: string | null;
+        };
         /** ConversationStreamActivityEvent */
         ConversationStreamActivityEvent: {
             activity: components["schemas"]["ConversationActivity"];
@@ -9629,6 +9678,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteResearchItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_conversations_api_v1_search_conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSearchResponse"];
                 };
             };
             /** @description Validation Error */

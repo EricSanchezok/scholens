@@ -14,6 +14,10 @@ export const conversationKeys = {
   lists: () => [...conversationKeys.all, "list"] as const,
   list: (filters: ConversationListFilters = {}) =>
     [...conversationKeys.lists(), filters] as const,
+  infiniteList: (filters: ConversationListFilters = {}) =>
+    [...conversationKeys.list(filters), "infinite"] as const,
+  searches: () => [...conversationKeys.all, "search"] as const,
+  search: (query: string) => [...conversationKeys.searches(), query] as const,
   details: () => [...conversationKeys.all, "detail"] as const,
   detail: (conversationId: string) =>
     [...conversationKeys.details(), conversationId] as const,

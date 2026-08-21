@@ -8,6 +8,8 @@ const zoteroCollectionsUrl =
 const zoteroLibraryItemsUrl =
   "http://127.0.0.1:7301/api/v1/integrations/zotero/library-items";
 const paperSearchUrl = "http://127.0.0.1:7301/api/v1/search/papers";
+const conversationSearchUrl =
+  "http://127.0.0.1:7301/api/v1/search/conversations";
 
 export const webPerformanceHandler = http.post(
   "*/__telemetry/web-performance",
@@ -97,6 +99,43 @@ export const paperSearchHandler = http.post(paperSearchUrl, () =>
     next_cursor: null,
     search_mode: "hybrid",
     semantic_index_coverage: 1,
+    total: 1,
+  }),
+);
+
+export const conversationSearchHandler = http.post(conversationSearchUrl, () =>
+  HttpResponse.json({
+    items: [
+      {
+        conversation: {
+          archived_at: null,
+          capabilities: {
+            archive: true,
+            delete: true,
+            detach: false,
+            move: true,
+            pin: true,
+            rename: true,
+            send: true,
+            share: false,
+          },
+          id: "76000000-0000-4000-8000-000000000001",
+          pinned_at: null,
+          read_only: false,
+          read_only_reason: null,
+          scope_access: "active",
+          scope_id: null,
+          scope_label: "Memory systems",
+          scope_type: "global",
+          title: "Comparing memory retrieval strategies",
+          updated_at: "2026-08-20T08:00:00Z",
+        },
+        matched_field: "assistant_response",
+        snippet:
+          "The selected answer compares retrieval strategies across long-running memory systems.",
+      },
+    ],
+    next_cursor: null,
     total: 1,
   }),
 );
