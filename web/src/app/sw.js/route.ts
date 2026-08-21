@@ -53,7 +53,8 @@ export function GET() {
   return new Response(serviceWorkerSource(), {
     headers: {
       "Cache-Control": "no-cache, no-store, must-revalidate",
-      "Content-Security-Policy": "default-src 'none'; script-src 'self'",
+      "Content-Security-Policy":
+        "default-src 'none'; script-src 'self'; connect-src 'self'",
       "Content-Type": "application/javascript; charset=utf-8",
       "Service-Worker-Allowed": "/",
     },

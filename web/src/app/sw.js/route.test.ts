@@ -12,7 +12,11 @@ describe("service worker route", () => {
     );
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("service-worker-allowed")).toBe("/");
+    expect(response.headers.get("content-security-policy")).toContain(
+      "connect-src 'self'",
+    );
     expect(source).toContain('event.request.mode !== "navigate"');
+    expect(source).toContain("fetch(event.request)");
     expect(source).not.toContain("caches.open");
     expect(source).not.toContain("Cache API");
   });

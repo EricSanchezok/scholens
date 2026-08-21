@@ -153,7 +153,7 @@ test("uses the Android installation event from the permanent mobile entry", asyn
     .toBe(1);
 });
 
-test("returns a safe bilingual page for an offline cold navigation", async ({
+test("keeps controlled online navigation working before using the offline fallback", async ({
   context,
   page,
 }) => {
@@ -172,6 +172,11 @@ test("returns a safe bilingual page for an offline cold navigation", async ({
       );
     });
   });
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back" }),
+  ).toBeVisible();
 
   await context.setOffline(true);
   await page.reload();
