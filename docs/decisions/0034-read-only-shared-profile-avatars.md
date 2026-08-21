@@ -1,4 +1,4 @@
-# 0032 — Read-only shared profile avatars
+# 0034 — Read-only shared profile avatars
 
 Status: Accepted
 Date: 2026-08-21
