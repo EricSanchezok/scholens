@@ -1,14 +1,10 @@
+import { normalizeReaderSelectionRects } from "./rect-normalization";
 import {
-  normalizeReaderSelectionRects,
-  type NormalizedSelectionRect,
-} from "./rect-normalization";
+  limitDocumentSelectionSegments,
+  type DocumentSelectionSegment,
+} from "./document-selection-geometry";
 
 export const DOCUMENT_SELECTION_SETTLE_DELAY_MS = 100;
-
-export type DocumentSelectionSegment = {
-  pageNumber: number;
-  rects: NormalizedSelectionRect[];
-};
 
 export type CommittedDocumentSelection = {
   focusPageNumber: number;
@@ -117,9 +113,13 @@ function readDocumentSelection(
 
   const focusLayer = textLayerForNode(root, selection.focusNode);
   const focusPageNumber = focusLayer && pageNumberForLayer(focusLayer);
-  return {
-    focusPageNumber: focusPageNumber ?? segments.at(-1)!.pageNumber,
+  const boundedSegments = limitDocumentSelectionSegments(
     segments,
+    focusPageNumber,
+  );
+  return {
+    focusPageNumber: focusPageNumber ?? boundedSegments.at(-1)!.pageNumber,
+    segments: boundedSegments,
     text,
   };
 }

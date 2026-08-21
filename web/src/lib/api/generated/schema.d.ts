@@ -4182,7 +4182,7 @@ export interface components {
             rects: components["schemas"]["PdfTextRect"][];
             /**
              * Segments
-             * @description Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment.
+             * @description Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment. Across all segments, the position may contain at most 200 rectangles.
              */
             segments?: components["schemas"]["PdfTextPageSegment"][] | null;
         };

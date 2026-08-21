@@ -30,7 +30,10 @@ and deletion semantics ambiguous.
 - A `pdf_text` position may carry ascending, unique `segments`, each containing
   one page number and its normalized rectangles. `page_number` and `rects`
   remain required and must equal the first segment. Requests without segments
-  remain valid one-page anchors.
+  remain valid one-page anchors. The complete position is capped at 200
+  rectangles across all segments. Reader deterministically samples oversized
+  normalized geometry across pages and within each page before constructing
+  the anchor, while the Server independently enforces the same fixed bound.
 - The materialized annotation `page_number` remains the first segment's page,
   so existing source ordering, indexes, and navigation contracts do not need a
   migration. The complete position stays in the existing JSON value.
@@ -62,7 +65,9 @@ there; application behavior uses a single canonical segment view.
 ## Validation
 
 Server contract tests accept legacy and segmented positions and reject
-unordered, duplicate, or mismatched projections. Reader unit tests cover exact
-cross-page text, per-page geometry, transient collapse, and stale-selection
-rejection. A focused Reader browser test runs in Chromium, Firefox, and WebKit,
-persists one two-page highlight, and verifies both page overlays.
+unordered, duplicate, mismatched, or over-budget projections, including the
+200/201-rectangle boundary. Reader unit tests cover exact cross-page text,
+per-page geometry, deterministic geometry limiting, transient collapse, and
+stale-selection rejection. A focused Reader browser test runs in Chromium,
+Firefox, and WebKit, persists one two-page highlight, and verifies both page
+overlays.

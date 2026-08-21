@@ -478,6 +478,45 @@ def test_pdf_text_position_accepts_legacy_and_ordered_page_segments() -> None:
             )
 
 
+def test_pdf_text_position_caps_total_segment_rectangles() -> None:
+    rect = {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.04}
+    first_page_rects = [rect] * 100
+
+    accepted = CreateAnnotationThreadRequest.model_validate(
+        {
+            "quote_text": "Bounded geometry",
+            "position": {
+                "kind": "pdf_text",
+                "page_number": 2,
+                "rects": first_page_rects,
+                "segments": [
+                    {"page_number": 2, "rects": first_page_rects},
+                    {"page_number": 3, "rects": [rect] * 100},
+                ],
+            },
+        }
+    ).position
+    assert isinstance(accepted, PdfTextPosition)
+    assert accepted.segments is not None
+    assert sum(len(segment.rects) for segment in accepted.segments) == 200
+
+    with pytest.raises(ValidationError, match="at most 200 rectangles"):
+        CreateAnnotationThreadRequest.model_validate(
+            {
+                "quote_text": "Oversized geometry",
+                "position": {
+                    "kind": "pdf_text",
+                    "page_number": 2,
+                    "rects": first_page_rects,
+                    "segments": [
+                        {"page_number": 2, "rects": first_page_rects},
+                        {"page_number": 3, "rects": [rect] * 101},
+                    ],
+                },
+            }
+        )
+
+
 def test_citation_snapshot_is_strictly_validated_before_persistence() -> None:
     snapshot = CitationSnapshot.model_validate(
         {

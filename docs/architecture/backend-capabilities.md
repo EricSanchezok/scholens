@@ -492,7 +492,9 @@ derived from audience and comment count and is never another persisted source
 of truth. A PDF text anchor accepts either the historical one-page projection
 or ordered page segments. For a segmented anchor, `page_number` and `rects`
 must equal the first segment, preserving indexed source order and compatibility
-while the JSON position remains one annotation-thread value.
+while the JSON position remains one annotation-thread value. The canonical
+position validator caps geometry at 200 normalized rectangles in total across
+all segments, preventing an additive page-by-page payload expansion.
 
 Reader selection translation is a paper-authorized streaming workflow.
 `GET|PUT /api/v1/me/translation-preferences` owns source language, target

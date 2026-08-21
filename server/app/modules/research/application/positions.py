@@ -6,6 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+MAX_PDF_TEXT_RECTS = 200
+
 
 class PdfTextRect(BaseModel):
     """A PDF text rectangle normalized to the page's 0–1 coordinate space."""
@@ -51,7 +53,7 @@ class PdfTextPageSegment(BaseModel):
     )
     rects: list[PdfTextRect] = Field(
         min_length=1,
-        max_length=200,
+        max_length=MAX_PDF_TEXT_RECTS,
         description="Ordered normalized rectangles on this PDF page.",
     )
 
@@ -69,7 +71,7 @@ class PdfTextPosition(BaseModel):
     )
     rects: list[PdfTextRect] = Field(
         min_length=1,
-        max_length=200,
+        max_length=MAX_PDF_TEXT_RECTS,
         description="Legacy projection of the first page segment.",
     )
     segments: list[PdfTextPageSegment] | None = Field(
@@ -78,7 +80,8 @@ class PdfTextPosition(BaseModel):
         max_length=200,
         description=(
             "Ordered page segments covering the exact selected quote. "
-            "Omitted legacy requests are interpreted as one segment."
+            "Omitted legacy requests are interpreted as one segment. Across all "
+            f"segments, the position may contain at most {MAX_PDF_TEXT_RECTS} rectangles."
         ),
     )
 
@@ -92,6 +95,12 @@ class PdfTextPosition(BaseModel):
         first = self.segments[0]
         if first.page_number != self.page_number or first.rects != self.rects:
             raise ValueError("PDF text legacy fields must equal the first page segment")
+        rect_count = sum(len(segment.rects) for segment in self.segments)
+        if rect_count > MAX_PDF_TEXT_RECTS:
+            raise ValueError(
+                "PDF text position must contain at most "
+                f"{MAX_PDF_TEXT_RECTS} rectangles across all segments"
+            )
         return self
 
 

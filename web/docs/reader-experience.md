@@ -283,7 +283,12 @@ Selection, its Ranges, and all PDF.js text layers:
   rectangles are rejected rather than clamped into false highlights.
   Overlapping PDF text fragments on the same visual line are coalesced, and
   the remaining geometry is painted once so translucent color can never
-  accumulate into darker stripes.
+  accumulate into darker stripes. A committed PDF anchor contains at most 200
+  rectangles in total. If coalesced browser geometry exceeds that bound,
+  Reader samples it deterministically across pages and within each page,
+  preserving the first page, last page, and native focus page rather than
+  constructing a request the Server must reject; the exact selected text is
+  unchanged.
 - The overlay remains visible with the floating toolbar until the user acts,
   presses Escape, clicks elsewhere, or starts a replacement selection. Normal
   continuous scrolling and viewport-driven page changes preserve it.
