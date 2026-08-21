@@ -123,6 +123,7 @@ for (const repositoryFile of repositoryFiles) {
 const mediaExtensions = new Set([
   ".avif",
   ".gif",
+  ".ico",
   ".jpeg",
   ".jpg",
   ".mov",
