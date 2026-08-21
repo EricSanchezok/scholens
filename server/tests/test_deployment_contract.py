@@ -917,7 +917,13 @@ def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
         "arn:${AWS::Partition}:s3:::sanchezcloud-account-avatars-"
         "${AWS::AccountId}-${AWS::Region}/auth/avatars/v1/*"
     )
-    bootstrap = load_template("scholens-foundation-bootstrap.yml")["Resources"]
+    bootstrap_template = load_template("scholens-foundation-bootstrap.yml")
+    bootstrap = bootstrap_template["Resources"]
+    avatar_key_pattern = r"^arn:[^:]+:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+$"
+    assert bootstrap_template["Parameters"]["AvatarKmsKeyArn"] == {
+        "AllowedPattern": avatar_key_pattern,
+        "Type": "String",
+    }
     boundary = bootstrap["RuntimeTaskPermissionsBoundary"]["Properties"][
         "PolicyDocument"
     ]["Statement"]
@@ -940,11 +946,14 @@ def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
         if _actions(statement) == {"kms:Decrypt"}
         and statement.get("Condition") == expected_condition
     )
-    assert boundary_decrypt["Resource"] == {
-        "Fn::Sub": ("arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*")
-    }
+    assert boundary_decrypt["Resource"] == {"Ref": "AvatarKmsKeyArn"}
 
-    resources = load_template("scholens-production.yml")["Resources"]
+    production_template = load_template("scholens-production.yml")
+    assert production_template["Parameters"]["AvatarKmsKeyArn"] == {
+        "AllowedPattern": avatar_key_pattern,
+        "Type": "String",
+    }
+    resources = production_template["Resources"]
     api_statements = _policy_statements(resources["ApiTaskRole"])
     api_object = next(
         statement
@@ -952,11 +961,13 @@ def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
         if statement.get("Resource") == {"Fn::Sub": avatar_prefix}
     )
     assert _actions(api_object) == {"s3:GetObject"}
-    assert any(
-        _actions(statement) == {"kms:Decrypt"}
-        and statement.get("Condition") == expected_condition
+    api_decrypt = next(
+        statement
         for statement in api_statements
+        if _actions(statement) == {"kms:Decrypt"}
+        and statement.get("Condition") == expected_condition
     )
+    assert api_decrypt["Resource"] == {"Ref": "AvatarKmsKeyArn"}
     for role_name in (
         "DocumentWorkerTaskRole",
         "ResearchWorkerTaskRole",
@@ -978,6 +989,22 @@ def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
         "Fn::Sub": "sanchezcloud-account-avatars-${AWS::AccountId}-${AWS::Region}"
     }
     assert environment["SHARED_AVATAR_URL_TTL_SECONDS"] == "900"
+
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    readme = (ECS / "README.md").read_text(encoding="utf-8")
+    for deployment_contract in (workflow, readme):
+        assert "sanchezcloud-account-center-foundation" in deployment_contract
+        assert "Outputs[?OutputKey==`AvatarKmsKeyArn`]" in deployment_contract
+        assert 'test "$avatar_kms_key_arn" != None' in deployment_contract
+    assert (
+        workflow.count(
+            'AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$avatar_kms_key_arn")'
+        )
+        == 2
+    )
+    assert 'AvatarKmsKeyArn="$avatar_kms_key_arn"' in readme
 
 
 def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> None:

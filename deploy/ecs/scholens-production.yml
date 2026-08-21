@@ -10,6 +10,9 @@ Parameters:
     AllowedPattern: ^arn:[^:]+:acm:[^:]+:[0-9]{12}:certificate/[0-9a-f-]+$
   RdsSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
+  AvatarKmsKeyArn:
+    Type: String
+    AllowedPattern: ^arn:[^:]+:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+$
   WebImage:
     Type: String
     AllowedPattern:
@@ -643,7 +646,7 @@ Resources:
           - Effect: Allow
             Action: kms:Decrypt
             Resource:
-              Fn::Sub: arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*
+              Ref: AvatarKmsKeyArn
             Condition:
               StringEquals:
                 kms:ViaService:

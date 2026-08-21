@@ -203,7 +203,12 @@ jobs:
           template_kms_key_arn=$(aws cloudformation list-exports \
             --query 'Exports[?Name==`sanchezcloud-scholens-configuration-key-arn`].Value|[0]' \
             --output text)
+          avatar_kms_key_arn=$(aws cloudformation describe-stacks \
+            --stack-name sanchezcloud-account-center-foundation \
+            --query 'Stacks[0].Outputs[?OutputKey==`AvatarKmsKeyArn`].OutputValue|[0]' \
+            --output text)
           test "$template_kms_key_arn" != None
+          test "$avatar_kms_key_arn" != None
           web_image=$(jq -r .images.web release-manifest.json)
           api_image=$(jq -r .images.api release-manifest.json)
           jobs_image=$(jq -r .images.jobs release-manifest.json)
@@ -216,6 +221,7 @@ jobs:
               DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
               CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
               RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
+              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$avatar_kms_key_arn") ;;
               WebImage) parameter_overrides+=("WebImage=$web_image") ;;
               ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
               JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
@@ -305,6 +311,11 @@ jobs:
           EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
+          avatar_kms_key_arn=$(aws cloudformation describe-stacks \
+            --stack-name sanchezcloud-account-center-foundation \
+            --query 'Stacks[0].Outputs[?OutputKey==`AvatarKmsKeyArn`].OutputValue|[0]' \
+            --output text)
+          test "$avatar_kms_key_arn" != None
           bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
           template_kms_key_arn=$(aws cloudformation list-exports \
             --query 'Exports[?Name==`sanchezcloud-scholens-configuration-key-arn`].Value|[0]' \
@@ -365,6 +376,7 @@ jobs:
               DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
               CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
               RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
+              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$avatar_kms_key_arn") ;;
               WebImage) parameter_overrides+=("WebImage=$web_image") ;;
               ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
               JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;

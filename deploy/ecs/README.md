@@ -248,8 +248,14 @@ delegation_kms_key_arn=$(aws cloudformation list-exports \
   --region ap-southeast-1 \
   --query 'Exports[?Name==`sanchezcloud-scholight-configuration-key-arn`].Value|[0]' \
   --output text)
+avatar_kms_key_arn=$(aws cloudformation describe-stacks \
+  --region ap-southeast-1 \
+  --stack-name sanchezcloud-account-center-foundation \
+  --query 'Stacks[0].Outputs[?OutputKey==`AvatarKmsKeyArn`].OutputValue|[0]' \
+  --output text)
 test "$delegation_secret_arn" != None
 test "$delegation_kms_key_arn" != None
+test "$avatar_kms_key_arn" != None
 
 aws cloudformation validate-template \
   --region ap-southeast-1 \
@@ -265,6 +271,7 @@ aws cloudformation deploy \
     RdsSecurityGroupId=<shared-rds-security-group-id> \
     ScholightMcpDelegationSecretArn="$delegation_secret_arn" \
     ScholightMcpDelegationKmsKeyArn="$delegation_kms_key_arn" \
+    AvatarKmsKeyArn="$avatar_kms_key_arn" \
   --tags \
     System=SanchezCloud \
     Product=Scholens \
@@ -302,6 +309,10 @@ therefore fails closed if its template tries to mutate IAM. Standard resource ta
 inherited from the four stack tags above; the protected foundation workflow supplies the
 same tags on later data-plane updates. Any role, managed-policy, permissions-boundary, or
 bootstrap permission change requires a separately reviewed administrator update.
+The Account Center avatar key is deliberately not a cross-stack export. Bootstrap and
+runtime deployment resolve the exact `AvatarKmsKeyArn` output from the retained
+`sanchezcloud-account-center-foundation` stack and pass it as an ARN-validated parameter;
+neither policy may fall back to an account-wide KMS wildcard.
 Deploy a reviewed bootstrap permissions-boundary update before a runtime template that
 depends on its new action. In particular, the scoped `s3:GetObjectVersion` boundary must
 be active before deploying the API role policy that performs version-locked staged-upload

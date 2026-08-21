@@ -21,6 +21,9 @@ from app.modules.projects.application.contracts import (
     ProjectPermissionSet,
 )
 from app.modules.research.application.contracts import AnnotationThreadListResponse
+from app.modules.research.application.avatar_contracts import (
+    AvatarAnnotationThreadSummaryResponse,
+)
 from app.shared.application import Actor, AvatarReference
 from app.shared.domain import AppError, FailureKind
 from app.transport.http.public_v1.avatar_presenters import (
@@ -77,6 +80,12 @@ def _actor() -> Actor:
         status="active",
         email_verified=True,
     )
+
+
+def test_avatar_annotation_summary_preserves_base_comment_count_constraint() -> None:
+    schema = AvatarAnnotationThreadSummaryResponse.model_json_schema()
+
+    assert schema["properties"]["comment_count"]["minimum"] == 0
 
 
 def test_shared_avatar_settings_are_optional_outside_production() -> None:
