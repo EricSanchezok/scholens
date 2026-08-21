@@ -1,13 +1,22 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 import type { Route } from "next";
-import { expect, fn, userEvent, within } from "storybook/test";
+import * as React from "react";
+import {
+  expect,
+  fireEvent,
+  fn,
+  userEvent,
+  waitFor,
+  within,
+} from "storybook/test";
 
 import { ToastProvider } from "@/components/ui/toast";
 import {
   PaperCollectionWorkbench,
   type PaperCollectionItem,
 } from "./paper-collection-workbench";
+import type { PaperListPreferences } from "./api";
 
 const preferences = {
   preview_open: true,
@@ -21,6 +30,42 @@ const preferenceHandlers = [
   http.put("*/api/v1/me/paper-list-preferences", async ({ request }) =>
     HttpResponse.json(await request.json()),
   ),
+];
+
+let queuedPreferenceRequestCount = 0;
+let queuedPersistedPreferences: PaperListPreferences = {
+  ...preferences,
+  visible_columns: [...preferences.visible_columns],
+};
+
+const queuedPreferenceHandlers = [
+  http.get("*/api/v1/me/paper-list-preferences", () =>
+    HttpResponse.json(preferences),
+  ),
+  http.put("*/api/v1/me/paper-list-preferences", async ({ request }) => {
+    const next = (await request.json()) as PaperListPreferences;
+    queuedPreferenceRequestCount += 1;
+    if (queuedPreferenceRequestCount === 1) await delay(200);
+    queuedPersistedPreferences = next;
+    return HttpResponse.json(next);
+  }),
+];
+
+let failedPreferenceRequestCount = 0;
+
+const failingPreferenceHandlers = [
+  http.get("*/api/v1/me/paper-list-preferences", async () => {
+    await delay(2000);
+    return HttpResponse.json(preferences);
+  }),
+  http.put("*/api/v1/me/paper-list-preferences", async () => {
+    failedPreferenceRequestCount += 1;
+    if (failedPreferenceRequestCount === 1) await delay(200);
+    return HttpResponse.json(
+      { code: "preferences_unavailable" },
+      { status: 503 },
+    );
+  }),
 ];
 
 const items: PaperCollectionItem[] = [
@@ -195,6 +240,123 @@ export const Narrow: Story = {
 
 export const Mobile: Story = {
   parameters: { viewport: { defaultViewport: "mobile1" } },
+};
+
+const oldPreviewUrl = "https://preview.example/old-signed-url.png";
+const refreshedPreviewUrl = "https://preview.example/new-signed-url.png";
+
+function PreviewUrlRefreshHarness() {
+  const [previewUrl, setPreviewUrl] = React.useState(oldPreviewUrl);
+  return (
+    <>
+      <button onClick={() => setPreviewUrl(refreshedPreviewUrl)} type="button">
+        Refresh signed URL
+      </button>
+      <PaperCollectionWorkbench
+        items={[{ ...items[0]!, previewUrl }]}
+        toolbar={<span>Preview refresh</span>}
+      />
+    </>
+  );
+}
+
+export const PreviewUrlRefresh: Story = {
+  render: () => <PreviewUrlRefreshHarness />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const oldImages = Array.from(
+      canvasElement.querySelectorAll<HTMLImageElement>(
+        `img[src="${oldPreviewUrl}"]`,
+      ),
+    );
+    await expect(oldImages.length).toBeGreaterThanOrEqual(2);
+    oldImages.forEach((image) => fireEvent.error(image));
+    await waitFor(() =>
+      expect(
+        canvasElement.querySelectorAll("[data-paper-image-fallback]").length,
+      ).toBeGreaterThanOrEqual(oldImages.length),
+    );
+
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Refresh signed URL" }),
+    );
+    await waitFor(() =>
+      expect(
+        canvasElement.querySelectorAll(`img[src="${refreshedPreviewUrl}"]`),
+      ).toHaveLength(oldImages.length),
+    );
+  },
+};
+
+export const QueuedPreferenceUpdates: Story = {
+  parameters: { msw: { handlers: queuedPreferenceHandlers } },
+  play: async ({ canvasElement }) => {
+    queuedPreferenceRequestCount = 0;
+    queuedPersistedPreferences = {
+      ...preferences,
+      visible_columns: [...preferences.visible_columns],
+    };
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Configure columns" }),
+    );
+    await userEvent.click(
+      await body.findByRole("menuitemcheckbox", { name: "DOI" }),
+    );
+    await userEvent.click(
+      body.getByRole("menuitemcheckbox", { name: "Authors" }),
+    );
+
+    await waitFor(() => expect(queuedPreferenceRequestCount).toBe(2));
+    await waitFor(() =>
+      expect(queuedPersistedPreferences.visible_columns).toEqual([
+        "status",
+        "tags",
+        "publication",
+        "last_opened",
+        "doi",
+      ]),
+    );
+    await expect(
+      body.getByRole("menuitemcheckbox", { name: "DOI" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await expect(
+      body.getByRole("menuitemcheckbox", { name: "Authors" }),
+    ).toHaveAttribute("aria-checked", "false");
+    await userEvent.keyboard("{Escape}");
+  },
+};
+
+export const FailedPreferenceUpdateBeforeInitialQuery: Story = {
+  parameters: { msw: { handlers: failingPreferenceHandlers } },
+  play: async ({ canvasElement }) => {
+    failedPreferenceRequestCount = 0;
+    const canvas = within(canvasElement);
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Configure columns" }),
+    );
+    const doi = await body.findByRole("menuitemcheckbox", { name: "DOI" });
+    await userEvent.click(doi);
+    await userEvent.click(
+      body.getByRole("menuitemcheckbox", { name: "Authors" }),
+    );
+    await waitFor(() => expect(failedPreferenceRequestCount).toBe(2));
+    await body.findAllByText("Paper list preferences could not be saved.");
+    await waitFor(() =>
+      expect(
+        body.getByRole("menuitemcheckbox", { name: "DOI" }),
+      ).toHaveAttribute("aria-checked", "false"),
+    );
+    await expect(
+      body.getByRole("menuitemcheckbox", { name: "Authors" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(
+      body.getAllByRole("menuitem", { name: "Move up" })[0]!,
+    );
+    await waitFor(() => expect(body.queryByRole("menu")).toBeNull());
+  },
 };
 
 export const ThousandPapers: Story = {

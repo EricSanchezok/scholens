@@ -63,8 +63,14 @@ except Paper can be hidden and the visible columns can be reordered. Column
 order and preview disclosure are account-scoped and shared with Project Papers;
 sort and filters remain URL state. Every paper owns a stable 36×52 px portrait
 thumbnail slot that consumes `preview_url` and falls back without shifting the
-text columns. Selection remains an independent leading control. Entering
-selection replaces the utility row with the batch toolbar above the collection.
+text columns. A failed short-lived preview URL is remembered by URL, so a newly
+signed URL retries automatically in both the row and details preview. Preference
+writes are serialized per account preference key; rapid edits preserve their
+order, and only server-confirmed data can be a rollback source. Before the
+initial query resolves, a failed write restores the documented defaults and
+refetches instead of retaining optimistic state. Selection remains an
+independent leading control. Entering selection replaces the utility row with
+the batch toolbar above the collection.
 
 Below the desktop breakpoint, Papers uses a compact stacked row rather than
 compressing the table. Long titles wrap to at most two lines and uninterrupted

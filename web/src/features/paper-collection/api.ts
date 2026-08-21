@@ -13,6 +13,11 @@ export const paperListPreferencesKey = [
   "paper-list-preferences",
 ] as const;
 
+export const defaultPaperListPreferences = {
+  visible_columns: ["status", "tags", "authors", "publication", "last_opened"],
+  preview_open: true,
+} satisfies PaperListPreferences;
+
 export const paperCollectionTagsQuery = () =>
   queryOptions({
     queryKey: ["library", "tags"] as const,
