@@ -1868,7 +1868,7 @@
       "resetWidths": "Reset all widths"
     },
     "resize": {
-      "column": "Resize {column} column",
+      "boundary": "Resize boundary between {left} and {right}",
       "preview": "Resize paper details"
     },
     "tagFilterLabel": "Filter by {tag} for {title}",

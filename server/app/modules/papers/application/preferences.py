@@ -52,8 +52,8 @@ DEFAULT_PAPER_LIST_COLUMN_WIDTHS = {
     PaperListSizedColumn.DOI: 160,
 }
 PAPER_LIST_COLUMN_WIDTH_LIMITS = {
-    PaperListSizedColumn.PAPER: (288, 960),
-    PaperListSizedColumn.STATUS: (88, 240),
+    PaperListSizedColumn.PAPER: (160, 1600),
+    PaperListSizedColumn.STATUS: (88, 960),
     PaperListSizedColumn.TAGS: (128, 400),
     PaperListSizedColumn.AUTHORS: (144, 520),
     PaperListSizedColumn.PUBLICATION: (128, 400),

@@ -429,13 +429,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div
-        className={
-          parsed.tab === "papers"
-            ? "w-full min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-8 lg:pt-6"
-            : "mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6"
-        }
-      >
+      <div className="w-full min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-8 lg:pt-6">
         <Tabs
           className="min-w-0"
           onValueChange={handleTabChange}

@@ -73,8 +73,8 @@ const COLUMN_WIDTH_LIMITS: Record<
   PaperCollectionSizedColumn,
   { default: number; max: number; min: number }
 > = {
-  paper: { default: 360, max: 960, min: 288 },
-  status: { default: 96, max: 240, min: 88 },
+  paper: { default: 360, max: 1600, min: 160 },
+  status: { default: 96, max: 960, min: 88 },
   tags: { default: 160, max: 400, min: 128 },
   authors: { default: 176, max: 520, min: 144 },
   publication: { default: 144, max: 400, min: 128 },
@@ -112,6 +112,31 @@ function toColumnWidthPreferences(
   widths: Record<PaperCollectionSizedColumn, number>,
 ) {
   return ALL_COLUMNS.map((column) => ({ column, width: widths[column] }));
+}
+
+function resizeColumnPair({
+  left,
+  leftLimits,
+  nextLeft,
+  right,
+  rightLimits,
+}: {
+  left: number;
+  leftLimits: { max: number; min: number };
+  nextLeft: number;
+  right: number;
+  rightLimits: { max: number; min: number };
+}) {
+  const total = left + right;
+  const minimum = Math.max(leftLimits.min, total - rightLimits.max);
+  const maximum = Math.min(leftLimits.max, total - rightLimits.min);
+  const resolvedLeft = clamp(nextLeft, minimum, maximum);
+  return {
+    left: resolvedLeft,
+    maximum,
+    minimum,
+    right: total - resolvedLeft,
+  };
 }
 
 function ResizeHandle({
@@ -749,13 +774,13 @@ export function PaperCollectionWorkbench({
     setColumnWidths(persistedColumnWidths);
     setPreviewWidth(preferences.preview_width);
   }, [persistedColumnWidths, preferences.preview_width]);
-  const commitColumnWidth = React.useCallback(
-    (column: PaperCollectionSizedColumn, width: number) => {
-      setColumnWidths((current) => ({ ...current, [column]: width }));
+  const commitColumnWidths = React.useCallback(
+    (updates: Partial<Record<PaperCollectionSizedColumn, number>>) => {
+      setColumnWidths((current) => ({ ...current, ...updates }));
       mutatePreferences((current) => {
         const nextWidths = {
           ...getColumnWidths(current),
-          [column]: width,
+          ...updates,
         };
         return {
           ...current,
@@ -829,17 +854,40 @@ export function PaperCollectionWorkbench({
     getScrollElement: () => scrollRef.current,
     overscan: 8,
   });
-  const gridTemplateColumns = `${leading ? "3rem " : ""}minmax(${columnWidths.paper}px,1fr) ${effectiveColumns.map((column) => `${columnWidths[column]}px`).join(" ")} ${actions ? "2.75rem" : ""}`;
-  const tableMinimumWidth =
+  const orderedColumns: PaperCollectionSizedColumn[] = [
+    "paper",
+    ...effectiveColumns,
+  ];
+  const tableChromeWidth =
     (leading ? 48 : 0) +
-    columnWidths.paper +
-    effectiveColumns.reduce(
-      (total, column) => total + columnWidths[column],
-      0,
-    ) +
     (actions ? 44 : 0) +
     Math.max(0, columnCount - 1) * 12 +
     16;
+  const storedColumnsWidth = orderedColumns.reduce(
+    (total, column) => total + columnWidths[column],
+    0,
+  );
+  const availableColumnsWidth = Math.max(0, listWidth - tableChromeWidth);
+  const paperSurplus = Math.max(
+    0,
+    Math.floor(availableColumnsWidth - storedColumnsWidth),
+  );
+  const renderedColumnWidths = {
+    ...columnWidths,
+    paper: columnWidths.paper + paperSurplus,
+  };
+  const columnLabel = (column: PaperCollectionSizedColumn) =>
+    t(
+      column === "paper"
+        ? "columns.paper"
+        : column === "status" && personalLabels
+          ? "columns.personalStatus"
+          : column === "tags" && personalLabels
+            ? "columns.personalTags"
+            : `columns.${column}`,
+    );
+  const gridTemplateColumns = `${leading ? "3rem " : ""}${orderedColumns.map((column) => `${renderedColumnWidths[column]}px`).join(" ")} ${actions ? "2.75rem" : ""}`;
+  const tableMinimumWidth = tableChromeWidth + storedColumnsWidth;
   const virtualItems = rowVirtualizer.getVirtualItems();
   const renderedVirtualItems = width === undefined ? [] : virtualItems;
   return (
@@ -931,36 +979,23 @@ export function PaperCollectionWorkbench({
                       <span className="sr-only">{t("columns.selection")}</span>
                     </span>
                   ) : null}
-                  <span
-                    className="relative flex h-full items-center"
-                    role="columnheader"
-                  >
-                    {t("columns.paper")}
-                    <ResizeHandle
-                      className="absolute top-0 -right-2 z-20 h-full w-4"
-                      label={t("resize.column", {
-                        column: t("columns.paper"),
-                      })}
-                      max={COLUMN_WIDTH_LIMITS.paper.max}
-                      min={COLUMN_WIDTH_LIMITS.paper.min}
-                      onChange={(next) =>
-                        setColumnWidths((current) => ({
-                          ...current,
-                          paper: next,
-                        }))
-                      }
-                      onCommit={(next) => commitColumnWidth("paper", next)}
-                      value={columnWidths.paper}
-                    />
-                  </span>
-                  {effectiveColumns.map((column) => {
-                    const label = t(
-                      column === "status" && personalLabels
-                        ? "columns.personalStatus"
-                        : column === "tags" && personalLabels
-                          ? "columns.personalTags"
-                          : `columns.${column}`,
-                    );
+                  {orderedColumns.map((column, index) => {
+                    const label = columnLabel(column);
+                    const nextColumn = orderedColumns[index + 1];
+                    const nextLabel = nextColumn
+                      ? columnLabel(nextColumn)
+                      : undefined;
+                    const resizePair = nextColumn
+                      ? (nextLeft: number) =>
+                          resizeColumnPair({
+                            left: renderedColumnWidths[column],
+                            leftLimits: COLUMN_WIDTH_LIMITS[column],
+                            nextLeft,
+                            right: renderedColumnWidths[nextColumn],
+                            rightLimits: COLUMN_WIDTH_LIMITS[nextColumn],
+                          })
+                      : undefined;
+                    const pair = resizePair?.(renderedColumnWidths[column]);
                     return (
                       <span
                         className="relative flex h-full items-center"
@@ -968,20 +1003,33 @@ export function PaperCollectionWorkbench({
                         role="columnheader"
                       >
                         {label}
-                        <ResizeHandle
-                          className="absolute top-0 -right-2 z-20 h-full w-4"
-                          label={t("resize.column", { column: label })}
-                          max={COLUMN_WIDTH_LIMITS[column].max}
-                          min={COLUMN_WIDTH_LIMITS[column].min}
-                          onChange={(next) =>
-                            setColumnWidths((current) => ({
-                              ...current,
-                              [column]: next,
-                            }))
-                          }
-                          onCommit={(next) => commitColumnWidth(column, next)}
-                          value={columnWidths[column]}
-                        />
+                        {nextColumn && nextLabel && resizePair && pair ? (
+                          <ResizeHandle
+                            className="absolute top-0 -right-2 z-20 h-full w-4"
+                            label={t("resize.boundary", {
+                              left: label,
+                              right: nextLabel,
+                            })}
+                            max={pair.maximum}
+                            min={pair.minimum}
+                            onChange={(next) => {
+                              const resized = resizePair(next);
+                              setColumnWidths((current) => ({
+                                ...current,
+                                [column]: resized.left,
+                                [nextColumn]: resized.right,
+                              }));
+                            }}
+                            onCommit={(next) => {
+                              const resized = resizePair(next);
+                              commitColumnWidths({
+                                [column]: resized.left,
+                                [nextColumn]: resized.right,
+                              });
+                            }}
+                            value={renderedColumnWidths[column]}
+                          />
+                        ) : null}
                       </span>
                     );
                   })}

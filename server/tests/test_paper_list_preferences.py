@@ -182,6 +182,25 @@ def test_paper_list_preferences_merge_partial_layout_sizes() -> None:
 
 
 @pytest.mark.parametrize(
+    ("column", "width"),
+    [("paper", 160), ("paper", 1600), ("status", 88), ("status", 960)],
+)
+def test_paper_list_preferences_accept_expanded_width_boundaries(
+    column: str, width: int
+) -> None:
+    request = PaperListPreferencesUpdateRequest.model_validate(
+        {
+            "visible_columns": ["status"],
+            "preview_open": True,
+            "column_widths": [{"column": column, "width": width}],
+        }
+    )
+
+    assert request.column_widths is not None
+    assert request.column_widths[0].width == width
+
+
+@pytest.mark.parametrize(
     "visible_columns",
     [
         ["status", "status"],
@@ -210,6 +229,8 @@ def test_paper_list_preferences_reject_invalid_columns(
             ],
             512,
         ),
+        ([{"column": "paper", "width": 159}], 512),
+        ([{"column": "paper", "width": 1601}], 512),
         ([{"column": "status", "width": 40}], 512),
         ([], 900),
     ],

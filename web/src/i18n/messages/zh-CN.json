@@ -1868,7 +1868,7 @@
       "resetWidths": "重置全部宽度"
     },
     "resize": {
-      "column": "调整{column}列宽",
+      "boundary": "调整{left}与{right}之间的边界",
       "preview": "调整论文详情宽度"
     },
     "tagFilterLabel": "按《{title}》的“{tag}”标签筛选",

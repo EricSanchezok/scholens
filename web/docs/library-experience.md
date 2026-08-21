@@ -65,7 +65,12 @@ space. Default columns are Paper, Status, Tags, Authors, Publication, and Last
 opened. Added and DOI are optional; every column except Paper can be hidden and
 the visible columns can be reordered. Column order, per-column widths, preview
 width, and preview disclosure are account-scoped and shared with Project Papers;
-sort and filters remain URL state. Every paper owns a stable 36×52 px portrait
+sort and filters remain URL state. The Paper column can contract to 160 px and
+expand to 1,600 px. Dragging an internal column boundary redistributes the
+bounded width only between its two adjacent visible columns, keeping their
+combined width and the trailing column edge fixed; the boundary stops when
+either column reaches its limit. The final data column has no resize handle.
+Every paper owns a stable 36×52 px portrait
 thumbnail slot that consumes `preview_url` and falls back without shifting the
 text columns. A failed short-lived preview URL is remembered by URL, so a newly
 signed URL retries automatically in both the row and details preview. Preference
@@ -116,8 +121,10 @@ table and preview share one continuous top boundary; the preview's quiet
 vertical divider begins at that boundary instead of intersecting an independent
 table rule. Rows are separated by quiet dividers and reveal a local hover
 surface. Mobile keeps the same border ownership with one divided list instead
-of a stack of repeated cards. This visual contract also applies to Outputs so
-switching tabs does not change the page's interface dialect.
+of a stack of repeated cards. This visual contract also applies to Outputs.
+Papers and Outputs share the same full-width page container, header alignment,
+and responsive padding, so switching tabs never moves the title, tabs, primary
+action, or content edges.
 
 Paper and tag rows follow the shared collection-row and nested-action contract
 in [Component Development](./component-development.md). The row's main content
