@@ -6,6 +6,11 @@ answer quickly, overlays establish their origin, and larger layout changes
 settle without bounce. Ordinary route navigation never receives a full-page
 transition.
 
+Persistent navigation chrome also mounts without an entrance animation, even
+when a route owns a fresh shell instance. Sidebar labels may use
+`settled-content-enter` only when the user explicitly expands a collapsed rail;
+changing the active route must not replay that reveal across the navigation group.
+
 ## Architecture
 
 ```text

@@ -216,11 +216,13 @@ function NavigationPendingIndicator({
 }
 
 function SidebarLinkContent({
+  animateLabel,
   collapsed,
   glyph,
   href,
   label,
 }: {
+  animateLabel: boolean;
   collapsed: boolean;
   glyph: IconGlyph;
   href: string;
@@ -232,7 +234,12 @@ function SidebarLinkContent({
         <Icon glyph={glyph} size={20} tone="primary" />
       </span>
       {!collapsed && (
-        <span className="settled-content-enter text-sidebar-label truncate">
+        <span
+          className={cn(
+            "text-sidebar-label truncate",
+            animateLabel && "settled-content-enter",
+          )}
+        >
           {label}
         </span>
       )}
@@ -242,6 +249,7 @@ function SidebarLinkContent({
 }
 
 function SidebarControl({
+  animateLabel = false,
   collapsed,
   label,
   glyph,
@@ -251,6 +259,7 @@ function SidebarControl({
   disabledHint,
   onSelect,
 }: {
+  animateLabel?: boolean;
   collapsed: boolean;
   label: string;
   glyph: IconGlyph;
@@ -281,6 +290,7 @@ function SidebarControl({
       prefetch
     >
       <SidebarLinkContent
+        animateLabel={animateLabel}
         collapsed={collapsed}
         glyph={glyph}
         href={href}
@@ -304,7 +314,12 @@ function SidebarControl({
         <Icon glyph={glyph} size={20} tone="secondary" />
       </span>
       {!collapsed && (
-        <span className="settled-content-enter text-sidebar-label truncate">
+        <span
+          className={cn(
+            "text-sidebar-label truncate",
+            animateLabel && "settled-content-enter",
+          )}
+        >
           {label}
         </span>
       )}
@@ -1123,6 +1138,7 @@ export function WorkspaceNewChatAction() {
 }
 
 function Sidebar({
+  animateLabels,
   actor,
   billingUsage,
   conversations,
@@ -1147,6 +1163,7 @@ function Sidebar({
   onDeleteConversation,
   onRequestMobileRename,
 }: {
+  animateLabels: boolean;
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
   conversations: ConversationSummary[];
@@ -1237,6 +1254,7 @@ function Sidebar({
         >
           <SidebarControl
             active={activeDestination === "ask" && !activeConversationId}
+            animateLabel={animateLabels}
             collapsed={collapsed}
             glyph={NewConversationIcon}
             href="/"
@@ -1253,6 +1271,7 @@ function Sidebar({
           )}
           <SidebarControl
             active={activeDestination === "library"}
+            animateLabel={animateLabels}
             collapsed={collapsed}
             glyph={LibraryIcon}
             href="/library"
@@ -1260,6 +1279,7 @@ function Sidebar({
           />
           <SidebarControl
             active={activeDestination === "projects"}
+            animateLabel={animateLabels}
             collapsed={collapsed}
             glyph={ProjectIcon}
             href="/projects"
@@ -1341,6 +1361,7 @@ export function WorkspaceShell({
   const t = useTranslations("WorkspaceShell");
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [animateSidebarLabels, setAnimateSidebarLabels] = React.useState(false);
   const searchReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const [deleteTarget, setDeleteTarget] =
     React.useState<ConversationDialogTarget>();
@@ -1423,6 +1444,7 @@ export function WorkspaceShell({
         };
       }
       stopRailAnimations();
+      setAnimateSidebarLabels(!nextCollapsed);
       onCollapsedChange(nextCollapsed);
     },
     [onCollapsedChange, stopRailAnimations],
@@ -1551,6 +1573,7 @@ export function WorkspaceShell({
             activeConversationId={activeConversationId}
             activeDestination={activeDestination}
             actor={actor}
+            animateLabels={animateSidebarLabels}
             billingUsage={billingUsage}
             collapsed={collapsed}
             conversations={conversations}

@@ -310,6 +310,71 @@ test.beforeEach(async ({ page }) => {
   await mockWorkspace(page);
 });
 
+test("keeps workspace navigation labels stable across routes", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("scholens-motion", "full");
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "What are you working on?" }),
+  ).toBeVisible();
+  await page.evaluate(() => {
+    const failures: Array<{
+      animationName: string;
+      label: string;
+      opacity: string;
+    }> = [];
+    const labels = new Set(["New chat", "Library", "Projects"]);
+    const inspect = () => {
+      for (const element of document.querySelectorAll<HTMLElement>(
+        "nav a span",
+      )) {
+        const label = element.textContent?.trim() ?? "";
+        if (!labels.has(label)) continue;
+        const style = getComputedStyle(element);
+        if (style.animationName !== "none" || Number(style.opacity) < 1) {
+          failures.push({
+            animationName: style.animationName,
+            label,
+            opacity: style.opacity,
+          });
+        }
+      }
+    };
+    new MutationObserver(inspect).observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+    inspect();
+    Object.assign(window, { __sidebarLabelMotionFailures: failures });
+  });
+
+  for (const destination of [
+    { label: "Library", path: "/library" },
+    { label: "Projects", path: "/projects" },
+    { label: "New chat", path: "/" },
+  ]) {
+    await page.getByRole("link", { name: destination.label }).click();
+    await expect(page).toHaveURL(destination.path);
+    await expect(
+      page.getByRole("link", { name: destination.label }),
+    ).toHaveAttribute("aria-current", "page");
+  }
+
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __sidebarLabelMotionFailures?: Array<unknown>;
+          }
+        ).__sidebarLabelMotionFailures ?? [],
+    ),
+  ).toEqual([]);
+});
+
 test("uses one scrollbar contract for native vertical and horizontal regions", async ({
   browserName,
   page,
