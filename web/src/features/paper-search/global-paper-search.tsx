@@ -191,43 +191,48 @@ export function GlobalSearch({
             <p className="text-secondary mt-1 text-sm leading-6">
               {t("description")}
             </p>
-            <SearchField
-              aria-label={t("inputLabel")}
-              autoFocus
-              className="mt-5 h-12 rounded-[var(--radius-lg)] text-base"
-              onChange={(event) => {
-                const nextQuery = event.currentTarget.value;
-                setQuery(nextQuery);
-                if (!composingRef.current) setCommittedQuery(nextQuery);
-              }}
-              onCompositionEnd={(event) => {
-                composingRef.current = false;
-                setQuery(event.currentTarget.value);
-                setCommittedQuery(event.currentTarget.value);
-              }}
-              onCompositionStart={() => {
-                composingRef.current = true;
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  resultFocusRef.current?.();
-                }
-              }}
-              placeholder={
-                kind === "conversations"
-                  ? t("conversationPlaceholder")
-                  : t("paperPlaceholder")
-              }
-              value={query}
-            />
-            <div className="mt-4">
-              <TabsList aria-label={t("scopeLabel")}>
+            <div className="mt-5 flex min-w-0 items-center gap-2 max-[359px]:flex-col max-[359px]:items-stretch sm:gap-3">
+              <TabsList
+                aria-label={t("scopeLabel")}
+                className="h-12 shrink-0 items-center max-[359px]:w-fit"
+              >
                 <TabsTrigger value="conversations">
                   {t("tabs.conversations")}
                 </TabsTrigger>
                 <TabsTrigger value="papers">{t("tabs.papers")}</TabsTrigger>
               </TabsList>
+              <div className="min-w-0 flex-1 max-[359px]:w-full">
+                <SearchField
+                  aria-label={t("inputLabel")}
+                  autoFocus
+                  className="h-12 rounded-[var(--radius-lg)] text-base"
+                  onChange={(event) => {
+                    const nextQuery = event.currentTarget.value;
+                    setQuery(nextQuery);
+                    if (!composingRef.current) setCommittedQuery(nextQuery);
+                  }}
+                  onCompositionEnd={(event) => {
+                    composingRef.current = false;
+                    setQuery(event.currentTarget.value);
+                    setCommittedQuery(event.currentTarget.value);
+                  }}
+                  onCompositionStart={() => {
+                    composingRef.current = true;
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      resultFocusRef.current?.();
+                    }
+                  }}
+                  placeholder={
+                    kind === "conversations"
+                      ? t("conversationPlaceholder")
+                      : t("paperPlaceholder")
+                  }
+                  value={query}
+                />
+              </div>
             </div>
           </div>
 

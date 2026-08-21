@@ -196,6 +196,17 @@ test("opens one keyboard-search surface for conversations and papers", async ({
   const input = dialog.getByRole("searchbox", {
     name: "Search conversations or papers",
   });
+  const scopeTabs = dialog.getByRole("tablist", { name: "Search scope" });
+  const [inputBox, scopeTabsBox] = await Promise.all([
+    input.boundingBox(),
+    scopeTabs.boundingBox(),
+  ]);
+  expect(inputBox).not.toBeNull();
+  expect(scopeTabsBox).not.toBeNull();
+  expect(Math.abs(inputBox!.y - scopeTabsBox!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(inputBox!.height - scopeTabsBox!.height)).toBeLessThanOrEqual(
+    1,
+  );
   await input.fill("memory");
   const conversationResult = dialog.getByRole("link", {
     name: new RegExp(homeConversations[0]!.title),
