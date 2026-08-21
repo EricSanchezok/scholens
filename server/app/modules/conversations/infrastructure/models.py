@@ -87,7 +87,7 @@ class ConversationTurn(Base):
         ),
         Index(
             "ix_conversation_turns_user_query_fts",
-            text("to_tsvector('pg_catalog.simple', user_query)"),
+            text("to_tsvector('simple'::regconfig, user_query)"),
             postgresql_using="gin",
         ),
         CheckConstraint("depth >= 1", name="ck_conversation_turns_depth"),
@@ -191,7 +191,7 @@ class ConversationResponse(Base):
         ),
         Index(
             "ix_conversation_responses_content_fts",
-            text("to_tsvector('pg_catalog.simple', coalesce(content, ''))"),
+            text("to_tsvector('simple'::regconfig, COALESCE(content, ''::text))"),
             postgresql_using="gin",
         ),
         CheckConstraint(
