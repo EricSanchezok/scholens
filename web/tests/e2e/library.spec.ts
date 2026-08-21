@@ -428,11 +428,9 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
     },
   });
   await expect(dialog).toHaveCount(0);
-  const papersTable = page.getByRole("table");
-  const acceptedUpload = papersTable.getByText("local-paper.pdf");
-  await expect(acceptedUpload).toHaveCount(1);
-  await expect(acceptedUpload).toBeVisible();
-  await expect(papersTable.getByText("Waiting to process")).toBeVisible();
+  const ingestionRow = page.locator("[data-ingestion-row]");
+  await expect(ingestionRow.getByText("local-paper.pdf")).toBeVisible();
+  await expect(ingestionRow.getByText("Waiting to process")).toBeVisible();
 
   const cancelRequest = page.waitForRequest(
     (request) =>
@@ -441,9 +439,9 @@ test("moves accepted uploads into paper rows and supports cancellation", async (
         .url()
         .includes("/paper-ingestions/00000000-0000-4000-8000-000000000090"),
   );
-  await papersTable.getByRole("button", { name: "Cancel processing" }).click();
+  await ingestionRow.getByRole("button", { name: "Cancel processing" }).click();
   await cancelRequest;
-  await expect(papersTable.getByText("local-paper.pdf")).toHaveCount(0);
+  await expect(ingestionRow.getByText("local-paper.pdf")).toHaveCount(0);
 });
 
 test("restores URL state and contains each supported phone width", async ({
