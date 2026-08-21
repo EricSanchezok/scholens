@@ -51,4 +51,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("paper_list_preferences", schema="scholens")
+    # Production schema evolution is forward-only. Application rollback keeps
+    # this additive table in place and older revisions safely ignore it.
+    pass
