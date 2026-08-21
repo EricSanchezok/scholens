@@ -1,4 +1,4 @@
-# 0032 — Segmented cross-page PDF anchors
+# 0033 — Segmented cross-page PDF anchors
 
 Status: Accepted
 Date: 2026-08-21
