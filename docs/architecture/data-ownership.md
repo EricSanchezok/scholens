@@ -150,11 +150,12 @@ against that owner; deletion cascades only its Library Paper assignments.
 Library Paper tag edits are exact-set replacements, so clearing the final tag
 does not require a separate compatibility endpoint.
 
-`PaperListPreference` owns one user's ordered visible-column set and paper
-details-preview disclosure. It is Scholens account data keyed by the auth user
-ID; it does not move ownership into the `auth` schema. Library, Project Papers,
-and their search projections read the same preference, while sort and filter
-state remain URL-owned browser state. Project and search personal metadata is
+`PaperListPreference` owns one user's ordered visible-column set, bounded
+per-column widths, paper-details-preview width, and preview disclosure. It is
+Scholens account data keyed by the auth user ID; it does not move ownership into
+the `auth` schema. Library, Project Papers, and their search projections read
+the same preference, while sort and filter state remain URL-owned browser state.
+Project and search personal metadata is
 always projected from an actor-scoped `LibraryPaper` join. A Project-only
 Document returns no personal status, tags, or last-access time, and another
 user's private Library metadata is never a fallback.

@@ -17,7 +17,18 @@ const libraryTagsUrl = "http://127.0.0.1:7301/api/v1/library/tags";
 export const paperListPreferencesHandlers = [
   http.get(paperListPreferencesUrl, () =>
     HttpResponse.json({
+      column_widths: [
+        { column: "paper", width: 360 },
+        { column: "status", width: 96 },
+        { column: "tags", width: 160 },
+        { column: "authors", width: 176 },
+        { column: "publication", width: 144 },
+        { column: "last_opened", width: 120 },
+        { column: "added_at", width: 120 },
+        { column: "doi", width: 160 },
+      ],
       preview_open: true,
+      preview_width: 512,
       visible_columns: [
         "status",
         "tags",

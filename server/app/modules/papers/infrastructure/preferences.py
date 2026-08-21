@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from app.modules.papers.application.preferences import (
     PaperListColumn,
+    PaperListColumnWidth,
     PaperListPreferencesRecord,
+    PaperListSizedColumn,
 )
 from app.shared.infrastructure.persistence import Base
-from sqlalchemy import BigInteger, Boolean, ForeignKey, func
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, func
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -31,6 +33,16 @@ class PaperListPreference(Base):
         default=True,
         server_default="true",
     )
+    column_widths: Mapped[dict[str, int]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+    preview_width: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=512,
+        server_default="512",
+    )
 
 
 class SqlAlchemyPaperListPreferences:
@@ -48,18 +60,25 @@ class SqlAlchemyPaperListPreferences:
         preferences: PaperListPreferencesRecord,
     ) -> PaperListPreferencesRecord:
         values = [column.value for column in preferences.visible_columns]
+        column_widths = {
+            item.column.value: item.width for item in preferences.column_widths
+        }
         model = self._db.execute(
             insert(PaperListPreference)
             .values(
                 user_id=user_id,
                 visible_columns=values,
                 preview_open=preferences.preview_open,
+                column_widths=column_widths,
+                preview_width=preferences.preview_width,
             )
             .on_conflict_do_update(
                 index_elements=["user_id"],
                 set_={
                     "visible_columns": values,
                     "preview_open": preferences.preview_open,
+                    "column_widths": column_widths,
+                    "preview_width": preferences.preview_width,
                     "updated_at": func.now(),
                 },
             )
@@ -74,4 +93,12 @@ def _record(model: PaperListPreference) -> PaperListPreferencesRecord:
             PaperListColumn(value) for value in model.visible_columns
         ),
         preview_open=model.preview_open,
+        column_widths=tuple(
+            PaperListColumnWidth(
+                column=PaperListSizedColumn(column),
+                width=width,
+            )
+            for column, width in model.column_widths.items()
+        ),
+        preview_width=model.preview_width,
     )

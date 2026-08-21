@@ -1862,11 +1862,14 @@
     "columnsMenu": {
       "label": "配置列",
       "title": "显示列",
-      "moveUp": "上移",
-      "moveDown": "下移",
+      "description": "选择并排序显示列；拖动表头边缘可以调整列宽。",
       "moveUpColumn": "将{column}上移",
       "moveDownColumn": "将{column}下移",
-      "done": "完成"
+      "resetWidths": "重置全部宽度"
+    },
+    "resize": {
+      "column": "调整{column}列宽",
+      "preview": "调整论文详情宽度"
     },
     "tagFilterLabel": "按《{title}》的“{tag}”标签筛选",
     "moreTags": "另有 {count} 个标签",

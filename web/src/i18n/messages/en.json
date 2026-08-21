@@ -1862,11 +1862,14 @@
     "columnsMenu": {
       "label": "Configure columns",
       "title": "Visible columns",
-      "moveUp": "Move up",
-      "moveDown": "Move down",
+      "description": "Choose and reorder columns. Drag a table header edge to resize it.",
       "moveUpColumn": "Move {column} up",
       "moveDownColumn": "Move {column} down",
-      "done": "Done"
+      "resetWidths": "Reset all widths"
+    },
+    "resize": {
+      "column": "Resize {column} column",
+      "preview": "Resize paper details"
     },
     "tagFilterLabel": "Filter by {tag} for {title}",
     "moreTags": "{count} more tags",

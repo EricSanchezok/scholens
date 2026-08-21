@@ -4099,20 +4099,39 @@ export interface components {
          * @enum {string}
          */
         PaperListColumn: "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
+        /** PaperListColumnWidth */
+        PaperListColumnWidth: {
+            column: components["schemas"]["PaperListSizedColumn"];
+            /** Width */
+            width: number;
+        };
         /** PaperListPreferencesResponse */
         PaperListPreferencesResponse: {
+            /** Column Widths */
+            column_widths: components["schemas"]["PaperListColumnWidth"][];
             /** Preview Open */
             preview_open: boolean;
+            /** Preview Width */
+            preview_width: number;
             /** Visible Columns */
             visible_columns: components["schemas"]["PaperListColumn"][];
         };
         /** PaperListPreferencesUpdateRequest */
         PaperListPreferencesUpdateRequest: {
+            /** Column Widths */
+            column_widths?: components["schemas"]["PaperListColumnWidth"][] | null;
             /** Preview Open */
             preview_open: boolean;
+            /** Preview Width */
+            preview_width?: number | null;
             /** Visible Columns */
             visible_columns: components["schemas"]["PaperListColumn"][];
         };
+        /**
+         * PaperListSizedColumn
+         * @enum {string}
+         */
+        PaperListSizedColumn: "paper" | "status" | "tags" | "authors" | "publication" | "last_opened" | "added_at" | "doi";
         /** PaperSearchFilters */
         PaperSearchFilters: {
             /**

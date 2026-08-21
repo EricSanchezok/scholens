@@ -142,6 +142,20 @@ export function PaperSearchResults({
         }}
         onTagClick={(tag) => onTagClick?.(tag.id)}
         personalLabels
+        tableFooter={
+          hasMore ? (
+            <div className="flex justify-center py-6" ref={loadMoreRef}>
+              <Button
+                loading={loadingMore}
+                onClick={() => void onLoadMore()}
+                size="sm"
+                variant="ghost"
+              >
+                {loadingMore ? t("loadingMore") : t("loadMore")}
+              </Button>
+            </div>
+          ) : null
+        }
         toolbar={
           <div className="flex min-w-0 items-center gap-3">
             {toolbar ? <div className="min-w-0 flex-1">{toolbar}</div> : null}
@@ -151,18 +165,6 @@ export function PaperSearchResults({
           </div>
         }
       />
-      {hasMore ? (
-        <div className="flex justify-center py-6" ref={loadMoreRef}>
-          <Button
-            loading={loadingMore}
-            onClick={() => void onLoadMore()}
-            size="sm"
-            variant="ghost"
-          >
-            {loadingMore ? t("loadingMore") : t("loadMore")}
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }

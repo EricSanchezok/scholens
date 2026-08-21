@@ -360,7 +360,7 @@ surface covers:
 | Stored paper search, bounded content, citation, and download |            7 | No internet discovery                                    |
 | Projects, papers, membership, invitations, and ownership     |           19 | Resource authorization after coarse Access Key filtering |
 | Personal Library, sharing, and tags                          |           14 | Library state remains user-owned                         |
-| Known-source ingestion, upload preparation, and jobs         |            7 | Bounded waiting, batch acceptance, stable idempotency     |
+| Known-source ingestion, upload preparation, and jobs         |            7 | Bounded waiting, batch acceptance, stable idempotency    |
 | Annotation threads and comments                              |            8 | Personal or one-Project audience                         |
 | Existing research outputs                                    |            2 | Read-only; no generation tool                            |
 
@@ -668,10 +668,11 @@ The Library exposes two deliberately different collections:
   browser does not join permissions itself.
 
 `GET|PUT /api/v1/me/paper-list-preferences` owns the ordered, duplicate-free
-visible paper columns and shared preview-open flag. Missing storage returns the
-canonical default columns and an open preview. Updates are user-isolated and
-replace the full small preference document; they do not persist browse filters
-or sorting.
+visible paper columns, bounded per-column widths, and shared preview width/open
+state. Missing storage returns the canonical default columns and layout sizes
+with an open preview. Updates are user-isolated; older callers may omit the
+additive size fields, while supplied size entries merge into the stored layout.
+The preference does not persist browse filters or sorting.
 
 `GET /api/v1/library/summary` returns successful Paper and Output counts plus
 the number of current ingestion lifecycles and failed ingestions that require

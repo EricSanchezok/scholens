@@ -12,20 +12,22 @@ import remarkGfm from "remark-gfm";
 
 import {
   Button,
+  Checkbox,
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
   keyboardFocusRing,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   useToast,
 } from "@/components/ui";
 import {
   ClosePanelIcon,
+  MoveDownIcon,
+  MoveUpIcon,
   OpenPanelIcon,
   OutlineIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -37,6 +39,7 @@ import {
   paperListPreferencesQuery,
   updatePaperListPreferences,
   type PaperCollectionColumn,
+  type PaperCollectionSizedColumn,
   type PaperListPreferences,
   type PaperStatus,
 } from "./api";
@@ -66,17 +69,147 @@ export type PaperCollectionItem = {
   href: Route;
 };
 
-const COLUMN_WIDTHS: Record<PaperCollectionColumn, string> = {
-  status: "6rem",
-  tags: "10rem",
-  authors: "11rem",
-  publication: "8.5rem",
-  last_opened: "7rem",
-  added_at: "7rem",
-  doi: "10rem",
+const COLUMN_WIDTH_LIMITS: Record<
+  PaperCollectionSizedColumn,
+  { default: number; max: number; min: number }
+> = {
+  paper: { default: 360, max: 960, min: 288 },
+  status: { default: 96, max: 240, min: 88 },
+  tags: { default: 160, max: 400, min: 128 },
+  authors: { default: 176, max: 520, min: 144 },
+  publication: { default: 144, max: 400, min: 128 },
+  last_opened: { default: 120, max: 280, min: 112 },
+  added_at: { default: 120, max: 280, min: 112 },
+  doi: { default: 160, max: 480, min: 144 },
 };
 
-const ALL_COLUMNS = Object.keys(COLUMN_WIDTHS) as PaperCollectionColumn[];
+const ALL_COLUMNS = Object.keys(
+  COLUMN_WIDTH_LIMITS,
+) as PaperCollectionSizedColumn[];
+const CONFIGURABLE_COLUMNS = ALL_COLUMNS.filter(
+  (column): column is PaperCollectionColumn => column !== "paper",
+);
+const DEFAULT_COLUMN_WIDTHS = Object.fromEntries(
+  ALL_COLUMNS.map((column) => [column, COLUMN_WIDTH_LIMITS[column].default]),
+) as Record<PaperCollectionSizedColumn, number>;
+const MIN_PREVIEW_WIDTH = 400;
+const MAX_PREVIEW_WIDTH = 720;
+const MIN_LIST_WIDTH_WITH_PREVIEW = 640;
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, Math.round(value)));
+}
+
+function getColumnWidths(preferences: PaperListPreferences) {
+  const widths = { ...DEFAULT_COLUMN_WIDTHS };
+  preferences.column_widths.forEach(({ column, width }) => {
+    widths[column] = width;
+  });
+  return widths;
+}
+
+function toColumnWidthPreferences(
+  widths: Record<PaperCollectionSizedColumn, number>,
+) {
+  return ALL_COLUMNS.map((column) => ({ column, width: widths[column] }));
+}
+
+function ResizeHandle({
+  className,
+  direction = 1,
+  label,
+  max,
+  min,
+  onChange,
+  onCommit,
+  value,
+}: {
+  className?: string;
+  direction?: -1 | 1;
+  label: string;
+  max: number;
+  min: number;
+  onChange: (value: number) => void;
+  onCommit: (value: number) => void;
+  value: number;
+}) {
+  const drag = React.useRef<{
+    lastValue: number;
+    pointerId: number;
+    startValue: number;
+    startX: number;
+  } | null>(null);
+  const valueRef = React.useRef(value);
+  React.useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  function resize(nextValue: number) {
+    const next = clamp(nextValue, min, max);
+    valueRef.current = next;
+    if (drag.current) drag.current.lastValue = next;
+    onChange(next);
+  }
+
+  function finish(pointerId: number) {
+    if (!drag.current || drag.current.pointerId !== pointerId) return;
+    const next = drag.current.lastValue;
+    drag.current = null;
+    onCommit(next);
+  }
+
+  return (
+    <div
+      aria-label={label}
+      aria-orientation="vertical"
+      aria-valuemax={max}
+      aria-valuemin={min}
+      aria-valuenow={value}
+      className={cn(
+        "group flex cursor-col-resize touch-none items-center justify-center outline-none select-none",
+        keyboardFocusRing,
+        className,
+      )}
+      data-paper-resize-handle=""
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const screenDelta = event.key === "ArrowRight" ? 1 : -1;
+        const step = event.shiftKey ? 32 : 8;
+        const next = clamp(
+          valueRef.current + screenDelta * direction * step,
+          min,
+          max,
+        );
+        resize(next);
+        onCommit(next);
+      }}
+      onPointerCancel={(event) => finish(event.pointerId)}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = {
+          lastValue: valueRef.current,
+          pointerId: event.pointerId,
+          startValue: valueRef.current,
+          startX: event.clientX,
+        };
+      }}
+      onPointerMove={(event) => {
+        const current = drag.current;
+        if (!current || current.pointerId !== event.pointerId) return;
+        resize(
+          current.startValue + (event.clientX - current.startX) * direction,
+        );
+      }}
+      onPointerUp={(event) => finish(event.pointerId)}
+      role="separator"
+      tabIndex={0}
+    >
+      <span className="bg-line-strong group-hover:bg-foreground group-focus-visible:bg-foreground h-5 w-px" />
+    </div>
+  );
+}
 
 function useElementWidth(ref: React.RefObject<HTMLElement | null>) {
   const [width, setWidth] = React.useState<number>();
@@ -253,9 +386,11 @@ function TagButtons({
 }
 
 function ColumnManager({
+  onResetWidths,
   preferences,
   update,
 }: {
+  onResetWidths: () => void;
   preferences: PaperListPreferences;
   update: (
     updater: (current: PaperListPreferences) => PaperListPreferences,
@@ -285,9 +420,15 @@ function ColumnManager({
       return { ...preferences, visible_columns: current };
     });
   }
+  const orderedColumns: PaperCollectionColumn[] = [
+    ...preferences.visible_columns,
+    ...CONFIGURABLE_COLUMNS.filter(
+      (column) => !preferences.visible_columns.includes(column),
+    ),
+  ];
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Popover>
+      <PopoverTrigger asChild>
         <Button
           aria-label={t("columnsMenu.label")}
           className="hidden sm:inline-flex"
@@ -297,61 +438,79 @@ function ColumnManager({
           <Icon glyph={OutlineIcon} size={20} />
           <span className="hidden xl:inline">{t("columnsMenu.label")}</span>
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>{t("columnsMenu.title")}</DropdownMenuLabel>
-        {ALL_COLUMNS.map((column) => {
-          const checked = preferences.visible_columns.includes(column);
-          const visibleIndex = preferences.visible_columns.indexOf(column);
-          const columnLabel = t(`columns.${column}`);
-          return (
-            <React.Fragment key={column}>
-              <DropdownMenuCheckboxItem
-                checked={checked}
-                onCheckedChange={(value) => toggle(column, value === true)}
-                onSelect={(event) => event.preventDefault()}
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        aria-label={t("columnsMenu.title")}
+        className="w-80 p-2"
+      >
+        <div className="px-2 pt-1 pb-2">
+          <h3 className="text-sm font-semibold">{t("columnsMenu.title")}</h3>
+          <p className="text-secondary mt-1 text-xs leading-5">
+            {t("columnsMenu.description")}
+          </p>
+        </div>
+        <div className="grid gap-0.5">
+          {orderedColumns.map((column) => {
+            const checked = preferences.visible_columns.includes(column);
+            const visibleIndex = preferences.visible_columns.indexOf(column);
+            const columnLabel = t(`columns.${column}`);
+            return (
+              <div
+                className="hover:bg-hover grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-sm)] px-2"
+                key={column}
               >
-                {columnLabel}
-              </DropdownMenuCheckboxItem>
-              {checked ? (
-                <DropdownMenuGroup className="flex justify-end gap-1 px-2 pb-1">
-                  <DropdownMenuItem
-                    aria-label={t("columnsMenu.moveUpColumn", {
-                      column: columnLabel,
-                    })}
-                    className="min-h-8 px-2 text-xs"
-                    disabled={visibleIndex === 0}
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      move(column, -1);
-                    }}
-                  >
-                    {t("columnsMenu.moveUp")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    aria-label={t("columnsMenu.moveDownColumn", {
-                      column: columnLabel,
-                    })}
-                    className="min-h-8 px-2 text-xs"
-                    disabled={
-                      visibleIndex === preferences.visible_columns.length - 1
-                    }
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      move(column, 1);
-                    }}
-                  >
-                    {t("columnsMenu.moveDown")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              ) : null}
-            </React.Fragment>
-          );
-        })}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>{t("columnsMenu.done")}</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+                <label className="flex min-w-0 cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(value) => toggle(column, value === true)}
+                  />
+                  <span className="truncate">{columnLabel}</span>
+                </label>
+                {checked ? (
+                  <span className="flex items-center gap-0.5">
+                    <IconButton
+                      className="size-8 min-h-8"
+                      disabled={visibleIndex === 0}
+                      label={t("columnsMenu.moveUpColumn", {
+                        column: columnLabel,
+                      })}
+                      onClick={() => move(column, -1)}
+                      variant="ghost"
+                    >
+                      <Icon glyph={MoveUpIcon} size={16} />
+                    </IconButton>
+                    <IconButton
+                      className="size-8 min-h-8"
+                      disabled={
+                        visibleIndex === preferences.visible_columns.length - 1
+                      }
+                      label={t("columnsMenu.moveDownColumn", {
+                        column: columnLabel,
+                      })}
+                      onClick={() => move(column, 1)}
+                      variant="ghost"
+                    >
+                      <Icon glyph={MoveDownIcon} size={16} />
+                    </IconButton>
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className="border-line-subtle mt-2 border-t px-1 pt-2">
+          <Button
+            className="w-full justify-start"
+            onClick={onResetWidths}
+            size="sm"
+            variant="ghost"
+          >
+            {t("columnsMenu.resetWidths")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -422,7 +581,7 @@ function Preview({
   return (
     <aside
       aria-label={t("preview.label")}
-      className="border-line-subtle bg-subtle max-h-[min(42.5rem,calc(100dvh-12rem))] min-w-0 overflow-y-auto border-l px-5 pb-5"
+      className="border-line-subtle bg-subtle h-full min-w-0 overflow-y-auto border-l px-5 pb-5"
       data-paper-collection-preview=""
     >
       <div className="flex h-10 items-center justify-between gap-3">
@@ -435,26 +594,30 @@ function Preview({
           <Icon glyph={ClosePanelIcon} size={20} />
         </IconButton>
       </div>
-      <PaperPreviewImage
-        className="bg-surface mt-3 h-36 w-24"
-        previewUrl={item.previewUrl}
-        variant="detail"
-      />
-      <h3 className="mt-4 text-base leading-6 font-semibold [overflow-wrap:anywhere]">
-        {item.title}
-      </h3>
-      <p className="text-secondary mt-2 text-xs leading-5">
-        {item.authors.join(" · ") || t("preview.unknownAuthors")}
-      </p>
-      <p className="text-secondary mt-1 text-xs">
-        {item.publication || t("unknown")}
-      </p>
-      {item.doi ? (
-        <p className="text-secondary mt-2 text-xs [overflow-wrap:anywhere]">
-          <span className="text-muted font-medium">{t("columns.doi")}</span>{" "}
-          {item.doi}
-        </p>
-      ) : null}
+      <div className="mt-3 grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-4">
+        <PaperPreviewImage
+          className="bg-surface h-36 w-24"
+          previewUrl={item.previewUrl}
+          variant="detail"
+        />
+        <div className="min-w-0">
+          <h3 className="text-base leading-6 font-semibold [overflow-wrap:anywhere]">
+            {item.title}
+          </h3>
+          <p className="text-secondary mt-2 text-xs leading-5">
+            {item.authors.join(" · ") || t("preview.unknownAuthors")}
+          </p>
+          <p className="text-secondary mt-1 text-xs">
+            {item.publication || t("unknown")}
+          </p>
+          {item.doi ? (
+            <p className="text-secondary mt-2 text-xs [overflow-wrap:anywhere]">
+              <span className="text-muted font-medium">{t("columns.doi")}</span>{" "}
+              {item.doi}
+            </p>
+          ) : null}
+        </div>
+      </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="text-muted text-xs">
           {t(personalLabels ? "columns.personalStatus" : "columns.status")}
@@ -464,8 +627,6 @@ function Preview({
           onChange={onStatusChange}
           personalLabels={personalLabels}
         />
-      </div>
-      <div className="mt-3 flex flex-wrap gap-1">
         <TagButtons item={item} onTagClick={onTagClick} />
       </div>
       <p className="text-secondary mt-5 text-xs font-medium">
@@ -501,6 +662,7 @@ export function PaperCollectionWorkbench({
   onStatusChange,
   onTagClick,
   personalLabels = false,
+  tableFooter,
   toolbar,
 }: {
   actions?: (item: PaperCollectionItem) => React.ReactNode;
@@ -510,6 +672,7 @@ export function PaperCollectionWorkbench({
   onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
   onTagClick?: (tag: PaperCollectionTag) => void;
   personalLabels?: boolean;
+  tableFooter?: React.ReactNode;
   toolbar?: React.ReactNode;
 }) {
   const t = useTranslations("PaperCollection");
@@ -574,8 +737,46 @@ export function PaperCollectionWorkbench({
     },
     [mutation],
   );
+  const persistedColumnWidths = React.useMemo(
+    () => getColumnWidths(preferences),
+    [preferences],
+  );
+  const [columnWidths, setColumnWidths] = React.useState(persistedColumnWidths);
+  const [previewWidth, setPreviewWidth] = React.useState(
+    preferences.preview_width,
+  );
+  React.useEffect(() => {
+    setColumnWidths(persistedColumnWidths);
+    setPreviewWidth(preferences.preview_width);
+  }, [persistedColumnWidths, preferences.preview_width]);
+  const commitColumnWidth = React.useCallback(
+    (column: PaperCollectionSizedColumn, width: number) => {
+      setColumnWidths((current) => ({ ...current, [column]: width }));
+      mutatePreferences((current) => {
+        const nextWidths = {
+          ...getColumnWidths(current),
+          [column]: width,
+        };
+        return {
+          ...current,
+          column_widths: toColumnWidthPreferences(nextWidths),
+        };
+      });
+    },
+    [mutatePreferences],
+  );
+  const resetLayoutWidths = React.useCallback(() => {
+    setColumnWidths(DEFAULT_COLUMN_WIDTHS);
+    setPreviewWidth(defaultPaperListPreferences.preview_width);
+    mutatePreferences((current) => ({
+      ...current,
+      column_widths: toColumnWidthPreferences(DEFAULT_COLUMN_WIDTHS),
+      preview_width: defaultPaperListPreferences.preview_width,
+    }));
+  }, [mutatePreferences]);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const headerScrollRef = React.useRef<HTMLDivElement>(null);
   const width = useElementWidth(rootRef);
   const measuredWidth = width ?? 0;
   const [previewId, setPreviewId] = React.useState<string>();
@@ -587,7 +788,19 @@ export function PaperCollectionWorkbench({
   const previewVisible = Boolean(
     preview && preferences.preview_open && measuredWidth >= 1040,
   );
-  const listWidth = Math.max(0, measuredWidth - (previewVisible ? 384 : 0));
+  const previewWidthMaximum = Math.max(
+    MIN_PREVIEW_WIDTH,
+    Math.min(MAX_PREVIEW_WIDTH, measuredWidth - MIN_LIST_WIDTH_WITH_PREVIEW),
+  );
+  const resolvedPreviewWidth = clamp(
+    previewWidth,
+    MIN_PREVIEW_WIDTH,
+    previewWidthMaximum,
+  );
+  const listWidth = Math.max(
+    0,
+    measuredWidth - (previewVisible ? resolvedPreviewWidth : 0),
+  );
   const effectiveColumns = React.useMemo(() => {
     if (listWidth >= 1200) return preferences.visible_columns;
     if (listWidth >= 1020)
@@ -616,7 +829,17 @@ export function PaperCollectionWorkbench({
     getScrollElement: () => scrollRef.current,
     overscan: 8,
   });
-  const gridTemplateColumns = `${leading ? "3rem " : ""}minmax(18rem,1fr) ${effectiveColumns.map((column) => COLUMN_WIDTHS[column]).join(" ")} ${actions ? "2.75rem" : ""}`;
+  const gridTemplateColumns = `${leading ? "3rem " : ""}minmax(${columnWidths.paper}px,1fr) ${effectiveColumns.map((column) => `${columnWidths[column]}px`).join(" ")} ${actions ? "2.75rem" : ""}`;
+  const tableMinimumWidth =
+    (leading ? 48 : 0) +
+    columnWidths.paper +
+    effectiveColumns.reduce(
+      (total, column) => total + columnWidths[column],
+      0,
+    ) +
+    (actions ? 44 : 0) +
+    Math.max(0, columnCount - 1) * 12 +
+    16;
   const virtualItems = rowVirtualizer.getVirtualItems();
   const renderedVirtualItems = width === undefined ? [] : virtualItems;
   return (
@@ -647,26 +870,44 @@ export function PaperCollectionWorkbench({
               <span className="hidden xl:inline">{t("preview.open")}</span>
             </Button>
           ) : null}
-          <ColumnManager preferences={preferences} update={mutatePreferences} />
+          <ColumnManager
+            onResetWidths={resetLayoutWidths}
+            preferences={preferences}
+            update={mutatePreferences}
+          />
         </div>
       </div>
       {beforeTable}
       <div
         className={cn(
-          "border-line grid min-w-0 items-start border-t",
-          previewVisible && "grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)]",
+          "border-line grid h-[max(28rem,calc(100dvh-12rem))] min-w-0 items-stretch overflow-hidden border-t",
         )}
         data-paper-collection-split=""
+        style={
+          previewVisible
+            ? {
+                gridTemplateColumns: `minmax(0, 1fr) ${resolvedPreviewWidth}px`,
+              }
+            : undefined
+        }
       >
         <div
           aria-busy={width === undefined}
           aria-colcount={width === undefined ? undefined : columnCount}
-          aria-rowcount={width === undefined ? undefined : items.length + 1}
-          className="min-w-0"
+          aria-rowcount={
+            width === undefined
+              ? undefined
+              : items.length + 1 + (tableFooter ? 1 : 0)
+          }
+          className="flex min-h-0 min-w-0 flex-col"
           role="table"
         >
           {width === undefined ? null : (
-            <div role="rowgroup">
+            <div
+              className="overflow-hidden"
+              ref={headerScrollRef}
+              role="rowgroup"
+            >
               {compact ? (
                 <div aria-rowindex={1} className="sr-only" role="row">
                   <span role="columnheader">{t("columns.thumbnail")}</span>
@@ -680,25 +921,70 @@ export function PaperCollectionWorkbench({
                   className="bg-surface text-muted sticky top-0 z-10 grid h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold"
                   aria-rowindex={1}
                   role="row"
-                  style={{ gridTemplateColumns }}
+                  style={{
+                    gridTemplateColumns,
+                    minWidth: tableMinimumWidth,
+                  }}
                 >
                   {leading ? (
                     <span role="columnheader">
                       <span className="sr-only">{t("columns.selection")}</span>
                     </span>
                   ) : null}
-                  <span role="columnheader">{t("columns.paper")}</span>
-                  {effectiveColumns.map((column) => (
-                    <span key={column} role="columnheader">
-                      {t(
-                        column === "status" && personalLabels
-                          ? "columns.personalStatus"
-                          : column === "tags" && personalLabels
-                            ? "columns.personalTags"
-                            : `columns.${column}`,
-                      )}
-                    </span>
-                  ))}
+                  <span
+                    className="relative flex h-full items-center"
+                    role="columnheader"
+                  >
+                    {t("columns.paper")}
+                    <ResizeHandle
+                      className="absolute top-0 -right-2 z-20 h-full w-4"
+                      label={t("resize.column", {
+                        column: t("columns.paper"),
+                      })}
+                      max={COLUMN_WIDTH_LIMITS.paper.max}
+                      min={COLUMN_WIDTH_LIMITS.paper.min}
+                      onChange={(next) =>
+                        setColumnWidths((current) => ({
+                          ...current,
+                          paper: next,
+                        }))
+                      }
+                      onCommit={(next) => commitColumnWidth("paper", next)}
+                      value={columnWidths.paper}
+                    />
+                  </span>
+                  {effectiveColumns.map((column) => {
+                    const label = t(
+                      column === "status" && personalLabels
+                        ? "columns.personalStatus"
+                        : column === "tags" && personalLabels
+                          ? "columns.personalTags"
+                          : `columns.${column}`,
+                    );
+                    return (
+                      <span
+                        className="relative flex h-full items-center"
+                        key={column}
+                        role="columnheader"
+                      >
+                        {label}
+                        <ResizeHandle
+                          className="absolute top-0 -right-2 z-20 h-full w-4"
+                          label={t("resize.column", { column: label })}
+                          max={COLUMN_WIDTH_LIMITS[column].max}
+                          min={COLUMN_WIDTH_LIMITS[column].min}
+                          onChange={(next) =>
+                            setColumnWidths((current) => ({
+                              ...current,
+                              [column]: next,
+                            }))
+                          }
+                          onCommit={(next) => commitColumnWidth(column, next)}
+                          value={columnWidths[column]}
+                        />
+                      </span>
+                    );
+                  })}
                   {actions ? (
                     <span role="columnheader">
                       <span className="sr-only">{t("columns.actions")}</span>
@@ -709,13 +995,22 @@ export function PaperCollectionWorkbench({
             </div>
           )}
           <div
-            className="max-h-[min(42rem,calc(100dvh-12rem))] overflow-auto"
+            className="min-h-0 flex-1 overflow-auto"
+            onScroll={(event) => {
+              if (headerScrollRef.current) {
+                headerScrollRef.current.scrollLeft =
+                  event.currentTarget.scrollLeft;
+              }
+            }}
             ref={scrollRef}
-            role="rowgroup"
           >
             <div
-              className="relative w-full min-w-0"
-              style={{ height: rowVirtualizer.getTotalSize() }}
+              className="relative w-full"
+              role="rowgroup"
+              style={{
+                height: rowVirtualizer.getTotalSize(),
+                minWidth: compact ? undefined : tableMinimumWidth,
+              }}
             >
               {renderedVirtualItems.map((virtualRow) => {
                 const item = items[virtualRow.index];
@@ -779,7 +1074,10 @@ export function PaperCollectionWorkbench({
                     ) : (
                       <div
                         className="grid h-16 items-center gap-3 px-2"
-                        style={{ gridTemplateColumns }}
+                        style={{
+                          gridTemplateColumns,
+                          minWidth: tableMinimumWidth,
+                        }}
                       >
                         {leading ? (
                           <div role="cell">{leading(item)}</div>
@@ -842,21 +1140,48 @@ export function PaperCollectionWorkbench({
                 );
               })}
             </div>
+            {tableFooter ? (
+              <div role="rowgroup">
+                <div aria-rowindex={items.length + 2} role="row">
+                  <div aria-colspan={columnCount} role="cell">
+                    {tableFooter}
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
         {previewVisible && preview ? (
-          <Preview
-            item={preview}
-            onClose={() =>
-              mutatePreferences((current) => ({
-                ...current,
-                preview_open: false,
-              }))
-            }
-            onStatusChange={onStatusChange}
-            onTagClick={onTagClick}
-            personalLabels={personalLabels}
-          />
+          <div className="relative min-h-0 min-w-0">
+            <ResizeHandle
+              className="absolute inset-y-0 -left-2 z-20 w-4"
+              direction={-1}
+              label={t("resize.preview")}
+              max={previewWidthMaximum}
+              min={MIN_PREVIEW_WIDTH}
+              onChange={setPreviewWidth}
+              onCommit={(next) => {
+                setPreviewWidth(next);
+                mutatePreferences((current) => ({
+                  ...current,
+                  preview_width: next,
+                }));
+              }}
+              value={resolvedPreviewWidth}
+            />
+            <Preview
+              item={preview}
+              onClose={() =>
+                mutatePreferences((current) => ({
+                  ...current,
+                  preview_open: false,
+                }))
+              }
+              onStatusChange={onStatusChange}
+              onTagClick={onTagClick}
+              personalLabels={personalLabels}
+            />
+          </div>
         ) : null}
       </div>
     </div>
