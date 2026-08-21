@@ -52,7 +52,21 @@ export function createSelectionCommitController({
   function commit() {
     if (disposed) return;
     pendingTimer = undefined;
-    const range = currentValidRange() ?? lastValidRange;
+    const liveSelection = window.getSelection();
+    const liveRange = currentValidRange();
+    // A non-collapsed Range outside this page is not a transient browser
+    // collapse. It can be an intentional cross-page selection, so falling
+    // back to this page's last Range would visibly snap the selection back.
+    if (
+      !liveRange &&
+      liveSelection &&
+      liveSelection.rangeCount > 0 &&
+      !liveSelection.isCollapsed
+    ) {
+      lastValidRange = undefined;
+      return;
+    }
+    const range = liveRange ?? lastValidRange;
     if (!range || !isRangeInside(range, textLayer)) return;
     let committed: CommittedTextSelection;
     try {
@@ -103,7 +117,16 @@ export function createSelectionCommitController({
   function handlePointerUp() {
     if (disposed) return;
     const range = currentValidRange();
-    if (range) lastValidRange = range.cloneRange();
+    const selection = window.getSelection();
+    if (range) {
+      lastValidRange = range.cloneRange();
+    } else if (
+      selection &&
+      selection.rangeCount > 0 &&
+      !selection.isCollapsed
+    ) {
+      lastValidRange = undefined;
+    }
     if (lastValidRange) scheduleCommit();
   }
 

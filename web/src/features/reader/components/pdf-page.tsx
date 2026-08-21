@@ -681,8 +681,12 @@ export function PdfPage({
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const activePageRef = React.useRef(0);
+  const internallyReportedPageRef = React.useRef<number | undefined>(undefined);
+  const pendingGesturePageRef = React.useRef<number | undefined>(undefined);
   const pendingPageAlignmentRef = React.useRef<number | undefined>(undefined);
   const alignmentFrameRef = React.useRef(0);
+  const [selectionGestureActive, setSelectionGestureActive] =
+    React.useState(false);
   const [containerSize, setContainerSize] = React.useState({
     height: 0,
     width: 0,
@@ -699,6 +703,30 @@ export function PdfPage({
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [clearActiveSelection]);
+
+  React.useEffect(() => {
+    if (!selectionGestureActive) return;
+    function finishSelectionGesture() {
+      setSelectionGestureActive(false);
+      const pendingPage = pendingGesturePageRef.current;
+      pendingGesturePageRef.current = undefined;
+      if (pendingPage === undefined) return;
+      internallyReportedPageRef.current = pendingPage;
+      onVisiblePageChange(pendingPage);
+    }
+    document.addEventListener("pointerup", finishSelectionGesture, true);
+    document.addEventListener("pointercancel", finishSelectionGesture, true);
+    window.addEventListener("blur", finishSelectionGesture);
+    return () => {
+      document.removeEventListener("pointerup", finishSelectionGesture, true);
+      document.removeEventListener(
+        "pointercancel",
+        finishSelectionGesture,
+        true,
+      );
+      window.removeEventListener("blur", finishSelectionGesture);
+    };
+  }, [onVisiblePageChange, selectionGestureActive]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -739,7 +767,12 @@ export function PdfPage({
         const nextPage = selectReaderViewportPage(viewport, pages);
         if (nextPage && nextPage !== activePageRef.current) {
           activePageRef.current = nextPage;
-          onVisiblePageChange(nextPage);
+          if (selectionGestureActive) {
+            pendingGesturePageRef.current = nextPage;
+          } else {
+            internallyReportedPageRef.current = nextPage;
+            onVisiblePageChange(nextPage);
+          }
         }
       });
     }
@@ -751,9 +784,16 @@ export function PdfPage({
       window.cancelAnimationFrame(frame);
       scrollContainer.removeEventListener("scroll", updateVisiblePage);
     };
-  }, [onVisiblePageChange]);
+  }, [onVisiblePageChange, selectionGestureActive]);
 
   React.useEffect(() => {
+    if (selectionGestureActive) return;
+    if (internallyReportedPageRef.current !== undefined) {
+      if (internallyReportedPageRef.current === pageNumber) {
+        internallyReportedPageRef.current = undefined;
+      }
+      return;
+    }
     const externallyRequested = activePageRef.current !== pageNumber;
     const layoutPending = pendingPageAlignmentRef.current === pageNumber;
     if (!externallyRequested && !layoutPending) return;
@@ -788,7 +828,12 @@ export function PdfPage({
       });
     }
     return () => window.cancelAnimationFrame(alignmentFrameRef.current);
-  }, [containerSize.height, containerSize.width, pageNumber]);
+  }, [
+    containerSize.height,
+    containerSize.width,
+    pageNumber,
+    selectionGestureActive,
+  ]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -868,6 +913,9 @@ export function PdfPage({
       className="bg-subtle relative min-h-0 flex-1 overflow-auto overscroll-contain p-4"
       onPointerDown={(event) => {
         const target = event.target as HTMLElement;
+        if (target.closest(".pdf-text-layer")) {
+          setSelectionGestureActive(true);
+        }
         if (!target.closest("[data-reader-selection-toolbar]")) {
           clearActiveSelection();
         }

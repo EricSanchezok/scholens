@@ -143,4 +143,33 @@ describe("createSelectionCommitController", () => {
     expect(commit).not.toHaveBeenCalled();
     controller.dispose();
   });
+
+  it("does not replace an intentional cross-page Range with a stale page Range", () => {
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => [{ height: 20, left: 0, top: 0, width: 30 }],
+    });
+    const firstPage = makeTextLayer();
+    const secondPage = makeTextLayer();
+    const commit = vi.fn();
+    const controller = createSelectionCommitController({
+      textLayer: firstPage,
+      onCommit: commit,
+    });
+
+    select(firstPage, 0, 3);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    const range = document.createRange();
+    range.setStart(firstPage.querySelector("span")!.firstChild!, 0);
+    range.setEnd(secondPage.querySelector("span")!.firstChild!, 3);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    controller.syncNow();
+
+    expect(commit).not.toHaveBeenCalled();
+    expect(window.getSelection()?.toString()).toContain("The");
+    controller.dispose();
+  });
 });
