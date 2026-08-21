@@ -79,10 +79,11 @@ const COLUMN_WIDTHS: Record<PaperCollectionColumn, string> = {
 const ALL_COLUMNS = Object.keys(COLUMN_WIDTHS) as PaperCollectionColumn[];
 
 function useElementWidth(ref: React.RefObject<HTMLElement | null>) {
-  const [width, setWidth] = React.useState(1600);
+  const [width, setWidth] = React.useState<number>();
   React.useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    setWidth(node.getBoundingClientRect().width);
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setWidth(entry.contentRect.width);
     });
@@ -540,6 +541,7 @@ export function PaperCollectionWorkbench({
   const rootRef = React.useRef<HTMLDivElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const width = useElementWidth(rootRef);
+  const measuredWidth = width ?? 0;
   const [previewId, setPreviewId] = React.useState<string>();
   const [hoveredPreviewId, setHoveredPreviewId] = React.useState<string>();
   const preview =
@@ -547,9 +549,9 @@ export function PaperCollectionWorkbench({
     items.find((item) => item.id === previewId) ??
     items[0];
   const previewVisible = Boolean(
-    preview && preferences.preview_open && width >= 1040,
+    preview && preferences.preview_open && measuredWidth >= 1040,
   );
-  const listWidth = Math.max(0, width - (previewVisible ? 384 : 0));
+  const listWidth = Math.max(0, measuredWidth - (previewVisible ? 384 : 0));
   const effectiveColumns = React.useMemo(() => {
     if (listWidth >= 1200) return preferences.visible_columns;
     if (listWidth >= 1020)
@@ -580,6 +582,7 @@ export function PaperCollectionWorkbench({
   });
   const gridTemplateColumns = `${leading ? "3rem " : ""}minmax(18rem,1fr) ${effectiveColumns.map((column) => COLUMN_WIDTHS[column]).join(" ")} ${actions ? "2.75rem" : ""}`;
   const virtualItems = rowVirtualizer.getVirtualItems();
+  const renderedVirtualItems = width === undefined ? [] : virtualItems;
   return (
     <div className="min-w-0" ref={rootRef}>
       <div
@@ -592,7 +595,7 @@ export function PaperCollectionWorkbench({
           <div className="flex-1" />
         )}
         <div className="hidden shrink-0 items-center gap-1 sm:flex">
-          {!preferences.preview_open && width >= 1040 ? (
+          {!preferences.preview_open && measuredWidth >= 1040 ? (
             <Button
               aria-label={t("preview.open")}
               onClick={() =>
@@ -620,51 +623,54 @@ export function PaperCollectionWorkbench({
         data-paper-collection-split=""
       >
         <div
-          aria-colcount={columnCount}
-          aria-rowcount={items.length + 1}
+          aria-busy={width === undefined}
+          aria-colcount={width === undefined ? undefined : columnCount}
+          aria-rowcount={width === undefined ? undefined : items.length + 1}
           className="min-w-0"
           role="table"
         >
-          <div role="rowgroup">
-            {compact ? (
-              <div className="sr-only" role="row">
-                <span role="columnheader">{t("columns.thumbnail")}</span>
-                <span role="columnheader">{t("columns.paper")}</span>
-                {actions ? (
-                  <span role="columnheader">{t("columns.actions")}</span>
-                ) : null}
-              </div>
-            ) : (
-              <div
-                className="bg-surface text-muted sticky top-0 z-10 grid h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold"
-                role="row"
-                style={{ gridTemplateColumns }}
-              >
-                {leading ? (
-                  <span role="columnheader">
-                    <span className="sr-only">{t("columns.selection")}</span>
-                  </span>
-                ) : null}
-                <span role="columnheader">{t("columns.paper")}</span>
-                {effectiveColumns.map((column) => (
-                  <span key={column} role="columnheader">
-                    {t(
-                      column === "status" && personalLabels
-                        ? "columns.personalStatus"
-                        : column === "tags" && personalLabels
-                          ? "columns.personalTags"
-                          : `columns.${column}`,
-                    )}
-                  </span>
-                ))}
-                {actions ? (
-                  <span role="columnheader">
-                    <span className="sr-only">{t("columns.actions")}</span>
-                  </span>
-                ) : null}
-              </div>
-            )}
-          </div>
+          {width === undefined ? null : (
+            <div role="rowgroup">
+              {compact ? (
+                <div className="sr-only" role="row">
+                  <span role="columnheader">{t("columns.thumbnail")}</span>
+                  <span role="columnheader">{t("columns.paper")}</span>
+                  {actions ? (
+                    <span role="columnheader">{t("columns.actions")}</span>
+                  ) : null}
+                </div>
+              ) : (
+                <div
+                  className="bg-surface text-muted sticky top-0 z-10 grid h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold"
+                  role="row"
+                  style={{ gridTemplateColumns }}
+                >
+                  {leading ? (
+                    <span role="columnheader">
+                      <span className="sr-only">{t("columns.selection")}</span>
+                    </span>
+                  ) : null}
+                  <span role="columnheader">{t("columns.paper")}</span>
+                  {effectiveColumns.map((column) => (
+                    <span key={column} role="columnheader">
+                      {t(
+                        column === "status" && personalLabels
+                          ? "columns.personalStatus"
+                          : column === "tags" && personalLabels
+                            ? "columns.personalTags"
+                            : `columns.${column}`,
+                      )}
+                    </span>
+                  ))}
+                  {actions ? (
+                    <span role="columnheader">
+                      <span className="sr-only">{t("columns.actions")}</span>
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
           <div
             className="max-h-[min(42rem,calc(100dvh-12rem))] overflow-auto"
             ref={scrollRef}
@@ -674,7 +680,7 @@ export function PaperCollectionWorkbench({
               className="relative w-full min-w-0"
               style={{ height: rowVirtualizer.getTotalSize() }}
             >
-              {virtualItems.map((virtualRow) => {
+              {renderedVirtualItems.map((virtualRow) => {
                 const item = items[virtualRow.index];
                 if (!item) return null;
                 return (

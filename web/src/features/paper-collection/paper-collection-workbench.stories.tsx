@@ -165,8 +165,12 @@ async function expectCompactTableSemantics(canvasElement: HTMLElement) {
     "Paper",
     "Actions",
   ]);
+  await waitFor(() =>
+    expect(within(table).getAllByRole("row").slice(1).length).toBeGreaterThan(
+      0,
+    ),
+  );
   const rows = within(table).getAllByRole("row").slice(1);
-  await expect(rows.length).toBeGreaterThan(0);
   rows.forEach((row) =>
     expect(within(row).getAllByRole("cell")).toHaveLength(3),
   );
@@ -298,12 +302,18 @@ export const PreviewUrlRefresh: Story = {
   render: () => <PreviewUrlRefreshHarness />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await waitFor(
+      () =>
+        expect(
+          canvasElement.querySelectorAll(`img[src="${oldPreviewUrl}"]`).length,
+        ).toBeGreaterThanOrEqual(2),
+      { timeout: 5000 },
+    );
     const oldImages = Array.from(
       canvasElement.querySelectorAll<HTMLImageElement>(
         `img[src="${oldPreviewUrl}"]`,
       ),
     );
-    await expect(oldImages.length).toBeGreaterThanOrEqual(2);
     oldImages.forEach((image) => fireEvent.error(image));
     await waitFor(() =>
       expect(
