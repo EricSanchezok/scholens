@@ -110,6 +110,7 @@ function PaperPreviewImage({
         className,
       )}
       data-paper-preview-image={variant}
+      data-paper-thumbnail={variant === "thumbnail" ? "" : undefined}
     >
       {showImage ? (
         // Authenticated short-lived preview URL returned by the API.
