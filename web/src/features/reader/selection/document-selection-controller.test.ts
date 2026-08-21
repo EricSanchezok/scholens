@@ -105,6 +105,32 @@ describe("createDocumentSelectionController", () => {
     controller.dispose();
   });
 
+  it("keeps the gesture active until its selection has committed", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => [{ height: 10, left: 10, top: 10, width: 40 }],
+    });
+    const { layers, root } = makeDocumentPages();
+    const lifecycle: string[] = [];
+    const controller = createDocumentSelectionController({
+      root,
+      onCommit: () => lifecycle.push("commit"),
+      onGestureChange: (active) => lifecycle.push(active ? "start" : "finish"),
+    });
+
+    layers[0]!.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true }),
+    );
+    selectAcross(layers);
+    layers[1]!.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+
+    expect(lifecycle).toEqual(["start"]);
+    vi.runAllTimers();
+    expect(lifecycle).toEqual(["start", "commit", "finish"]);
+    controller.dispose();
+  });
+
   it("uses the last complete multi-page snapshot after a transient collapse", () => {
     Object.defineProperty(Range.prototype, "getClientRects", {
       configurable: true,

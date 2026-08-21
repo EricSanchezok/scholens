@@ -139,7 +139,14 @@ export function createDocumentSelectionController({
   let pendingFrame: number | undefined;
   let pendingSnapshotFrame: number | undefined;
   let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+  let gestureSettling = false;
   let disposed = false;
+
+  function finishGestureLifecycle() {
+    if (!gestureSettling) return;
+    gestureSettling = false;
+    onGestureChange?.(false);
+  }
 
   function cancelPending() {
     generation += 1;
@@ -182,13 +189,18 @@ export function createDocumentSelectionController({
       // A live selection outside this document is intentional. Never revive a
       // stale PDF Range, which would snap the viewport back to an older page.
       lastValidSelection = undefined;
+      finishGestureLifecycle();
       return;
     }
     const committed = liveSelection ?? lastValidSelection;
-    if (!committed) return;
+    if (!committed) {
+      finishGestureLifecycle();
+      return;
+    }
     onCommit(committed);
     nativeSelection?.removeAllRanges();
     lastValidSelection = undefined;
+    finishGestureLifecycle();
   }
 
   function scheduleCommit() {
@@ -241,7 +253,7 @@ export function createDocumentSelectionController({
     cancelPendingSnapshot();
     if (pointerSelecting) {
       pointerSelecting = false;
-      onGestureChange?.(false);
+      gestureSettling = true;
     }
     const nextSelection = updateSnapshot();
     const nativeSelection = window.getSelection();
@@ -254,6 +266,7 @@ export function createDocumentSelectionController({
       lastValidSelection = undefined;
     }
     if (nextSelection || lastValidSelection) scheduleCommit();
+    else finishGestureLifecycle();
   }
 
   document.addEventListener("pointerdown", handlePointerDown, true);
@@ -268,8 +281,9 @@ export function createDocumentSelectionController({
       disposed = true;
       cancelPending();
       cancelPendingSnapshot();
-      if (pointerSelecting) onGestureChange?.(false);
+      if (pointerSelecting || gestureSettling) onGestureChange?.(false);
       pointerSelecting = false;
+      gestureSettling = false;
       lastValidSelection = undefined;
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("pointerup", finishPointerGesture, true);
