@@ -121,6 +121,21 @@ describe("usePaperIngestions", () => {
     });
   });
 
+  it("replaces a local transfer with exactly one accepted ingestion", async () => {
+    api.uploadPaperFile.mockResolvedValue(accepted("server-1", "paper-1.pdf"));
+    const { result } = renderHook(() => usePaperIngestions([]), {
+      wrapper: wrapper(),
+    });
+
+    act(() => result.current.startUploads([upload(1)]));
+
+    await waitFor(() => {
+      expect(
+        result.current.rows.filter((row) => row.displayName === "paper-1.pdf"),
+      ).toEqual([expect.objectContaining({ id: "server-1" })]);
+    });
+  });
+
   it("preserves a secure-upload outage for direct retry", async () => {
     api.uploadPaperFile
       .mockRejectedValueOnce(
