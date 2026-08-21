@@ -20,15 +20,12 @@ test("publishes complete product identity metadata and assets", async ({
   await mockAnonymousSession(page);
   await page.goto("/login");
 
-  await expect(page.locator('[data-product-mark="micro"]')).toBeVisible();
+  await expect(page.locator('[data-product-mark="portrait"]')).toBeVisible();
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
     "href",
     "/manifest.webmanifest",
   );
-  await expect(page.locator('link[rel="mask-icon"]')).toHaveAttribute(
-    "href",
-    "/brand/safari-pinned-tab.svg",
-  );
+  await expect(page.locator('link[rel="mask-icon"]')).toHaveCount(0);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
     "https://scholens.sanchezcloud.net/opengraph-image.png",
@@ -49,8 +46,9 @@ test("publishes complete product identity metadata and assets", async ({
     name: string;
   };
   expect(manifest).toMatchObject({ display: "standalone", name: "Scholens" });
-  expect(manifest.icons.map(({ purpose }) => purpose)).toEqual(
-    expect.arrayContaining(["maskable", "monochrome"]),
+  expect(manifest.icons.map(({ purpose }) => purpose)).toContain("maskable");
+  expect(manifest.icons.map(({ purpose }) => purpose)).not.toContain(
+    "monochrome",
   );
 
   for (const icon of manifest.icons) {
@@ -67,7 +65,7 @@ test("keeps the documentation lockup contained at the minimum width", async ({
   await page.goto("/docs");
 
   await expect(
-    page.locator('header [data-product-mark="micro"]'),
+    page.locator('header [data-product-mark="portrait"]'),
   ).toBeVisible();
   expect(
     await page.evaluate(

@@ -30,11 +30,8 @@ export const Light: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Scholens")).toBeVisible();
     await expect(
-      canvasElement.querySelectorAll('[data-product-mark="micro"]'),
-    ).toHaveLength(3);
-    await expect(
-      canvasElement.querySelector('[data-product-mark="portrait"]'),
-    ).not.toBeNull();
+      canvasElement.querySelectorAll('[data-product-mark="portrait"]'),
+    ).toHaveLength(4);
   },
 };
 
