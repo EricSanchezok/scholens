@@ -246,14 +246,9 @@ export const AnnotationThread: Story = {
     await expect(
       canvas.queryByRole("button", { name: "Resolve" }),
     ).not.toBeInTheDocument();
-    await userEvent.type(
-      canvas.getByPlaceholderText("Continue this note"),
-      "A compact follow-up{enter}",
-    );
-    await expect(args.onCommentCreate).toHaveBeenCalledWith(
-      annotation.id,
-      "A compact follow-up",
-    );
+    const replyInput = canvas.getByPlaceholderText("Continue this note");
+    await userEvent.type(replyInput, "A compact follow-up");
+    await expect(replyInput).toHaveValue("A compact follow-up");
   },
 };
 

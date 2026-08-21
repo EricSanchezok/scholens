@@ -44,6 +44,39 @@ async function railClipRight(locator: Locator) {
   });
 }
 
+async function holdRailAnimationsAtCheckpoint(page: Page) {
+  await page.waitForFunction(() => {
+    const elements = [
+      document.querySelector("[data-motion-rail-content]"),
+      document.querySelector(".motion-rail-chrome"),
+    ].filter((element): element is Element => element !== null);
+    const animations = elements.flatMap((element) => element.getAnimations());
+    if (animations.length < 2) return false;
+
+    for (const animation of animations) {
+      const duration = Number(animation.effect?.getComputedTiming().duration);
+      if (!Number.isFinite(duration)) return false;
+      animation.pause();
+      animation.currentTime = duration / 4;
+    }
+    return true;
+  });
+}
+
+async function resumeRailAnimations(page: Page) {
+  await page.evaluate(() => {
+    const elements = [
+      document.querySelector("[data-motion-rail-content]"),
+      document.querySelector(".motion-rail-chrome"),
+    ].filter((element): element is Element => element !== null);
+    for (const animation of elements.flatMap((element) =>
+      element.getAnimations(),
+    )) {
+      animation.play();
+    }
+  });
+}
+
 async function mockWorkspace(page: Page) {
   await mockBillingUsage(page);
   await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
@@ -490,6 +523,7 @@ test("lets an explicit full-motion preference override the OS setting", async ({
   const railContent = page.locator("[data-motion-rail-content]");
   const railChrome = page.locator(".motion-rail-chrome");
   const workspace = page.locator("[data-workspace-shell]");
+  await holdRailAnimationsAtCheckpoint(page);
   await expect(sidebar).toHaveCSS("width", "64px");
   await expect
     .poll(async () => {
@@ -521,6 +555,7 @@ test("lets an explicit full-motion preference override the OS setting", async ({
   const expandSidebar = page.getByRole("button", { name: "Expand sidebar" });
   await expect(expandSidebar).toBeVisible();
   await expandSidebar.click();
+  await holdRailAnimationsAtCheckpoint(page);
   await expect(sidebar).toHaveCSS("width", "288px");
   await expect
     .poll(async () => {
@@ -543,6 +578,7 @@ test("lets an explicit full-motion preference override the OS setting", async ({
   expect(interruptionFrame.skewY).toBeCloseTo(0, 4);
   expect(interruptionFrame.translateX).toBeLessThan(0);
   expect(interruptionFrame.translateX).toBeGreaterThan(-200);
+  await resumeRailAnimations(page);
   await expect(railContent).toHaveCSS("transform", "none");
   await expect.poll(() => railClipRight(railChrome)).toBeCloseTo(0, 4);
   expect(
@@ -591,16 +627,8 @@ test("cancels an active rail FLIP when system motion becomes reduced", async ({
   const railChrome = page.locator(".motion-rail-chrome");
   await expect(root).toHaveAttribute("data-motion", "full");
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await holdRailAnimationsAtCheckpoint(page);
   await expect(sidebar).toHaveCSS("width", "64px");
-  await expect
-    .poll(async () => {
-      const [contentAnimations, chromeAnimations] = await Promise.all([
-        railContent.evaluate((element) => element.getAnimations().length),
-        railChrome.evaluate((element) => element.getAnimations().length),
-      ]);
-      return contentAnimations + chromeAnimations;
-    })
-    .toBeGreaterThan(0);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(root).toHaveAttribute("data-motion", "reduced");

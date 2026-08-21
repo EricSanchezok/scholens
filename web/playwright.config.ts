@@ -34,24 +34,24 @@ export default defineConfig({
     {
       name: "firefox-theme",
       testMatch: /theme-smoke\.spec\.ts/,
-      use: { ...devices["Desktop Firefox"] },
+      use: { ...devices["Desktop Firefox"], serviceWorkers: "block" },
     },
     {
       name: "webkit-theme",
       testMatch: /theme-smoke\.spec\.ts/,
-      use: { ...devices["Desktop Safari"] },
+      use: { ...devices["Desktop Safari"], serviceWorkers: "block" },
     },
     {
       grep: /@selection/,
       name: "firefox-selection",
       testMatch: /reader\.spec\.ts/,
-      use: { ...devices["Desktop Firefox"] },
+      use: { ...devices["Desktop Firefox"], serviceWorkers: "block" },
     },
     {
       grep: /@selection/,
       name: "webkit-selection",
       testMatch: /reader\.spec\.ts/,
-      use: { ...devices["Desktop Safari"] },
+      use: { ...devices["Desktop Safari"], serviceWorkers: "block" },
     },
   ],
   webServer: {

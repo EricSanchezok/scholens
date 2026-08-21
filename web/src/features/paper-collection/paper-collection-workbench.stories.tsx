@@ -305,8 +305,10 @@ export const SmallMobile: Story = {
   play: async ({ canvasElement }) => expectCompactTableSemantics(canvasElement),
 };
 
-const oldPreviewUrl = "https://preview.example/old-signed-url.png";
-const refreshedPreviewUrl = "https://preview.example/new-signed-url.png";
+const oldPreviewUrl =
+  "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201%201%22%3E%3Cpath%20fill=%22%23ececea%22%20d=%22M0%200h1v1H0z%22/%3E%3C/svg%3E";
+const refreshedPreviewUrl =
+  "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201%201%22%3E%3Cpath%20fill=%22%23d7d7d2%22%20d=%22M0%200h1v1H0z%22/%3E%3C/svg%3E";
 
 function PreviewUrlRefreshHarness() {
   const [previewUrl, setPreviewUrl] = React.useState(oldPreviewUrl);
