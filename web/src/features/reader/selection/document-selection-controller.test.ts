@@ -105,11 +105,58 @@ describe("createDocumentSelectionController", () => {
     controller.dispose();
   });
 
+  it("excludes the trailing selection sentinel from clipped page geometry", () => {
+    const { layers, root } = makeDocumentPages();
+    const sentinel = document.createElement("div");
+    sentinel.className = "endOfContent";
+    layers[0]!.append(sentinel);
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value(this: Range) {
+        if (
+          this.endContainer === layers[0] &&
+          this.endOffset === layers[0]!.childNodes.length
+        ) {
+          return [{ height: 100, left: 0, top: 0, width: 100 }];
+        }
+        const onSecondPage = this.toString().includes("Beta");
+        return [
+          {
+            height: 10,
+            left: onSecondPage ? 20 : 10,
+            top: onSecondPage ? 110 : 10,
+            width: 40,
+          },
+        ];
+      },
+    });
+    const commit = vi.fn();
+    const controller = createDocumentSelectionController({
+      root,
+      onCommit: commit,
+    });
+
+    selectAcross(layers);
+    controller.syncNow();
+
+    expect(commit.mock.calls[0]?.[0].segments).toHaveLength(2);
+    controller.dispose();
+  });
+
   it("keeps the gesture active until its selection has committed", () => {
     vi.useFakeTimers();
     Object.defineProperty(Range.prototype, "getClientRects", {
       configurable: true,
-      value: () => [{ height: 10, left: 10, top: 10, width: 40 }],
+      value(this: Range) {
+        return [
+          {
+            height: 10,
+            left: 10,
+            top: this.toString().includes("Beta") ? 110 : 10,
+            width: 40,
+          },
+        ];
+      },
     });
     const { layers, root } = makeDocumentPages();
     const lifecycle: string[] = [];
@@ -156,6 +203,39 @@ describe("createDocumentSelectionController", () => {
     selectAcross(layers);
     document.dispatchEvent(new Event("selectionchange"));
     window.getSelection()?.collapse(layers[1]!, 0);
+    controller.syncNow();
+
+    expect(commit.mock.calls[0]?.[0].segments).toHaveLength(2);
+    controller.dispose();
+  });
+
+  it("does not replace a complete snapshot with partial endpoint geometry", () => {
+    let firstPageGeometryAvailable = true;
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value(this: Range) {
+        const secondPage = this.toString().includes("Beta");
+        if (!secondPage && !firstPageGeometryAvailable) return [];
+        return [
+          {
+            height: 10,
+            left: 10,
+            top: secondPage ? 110 : 10,
+            width: 40,
+          },
+        ];
+      },
+    });
+    const { layers, root } = makeDocumentPages();
+    const commit = vi.fn();
+    const controller = createDocumentSelectionController({
+      root,
+      onCommit: commit,
+    });
+
+    selectAcross(layers);
+    document.dispatchEvent(new Event("selectionchange"));
+    firstPageGeometryAvailable = false;
     controller.syncNow();
 
     expect(commit.mock.calls[0]?.[0].segments).toHaveLength(2);

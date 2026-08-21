@@ -322,6 +322,7 @@ function PdfPageSurface({
     );
     return Math.min(widthScale, heightScale);
   }, [containerSize, fitMode, pageSize, zoom]);
+  const expectedRenderedKey = `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`;
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -344,9 +345,7 @@ function PdfPageSurface({
     void renderTask.promise
       .then(({ activeSearchElement }) => {
         if (!active) return;
-        setRenderedKey(
-          `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`,
-        );
+        setRenderedKey(expectedRenderedKey);
         ensureEndOfContent(textLayer);
         if (activeSearchElement) {
           window.requestAnimationFrame(() => {
@@ -386,6 +385,7 @@ function PdfPageSurface({
   }, [
     annotationLinkLabel,
     activeSearchMatch?.id,
+    expectedRenderedKey,
     onInternalDestination,
     page,
     pageNumber,
@@ -397,10 +397,7 @@ function PdfPageSurface({
   ]);
 
   const rendering =
-    shouldRender &&
-    (!page ||
-      renderedKey !==
-        `${pageNumber}:${scale}:${searchQuery}:${activeSearchMatch?.id ?? ""}`);
+    shouldRender && (!page || renderedKey !== expectedRenderedKey);
 
   React.useEffect(() => {
     const textLayer = textLayerRef.current;
@@ -439,7 +436,13 @@ function PdfPageSurface({
         </div>
       )}
       <canvas className="absolute inset-0" ref={canvasRef} />
-      <div className="textLayer pdf-text-layer" ref={textLayerRef} />
+      <div
+        className="textLayer pdf-text-layer"
+        data-pdf-text-ready={
+          renderedKey === expectedRenderedKey ? "true" : undefined
+        }
+        ref={textLayerRef}
+      />
       <div
         className="pdf-annotation-layer pointer-events-none absolute inset-0 [&_a]:pointer-events-auto [&_a]:outline-offset-2"
         ref={annotationLayerRef}

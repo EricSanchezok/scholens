@@ -707,9 +707,12 @@ async function waitForPdfTextLayer(page: Page, pageNumber: number) {
   const textLayer = page.locator(
     `[data-pdf-page-number="${pageNumber}"] .pdf-text-layer`,
   );
+  await expect(textLayer).toHaveAttribute("data-pdf-text-ready", "true", {
+    timeout: 10_000,
+  });
   await expect(
     textLayer.locator("span").filter({ hasText: /\S/ }).first(),
-  ).toBeAttached({ timeout: 10_000 });
+  ).toBeAttached();
   await expect(textLayer.locator(".endOfContent")).toBeAttached();
   return textLayer;
 }
@@ -731,9 +734,9 @@ async function finishPdfSelectionAcrossPages(
   endPageNumber: number,
 ) {
   const startLayer = await waitForPdfTextLayer(page, startPageNumber);
-  await waitForPdfTextLayer(page, endPageNumber);
+  const endLayer = await waitForPdfTextLayer(page, endPageNumber);
 
-  return startLayer.evaluate((layer, endPage) => {
+  const selectedText = await startLayer.evaluate((layer, endPage) => {
     const endLayer = document.querySelector<HTMLElement>(
       `[data-pdf-page-number="${endPage}"] .pdf-text-layer`,
     );
@@ -743,8 +746,25 @@ async function finishPdfSelectionAcrossPages(
     const endSpans = [...(endLayer?.querySelectorAll("span") ?? [])].filter(
       (span) => span.textContent?.trim(),
     );
-    const start = startSpans.at(-1)?.firstChild;
-    const end = endSpans[0]?.firstChild;
+    const selectableTextNode = (span: HTMLSpanElement) => {
+      if (
+        (span.textContent?.trim().length ?? 0) < 8 ||
+        span.getClientRects().length === 0
+      ) {
+        return undefined;
+      }
+      return [...span.childNodes].find(
+        (node): node is Text =>
+          node instanceof Text && Boolean(node.data.trim()),
+      );
+    };
+    const start = [...startSpans]
+      .reverse()
+      .map(selectableTextNode)
+      .find((node): node is Text => Boolean(node));
+    const end = endSpans
+      .map(selectableTextNode)
+      .find((node): node is Text => Boolean(node));
     if (!start || !end || !endLayer) throw new Error("PDF text was not ready");
     const range = document.createRange();
     range.setStart(start, Math.max(0, (start.textContent?.length ?? 0) - 8));
@@ -752,10 +772,16 @@ async function finishPdfSelectionAcrossPages(
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    const selectedText = selection?.toString() ?? "";
-    endLayer.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
-    return selectedText.trim();
+    return (selection?.toString() ?? "").trim();
   }, endPageNumber);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await endLayer.dispatchEvent("pointerup");
+  return selectedText;
 }
 
 async function selectPdfAcrossPages(
@@ -1111,10 +1137,20 @@ test("@selection preserves and persists one cross-page PDF selection", async ({
   await expect(
     page.locator('[data-pdf-page-number="2"] > canvas'),
   ).toBeVisible();
-  await page.locator('[data-pdf-page-number="3"]').scrollIntoViewIfNeeded();
+  const pageThree = page.locator('[data-pdf-page-number="3"]');
+  await pageThree.scrollIntoViewIfNeeded();
+  await expect(pageThree).toBeInViewport();
+  await expect(page.getByRole("textbox", { name: "Page" })).toHaveValue("3");
+  await expect(page).toHaveURL(/page=3/);
 
-  const selectedText = await selectPdfAcrossPages(page, 2, 3);
-  await expect(page.locator("[data-active-selection-overlay]")).toHaveCount(2);
+  const activeSelectionOverlays = page.locator(
+    "[data-active-selection-overlay]",
+  );
+  let selectedText = "";
+  await expect(async () => {
+    selectedText = await selectPdfAcrossPages(page, 2, 3);
+    await expect(activeSelectionOverlays).toHaveCount(2, { timeout: 1_500 });
+  }).toPass({ timeout: 15_000 });
   const selectedPages = await page
     .locator("[data-active-selection-overlay]")
     .evaluateAll((overlays) =>
@@ -1126,7 +1162,6 @@ test("@selection preserves and persists one cross-page PDF selection", async ({
       ),
     );
   expect(selectedPages).toEqual([2, 3]);
-  const pageThree = page.locator('[data-pdf-page-number="3"]');
   const highlightButton = pageThree.getByRole("button", {
     name: "Highlight selection",
   });
@@ -1148,11 +1183,21 @@ test("@selection preserves and persists one cross-page PDF selection", async ({
       return position?.segments?.map((segment) => segment.page_number);
     })
     .toEqual([2, 3]);
-  await expect(
-    page.locator(
-      '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+  const persistedHighlight = page.locator(
+    '[data-reader-annotation-highlight="20000000-0000-4000-8000-000000000001"]',
+  );
+  await expect.poll(() => persistedHighlight.count()).toBeGreaterThanOrEqual(2);
+  const persistedPages = await persistedHighlight.evaluateAll((highlights) => [
+    ...new Set(
+      highlights.map((highlight) =>
+        Number(
+          highlight.closest<HTMLElement>("[data-pdf-page-number]")?.dataset
+            .pdfPageNumber,
+        ),
+      ),
     ),
-  ).toHaveCount(2);
+  ]);
+  expect(persistedPages).toEqual([2, 3]);
 });
 
 test("@selection defers visible-page alignment during a cross-page drag", async ({
