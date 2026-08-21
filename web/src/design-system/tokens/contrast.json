@@ -1,0 +1,89 @@
+{
+  "pairs": [
+    {
+      "foreground": "color.text.primary",
+      "background": "color.bg.canvas",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.secondary",
+      "background": "color.bg.canvas",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.muted",
+      "background": "color.bg.canvas",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.tertiary",
+      "background": "color.bg.canvas",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.primary",
+      "background": "color.bg.surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.secondary",
+      "background": "color.bg.surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.muted",
+      "background": "color.bg.surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.text.tertiary",
+      "background": "color.bg.surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.action.primary-foreground",
+      "background": "color.action.primary",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.accent.foreground",
+      "background": "color.accent.bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.info.text",
+      "background": "color.info.bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.success.text",
+      "background": "color.success.bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.warning.text",
+      "background": "color.warning.bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.danger.text",
+      "background": "color.danger.bg",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.focus.ring",
+      "background": "color.bg.canvas",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.ring",
+      "background": "color.bg.surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.ring",
+      "background": "color.bg.elevated",
+      "minimum": 3
+    }
+  ]
+}

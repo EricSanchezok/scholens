@@ -39,6 +39,22 @@
     "sidebar-label": "type.sidebar",
     "caption": "type.caption"
   },
+  "fontFamilies": {
+    "sans": "theme.font.interface"
+  },
+  "fontWeights": {
+    "normal": "theme.font.weight.normal",
+    "medium": "theme.font.weight.medium",
+    "semibold": "theme.font.weight.semibold"
+  },
+  "radii": {
+    "xs": "theme.radius.xs",
+    "sm": "theme.radius.sm",
+    "md": "theme.radius.md",
+    "lg": "theme.radius.lg",
+    "xl": "theme.radius.xl",
+    "2xl": "theme.radius.2xl"
+  },
   "shadows": {
     "overlay": "elevation.overlay",
     "modal": "elevation.modal",

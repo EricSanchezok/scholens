@@ -13,7 +13,12 @@ import {
   SelectValue,
   keyboardFocusRing,
 } from "@/components/ui";
-import { useTheme } from "@/design-system/theme/theme-provider";
+import { useTheme } from "@/design-system/theme";
+import {
+  themeNames,
+  type ColorScheme,
+  type ThemeName,
+} from "@/design-system/generated/theme-metadata";
 import {
   motionPreferences,
   useMotionPreference,
@@ -24,12 +29,18 @@ import { SettingsPanelHeader } from "./settings-layout";
 
 const appearanceOptions = ["light", "dark", "system"] as const;
 
-function PreviewPane({ scheme }: { scheme: "light" | "dark" }) {
+function PreviewPane({
+  scheme,
+  theme,
+}: {
+  scheme: ColorScheme;
+  theme: ThemeName;
+}) {
   return (
     <span
       className="bg-canvas flex h-full min-w-0 flex-1 gap-1.5 rounded-[var(--radius-md)] p-2"
       data-color-scheme={scheme}
-      data-theme="default"
+      data-theme={theme}
     >
       <span className="bg-subtle h-full w-1/4 rounded-[var(--radius-sm)]" />
       <span className="flex flex-1 flex-col justify-end gap-1.5 py-1">
@@ -42,18 +53,20 @@ function PreviewPane({ scheme }: { scheme: "light" | "dark" }) {
 
 function AppearancePreview({
   option,
+  theme,
 }: {
   option: (typeof appearanceOptions)[number];
+  theme: ThemeName;
 }) {
   return (
     <span className="border-line-subtle bg-surface flex h-20 overflow-hidden rounded-[var(--radius-lg)] border p-1.5">
       {option === "system" ? (
         <>
-          <PreviewPane scheme="light" />
-          <PreviewPane scheme="dark" />
+          <PreviewPane scheme="light" theme={theme} />
+          <PreviewPane scheme="dark" theme={theme} />
         </>
       ) : (
-        <PreviewPane scheme={option} />
+        <PreviewPane scheme={option} theme={theme} />
       )}
     </span>
   );
@@ -62,7 +75,14 @@ function AppearancePreview({
 export function GeneralPanel() {
   const t = useTranslations("Settings");
   const { locale, pending: localePending, setLocale } = useLocalePreference();
-  const { preference, setColorSchemePreference } = useTheme();
+  const {
+    ready,
+    theme,
+    colorScheme,
+    colorSchemePreference,
+    setTheme,
+    setColorSchemePreference,
+  } = useTheme();
   const { preference: motionPreference, setPreference: setMotionPreference } =
     useMotionPreference();
 
@@ -73,24 +93,62 @@ export function GeneralPanel() {
         title={t("general.title")}
       />
       <div className="max-w-2xl">
-        <section aria-labelledby="appearance-title">
+        {themeNames.length > 1 ? (
+          <section aria-labelledby="theme-title">
+            <h3 className="text-sm font-semibold" id="theme-title">
+              {t("general.theme")}
+            </h3>
+            <p className="text-muted mt-1 max-w-xl text-sm">
+              {t("general.themeDescription")}
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 sm:gap-3">
+              {themeNames.map((option) => (
+                <button
+                  aria-pressed={ready && theme === option}
+                  className={cn(
+                    "motion-control hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left sm:p-2",
+                    keyboardFocusRing,
+                    theme === option && "bg-pressed",
+                  )}
+                  key={option}
+                  onClick={() => setTheme(option)}
+                  type="button"
+                >
+                  <span className="border-line-subtle bg-surface block h-20 overflow-hidden rounded-[var(--radius-lg)] border p-1.5">
+                    <PreviewPane scheme={colorScheme} theme={option} />
+                  </span>
+                  <span className="mt-2 block text-center text-sm font-medium">
+                    {t(`theme.options.${option}`)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <section
+          aria-labelledby="appearance-title"
+          className={cn(
+            themeNames.length > 1 && "border-line-subtle mt-8 border-t pt-7",
+          )}
+        >
           <h3 className="text-sm font-semibold" id="appearance-title">
             {t("general.appearance")}
           </h3>
           <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
             {appearanceOptions.map((option) => (
               <button
-                aria-pressed={preference === option}
+                aria-pressed={ready && colorSchemePreference === option}
                 className={cn(
                   "motion-control hover:bg-hover rounded-[var(--radius-xl)] p-1.5 text-left sm:p-2",
                   keyboardFocusRing,
-                  preference === option && "bg-pressed",
+                  colorSchemePreference === option && "bg-pressed",
                 )}
                 key={option}
                 onClick={() => setColorSchemePreference(option)}
                 type="button"
               >
-                <AppearancePreview option={option} />
+                <AppearancePreview option={option} theme={theme} />
                 <span className="mt-2 block text-center text-xs font-medium sm:text-sm">
                   {t(`appearance.${option}`)}
                 </span>

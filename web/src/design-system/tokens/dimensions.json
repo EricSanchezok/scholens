@@ -12,12 +12,6 @@
     "16": { "$type": "dimension", "$value": { "value": 64, "unit": "px" } }
   },
   "radius": {
-    "xs": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } },
-    "sm": { "$type": "dimension", "$value": { "value": 6, "unit": "px" } },
-    "md": { "$type": "dimension", "$value": { "value": 8, "unit": "px" } },
-    "lg": { "$type": "dimension", "$value": { "value": 12, "unit": "px" } },
-    "xl": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } },
-    "2xl": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } },
     "full": { "$type": "dimension", "$value": { "value": 999, "unit": "px" } }
   },
   "layout": {
@@ -49,8 +43,7 @@
   "icon": {
     "sm": { "$type": "dimension", "$value": { "value": 16, "unit": "px" } },
     "md": { "$type": "dimension", "$value": { "value": 20, "unit": "px" } },
-    "lg": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } },
-    "stroke": { "$type": "number", "$value": 1.5 }
+    "lg": { "$type": "dimension", "$value": { "value": 24, "unit": "px" } }
   },
   "touch": {
     "target": { "$type": "dimension", "$value": { "value": 44, "unit": "px" } }

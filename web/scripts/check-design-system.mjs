@@ -2,6 +2,13 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
+import {
+  flattenTokens,
+  loadThemeContract,
+  resolveTokenValue,
+  tokenReference as reference,
+} from "./theme-contract.mjs";
+
 const webRoot = path.resolve(import.meta.dirname, "..");
 const sourceRoot = path.join(webRoot, "src");
 const tokenRoot = path.join(sourceRoot, "design-system", "tokens");
@@ -15,22 +22,6 @@ const semanticIconRegistryPath = path.join(
 
 const readJson = async (filePath) =>
   JSON.parse(await readFile(filePath, "utf8"));
-
-function flattenTokens(value, prefix = [], tokens = new Map()) {
-  for (const [name, child] of Object.entries(value)) {
-    const tokenPath = [...prefix, name];
-    if (child && typeof child === "object" && "$value" in child) {
-      tokens.set(tokenPath.join("."), child);
-    } else if (child && typeof child === "object") {
-      flattenTokens(child, tokenPath, tokens);
-    }
-  }
-  return tokens;
-}
-
-function reference(value) {
-  return typeof value === "string" ? value.match(/^\{([^}]+)\}$/)?.[1] : null;
-}
 
 async function collectFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -103,17 +94,16 @@ if (!semanticIconRegistryBody) {
   }
 }
 
-const primitives = flattenTokens(
-  await readJson(path.join(tokenRoot, "primitives.json")),
+const themeContract = await loadThemeContract(tokenRoot);
+const themeTokens = new Map(
+  [...themeContract.themes].map(([name, theme]) => [
+    name,
+    flattenTokens(theme),
+  ]),
 );
-const palette = flattenTokens(
-  await readJson(path.join(tokenRoot, "themes", "default.json")),
-);
+const defaultThemeTokens = themeTokens.get(themeContract.defaultThemeName);
 const dimensions = flattenTokens(
   await readJson(path.join(tokenRoot, "dimensions.json")),
-);
-const effects = flattenTokens(
-  await readJson(path.join(tokenRoot, "effects.json")),
 );
 const motion = flattenTokens(
   await readJson(path.join(tokenRoot, "motion.json")),
@@ -125,14 +115,49 @@ const dark = flattenTokens(
   await readJson(path.join(tokenRoot, "semantic", "dark.json")),
 );
 
-for (const [tokenPath, token] of palette) {
-  const target = reference(token.$value);
-  if (!target?.startsWith("primitive.")) {
+const defaultThemePaths = [...defaultThemeTokens.keys()].sort();
+const themeableTokenPaths = [
+  /^primitive\./,
+  /^palette\./,
+  /^theme\.font\.interface$/,
+  /^theme\.font\.weight\.(normal|medium|semibold)$/,
+  /^theme\.radius\.(xs|sm|md|lg|xl|2xl)$/,
+  /^theme\.icon\.stroke$/,
+  /^elevation\./,
+];
+for (const tokenPath of defaultThemePaths) {
+  if (!themeableTokenPaths.some((pattern) => pattern.test(tokenPath))) {
     report(
-      `${tokenPath}: theme palette values must reference primitive.* directly`,
+      `${tokenPath}: themes may express color, interface typography, non-pill radii, icon stroke, and elevation only`,
     );
-  } else if (!primitives.has(target)) {
-    report(`${tokenPath}: unresolved primitive reference ${target}`);
+  }
+}
+for (const [themeName, tokens] of themeTokens) {
+  const paths = [...tokens.keys()].sort();
+  for (const tokenPath of new Set([...defaultThemePaths, ...paths])) {
+    const defaultToken = defaultThemeTokens.get(tokenPath);
+    const token = tokens.get(tokenPath);
+    if (!defaultToken || !token) {
+      report(
+        `${themeName}.${tokenPath}: theme token path must match ${themeContract.defaultThemeName}`,
+      );
+    } else if (defaultToken.$type !== token.$type) {
+      report(
+        `${themeName}.${tokenPath}: expected ${defaultToken.$type}, found ${token.$type}`,
+      );
+    }
+  }
+
+  for (const [tokenPath, token] of tokens) {
+    if (!tokenPath.startsWith("palette.")) continue;
+    const target = reference(token.$value);
+    if (!target?.startsWith("primitive.")) {
+      report(
+        `${themeName}.${tokenPath}: theme palette values must reference primitive.* directly`,
+      );
+    } else if (!tokens.has(target)) {
+      report(`${themeName}.${tokenPath}: unresolved reference ${target}`);
+    }
   }
 }
 
@@ -155,8 +180,14 @@ for (const tokenPath of new Set([...lightPaths, ...darkPaths])) {
     const target = reference(token.$value);
     if (!target?.startsWith("palette.")) {
       report(`${tokenPath}: ${appearance} must reference palette.* directly`);
-    } else if (!palette.has(target)) {
-      report(`${tokenPath}: ${appearance} has unresolved reference ${target}`);
+    } else {
+      for (const [themeName, tokens] of themeTokens) {
+        if (!tokens.has(target)) {
+          report(
+            `${themeName}.${tokenPath}: ${appearance} has unresolved reference ${target}`,
+          );
+        }
+      }
     }
   }
 }
@@ -168,15 +199,26 @@ const adapterPath = path.join(
   "tailwind.json",
 );
 const adapter = await readJson(adapterPath);
+const adapterNamespaces = {
+  colors: "color",
+  fontFamilies: "font",
+  fontSizes: "text",
+  fontWeights: "font-weight",
+  radii: "radius",
+  shadows: "shadow",
+};
 for (const [group, aliases] of Object.entries(adapter)) {
   for (const [name, target] of Object.entries(aliases)) {
     const valid =
       (light.has(target) && dark.has(target)) ||
       dimensions.has(target) ||
-      effects.has(target);
+      defaultThemeTokens.has(target);
     if (!valid) report(`tailwind ${group}.${name}: unresolved token ${target}`);
-    const namespace =
-      group === "colors" ? "color" : group === "fontSizes" ? "text" : "shadow";
+    const namespace = adapterNamespaces[group];
+    if (!namespace) {
+      report(`tailwind ${group}: unknown adapter group`);
+      continue;
+    }
     if (`${namespace}-${name}` === target.replaceAll(".", "-")) {
       report(
         `tailwind ${group}.${name}: alias would create a self-referencing CSS variable`,
@@ -185,15 +227,92 @@ for (const [group, aliases] of Object.entries(adapter)) {
   }
 }
 
-for (const [tokenPath, token] of effects) {
-  if (token.$type !== "shadow") {
-    report(`${tokenPath}: effect tokens must use the DTCG shadow type`);
+for (const [themeName, tokens] of themeTokens) {
+  for (const [tokenPath, token] of tokens) {
+    if (!tokenPath.startsWith("elevation.")) continue;
+    if (token.$type !== "shadow") {
+      report(`${themeName}.${tokenPath}: expected DTCG shadow type`);
+    }
+    const colorTarget = reference(token.$value?.color);
+    if (!colorTarget || !light.has(colorTarget) || !dark.has(colorTarget)) {
+      report(
+        `${themeName}.${tokenPath}: shadow color must resolve to a Light/Dark semantic token`,
+      );
+    }
   }
-  const colorTarget = reference(token.$value?.color);
-  if (!colorTarget || !light.has(colorTarget) || !dark.has(colorTarget)) {
-    report(
-      `${tokenPath}: shadow color must resolve to a Light/Dark semantic token`,
-    );
+}
+
+function rgba(hex) {
+  if (typeof hex !== "string" || !/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(hex)) {
+    return null;
+  }
+  const color = hex.slice(1);
+  return {
+    red: Number.parseInt(color.slice(0, 2), 16) / 255,
+    green: Number.parseInt(color.slice(2, 4), 16) / 255,
+    blue: Number.parseInt(color.slice(4, 6), 16) / 255,
+    alpha:
+      color.length === 8 ? Number.parseInt(color.slice(6, 8), 16) / 255 : 1,
+  };
+}
+
+function composite(foreground, background) {
+  return {
+    red:
+      foreground.red * foreground.alpha +
+      background.red * (1 - foreground.alpha),
+    green:
+      foreground.green * foreground.alpha +
+      background.green * (1 - foreground.alpha),
+    blue:
+      foreground.blue * foreground.alpha +
+      background.blue * (1 - foreground.alpha),
+    alpha: 1,
+  };
+}
+
+function luminance(color) {
+  const linear = [color.red, color.green, color.blue].map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+}
+
+function contrastRatio(foregroundHex, backgroundHex) {
+  const foreground = rgba(foregroundHex);
+  const background = rgba(backgroundHex);
+  if (!foreground || !background || background.alpha !== 1) return null;
+  const resolvedForeground =
+    foreground.alpha === 1 ? foreground : composite(foreground, background);
+  const foregroundLuminance = luminance(resolvedForeground);
+  const backgroundLuminance = luminance(background);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
+}
+
+const contrastContract = await readJson(path.join(tokenRoot, "contrast.json"));
+for (const [themeName, tokens] of themeTokens) {
+  for (const [appearanceName, appearanceTokens] of [
+    ["light", light],
+    ["dark", dark],
+  ]) {
+    const resolvedTokens = new Map([...tokens, ...appearanceTokens]);
+    for (const { foreground, background, minimum } of contrastContract.pairs) {
+      const foregroundValue = resolveTokenValue(resolvedTokens, foreground);
+      const backgroundValue = resolveTokenValue(resolvedTokens, background);
+      const ratio = contrastRatio(foregroundValue, backgroundValue);
+      if (ratio === null) {
+        report(
+          `${themeName}/${appearanceName}: cannot resolve contrast pair ${foreground} on ${background}`,
+        );
+      } else if (ratio < minimum) {
+        report(
+          `${themeName}/${appearanceName}: ${foreground} on ${background} is ${ratio.toFixed(2)}:1, expected at least ${minimum}:1`,
+        );
+      }
+    }
   }
 }
 
@@ -533,6 +652,26 @@ const preview = await readFile(
   path.join(webRoot, ".storybook", "preview.tsx"),
   "utf8",
 );
+const generatedThemesCss = await readFile(
+  path.join(generatedRoot, "themes.css"),
+  "utf8",
+);
+for (const themeName of themeContract.themeNames) {
+  if (!generatedThemesCss.includes(`[data-theme="${themeName}"] {`)) {
+    report(`generated/themes.css: missing ${themeName} theme selector`);
+  }
+  for (const appearance of ["light", "dark"]) {
+    if (
+      !generatedThemesCss.includes(
+        `[data-theme="${themeName}"][data-color-scheme="${appearance}"] {`,
+      )
+    ) {
+      report(
+        `generated/themes.css: missing ${themeName}/${appearance} selector`,
+      );
+    }
+  }
+}
 for (const globalName of [
   "theme",
   "appearance",
@@ -544,6 +683,12 @@ for (const globalName of [
   if (!preview.includes(`${globalName}: {`)) {
     report(`.storybook/preview.tsx: missing ${globalName} global control`);
   }
+}
+if (!preview.includes("context.globals.theme")) {
+  report(".storybook/preview.tsx: Theme toolbar must drive the active theme");
+}
+if (!preview.includes("items: themeNames.map")) {
+  report(".storybook/preview.tsx: Theme toolbar must use generated themeNames");
 }
 if (!preview.includes('a11y: { test: "error" }')) {
   report(
@@ -571,6 +716,7 @@ if (violations.length > 0) {
 const storyCount = scannedFiles.filter((file) =>
   file.endsWith(".stories.tsx"),
 ).length;
+const themeLabel = themeContract.themeNames.length === 1 ? "theme" : "themes";
 console.log(
-  `Design-system contract is clean (${light.size} semantic tokens per appearance, ${storyCount} story files).`,
+  `Design-system contract is clean (${themeContract.themeNames.length} ${themeLabel}, ${light.size} semantic tokens per appearance, ${storyCount} story files).`,
 );

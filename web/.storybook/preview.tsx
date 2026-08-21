@@ -5,11 +5,17 @@ import { useLayoutEffect } from "react";
 
 import { localeDirection, type AppLocale } from "../src/i18n/config";
 import {
+  defaultThemeName,
+  themeNames,
+  type ThemeName,
+} from "../src/design-system/generated/theme-metadata";
+import {
   MotionProvider,
   MotionRuntimeProvider,
   type MotionPreference,
 } from "../src/design-system/motion";
 import { ScrollbarActivity } from "../src/design-system/scrollbars/scrollbar-activity";
+import { ThemeProvider } from "../src/design-system/theme";
 import { formats } from "../src/i18n/formats";
 import en from "../src/i18n/messages/en.json";
 import zhCN from "../src/i18n/messages/zh-CN.json";
@@ -46,6 +52,9 @@ const initialMotionPreference: MotionPreference = isStorybookTest
 const preview: Preview = {
   decorators: [
     (Story, context) => {
+      const theme = themeNames.includes(context.globals.theme as ThemeName)
+        ? (context.globals.theme as ThemeName)
+        : defaultThemeName;
       const appearance =
         context.globals.appearance === "dark" ? "dark" : "light";
       const locale: AppLocale =
@@ -56,11 +65,9 @@ const preview: Preview = {
         ? (context.globals.motion as MotionPreference)
         : "system";
       useLayoutEffect(() => {
-        document.documentElement.dataset.theme = "default";
-        document.documentElement.dataset.colorScheme = appearance;
         document.documentElement.lang = locale;
         document.documentElement.dir = localeDirection(locale);
-      }, [appearance, locale, motion]);
+      }, [locale]);
       return (
         <NextIntlClientProvider
           formats={formats}
@@ -69,24 +76,30 @@ const preview: Preview = {
           now={new Date("2026-08-04T10:00:00Z")}
           timeZone="UTC"
         >
-          <MotionProvider
-            initialPreference={motion}
-            key={motion}
-            skipAnimations={isStorybookTest}
+          <ThemeProvider
+            initialColorSchemePreference={appearance}
+            initialTheme={theme}
+            key={`${theme}:${appearance}`}
           >
-            <ScrollbarActivity />
-            <MotionRuntimeProvider>
-              <QueryProvider>
-                <div
-                  className={`bg-canvas text-foreground min-h-screen ${
-                    context.parameters.layout === "fullscreen" ? "" : "p-6"
-                  }`}
-                >
-                  <Story />
-                </div>
-              </QueryProvider>
-            </MotionRuntimeProvider>
-          </MotionProvider>
+            <MotionProvider
+              initialPreference={motion}
+              key={motion}
+              skipAnimations={isStorybookTest}
+            >
+              <ScrollbarActivity />
+              <MotionRuntimeProvider>
+                <QueryProvider>
+                  <div
+                    className={`bg-canvas text-foreground min-h-screen ${
+                      context.parameters.layout === "fullscreen" ? "" : "p-6"
+                    }`}
+                  >
+                    <Story />
+                  </div>
+                </QueryProvider>
+              </MotionRuntimeProvider>
+            </MotionProvider>
+          </ThemeProvider>
         </NextIntlClientProvider>
       );
     },
@@ -94,10 +107,16 @@ const preview: Preview = {
   globalTypes: {
     theme: {
       description: "Theme palette",
-      defaultValue: "default",
+      defaultValue: defaultThemeName,
       toolbar: {
         icon: "paintbrush",
-        items: [{ value: "default", title: "Default" }],
+        items: themeNames.map((value) => ({
+          value,
+          title: value
+            .split("-")
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(" "),
+        })),
       },
     },
     appearance: {
@@ -160,7 +179,7 @@ const preview: Preview = {
     },
   },
   initialGlobals: {
-    theme: "default",
+    theme: defaultThemeName,
     appearance: "light",
     motion: initialMotionPreference,
     locale: "en",

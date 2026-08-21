@@ -1585,6 +1585,11 @@
       "dark": "Dark",
       "system": "System"
     },
+    "theme": {
+      "options": {
+        "default": "Default"
+      }
+    },
     "motion": {
       "system": {
         "label": "Follow system",
@@ -1607,6 +1612,8 @@
       "title": "Appearance",
       "description": "Choose how Scholens looks, moves, and which language its interface uses.",
       "interfaceLanguage": "Interface language",
+      "theme": "Theme",
+      "themeDescription": "Choose a curated visual expression without changing how Scholens works.",
       "appearance": "Appearance",
       "motion": "Motion",
       "motionDescription": "Motion explains changes and relationships without slowing down your work."
