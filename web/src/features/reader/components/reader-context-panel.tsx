@@ -59,7 +59,8 @@ import {
   readReaderHighlightColor,
   type ReaderHighlightColor,
 } from "../reader-highlight-colors";
-import type { ReaderSelection } from "./pdf-page";
+import { readerPdfPageRange } from "../reader-pdf-position";
+import type { ReaderSelection } from "../reader-selection";
 import type {
   ReaderAnnotationSummary,
   ReaderAnnotationAudience,
@@ -376,6 +377,10 @@ export function ReaderAnnotationPanel({
         annotations.map((annotation) => {
           const active = selectedAnnotationId === annotation.id;
           const currentColor = readReaderHighlightColor(annotation.color);
+          const pageRange =
+            annotation.position?.kind === "pdf_text"
+              ? readerPdfPageRange(annotation.position)
+              : undefined;
           const replyDraft = replyDrafts[annotation.id] ?? "";
           const replyPrompt =
             annotation.mode === "highlight"
@@ -430,9 +435,11 @@ export function ReaderAnnotationPanel({
                     </span>
                     <span aria-hidden>·</span>
                     <span className="shrink-0">
-                      {t("page", {
-                        page: annotation.position?.page_number ?? 1,
-                      })}
+                      {pageRange && pageRange.start !== pageRange.end
+                        ? t("pageRange", pageRange)
+                        : t("page", {
+                            page: annotation.position?.page_number ?? 1,
+                          })}
                     </span>
                     {annotation.mode === "discussion" &&
                     annotation.status === "resolved" ? (
@@ -995,6 +1002,16 @@ export function ReaderContextPanel({
 }: ReaderContextPanelProps) {
   const t = useTranslations("Reader");
   const activePanel = panel;
+  let turnContextLabel: string | undefined;
+  if (pendingTurnContext) {
+    const range = readerPdfPageRange(pendingTurnContext.anchor);
+    turnContextLabel =
+      range.start === range.end
+        ? t("selection.context", { page: range.start })
+        : t("selection.contextRange", range);
+  } else if (selectedAnnotationId) {
+    turnContextLabel = t("annotations.context");
+  }
 
   return (
     <aside
@@ -1147,15 +1164,7 @@ export function ReaderContextPanel({
                     conversationSession.conversationQuery.data?.read_only_reason
                   }
                   submissionPending={conversationSession.submissionPending}
-                  turnContextLabel={
-                    pendingTurnContext
-                      ? t("selection.context", {
-                          page: pendingTurnContext.page_number,
-                        })
-                      : selectedAnnotationId
-                        ? t("annotations.context")
-                        : undefined
-                  }
+                  turnContextLabel={turnContextLabel}
                   turns={conversationSession.turnsQuery.data?.items ?? []}
                 />
               </div>

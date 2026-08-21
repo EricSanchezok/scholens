@@ -1,4 +1,5 @@
 import type { ReaderAnnotationSummary } from "./reader-types";
+import { readerPdfPositionSegments } from "./reader-pdf-position";
 
 function anchorOrder(annotation: ReaderAnnotationSummary) {
   const position = annotation.position;
@@ -10,10 +11,15 @@ function anchorOrder(annotation: ReaderAnnotationSummary) {
       position.end_offset,
     ] as const;
   }
-  const firstRect = [...position.rects].sort(
+  const firstSegment = readerPdfPositionSegments(position)[0]!;
+  const firstRect = [...firstSegment.rects].sort(
     (left, right) => left.y - right.y || left.x - right.x,
   )[0];
-  return [position.page_number, firstRect?.y ?? 1, firstRect?.x ?? 1] as const;
+  return [
+    firstSegment.page_number,
+    firstRect?.y ?? 1,
+    firstRect?.x ?? 1,
+  ] as const;
 }
 
 export function compareReaderAnnotationsBySource(

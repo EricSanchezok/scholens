@@ -5,9 +5,13 @@ import * as React from "react";
 
 import { LoadingState } from "@/components/feedback";
 import { keyboardFocusRing } from "@/components/ui";
-import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 import { PdfDocumentAdapter, renderPdfPage } from "../pdf-document-adapter";
+import { readerPdfRectsForPage } from "../reader-pdf-position";
+import {
+  readerSelectionFocusPage,
+  type ReaderSelection,
+} from "../reader-selection";
 import {
   readerHighlightColorValue,
   type ReaderHighlightColor,
@@ -26,25 +30,21 @@ import {
   type ReaderSelectionLabels,
   type ReaderSelectionTranslationPreview,
 } from "./reader-selection-toolbar";
-import {
-  normalizeReaderSelectionRects,
-  type NormalizedSelectionRect,
-} from "../selection/rect-normalization";
+import { type NormalizedSelectionRect } from "../selection/rect-normalization";
 import {
   ensureEndOfContent,
   installTextLayerSelectionGuard,
   uninstallTextLayerSelectionGuard,
 } from "../selection/text-layer-selection-guard";
 import {
-  createSelectionCommitController,
-  type CommittedTextSelection,
-} from "../selection/selection-commit-controller";
+  createDocumentSelectionController,
+  type CommittedDocumentSelection,
+} from "../selection/document-selection-controller";
 
 const EMPTY_SEARCH_MATCHES: ReaderSearchMatch[] = [];
 
 export type ReaderFitMode = "width" | "page" | "custom";
-export type ReaderSelection =
-  components["schemas"]["PaperSelectionTurnContext"];
+export type { ReaderSelection } from "../reader-selection";
 export type ReaderPdfSourceTarget = {
   page_number: number;
   source_rect: NormalizedSelectionRect;
@@ -408,30 +408,12 @@ function PdfPageSurface({
     return () => uninstallTextLayerSelectionGuard(textLayer);
   }, []);
 
-  React.useEffect(() => {
-    const textLayer = textLayerRef.current;
-    if (!textLayer || !onActiveTextSelectionChange) return;
-    const controller = createSelectionCommitController({
-      textLayer,
-      onCommit: (selection: CommittedTextSelection) => {
-        const pageRect = textLayer.getBoundingClientRect();
-        const rects = normalizeReaderSelectionRects(pageRect, selection.rects);
-        if (rects.length === 0 || !selection.text) return;
-        onActiveTextSelectionChange({
-          kind: "paper_selection",
-          document_id: "",
-          page_number: pageNumber,
-          selected_text: selection.text,
-          anchor: { kind: "pdf_text", page_number: pageNumber, rects },
-        });
-      },
-    });
-    return () => controller.dispose();
-  }, [onActiveTextSelectionChange, pageNumber]);
-
   const pageAnnotations = annotations.filter((annotation) => {
     const position = annotation.position;
-    return position?.kind === "pdf_text" && position.page_number === pageNumber;
+    return (
+      position?.kind === "pdf_text" &&
+      Boolean(readerPdfRectsForPage(position, pageNumber))
+    );
   });
   const annotationGroups = groupReaderAnnotationsByAnchor(pageAnnotations);
 
@@ -439,7 +421,9 @@ function PdfPageSurface({
     <article
       className={cn(
         "shadow-raised bg-surface relative mx-auto shrink-0",
-        activeTextSelection?.page_number === pageNumber && "z-30",
+        activeTextSelection?.anchor.kind === "pdf_text" &&
+          readerPdfRectsForPage(activeTextSelection.anchor, pageNumber) &&
+          "z-30",
       )}
       data-pdf-page-number={pageNumber}
       ref={pageSurfaceRef}
@@ -464,6 +448,8 @@ function PdfPageSurface({
           const annotation = group[0];
           const position = annotation?.position;
           if (!annotation || position?.kind !== "pdf_text") return null;
+          const pageRects = readerPdfRectsForPage(position, pageNumber);
+          if (!pageRects) return null;
           const groupSelected = group.some(
             (item) => item.id === selectedAnnotationId,
           );
@@ -480,14 +466,15 @@ function PdfPageSurface({
             previewGroupItem ?? selectedGroupItem ?? annotation;
           const commentCount = countReaderAnnotationComments(group);
           const paintMode = readerAnnotationPaintMode(group);
-          const markerRect = position.rects[0];
+          const markerRect =
+            position.page_number === pageNumber ? pageRects[0] : undefined;
           const resolved = group.every((item) => item.status === "resolved");
           const activateGroup = () =>
             onAnnotationSelect?.(interactionTarget.id);
 
           return (
             <React.Fragment key={annotation.id}>
-              {position.rects.map((rect, index) => (
+              {pageRects.map((rect, index) => (
                 <button
                   aria-label={`${annotation.quote_text}${group.length > 1 ? ` (${group.length})` : ""}`}
                   className={cn(
@@ -570,13 +557,18 @@ function PdfPageSurface({
           );
         })}
       </div>
-      {activeTextSelection?.page_number === pageNumber &&
-      activeTextSelection.anchor.kind === "pdf_text" ? (
+      {activeTextSelection?.anchor.kind === "pdf_text" &&
+      readerPdfRectsForPage(activeTextSelection.anchor, pageNumber) ? (
         <div
           className="pointer-events-none absolute inset-0 z-20"
           data-active-selection-overlay
         >
-          <ReaderSelectionOverlay rects={activeTextSelection.anchor.rects} />
+          <ReaderSelectionOverlay
+            rects={readerPdfRectsForPage(
+              activeTextSelection.anchor,
+              pageNumber,
+            )!}
+          />
         </div>
       ) : null}
       {sourceTarget?.page_number === pageNumber ? (
@@ -588,7 +580,7 @@ function PdfPageSurface({
         </div>
       ) : null}
       {activeTextSelection &&
-        activeTextSelection.page_number === pageNumber &&
+        readerSelectionFocusPage(activeTextSelection) === pageNumber &&
         selectionLabels && (
           <div data-reader-selection-toolbar>
             <ReaderSelectionToolbar
@@ -614,6 +606,7 @@ function PdfPageSurface({
 
 export function PdfPage({
   adapter,
+  annotationNavigation,
   annotationLinkLabel,
   annotationCommentLabel,
   fitMode,
@@ -644,6 +637,7 @@ export function PdfPage({
   sourceTarget,
 }: {
   adapter: PdfDocumentAdapter;
+  annotationNavigation?: { id: string; request: number };
   annotationLinkLabel: string;
   annotationCommentLabel: (count: number) => string;
   canvasLabel: string;
@@ -681,7 +675,7 @@ export function PdfPage({
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const activePageRef = React.useRef(0);
-  const internallyReportedPageRef = React.useRef<number | undefined>(undefined);
+  const internallyReportedPagesRef = React.useRef<number[]>([]);
   const pendingGesturePageRef = React.useRef<number | undefined>(undefined);
   const pendingPageAlignmentRef = React.useRef<number | undefined>(undefined);
   const alignmentFrameRef = React.useRef(0);
@@ -691,9 +685,47 @@ export function PdfPage({
     height: 0,
     width: 0,
   });
+  const reportVisiblePage = React.useCallback(
+    (nextPage: number) => {
+      const reports = internallyReportedPagesRef.current;
+      if (reports.at(-1) !== nextPage) reports.push(nextPage);
+      onVisiblePageChange(nextPage);
+    },
+    [onVisiblePageChange],
+  );
   const clearActiveSelection = React.useCallback(() => {
     onActiveTextSelectionChange?.(undefined);
     window.getSelection()?.removeAllRanges();
+  }, [onActiveTextSelectionChange]);
+
+  React.useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !onActiveTextSelectionChange) return;
+    const controller = createDocumentSelectionController({
+      root,
+      onCommit: (selection: CommittedDocumentSelection) => {
+        const firstSegment = selection.segments[0];
+        if (!firstSegment) return;
+        onActiveTextSelectionChange({
+          anchor: {
+            kind: "pdf_text",
+            page_number: firstSegment.pageNumber,
+            rects: firstSegment.rects,
+            segments: selection.segments.map((segment) => ({
+              page_number: segment.pageNumber,
+              rects: segment.rects,
+            })),
+          },
+          document_id: "",
+          focus_page_number: selection.focusPageNumber,
+          kind: "paper_selection",
+          page_number: firstSegment.pageNumber,
+          selected_text: selection.text,
+        });
+      },
+      onGestureChange: setSelectionGestureActive,
+    });
+    return () => controller.dispose();
   }, [onActiveTextSelectionChange]);
 
   React.useEffect(() => {
@@ -711,8 +743,7 @@ export function PdfPage({
       const pendingPage = pendingGesturePageRef.current;
       pendingGesturePageRef.current = undefined;
       if (pendingPage === undefined) return;
-      internallyReportedPageRef.current = pendingPage;
-      onVisiblePageChange(pendingPage);
+      reportVisiblePage(pendingPage);
     }
     document.addEventListener("pointerup", finishSelectionGesture, true);
     document.addEventListener("pointercancel", finishSelectionGesture, true);
@@ -726,7 +757,7 @@ export function PdfPage({
       );
       window.removeEventListener("blur", finishSelectionGesture);
     };
-  }, [onVisiblePageChange, selectionGestureActive]);
+  }, [reportVisiblePage, selectionGestureActive]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -770,8 +801,7 @@ export function PdfPage({
           if (selectionGestureActive) {
             pendingGesturePageRef.current = nextPage;
           } else {
-            internallyReportedPageRef.current = nextPage;
-            onVisiblePageChange(nextPage);
+            reportVisiblePage(nextPage);
           }
         }
       });
@@ -784,16 +814,19 @@ export function PdfPage({
       window.cancelAnimationFrame(frame);
       scrollContainer.removeEventListener("scroll", updateVisiblePage);
     };
-  }, [onVisiblePageChange, selectionGestureActive]);
+  }, [reportVisiblePage, selectionGestureActive]);
 
   React.useEffect(() => {
     if (selectionGestureActive) return;
-    if (internallyReportedPageRef.current !== undefined) {
-      if (internallyReportedPageRef.current === pageNumber) {
-        internallyReportedPageRef.current = undefined;
-      }
+    const reportedIndex =
+      internallyReportedPagesRef.current.lastIndexOf(pageNumber);
+    if (reportedIndex >= 0) {
+      internallyReportedPagesRef.current.splice(0, reportedIndex + 1);
       return;
     }
+    // An unrelated route page is an explicit navigation request. Drop any
+    // skipped scroll reports so they cannot suppress a later real navigation.
+    internallyReportedPagesRef.current.length = 0;
     const externallyRequested = activePageRef.current !== pageNumber;
     const layoutPending = pendingPageAlignmentRef.current === pageNumber;
     if (!externallyRequested && !layoutPending) return;
@@ -863,7 +896,7 @@ export function PdfPage({
   }, [containerSize.height, containerSize.width, sourceTarget]);
 
   React.useEffect(() => {
-    if (!selectedAnnotationId) return;
+    if (!annotationNavigation) return;
     const frame = window.requestAnimationFrame(() => {
       const container = containerRef.current;
       const target = [
@@ -872,7 +905,7 @@ export function PdfPage({
         ) ?? []),
       ].find(
         (element) =>
-          element.dataset.readerAnnotationHighlight === selectedAnnotationId,
+          element.dataset.readerAnnotationHighlight === annotationNavigation.id,
       );
       if (!container || !target) return;
       const containerRect = container.getBoundingClientRect();
@@ -892,7 +925,7 @@ export function PdfPage({
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [selectedAnnotationId]);
+  }, [annotationNavigation]);
 
   // Stable per-page match arrays: the page render effect depends on
   // `searchMatches`, so a fresh array identity on every parent render would
@@ -913,9 +946,6 @@ export function PdfPage({
       className="bg-subtle relative min-h-0 flex-1 overflow-auto overscroll-contain p-4"
       onPointerDown={(event) => {
         const target = event.target as HTMLElement;
-        if (target.closest(".pdf-text-layer")) {
-          setSelectionGestureActive(true);
-        }
         if (!target.closest("[data-reader-selection-toolbar]")) {
           clearActiveSelection();
         }

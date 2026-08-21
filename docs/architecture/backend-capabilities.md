@@ -489,7 +489,10 @@ audience, presentation mode, and status are authorized and applied by the
 Server, with open threads as the default. The thread-detail endpoint remains a
 canonical single-thread resource for direct consumers. Presentation mode is
 derived from audience and comment count and is never another persisted source
-of truth.
+of truth. A PDF text anchor accepts either the historical one-page projection
+or ordered page segments. For a segmented anchor, `page_number` and `rects`
+must equal the first segment, preserving indexed source order and compatibility
+while the JSON position remains one annotation-thread value.
 
 Reader selection translation is a paper-authorized streaming workflow.
 `GET|PUT /api/v1/me/translation-preferences` owns source language, target

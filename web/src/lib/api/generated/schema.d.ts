@@ -4147,6 +4147,22 @@ export interface components {
              */
             start_offset: number;
         };
+        /**
+         * PdfTextPageSegment
+         * @description Ordered PDF text geometry belonging to one page.
+         */
+        PdfTextPageSegment: {
+            /**
+             * Page Number
+             * @description One-based PDF page containing this rectangle segment.
+             */
+            page_number: number;
+            /**
+             * Rects
+             * @description Ordered normalized rectangles on this PDF page.
+             */
+            rects: components["schemas"]["PdfTextRect"][];
+        };
         /** PdfTextPosition */
         PdfTextPosition: {
             /**
@@ -4156,14 +4172,19 @@ export interface components {
             kind: "pdf_text";
             /**
              * Page Number
-             * @description One-based PDF page containing every supplied rectangle.
+             * @description One-based PDF page containing the first supplied segment.
              */
             page_number: number;
             /**
              * Rects
-             * @description Ordered normalized rectangles covering the exact selected quote.
+             * @description Legacy projection of the first page segment.
              */
             rects: components["schemas"]["PdfTextRect"][];
+            /**
+             * Segments
+             * @description Ordered page segments covering the exact selected quote. Omitted legacy requests are interpreted as one segment.
+             */
+            segments?: components["schemas"]["PdfTextPageSegment"][] | null;
         };
         /**
          * PdfTextRect

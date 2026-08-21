@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { ReaderAnnotationSummary } from "./reader-types";
 import { compareReaderAnnotationsBySource } from "./reader-annotations";
+import {
+  readerPdfPageRange,
+  readerPdfRectsForPage,
+} from "./reader-pdf-position";
 
 function summary(
   id: string,
@@ -45,5 +49,33 @@ describe("compareReaderAnnotationsBySource", () => {
         .sort(compareReaderAnnotationsBySource)
         .map(({ id }) => id),
     ).toEqual(["top", "bottom", "next-page"]);
+  });
+
+  it("orders and resolves legacy and multi-page PDF anchors canonically", () => {
+    const legacy = summary("legacy", 2, 0.1, 0.2, "2026-08-14T01:00:00Z");
+    const position = {
+      kind: "pdf_text" as const,
+      page_number: 3,
+      rects: [{ x: 0.1, y: 0.8, width: 0.2, height: 0.03 }],
+      segments: [
+        {
+          page_number: 3,
+          rects: [{ x: 0.1, y: 0.8, width: 0.2, height: 0.03 }],
+        },
+        {
+          page_number: 4,
+          rects: [{ x: 0.1, y: 0.1, width: 0.3, height: 0.03 }],
+        },
+      ],
+    };
+
+    if (legacy.position?.kind !== "pdf_text") {
+      throw new Error("Expected a PDF position");
+    }
+    expect(readerPdfPageRange(legacy.position)).toEqual({ start: 2, end: 2 });
+    expect(readerPdfPageRange(position)).toEqual({ start: 3, end: 4 });
+    expect(readerPdfRectsForPage(position, 4)).toEqual(
+      position.segments[1]!.rects,
+    );
   });
 });

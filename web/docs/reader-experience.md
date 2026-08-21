@@ -253,8 +253,8 @@ pointer-up, Reader replaces the browser-native selection with a normalized
 overlay using the same token. The browser selection is cleared before this
 overlay appears.
 
-PDF selection is guarded by a small Reader-owned adapter around the browser
-Range and the PDF.js text layer:
+PDF selection is guarded by one document-owned adapter around the browser
+Selection, its Ranges, and all PDF.js text layers:
 
 - A selection sentinel (`.endOfContent`) plus a `.selecting` state mirror the
   PDF.js viewer behavior, so a drag that lands in the whitespace between
@@ -262,8 +262,17 @@ Range and the PDF.js text layer:
   layer while the pointer is down.
 - On pointer-up the commit waits one animation frame and a short settle window
   (100 ms). If the browser transiently collapses onto the sentinel, Reader
-  retains the last valid Range from that gesture; a detached Range caused by
-  a concurrent text-layer render is discarded instead of guessed.
+  retains the last complete selection snapshot from that gesture; a detached
+  Range caused by a concurrent text-layer render is discarded instead of
+  guessed. A live non-collapsed selection outside Reader always wins over that
+  snapshot, so stale geometry can never revive and scroll back to an earlier
+  page.
+- A cross-page gesture remains one logical selection. Reader preserves the
+  browser's exact quote and partitions geometry into ascending, unique page
+  segments. The post-pointer overlay paints every segment, while the floating
+  toolbar follows the browser focus end of the gesture. Viewport-driven page
+  URL updates are deferred until the gesture ends and never realign the PDF
+  scroller in response to their own route update.
 - The committed `selected_text` and overlay rectangles come from that same
   native Range. Partial words, search-highlight nesting, bidirectional text,
   and multi-column DOM order therefore keep the browser's own exact selection
@@ -276,7 +285,8 @@ Range and the PDF.js text layer:
   the remaining geometry is painted once so translucent color can never
   accumulate into darker stripes.
 - The overlay remains visible with the floating toolbar until the user acts,
-  presses Escape, clicks elsewhere, or moves to another page.
+  presses Escape, clicks elsewhere, or starts a replacement selection. Normal
+  continuous scrolling and viewport-driven page changes preserve it.
 
 - Ask copies the selection into `pendingTurnContext`, opens Ask, clears the
   browser selection, and adds a removable page chip; it never sends
@@ -307,8 +317,8 @@ Range and the PDF.js text layer:
   audience control.
 - Copy reports success through the shared copied state, remains keyboard
   accessible, and dismisses the toolbar after feedback.
-- Clicking outside, Escape, page navigation, or a replacement selection clears
-  only `activeTextSelection`; committed Ask and annotation contexts remain.
+- Clicking outside, Escape, or a replacement selection clears only
+  `activeTextSelection`; committed Ask and annotation contexts remain.
 
 Annotation rows and PDF overlays share a single active annotation ID. Choosing
 either representation navigates to and emphasizes the other. Active state uses
@@ -316,7 +326,11 @@ a stronger fill only; it never draws a border or ring around every line of a
 multi-line highlight. Exact-equal anchors are painted once, even when personal
 and Project threads overlap; a count affordance discloses the individual
 threads. A persisted PDF anchor uses one-based page numbers and zero-to-one
-normalized rectangles.
+normalized rectangles. Legacy anchors project one page through `page_number`
+and `rects`; multi-page anchors additionally carry ordered `segments`, with the
+legacy fields equal to the first segment. Every action—Ask, Translate,
+Highlight, Add annotation, and Copy—uses the same exact quote and logical
+selection.
 The empty Annotations panel is a quiet typographic prompt without a decorative
 list icon; the panel tab already provides the necessary context.
 
@@ -343,9 +357,10 @@ and use a subdued overlay only while the Resolved filter is active.
 
 Commented anchors add one compact count marker at the PDF page edge; pure
 highlights do not. Exact duplicate anchors paint once and aggregate their
-comment count. Selecting either the painted passage, its marker, or a panel
-summary opens the same thread and centers the exact anchor in the scroll
-viewport. The panel's previous and next actions follow the current filtered
+comment count. Selecting a panel summary centers the first segment of the exact
+anchor in the scroll viewport. Selecting a painted segment or its marker opens
+the same thread in place without jumping away from the page the user is
+reading. The panel's previous and next actions follow the current filtered
 summary order across pages while keeping the PDF and panel selection in sync.
 
 The annotation panel is one static, source-ordered list. Every card reduces its

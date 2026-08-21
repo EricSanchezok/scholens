@@ -851,7 +851,8 @@
       "copying": "正在复制",
       "copied": "已复制",
       "copyFailed": "复制失败",
-      "context": "第 {page} 页选区"
+      "context": "第 {page} 页选区",
+      "contextRange": "第 {start}–{end} 页选区"
     },
     "translation": {
       "sourceLanguage": "原文",
@@ -955,6 +956,7 @@
       "emptyTitle": "还没有批注",
       "emptyDescription": "选择 PDF 中的文字，即可高亮或添加笔记。",
       "page": "第 {page} 页",
+      "pageRange": "第 {start}–{end} 页",
       "deleteHighlight": "删除批注",
       "delete": "删除",
       "cancel": "取消",

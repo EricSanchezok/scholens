@@ -40,6 +40,22 @@ class PdfTextRect(BaseModel):
         return self
 
 
+class PdfTextPageSegment(BaseModel):
+    """Ordered PDF text geometry belonging to one page."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    page_number: int = Field(
+        ge=1,
+        description="One-based PDF page containing this rectangle segment.",
+    )
+    rects: list[PdfTextRect] = Field(
+        min_length=1,
+        max_length=200,
+        description="Ordered normalized rectangles on this PDF page.",
+    )
+
+
 class PdfTextPosition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,13 +65,34 @@ class PdfTextPosition(BaseModel):
     )
     page_number: int = Field(
         ge=1,
-        description="One-based PDF page containing every supplied rectangle.",
+        description="One-based PDF page containing the first supplied segment.",
     )
     rects: list[PdfTextRect] = Field(
         min_length=1,
         max_length=200,
-        description="Ordered normalized rectangles covering the exact selected quote.",
+        description="Legacy projection of the first page segment.",
     )
+    segments: list[PdfTextPageSegment] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description=(
+            "Ordered page segments covering the exact selected quote. "
+            "Omitted legacy requests are interpreted as one segment."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_segments(self) -> PdfTextPosition:
+        if self.segments is None:
+            return self
+        page_numbers = [segment.page_number for segment in self.segments]
+        if page_numbers != sorted(set(page_numbers)):
+            raise ValueError("PDF text segments must use unique ascending pages")
+        first = self.segments[0]
+        if first.page_number != self.page_number or first.rects != self.rects:
+            raise ValueError("PDF text legacy fields must equal the first page segment")
+        return self
 
 
 class ParsedTextPosition(BaseModel):
@@ -106,6 +143,7 @@ def position_columns(
 
 __all__ = [
     "ParsedTextPosition",
+    "PdfTextPageSegment",
     "PdfTextPosition",
     "PdfTextRect",
     "ResearchPosition",
