@@ -355,22 +355,21 @@ function ColumnManager({
   );
 }
 
+const PreviewMarkdownHeading: NonNullable<Components["h1"]> = ({
+  children,
+}) => (
+  <h4 className="text-foreground text-sm leading-5 font-semibold">
+    {children}
+  </h4>
+);
+
 const previewMarkdownComponents: Components = {
-  h1: ({ children }) => (
-    <h4 className="text-foreground text-sm leading-5 font-semibold">
-      {children}
-    </h4>
-  ),
-  h2: ({ children }) => (
-    <h4 className="text-foreground text-sm leading-5 font-semibold">
-      {children}
-    </h4>
-  ),
-  h3: ({ children }) => (
-    <h4 className="text-foreground text-sm leading-5 font-semibold">
-      {children}
-    </h4>
-  ),
+  h1: PreviewMarkdownHeading,
+  h2: PreviewMarkdownHeading,
+  h3: PreviewMarkdownHeading,
+  h4: PreviewMarkdownHeading,
+  h5: PreviewMarkdownHeading,
+  h6: PreviewMarkdownHeading,
   p: ({ children }) => <p className="text-pretty">{children}</p>,
   ul: ({ children }) => (
     <ul className="marker:text-muted list-disc space-y-1.5 pl-4">{children}</ul>
