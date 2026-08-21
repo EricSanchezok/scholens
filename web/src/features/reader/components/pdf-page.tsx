@@ -40,6 +40,7 @@ import {
   createDocumentSelectionController,
   type CommittedDocumentSelection,
 } from "../selection/document-selection-controller";
+import { createReaderSelectionPageCoordinator } from "../selection/reader-selection-page-coordinator";
 
 const EMPTY_SEARCH_MATCHES: ReaderSearchMatch[] = [];
 
@@ -674,12 +675,16 @@ export function PdfPage({
   ) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const routePageRef = React.useRef(pageNumber);
   const activePageRef = React.useRef(0);
   const internallyReportedPagesRef = React.useRef<number[]>([]);
   const pendingGesturePageRef = React.useRef<number | undefined>(undefined);
   const pendingPageAlignmentRef = React.useRef<number | undefined>(undefined);
   const alignmentFrameRef = React.useRef(0);
-  const [selectionGestureActive, setSelectionGestureActive] =
+  const selectionPageCoordinatorRef = React.useRef<
+    ReturnType<typeof createReaderSelectionPageCoordinator> | undefined
+  >(undefined);
+  const [selectionAlignmentGuarded, setSelectionAlignmentGuarded] =
     React.useState(false);
   const [containerSize, setContainerSize] = React.useState({
     height: 0,
@@ -693,10 +698,42 @@ export function PdfPage({
     },
     [onVisiblePageChange],
   );
+  const settleInternallyReportedPage = React.useCallback(
+    (settledPage: number, acknowledged: boolean) => {
+      const reports = internallyReportedPagesRef.current;
+      const reportedIndex = reports.lastIndexOf(settledPage);
+      if (reportedIndex < 0) return;
+      if (acknowledged) {
+        reports.splice(0, reportedIndex + 1);
+      } else {
+        reports.splice(reportedIndex, 1);
+      }
+    },
+    [],
+  );
   const clearActiveSelection = React.useCallback(() => {
     onActiveTextSelectionChange?.(undefined);
     window.getSelection()?.removeAllRanges();
   }, [onActiveTextSelectionChange]);
+
+  React.useEffect(() => {
+    routePageRef.current = pageNumber;
+  }, [pageNumber]);
+
+  React.useEffect(() => {
+    const coordinator = createReaderSelectionPageCoordinator({
+      onGuardChange: setSelectionAlignmentGuarded,
+      onReportPage: reportVisiblePage,
+      onSettleReport: settleInternallyReportedPage,
+    });
+    selectionPageCoordinatorRef.current = coordinator;
+    return () => {
+      coordinator.dispose();
+      if (selectionPageCoordinatorRef.current === coordinator) {
+        selectionPageCoordinatorRef.current = undefined;
+      }
+    };
+  }, [reportVisiblePage, settleInternallyReportedPage]);
 
   React.useEffect(() => {
     const root = containerRef.current;
@@ -723,7 +760,17 @@ export function PdfPage({
           selected_text: selection.text,
         });
       },
-      onGestureChange: setSelectionGestureActive,
+      onGestureChange: (active) => {
+        const coordinator = selectionPageCoordinatorRef.current;
+        if (active) {
+          pendingGesturePageRef.current = undefined;
+          coordinator?.startGesture(routePageRef.current);
+          return;
+        }
+        const pendingPage = pendingGesturePageRef.current;
+        pendingGesturePageRef.current = undefined;
+        coordinator?.finishGesture(pendingPage);
+      },
     });
     return () => controller.dispose();
   }, [onActiveTextSelectionChange]);
@@ -735,29 +782,6 @@ export function PdfPage({
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [clearActiveSelection]);
-
-  React.useEffect(() => {
-    if (!selectionGestureActive) return;
-    function finishSelectionGesture() {
-      setSelectionGestureActive(false);
-      const pendingPage = pendingGesturePageRef.current;
-      pendingGesturePageRef.current = undefined;
-      if (pendingPage === undefined) return;
-      reportVisiblePage(pendingPage);
-    }
-    document.addEventListener("pointerup", finishSelectionGesture, true);
-    document.addEventListener("pointercancel", finishSelectionGesture, true);
-    window.addEventListener("blur", finishSelectionGesture);
-    return () => {
-      document.removeEventListener("pointerup", finishSelectionGesture, true);
-      document.removeEventListener(
-        "pointercancel",
-        finishSelectionGesture,
-        true,
-      );
-      window.removeEventListener("blur", finishSelectionGesture);
-    };
-  }, [reportVisiblePage, selectionGestureActive]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -798,7 +822,7 @@ export function PdfPage({
         const nextPage = selectReaderViewportPage(viewport, pages);
         if (nextPage && nextPage !== activePageRef.current) {
           activePageRef.current = nextPage;
-          if (selectionGestureActive) {
+          if (selectionPageCoordinatorRef.current?.isGuarded()) {
             pendingGesturePageRef.current = nextPage;
           } else {
             reportVisiblePage(nextPage);
@@ -814,10 +838,13 @@ export function PdfPage({
       window.cancelAnimationFrame(frame);
       scrollContainer.removeEventListener("scroll", updateVisiblePage);
     };
-  }, [reportVisiblePage, selectionGestureActive]);
+  }, [reportVisiblePage]);
 
   React.useEffect(() => {
-    if (selectionGestureActive) return;
+    const routeDecision =
+      selectionPageCoordinatorRef.current?.routePageChanged(pageNumber) ??
+      "continue";
+    if (routeDecision !== "continue") return;
     const reportedIndex =
       internallyReportedPagesRef.current.lastIndexOf(pageNumber);
     if (reportedIndex >= 0) {
@@ -865,7 +892,7 @@ export function PdfPage({
     containerSize.height,
     containerSize.width,
     pageNumber,
-    selectionGestureActive,
+    selectionAlignmentGuarded,
   ]);
 
   React.useEffect(() => {
