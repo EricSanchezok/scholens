@@ -421,10 +421,7 @@ test("supports the Library Papers critical journey", async ({ page }) => {
   const firstPaper = page.getByRole("checkbox", {
     name: "Select Attention Is All You Need",
   });
-  await page
-    .getByRole("row")
-    .filter({ hasText: "Attention Is All You Need" })
-    .hover();
+  await page.getByRole("row").filter({ has: firstPaper }).hover();
   await expect(firstPaper).toBeVisible();
   await firstPaper.click();
   await expect(page.getByText("1 paper selected")).toBeVisible();
