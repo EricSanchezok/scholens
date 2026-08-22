@@ -48,7 +48,32 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const recentCards = Array.from(
+      canvasElement.querySelectorAll<HTMLElement>("[data-home-recent-card]"),
+    );
+    await expect(recentCards.length).toBeGreaterThan(0);
+    for (const card of recentCards) {
+      await expect(card.dataset.slot).toBe("frame");
+      await expect(
+        card.querySelector('[data-slot="frame-panel"]'),
+      ).not.toBeInTheDocument();
+      const nestedClosedBorders = Array.from(card.querySelectorAll("*")).filter(
+        (element) => {
+          const style = getComputedStyle(element);
+          return [
+            style.borderTopWidth,
+            style.borderRightWidth,
+            style.borderBottomWidth,
+            style.borderLeftWidth,
+          ].every((width) => Number(width.replace("px", "")) > 0);
+        },
+      );
+      await expect(nestedClosedBorders).toHaveLength(0);
+    }
+  },
+};
 
 export const PapersOnly: Story = {
   args: { projects: [] },
@@ -79,14 +104,36 @@ export const Empty: Story = {
 };
 
 export const MobileRecents: Story = {
+  args: { showComposer: false },
   globals: {
     locale: "zh-CN",
     viewport: { value: "mobile", isRotated: false },
   },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
+    const hero = canvasElement.querySelector<HTMLElement>("[data-home-hero]");
+    const launcher = canvasElement.querySelector<HTMLElement>(
+      "[data-mobile-recent-launcher]",
+    );
     await expect(canvas.getByText("继续最近研究")).toBeVisible();
+    await expect(canvas.getByText("基于你的研究资料提问。")).not.toBeVisible();
     await expect(canvas.getByText("最近论文")).not.toBeVisible();
+    await expect(hero).not.toBeNull();
+    await expect(launcher).not.toBeNull();
+    await expect(["left", "start"]).toContain(
+      getComputedStyle(hero!).textAlign,
+    );
+    const heroBounds = hero!.getBoundingClientRect();
+    const launcherBounds = launcher!.getBoundingClientRect();
+    await expect(launcherBounds.top - heroBounds.bottom).toBeGreaterThanOrEqual(
+      48,
+    );
+    await expect(launcherBounds.top - heroBounds.bottom).toBeLessThanOrEqual(
+      64,
+    );
+    await expect(
+      Math.abs(launcherBounds.left - heroBounds.left),
+    ).toBeLessThanOrEqual(4);
     await userEvent.click(
       canvas.getByRole("button", {
         name: /将论文《Attention Is All You Need》设为研究范围/,
@@ -101,7 +148,7 @@ export const MobileRecents: Story = {
 };
 
 export const MobileRecentsLongTitles: Story = {
-  args: { papers: longTitlePapers, projects: [] },
+  args: { papers: longTitlePapers, projects: [], showComposer: false },
   globals: { viewport: { value: "smallMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -126,6 +173,7 @@ export const MobileRecentsLoading: Story = {
     projects: [],
     papersLoading: true,
     projectsLoading: true,
+    showComposer: false,
   },
   play: async ({ canvasElement }) => {
     await expect(
@@ -138,7 +186,13 @@ export const MobileRecentsLoading: Story = {
 
 export const MobileRecentsError: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },
-  args: { papers: [], projects: [], papersError: true, projectsError: true },
+  args: {
+    papers: [],
+    projects: [],
+    papersError: true,
+    projectsError: true,
+    showComposer: false,
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const visibleError = canvas

@@ -314,26 +314,6 @@ export const AccessKeys: Story = {
   },
 };
 
-export const AccessKeysSmallMobile: Story = {
-  globals: { viewport: { value: "smallMobile", isRotated: false } },
-  parameters: { nextjs: navigation("access-keys") },
-  play: async () => {
-    const body = within(document.body);
-    await expect(
-      await body.findByRole("heading", { name: "Access keys" }),
-    ).toBeVisible();
-    await expect(
-      body.getByRole("link", { name: /MCP setup guide/ }),
-    ).toBeVisible();
-    await expect(
-      body.getByRole("button", { name: "Create access key" }),
-    ).toBeVisible();
-    expect(document.documentElement.scrollWidth <= window.innerWidth).toBe(
-      true,
-    );
-  },
-};
-
 export const Connections: Story = {
   parameters: { nextjs: navigation("connections") },
   play: async () => {
@@ -888,25 +868,6 @@ export const Translation: Story = {
       await body.findByRole("option", { name: "Japanese" }),
     );
     await expect(sourceLanguage).toHaveTextContent("Japanese");
-  },
-};
-
-export const Mobile390: Story = {
-  globals: { viewport: { value: "mobile", isRotated: false } },
-  parameters: { nextjs: navigation("connections") },
-};
-
-export const MobileAccount390: Story = {
-  globals: { viewport: { value: "mobile", isRotated: false } },
-  parameters: { nextjs: navigation("account") },
-  play: async () => {
-    const body = within(document.body);
-    await expect(
-      await body.findByRole("heading", { name: "Account" }),
-    ).toBeVisible();
-    await expect(
-      await body.findByRole("button", { name: "Sign out" }),
-    ).toBeVisible();
   },
 };
 

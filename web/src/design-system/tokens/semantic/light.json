@@ -1,10 +1,10 @@
 {
   "color": {
     "bg": {
-      "canvas": { "$type": "color", "$value": "{palette.neutral.0}" },
+      "canvas": { "$type": "color", "$value": "{palette.neutral.25}" },
       "sidebar": { "$type": "color", "$value": "{palette.neutral.50}" },
       "surface": { "$type": "color", "$value": "{palette.neutral.0}" },
-      "subtle": { "$type": "color", "$value": "{palette.neutral.25}" },
+      "subtle": { "$type": "color", "$value": "{palette.neutral.50}" },
       "hover": { "$type": "color", "$value": "{palette.neutral.100}" },
       "pressed": { "$type": "color", "$value": "{palette.neutral.200}" },
       "elevated": { "$type": "color", "$value": "{palette.neutral.0}" }
@@ -12,8 +12,8 @@
     "text": {
       "primary": { "$type": "color", "$value": "{palette.neutral.950}" },
       "secondary": { "$type": "color", "$value": "{palette.neutral.800}" },
-      "muted": { "$type": "color", "$value": "{palette.neutral.600}" },
-      "tertiary": { "$type": "color", "$value": "{palette.neutral.600}" },
+      "muted": { "$type": "color", "$value": "{palette.neutral.700}" },
+      "tertiary": { "$type": "color", "$value": "{palette.neutral.700}" },
       "inverse": { "$type": "color", "$value": "{palette.neutral.0}" },
       "disabled": { "$type": "color", "$value": "{palette.neutral.500}" },
       "link": { "$type": "color", "$value": "{palette.neutral.950}" },
@@ -26,7 +26,7 @@
       "inverse": { "$type": "color", "$value": "{palette.neutral.0}" }
     },
     "border": {
-      "default": { "$type": "color", "$value": "{palette.neutral.150}" },
+      "default": { "$type": "color", "$value": "{palette.neutral.200}" },
       "subtle": { "$type": "color", "$value": "{palette.neutral.150}" },
       "strong": { "$type": "color", "$value": "{palette.neutral.600}" },
       "control": { "$type": "color", "$value": "{palette.neutral.550}" },

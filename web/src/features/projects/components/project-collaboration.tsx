@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
-import { Avatar, Button } from "@/components/ui";
+import { Avatar, Button, Frame } from "@/components/ui";
 import type { components } from "@/lib/api/generated/schema";
 import { projectQueries } from "../api";
 
@@ -28,10 +28,13 @@ export function ProjectCollaboration({
   const memberCount = members?.length ?? project.num_collaborators + 1;
 
   return (
-    <section
+    <Frame
       aria-labelledby="project-collaboration-heading"
       className="min-w-0"
       data-project-collaboration
+      role="region"
+      spacing="roomy"
+      variant="ghost"
     >
       <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h2
@@ -51,7 +54,7 @@ export function ProjectCollaboration({
           ) : null}
         </span>
       </div>
-      <div className="border-line-subtle min-w-0 border-y">
+      <div className="min-w-0">
         {!members && membersQuery.isPending ? (
           <div className="px-1 py-4">
             <LoadingState presentation="inline" />
@@ -71,7 +74,7 @@ export function ProjectCollaboration({
           <ul className="divide-line-subtle min-w-0 divide-y">
             {(members ?? []).map((member) => (
               <li
-                className="flex min-w-0 items-center gap-3 py-3"
+                className="flex min-w-0 items-center gap-3 px-1 py-3"
                 key={member.user_id}
               >
                 <Avatar
@@ -88,6 +91,6 @@ export function ProjectCollaboration({
           </ul>
         )}
       </div>
-    </section>
+    </Frame>
   );
 }

@@ -30,6 +30,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Frame,
+  FramePanel,
   IconButton,
   Input,
   isImeComposing,
@@ -392,10 +394,10 @@ export function ReaderAnnotationPanel({
                 ? t("continueNote")
                 : t("replyPlaceholder");
           return (
-            <article
+            <Frame
               className={cn(
-                "motion-control group/thread group/interactive-row border-line bg-surface hover:bg-hover focus-within:bg-hover active:bg-pressed max-w-full min-w-0 rounded-[var(--radius-lg)] border",
-                active && "bg-subtle",
+                "motion-control group/thread group/interactive-row hover:border-line-strong hover:bg-hover focus-within:border-line-strong focus-within:bg-hover active:bg-pressed max-w-full",
+                active && "border-line-strong",
               )}
               data-reader-annotation-card={annotation.id}
               data-current={active ? "" : undefined}
@@ -408,6 +410,8 @@ export function ReaderAnnotationPanel({
               onFocusCapture={() => onPreviewChange(annotation.id)}
               onMouseEnter={() => onPreviewChange(annotation.id)}
               onMouseLeave={() => onPreviewChange(undefined)}
+              role="article"
+              spacing="compact"
             >
               <div className="flex items-start gap-1 px-3 pt-2.5">
                 <button
@@ -579,7 +583,11 @@ export function ReaderAnnotationPanel({
                 ) : null}
               </div>
 
-              <div className="px-3 pb-3">
+              <FramePanel
+                className="overflow-visible"
+                spacing="compact"
+                variant={active ? "raised" : "flat"}
+              >
                 <div className="text-secondary mt-1.5 flex items-center gap-1.5 text-xs">
                   <span className="truncate">
                     {annotation.created_by.display_name ?? t("unknownAuthor")}
@@ -787,8 +795,8 @@ export function ReaderAnnotationPanel({
                     </button>
                   </form>
                 ) : null}
-              </div>
-            </article>
+              </FramePanel>
+            </Frame>
           );
         })
       )}

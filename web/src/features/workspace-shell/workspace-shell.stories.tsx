@@ -85,7 +85,7 @@ function ShellStory({
   activeDestination = "library",
   storyActor = actor,
 }: {
-  activeDestination?: "ask" | "library" | "projects";
+  activeDestination?: "ask" | "library" | "projects" | "me";
   storyActor?: typeof actor;
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
@@ -771,6 +771,12 @@ export const MobileNavigation: Story = {
     const dialog = within(document.body).getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(
+      within(dialog).getByRole("link", { name: actor.display_name }),
+    ).toHaveAttribute("href", "/me");
+    await expect(
+      within(dialog).getByRole("button", { name: "Close navigation" }),
+    ).toBeVisible();
+    await expect(
       within(dialog).getByRole("link", { name: "New chat" }),
     ).toBeVisible();
     await expect(
@@ -832,31 +838,28 @@ export const MobileConversationRename: Story = {
   },
 };
 
-export const MobileAccountMenu: Story = {
+export const MobileAccountEntry: Story = {
   globals: { viewport: { value: "mobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
+    const primaryNavigation = canvas.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    const meDestination = within(primaryNavigation).getByRole("link", {
+      name: "Me",
+    });
+    await expect(meDestination).toHaveAttribute("href", "/me");
     await userEvent.click(
       canvas.getByRole("button", { name: "Open navigation" }),
     );
     const navigation = await body.findByRole("dialog");
-    await userEvent.click(
-      within(navigation).getByRole("button", { name: "Settings" }),
-    );
-    const menu = await body.findByRole("menu");
-    await expect(await within(menu).findByText("24M / 100M")).toBeVisible();
-    for (const item of within(menu).getAllByRole("menuitem")) {
-      await expect(item.getBoundingClientRect().height).toBeGreaterThanOrEqual(
-        44,
-      );
-    }
-    await userEvent.click(
-      within(menu).getByRole("menuitem", { name: "Usage" }),
-    );
-    await expect(getRouter().replace).toHaveBeenCalledWith("/?settings=usage", {
-      scroll: false,
-    });
+    const identity = within(navigation).getByRole("link", { name: "Eric" });
+    await expect(identity).toHaveAttribute("href", "/me");
+    await expect(
+      within(navigation).queryByRole("button", { name: "Settings" }),
+    ).not.toBeInTheDocument();
+    await expect(within(navigation).queryByText("24M / 100M")).toBeNull();
   },
 };
 

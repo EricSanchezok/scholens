@@ -51,7 +51,12 @@ export const OverviewCollapsed: Story = {
     await expect(heading).toBeVisible();
     const workbenchHeader = heading.closest("header");
     await expect(workbenchHeader).not.toBeNull();
+    await expect(workbenchHeader).not.toHaveAttribute("data-slot", "frame");
     const tabs = canvas.getByRole("tablist");
+    const tabWidths = within(tabs)
+      .getAllByRole("tab")
+      .map((tab) => Math.round(tab.getBoundingClientRect().width));
+    await expect(new Set(tabWidths).size).toBe(1);
     if (workbenchHeader) {
       await expect(
         Math.round(
@@ -257,6 +262,81 @@ export const Outputs: Story = {
     await expect(
       await within(canvasElement).findByText("Citation"),
     ).toBeVisible();
+  },
+};
+
+export const Mobile430Papers: Story = {
+  globals: { viewport: { value: "largeMobile", isRotated: false } },
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: `/projects/${projectId}?view=papers`,
+        pathname: `/projects/${projectId}`,
+        query: { view: "papers" },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const search = await canvas.findByRole("searchbox", {
+      name: "Search project papers",
+    });
+    const status = canvas.getByRole("button", { name: "Status" });
+    const tags = canvas.getByRole("button", { name: "Tags" });
+    const sort = canvas.getByRole("combobox", {
+      name: "Sort project papers",
+    });
+    const toolbar = search.closest<HTMLElement>("[data-collection-toolbar]");
+    await expect(toolbar).not.toBeNull();
+    const boxes = [search, status, tags, sort].map((element) =>
+      element.getBoundingClientRect(),
+    );
+    await expect(
+      Math.max(...boxes.map((box) => box.top)) -
+        Math.min(...boxes.map((box) => box.top)),
+    ).toBeLessThanOrEqual(1);
+    await expect(toolbar!.scrollWidth).toBeLessThanOrEqual(
+      toolbar!.clientWidth,
+    );
+  },
+};
+
+export const Mobile430Outputs: Story = {
+  globals: { viewport: { value: "largeMobile", isRotated: false } },
+  parameters: {
+    nextjs: {
+      appDirectory: true,
+      navigation: {
+        asPath: `/projects/${projectId}?view=outputs`,
+        pathname: `/projects/${projectId}`,
+        query: { view: "outputs" },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const search = await canvas.findByRole("searchbox", {
+      name: "Search project outputs",
+    });
+    const kind = canvas.getByRole("combobox", {
+      name: "Filter output type",
+    });
+    const sort = canvas.getByRole("combobox", {
+      name: "Sort project outputs",
+    });
+    const toolbar = search.closest<HTMLElement>("[data-collection-toolbar]");
+    await expect(toolbar).not.toBeNull();
+    const boxes = [search, kind, sort].map((element) =>
+      element.getBoundingClientRect(),
+    );
+    await expect(
+      Math.max(...boxes.map((box) => box.top)) -
+        Math.min(...boxes.map((box) => box.top)),
+    ).toBeLessThanOrEqual(1);
+    await expect(toolbar!.scrollWidth).toBeLessThanOrEqual(
+      toolbar!.clientWidth,
+    );
   },
 };
 

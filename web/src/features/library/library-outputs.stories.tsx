@@ -133,6 +133,25 @@ export const Mobile390: Story = {
   globals: { viewport: { value: "mobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const toolbar = canvasElement.querySelector<HTMLElement>(
+      "[data-collection-toolbar]",
+    );
+    await expect(toolbar).not.toBeNull();
+    if (toolbar) {
+      const search = canvas.getByRole("searchbox", { name: "Search outputs" });
+      const types = canvas.getByRole("button", { name: "Types" });
+      const sort = canvas.getByRole("combobox", { name: "Sort outputs" });
+      const boxes = [search, types, sort].map((element) =>
+        element.getBoundingClientRect(),
+      );
+      await expect(
+        Math.max(...boxes.map((box) => box.top)) -
+          Math.min(...boxes.map((box) => box.top)),
+      ).toBeLessThanOrEqual(1);
+      await expect(toolbar.scrollWidth).toBeLessThanOrEqual(
+        toolbar.clientWidth,
+      );
+    }
     const titles = await canvas.findAllByText("Architecture notes");
     await expect(
       titles.some((element) => element.getClientRects().length > 0),

@@ -7,6 +7,7 @@ export * from "./display";
 export * from "./dropdown-menu";
 export * from "./field";
 export * from "./focus";
+export * from "./frame";
 export * from "./ime";
 export * from "./input";
 export * from "./overflow-menu-button";

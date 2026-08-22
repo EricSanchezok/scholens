@@ -95,6 +95,20 @@ export const libraryPapers: LibraryPaper[] = [
   ),
 ];
 
+export const libraryNextPagePapers = libraryPapers.map((item, index) => {
+  const suffix = String(index + 101).padStart(12, "0");
+  const documentId = `70000000-0000-4000-8000-${suffix}`;
+  return {
+    ...item,
+    document: {
+      ...item.document,
+      document_id: documentId,
+      title: `Follow-up reading ${index + 1}: ${item.document.title}`,
+    },
+    library_entry_id: `72000000-0000-4000-8000-${suffix}`,
+  };
+});
+
 export const libraryLongTitlePapers: LibraryPaper[] = libraryPapers.map(
   (item, index) => ({
     ...item,

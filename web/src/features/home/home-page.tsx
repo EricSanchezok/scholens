@@ -146,6 +146,7 @@ export function HomeWorkspace({
           variant="mobileHeader"
         />
       }
+      mobileHeaderDivider={false}
       mobileHeaderTrailing={<WorkspaceNewChatAction />}
       mobileViewport={mobileViewport}
     >

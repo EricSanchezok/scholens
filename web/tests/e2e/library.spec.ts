@@ -3,6 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 import {
   libraryConversations,
+  libraryNextPagePapers,
   libraryOutputs,
   libraryPapers,
   libraryTags,
@@ -63,6 +64,22 @@ async function mockLibrary(page: Page) {
       body: JSON.stringify({ items: libraryConversations, next_cursor: null }),
     }),
   );
+  await page.route(`${apiPattern}/me/paper-list-preferences`, async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(paperListPreferences),
+      });
+    }
+    if (route.request().method() === "PUT") {
+      paperListPreferences = route.request().postDataJSON();
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(paperListPreferences),
+      });
+    }
+    return route.fallback();
+  });
   await page.route(`${apiPattern}/library/summary`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -125,7 +142,7 @@ async function mockLibrary(page: Page) {
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        items: cursor ? [libraryPapers[2]] : libraryPapers,
+        items: cursor ? [libraryNextPagePapers[0]] : libraryPapers,
         next_cursor: cursor ? null : "next-library-page",
         previous_cursor: cursor ? "previous-library-page" : null,
         total_count: 27,
@@ -253,25 +270,68 @@ test("keeps the mobile filter controls readable without horizontal overflow", as
   );
   await page.goto("/library");
 
-  const tagButton = page.getByRole("button", { name: "Tags" });
+  const search = page.getByRole("searchbox", { name: "Search papers" });
+  const statusButton = page.getByRole("button", {
+    exact: true,
+    name: "Status",
+  });
+  const tagButton = page.getByRole("button", { exact: true, name: "Tags" });
   const sort = page.getByRole("combobox", { name: "Sort papers" });
   const count = page.getByText("27 papers", { exact: true });
+  await expect(search).toBeVisible();
+  await expect(statusButton).toBeVisible();
   await expect(tagButton).toBeVisible();
   await expect(sort).toBeVisible();
-  await expect(count).toBeVisible();
+  await expect(count).toBeHidden();
 
-  const [tagBox, sortBox, countBox, overflow] = await Promise.all([
+  const [searchBox, statusBox, tagBox, sortBox, overflow] = await Promise.all([
+    search.boundingBox(),
+    statusButton.boundingBox(),
     tagButton.boundingBox(),
     sort.boundingBox(),
-    count.boundingBox(),
     page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     ),
   ]);
-  expect(countBox!.y).toBeGreaterThanOrEqual(
-    Math.max(tagBox!.y + tagBox!.height, sortBox!.y + sortBox!.height),
-  );
+  const tops = [searchBox, statusBox, tagBox, sortBox].map((box) => box!.y);
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
+  expect(
+    await page
+      .locator("[data-collection-toolbar]")
+      .evaluate((toolbar) => toolbar.scrollWidth <= toolbar.clientWidth),
+  ).toBe(true);
+  await expect(
+    search.locator("xpath=ancestor::*[@data-slot='frame']"),
+  ).toHaveCount(0);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("keeps Library output controls on one mobile row", async ({ page }) => {
+  await page.setViewportSize({ height: 852, width: 320 });
+  await page.goto("/library?tab=outputs");
+  const search = page.getByRole("searchbox", { name: "Search outputs" });
+  const kinds = page.getByRole("button", { name: "Types" });
+  const sort = page.getByRole("combobox", { name: "Sort outputs" });
+  const boxes = await Promise.all([
+    search.boundingBox(),
+    kinds.boundingBox(),
+    sort.boundingBox(),
+  ]);
+  const tops = boxes.map((box) => box!.y);
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
+  expect(
+    await search
+      .locator("xpath=ancestor::*[@data-collection-toolbar]")
+      .evaluate((toolbar) => toolbar.scrollWidth <= toolbar.clientWidth),
+  ).toBe(true);
+  await expect(
+    search.locator("xpath=ancestor::*[@data-slot='frame']"),
+  ).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("loads the tag catalog only when tag controls are requested", async ({
@@ -295,6 +355,58 @@ test("loads the tag catalog only when tag controls are requested", async ({
     page.getByRole("checkbox", { name: libraryTags[0]!.name }),
   ).toBeVisible();
   expect(tagReads).toBe(1);
+});
+
+test("opens paper details as a full-height Library side panel", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/library");
+
+  const layout = page.locator("[data-paper-collection-page-layout]");
+  const preview = page.getByRole("complementary", { name: "Paper details" });
+  await expect(preview).toBeVisible();
+  const [layoutBox, previewBox] = await Promise.all([
+    layout.boundingBox(),
+    preview.boundingBox(),
+  ]);
+  expect(Math.abs(previewBox!.y - layoutBox!.y)).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      previewBox!.y + previewBox!.height - (layoutBox!.y + layoutBox!.height),
+    ),
+  ).toBeLessThanOrEqual(1);
+  await expect(
+    preview.getByRole("button", { name: "Close paper details" }),
+  ).toHaveCount(0);
+
+  const lastOpenedHeader = page.getByRole("columnheader", {
+    exact: true,
+    name: "Last opened",
+  });
+  const table = page.getByRole("table");
+  const [lastOpenedBox, tableBox] = await Promise.all([
+    lastOpenedHeader.boundingBox(),
+    table.boundingBox(),
+  ]);
+  expect(lastOpenedBox).not.toBeNull();
+  expect(tableBox).not.toBeNull();
+  expect(lastOpenedBox!.x + lastOpenedBox!.width).toBeLessThanOrEqual(
+    tableBox!.x + tableBox!.width,
+  );
+
+  const toggle = page.locator("[data-paper-preview-toggle]");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await toggle.click();
+  await expect(preview).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("aria-label", "Show paper details");
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(toggle).toBeFocused();
+
+  await toggle.click();
+  await expect(preview).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-label", "Close paper details");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
 
 test("supports the Library Papers critical journey", async ({ page }) => {

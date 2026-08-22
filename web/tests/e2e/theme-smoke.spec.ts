@@ -37,5 +37,5 @@ test("falls back safely from stale theme and appearance values", async ({
     .poll(() =>
       page.evaluate(() => getComputedStyle(document.body).backgroundColor),
     )
-    .toBe("rgb(255, 255, 255)");
+    .toBe("rgb(250, 250, 248)");
 });

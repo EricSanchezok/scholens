@@ -3,6 +3,7 @@
 import {
   AccountIcon,
   CollapseRailIcon,
+  DismissIcon,
   DocumentationIcon,
   ExpandRailIcon,
   ExternalLinkIcon,
@@ -10,6 +11,7 @@ import {
   RepositoryIcon,
   SignOutIcon,
   MenuIcon,
+  NextIcon,
   SearchIcon,
   SettingsIcon,
   UsageIcon,
@@ -47,7 +49,7 @@ import { useMotionPreference } from "@/design-system/motion/motion-provider";
 import { CurrentUserAvatar, type Actor } from "@/features/authentication";
 import { conversationQueries } from "@/features/conversation";
 import { GlobalSearch } from "@/features/paper-search";
-import { ProductLockup, ProductMark } from "@/features/product-identity";
+import { ProductLockup } from "@/features/product-identity";
 import {
   InstallInstructionsDialog,
   InstallPromotion,
@@ -57,7 +59,7 @@ import {
   formatDateOnly,
   SettingsDialog,
   useCurrentBillingUsage,
-  useSettingsNavigation,
+  useSettingsLauncher,
   type CurrentBillingUsageSummary,
 } from "@/features/settings";
 import type { components } from "@/lib/api/generated/schema";
@@ -86,7 +88,7 @@ import {
 import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
 import { useShellVisualViewport } from "./use-shell-visual-viewport";
 
-export type WorkspaceDestination = "ask" | "library" | "projects";
+export type WorkspaceDestination = "ask" | "library" | "projects" | "me";
 
 export type MobileViewportState = {
   open: boolean;
@@ -217,12 +219,14 @@ function NavigationPendingIndicator({
 
 function SidebarLinkContent({
   animateLabel,
+  active,
   collapsed,
   glyph,
   href,
   label,
 }: {
   animateLabel: boolean;
+  active: boolean;
   collapsed: boolean;
   glyph: IconGlyph;
   href: string;
@@ -231,7 +235,7 @@ function SidebarLinkContent({
   return (
     <>
       <span className="grid size-6 shrink-0 place-items-center">
-        <Icon glyph={glyph} size={20} tone="primary" />
+        <Icon glyph={glyph} size={20} tone={active ? "primary" : "secondary"} />
       </span>
       {!collapsed && (
         <span
@@ -276,10 +280,12 @@ function SidebarControl({
       aria-current={active ? "page" : undefined}
       aria-label={accessibleLabel}
       className={cn(
-        "motion-control hover:bg-hover active:bg-pressed relative flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
+        "motion-control active:bg-pressed relative flex h-10 items-center gap-2 rounded-[var(--radius-lg)] border font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
-        active && "bg-hover",
+        active
+          ? "border-line bg-surface shadow-raised"
+          : "hover:bg-hover border-transparent",
       )}
       href={href as Route}
       onClick={(event) => {
@@ -291,6 +297,7 @@ function SidebarControl({
     >
       <SidebarLinkContent
         animateLabel={animateLabel}
+        active={Boolean(active)}
         collapsed={collapsed}
         glyph={glyph}
         href={href}
@@ -302,7 +309,7 @@ function SidebarControl({
       aria-disabled={disabled || undefined}
       aria-label={disabled || collapsed ? accessibleLabel : undefined}
       className={cn(
-        "motion-control flex h-10 items-center gap-2 rounded-[var(--radius-lg)] font-medium",
+        "motion-control flex h-10 items-center gap-2 rounded-[var(--radius-lg)] border border-transparent font-medium",
         keyboardFocusRing,
         collapsed ? "w-10 justify-center" : "w-full px-2",
         disabled ? "text-secondary cursor-not-allowed" : "hover:bg-hover",
@@ -401,7 +408,6 @@ function AccountMenu({
   actor,
   billingUsage,
   collapsed,
-  settingsTrigger = false,
   signingOut,
   onOpenAccount,
   onOpenSettings,
@@ -411,7 +417,6 @@ function AccountMenu({
   actor: Actor;
   billingUsage: CurrentBillingUsageSummary;
   collapsed: boolean;
-  settingsTrigger?: boolean;
   signingOut: boolean;
   onOpenAccount: () => void;
   onOpenSettings: () => void;
@@ -427,59 +432,46 @@ function AccountMenu({
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={
-            settingsTrigger ? t("navigation.settings") : t("account.openMenu")
-          }
+          aria-label={t("account.openMenu")}
           className={cn(
-            "hover:bg-hover flex items-center",
+            "border-line bg-surface shadow-raised hover:bg-hover flex h-14 items-center rounded-[var(--radius-xl)] border",
             keyboardFocusRing,
-            settingsTrigger
-              ? "bg-surface size-12 justify-center rounded-full"
-              : "rounded-[var(--radius-lg)]",
-            !settingsTrigger && "h-14",
-            !settingsTrigger &&
-              (collapsed
-                ? "ml-auto w-10 justify-center px-2"
-                : "w-full gap-3 px-2"),
+            collapsed
+              ? "ml-auto w-10 justify-center px-2"
+              : "w-full gap-3 px-2",
           )}
           type="button"
         >
-          {settingsTrigger ? (
-            <Icon glyph={SettingsIcon} size={20} tone="primary" />
-          ) : (
-            <>
-              <CurrentUserAvatar
-                className={cn(
-                  collapsed ? "text-caption size-8" : "size-10 text-sm",
-                )}
-                data-account-avatar
-                fallback={initial}
-                sizes={collapsed ? "32px" : "40px"}
-              />
-              {!collapsed && (
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="text-sidebar-label block truncate leading-5 font-normal">
-                    {name}
-                  </span>
-                  <span className="text-caption text-secondary block truncate leading-4">
-                    {actor.email}
-                  </span>
-                </span>
-              )}
-            </>
+          <CurrentUserAvatar
+            className={cn(
+              collapsed ? "text-caption size-8" : "size-10 text-sm",
+            )}
+            data-account-avatar
+            fallback={initial}
+            sizes={collapsed ? "32px" : "40px"}
+          />
+          {!collapsed && (
+            <span className="min-w-0 flex-1 text-left">
+              <span className="text-sidebar-label block truncate leading-5 font-normal">
+                {name}
+              </span>
+              <span className="text-caption text-secondary block truncate leading-4">
+                {actor.email}
+              </span>
+            </span>
           )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={collapsed || settingsTrigger ? "end" : "start"}
+        align={collapsed ? "end" : "start"}
         className={cn(
           "rounded-[var(--radius-xl)]",
-          collapsed || settingsTrigger
+          collapsed
             ? "w-72"
             : "w-[max(var(--radix-dropdown-menu-trigger-width),18rem)]",
         )}
-        side={collapsed && !settingsTrigger ? "right" : "top"}
-        sideOffset={collapsed || settingsTrigger ? 8 : 4}
+        side={collapsed ? "right" : "top"}
+        sideOffset={collapsed ? 8 : 4}
       >
         <DropdownMenuLabel className="flex items-center gap-3 px-2.5 py-3">
           <CurrentUserAvatar
@@ -601,10 +593,24 @@ function AccountMenu({
   );
 }
 
-function MobileActorIdentity({ actor }: { actor: Actor }) {
+function MobileActorIdentity({
+  actor,
+  onSelect,
+}: {
+  actor: Actor;
+  onSelect: () => void;
+}) {
   const name = actorName(actor);
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
+    <Link
+      aria-label={name}
+      className={cn(
+        "hover:bg-hover active:bg-pressed -ml-2 flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-xl)] px-2 py-2",
+        keyboardFocusRing,
+      )}
+      href={"/me" as Route}
+      onClick={onSelect}
+    >
       <CurrentUserAvatar
         className="size-12 text-sm"
         fallback={name.slice(0, 1).toUpperCase()}
@@ -618,7 +624,8 @@ function MobileActorIdentity({ actor }: { actor: Actor }) {
           {actor.email}
         </span>
       </span>
-    </div>
+      <Icon glyph={NextIcon} size={20} tone="secondary" />
+    </Link>
   );
 }
 
@@ -832,18 +839,12 @@ function ConversationHistory({
 
 function MobileNavigation({
   actor,
-  billingUsage,
   conversations,
   currentConversation,
   activeConversationId,
   hasNextPage,
   isError,
   isFetchingNextPage,
-  signingOut,
-  onOpenAccount,
-  onOpenSettings,
-  onOpenUsage,
-  onSignOut,
   onLoadMore,
   onRetry,
   onSearch,
@@ -855,18 +856,12 @@ function MobileNavigation({
   showInstall,
 }: {
   actor: Actor;
-  billingUsage: CurrentBillingUsageSummary;
   conversations: ConversationSummary[];
   currentConversation?: ConversationSummary;
   activeConversationId?: string;
   hasNextPage: boolean;
   isError: boolean;
   isFetchingNextPage: boolean;
-  signingOut: boolean;
-  onOpenAccount: () => void;
-  onOpenSettings: () => void;
-  onOpenUsage: () => void;
-  onSignOut: () => Promise<void>;
   onLoadMore: () => void;
   onRetry: () => void;
   onSearch: () => void;
@@ -889,9 +884,8 @@ function MobileNavigation({
     <aside className="flex h-full flex-col overflow-hidden bg-[var(--color-bg-sidebar)] pt-[env(safe-area-inset-top)]">
       <div className="flex min-h-20 shrink-0 items-center px-4 pr-16">
         <div className="min-w-0 flex-1">
-          <MobileActorIdentity actor={actor} />
+          <MobileActorIdentity actor={actor} onSelect={onSelect} />
         </div>
-        <ProductMark className="text-secondary ml-3" />
       </div>
       <div
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
@@ -940,17 +934,6 @@ function MobileNavigation({
             <Icon glyph={SearchIcon} size={20} tone="secondary" />
             <span className="truncate">{t("navigation.searchShort")}</span>
           </button>
-          <AccountMenu
-            actor={actor}
-            billingUsage={billingUsage}
-            collapsed={false}
-            onOpenAccount={onOpenAccount}
-            onOpenSettings={onOpenSettings}
-            onOpenUsage={onOpenUsage}
-            onSignOut={onSignOut}
-            settingsTrigger
-            signingOut={signingOut}
-          />
           <Link
             aria-label={t("navigation.newChat")}
             className={cn(
@@ -1061,7 +1044,7 @@ function MobileTabBar({
   return (
     <nav
       aria-label={t("primary")}
-      className="grid h-14 shrink-0 grid-cols-3 lg:hidden"
+      className="bg-canvas grid h-16 shrink-0 grid-cols-4 px-1 lg:hidden"
       data-testid="mobile-tab-bar"
     >
       <MobileDestinationLink
@@ -1081,6 +1064,12 @@ function MobileTabBar({
         glyph={ProjectIcon}
         href="/projects"
         label={t("projects")}
+      />
+      <MobileDestinationLink
+        active={activeDestination === "me"}
+        glyph={AccountIcon}
+        href="/me"
+        label={t("me")}
       />
     </nav>
   );
@@ -1109,10 +1098,12 @@ function MobileBottomDock({
       data-testid="mobile-bottom-dock"
       ref={ref}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute right-0 bottom-full left-0 h-5 bg-[linear-gradient(to_top,var(--color-bg-canvas),transparent)]"
-      />
+      {content ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 bottom-full left-0 h-5 bg-[linear-gradient(to_top,var(--color-bg-canvas),transparent)]"
+        />
+      ) : null}
       {content && <div className="min-w-0">{content}</div>}
       {!keyboardOpen && showNavigation && (
         <MobileTabBar activeDestination={activeDestination} />
@@ -1334,6 +1325,8 @@ export function WorkspaceShell({
   mobileHeaderLeading,
   mobileHeaderCenter,
   mobileHeaderTrailing,
+  mobileHeaderDivider = true,
+  showMobileHeader = true,
   mobileBottomContent,
   mobileBottomRef,
   mobileViewport,
@@ -1351,6 +1344,8 @@ export function WorkspaceShell({
   mobileHeaderLeading?: React.ReactNode;
   mobileHeaderCenter?: React.ReactNode;
   mobileHeaderTrailing?: React.ReactNode;
+  mobileHeaderDivider?: boolean;
+  showMobileHeader?: boolean;
   mobileBottomContent?: React.ReactNode;
   mobileBottomRef?: React.Ref<HTMLDivElement>;
   mobileViewport?: MobileViewportState;
@@ -1401,7 +1396,7 @@ export function WorkspaceShell({
   const retryConversations = React.useCallback(() => {
     void conversationListQuery.refetch();
   }, [conversationListQuery]);
-  const { setSection: setSettingsSection } = useSettingsNavigation();
+  const { openSection: openSettingsSection } = useSettingsLauncher();
   const {
     ready: motionReady,
     resolved: resolvedMotion,
@@ -1564,7 +1559,7 @@ export function WorkspaceShell({
       >
         <div
           aria-hidden="true"
-          className="motion-rail-chrome border-line bg-canvas pointer-events-none absolute inset-y-0 left-0 w-[var(--workspace-sidebar-width)] border-r"
+          className="motion-rail-chrome border-line bg-sidebar pointer-events-none absolute inset-y-0 left-0 w-[var(--workspace-sidebar-width)] border-r"
           data-collapsed={collapsed}
           ref={desktopRailChromeRef}
         />
@@ -1586,9 +1581,9 @@ export function WorkspaceShell({
             onDeleteConversation={(conversation, returnFocus) =>
               setDeleteTarget({ conversation, returnFocus })
             }
-            onOpenAccount={() => setSettingsSection("account")}
-            onOpenSettings={() => setSettingsSection("general")}
-            onOpenUsage={() => setSettingsSection("usage")}
+            onOpenAccount={() => openSettingsSection("account")}
+            onOpenSettings={() => openSettingsSection("general")}
+            onOpenUsage={() => openSettingsSection("usage")}
             onLoadMore={loadMoreConversations}
             onRequestMobileRename={(conversation, returnFocus) =>
               setRenameTarget({ conversation, returnFocus })
@@ -1603,13 +1598,14 @@ export function WorkspaceShell({
       <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
         <SheetContent
           className="inset-0 h-dvh w-full max-w-none border-0 bg-[var(--color-bg-sidebar)] p-0 shadow-none focus:outline-none"
-          closeGlyph={ExpandRailIcon}
+          closeGlyph={DismissIcon}
           closeLabel={t("navigation.closeMenu")}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             mobileSheetRef.current?.focus();
           }}
           ref={mobileSheetRef}
+          side="left"
           tabIndex={-1}
         >
           <SheetTitle className="sr-only">
@@ -1618,7 +1614,6 @@ export function WorkspaceShell({
           <MobileNavigation
             activeConversationId={activeConversationId}
             actor={actor}
-            billingUsage={billingUsage}
             conversations={conversations}
             controller={conversationController}
             currentConversation={currentConversation}
@@ -1628,18 +1623,6 @@ export function WorkspaceShell({
             onDeleteConversation={(conversation, returnFocus) =>
               setDeleteTarget({ conversation, returnFocus })
             }
-            onOpenAccount={() => {
-              setMobileOpen(false);
-              setSettingsSection("account");
-            }}
-            onOpenSettings={() => {
-              setMobileOpen(false);
-              setSettingsSection("general");
-            }}
-            onOpenUsage={() => {
-              setMobileOpen(false);
-              setSettingsSection("usage");
-            }}
             onLoadMore={loadMoreConversations}
             onRequestMobileRename={(conversation, returnFocus) =>
               setRenameTarget({ conversation, returnFocus })
@@ -1654,9 +1637,7 @@ export function WorkspaceShell({
               setMobileOpen(false);
               openSearch();
             }}
-            onSignOut={onSignOut}
             showInstall={installExperience.showInstallEntry}
-            signingOut={signingOut}
           />
         </SheetContent>
       </Sheet>
@@ -1665,22 +1646,29 @@ export function WorkspaceShell({
         data-motion-rail-content=""
         ref={desktopContentRef}
       >
-        <header className="border-line shrink-0 border-b pt-[env(safe-area-inset-top)] lg:hidden">
-          <div className="flex h-16 items-center px-3">
-            {mobileHeaderLeading ?? (
-              <IconButton
-                label={t("navigation.openMenu")}
-                onClick={() => setMobileOpen(true)}
-                ref={mobileMenuTriggerRef}
-                variant="ghost"
-              >
-                <Icon glyph={MenuIcon} size={24} />
-              </IconButton>
+        {showMobileHeader ? (
+          <header
+            className={cn(
+              "shrink-0 pt-[env(safe-area-inset-top)] lg:hidden",
+              mobileHeaderDivider && "border-line border-b",
             )}
-            <div className="mx-2 min-w-0 flex-1">{mobileHeaderCenter}</div>
-            <div className="ml-auto shrink-0">{mobileHeaderTrailing}</div>
-          </div>
-        </header>
+          >
+            <div className="flex h-16 items-center px-3">
+              {mobileHeaderLeading ?? (
+                <IconButton
+                  label={t("navigation.openMenu")}
+                  onClick={() => setMobileOpen(true)}
+                  ref={mobileMenuTriggerRef}
+                  variant="ghost"
+                >
+                  <Icon glyph={MenuIcon} size={24} />
+                </IconButton>
+              )}
+              <div className="mx-2 min-w-0 flex-1">{mobileHeaderCenter}</div>
+              <div className="ml-auto shrink-0">{mobileHeaderTrailing}</div>
+            </div>
+          </header>
+        ) : null}
         <main
           className="min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto overscroll-y-contain"
           data-scrollbar-gutter="stable"

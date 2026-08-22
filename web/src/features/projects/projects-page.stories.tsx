@@ -46,10 +46,14 @@ export const Populated: Story = {
     const search = await canvas.findByRole("searchbox", {
       name: "Search projects",
     });
+    const utilityToolbar = search.closest<HTMLElement>(
+      "[data-collection-toolbar]",
+    );
+    await expect(utilityToolbar).not.toBeNull();
     if (workbenchHeader) {
       await expect(
         Math.round(
-          search.getBoundingClientRect().top -
+          utilityToolbar!.getBoundingClientRect().top -
             workbenchHeader.getBoundingClientRect().bottom,
         ),
       ).toBe(16);
@@ -145,6 +149,14 @@ export const Mobile390: Story = {
     await expect(
       canvas.getByRole("button", { name: "New project" }),
     ).toBeVisible();
+    const search = canvas.getByRole("searchbox", { name: "Search projects" });
+    const sort = canvas.getByRole("combobox", { name: "Sort projects" });
+    await expect(
+      Math.abs(
+        search.getBoundingClientRect().top - sort.getBoundingClientRect().top,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await expect(search.closest('[data-slot="frame"]')).toBeNull();
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
       canvasElement.clientWidth,
     );

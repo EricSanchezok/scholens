@@ -24,6 +24,7 @@ runtime behavior, accessibility, data contracts, and component APIs.
 | [Architecture](./architecture.md)                           | Adding a route, feature slice, provider, shared state, or dependency               |
 | [Component development](./component-development.md)         | Creating or importing a component                                                  |
 | [Design tokens](./design-tokens.md)                         | Changing color, spacing, radius, theme, or Figma variables                         |
+| [Visual language](./visual-language.md)                     | Applying shared surface hierarchy or adapting ReUI and React Bits recipes          |
 | [Product identity](./product-identity.md)                   | Changing the Scholens raven, app icons, metadata, or brand lockups                 |
 | [Motion system](./motion.md)                                | Designing animation, transitions, layout continuity, or reduced motion             |
 | [Web performance](./performance.md)                         | Changing navigation feedback, RUM, bundles, or performance budgets                 |

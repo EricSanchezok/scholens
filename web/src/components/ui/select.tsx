@@ -55,7 +55,10 @@ export const SelectTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon className="motion-icon shrink-0 group-data-[state=open]/select:rotate-180">
+    <SelectPrimitive.Icon
+      className="motion-icon shrink-0 group-data-[state=open]/select:rotate-180"
+      data-slot="select-indicator"
+    >
       <Icon glyph={NavArrowDown} size={16} tone="secondary" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>

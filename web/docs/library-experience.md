@@ -45,10 +45,15 @@ viewport without a repeated explanatory hero or a second controls band.
 Explanatory copy belongs to empty and unavailable states. Mobile keeps the
 Workspace app bar as the only page-title and primary-action surface.
 
-At phone widths the utility controls are composed rather than compressed:
-search owns the first row, tag and sort controls share a bounded two-column
-row, and the result/import counts occupy a separate right-aligned row. Count
-phrases may separate by semantic line but never wrap character by character.
+At phone widths the utility controls stay on one non-wrapping row: search owns
+the remaining width while status, tag or kind, and sort collapse to distinct
+44 px icon controls with accessible names. Full labels return when the content
+width can support them. Result counts already represented by the page tabs are
+hidden from the phone utility row instead of creating another line; active
+filter counts remain attached to their control.
+The utility row itself is a transparent layout region rather than a framed
+surface. Search, filters, and sorting each keep one quiet control boundary;
+the workbench does not add a second background, border, or shadow around them.
 The owned tag catalog is requested when filtering or tag management opens;
 assigned tags already present on paper rows remain available without that
 catalog request.
@@ -56,21 +61,34 @@ catalog request.
 ## Papers
 
 Desktop uses the shared full-width `paper-collection` workbench: a flat semantic
-table with a sticky header, quiet dividers, fixed 64 px virtual rows, and an
-adjacent details preview that defaults to 512 px and can be resized from 400 to
-720 px while preserving at least 640 px for the collection. The table and
-preview consume the remaining viewport height instead of stopping at an
-arbitrary content cap; each side scrolls only when its own content exceeds that
-space. Default columns are Paper, Status, Tags, Authors, Publication, and Last
-opened. Added and DOI are optional; every column except Paper can be hidden and
-the visible columns can be reordered. Column order, per-column widths, preview
+table with a sticky header, quiet dividers, fixed 64 px virtual rows, and a
+page-level details panel that enters from the right beneath the stable Library
+title and tabs, then fills the remaining content height. The panel follows the
+same spatial model as Project Chat, defaults to 512 px, and can be resized from
+400 to 720 px while preserving at least 640 px for the collection. The fixed
+page header does not resize when the panel opens or a user changes tabs. The
+collection and panel scroll
+independently when their own content exceeds the viewport. One persistent,
+icon-only eye control in the collection toolbar opens and closes the panel,
+changes icon and pressed state with disclosure, and retains focus in place; the
+panel does not duplicate that control in its own header. Project Papers keeps
+the workbench's inline preview because the Project page-level right rail is
+owned by Chat. When either preview is open, selected columns compress together
+to panel-specific display minima instead of disappearing by breakpoint. If the
+remaining collection width cannot contain them, local horizontal scrolling
+keeps every selected column reachable.
+
+Default columns are Paper, Status, Tags, Authors, Publication, and Last opened.
+Added and DOI are optional; every column except Paper can be hidden and the
+visible columns can be reordered. Column order, per-column widths, preview
 width, and preview disclosure are account-scoped and shared with Project Papers;
 sort and filters remain URL state. The Paper column can contract to 160 px and
 expand to 1,600 px. Dragging an internal column boundary redistributes the
-bounded width only between its two adjacent visible columns, keeping their
-combined width and the trailing column edge fixed; the boundary stops when
-either column reaches its limit. The final data column has no resize handle.
-Every paper owns a stable 36×52 px portrait
+stored bounded width only between its two adjacent visible columns, keeping
+their combined width and the trailing column edge fixed; preview compression is
+a display projection and is never persisted as an invalid preference. The
+boundary stops when either column reaches its limit, and the final data column
+has no resize handle. Every paper owns a stable 36×52 px portrait
 thumbnail slot that consumes `preview_url` and falls back without shifting the
 text columns. A failed short-lived preview URL is remembered by URL, so a newly
 signed URL retries automatically in both the row and details preview. Preference
@@ -89,15 +107,16 @@ reset for all stored widths. Selection remains an independent leading control.
 Entering selection replaces the utility row with the batch toolbar above the
 collection.
 
-Below the desktop breakpoint, Papers uses a compact stacked row rather than
+Below 640 px of collection width, Papers uses a compact stacked row rather than
 compressing the table. Long titles wrap to at most two lines and uninterrupted
 identifiers do not create horizontal page scrolling. Compact mode renders only
 its active two-or-three-column semantic structure (named thumbnail, paper
 details, and optional row actions), rather than keeping a hidden desktop table;
 desktop-only selection controls therefore do not create phantom mobile columns.
-When the collection container is below 1040 px, lower-priority right-side
-columns and the preview temporarily disappear without rewriting the stored
-preference; mobile exposes neither column management nor preview. Selecting or
+When the page-level container is below 1040 px, the preview temporarily becomes
+unavailable without rewriting the stored preference; selected desktop columns
+remain reachable through the collection's local horizontal scroller. Mobile
+exposes neither column management nor preview. Selecting or
 focusing a paper updates the preview with its full title, authors, publication,
 DOI, personal status, tags, abstract or summary, and keywords. Hover provides a
 temporary preview; focus or pointer activation persists the current row so
@@ -117,14 +136,15 @@ retrieval and never hide otherwise matching papers.
 The Library collection uses one flat editorial surface rather than placing a
 table inside a rounded card. Search and non-select filters remain compact pills;
 sorting uses the same light-line Select surface as forms and Reader. The
-table and preview share one continuous top boundary; the preview's quiet
-vertical divider begins at that boundary instead of intersecting an independent
-table rule. Rows are separated by quiet dividers and reveal a local hover
-surface. Mobile keeps the same border ownership with one divided list instead
-of a stack of repeated cards. This visual contract also applies to Outputs.
-Papers and Outputs share the same full-width page container, header alignment,
-and responsive padding, so switching tabs never moves the title, tabs, primary
-action, or content edges.
+table owns one top boundary beneath its utility row. The Library preview owns a
+single quiet full-height divider at the page boundary instead of inheriting the
+table frame or introducing nested cards. The inline Project preview begins at
+the collection boundary and follows the same quiet-divider ownership. Rows are
+separated by quiet dividers and reveal a local hover surface. Mobile keeps the
+same border ownership with one divided list instead of a stack of repeated
+cards. This visual contract also applies to Outputs. Papers and Outputs share
+the same full-width page container, header alignment, and responsive padding,
+so switching tabs never moves the title, tabs, primary action, or content edges.
 
 Paper and tag rows follow the shared collection-row and nested-action contract
 in [Component Development](./component-development.md). The row's main content

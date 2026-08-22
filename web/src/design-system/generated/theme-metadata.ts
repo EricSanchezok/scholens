@@ -5,10 +5,10 @@ export const colorSchemes = ["light", "dark"] as const;
 export const colorSchemePreferences = ["system", ...colorSchemes] as const;
 export const pwaColors = {
   light: {
-    canvas: "#ffffff",
+    canvas: "#fafaf8",
     textPrimary: "#20201e",
     textSecondary: "#4b4b47",
-    borderDefault: "#e7e7e4",
+    borderDefault: "#e4e4e1",
   },
   dark: {
     canvas: "#141412",

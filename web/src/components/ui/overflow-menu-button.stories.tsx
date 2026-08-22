@@ -34,6 +34,18 @@ export const Contextual: Story = {
   ),
 };
 
+export const MobileContextual: Story = {
+  ...Contextual,
+  globals: { viewport: { value: "mobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const button = within(canvasElement).getByRole("button", {
+      name: "Open actions",
+    });
+    await expect(button).toBeVisible();
+    await expect(getComputedStyle(button).opacity).toBe("1");
+  },
+};
+
 export const Open: Story = {
   render: (args) => (
     <DropdownMenu modal={false}>

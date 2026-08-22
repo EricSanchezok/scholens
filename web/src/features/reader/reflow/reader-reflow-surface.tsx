@@ -7,7 +7,7 @@ import * as React from "react";
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import { Button, LinkButton, useToast } from "@/components/ui";
 import { integrationQueries } from "@/features/integrations";
-import { useSettingsNavigation } from "@/features/settings";
+import { useSettingsLauncher } from "@/features/settings";
 import { ApiError } from "@/lib/api/errors";
 import { reflowKeys, reflowQueries, requestDocumentReflowAttempt } from "./api";
 import {
@@ -47,7 +47,7 @@ export function ReaderReflowSurface({
   const queryClient = useQueryClient();
   const t = useTranslations("Reader.reflow");
   const toast = useToast();
-  const { setSection: setSettingsSection } = useSettingsNavigation();
+  const { openSection: openSettingsSection } = useSettingsLauncher();
   const [mineruRequired, setMineruRequired] = React.useState(false);
   const [requesting, setRequesting] = React.useState(false);
   const attemptKey = React.useRef<string | undefined>(undefined);
@@ -128,7 +128,7 @@ export function ReaderReflowSurface({
         )
       ) {
         setMineruRequired(true);
-        setSettingsSection("connections");
+        openSettingsSection("connections");
         toast.notify({
           description: t("mineruRequiredDescription"),
           title: t("mineruRequiredTitle"),
@@ -142,7 +142,7 @@ export function ReaderReflowSurface({
     } finally {
       setRequesting(false);
     }
-  }, [documentId, queryClient, requesting, setSettingsSection, t, toast]);
+  }, [documentId, openSettingsSection, queryClient, requesting, t, toast]);
 
   const mineru = integrations.data?.items.find(
     (integration) => integration.provider === "mineru",
@@ -204,7 +204,7 @@ export function ReaderReflowSurface({
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <Button
-            onClick={() => setSettingsSection("connections")}
+            onClick={() => openSettingsSection("connections")}
             variant="primary"
           >
             {t("connectMineru")}

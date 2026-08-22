@@ -47,7 +47,32 @@ function resolveColor(value: string, property: "backgroundColor" | "color") {
   return resolved;
 }
 
+async function expectSingleLineToolbar(canvasElement: HTMLElement) {
+  const toolbar = canvasElement.querySelector<HTMLElement>(
+    "[data-collection-toolbar]",
+  );
+  await expect(toolbar).not.toBeNull();
+  if (!toolbar) return;
+  const search = toolbar.querySelector<HTMLElement>('input[type="search"]');
+  const controls = Array.from(
+    toolbar.querySelectorAll<HTMLElement>(
+      "[data-collection-toolbar-controls] > button, [data-collection-toolbar-controls] > div > button",
+    ),
+  ).filter((control) => control.getClientRects().length > 0);
+  await expect(search).not.toBeNull();
+  if (!search) return;
+  const boxes = [search, ...controls].map((element) =>
+    element.getBoundingClientRect(),
+  );
+  await expect(
+    Math.max(...boxes.map((box) => box.top)) -
+      Math.min(...boxes.map((box) => box.top)),
+  ).toBeLessThanOrEqual(1);
+  await expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
+}
+
 export const Populated: Story = {
+  globals: { viewport: { value: "desktop", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
@@ -81,6 +106,21 @@ export const Populated: Story = {
     await expect(getComputedStyle(tableSurface).borderTopWidth).toBe("0px");
     await expect(getComputedStyle(splitSurface!).borderTopWidth).toBe("1px");
     await expect(getComputedStyle(tableSurface).borderRadius).toBe("0px");
+    const pageLayout = canvasElement.querySelector<HTMLElement>(
+      "[data-paper-collection-page-layout]",
+    );
+    await expect(pageLayout).not.toBeNull();
+    const preview = await canvas.findByRole("complementary", {
+      name: "Paper details",
+    });
+    const layoutBox = pageLayout!.getBoundingClientRect();
+    const previewBox = preview.getBoundingClientRect();
+    await expect(Math.abs(previewBox.top - layoutBox.top)).toBeLessThanOrEqual(
+      1,
+    );
+    await expect(
+      Math.abs(previewBox.bottom - layoutBox.bottom),
+    ).toBeLessThanOrEqual(1);
     await expect(search).toHaveClass("rounded-full");
     await expect(
       canvas
@@ -332,10 +372,17 @@ export const AddPapersOpenAlexRequired: Story = {
     await userEvent.click(
       body.getByRole("button", { name: "Connect OpenAlex" }),
     );
-    await expect(getRouter().replace).toHaveBeenCalledWith(
-      expect.stringContaining("settings=connections"),
-      { scroll: false },
-    );
+    if (window.matchMedia("(min-width: 64rem)").matches) {
+      await expect(getRouter().replace).toHaveBeenCalledWith(
+        expect.stringContaining("settings=connections"),
+        { scroll: false },
+      );
+    } else {
+      await expect(getRouter().push).toHaveBeenCalledWith(
+        expect.stringContaining("/me/connections?returnTo="),
+        { scroll: false },
+      );
+    }
   },
 };
 
@@ -379,6 +426,7 @@ export const Mobile390: Story = {
   globals: { viewport: { value: "mobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectSingleLineToolbar(canvasElement);
     const titles = await canvas.findAllByText("Attention Is All You Need");
     await expect(
       titles.some((element) => element.getClientRects().length > 0),
@@ -409,6 +457,7 @@ export const Mobile320LongTitles: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectSingleLineToolbar(canvasElement);
     const titleText = libraryLongTitlePapers[0]!.document.title!;
     const title = (await canvas.findAllByText(titleText)).find(
       (candidate) => candidate.closest('[role="row"]')?.getClientRects().length,
@@ -428,6 +477,7 @@ export const Mobile430Filters: Story = {
   globals: { viewport: { value: "largeMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expectSingleLineToolbar(canvasElement);
     await userEvent.click(await canvas.findByRole("button", { name: "Tags" }));
     const body = within(canvasElement.ownerDocument.body);
     const dialog = await body.findByRole("dialog");

@@ -266,8 +266,9 @@ export function ReaderFullTranslationControl({
     <Sheet onOpenChange={setOpen} open={open}>
       {trigger}
       <SheetContent
-        className="inset-x-0 top-auto bottom-0 h-auto max-h-[88dvh] w-full max-w-none overflow-y-auto rounded-t-[var(--radius-xl)] border-t border-l-0 px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        className="h-auto max-h-[88dvh] overflow-y-auto rounded-t-[var(--radius-xl)] px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         closeLabel={t("close")}
+        side="bottom"
       >
         <SheetTitle className="pr-12 text-lg font-semibold">
           {t("title")}

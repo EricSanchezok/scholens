@@ -697,7 +697,7 @@ export function ResearchComposer({
             </span>
           ) : null}
           <ReasoningMenu
-            className="ml-auto h-9 shrink-0 px-2"
+            className="border-line bg-subtle ml-auto h-9 shrink-0 rounded-[var(--radius-lg)] border px-2"
             disabled={unavailable}
             onChange={onReasoningLevelChange}
             value={reasoningLevel}
@@ -733,7 +733,7 @@ export function ResearchComposer({
         "border-line bg-surface shadow-composer lg:shadow-raised grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1 rounded-full border p-2",
         expanded
           ? "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:rounded-[var(--radius-2xl)] lg:p-3"
-          : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-2",
+          : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-1.5",
       )}
       data-expanded={expanded}
       data-has-context={hasContext || undefined}
@@ -797,11 +797,12 @@ export function ResearchComposer({
           open={pickerOpen}
           papers={papers}
           projects={projects}
+          triggerClassName="lg:border-line lg:bg-subtle lg:size-11 lg:border"
         />
       </div>
       <ReasoningMenu
         className={cn(
-          "hidden justify-self-start lg:flex",
+          "border-line bg-subtle hidden justify-self-start border lg:flex",
           expanded
             ? "lg:col-start-3 lg:row-start-3 lg:justify-self-end"
             : "lg:col-start-3 lg:row-start-1",
