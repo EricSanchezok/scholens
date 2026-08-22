@@ -13,6 +13,7 @@ from scholens_job_contracts import (
 
 from src.tasks import (
     _claim_job,
+    _claim_job_with_retry,
     _deliver_zotero_webhook,
     _fetch_zotero_credential,
     _zotero_progress,
@@ -155,6 +156,30 @@ def test_claim_job_closes_response(raise_http_error: bool) -> None:
             assert _claim_job("https://server.example/claim", task_id="job-1")
 
     response.close.assert_called_once_with()
+
+
+def test_claim_transport_failure_uses_bounded_celery_retry() -> None:
+    task = MagicMock()
+    task.request.retries = 3
+    task.retry.side_effect = RuntimeError("celery-retry")
+
+    with (
+        patch(
+            "src.tasks._claim_job",
+            side_effect=requests.ConnectionError("server unavailable"),
+        ),
+        pytest.raises(RuntimeError, match="celery-retry"),
+    ):
+        _claim_job_with_retry(
+            task,
+            "https://server.example/internal/v1/jobs/job-1/claim",
+            task_id="job-1",
+        )
+
+    task.retry.assert_called_once()
+    retry_kwargs = task.retry.call_args.kwargs
+    assert retry_kwargs["countdown"] == 40
+    assert retry_kwargs["max_retries"] == 24
 
 
 @pytest.mark.parametrize("invalid_payload", [False, True])

@@ -1261,6 +1261,8 @@ Resources:
           Value: '1'
         - Name: JOB_DISPATCH_PUBLISH_LEASE_SECONDS
           Value: '30'
+        - Name: JOB_UNCLAIMED_TIMEOUT_SECONDS
+          Value: '3600'
         - Name: AI_MAX_INTERACTIVE_PER_USER
           Value: '12'
         - Name: AI_MAX_BACKGROUND_PER_USER
@@ -1617,6 +1619,8 @@ Resources:
             Fn::ImportValue: sanchezcloud-scholens-cache-port
         - Name: CACHE_TLS
           Value: 'true'
+        - Name: WEBHOOK_BASE_URL
+          Value: http://scholens-api.production.svc.sanchezcloud:8000
         - Name: AI_MAX_INTERACTIVE_PER_USER
           Value: '12'
         - Name: AI_MAX_BACKGROUND_PER_USER
@@ -3591,6 +3595,23 @@ Resources:
       AlarmName: sanchezcloud-scholens-diagnostic-snapshot-write-failure
       Namespace: Scholens/Production
       MetricName: scholens.diagnostic_snapshot.write_failed
+      Dimensions:
+      - Name: OTelLib
+        Value: scholens
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+      - Fn::ImportValue: sanchezcloud-scholens-alert-topic-arn
+  PdfUnclaimedRecoveryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: sanchezcloud-scholens-pdf-unclaimed-recovery
+      Namespace: Scholens/Production
+      MetricName: scholens.jobs.pdf_unclaimed_recoveries
       Dimensions:
       - Name: OTelLib
         Value: scholens

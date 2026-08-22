@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from ipaddress import ip_address
 from urllib.parse import quote, unquote, urlsplit
 
 _DNS_NAME = re.compile(
@@ -187,3 +188,67 @@ def validate_database_endpoint(
         ),
         _port(port, field="DATABASE_PORT"),
     )
+
+
+def resolve_internal_callback_base_url(
+    *,
+    configured_url: str | None = None,
+    environment: str | None = None,
+    fallback_url: str | None = None,
+) -> str:
+    """Return a canonical Server callback base URL for internal Jobs requests.
+
+    Production must provide an explicit, non-loopback HTTP endpoint. Development
+    may use the documented loopback fallback, but configured values still pass
+    the same structural validation so task payloads cannot smuggle credentials,
+    query parameters, or fragments into the callback authority.
+    """
+    production = _production(environment)
+    source_url = configured_url or (fallback_url if not production else None)
+    if not source_url:
+        raise EndpointConfigurationError(
+            "WEBHOOK_BASE_URL is required in production"
+            if production
+            else "WEBHOOK_BASE_URL is required"
+        )
+    if any(character.isspace() for character in source_url):
+        raise EndpointConfigurationError("WEBHOOK_BASE_URL must contain no whitespace")
+    try:
+        parsed = urlsplit(source_url)
+        parsed_port = parsed.port
+    except ValueError as exc:
+        raise EndpointConfigurationError("WEBHOOK_BASE_URL is malformed") from exc
+    if parsed.scheme.casefold() not in {"http", "https"}:
+        raise EndpointConfigurationError("WEBHOOK_BASE_URL must use http or https")
+    if parsed.hostname is None:
+        raise EndpointConfigurationError("WEBHOOK_BASE_URL must include a hostname")
+    if parsed.username is not None or parsed.password is not None:
+        raise EndpointConfigurationError(
+            "WEBHOOK_BASE_URL must not include credentials"
+        )
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise EndpointConfigurationError(
+            "WEBHOOK_BASE_URL must not include path, query, or fragment data"
+        )
+    hostname = parsed.hostname.casefold().rstrip(".")
+    if production:
+        loopback = hostname == "localhost" or hostname.endswith(".localhost")
+        try:
+            address = ip_address(hostname)
+            loopback = loopback or any(
+                (
+                    address.is_loopback,
+                    address.is_unspecified,
+                    address.is_link_local,
+                    address.is_multicast,
+                )
+            )
+        except ValueError:
+            pass
+        if loopback:
+            raise EndpointConfigurationError(
+                "production WEBHOOK_BASE_URL must use a routable, non-loopback host"
+            )
+    port = f":{parsed_port}" if parsed_port is not None else ""
+    bracketed_host = f"[{hostname}]" if ":" in hostname else hostname
+    return f"{parsed.scheme.casefold()}://{bracketed_host}{port}"

@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import os
 
-from src.webhook_signing import post_signed_json
+from src.webhook_signing import callback_base_url, post_signed_json
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> int:
-    webhook_base = os.getenv("WEBHOOK_BASE_URL", "http://127.0.0.1:7301").rstrip("/")
+    webhook_base = callback_base_url()
     sync_interval = int(os.getenv("ZOTERO_SYNC_INTERVAL_SECONDS", str(24 * 60 * 60)))
     url = (
         f"{webhook_base}/internal/v1/schedules/zotero-sync"

@@ -644,6 +644,7 @@
           "paper_ingestion_metadata_failed": "正文已读取，但论文元数据提取失败。",
           "paper_ingestion_indexing_failed": "正文已读取，但搜索索引建立失败。",
           "paper_ingestion_finalizing_failed": "处理结果已生成，但未能写入资料库。",
+          "paper_ingestion_claim_failed": "解析服务未能启动此导入，来源已保留，可直接重试。",
           "unknown": "处理失败，来源已保留，可直接重试。"
         }
       },

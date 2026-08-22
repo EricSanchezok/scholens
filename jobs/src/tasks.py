@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 import psutil
 import requests
+from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 
 from src.schemas import (
@@ -56,6 +57,8 @@ PDF_TASK_SOFT_TIME_LIMIT_SECONDS = 1200
 PDF_TASK_TIME_LIMIT_SECONDS = 1260
 JOB_HEARTBEAT_SECONDS = 30
 JOB_PROGRESS_TIMEOUT_SECONDS = 5
+JOB_CLAIM_MAX_RETRIES = 24
+JOB_CLAIM_MAX_RETRY_DELAY_SECONDS = 300
 PDF_PROGRESS_MARKERS = (
     # Match terminal and specific stages before broad provider status text.
     # "PDF processing complete" intentionally contains "processing".
@@ -236,6 +239,36 @@ def _claim_job(claim_url: str | None, *, task_id: str) -> bool:
             response.close()
 
 
+def _claim_job_with_retry(
+    task: Task,
+    claim_url: str | None,
+    *,
+    task_id: str,
+) -> bool:
+    """Claim durable Server state without acknowledging transient outages."""
+    try:
+        return _claim_job(claim_url, task_id=task_id)
+    except requests.RequestException as exc:
+        retries = int(getattr(task.request, "retries", 0) or 0)
+        countdown = min(
+            5 * (2 ** min(retries, 6)),
+            JOB_CLAIM_MAX_RETRY_DELAY_SECONDS,
+        )
+        logger.warning(
+            "job.claim.retrying",
+            extra={
+                "job_id": task_id,
+                "retry_count": retries + 1,
+                "retry_delay_seconds": countdown,
+            },
+        )
+        raise task.retry(
+            exc=exc,
+            countdown=countdown,
+            max_retries=JOB_CLAIM_MAX_RETRIES,
+        ) from exc
+
+
 def _log_data_table_progress(task_id: str, status: str) -> None:
     """Record progress without relying on a Celery result backend."""
     logger.info(
@@ -390,7 +423,7 @@ def upload_and_process_file(
     are produced. Used by the Zotero import path.
     """
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
     progress: ProgressReporter | None = None
@@ -522,7 +555,7 @@ def construct_data_table_task(
     Celery task to construct a data table based on the provided schema.
     """
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     usage_events: list[dict[str, Any]] = []
 
@@ -594,7 +627,7 @@ def generate_audio_overview_task(
 ) -> dict[str, Any]:
     """Generate one idempotently-addressed audio research item."""
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
 
     usage_events: list[dict[str, Any]] = []
@@ -641,7 +674,7 @@ def generate_document_reflow_task(
     """Generate one lossless, idempotently addressed reading layout."""
 
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     if credential_url is None:
         raise RuntimeError("document_reflow_credential_url_missing")
@@ -718,7 +751,7 @@ def postprocess_pdf_task(
 ) -> dict[str, Any]:
     """Trigger idempotent Server-side persistence work under a durable lease."""
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     payload = {"task_id": task_id}
     if semantic_text and semantic_source_digest:
@@ -750,7 +783,7 @@ def collect_document_task(
 ) -> dict[str, Any]:
     """Execute reference-safe, idempotent storage collection through Server."""
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     payload = {"task_id": task_id}
     if not _deliver_webhook(callback_url, payload, task_id=task_id):
@@ -767,7 +800,7 @@ def delete_storage_objects_task(
 ) -> dict[str, Any]:
     """Idempotently remove generated objects and acknowledge the durable job."""
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     failed = [key for key in object_keys if not s3_service.delete_file(key)]
     if failed:
@@ -847,7 +880,7 @@ def import_zotero_items_task(
     progress_url: str,
 ) -> dict[str, Any]:
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     expected_revision = str(request.get("credential_revision") or "")
     try:
@@ -919,7 +952,7 @@ def sync_zotero_task(
     progress_url: str,
 ) -> dict[str, Any]:
     task_id = self.request.id
-    if not _claim_job(claim_url, task_id=task_id):
+    if not _claim_job_with_retry(self, claim_url, task_id=task_id):
         return {"task_id": task_id, "status": "duplicate"}
     expected_revision = str(request.get("credential_revision") or "")
     try:

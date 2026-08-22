@@ -99,6 +99,13 @@ def main() -> int:
     identity_database_url = _identity_database_url(database_url)
     os.environ["DATABASE_URL"] = database_url
     os.environ["AUTH_DATABASE_URL"] = identity_database_url
+    if command in {"api", "conversation-worker"}:
+        # Both processes can publish durable Jobs tasks. Validate the callback
+        # authority before either process accepts work so production can never
+        # serialize a local-development URL into the outbox.
+        from app.helpers.celery_config import get_webhook_base_url
+
+        get_webhook_base_url()
     if command == "api":
         executable = ["gunicorn", "-c", "gunicorn.config.py", "app.main:app"]
     elif command == "conversation-worker":

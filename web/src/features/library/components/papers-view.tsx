@@ -243,6 +243,9 @@ function IngestionDetails({ ingestion }: { ingestion: PaperIngestionRow }) {
       case "paper_ingestion_finalizing_failed":
         description = t("errors.paper_ingestion_finalizing_failed");
         break;
+      case "paper_ingestion_claim_failed":
+        description = t("errors.paper_ingestion_claim_failed");
+        break;
       case "service_unavailable":
         description = t("errors.service_unavailable");
         break;

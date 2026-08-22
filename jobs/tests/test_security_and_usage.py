@@ -12,7 +12,7 @@ from scholens_observability import current_context
 
 from src.observability import _task_postrun, _task_prerun
 from src.token_usage import collect_token_usage, record_token_usage
-from src.webhook_signing import post_signed_json
+from src.webhook_signing import callback_base_url, post_signed_json
 
 
 def test_job_task_context_restores_durable_causality_headers() -> None:
@@ -100,3 +100,47 @@ def test_jobs_webhook_signature_covers_method_target_nonce_and_body(
         headers["X-Jobs-Signature"]
         == hmac.new(b"s" * 32, canonical, hashlib.sha256).hexdigest()
     )
+
+
+def test_production_jobs_callback_uses_worker_owned_server_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "WEBHOOK_BASE_URL",
+        "http://scholens-api.production.svc.sanchezcloud:8000",
+    )
+    monkeypatch.setenv("JOBS_WEBHOOK_SIGNING_SECRET", "s" * 32)
+
+    with patch("src.webhook_signing.requests.post") as post:
+        post_signed_json(
+            "http://127.0.0.1:7301/internal/v1/jobs/job-1/claim?attempt=1",
+            {},
+            timeout=5,
+        )
+
+    assert post.call_args.args[0] == (
+        "http://scholens-api.production.svc.sanchezcloud:8000"
+        "/internal/v1/jobs/job-1/claim?attempt=1"
+    )
+
+
+def test_production_jobs_callback_configuration_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("WEBHOOK_BASE_URL", raising=False)
+
+    with pytest.raises(ValueError, match="WEBHOOK_BASE_URL is required"):
+        callback_base_url()
+
+
+def test_production_jobs_callback_rejects_non_internal_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("WEBHOOK_BASE_URL", "https://api.example.com")
+    monkeypatch.setenv("JOBS_WEBHOOK_SIGNING_SECRET", "s" * 32)
+
+    with pytest.raises(RuntimeError, match="invalid_internal_callback_url"):
+        post_signed_json("https://attacker.example/collect", {}, timeout=5)

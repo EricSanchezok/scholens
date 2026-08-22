@@ -81,7 +81,8 @@ exposes `NEXT_PUBLIC_*` values to browser code, but keeping secrets out of the
 client build context is the safer operational boundary.
 
 **Must match across server and jobs:** `CELERY_BROKER_URL`, `CACHE_URL`, S3/AWS
-bucket vars, `SCHOLENS_AI_*`, and `JOBS_WEBHOOK_SIGNING_SECRET`. Jobs needs
+bucket vars, `SCHOLENS_AI_*`, `JOBS_WEBHOOK_SIGNING_SECRET`, and the internal
+callback authority. Local development uses
 `WEBHOOK_BASE_URL=http://127.0.0.1:7301`.
 
 AI configuration has one canonical namespace: `SCHOLENS_AI_*`. Remove obsolete
@@ -97,7 +98,7 @@ the superseded names.
 | `SCHOLENS_AI_DEEPSEEK_API_KEY`                                                                    | server, jobs (for the current default profiles)                 |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `CLOUDFLARE_BUCKET_NAME`          | server + jobs; isolated remote dev S3                           |
 | `CELERY_BROKER_URL`, `CACHE_URL`                                                                  | server + jobs                                                   |
-| `WEBHOOK_BASE_URL`                                                                                | jobs                                                            |
+| `WEBHOOK_BASE_URL`                                                                                | server + jobs                                                   |
 | `AUTH_JWT_SECRET` (32+ bytes)                                                                     | server                                                          |
 | `SCHOLENS_ALIYUN_DM_ACCESS_KEY_ID`, `SCHOLENS_ALIYUN_DM_ACCESS_KEY_SECRET`, `SCHOLENS_ALIYUN_DM_ACCOUNT_NAME` | server; identity and Project invitation mail                    |
 | `CLIENT_DOMAIN`                                                                                   | server canonical URL (`http://127.0.0.1:7300`)                  |

@@ -1,4 +1,4 @@
-"""Administrator-only legacy data repair use cases.
+"""Administrator-only bounded data repair and incident recovery use cases.
 
 The MCP tooling audit found production annotation anchors whose offsets do
 not cover the quote and current completed job results whose ``s3_object_key``
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 from app.modules.identity.domain import AccountAccessFacts, require_administrator
 from app.modules.operation_journal.application import OperationJournal
@@ -21,6 +22,7 @@ ANNOTATION_OFFSETS_FIXED = OperationAction("research.annotation_offsets_fixed")
 CONTAMINATED_DOCUMENTS_REPROCESSED = OperationAction(
     "papers.contaminated_documents_reprocessed"
 )
+STUCK_PAPER_INGESTION_RECOVERED = OperationAction("papers.stuck_ingestion_recovered")
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +55,17 @@ class DataRepairGateway(Protocol):
         apply: bool,
     ) -> ReprocessResult: ...
 
+    def recover_stuck_paper_ingestion(
+        self,
+        *,
+        job_id: UUID,
+        min_age_seconds: int,
+        apply: bool,
+    ) -> ReprocessResult: ...
+
 
 class DataRepair:
-    """Bounded, administrator-guarded legacy data repair use cases."""
+    """Bounded, administrator-guarded data repair and recovery use cases."""
 
     def __init__(
         self,
@@ -117,6 +127,30 @@ class DataRepair:
                 operation=operation,
                 action=CONTAMINATED_DOCUMENTS_REPROCESSED,
                 resources=(ResourceRef("jobs", "pdf_process"),),
+            )
+        return result
+
+    def recover_stuck_paper_ingestion(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        job_id: UUID,
+        min_age_seconds: int,
+        apply: bool,
+    ) -> ReprocessResult:
+        self._require_admin(actor)
+        result = self._gateway.recover_stuck_paper_ingestion(
+            job_id=job_id,
+            min_age_seconds=min_age_seconds,
+            apply=apply,
+        )
+        if apply and result.reprocessed:
+            self._journal.append(
+                actor=actor,
+                operation=operation,
+                action=STUCK_PAPER_INGESTION_RECOVERED,
+                resources=(ResourceRef("job", str(job_id)),),
             )
         return result
 

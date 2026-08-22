@@ -18,6 +18,7 @@ _RETRYABLE_FAILURES = frozenset(
         "paper_ingestion_metadata_failed",
         "paper_ingestion_indexing_failed",
         "paper_ingestion_finalizing_failed",
+        "paper_ingestion_claim_failed",
         "document_reflow_failed",
     }
 )

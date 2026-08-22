@@ -188,6 +188,40 @@ def test_expired_worker_lease_requeues_the_existing_dispatch() -> None:
     db.flush.assert_called_once()
 
 
+def test_stale_unclaimed_pdf_job_uses_composition_recovery_hook() -> None:
+    job = _job(status=JobStatus.PENDING)
+    job.operation = JobOperation.PDF_PROCESS.value
+    job.document_id = uuid4()
+    dispatch = JobDispatch(
+        job_id=job.id,
+        task_name="upload_and_process_file",
+        queue="document",
+        kwargs={},
+        status=JobDispatchStatus.PUBLISHED.value,
+        published_at=datetime.now(UTC) - timedelta(hours=2),
+    )
+    job.dispatch = dispatch
+    result = MagicMock()
+    result.all.return_value = [job]
+    db = MagicMock(spec=Session)
+    db.scalars.return_value = result
+    recover = MagicMock()
+
+    recovered = job_repository.recover_stale_unclaimed_pdf_jobs(
+        db,
+        limit=10,
+        max_age=timedelta(hours=1),
+        recover_pdf=recover,
+    )
+
+    assert recovered == 1
+    recover.assert_called_once_with(db, job)
+    statement = str(db.scalars.call_args.args[0])
+    assert "job_dispatches.available_at" in statement
+    assert "job_dispatches.published_at IS NOT NULL" in statement
+    db.flush.assert_called_once()
+
+
 def test_expired_conversation_generation_fails_instead_of_replaying_the_turn() -> None:
     from app.bootstrap.adapters.conversation_job_recovery import (
         fail_interrupted_conversation_response,

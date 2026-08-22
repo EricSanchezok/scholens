@@ -11,6 +11,7 @@ from app.modules.jobs.infrastructure.dispatcher import run_job_dispatcher
 from app.bootstrap.adapters.conversation_job_recovery import (
     fail_interrupted_conversation_response,
 )
+from app.bootstrap.adapters.data_repair_jobs import recover_unclaimed_pdf_job
 from app.observability.diagnostics import close_diagnostic_snapshot_recorder
 from fastapi import FastAPI
 
@@ -26,6 +27,7 @@ async def app_lifespan(application: FastAPI) -> AsyncIterator[None]:
             run_job_dispatcher(
                 stop_dispatcher,
                 recover_conversation=fail_interrupted_conversation_response,
+                recover_unclaimed_pdf=recover_unclaimed_pdf_job,
             ),
             name="jobs-outbox-dispatcher",
         )

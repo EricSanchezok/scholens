@@ -181,6 +181,16 @@ export const SecureUploadUnavailable: Story = {
   },
 };
 
+export const ProcessingWorkerUnavailable: Story = {
+  args: {
+    attentionCount: 1,
+    ingestions: [row("failed", "queued", "paper_ingestion_claim_failed")],
+  },
+  play: expectedCopy(
+    "The processing worker could not start this import. The source is preserved for retry.",
+  ),
+};
+
 export const MinerUClassifiedFailures: Story = {
   args: {
     attentionCount: 6,

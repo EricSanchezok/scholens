@@ -215,6 +215,15 @@ verbatim quote for reanchoring, or the current completed PDF job whose result
 object key conflicts with its canonical Document. `--apply` and normal operator
 confirmation are required for writes.
 
+`maintenance recover-stuck-paper-ingestion --job-id <uuid>` is the dry-run-first
+incident command for one PDF dispatch that is still pending after publication.
+It requires at least a one-hour age by default, preserves existing Library and
+Project membership and quota ownership, marks the lost source task failed, and
+enqueues one idempotent replacement. The API dispatcher applies the same rule
+automatically after `JOB_UNCLAIMED_TIMEOUT_SECONDS`; a replacement is never
+automatically replaced a second time, so repeated infrastructure failure becomes
+an explicit retryable ingestion failure instead of an unbounded job chain.
+
 The local broker is `pyamqp://guest@127.0.0.1:55672//` when the Jobs profile is
 enabled.
 

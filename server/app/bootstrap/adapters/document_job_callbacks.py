@@ -128,6 +128,7 @@ SAFE_PDF_FAILURE_CODES = frozenset(
         "paper_ingestion_metadata_failed",
         "paper_ingestion_indexing_failed",
         "paper_ingestion_finalizing_failed",
+        "paper_ingestion_claim_failed",
     }
 )
 PDF_PROGRESS_FAILURE_CODES = {
