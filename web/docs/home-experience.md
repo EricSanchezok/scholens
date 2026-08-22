@@ -112,21 +112,21 @@ inline `200` SSE response remains a compatible fallback. Both paths use one
 standard SSE decoder. The stream accepts `start`, the stable-ID
 `assistant_item_start → delta → complete`
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
-`complete`, `cancelled`, and `error`. A provisional assistant item is rendered immediately,
-then atomically classified as `progress` or `final` by its completion event;
-`response_ready` supplies the complete persisted turn snapshot, and an optional
-`suggestions` event may supplement it before `complete` closes the stream. The
-client never infers phase from prose and never duplicates the text while moving
-it. Until classification, the stable item occupies the worklog's progress slot
-and uses the same message typography it retains if classified as progress, so
-the completion event changes ownership and disclosure without a visual-format
-flash. Progress and activity share one sequence and become an ordered worklog.
-The final answer remains outside that trace and is always visible.
+`complete`, `cancelled`, and `error`. The Server buffers model text until the
+complete node establishes its role. Text accompanying a runtime tool call may
+arrive as bounded `progress`; a `final` item arrives only after structured
+answer validation. `response_ready` supplies the complete persisted turn
+snapshot, and an optional `suggestions` event may supplement it before
+`complete` closes the stream. The client never infers phase from prose or
+renders an unvalidated final draft. Progress and activity share one sequence
+and become an ordered worklog. The final answer remains outside that trace and
+is always visible.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
-tool name. Adjacent tool entries are rendered as one category-count batch;
-progress text separates batches. Model reasoning, provider heartbeats, raw tool
-names, arguments, and return payloads are not product UI. Only final items may
+tool name. Adjacent tool entries with the same outcome are rendered as one
+category-count batch; outcome changes and progress text separate batches. Model
+reasoning, provider heartbeats, raw tool names, arguments, and return payloads
+are not product UI. Only final items may
 publish references. `response_ready` releases the Composer and completed-answer
 actions without waiting for a GET refetch, conversation title, or suggestion
 sidecar. `complete`, `cancelled`, and `error` are terminal. A dropped
@@ -370,9 +370,11 @@ against showing the same submitted prompt twice while a stream is active.
 Each generated response owns one `ConversationWorklog` before its final answer.
 During a run it opens by default; a final item collapses it unless the user has
 manually chosen a state. Persisted history starts collapsed. Expanded rows
-interleave concise progress with grouped tool batches, show at most two safe
-subject examples per batch, and never create nested tool disclosures. The
-summary is the only polite live-region announcement, so screen readers do not
+interleave concise progress with outcome-homogeneous tool batches, show at most
+two safe subject examples per batch, and never create nested tool disclosures.
+Each batch names its visible state, and the summary labels the reference count
+as cited sources rather than retrieval results. The summary is the only polite
+live-region announcement, so screen readers do not
 receive every tool update. The same semantic component is used on desktop and
 mobile, with compact responsive spacing and no inner scrolling surface.
 

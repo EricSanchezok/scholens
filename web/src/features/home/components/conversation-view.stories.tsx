@@ -684,7 +684,9 @@ export const MobileWorklogExpanded: Story = {
     const canvas = within(canvasElement);
     const disclosure = canvas.getByRole("button", { name: /已完成研究/ });
     await userEvent.click(disclosure);
-    await waitFor(() => expect(canvas.getByText("检索了 2 次")).toBeVisible());
+    await waitFor(() =>
+      expect(canvas.getByText("检索了 2 次 · 已完成")).toBeVisible(),
+    );
   },
 };
 
@@ -884,7 +886,7 @@ export const CompletedCollapsed: Story = {
   },
   play: async ({ canvasElement }) => {
     const disclosure = within(canvasElement).getByRole("button", {
-      name: "Research complete · 2 actions · 3 sources",
+      name: "Research complete · 2 actions · 3 cited sources",
     });
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
   },
@@ -902,6 +904,15 @@ export const PartialFailure: Story = {
         entries: [searchActivity, { ...readActivity, state: "failed" }],
       },
     }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const disclosure = canvas.getByRole("button", {
+      name: "Partially complete · 2 actions · 3 cited sources",
+    });
+    await userEvent.click(disclosure);
+    await expect(canvas.getByText("Searched 1 time · Completed")).toBeVisible();
+    await expect(canvas.getByText("Read 1 source · Failed")).toBeVisible();
   },
 };
 
