@@ -125,6 +125,11 @@ def enqueue_reprocess_job(
     new_reservation.job = persisted.job
     db.add(new_reservation)
     if reservation is not None:
+        # The self-referential supersession FK is immediate in PostgreSQL.
+        # Materialize its replacement before an autoflush can update the
+        # source reservation to point at that row. This remains part of the
+        # caller's transaction and therefore preserves atomic recovery.
+        db.flush()
         reservation.superseded_by_id = new_job_id
     if source_failure_code is not None:
         _source, failed = job_repository.fail(

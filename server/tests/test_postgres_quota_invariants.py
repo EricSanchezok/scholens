@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.bootstrap.adapters.data_repair_jobs import recover_unclaimed_pdf_job
 from app.bootstrap.adapters.billing_capacity import BillingProjectCapacity
 from app.bootstrap.adapters.project_repository import project_repository
 from app.bootstrap.adapters.upload_reservations import reserve_upload
@@ -33,6 +34,7 @@ from app.modules.identity.application.identity import Identity
 from app.modules.identity.infrastructure.application_gateway import (
     SqlAlchemyIdentityGateway,
 )
+from app.modules.jobs.infrastructure.models import DurableJob
 from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBackfill
 from app.shared.application import (
     Actor,
@@ -950,6 +952,129 @@ def test_runtime_role_can_backfill_passages_without_trigger_ddl() -> None:
                     {"document_id": document_id},
                 )
             )
+    finally:
+        _delete_users(admin_engine, [user_id])
+        app_engine.dispose()
+        admin_engine.dispose()
+
+
+def test_unclaimed_pdf_recovery_preserves_the_supersession_foreign_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The replacement reservation must exist before the source points to it."""
+    assert APP_DATABASE_URL is not None and ADMIN_DATABASE_URL is not None
+    app_engine = create_engine(APP_DATABASE_URL)
+    admin_engine = create_engine(ADMIN_DATABASE_URL)
+    session_factory = sessionmaker(bind=app_engine, expire_on_commit=False)
+    users = _create_users(admin_engine, "pg-pdf-recovery", 1)
+    user_id, _email = users[0]
+    document_id = uuid4()
+    source_job_id = uuid4()
+    correlation_id = uuid4()
+    origin_operation_id = uuid4()
+    content_sha256 = uuid4().hex * 2
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO scholens.documents
+                    (id, sha256, original_filename, mime_type, size_bytes,
+                     s3_object_key, processing_status, processing_job_id,
+                     created_by_id)
+                VALUES
+                    (:document_id, :sha256, 'recovery.pdf', 'application/pdf',
+                     1024, :object_key, 'processing', :source_job_id, :user_id)
+                """
+            ),
+            {
+                "document_id": document_id,
+                "sha256": content_sha256,
+                "object_key": f"documents/{document_id}/source.pdf",
+                "source_job_id": source_job_id,
+                "user_id": user_id,
+            },
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO scholens.jobs
+                    (id, operation, correlation_id, origin_operation_id,
+                     requested_by_id, document_id, idempotency_key, status,
+                     payload)
+                VALUES
+                    (:job_id, 'pdf_process', :correlation_id,
+                     :origin_operation_id, :user_id, :document_id,
+                     :idempotency_key, 'pending',
+                     CAST(:payload AS jsonb))
+                """
+            ),
+            {
+                "job_id": source_job_id,
+                "correlation_id": correlation_id,
+                "origin_operation_id": origin_operation_id,
+                "user_id": user_id,
+                "document_id": document_id,
+                "idempotency_key": f"pg-pdf-recovery:{source_job_id}",
+                "payload": '{"recovery_attempt":0}',
+            },
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO scholens.upload_reservations
+                    (id, quota_owner_id, reserved_size_kb,
+                     reserved_reference_count, content_sha256,
+                     original_filename, display_name, source_kind)
+                VALUES
+                    (:job_id, :user_id, 1, 1, :sha256,
+                     'recovery.pdf', 'Recovery fixture', 'upload')
+                """
+            ),
+            {
+                "job_id": source_job_id,
+                "user_id": user_id,
+                "sha256": content_sha256,
+            },
+        )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.get_webhook_base_url",
+        lambda: "https://scholens.example.test",
+    )
+
+    try:
+        with session_factory.begin() as db:
+            source = db.get(DurableJob, source_job_id)
+            assert source is not None
+            recover_unclaimed_pdf_job(db, source)
+
+        with admin_engine.connect() as connection:
+            recovered = connection.execute(
+                text(
+                    """
+                    SELECT source.status,
+                           source.result ->> 'recovered_by_job_id'
+                             AS recovered_by_job_id,
+                           reservation.superseded_by_id,
+                           document.processing_job_id,
+                           replacement.payload ->> 'recovery_attempt'
+                             AS recovery_attempt
+                    FROM scholens.jobs AS source
+                    JOIN scholens.upload_reservations AS reservation
+                      ON reservation.id = source.id
+                    JOIN scholens.documents AS document
+                      ON document.id = source.document_id
+                    JOIN scholens.jobs AS replacement
+                      ON replacement.id = reservation.superseded_by_id
+                    WHERE source.id = :job_id
+                    """
+                ),
+                {"job_id": source_job_id},
+            ).one()
+        replacement_id = str(recovered.superseded_by_id)
+        assert recovered.status == "failed"
+        assert recovered.recovered_by_job_id == replacement_id
+        assert str(recovered.processing_job_id) == replacement_id
+        assert recovered.recovery_attempt == "1"
     finally:
         _delete_users(admin_engine, [user_id])
         app_engine.dispose()
