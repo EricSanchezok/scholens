@@ -35,12 +35,18 @@ SELECT format(
   'CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION %I',
   :'auth_migrator_role'
 ) \gexec
-SELECT format('ALTER SCHEMA auth OWNER TO %I', :'auth_migrator_role') \gexec
+SELECT format('ALTER SCHEMA auth OWNER TO %I', :'auth_migrator_role')
+FROM pg_namespace
+WHERE nspname = 'auth'
+  AND pg_get_userbyid(nspowner) <> :'auth_migrator_role' \gexec
 SELECT format(
   'CREATE SCHEMA IF NOT EXISTS scholens AUTHORIZATION %I',
   :'product_migrator_role'
 ) \gexec
-SELECT format('ALTER SCHEMA scholens OWNER TO %I', :'product_migrator_role') \gexec
+SELECT format('ALTER SCHEMA scholens OWNER TO %I', :'product_migrator_role')
+FROM pg_namespace
+WHERE nspname = 'scholens'
+  AND pg_get_userbyid(nspowner) <> :'product_migrator_role' \gexec
 
 REVOKE CREATE ON SCHEMA auth FROM PUBLIC;
 REVOKE CREATE ON SCHEMA scholens FROM PUBLIC;
