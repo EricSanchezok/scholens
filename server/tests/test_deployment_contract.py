@@ -1491,10 +1491,15 @@ def test_database_contract_shares_auth_and_isolates_scholens() -> None:
     bootstrap = (ECS / "database-bootstrap.sql").read_text(encoding="utf-8")
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert "CREATE SCHEMA IF NOT EXISTS auth" in bootstrap
-    assert "CREATE SCHEMA IF NOT EXISTS scholens" in bootstrap
+    assert "CREATE SCHEMA auth AUTHORIZATION" in bootstrap
+    assert "CREATE SCHEMA scholens AUTHORIZATION" in bootstrap
+    assert "to_regnamespace('auth') IS NULL" in bootstrap
+    assert "to_regnamespace('scholens') IS NULL" in bootstrap
     assert "pg_get_userbyid(nspowner) <> :'auth_migrator_role'" in bootstrap
     assert "pg_get_userbyid(nspowner) <> :'product_migrator_role'" in bootstrap
+    assert bootstrap.count("CROSS JOIN LATERAL aclexplode") == 2
+    assert "REVOKE ALL ON TABLES FROM %I" in bootstrap
+    assert "REVOKE ALL ON SEQUENCES FROM %I" in bootstrap
     assert "GRANT CREATE ON DATABASE" not in bootstrap
     assert "auth_migrator_role" in bootstrap
     assert "product_migrator_role" in bootstrap
