@@ -105,8 +105,14 @@ class _BlockedRuntime:
 
 
 class _ChatData:
-    def __init__(self, request: ConversationTurnCreateRequest) -> None:
+    def __init__(
+        self,
+        request: ConversationTurnCreateRequest,
+        *,
+        title_is_default: bool = False,
+    ) -> None:
         self.request = request
+        self.title_is_default = title_is_default
         self.suggestions: list[str] | None = None
         self.completed = False
         self.complete_duration_ms: int | None = None
@@ -123,7 +129,7 @@ class _ChatData:
             document_id=None,
             paper_context=LibraryPaperCollection(),
             tool_permissions=frozenset(),
-            title_is_default=False,
+            title_is_default=self.title_is_default,
         )
 
     def mentions(self, **_: object) -> MentionScope:
@@ -194,6 +200,11 @@ class _ChatData:
 class _Conversations:
     def __init__(self, chat_data: _ChatData) -> None:
         self._chat_data = chat_data
+        self.applied_titles: list[str] = []
+
+    def apply_initial_generated_title(self, *, title: str, **_: object) -> bool:
+        self.applied_titles.append(title)
+        return True
 
     def turns(self, **_: object) -> ConversationTurnsResponse:
         request = self._chat_data.request
@@ -735,6 +746,84 @@ async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
     assert chat_data.suggestions == ["Deepen?", "Verify?", "Apply?"]
     assert chat_data.complete_duration_ms is not None
     assert chat_data.complete_duration_ms >= 0
+
+
+@pytest.mark.asyncio
+async def test_resumed_async_generation_applies_initial_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = ConversationTurnCreateRequest(
+        turn_id=uuid4(),
+        response_id=uuid4(),
+        user_query="Why do agents need formal safety guarantees?",
+        locale="en",
+        time_zone="UTC",
+    )
+    chat_data = _ChatData(request, title_is_default=True)
+    executor = _Executor(chat_data)
+    suggestions_started = asyncio.Event()
+    suggestions_release = asyncio.Event()
+    suggestions_release.set()
+    _patch_stream_dependencies(monkeypatch)
+
+    async def generate_title(**_: object) -> str:
+        return "Formal agent safety"
+
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.conversation_chat._generate_initial_title",
+        generate_title,
+    )
+    operation = SimpleNamespace(
+        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
+        origin="test",
+        credential=None,
+    )
+    turn_start = ConversationTurnStart(
+        turn_id=request.turn_id,
+        response=PersistedChatResponse(
+            id=request.response_id,
+            turn_id=request.turn_id,
+            variant_index=1,
+            status="running",
+            content="",
+            references=None,
+            trace=None,
+            duration_ms=None,
+        ),
+        turn_operation_id=uuid4(),
+        correlation_id=uuid4(),
+        turn_created=False,
+        response_created=False,
+        generation_kind="initial",
+        suggestions=(),
+    )
+
+    source = await stream_conversation_agent(
+        request,
+        conversation_id=uuid4(),
+        client_ip="127.0.0.1",
+        executor=executor,
+        current_user=Actor(
+            id=7,
+            email="reader@example.com",
+            status="active",
+            email_verified=True,
+        ),
+        runtime=_Runtime(suggestions_started),
+        operation=operation,
+        operation_factory=SimpleNamespace(resume=lambda **_: operation),
+        suggestion_generator=_SuggestionGenerator(
+            suggestions_started,
+            suggestions_release,
+        ),
+        turn_start_override=turn_start,
+        limits_preacquired=True,
+    )
+
+    event_types = [_payload(event)["type"] async for event in source]
+
+    assert event_types[-1] == "complete"
+    assert executor.capabilities.conversations.applied_titles == ["Formal agent safety"]
 
 
 @pytest.mark.asyncio

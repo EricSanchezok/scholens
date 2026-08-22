@@ -241,7 +241,14 @@ def test_agent_metadata_requires_descriptions_on_nested_input_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_maps_unknown_tools_and_invalid_arguments() -> None:
+async def test_dispatcher_maps_unknown_tools_and_invalid_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counters: list[dict[str, str]] = []
+    monkeypatch.setattr(
+        "app.tooling.dispatcher.add_counter",
+        lambda _name, **kwargs: counters.append(kwargs["attributes"]),
+    )
     definition = ToolDefinition[Capabilities](
         name="query_tool",
         description="query",
@@ -279,6 +286,10 @@ async def test_dispatcher_maps_unknown_tools_and_invalid_arguments() -> None:
         )
     assert invalid.value.code == "tool_arguments_invalid"
     assert invalid.value.kind is FailureKind.INVALID_ARGUMENT
+    assert [counter["error_code"] for counter in counters] == [
+        "tool_not_found",
+        "tool_arguments_invalid",
+    ]
 
 
 @pytest.mark.asyncio

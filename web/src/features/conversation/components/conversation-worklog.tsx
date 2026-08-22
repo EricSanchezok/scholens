@@ -29,6 +29,7 @@ type ActivityBatch = {
   kind: "batch";
   id: string;
   sequence: number;
+  state: ConversationActivity["state"];
   activities: ConversationActivity[];
 };
 
@@ -47,13 +48,14 @@ export function groupWorklogEntries(
       continue;
     }
     const previous = rows.at(-1);
-    if (previous?.kind === "batch") {
+    if (previous?.kind === "batch" && previous.state === entry.state) {
       previous.activities.push(entry);
     } else {
       rows.push({
         kind: "batch",
         id: `batch:${entry.id}`,
         sequence: entry.sequence,
+        state: entry.state,
         activities: [entry],
       });
     }
@@ -142,7 +144,7 @@ function batchLabel(
   for (const activity of batch.activities) {
     counts.set(activity.category, (counts.get(activity.category) ?? 0) + 1);
   }
-  return [...counts.entries()]
+  const activity = [...counts.entries()]
     .map(([category, count]) =>
       t(`activity.batch.${category}`, {
         count,
@@ -152,6 +154,12 @@ function batchLabel(
       }),
     )
     .join(" · ");
+  const state = {
+    running: t("activity.state.running"),
+    succeeded: t("activity.state.succeeded"),
+    failed: t("activity.state.failed"),
+  }[batch.state];
+  return t("activity.batchState", { activity, state });
 }
 
 function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
@@ -202,7 +210,6 @@ function ActivityBatchRow({ batch }: { batch: ActivityBatch }) {
           </span>
         )}
       </span>
-      {failed && <span className="sr-only">{t("activity.state.failed")}</span>}
     </li>
   );
 }

@@ -67,6 +67,7 @@ change what the accepted record decided.
 - [ADR 0033: Segmented cross-page PDF anchors](./0033-segmented-cross-page-pdf-anchors.md)
 - [ADR 0034: Read-only shared profile avatars](./0034-read-only-shared-profile-avatars.md)
 - [ADR 0035: Installable Web App as the first mobile distribution boundary](./0035-installable-web-app-mobile-distribution.md)
+- [ADR 0036: Validated Conversation final output](./0036-validated-conversation-final-output.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

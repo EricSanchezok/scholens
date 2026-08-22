@@ -82,6 +82,17 @@ def _context() -> ToolExecutionContext:
     )
 
 
+def test_search_scope_schema_includes_complete_object_examples() -> None:
+    scope_schema = SearchKnowledgeInput.model_json_schema()["properties"]["scope"]
+
+    assert scope_schema["examples"] == [
+        {"kind": "library"},
+        {"kind": "all_accessible"},
+        {"kind": "project", "project_id": "00000000-0000-0000-0000-000000000000"},
+        {"kind": "paper", "document_id": "00000000-0000-0000-0000-000000000000"},
+    ]
+
+
 def _thread(*, document_id: UUID, project_id: UUID | None) -> ResearchSearchResult:
     return ResearchSearchResult(
         id=uuid4(),

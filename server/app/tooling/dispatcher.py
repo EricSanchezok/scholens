@@ -172,6 +172,7 @@ class ToolDispatcher(Generic[CapabilitiesT]):
         started = monotonic()
         status = "success"
         execution = "unknown"
+        error_code = "none"
         try:
             return await self._dispatch(
                 name=name,
@@ -179,8 +180,13 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 context=context,
                 access=access,
             )
+        except AppError as exc:
+            status = "failure"
+            error_code = exc.code
+            raise
         except BaseException:
             status = "failure"
+            error_code = "unexpected"
             raise
         finally:
             try:
@@ -192,6 +198,7 @@ class ToolDispatcher(Generic[CapabilitiesT]):
                 "execution": execution,
                 "status": status,
                 "source": "local",
+                "error_code": error_code,
             }
             add_counter("scholens.tool.calls", attributes=attributes)
             record_histogram(

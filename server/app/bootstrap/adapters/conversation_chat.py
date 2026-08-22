@@ -495,7 +495,7 @@ async def stream_conversation_agent(
                 ),
                 name=f"conversation-suggestions:{request.turn_id}",
             )
-        if turn_start.turn_created and conversation_scope.title_is_default:
+        if conversation_scope.title_is_default:
             title_seed = (
                 prior_history[0].content if prior_history else request.user_query
             )

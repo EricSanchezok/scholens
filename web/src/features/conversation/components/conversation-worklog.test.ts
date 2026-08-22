@@ -7,13 +7,14 @@ function activity(
   id: string,
   sequence: number,
   category: "search" | "read",
+  state: "running" | "succeeded" | "failed" = "succeeded",
 ): ConversationTraceEntry {
   return {
     kind: "activity",
     id,
     sequence,
     category,
-    state: "succeeded",
+    state,
   };
 }
 
@@ -50,6 +51,19 @@ describe("conversation worklog grouping", () => {
       "batch",
       "progress",
       "batch",
+    ]);
+  });
+
+  it("keeps successful and failed activities in separate batches", () => {
+    const rows = groupWorklogEntries([
+      activity("search-failed", 1, "search", "failed"),
+      activity("read-succeeded", 2, "read", "succeeded"),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows).toMatchObject([
+      { kind: "batch", state: "failed" },
+      { kind: "batch", state: "succeeded" },
     ]);
   });
 });

@@ -186,8 +186,19 @@ class SearchKnowledgeInput(ToolInput):
     scope: KnowledgeScope = Field(
         description=(
             "The explicit Scholens boundary to search. Prefer project for a repository "
-            "that is bound to one long-running research Project."
-        )
+            "that is bound to one long-running research Project. Always pass one of "
+            'these object shapes: {"kind":"library"}, '
+            '{"kind":"all_accessible"}, '
+            '{"kind":"project","project_id":"<uuid>"}, or '
+            '{"kind":"paper","document_id":"<uuid>"}; the paper shape may also '
+            'include "project_id":"<uuid>".'
+        ),
+        examples=[
+            {"kind": "library"},
+            {"kind": "all_accessible"},
+            {"kind": "project", "project_id": "00000000-0000-0000-0000-000000000000"},
+            {"kind": "paper", "document_id": "00000000-0000-0000-0000-000000000000"},
+        ],
     )
     kinds: list[
         Literal[
