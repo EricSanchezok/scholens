@@ -1,4 +1,4 @@
-"""SQLAlchemy gateway for bounded legacy data repair.
+"""SQLAlchemy gateway for bounded data repair and incident recovery.
 
 Repairs target only rows written by the pre-fix pipelines and follow the
 established operator-maintenance shape: one bounded candidate batch and
@@ -8,14 +8,16 @@ role never receives trigger or table DDL privileges.
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.database.models import (
     Document,
     DurableJob,
+    JobDispatch,
     UploadReservation,
 )
 from app.llm.utils import find_offsets
@@ -49,15 +51,21 @@ class ReprocessEnqueuer(Protocol):
     ) -> bool: ...
 
 
+class StuckJobRecoverer(Protocol):
+    def __call__(self, db: Session, source: DurableJob) -> None: ...
+
+
 class SqlDataRepair(DataRepairGateway):
     def __init__(
         self,
         db: Session,
         *,
         reprocess_enqueuer: ReprocessEnqueuer,
+        stuck_job_recoverer: StuckJobRecoverer,
     ) -> None:
         self._db = db
         self._reprocess_enqueuer = reprocess_enqueuer
+        self._stuck_job_recoverer = stuck_job_recoverer
 
     def fix_annotation_offsets(
         self,
@@ -206,6 +214,53 @@ class SqlDataRepair(DataRepairGateway):
             candidates=candidates,
             reprocessed=len(reprocessed),
             sample_job_ids=tuple(reprocessed[:5]),
+        )
+
+    def recover_stuck_paper_ingestion(
+        self,
+        *,
+        job_id: uuid.UUID,
+        min_age_seconds: int,
+        apply: bool,
+    ) -> ReprocessResult:
+        cutoff = datetime.now(UTC) - timedelta(seconds=min_age_seconds)
+        statement = (
+            select(DurableJob)
+            .join(JobDispatch, JobDispatch.job_id == DurableJob.id)
+            .join(Document, Document.id == DurableJob.document_id)
+            .where(
+                DurableJob.id == job_id,
+                DurableJob.operation == "pdf_process",
+                DurableJob.status == "pending",
+                DurableJob.requested_by_id.is_not(None),
+                Document.processing_status == "processing",
+                Document.processing_job_id == DurableJob.id,
+                JobDispatch.status == "published",
+                JobDispatch.published_at.is_not(None),
+                JobDispatch.published_at < cutoff,
+            )
+        )
+        if apply:
+            statement = statement.with_for_update()
+        source = self._db.scalar(statement)
+        recovery_attempt = source.payload.get("recovery_attempt", 0) if source else 0
+        if source is None or (
+            isinstance(recovery_attempt, int)
+            and not isinstance(recovery_attempt, bool)
+            and recovery_attempt >= 1
+        ):
+            return ReprocessResult(candidates=0, reprocessed=0)
+        if not apply:
+            return ReprocessResult(
+                candidates=1,
+                reprocessed=0,
+                sample_job_ids=(str(source.id),),
+            )
+        self._stuck_job_recoverer(self._db, source)
+        return ReprocessResult(
+            candidates=1,
+            reprocessed=1,
+            sample_job_ids=(str(source.id),),
         )
 
     def _reprocess_one(self, *, job_id: uuid.UUID) -> bool:

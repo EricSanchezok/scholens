@@ -2,6 +2,11 @@
 
 import os
 
+from scholens_runtime_contracts import (
+    EndpointConfigurationError,
+    resolve_internal_callback_base_url,
+)
+
 DEFAULT_CELERY_BROKER_URL = "pyamqp://guest@127.0.0.1:55672//"
 DEFAULT_WEBHOOK_BASE_URL = "http://127.0.0.1:7301"
 SQS_QUEUE_ENVIRONMENT = {
@@ -47,4 +52,11 @@ def get_celery_transport_options(
 
 def get_webhook_base_url(override: str | None = None) -> str:
     """Resolve the base URL the jobs worker calls back for webhooks."""
-    return override or os.environ.get("WEBHOOK_BASE_URL") or DEFAULT_WEBHOOK_BASE_URL
+    try:
+        return resolve_internal_callback_base_url(
+            configured_url=override or os.environ.get("WEBHOOK_BASE_URL"),
+            environment=os.environ.get("ENVIRONMENT", "development"),
+            fallback_url=DEFAULT_WEBHOOK_BASE_URL,
+        )
+    except EndpointConfigurationError as exc:
+        raise RuntimeError(str(exc)) from exc

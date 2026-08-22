@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from uuid import UUID
 
 import click
 
@@ -206,6 +207,46 @@ maintenance_group.add_command(
         "Repair annotation anchors whose offsets do not cover the quote",
     )
 )
+
+
+@maintenance_group.command("recover-stuck-paper-ingestion")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option("--job-id", required=True, type=click.UUID)
+@click.option(
+    "--min-age-seconds",
+    type=click.IntRange(60, 7 * 24 * 60 * 60),
+    default=3600,
+    show_default=True,
+)
+@click.option("--apply", is_flag=True, help="Apply recovery; otherwise only inspect.")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt when applying.")
+@click.pass_obj
+@guarded
+def recover_stuck_paper_ingestion(
+    state: CliState,
+    actor_email: str,
+    job_id: UUID,
+    min_age_seconds: int,
+    apply: bool,
+    yes: bool,
+) -> None:
+    """Recover one published PDF ingestion that never acquired a job lease."""
+    actor_user = load_user(actor_email)
+    if apply:
+        confirm(f"Recover stuck paper ingestion {job_id}?", yes=yes)
+    invoke = executor().command if apply else executor().query
+    result = invoke(
+        lambda capabilities: capabilities.data_repair.recover_stuck_paper_ingestion(
+            actor=current_admin(capabilities, actor_user.id),
+            operation=cli_operation("maintenance.recover-stuck-paper-ingestion"),
+            job_id=job_id,
+            min_age_seconds=min_age_seconds,
+            apply=apply,
+        )
+    )
+    emit(state, {"dry_run": not apply, **asdict(result)})
+
+
 maintenance_group.add_command(
     _repair_command(
         "reprocess-contaminated-documents",

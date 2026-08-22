@@ -10,3 +10,8 @@ password, and resolve under the AWS ElastiCache DNS suffix. Production database
 hosts must resolve under the AWS RDS DNS suffix. Development may use ordinary
 DNS names or IP addresses, but still rejects URL delimiters, whitespace, and
 invalid ports.
+
+Internal Jobs callback bases are also validated here. Production requires an
+explicit HTTP(S) authority and rejects loopback or non-routable hosts,
+credentials, paths, queries, and fragments; development may use an explicitly
+supplied loopback fallback.

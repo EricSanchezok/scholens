@@ -1022,6 +1022,11 @@ def test_api_and_dependency_failures_have_actionable_alarms_and_dashboard() -> N
             environment["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] == "DELTA"
         )
 
+    recovery_alarm = resources["PdfUnclaimedRecoveryAlarm"]["Properties"]
+    assert recovery_alarm["MetricName"] == "scholens.jobs.pdf_unclaimed_recoveries"
+    assert recovery_alarm["Threshold"] == 1
+    assert recovery_alarm["TreatMissingData"] == "notBreaching"
+
     target_alarm = resources["ApiTarget5xxAlarm"]["Properties"]
     assert target_alarm["Namespace"] == "AWS/ApplicationELB"
     assert target_alarm["MetricName"] == "HTTPCode_Target_5XX_Count"
@@ -1303,6 +1308,27 @@ def test_workers_use_sqs_without_a_result_backend_or_beat() -> None:
         assert f"--queues={queue}" in runtime
     assert "celery beat" not in runtime
     assert "AWS::Scheduler::Schedule" in runtime
+
+
+def test_every_job_producer_has_the_same_validated_callback_base() -> None:
+    resources = load_template("scholens-production.yml")["Resources"]
+    expected = "http://scholens-api.production.svc.sanchezcloud:8000"
+    for task_definition, container_name in (
+        ("ApiTaskDefinition", "api"),
+        ("ConversationWorkerTaskDefinition", "conversation-worker"),
+        ("DocumentWorkerTaskDefinition", "document-worker"),
+        ("ResearchWorkerTaskDefinition", "research-worker"),
+        ("MaintenanceWorkerTaskDefinition", "maintenance-worker"),
+        ("SchedulerTaskDefinition", "scheduler"),
+    ):
+        containers = resources[task_definition]["Properties"]["ContainerDefinitions"]
+        container = next(item for item in containers if item["Name"] == container_name)
+        environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+        assert environment["WEBHOOK_BASE_URL"] == expected
+
+    api = resources["ApiTaskDefinition"]["Properties"]["ContainerDefinitions"][0]
+    api_environment = {item["Name"]: item["Value"] for item in api["Environment"]}
+    assert api_environment["JOB_UNCLAIMED_TIMEOUT_SECONDS"] == "3600"
 
 
 def test_production_uses_the_unified_migration_cli_and_gunicorn_runtime() -> None:

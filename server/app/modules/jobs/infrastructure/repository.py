@@ -477,6 +477,42 @@ class JobRepository:
         return len(expired_jobs)
 
     @staticmethod
+    def recover_stale_unclaimed_pdf_jobs(
+        db: Session,
+        *,
+        limit: int,
+        max_age: timedelta,
+        recover_pdf: Callable[[Session, DurableJob], None],
+    ) -> int:
+        """Replace published PDF work that never acquired its Server lease."""
+        cutoff = datetime.now(UTC) - max_age
+        stale_jobs = list(
+            db.scalars(
+                select(DurableJob)
+                .join(JobDispatch, JobDispatch.job_id == DurableJob.id)
+                .where(
+                    DurableJob.operation == JobOperation.PDF_PROCESS.value,
+                    DurableJob.status == JobStatus.PENDING.value,
+                    DurableJob.requested_by_id.is_not(None),
+                    DurableJob.document_id.is_not(None),
+                    JobDispatch.status == JobDispatchStatus.PUBLISHED.value,
+                    JobDispatch.published_at.is_not(None),
+                    # ``available_at`` retains the completed publish lease and
+                    # is covered by ix_job_dispatches_pending. Using it keeps
+                    # the per-poll stale check bounded as dispatch history grows.
+                    JobDispatch.available_at < cutoff,
+                )
+                .order_by(JobDispatch.available_at, DurableJob.id)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            ).all()
+        )
+        for job in stale_jobs:
+            recover_pdf(db, job)
+        db.flush()
+        return len(stale_jobs)
+
+    @staticmethod
     def complete(
         db: Session,
         *,

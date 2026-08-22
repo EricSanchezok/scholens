@@ -27,24 +27,34 @@ MAX_BACKOFF_SECONDS = 60
 PUBLISH_LEASE = timedelta(
     seconds=float(os.getenv("JOB_DISPATCH_PUBLISH_LEASE_SECONDS", "30"))
 )
+UNCLAIMED_PDF_MAX_AGE = timedelta(
+    seconds=float(os.getenv("JOB_UNCLAIMED_TIMEOUT_SECONDS", "3600"))
+)
+if UNCLAIMED_PDF_MAX_AGE <= timedelta(0):
+    raise RuntimeError("JOB_UNCLAIMED_TIMEOUT_SECONDS must be positive")
 
 
 def _reserve_dispatches(
     *,
     limit: int,
     recover_conversation: Callable[[Session, DurableJob], None] | None,
+    recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None,
 ) -> tuple[ReservedJobDispatch, ...]:
     """Lease a batch in one short progress transaction."""
+    recovered_count = 0
+    recovered_pdf_count = 0
     with SessionLocal() as db:
         recovered_count = job_repository.recover_expired_leases(
             db,
             limit=limit,
             recover_conversation=recover_conversation,
         )
-        if recovered_count:
-            logger.warning(
-                "jobs.leases.recovered",
-                extra={"recovered_count": recovered_count},
+        if recover_unclaimed_pdf is not None:
+            recovered_pdf_count = job_repository.recover_stale_unclaimed_pdf_jobs(
+                db,
+                limit=limit,
+                max_age=UNCLAIMED_PDF_MAX_AGE,
+                recover_pdf=recover_unclaimed_pdf,
             )
         dispatches = job_repository.reserve_dispatches(
             db,
@@ -52,6 +62,20 @@ def _reserve_dispatches(
             lease=PUBLISH_LEASE,
         )
         db.commit()
+    if recovered_count:
+        logger.warning(
+            "jobs.leases.recovered",
+            extra={"recovered_count": recovered_count},
+        )
+    if recovered_pdf_count:
+        add_counter(
+            "scholens.jobs.pdf_unclaimed_recoveries",
+            value=recovered_pdf_count,
+        )
+        logger.error(
+            "jobs.pdf_unclaimed.recovered",
+            extra={"recovered_count": recovered_pdf_count},
+        )
     return dispatches
 
 
@@ -93,6 +117,7 @@ def dispatch_pending_jobs_once(
     *,
     limit: int = DISPATCH_BATCH_SIZE,
     recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+    recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None = None,
 ) -> int:
     """Publish outside a DB transaction, then persist each delivery outcome."""
     started = monotonic()
@@ -100,6 +125,7 @@ def dispatch_pending_jobs_once(
     dispatches = _reserve_dispatches(
         limit=limit,
         recover_conversation=recover_conversation,
+        recover_unclaimed_pdf=recover_unclaimed_pdf,
     )
     with instrumented_span(
         "jobs.outbox.dispatch",
@@ -171,6 +197,7 @@ async def run_job_dispatcher(
     stop: asyncio.Event,
     *,
     recover_conversation: Callable[[Session, DurableJob], None] | None = None,
+    recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None = None,
 ) -> None:
     """Continuously drain the outbox without blocking the ASGI event loop."""
     while not stop.is_set():
@@ -178,6 +205,7 @@ async def run_job_dispatcher(
             published = await asyncio.to_thread(
                 dispatch_pending_jobs_once,
                 recover_conversation=recover_conversation,
+                recover_unclaimed_pdf=recover_unclaimed_pdf,
             )
         except Exception:
             logger.exception("jobs.outbox.dispatch_failed")

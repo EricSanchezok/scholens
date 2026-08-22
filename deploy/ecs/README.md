@@ -107,6 +107,18 @@ The shared API cache identity is limited to rate, concurrency, translation, and 
 `scholens:conversation-events:*` replay keys. The Jobs cache identity cannot access that
 Conversation namespace.
 
+API, Conversation worker, Jobs workers, and the scheduler receive the same
+private Cloud Map `WEBHOOK_BASE_URL`. Server-image job producers validate it at
+process startup and reject a missing or loopback production value. Jobs-image
+workloads independently validate that authority and rebase signed internal
+callback paths onto it, so an accepted task cannot retain a producer-local host.
+The API treats a PDF dispatch that remains unclaimed for one hour as lost,
+performs one idempotent replacement while preserving memberships and quota, and
+then exposes a retryable terminal failure rather than creating an unlimited
+recovery chain. Every automatic replacement increments
+`scholens.jobs.pdf_unclaimed_recoveries`; the production alarm pages on the
+first occurrence because healthy ingestion does not use this recovery path.
+
 The Web service accepts bounded, same-origin anonymous performance events at
 `/__telemetry/web-performance`. It writes low-cardinality `web_performance` JSON to the
 Web log group without user IDs, content, query strings, raw URLs, or client IPs. The

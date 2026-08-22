@@ -11,10 +11,12 @@ from scholens_job_contracts import JobQueue
 from src.observability import configure_jobs_observability
 from src.pdf import validate_pdf_runtime_configuration
 from src.task_protection import register_task_protection_signals
+from src.webhook_signing import callback_base_url
 
 load_dotenv()
 configure_jobs_observability()
 validate_pdf_runtime_configuration()
+callback_base_url()
 
 LOCAL_BROKER_URL = "pyamqp://guest@127.0.0.1:55672//"
 QUEUE_ENVIRONMENT = {

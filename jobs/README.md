@@ -6,6 +6,13 @@ for shared limits and resumable parser state, and return signed results to the
 Server webhook API. Celery has no result backend; PostgreSQL-owned jobs and
 signed callbacks are the durable state contract.
 
+Before doing provider or storage work, every task claims its durable Server
+job. Transient claim transport failures use bounded exponential Celery retry
+instead of being acknowledged as terminal worker failures. In production the
+Jobs runtime validates `WEBHOOK_BASE_URL` and pins every signed `/internal/v1/`
+request to that worker-owned authority; the path and query remain job-specific,
+but a stale producer-supplied host cannot redirect or strand a callback.
+
 ## PDF ingestion
 
 The PDF worker follows one explicit, local-first pipeline:
@@ -195,6 +202,8 @@ Production requires:
 - non-secret MinerU runtime policy (`MINERU_API_BASE_URL`, timeouts, and limits)
 - the `SCHOLENS_AI_*` profile variables and the selected provider credential
 - `JOBS_WEBHOOK_SIGNING_SECRET`
+- an explicit, non-loopback `WEBHOOK_BASE_URL` for the private Server callback
+  authority
 
 MinerU tokens are user-owned connections stored by Server, never Jobs process
 environment. Jobs fetches a token only after claiming an eligible PDF or

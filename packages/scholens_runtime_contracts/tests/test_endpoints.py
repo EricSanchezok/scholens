@@ -5,6 +5,7 @@ import pytest
 from scholens_runtime_contracts import (
     EndpointConfigurationError,
     resolve_cache_url,
+    resolve_internal_callback_base_url,
     validate_database_endpoint,
 )
 
@@ -103,3 +104,49 @@ def test_production_database_requires_rds_dns_and_valid_port() -> None:
             port="5432?sslmode=disable",
             environment="production",
         )
+
+
+def test_production_internal_callback_base_is_explicit_and_canonical() -> None:
+    assert (
+        resolve_internal_callback_base_url(
+            configured_url="HTTP://Scholens-Api.Production.SVC.SanchezCloud:8000/",
+            environment="production",
+        )
+        == "http://scholens-api.production.svc.sanchezcloud:8000"
+    )
+
+
+@pytest.mark.parametrize(
+    "configured_url",
+    [
+        None,
+        "http://127.0.0.1:7301",
+        "http://[::1]:7301",
+        "http://0.0.0.0:7301",
+        "http://169.254.10.20:7301",
+        "http://localhost:7301",
+        "ftp://api.example.com",
+        "http://user:secret@api.example.com",
+        "http://api.example.com/internal/v1",
+        "http://api.example.com?target=elsewhere",
+        "http://api.example.com#fragment",
+    ],
+)
+def test_production_internal_callback_base_rejects_unsafe_values(
+    configured_url: str | None,
+) -> None:
+    with pytest.raises(EndpointConfigurationError):
+        resolve_internal_callback_base_url(
+            configured_url=configured_url,
+            environment="production",
+        )
+
+
+def test_development_internal_callback_base_uses_loopback_fallback() -> None:
+    assert (
+        resolve_internal_callback_base_url(
+            environment="development",
+            fallback_url="http://127.0.0.1:7301",
+        )
+        == "http://127.0.0.1:7301"
+    )

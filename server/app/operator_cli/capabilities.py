@@ -16,7 +16,10 @@ from app.modules.operation_journal.application import OperationJournal
 from app.modules.operation_journal.infrastructure import (
     SqlAlchemyOperationJournalStore,
 )
-from app.bootstrap.adapters.data_repair_jobs import enqueue_reprocess_job
+from app.bootstrap.adapters.data_repair_jobs import (
+    enqueue_reprocess_job,
+    recover_unclaimed_pdf_job,
+)
 from app.modules.papers.application.data_repair import DataRepair
 from app.modules.papers.application.maintenance import (
     PassageMaintenance,
@@ -81,6 +84,7 @@ class OperatorCapabilities:
             SqlDataRepair(
                 self._session,
                 reprocess_enqueuer=enqueue_reprocess_job,
+                stuck_job_recoverer=recover_unclaimed_pdf_job,
             ),
             journal=self._journal,
         )

@@ -738,6 +738,12 @@ constraints remain authoritative for repeated and concurrent uploads. `DELETE
 /api/v1/paper-ingestions/{job_id}` owns cancellation; cancelled jobs reject
 replay and ignore late worker callbacks. The worker reports bounded lifecycle
 stages and heartbeats, while the Server owns terminal timeout/failure policy.
+Production callback authorities fail closed at process startup and Jobs pins
+signed internal paths to its own validated Server base. A published PDF task
+that never claims its durable job is replaced once after the configured
+one-hour bound; the source reservation is superseded without removing an
+existing membership or charging storage/reference quota again. A second lost
+claim becomes the retryable `paper_ingestion_claim_failed` terminal state.
 Ingestion attaches memberships atomically: the uploader's personal Library
 membership is the default even for Project-targeted uploads, and the Project
 membership is an independent idempotent association. `add_to_library=false`

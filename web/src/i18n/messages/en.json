@@ -644,6 +644,7 @@
           "paper_ingestion_metadata_failed": "The text was read, but paper metadata extraction failed.",
           "paper_ingestion_indexing_failed": "The text was read, but the search index could not be built.",
           "paper_ingestion_finalizing_failed": "Processing finished, but the paper could not be added to the library.",
+          "paper_ingestion_claim_failed": "The processing worker could not start this import. The source is preserved for retry.",
           "unknown": "Processing failed. The source is preserved for retry."
         }
       },

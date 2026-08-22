@@ -177,6 +177,31 @@ def test_runtime_entrypoint_executes_dedicated_conversation_worker(
     assert "--queues=conversation" in executed[0]
 
 
+@pytest.mark.parametrize("command", ["api", "conversation-worker"])
+def test_job_producer_runtime_fails_before_exec_without_production_callback(
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "DATABASE_HOST",
+        "sanchezcloud-pg.abc.ap-southeast-1.rds.amazonaws.com",
+    )
+    monkeypatch.setenv("DATABASE_PORT", "5432")
+    monkeypatch.setenv("DATABASE_NAME", "sanchezcloud")
+    monkeypatch.setenv("DATABASE_USERNAME", "scholens_app")
+    monkeypatch.setenv("DATABASE_PASSWORD", "secret")
+    monkeypatch.delenv("WEBHOOK_BASE_URL", raising=False)
+    monkeypatch.setattr("sys.argv", ["runtime_entrypoint", command])
+    executed: list[tuple[object, ...]] = []
+    monkeypatch.setattr(os, "execvp", lambda *args: executed.append(args))
+
+    with pytest.raises(RuntimeError, match="WEBHOOK_BASE_URL is required"):
+        main()
+
+    assert executed == []
+
+
 def test_migration_fails_when_identity_ledger_is_not_exact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

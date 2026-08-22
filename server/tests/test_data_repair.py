@@ -11,18 +11,23 @@ from uuid import UUID, uuid4
 import pytest
 from app.modules.papers.infrastructure.data_repair import ReprocessEnqueuer
 from app.modules.papers.infrastructure.data_repair import SqlDataRepair
-from app.bootstrap.adapters.data_repair_jobs import enqueue_reprocess_job
+from app.bootstrap.adapters.data_repair_jobs import (
+    enqueue_reprocess_job,
+    recover_unclaimed_pdf_job,
+)
 
 
 def _repair(
     db: MagicMock,
     *,
     enqueuer: ReprocessEnqueuer | Callable[..., bool] | None = None,
+    recoverer: Callable[..., None] | None = None,
 ) -> SqlDataRepair:
     """Build the gateway with a stub composition enqueuer."""
     return SqlDataRepair(
         db,
         reprocess_enqueuer=enqueuer if enqueuer is not None else MagicMock(),
+        stuck_job_recoverer=recoverer if recoverer is not None else MagicMock(),
     )
 
 
@@ -231,6 +236,42 @@ def test_reprocess_contaminated_documents_apply_skips_missing_document() -> None
     enqueuer.assert_not_called()
 
 
+def test_recover_stuck_paper_ingestion_is_dry_run_by_default() -> None:
+    db = MagicMock()
+    source = _source_job(job_id=uuid4())
+    source.status = "pending"
+    db.scalar.return_value = source
+    recoverer = MagicMock()
+
+    result = _repair(db, recoverer=recoverer).recover_stuck_paper_ingestion(
+        job_id=source.id,
+        min_age_seconds=3600,
+        apply=False,
+    )
+
+    assert result.candidates == 1
+    assert result.reprocessed == 0
+    assert result.sample_job_ids == (str(source.id),)
+    recoverer.assert_not_called()
+
+
+def test_recover_stuck_paper_ingestion_apply_delegates_locked_candidate() -> None:
+    db = MagicMock()
+    source = _source_job(job_id=uuid4())
+    source.status = "pending"
+    db.scalar.return_value = source
+    recoverer = MagicMock()
+
+    result = _repair(db, recoverer=recoverer).recover_stuck_paper_ingestion(
+        job_id=source.id,
+        min_age_seconds=3600,
+        apply=True,
+    )
+
+    assert result.reprocessed == 1
+    recoverer.assert_called_once_with(db, source)
+
+
 def test_reprocess_existing_document_does_not_reserve_storage_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -258,3 +299,81 @@ def test_reprocess_existing_document_does_not_reserve_storage_again(
     created_reservation = db.add.call_args.args[0]
     assert created_reservation.reserved_size_kb == 0
     assert created_reservation.reserved_reference_count == 0
+
+
+def test_unclaimed_pdf_recovery_supersedes_source_and_preserves_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock()
+    source = _source_job(job_id=uuid4())
+    source.status = "pending"
+    source.operation = "pdf_process"
+    source.payload = {"recovery_attempt": 0}
+    document = _document()
+    document.id = source.document_id
+    document.processing_status = "processing"
+    document.processing_job_id = source.id
+    reservation = MagicMock()
+    db.scalar.return_value = document
+    db.get.return_value = reservation
+    persisted_job = MagicMock()
+    enqueue = MagicMock(return_value=SimpleNamespace(created=True, job=persisted_job))
+    fail = MagicMock(return_value=(source, True))
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.job_repository.enqueue",
+        enqueue,
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.job_repository.fail",
+        fail,
+    )
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.get_webhook_base_url",
+        lambda: "http://127.0.0.1:7301",
+    )
+
+    recover_unclaimed_pdf_job(db, source)
+
+    request = enqueue.call_args.kwargs["request"]
+    assert request.payload["recovery_attempt"] == 1
+    assert request.task_kwargs["claim_url"].endswith(f"/{request.job_id}/claim")
+    assert reservation.superseded_by_id == request.job_id
+    assert document.processing_job_id == request.job_id
+    assert document.processing_status == "processing"
+    fail.assert_called_once_with(
+        db,
+        job_id=source.id,
+        error_code="paper_ingestion_claim_failed",
+        result={"recovered_by_job_id": str(request.job_id)},
+    )
+
+
+def test_second_unclaimed_pdf_failure_becomes_terminal_without_another_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = MagicMock()
+    source = _source_job(job_id=uuid4())
+    source.status = "pending"
+    source.operation = "pdf_process"
+    source.payload = {"recovery_attempt": 1}
+    document = _document()
+    document.id = source.document_id
+    document.processing_status = "processing"
+    document.processing_job_id = source.id
+    db.scalar.return_value = document
+    fail = MagicMock(return_value=(source, True))
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.job_repository.fail",
+        fail,
+    )
+    enqueue = MagicMock()
+    monkeypatch.setattr(
+        "app.bootstrap.adapters.data_repair_jobs.enqueue_reprocess_job",
+        enqueue,
+    )
+
+    recover_unclaimed_pdf_job(db, source)
+
+    enqueue.assert_not_called()
+    assert document.processing_status == "failed"
+    assert document.parser_warning_code == "processing_failed"

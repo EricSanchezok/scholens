@@ -9,9 +9,38 @@ import os
 import time
 import uuid
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
+from scholens_runtime_contracts import resolve_internal_callback_base_url
+
+DEFAULT_WEBHOOK_BASE_URL = "http://127.0.0.1:7301"
+
+
+def callback_base_url() -> str:
+    """Resolve the one validated internal Server authority for this runtime."""
+    return resolve_internal_callback_base_url(
+        configured_url=os.getenv("WEBHOOK_BASE_URL"),
+        environment=os.getenv("ENVIRONMENT", "development"),
+        fallback_url=DEFAULT_WEBHOOK_BASE_URL,
+    )
+
+
+def _production_callback_url(url: str) -> str:
+    """Pin signed production callbacks to the worker's validated Server base."""
+    if os.getenv("ENVIRONMENT", "development").casefold() != "production":
+        return url
+    base_url = callback_base_url()
+    parsed = urlsplit(url)
+    if (
+        not parsed.path.startswith("/internal/v1/")
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        raise RuntimeError("invalid_internal_callback_url")
+    base = urlsplit(base_url)
+    return urlunsplit((base.scheme, base.netloc, parsed.path, parsed.query, ""))
 
 
 def _secret() -> bytes:
@@ -27,6 +56,7 @@ def post_signed_json(
     *,
     timeout: float,
 ) -> requests.Response:
+    url = _production_callback_url(url)
     body = encode_json_body(payload)
     timestamp = str(int(time.time()))
     nonce = str(uuid.uuid4())
