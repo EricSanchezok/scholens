@@ -433,15 +433,20 @@ connector is available, the agent says so instead of fabricating a search.
 The model receives an injected absolute time for the request's validated IANA
 time zone, so current-date answers do not rely on model memory. Tool results are
 bounded and projected before returning to the model. `Agent.iter()` exposes
-complete model and tool nodes to the harness: text from a response that calls a
-tool completes as a `progress` item, while the accepted no-tool response
-completes as the `final` item. Both use stable IDs and share a monotonic sequence
-with sanitized activity records. The persisted trace contains ordered progress
-and activity entries; progress is bounded before persistence, and final answer
-text remains in the selected `ConversationResponse` row. Runtime-to-adapter communication uses the
-public typed event models directly plus one private typed result envelope, so
-there is no second untyped event protocol to drift. Empty assistant items are
-rejected and a turn cannot complete without visible final content.
+complete model and tool nodes to the harness, which buffers model text until the
+node establishes its role. Text accompanying an ordinary runtime tool call may
+complete as bounded `progress`. A run can terminate only through the structured
+`final_answer` output; its visible answer and private citation protocol validate
+before any final delta or persistence. Plain terminal text, empty visible
+content, citation-only output, and copied private protocol receive bounded model
+retries and then fail through the stable invalid-response path.
+
+Progress and final items use stable IDs and share a monotonic sequence with
+sanitized activity records. The persisted trace contains ordered progress and
+activity entries, while final answer text remains in the selected
+`ConversationResponse` row. Runtime-to-adapter communication uses the public
+typed event models directly plus one private typed result envelope, so there is
+no second untyped event protocol to drift.
 
 The public Conversation stream exposes item lifecycle events, sanitized
 activity, final-only server-generated references, a persisted `response_ready`
@@ -553,6 +558,10 @@ replay row. Conversation write invocation identities include conversation,
 turn, tool-call arguments, and tool name; MCP identities use the authenticated
 token session and JSON-RPC request identity. Replays return the persisted
 result, and conflicting argument reuse returns `tool_invocation_conflict`.
+Conversation-local argument validation failures return sanitized field errors
+through a bounded `ModelRetry`; raw arguments stay private. Metrics include the
+stable error code so repeated schema mismatches can be distinguished from
+dependency and execution failures.
 
 Durable-job tools use bounded server-side observation instead of model-driven
 busy polling. Single ingestion, retry, exact job lookup, and bounded batch

@@ -311,9 +311,11 @@ must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
 `suggestions`, `complete`, `cancelled`, and `error` events and treat those last
 three as terminal. `response_ready` carries the complete persisted turn snapshot and
 unblocks response actions; `suggestions` is an optional late sidecar update.
-Assistant items begin as
-provisional and are authoritatively classified on completion as `progress` or
-`final`; clients move the same stable item instead of duplicating its text.
+The runtime buffers model text until the complete model node establishes its
+role. Text accompanying an ordinary tool call may be published as bounded
+`progress`; a `final` item is published only after the model submits the
+structured `final_answer` output and its visible content and private citation
+protocol validate. Plain text cannot terminate a Conversation run.
 Progress and activity entries share a monotonic sequence. Requests include the
 UI locale and a validated IANA time zone. `activity` contains only a sanitized
 category/state/subject projection and intentionally omits the raw tool name.
@@ -322,8 +324,9 @@ never part of the public stream. References may be emitted only for the final
 assistant item. The runtime passes these same typed event models to the HTTP
 adapter rather than maintaining a second dictionary-shaped protocol. Completed
 assistant items must contain visible text; user-visible progress is bounded to
-4,000 characters, and a response without a visible final answer is failed
-instead of persisting an empty response variant. A turn owns the immutable user
+4,000 characters, and a response without a validated visible final answer is
+failed instead of persisting an empty or internal-draft response variant. A
+turn owns the immutable user
 prompt, typed paper-context snapshot, and one or more generated responses.
 Parent and selected-child pointers form a persistent tree, while the
 Conversation selects one root and publishes a monotonic path revision. Agent
@@ -541,6 +544,11 @@ general-purpose, and manual `paper_context` edits plus the resolved connector
 inventory are injected so the model acts on real capabilities. External
 literature discovery stays connector-owned.
 
+Local tool argument validation returns only sanitized field locations, error
+types, and messages to the model through a bounded retry. Raw arguments remain
+private. Tool error metrics retain the stable tool name, provider, and error
+code so repeated schema mismatches are observable without logging payloads.
+
 Unified Conversation agent workflow:
 
 ```mermaid
@@ -551,7 +559,7 @@ flowchart LR
     A --> T["Authorized workspace and discovery tools"]
     T --> S["Validated, bounded results"]
     S --> A
-    A --> C["Source registration and citation materialization"]
-    C --> R["Streamed response with sanitized activity"]
+    A --> C["Validated final answer and citation materialization"]
+    C --> R["Sanitized activity and response events"]
     R --> U
 ```

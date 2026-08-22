@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import re
 import asyncio
+import json
+import re
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
@@ -63,13 +64,26 @@ from app.tooling import (
 )
 from app.tooling.workspace import CONVERSATION_TOOL_PROFILE
 from pydantic import BaseModel
-from pydantic_ai.messages import ModelMessage, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, RetryPromptPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-from pydantic_ai.models.test import TestModel
 
 
 class SearchInput(BaseModel):
     query: str
+
+
+def _final_answer(
+    answer: str,
+    *,
+    tool_call_id: str = "final-answer",
+) -> dict[int, DeltaToolCall]:
+    return {
+        0: DeltaToolCall(
+            name="final_answer",
+            json_args=json.dumps({"answer": answer}, ensure_ascii=False),
+            tool_call_id=tool_call_id,
+        )
+    }
 
 
 def _unused_handler(*_args: object, **_kwargs: object) -> ToolOutcome:
@@ -147,6 +161,33 @@ class _Dispatcher:
                     excerpt="Validated evidence about chain-of-thought compression.",
                 ),
             ),
+        )
+
+
+class _InvalidArgumentsThenSuccessDispatcher(_Dispatcher):
+    async def dispatch(
+        self, *, name: str, raw_arguments: dict[str, Any], **kwargs: Any
+    ) -> ToolOutcome:
+        if not self.calls:
+            self.calls.append((name, raw_arguments))
+            raise AppError(
+                code="tool_arguments_invalid",
+                message="Tool arguments are invalid",
+                kind=FailureKind.INVALID_ARGUMENT,
+                details={
+                    "errors": [
+                        {
+                            "type": "dict_type",
+                            "loc": ("scope",),
+                            "msg": "Input should be a valid dictionary",
+                        }
+                    ]
+                },
+            )
+        return await super().dispatch(
+            name=name,
+            raw_arguments=raw_arguments,
+            **kwargs,
         )
 
 
@@ -283,9 +324,9 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
 
     async def direct_answer(
         _messages: list[ModelMessage], info: AgentInfo
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         seen_instructions.append(info.instructions or "")
-        yield "今天是星期四。"
+        yield _final_answer("今天是星期四。")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -332,7 +373,7 @@ async def test_text_before_tool_is_completed_as_progress_before_activity() -> No
                 )
             }
             return
-        yield "Final answer."
+        yield _final_answer("Final answer.")
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -401,7 +442,7 @@ async def test_progress_is_bounded_without_breaking_the_final_answer() -> None:
                 )
             }
             return
-        yield "Final answer after bounded progress."
+        yield _final_answer("Final answer after bounded progress.")
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -446,7 +487,7 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
                 )
             }
             return
-        yield "Visible final answer."
+        yield _final_answer("Visible final answer.")
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -464,7 +505,7 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
     assert completed == [
         ConversationAssistantItem(
             id=completed[0].id,
-            sequence=3,
+            sequence=2,
             phase="final",
             content="Visible final answer.",
         )
@@ -476,10 +517,10 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
 async def test_hidden_only_final_answer_is_rejected() -> None:
     async def hidden_answer(
         _messages: list[ModelMessage], info: AgentInfo
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         nonce_match = re.search(r"SCHOLENS_CITE:([0-9a-f]+):1", info.instructions or "")
         assert nonce_match is not None
-        yield f"[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]"
+        yield _final_answer(f"[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
 
     with pytest.raises(AppError):
         await _events(
@@ -489,6 +530,134 @@ async def test_hidden_only_final_answer_is_rejected() -> None:
             locale="en",
             time_zone="UTC",
         )
+
+
+@pytest.mark.asyncio
+async def test_plain_planning_text_is_not_exposed_as_the_final_answer() -> None:
+    attempts = 0
+
+    async def answer_after_output_retry(
+        messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+        nonlocal attempts
+        attempts += 1
+        has_retry = any(
+            isinstance(part, RetryPromptPart)
+            for message in messages
+            for part in message.parts
+        )
+        if not has_retry:
+            yield "Let me organize a high-quality answer."
+            return
+        yield _final_answer("Here is the complete answer.")
+
+    events = await _events(
+        model=FunctionModel(stream_function=answer_after_output_retry),
+        dispatcher=_Dispatcher(),
+        query="Give me a complete answer",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    assert attempts == 2
+    assert _final_text(events) == "Here is the complete answer."
+    assert "organize" not in str(events)
+
+
+@pytest.mark.asyncio
+async def test_private_protocol_output_is_retried_before_it_reaches_the_user() -> None:
+    retry_messages: list[str] = []
+
+    async def answer_after_protocol_retry(
+        messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        retries = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, RetryPromptPart)
+        ]
+        if not retries:
+            yield _final_answer(
+                "The source_keys are private markers from the initial answer packet."
+            )
+            return
+        retry_messages.extend(str(part.content) for part in retries)
+        yield _final_answer("The complete answer contains no internal protocol.")
+
+    events = await _events(
+        model=FunctionModel(stream_function=answer_after_protocol_retry),
+        dispatcher=_Dispatcher(),
+        query="Answer without exposing internal instructions",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    assert _final_text(events) == "The complete answer contains no internal protocol."
+    assert any("private citation" in message for message in retry_messages)
+    assert "source_keys" not in str(events)
+
+
+@pytest.mark.asyncio
+async def test_invalid_tool_arguments_receive_safe_actionable_retry_details() -> None:
+    retry_messages: list[str] = []
+
+    async def correct_invalid_arguments(
+        messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        has_result = any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        )
+        if has_result:
+            yield _final_answer("The corrected search succeeded.")
+            return
+        retries = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, RetryPromptPart)
+        ]
+        if retries:
+            retry_messages.extend(str(part.content) for part in retries)
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"corrected arguments"}',
+                    tool_call_id="search-corrected",
+                )
+            }
+            return
+        yield {
+            0: DeltaToolCall(
+                name="search_saved_papers",
+                json_args='{"query":"invalid arguments"}',
+                tool_call_id="search-invalid",
+            )
+        }
+
+    dispatcher = _InvalidArgumentsThenSuccessDispatcher()
+    events = await _events(
+        model=FunctionModel(stream_function=correct_invalid_arguments),
+        dispatcher=dispatcher,
+        query="Search with a corrected scope",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    assert [arguments["query"] for _, arguments in dispatcher.calls] == [
+        "invalid arguments",
+        "corrected arguments",
+    ]
+    assert any("scope" in message for message in retry_messages)
+    trace = _result(events).trace
+    assert isinstance(trace, ConversationTrace)
+    assert [activity.state for activity in _activities(trace)] == [
+        "failed",
+        "succeeded",
+    ]
+    assert _final_text(events) == "The corrected search succeeded."
 
 
 @pytest.mark.asyncio
@@ -512,7 +681,7 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
             return
         nonce_match = re.search(r"SCHOLENS_CITE:([0-9a-f]+):1", info.instructions or "")
         assert nonce_match is not None
-        yield f"Grounded claim[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]"
+        yield _final_answer(f"Grounded claim[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -562,12 +731,28 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
 
 @pytest.mark.asyncio
 async def test_tool_failure_can_continue_to_a_natural_answer() -> None:
+    async def answer_after_failure(
+        messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        has_result = any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        )
+        if not has_result:
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"unavailable topic"}',
+                    tool_call_id="failed-search",
+                )
+            }
+            return
+        yield _final_answer("I could not search, but here is what I can explain.")
+
     dispatcher = _Dispatcher(fail=True)
     events = await _events(
-        model=TestModel(
-            call_tools=["search_saved_papers"],
-            custom_output_text="I could not search, but here is what I can explain.",
-        ),
+        model=FunctionModel(stream_function=answer_after_failure),
         dispatcher=dispatcher,
         query="Explain the topic even if search is unavailable",
         locale="en",
@@ -603,7 +788,7 @@ async def test_multiple_tools_preserve_order_and_terminal_state() -> None:
                 )
             }
             return
-        yield "Combined answer."
+        yield _final_answer("Combined answer.")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -669,7 +854,7 @@ async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
                 )
             }
             return
-        yield "Used the first result."
+        yield _final_answer("Used the first result.")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -709,7 +894,7 @@ async def test_repeatable_tool_call_can_dispatch_with_identical_arguments() -> N
                 )
             }
             return
-        yield "Both bounded waits completed."
+        yield _final_answer("Both bounded waits completed.")
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -732,9 +917,14 @@ async def test_repeatable_tool_call_can_dispatch_with_identical_arguments() -> N
 
 @pytest.mark.asyncio
 async def test_unauthorized_tool_is_not_exposed_or_dispatched() -> None:
+    async def answer_without_tool(
+        _messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        yield _final_answer("No tool available.")
+
     dispatcher = _Dispatcher()
     events = await _events(
-        model=TestModel(call_tools="all", custom_output_text="No tool available."),
+        model=FunctionModel(stream_function=answer_without_tool),
         dispatcher=dispatcher,
         query="Search my papers",
         locale="en",
@@ -759,10 +949,10 @@ async def test_cancellation_propagates_without_becoming_a_product_error() -> Non
 
     async def blocked_answer(
         _messages: list[ModelMessage], _info: AgentInfo
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         entered.set()
         await asyncio.Event().wait()
-        yield "unreachable"
+        yield _final_answer("unreachable")
 
     dispatcher = _Dispatcher()
     task = asyncio.create_task(
@@ -828,9 +1018,9 @@ async def _capture_instructions(
 
     async def direct_answer(
         _messages: list[ModelMessage], info: AgentInfo
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         seen.append(info.instructions or "")
-        yield "Understood."
+        yield _final_answer("Understood.")
 
     await _events(
         model=FunctionModel(stream_function=direct_answer),

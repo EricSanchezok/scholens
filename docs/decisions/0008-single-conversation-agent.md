@@ -2,6 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-08-05
+- Superseded in part: the provisional-text and plain-string final-answer
+  boundary is replaced by [ADR 0036](./0036-validated-conversation-final-output.md)
 
 ## Problem
 

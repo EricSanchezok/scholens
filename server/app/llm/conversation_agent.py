@@ -56,6 +56,7 @@ from app.modules.integrations.connectors.infrastructure.mcp import (
     ConnectorToolResolver,
     ResolvedConnectorToolSet,
 )
+from app.modules.integrations.connections.domain import IntegrationProvider
 from app.modules.papers.application.contracts.search import SelectedPaperCollection
 from app.modules.papers.application.contracts.citation import CitationResult
 from app.shared.application import (
@@ -78,19 +79,22 @@ from app.tooling import (
 )
 from app.tooling.source_extraction import extract_external_sources
 from app.tooling.workspace import CONVERSATION_TOOL_PROFILE
-from pydantic import TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic_ai import (
     Agent,
+    AgentRun,
     CallToolsNode,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
     ModelRequestNode,
+    ModelRetry,
     PartDeltaEvent,
     PartStartEvent,
     RunContext,
     TextPart,
     TextPartDelta,
     Tool,
+    ToolOutput,
     UsageLimits,
 )
 from pydantic_ai.messages import (
@@ -110,6 +114,7 @@ _MAX_AGENT_REQUESTS = 32
 _MAX_AGENT_TOOL_CALLS = 24
 _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
+_FINAL_OUTPUT_TOOL_NAME = "final_answer"
 
 _SCOPE_GRAVITY_TEXT: dict[ConversationScopeType, str] = {
     ConversationScopeType.GLOBAL: (
@@ -177,6 +182,28 @@ def _bounded_json(value: JsonValue) -> JsonValue:
     }
 
 
+def _contains_private_output_protocol(value: str) -> bool:
+    normalized = value.casefold()
+    return "source_keys" in normalized and any(
+        marker in normalized
+        for marker in ("private marker", "initial answer packet", "scholens_cite")
+    )
+
+
+def _tool_argument_retry_message(error: AppError) -> str:
+    errors = (error.details or {}).get("errors", [])
+    serialized = json.dumps(
+        errors,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    return (
+        "The tool arguments do not match the declared JSON schema. Correct the "
+        f"arguments and call the tool again. Validation errors: {serialized[:3_000]}"
+    )
+
+
 def _history_messages(history: Sequence[object]) -> list[ModelMessage]:
     messages: list[ModelMessage] = []
     for item in history:
@@ -237,6 +264,20 @@ class _ConversationAgentDependencies:
         return self.last_sequence
 
 
+class FinalAnswer(BaseModel):
+    """Validated model output accepted as the user-visible final answer."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    answer: str = Field(
+        min_length=1,
+        description=(
+            "The complete self-contained answer for the user. Do not include planning, "
+            "hidden reasoning, tool protocol instructions, or a promise to answer later."
+        ),
+    )
+
+
 @dataclass(slots=True)
 class _StreamedAssistantItem:
     id: str
@@ -244,7 +285,6 @@ class _StreamedAssistantItem:
     content: str
     packet: AnswerPacket
     parser: GroundedAnswerStreamParser
-    started: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,8 +418,14 @@ class ScholensConversationAgent:
         tools = self._tools(deps)
         profile = profile_for_reasoning(request.reasoning_level)
         model = self._model_factory(request.reasoning_level)
-        agent: Agent[_ConversationAgentDependencies, str] = Agent(
+        agent: Agent[_ConversationAgentDependencies, FinalAnswer] = Agent(
             model,
+            output_type=ToolOutput(
+                FinalAnswer,
+                name=_FINAL_OUTPUT_TOOL_NAME,
+                description="Submit the complete user-visible answer and end the run.",
+                max_retries=2,
+            ),
             deps_type=_ConversationAgentDependencies,
             tools=tools,
             instructions=instructions,
@@ -387,243 +433,44 @@ class ScholensConversationAgent:
             retries=2,
         )
 
+        @agent.output_validator
+        def validate_final_answer(
+            ctx: RunContext[_ConversationAgentDependencies],
+            output: FinalAnswer,
+        ) -> FinalAnswer:
+            if _contains_private_output_protocol(output.answer):
+                raise ModelRetry(
+                    "Submit only the self-contained answer for the user. Do not repeat "
+                    "private citation or tool protocol instructions."
+                )
+            packet = self._answer_packet(ctx.deps)
+            parser = GroundedAnswerStreamParser(packet.sources, nonce=nonce)
+            visible = parser.feed(output.answer) + parser.finish()
+            if not visible.strip():
+                raise ModelRetry(
+                    "The submitted answer has no user-visible content after private "
+                    "citation markers are removed. Submit the complete answer."
+                )
+            return output
+
         result_seen = False
-        usage_settled = False
-        final_item: _StreamedAssistantItem | None = None
-        final_references: ReferenceBundle | None = None
         try:
             with instrumented_span(
                 "conversation.agent.run",
                 attributes={"conversation.scope": conversation_scope.scope_type.value},
             ):
-                async with agent.iter(
-                    request.user_query,
+                async for event in self._run_agent(
+                    agent=agent,
+                    request=request,
                     deps=deps,
-                    message_history=_history_messages(history),
-                    usage_limits=UsageLimits(
-                        request_limit=_MAX_AGENT_REQUESTS,
-                        tool_calls_limit=_MAX_AGENT_TOOL_CALLS,
-                    ),
-                ) as agent_run:
-                    node = agent_run.next_node
-                    pending_final: _StreamedAssistantItem | None = None
-                    while not isinstance(node, End):
-                        if isinstance(node, ModelRequestNode):
-                            item: _StreamedAssistantItem | None = None
-                            async with node.stream(agent_run.ctx) as stream:
-                                async for event in stream:
-                                    delta = ""
-                                    if isinstance(event, PartStartEvent) and isinstance(
-                                        event.part, TextPart
-                                    ):
-                                        delta = event.part.content
-                                    elif isinstance(
-                                        event, PartDeltaEvent
-                                    ) and isinstance(event.delta, TextPartDelta):
-                                        delta = event.delta.content_delta
-                                    if not delta:
-                                        continue
-                                    if item is None:
-                                        sequence = deps.allocate_sequence()
-                                        item_id = self._assistant_item_id(
-                                            request.turn_id, sequence
-                                        )
-                                        packet = self._answer_packet(deps)
-                                        item = _StreamedAssistantItem(
-                                            id=item_id,
-                                            sequence=sequence,
-                                            content="",
-                                            packet=packet,
-                                            parser=GroundedAnswerStreamParser(
-                                                packet.sources,
-                                                nonce=nonce,
-                                            ),
-                                        )
-                                    visible = item.parser.feed(delta)
-                                    if visible:
-                                        if not item.started:
-                                            item.started = True
-                                            yield ConversationStreamAssistantItemStartEvent(
-                                                response_id=request.response_id,
-                                                item_id=item.id,
-                                                sequence=item.sequence,
-                                            )
-                                        item.content += visible
-                                        yield ConversationStreamAssistantItemDeltaEvent(
-                                            response_id=request.response_id,
-                                            item_id=item.id,
-                                            delta=visible,
-                                        )
-
-                            next_node = await agent_run.next(node)
-                            if item is not None:
-                                remaining = item.parser.finish()
-                                if remaining:
-                                    if not item.started:
-                                        item.started = True
-                                        yield ConversationStreamAssistantItemStartEvent(
-                                            response_id=request.response_id,
-                                            item_id=item.id,
-                                            sequence=item.sequence,
-                                        )
-                                    item.content += remaining
-                                    yield ConversationStreamAssistantItemDeltaEvent(
-                                        response_id=request.response_id,
-                                        item_id=item.id,
-                                        delta=remaining,
-                                    )
-                                response = (
-                                    next_node.model_response
-                                    if isinstance(next_node, CallToolsNode)
-                                    else None
-                                )
-                                has_tool_call = response is not None and any(
-                                    isinstance(part, ToolCallPart)
-                                    for part in response.parts
-                                )
-                                if has_tool_call or (
-                                    response is not None
-                                    and response.finish_reason == "tool_call"
-                                ):
-                                    if item.content:
-                                        progress = self._progress_entry(item)
-                                        deps.progress_entries.append(progress)
-                                        yield self._complete_item(
-                                            item,
-                                            response_id=request.response_id,
-                                            phase="progress",
-                                            content=progress.content,
-                                        )
-                                elif item.content:
-                                    pending_final = item
-                            node = next_node
-                            continue
-
-                        if isinstance(node, CallToolsNode):
-                            has_tool_call = any(
-                                isinstance(part, ToolCallPart)
-                                for part in node.model_response.parts
-                            )
-                            if has_tool_call:
-                                async with node.stream(agent_run.ctx) as tool_events:
-                                    async for tool_event in tool_events:
-                                        if isinstance(
-                                            tool_event, FunctionToolCallEvent
-                                        ):
-                                            activity = self._running_activity(
-                                                deps, tool_event
-                                            )
-                                            yield ConversationStreamActivityEvent(
-                                                response_id=request.response_id,
-                                                activity=activity,
-                                            )
-                                        elif isinstance(
-                                            tool_event, FunctionToolResultEvent
-                                        ):
-                                            call_id = getattr(
-                                                tool_event.part, "tool_call_id", None
-                                            )
-                                            if isinstance(call_id, str):
-                                                updated_activity = deps.activities.get(
-                                                    call_id
-                                                )
-                                                if updated_activity is not None:
-                                                    yield ConversationStreamActivityEvent(
-                                                        response_id=request.response_id,
-                                                        activity=updated_activity,
-                                                    )
-                            next_node = await agent_run.next(node)
-                            if pending_final is not None:
-                                if isinstance(next_node, End):
-                                    final_item = pending_final
-                                    yield self._complete_item(
-                                        final_item,
-                                        response_id=request.response_id,
-                                        phase="final",
-                                    )
-                                    final_references = final_item.parser.references()
-                                    if final_references is not None:
-                                        yield self._references_event(
-                                            final_references,
-                                            response_id=request.response_id,
-                                        )
-                                elif pending_final.content:
-                                    progress = self._progress_entry(pending_final)
-                                    deps.progress_entries.append(progress)
-                                    yield self._complete_item(
-                                        pending_final,
-                                        response_id=request.response_id,
-                                        phase="progress",
-                                        content=progress.content,
-                                    )
-                                pending_final = None
-                            node = next_node
-                            continue
-
-                        node = await agent_run.next(node)
-
-                    result = agent_run.result
-                    if result is None:
-                        raise RuntimeError("Conversation agent ended without a result")
-                    result_seen = True
-                    if final_item is None:
-                        sequence = deps.allocate_sequence()
-                        packet = self._answer_packet(deps)
-                        fallback_parser = GroundedAnswerStreamParser(
-                            packet.sources,
-                            nonce=nonce,
-                        )
-                        content = fallback_parser.feed(result.output)
-                        content += fallback_parser.finish()
-                        final_item = _StreamedAssistantItem(
-                            id=self._assistant_item_id(request.turn_id, sequence),
-                            sequence=sequence,
-                            content=content,
-                            packet=packet,
-                            parser=fallback_parser,
-                        )
-                        if not content:
-                            raise RuntimeError(
-                                "Conversation agent produced no visible final answer"
-                            )
-                        final_item.started = True
-                        yield ConversationStreamAssistantItemStartEvent(
-                            response_id=request.response_id,
-                            item_id=final_item.id,
-                            sequence=final_item.sequence,
-                        )
-                        yield ConversationStreamAssistantItemDeltaEvent(
-                            response_id=request.response_id,
-                            item_id=final_item.id,
-                            delta=content,
-                        )
-                        yield self._complete_item(
-                            final_item,
-                            response_id=request.response_id,
-                            phase="final",
-                        )
-                        final_references = fallback_parser.references()
-                        if final_references is not None:
-                            yield self._references_event(
-                                final_references,
-                                response_id=request.response_id,
-                            )
-                    self._settle_usage(
-                        result=result,
-                        response_id=request.response_id,
-                        profile=profile,
+                    history=history,
+                    nonce=nonce,
+                    profile=profile,
+                ):
+                    result_seen = result_seen or isinstance(
+                        event, ConversationAgentResult
                     )
-                    usage_settled = True
-                    trace = self._trace(
-                        deps=deps,
-                        packet=final_item.packet,
-                        references=final_references,
-                        parser=final_item.parser,
-                    )
-                    yield ConversationAgentResult(
-                        trace=trace,
-                        artifacts=self._artifacts(deps.agent_state),
-                    )
+                    yield event
         except BaseException as exc:
             if isinstance(
                 exc,
@@ -631,6 +478,132 @@ class ScholensConversationAgent:
             ):
                 raise
             raise classify_llm_error(exc, stage="conversation_agent") from exc
+        finally:
+            record_histogram(
+                "scholens.conversation.agent.duration",
+                (time.monotonic() - started) * 1000,
+                attributes={
+                    "scope": conversation_scope.scope_type.value,
+                    "status": "success" if result_seen else "incomplete",
+                },
+            )
+
+    async def _run_agent(
+        self,
+        *,
+        agent: Agent[_ConversationAgentDependencies, FinalAnswer],
+        request: ConversationTurnCreateRequest,
+        deps: _ConversationAgentDependencies,
+        history: Sequence[object],
+        nonce: str,
+        profile: Any,
+    ) -> AsyncGenerator[ConversationAgentStreamEvent, None]:
+        usage_settled = False
+        try:
+            async with agent.iter(
+                request.user_query,
+                deps=deps,
+                message_history=_history_messages(history),
+                usage_limits=UsageLimits(
+                    request_limit=_MAX_AGENT_REQUESTS,
+                    tool_calls_limit=_MAX_AGENT_TOOL_CALLS,
+                ),
+            ) as agent_run:
+                node = agent_run.next_node
+                while not isinstance(node, End):
+                    if isinstance(node, ModelRequestNode):
+                        next_node, item = await self._consume_model_node(
+                            node=node,
+                            agent_run=agent_run,
+                            deps=deps,
+                            turn_id=request.turn_id,
+                            nonce=nonce,
+                        )
+                        if item is not None:
+                            progress = self._progress_entry(item)
+                            deps.progress_entries.append(progress)
+                            yield ConversationStreamAssistantItemStartEvent(
+                                response_id=request.response_id,
+                                item_id=item.id,
+                                sequence=item.sequence,
+                            )
+                            yield ConversationStreamAssistantItemDeltaEvent(
+                                response_id=request.response_id,
+                                item_id=item.id,
+                                delta=progress.content,
+                            )
+                            yield self._complete_item(
+                                item,
+                                response_id=request.response_id,
+                                phase="progress",
+                                content=progress.content,
+                            )
+                        node = next_node
+                        continue
+
+                    if isinstance(node, CallToolsNode):
+                        async for activity_event in self._stream_tool_activities(
+                            node=node,
+                            agent_run=agent_run,
+                            deps=deps,
+                            response_id=request.response_id,
+                        ):
+                            yield activity_event
+                        node = await agent_run.next(node)
+                        continue
+
+                    node = await agent_run.next(node)
+
+                result = agent_run.result
+                if result is None:
+                    raise RuntimeError("Conversation agent ended without a result")
+                final_item = self._assistant_item_from_text(
+                    deps=deps,
+                    turn_id=request.turn_id,
+                    raw_content=result.output.answer,
+                    nonce=nonce,
+                )
+                if final_item is None:
+                    raise RuntimeError(
+                        "Conversation agent produced no visible final answer"
+                    )
+                yield ConversationStreamAssistantItemStartEvent(
+                    response_id=request.response_id,
+                    item_id=final_item.id,
+                    sequence=final_item.sequence,
+                )
+                yield ConversationStreamAssistantItemDeltaEvent(
+                    response_id=request.response_id,
+                    item_id=final_item.id,
+                    delta=final_item.content,
+                )
+                yield self._complete_item(
+                    final_item,
+                    response_id=request.response_id,
+                    phase="final",
+                )
+                final_references = final_item.parser.references()
+                if final_references is not None:
+                    yield self._references_event(
+                        final_references,
+                        response_id=request.response_id,
+                    )
+                self._settle_usage(
+                    result=result,
+                    response_id=request.response_id,
+                    profile=profile,
+                )
+                usage_settled = True
+                trace = self._trace(
+                    deps=deps,
+                    packet=final_item.packet,
+                    references=final_references,
+                    parser=final_item.parser,
+                )
+                yield ConversationAgentResult(
+                    trace=trace,
+                    artifacts=self._artifacts(deps.agent_state),
+                )
         finally:
             if not usage_settled:
                 settle_token_usage(
@@ -649,14 +622,80 @@ class ScholensConversationAgent:
                     ),
                     status="unknown",
                 )
-            record_histogram(
-                "scholens.conversation.agent.duration",
-                (time.monotonic() - started) * 1000,
-                attributes={
-                    "scope": conversation_scope.scope_type.value,
-                    "status": "success" if result_seen else "incomplete",
-                },
-            )
+
+    async def _consume_model_node(
+        self,
+        *,
+        node: ModelRequestNode[_ConversationAgentDependencies, FinalAnswer],
+        agent_run: AgentRun[_ConversationAgentDependencies, FinalAnswer],
+        deps: _ConversationAgentDependencies,
+        turn_id: uuid.UUID,
+        nonce: str,
+    ) -> tuple[Any, _StreamedAssistantItem | None]:
+        text_parts: list[str] = []
+        async with node.stream(agent_run.ctx) as stream:
+            async for event in stream:
+                if isinstance(event, PartStartEvent) and isinstance(
+                    event.part, TextPart
+                ):
+                    text_parts.append(event.part.content)
+                elif isinstance(event, PartDeltaEvent) and isinstance(
+                    event.delta, TextPartDelta
+                ):
+                    text_parts.append(event.delta.content_delta)
+
+        next_node = await agent_run.next(node)
+        if not text_parts or not isinstance(next_node, CallToolsNode):
+            return next_node, None
+        tool_names = {
+            part.tool_name
+            for part in next_node.model_response.parts
+            if isinstance(part, ToolCallPart)
+        }
+        if not tool_names or _FINAL_OUTPUT_TOOL_NAME in tool_names:
+            return next_node, None
+        return next_node, self._assistant_item_from_text(
+            deps=deps,
+            turn_id=turn_id,
+            raw_content="".join(text_parts),
+            nonce=nonce,
+        )
+
+    async def _stream_tool_activities(
+        self,
+        *,
+        node: CallToolsNode[_ConversationAgentDependencies, FinalAnswer],
+        agent_run: AgentRun[_ConversationAgentDependencies, FinalAnswer],
+        deps: _ConversationAgentDependencies,
+        response_id: uuid.UUID,
+    ) -> AsyncGenerator[ConversationStreamActivityEvent, None]:
+        if not any(
+            isinstance(part, ToolCallPart) for part in node.model_response.parts
+        ):
+            return
+        async with node.stream(agent_run.ctx) as tool_events:
+            async for tool_event in tool_events:
+                if isinstance(tool_event, FunctionToolCallEvent) and (
+                    tool_event.part.tool_name != _FINAL_OUTPUT_TOOL_NAME
+                ):
+                    yield ConversationStreamActivityEvent(
+                        response_id=response_id,
+                        activity=self._running_activity(deps, tool_event),
+                    )
+                    continue
+                if not isinstance(tool_event, FunctionToolResultEvent) or (
+                    tool_event.part.tool_name == _FINAL_OUTPUT_TOOL_NAME
+                ):
+                    continue
+                call_id = getattr(tool_event.part, "tool_call_id", None)
+                updated_activity = (
+                    deps.activities.get(call_id) if isinstance(call_id, str) else None
+                )
+                if updated_activity is not None:
+                    yield ConversationStreamActivityEvent(
+                        response_id=response_id,
+                        activity=updated_activity,
+                    )
 
     def _tools(self, deps: _ConversationAgentDependencies) -> list[Tool[Any]]:
         tools: list[Tool[Any]] = []
@@ -706,13 +745,22 @@ class ScholensConversationAgent:
                 sort_keys=True,
                 default=str,
             )
+            started = time.monotonic()
+            provider = deps.connector_set.provider_for(name)
             allow_repeated_call = False
             if not deps.connector_set.has_tool(name):
                 allow_repeated_call = self._catalog.definition_for(
                     deps.tool_access, name
                 ).allow_repeated_calls
             if signature in deps.call_signatures and not allow_repeated_call:
-                self._finish_activity(deps, call_id, succeeded=False)
+                self._record_tool_failure(
+                    deps,
+                    call_id=call_id,
+                    name=name,
+                    provider=provider,
+                    started=started,
+                    error_code="duplicate_tool_call",
+                )
                 return {
                     "error": {
                         "code": "duplicate_tool_call",
@@ -720,8 +768,6 @@ class ScholensConversationAgent:
                     }
                 }
             deps.call_signatures.add(signature)
-            started = time.monotonic()
-            provider = deps.connector_set.provider_for(name)
             try:
                 context = ToolExecutionContext(
                     actor=deps.actor,
@@ -818,7 +864,26 @@ class ScholensConversationAgent:
                     }
                 )
             except AppError as exc:
-                self._record_tool_error(deps, call_id)
+                logger.info(
+                    "conversation.agent.tool_rejected",
+                    extra={
+                        "tool": name,
+                        "provider": (
+                            provider.value if provider is not None else "local"
+                        ),
+                        "error_code": exc.code,
+                    },
+                )
+                self._record_tool_failure(
+                    deps,
+                    call_id=call_id,
+                    name=name,
+                    provider=provider,
+                    started=started,
+                    error_code=exc.code,
+                )
+                if exc.code == "tool_arguments_invalid":
+                    raise ModelRetry(_tool_argument_retry_message(exc)) from exc
                 return {
                     "error": {
                         "code": exc.code,
@@ -827,9 +892,13 @@ class ScholensConversationAgent:
                 }
             except Exception:
                 logger.exception("conversation.agent.tool_failed", extra={"tool": name})
-                self._record_tool_error(
+                self._record_tool_failure(
                     deps,
-                    call_id,
+                    call_id=call_id,
+                    name=name,
+                    provider=provider,
+                    started=started,
+                    error_code="tool_execution_failed",
                 )
                 return {
                     "error": {
@@ -918,13 +987,40 @@ class ScholensConversationAgent:
             }
         )
 
-    def _record_tool_error(
+    def _record_tool_failure(
         self,
         deps: _ConversationAgentDependencies,
+        *,
         call_id: str,
+        name: str,
+        provider: IntegrationProvider | None,
+        started: float,
+        error_code: str,
     ) -> None:
         deps.agent_state.add_tool_error()
         self._finish_activity(deps, call_id, succeeded=False)
+        provider_name = provider.value if provider is not None else "local"
+        duration_ms = (time.monotonic() - started) * 1000
+        add_counter(
+            "scholens.conversation.tool.errors",
+            attributes={
+                "tool": name,
+                "provider": provider_name,
+                "error_code": error_code,
+            },
+        )
+        track_event(
+            "tool_call",
+            {
+                "tool_name": name,
+                "provider": provider_name,
+                "result_status": "failure",
+                "error_code": error_code,
+                "duration_ms": duration_ms,
+                "conversation_scope_type": deps.conversation_scope.scope_type.value,
+            },
+            user_id=str(deps.actor.id),
+        )
 
     def _load_document_source_texts(
         self,
@@ -1213,6 +1309,28 @@ Initial server-validated answer material:
     @staticmethod
     def _assistant_item_id(turn_id: uuid.UUID, sequence: int) -> str:
         return f"assistant:{turn_id}:{sequence}"
+
+    def _assistant_item_from_text(
+        self,
+        *,
+        deps: _ConversationAgentDependencies,
+        turn_id: uuid.UUID,
+        raw_content: str,
+        nonce: str,
+    ) -> _StreamedAssistantItem | None:
+        packet = self._answer_packet(deps)
+        parser = GroundedAnswerStreamParser(packet.sources, nonce=nonce)
+        content = parser.feed(raw_content) + parser.finish()
+        if not content.strip():
+            return None
+        sequence = deps.allocate_sequence()
+        return _StreamedAssistantItem(
+            id=self._assistant_item_id(turn_id, sequence),
+            sequence=sequence,
+            content=content,
+            packet=packet,
+            parser=parser,
+        )
 
     @staticmethod
     def _progress_entry(item: _StreamedAssistantItem) -> ConversationProgressEntry:
