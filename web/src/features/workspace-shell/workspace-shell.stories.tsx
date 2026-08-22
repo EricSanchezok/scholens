@@ -164,6 +164,14 @@ export const DesktopExpanded: Story = {
       "aria-current",
       "page",
     );
+    const navigation = within(
+      canvas.getByRole("navigation", { name: "Open navigation" }),
+    );
+    for (const label of ["New chat", "Library", "Projects"]) {
+      await expect(navigation.getByText(label)).not.toHaveClass(
+        "settled-content-enter",
+      );
+    }
   },
 };
 
@@ -377,6 +385,18 @@ export const DesktopCollapsed: Story = {
     await expect(getComputedStyle(railChrome).clipPath).toContain("224px");
     await expect(railContent.getAnimations()).toHaveLength(0);
     await expect(railChrome.getAnimations()).toHaveLength(0);
+
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Expand sidebar" }),
+    );
+    const navigation = within(
+      canvas.getByRole("navigation", { name: "Open navigation" }),
+    );
+    for (const label of ["New chat", "Library", "Projects"]) {
+      await expect(navigation.getByText(label)).toHaveClass(
+        "settled-content-enter",
+      );
+    }
   },
 };
 

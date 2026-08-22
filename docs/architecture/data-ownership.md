@@ -76,7 +76,8 @@ roles or persist credentials. The required order is:
 1. infrastructure creates roles and runs the bootstrap to create owned schemas;
 2. the protected Identity workflow migrates `auth.*` as `auth_migrator`;
 3. the database owner reapplies grants;
-4. Scholens validates the Identity version and migrates `scholens.*` as `scholens_migrator`;
+4. Scholens validates the Identity version, audits the exact read-only shared-avatar
+   runtime grant, and migrates `scholens.*` as `scholens_migrator`;
 5. the database owner reapplies runtime grants;
 6. CI audits `scholens_app` with the Identity `product-runtime` profile and separately verifies
    the Scholens avatar-read extension, Scholens DML, append-only journal behavior, and

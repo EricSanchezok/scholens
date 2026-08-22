@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import boto3
 from botocore.config import Config
@@ -18,7 +18,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sanchezcloud_identity.avatar_manager import AvatarManager
 from sanchezcloud_identity.avatar_s3 import S3AvatarStorage
 from sanchezcloud_identity.db.avatar_asyncpg import AsyncpgAvatarDatabase
-from sanchezcloud_identity.exceptions import AvatarNotFoundError
+from sanchezcloud_identity.exceptions import (
+    AvatarNotFoundError,
+    AvatarStorageError,
+    DBError,
+)
+from scholens_observability import add_counter
 
 from app.modules.identity.application import (
     SharedAvatarNotFoundError,
@@ -30,6 +35,16 @@ from app.shared.application import AvatarReference
 
 logger = logging.getLogger(__name__)
 _CACHE_MISS = object()
+
+
+def _failure_stage(
+    exc: Exception,
+) -> Literal["avatar_storage", "identity_adapter", "identity_database"]:
+    if isinstance(exc, DBError):
+        return "identity_database"
+    if isinstance(exc, AvatarStorageError):
+        return "avatar_storage"
+    return "identity_adapter"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,9 +135,13 @@ class SanchezCloudSharedAvatarReader(SharedAvatarReader):
             )
             raise SharedAvatarNotFoundError("Shared avatar not found") from exc
         except Exception as exc:
+            add_counter("scholens.shared_avatar.read_failed")
             logger.warning(
                 "shared_avatar_read_failed",
-                extra={"user_id": user_id},
+                extra={
+                    "exception_type": type(exc).__name__,
+                    "failure_stage": _failure_stage(exc),
+                },
                 exc_info=True,
             )
             raise SharedAvatarUnavailableError(
