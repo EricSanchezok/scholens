@@ -1501,7 +1501,8 @@ def test_database_contract_shares_auth_and_isolates_scholens() -> None:
     assert "GRANT SELECT, INSERT, UPDATE ON TABLE auth.user_clients" in bootstrap
     assert "GRANT SELECT, INSERT ON TABLE auth.security_events" in bootstrap
     assert "GRANT SELECT ON TABLE auth.user_avatars" in bootstrap
-    assert "INSERT, UPDATE, DELETE ON TABLE auth.user_avatars" not in bootstrap
+    assert "GRANT INSERT, UPDATE, DELETE ON TABLE auth.user_avatars" not in bootstrap
+    assert "REVOKE INSERT, UPDATE, DELETE ON TABLE auth.user_avatars" in bootstrap
     assert "security_events_id_seq" in bootstrap
     assert 'FOR ROLE :"auth_migrator_role"' not in bootstrap
     assert (

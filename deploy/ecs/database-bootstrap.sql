@@ -70,6 +70,11 @@ WHERE to_regclass('auth.security_events') IS NOT NULL \gexec
 -- Scholens reads the identity-owned avatar reference only to mint short-lived,
 -- authenticated GET URLs. Avatar writes remain exclusive to Account Center.
 SELECT format(
+  'REVOKE INSERT, UPDATE, DELETE ON TABLE auth.user_avatars FROM %I',
+  :'app_role'
+)
+WHERE to_regclass('auth.user_avatars') IS NOT NULL \gexec
+SELECT format(
   'GRANT SELECT ON TABLE auth.user_avatars TO %I',
   :'app_role'
 )
