@@ -50,12 +50,18 @@ def _reserve_dispatches(
             recover_conversation=recover_conversation,
         )
         if recover_unclaimed_pdf is not None:
-            recovered_pdf_count = job_repository.recover_stale_unclaimed_pdf_jobs(
-                db,
-                limit=limit,
-                max_age=UNCLAIMED_PDF_MAX_AGE,
-                recover_pdf=recover_unclaimed_pdf,
-            )
+            try:
+                recovered_pdf_count = job_repository.recover_stale_unclaimed_pdf_jobs(
+                    db,
+                    limit=limit,
+                    max_age=UNCLAIMED_PDF_MAX_AGE,
+                    recover_pdf=recover_unclaimed_pdf,
+                )
+            except Exception:
+                # Entering this fallback path is itself unhealthy. Preserve
+                # that signal even when the recovery transaction rolls back.
+                add_counter("scholens.jobs.pdf_unclaimed_recoveries")
+                raise
         dispatches = job_repository.reserve_dispatches(
             db,
             limit=limit,

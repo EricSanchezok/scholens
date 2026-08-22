@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from app.database.models import (
     ConversationResponse,
     DurableJob,
@@ -14,7 +15,10 @@ from app.modules.jobs.infrastructure.repository import (
     ReservedJobDispatch,
     job_repository,
 )
-from app.modules.jobs.infrastructure.dispatcher import dispatch_pending_jobs_once
+from app.modules.jobs.infrastructure.dispatcher import (
+    _reserve_dispatches,
+    dispatch_pending_jobs_once,
+)
 from sqlalchemy.orm import Session
 
 
@@ -220,6 +224,36 @@ def test_stale_unclaimed_pdf_job_uses_composition_recovery_hook() -> None:
     assert "job_dispatches.available_at" in statement
     assert "job_dispatches.published_at IS NOT NULL" in statement
     db.flush.assert_called_once()
+
+
+def test_failed_unclaimed_pdf_recovery_still_emits_the_pageable_metric() -> None:
+    db = MagicMock(spec=Session)
+    session = MagicMock()
+    session.__enter__.return_value = db
+    session.__exit__.return_value = False
+
+    with (
+        patch(
+            "app.modules.jobs.infrastructure.dispatcher.SessionLocal",
+            return_value=session,
+        ),
+        patch.object(job_repository, "recover_expired_leases", return_value=0),
+        patch.object(
+            job_repository,
+            "recover_stale_unclaimed_pdf_jobs",
+            side_effect=RuntimeError("recovery_failed"),
+        ),
+        patch("app.modules.jobs.infrastructure.dispatcher.add_counter") as add_counter,
+        pytest.raises(RuntimeError, match="recovery_failed"),
+    ):
+        _reserve_dispatches(
+            limit=10,
+            recover_conversation=None,
+            recover_unclaimed_pdf=MagicMock(),
+        )
+
+    add_counter.assert_called_once_with("scholens.jobs.pdf_unclaimed_recoveries")
+    db.commit.assert_not_called()
 
 
 def test_expired_conversation_generation_fails_instead_of_replaying_the_turn() -> None:
