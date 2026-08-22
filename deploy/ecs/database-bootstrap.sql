@@ -32,17 +32,19 @@ REVOKE ALL ON SCHEMA public FROM :"auth_migrator_role";
 REVOKE ALL ON SCHEMA public FROM :"product_migrator_role";
 
 SELECT format(
-  'CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION %I',
+  'CREATE SCHEMA auth AUTHORIZATION %I',
   :'auth_migrator_role'
-) \gexec
+)
+WHERE to_regnamespace('auth') IS NULL \gexec
 SELECT format('ALTER SCHEMA auth OWNER TO %I', :'auth_migrator_role')
 FROM pg_namespace
 WHERE nspname = 'auth'
   AND pg_get_userbyid(nspowner) <> :'auth_migrator_role' \gexec
 SELECT format(
-  'CREATE SCHEMA IF NOT EXISTS scholens AUTHORIZATION %I',
+  'CREATE SCHEMA scholens AUTHORIZATION %I',
   :'product_migrator_role'
-) \gexec
+)
+WHERE to_regnamespace('scholens') IS NULL \gexec
 SELECT format('ALTER SCHEMA scholens OWNER TO %I', :'product_migrator_role')
 FROM pg_namespace
 WHERE nspname = 'scholens'
@@ -140,10 +142,58 @@ FROM information_schema.sequences
 WHERE sequence_schema = 'scholens'
 ORDER BY sequence_name \gexec
 
-ALTER DEFAULT PRIVILEGES FOR ROLE :"product_migrator_role" IN SCHEMA scholens
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE :"product_migrator_role" IN SCHEMA scholens
-  GRANT USAGE, SELECT ON SEQUENCES TO :"app_role";
+-- Reapplying grants as the RDS owner must not require SET ROLE when the
+-- migrator-owned defaults already match the reviewed contract. Real drift
+-- still emits the owner-scoped repair and therefore fails closed unless the
+-- operator is authorized to administer the migrator role.
+SELECT format(
+  'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA scholens '
+  'REVOKE ALL ON TABLES FROM %I; '
+  'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA scholens '
+  'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I',
+  :'product_migrator_role',
+  :'app_role',
+  :'product_migrator_role',
+  :'app_role'
+)
+WHERE (
+  SELECT COALESCE(
+    array_agg(DISTINCT acl.privilege_type ORDER BY acl.privilege_type),
+    ARRAY[]::text[]
+  )
+  FROM pg_default_acl AS defaults
+  CROSS JOIN LATERAL aclexplode(defaults.defaclacl) AS acl
+  WHERE defaults.defaclrole = (
+    SELECT oid FROM pg_roles WHERE rolname = :'product_migrator_role'
+  )
+    AND defaults.defaclnamespace = to_regnamespace('scholens')
+    AND defaults.defaclobjtype = 'r'
+    AND acl.grantee = (SELECT oid FROM pg_roles WHERE rolname = :'app_role')
+) <> ARRAY['DELETE', 'INSERT', 'SELECT', 'UPDATE']::text[] \gexec
+SELECT format(
+  'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA scholens '
+  'REVOKE ALL ON SEQUENCES FROM %I; '
+  'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA scholens '
+  'GRANT USAGE, SELECT ON SEQUENCES TO %I',
+  :'product_migrator_role',
+  :'app_role',
+  :'product_migrator_role',
+  :'app_role'
+)
+WHERE (
+  SELECT COALESCE(
+    array_agg(DISTINCT acl.privilege_type ORDER BY acl.privilege_type),
+    ARRAY[]::text[]
+  )
+  FROM pg_default_acl AS defaults
+  CROSS JOIN LATERAL aclexplode(defaults.defaclacl) AS acl
+  WHERE defaults.defaclrole = (
+    SELECT oid FROM pg_roles WHERE rolname = :'product_migrator_role'
+  )
+    AND defaults.defaclnamespace = to_regnamespace('scholens')
+    AND defaults.defaclobjtype = 'S'
+    AND acl.grantee = (SELECT oid FROM pg_roles WHERE rolname = :'app_role')
+) <> ARRAY['SELECT', 'USAGE']::text[] \gexec
 
 SELECT format(
   'REVOKE ALL ON TABLE auth.schema_migrations FROM %I',
