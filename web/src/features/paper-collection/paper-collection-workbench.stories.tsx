@@ -36,6 +36,20 @@ const preferenceHandlers = [
   ),
 ];
 
+let resizePreferenceRequestCount = 0;
+let resizedPreferences = preferences;
+
+const resizePreferenceHandlers = [
+  http.get("*/api/v1/me/paper-list-preferences", () =>
+    HttpResponse.json(preferences),
+  ),
+  http.put("*/api/v1/me/paper-list-preferences", async ({ request }) => {
+    resizedPreferences = (await request.json()) as PaperListPreferences;
+    resizePreferenceRequestCount += 1;
+    return HttpResponse.json(resizedPreferences);
+  }),
+];
+
 let queuedPreferenceRequestCount = 0;
 let queuedPersistedPreferences: PaperListPreferences = {
   ...preferences,
@@ -204,13 +218,16 @@ export const Library: Story = {
       canvas.getByRole("heading", { name: "Key findings" }),
     ).toBeVisible();
     const paperResize = canvas.getByRole("separator", {
-      name: "Resize Paper column",
+      name: "Resize boundary between Paper and Status",
     });
-    await expect(paperResize).toHaveAttribute("aria-valuenow", "360");
+    const initialPaperWidth = Number(paperResize.getAttribute("aria-valuenow"));
     paperResize.focus();
-    await userEvent.keyboard("{ArrowRight}");
+    await userEvent.keyboard("{ArrowLeft}");
     await waitFor(() =>
-      expect(paperResize).toHaveAttribute("aria-valuenow", "368"),
+      expect(paperResize).toHaveAttribute(
+        "aria-valuenow",
+        String(initialPaperWidth - 8),
+      ),
     );
     const previewResize = canvas.getByRole("separator", {
       name: "Resize paper details",
@@ -306,6 +323,92 @@ export const Dark: Story = {
 
 export const Chinese: Story = {
   globals: { locale: "zh-CN" },
+};
+
+export const AdjacentColumnResizing: Story = {
+  parameters: {
+    msw: { handlers: resizePreferenceHandlers },
+    viewport: { defaultViewport: "desktop" },
+  },
+  play: async ({ canvasElement }) => {
+    resizePreferenceRequestCount = 0;
+    resizedPreferences = preferences;
+    const canvas = within(canvasElement);
+    const table = await canvas.findByRole("table");
+    const columnHeader = (label: string) => {
+      const header = within(table)
+        .getAllByRole("columnheader")
+        .find((candidate) => candidate.textContent?.trim() === label);
+      expect(header).toBeDefined();
+      return header!;
+    };
+    const dragLeft = (separator: HTMLElement, distance: number) => {
+      const startX = separator.getBoundingClientRect().x + 8;
+      fireEvent.pointerDown(separator, { clientX: startX, pointerId: 1 });
+      fireEvent.pointerMove(separator, {
+        clientX: startX - distance,
+        pointerId: 1,
+      });
+      fireEvent.pointerUp(separator, {
+        clientX: startX - distance,
+        pointerId: 1,
+      });
+    };
+
+    const paper = columnHeader("Paper");
+    const status = columnHeader("Status");
+    const paperBoundary = canvas.getByRole("separator", {
+      name: "Resize boundary between Paper and Status",
+    });
+    await expect(paperBoundary).toHaveAttribute("aria-valuemin", "160");
+    const paperBefore = paper.getBoundingClientRect();
+    const statusBefore = status.getBoundingClientRect();
+    dragLeft(paperBoundary, 48);
+    await waitFor(() => {
+      const paperAfter = paper.getBoundingClientRect();
+      const statusAfter = status.getBoundingClientRect();
+      expect(paperAfter.width).toBeCloseTo(paperBefore.width - 48, 0);
+      expect(statusAfter.width).toBeCloseTo(statusBefore.width + 48, 0);
+      expect(statusAfter.right).toBeCloseTo(statusBefore.right, 0);
+    });
+    await waitFor(() => expect(resizePreferenceRequestCount).toBe(1));
+
+    const tags = columnHeader("Tags");
+    const statusBoundary = canvas.getByRole("separator", {
+      name: "Resize boundary between Status and Tags",
+    });
+    const statusBeforeSecondDrag = status.getBoundingClientRect();
+    const tagsBefore = tags.getBoundingClientRect();
+    dragLeft(statusBoundary, 32);
+    await waitFor(() => {
+      const statusAfter = status.getBoundingClientRect();
+      const tagsAfter = tags.getBoundingClientRect();
+      expect(statusAfter.width).toBeCloseTo(
+        statusBeforeSecondDrag.width - 32,
+        0,
+      );
+      expect(tagsAfter.width).toBeCloseTo(tagsBefore.width + 32, 0);
+      expect(tagsAfter.right).toBeCloseTo(tagsBefore.right, 0);
+    });
+    await waitFor(() => expect(resizePreferenceRequestCount).toBe(2));
+    await expect(tags.querySelector("[data-paper-resize-handle]")).toBeNull();
+
+    const persistedWidths = Object.fromEntries(
+      resizedPreferences.column_widths.map(({ column, width }) => [
+        column,
+        width,
+      ]),
+    );
+    const persistedStatus = persistedWidths.status;
+    const persistedTags = persistedWidths.tags;
+    if (persistedStatus === undefined || persistedTags === undefined) {
+      throw new Error("Expected Status and Tags widths to be persisted");
+    }
+    expect(persistedStatus + persistedTags).toBeCloseTo(
+      statusBeforeSecondDrag.width + tagsBefore.width,
+      0,
+    );
+  },
 };
 
 export const ColumnConfiguration: Story = {

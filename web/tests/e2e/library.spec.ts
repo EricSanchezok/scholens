@@ -26,6 +26,27 @@ const actor = {
 async function mockLibrary(page: Page) {
   await mockBillingUsage(page);
   let tags = [...libraryTags];
+  let paperListPreferences = {
+    column_widths: [
+      { column: "paper", width: 360 },
+      { column: "status", width: 96 },
+      { column: "tags", width: 160 },
+      { column: "authors", width: 176 },
+      { column: "publication", width: 144 },
+      { column: "last_opened", width: 120 },
+      { column: "added_at", width: 120 },
+      { column: "doi", width: 160 },
+    ],
+    preview_open: true,
+    preview_width: 512,
+    visible_columns: [
+      "status",
+      "tags",
+      "authors",
+      "publication",
+      "last_opened",
+    ],
+  };
   await page.route(`${apiPattern}/auth/bootstrap`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -53,6 +74,15 @@ async function mockLibrary(page: Page) {
       }),
     }),
   );
+  await page.route(`${apiPattern}/me/paper-list-preferences`, async (route) => {
+    if (route.request().method() === "PUT") {
+      paperListPreferences = route.request().postDataJSON();
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(paperListPreferences),
+    });
+  });
   await page.route(`${apiPattern}/library/tags**`, async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -365,6 +395,61 @@ test("supports the Library Papers critical journey", async ({ page }) => {
       timeout: 5_000,
     })
     .toEqual([]);
+});
+
+test("keeps Library chrome fixed while switching between Papers and Outputs", async ({
+  page,
+}) => {
+  for (const width of [1440, 2560]) {
+    await page.setViewportSize({ height: 1000, width });
+    await page.goto("/library");
+    const heading = page.getByRole("heading", { name: "Library" });
+    const header = heading.locator("xpath=ancestor::header");
+    const addPapers = page.getByRole("button", { name: "Add papers" });
+    const paperSearch = page.getByRole("searchbox", { name: "Search papers" });
+    await expect(page.getByRole("table")).toBeVisible();
+    const before = {
+      addPapers: await addPapers.boundingBox(),
+      header: await header.boundingBox(),
+      search: await paperSearch.boundingBox(),
+    };
+
+    await page.getByRole("tab", { name: /^Outputs/ }).click();
+    await expect(page).toHaveURL(/tab=outputs/);
+    await expect(
+      page.getByRole("table").getByText("Architecture notes"),
+    ).toBeVisible();
+    const after = {
+      addPapers: await addPapers.boundingBox(),
+      header: await header.boundingBox(),
+      search: await page
+        .getByRole("searchbox", { name: "Search outputs" })
+        .boundingBox(),
+    };
+
+    expect(before.header).not.toBeNull();
+    expect(before.addPapers).not.toBeNull();
+    expect(before.search).not.toBeNull();
+    expect(after.header).not.toBeNull();
+    expect(after.addPapers).not.toBeNull();
+    expect(after.search).not.toBeNull();
+    if (
+      !before.header ||
+      !before.addPapers ||
+      !before.search ||
+      !after.header ||
+      !after.addPapers ||
+      !after.search
+    ) {
+      throw new Error(
+        "Expected Library layout elements to have bounding boxes",
+      );
+    }
+    expect(after.header.x).toBeCloseTo(before.header.x, 0);
+    expect(after.header.width).toBeCloseTo(before.header.width, 0);
+    expect(after.addPapers.x).toBeCloseTo(before.addPapers.x, 0);
+    expect(after.search.x).toBeCloseTo(before.search.x, 0);
+  }
 });
 
 test("moves accepted uploads into paper rows and supports cancellation", async ({
