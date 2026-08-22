@@ -6,6 +6,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -22,14 +23,18 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
   useToast,
 } from "@/components/ui";
 import {
-  ClosePanelIcon,
   MoveDownIcon,
   MoveUpIcon,
-  OpenPanelIcon,
   OutlineIcon,
+  PreviewHiddenIcon,
+  PreviewVisibleIcon,
 } from "@/design-system/icons/semantic-icons";
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
@@ -82,6 +87,16 @@ const COLUMN_WIDTH_LIMITS: Record<
   added_at: { default: 120, max: 280, min: 112 },
   doi: { default: 160, max: 480, min: 144 },
 };
+const PREVIEW_COLUMN_MINIMUMS: Record<PaperCollectionSizedColumn, number> = {
+  paper: 200,
+  status: 64,
+  tags: 56,
+  authors: 80,
+  publication: 72,
+  last_opened: 72,
+  added_at: 72,
+  doi: 96,
+};
 
 const ALL_COLUMNS = Object.keys(
   COLUMN_WIDTH_LIMITS,
@@ -95,6 +110,23 @@ const DEFAULT_COLUMN_WIDTHS = Object.fromEntries(
 const MIN_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_WIDTH = 720;
 const MIN_LIST_WIDTH_WITH_PREVIEW = 640;
+
+type PaperCollectionSidePanelState = {
+  open: boolean;
+  width: number;
+};
+
+type PaperCollectionSidePanelContextValue = {
+  containerWidth?: number;
+  panelElement: HTMLDivElement | null;
+  panelWidth: number;
+  setPanelState: React.Dispatch<
+    React.SetStateAction<PaperCollectionSidePanelState>
+  >;
+};
+
+const PaperCollectionSidePanelContext =
+  React.createContext<PaperCollectionSidePanelContextValue | null>(null);
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, Math.round(value)));
@@ -249,6 +281,53 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>) {
     return () => observer.disconnect();
   }, [ref]);
   return width;
+}
+
+export function PaperCollectionSidePanelLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const containerWidth = useElementWidth(rootRef);
+  const [panelElement, setPanelElement] = React.useState<HTMLDivElement | null>(
+    null,
+  );
+  const [panelState, setPanelState] =
+    React.useState<PaperCollectionSidePanelState>({
+      open: false,
+      width: defaultPaperListPreferences.preview_width,
+    });
+  const context = React.useMemo(
+    () => ({
+      containerWidth,
+      panelElement,
+      panelWidth: panelState.open ? panelState.width : 0,
+      setPanelState,
+    }),
+    [containerWidth, panelElement, panelState.open, panelState.width],
+  );
+
+  return (
+    <PaperCollectionSidePanelContext.Provider value={context}>
+      <div
+        className="flex min-h-0 min-w-0 flex-1"
+        data-paper-collection-page-layout=""
+        ref={rootRef}
+      >
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
+        <div
+          className={cn(
+            "relative h-full min-h-0 shrink-0",
+            !panelState.open && "hidden",
+          )}
+          data-paper-collection-side-panel=""
+          ref={setPanelElement}
+          style={{ width: panelState.open ? panelState.width : 0 }}
+        />
+      </div>
+    </PaperCollectionSidePanelContext.Provider>
+  );
 }
 
 function PaperPreviewImage({
@@ -591,13 +670,11 @@ const previewMarkdownComponents: Components = {
 
 function Preview({
   item,
-  onClose,
   onStatusChange,
   onTagClick,
   personalLabels,
 }: {
   item: PaperCollectionItem;
-  onClose: () => void;
   onStatusChange?: (item: PaperCollectionItem, status: PaperStatus) => void;
   onTagClick?: (tag: PaperCollectionTag) => void;
   personalLabels: boolean;
@@ -609,15 +686,8 @@ function Preview({
       className="border-line-subtle bg-subtle h-full min-w-0 overflow-y-auto border-l px-5 pb-5"
       data-paper-collection-preview=""
     >
-      <div className="flex h-10 items-center justify-between gap-3">
+      <div className="flex h-10 items-center">
         <h2 className="text-sm font-semibold">{t("preview.label")}</h2>
-        <IconButton
-          label={t("preview.close")}
-          onClick={onClose}
-          variant="ghost"
-        >
-          <Icon glyph={ClosePanelIcon} size={20} />
-        </IconButton>
       </div>
       <div className="mt-3 grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-4">
         <PaperPreviewImage
@@ -703,6 +773,7 @@ export function PaperCollectionWorkbench({
   const t = useTranslations("PaperCollection");
   const toast = useToast();
   const queryClient = useQueryClient();
+  const sidePanelLayout = React.useContext(PaperCollectionSidePanelContext);
   const preferencesQuery = useQuery(paperListPreferencesQuery());
   const preferences = preferencesQuery.data ?? defaultPaperListPreferences;
   const latestPreferencesRef = React.useRef(preferences);
@@ -800,10 +871,12 @@ export function PaperCollectionWorkbench({
     }));
   }, [mutatePreferences]);
   const rootRef = React.useRef<HTMLDivElement>(null);
+  const sidePanelContentInsetRef = React.useRef(0);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const headerScrollRef = React.useRef<HTMLDivElement>(null);
   const width = useElementWidth(rootRef);
   const measuredWidth = width ?? 0;
+  const availableWidth = sidePanelLayout?.containerWidth ?? measuredWidth;
   const [previewId, setPreviewId] = React.useState<string>();
   const [hoveredPreviewId, setHoveredPreviewId] = React.useState<string>();
   const preview =
@@ -811,11 +884,32 @@ export function PaperCollectionWorkbench({
     items.find((item) => item.id === previewId) ??
     items[0];
   const previewVisible = Boolean(
-    preview && preferences.preview_open && measuredWidth >= 1040,
+    preview &&
+    preferences.preview_open &&
+    measuredWidth > 0 &&
+    availableWidth >= 1040,
   );
+  if (
+    sidePanelLayout &&
+    sidePanelLayout.panelWidth === 0 &&
+    availableWidth > 0 &&
+    measuredWidth > 0
+  ) {
+    sidePanelContentInsetRef.current = Math.max(
+      0,
+      availableWidth - measuredWidth,
+    );
+  }
   const previewWidthMaximum = Math.max(
     MIN_PREVIEW_WIDTH,
-    Math.min(MAX_PREVIEW_WIDTH, measuredWidth - MIN_LIST_WIDTH_WITH_PREVIEW),
+    Math.min(
+      MAX_PREVIEW_WIDTH,
+      sidePanelLayout
+        ? availableWidth -
+            sidePanelContentInsetRef.current -
+            MIN_LIST_WIDTH_WITH_PREVIEW
+        : availableWidth - MIN_LIST_WIDTH_WITH_PREVIEW,
+    ),
   );
   const resolvedPreviewWidth = clamp(
     previewWidth,
@@ -824,24 +918,23 @@ export function PaperCollectionWorkbench({
   );
   const listWidth = Math.max(
     0,
-    measuredWidth - (previewVisible ? resolvedPreviewWidth : 0),
+    measuredWidth -
+      (previewVisible && !sidePanelLayout ? resolvedPreviewWidth : 0),
   );
-  const effectiveColumns = React.useMemo(() => {
-    if (listWidth >= 1200) return preferences.visible_columns;
-    if (listWidth >= 1020)
-      return preferences.visible_columns.filter(
-        (column) => !["last_opened", "added_at", "doi"].includes(column),
-      );
-    if (listWidth >= 900)
-      return preferences.visible_columns.filter((column) =>
-        ["status", "tags", "publication"].includes(column),
-      );
-    if (listWidth >= 700)
-      return preferences.visible_columns.filter((column) =>
-        ["status", "tags"].includes(column),
-      );
-    return preferences.visible_columns.filter((column) => column === "status");
-  }, [listWidth, preferences.visible_columns]);
+  const setSidePanelState = sidePanelLayout?.setPanelState;
+  React.useLayoutEffect(() => {
+    setSidePanelState?.({
+      open: previewVisible,
+      width: resolvedPreviewWidth,
+    });
+  }, [previewVisible, resolvedPreviewWidth, setSidePanelState]);
+  React.useEffect(
+    () => () => {
+      setSidePanelState?.((current) => ({ ...current, open: false }));
+    },
+    [setSidePanelState],
+  );
+  const effectiveColumns = preferences.visible_columns;
   const compact = listWidth < 640;
   const columnCount = compact
     ? 2 + (actions ? 1 : 0)
@@ -854,28 +947,95 @@ export function PaperCollectionWorkbench({
     getScrollElement: () => scrollRef.current,
     overscan: 8,
   });
-  const orderedColumns: PaperCollectionSizedColumn[] = [
-    "paper",
-    ...effectiveColumns,
-  ];
-  const tableChromeWidth =
-    (leading ? 48 : 0) +
-    (actions ? 44 : 0) +
-    Math.max(0, columnCount - 1) * 12 +
+  const orderedColumns = React.useMemo<PaperCollectionSizedColumn[]>(
+    () => ["paper", ...effectiveColumns],
+    [effectiveColumns],
+  );
+  const renderedColumnWidths = React.useMemo(() => {
+    const leadingWidth = previewVisible ? 40 : 48;
+    const actionsWidth = previewVisible ? 36 : 44;
+    const columnGap = previewVisible ? 8 : 12;
+    const minimumFor = (column: PaperCollectionSizedColumn) =>
+      previewVisible
+        ? PREVIEW_COLUMN_MINIMUMS[column]
+        : COLUMN_WIDTH_LIMITS[column].min;
+    const fixedWidth =
+      (leading ? leadingWidth : 0) +
+      (actions ? actionsWidth : 0) +
+      Math.max(0, columnCount - 1) * columnGap +
+      16;
+    const preferredTotal = orderedColumns.reduce(
+      (total, column) => total + columnWidths[column],
+      0,
+    );
+    const minimumTotal = orderedColumns.reduce(
+      (total, column) => total + minimumFor(column),
+      0,
+    );
+    const targetTotal = Math.max(
+      minimumTotal,
+      Math.min(preferredTotal, listWidth - fixedWidth),
+    );
+    const shortage = preferredTotal - targetTotal;
+    const compressibleTotal = orderedColumns.reduce(
+      (total, column) =>
+        total + Math.max(0, columnWidths[column] - minimumFor(column)),
+      0,
+    );
+
+    return Object.fromEntries(
+      orderedColumns.map((column) => {
+        const compressible = Math.max(
+          0,
+          columnWidths[column] - minimumFor(column),
+        );
+        const reduction = compressibleTotal
+          ? (shortage * compressible) / compressibleTotal
+          : 0;
+        return [
+          column,
+          clamp(
+            columnWidths[column] - reduction,
+            minimumFor(column),
+            columnWidths[column],
+          ),
+        ];
+      }),
+    ) as Partial<Record<PaperCollectionSizedColumn, number>>;
+  }, [
+    actions,
+    columnCount,
+    columnWidths,
+    leading,
+    listWidth,
+    orderedColumns,
+    previewVisible,
+  ]);
+  const leadingColumnWidth = previewVisible ? 40 : 48;
+  const actionsColumnWidth = previewVisible ? 36 : 44;
+  const tableColumnGap = previewVisible ? 8 : 12;
+  const renderedPaperWidth = renderedColumnWidths.paper ?? columnWidths.paper;
+  const gridTemplateColumns = [
+    leading ? `${leadingColumnWidth}px` : undefined,
+    `minmax(${renderedPaperWidth}px,1fr)`,
+    ...effectiveColumns.map(
+      (column) => `${renderedColumnWidths[column] ?? columnWidths[column]}px`,
+    ),
+    actions ? `${actionsColumnWidth}px` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const tableMinimumWidth =
+    (leading ? leadingColumnWidth : 0) +
+    renderedPaperWidth +
+    effectiveColumns.reduce(
+      (total, column) =>
+        total + (renderedColumnWidths[column] ?? columnWidths[column]),
+      0,
+    ) +
+    (actions ? actionsColumnWidth : 0) +
+    Math.max(0, columnCount - 1) * tableColumnGap +
     16;
-  const storedColumnsWidth = orderedColumns.reduce(
-    (total, column) => total + columnWidths[column],
-    0,
-  );
-  const availableColumnsWidth = Math.max(0, listWidth - tableChromeWidth);
-  const paperSurplus = Math.max(
-    0,
-    Math.floor(availableColumnsWidth - storedColumnsWidth),
-  );
-  const renderedColumnWidths = {
-    ...columnWidths,
-    paper: columnWidths.paper + paperSurplus,
-  };
   const columnLabel = (column: PaperCollectionSizedColumn) =>
     t(
       column === "paper"
@@ -886,14 +1046,15 @@ export function PaperCollectionWorkbench({
             ? "columns.personalTags"
             : `columns.${column}`,
     );
-  const gridTemplateColumns = `${leading ? "3rem " : ""}${orderedColumns.map((column) => `${renderedColumnWidths[column]}px`).join(" ")} ${actions ? "2.75rem" : ""}`;
-  const tableMinimumWidth = tableChromeWidth + storedColumnsWidth;
   const virtualItems = rowVirtualizer.getVirtualItems();
   const renderedVirtualItems = width === undefined ? [] : virtualItems;
+  const previewToggleLabel = previewVisible
+    ? t("preview.close")
+    : t("preview.open");
   return (
     <div className="min-w-0" ref={rootRef}>
       <div
-        className="mb-3 flex min-h-11 min-w-0 items-center gap-2"
+        className="mb-3 flex min-h-11 min-w-0 items-center"
         data-paper-collection-toolbar=""
       >
         {toolbar ? (
@@ -902,21 +1063,35 @@ export function PaperCollectionWorkbench({
           <div className="flex-1" />
         )}
         <div className="hidden shrink-0 items-center gap-1 sm:flex">
-          {!preferences.preview_open && measuredWidth >= 1040 ? (
-            <Button
-              aria-label={t("preview.open")}
-              onClick={() =>
-                mutatePreferences((current) => ({
-                  ...current,
-                  preview_open: true,
-                }))
-              }
-              size="sm"
-              variant="ghost"
-            >
-              <Icon glyph={OpenPanelIcon} size={20} />
-              <span className="hidden xl:inline">{t("preview.open")}</span>
-            </Button>
+          {availableWidth >= 1040 ? (
+            <TooltipProvider delayDuration={250}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    aria-pressed={previewVisible}
+                    data-paper-preview-toggle=""
+                    label={previewToggleLabel}
+                    onClick={() =>
+                      mutatePreferences((current) => ({
+                        ...current,
+                        preview_open: !current.preview_open,
+                      }))
+                    }
+                    variant="ghost"
+                  >
+                    <Icon
+                      glyph={
+                        previewVisible ? PreviewHiddenIcon : PreviewVisibleIcon
+                      }
+                      size={20}
+                    />
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {previewToggleLabel}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           ) : null}
           <ColumnManager
             onResetWidths={resetLayoutWidths}
@@ -932,7 +1107,7 @@ export function PaperCollectionWorkbench({
         )}
         data-paper-collection-split=""
         style={
-          previewVisible
+          previewVisible && !sidePanelLayout
             ? {
                 gridTemplateColumns: `minmax(0, 1fr) ${resolvedPreviewWidth}px`,
               }
@@ -966,7 +1141,10 @@ export function PaperCollectionWorkbench({
                 </div>
               ) : (
                 <div
-                  className="bg-surface text-muted sticky top-0 z-10 grid h-10 items-center gap-3 border-b px-2 text-[0.6875rem] font-semibold"
+                  className={cn(
+                    "bg-surface text-muted sticky top-0 z-10 grid h-10 items-center border-b px-2 text-[0.6875rem] font-semibold",
+                    previewVisible ? "gap-2" : "gap-3",
+                  )}
                   aria-rowindex={1}
                   role="row"
                   style={{
@@ -988,14 +1166,14 @@ export function PaperCollectionWorkbench({
                     const resizePair = nextColumn
                       ? (nextLeft: number) =>
                           resizeColumnPair({
-                            left: renderedColumnWidths[column],
+                            left: columnWidths[column],
                             leftLimits: COLUMN_WIDTH_LIMITS[column],
                             nextLeft,
-                            right: renderedColumnWidths[nextColumn],
+                            right: columnWidths[nextColumn],
                             rightLimits: COLUMN_WIDTH_LIMITS[nextColumn],
                           })
                       : undefined;
-                    const pair = resizePair?.(renderedColumnWidths[column]);
+                    const pair = resizePair?.(columnWidths[column]);
                     return (
                       <span
                         className="relative flex h-full items-center"
@@ -1027,7 +1205,7 @@ export function PaperCollectionWorkbench({
                                 [nextColumn]: resized.right,
                               });
                             }}
-                            value={renderedColumnWidths[column]}
+                            value={columnWidths[column]}
                           />
                         ) : null}
                       </span>
@@ -1121,7 +1299,10 @@ export function PaperCollectionWorkbench({
                       </div>
                     ) : (
                       <div
-                        className="grid h-16 items-center gap-3 px-2"
+                        className={cn(
+                          "grid h-16 items-center px-2",
+                          previewVisible ? "gap-2" : "gap-3",
+                        )}
                         style={{
                           gridTemplateColumns,
                           minWidth: tableMinimumWidth,
@@ -1199,7 +1380,7 @@ export function PaperCollectionWorkbench({
             ) : null}
           </div>
         </div>
-        {previewVisible && preview ? (
+        {previewVisible && preview && !sidePanelLayout ? (
           <div className="relative min-h-0 min-w-0">
             <ResizeHandle
               className="absolute inset-y-0 -left-2 z-20 w-4"
@@ -1219,12 +1400,6 @@ export function PaperCollectionWorkbench({
             />
             <Preview
               item={preview}
-              onClose={() =>
-                mutatePreferences((current) => ({
-                  ...current,
-                  preview_open: false,
-                }))
-              }
               onStatusChange={onStatusChange}
               onTagClick={onTagClick}
               personalLabels={personalLabels}
@@ -1232,6 +1407,35 @@ export function PaperCollectionWorkbench({
           </div>
         ) : null}
       </div>
+      {previewVisible && preview && sidePanelLayout?.panelElement
+        ? createPortal(
+            <div className="relative h-full min-h-0 min-w-0">
+              <ResizeHandle
+                className="absolute inset-y-0 -left-2 z-20 w-4"
+                direction={-1}
+                label={t("resize.preview")}
+                max={previewWidthMaximum}
+                min={MIN_PREVIEW_WIDTH}
+                onChange={setPreviewWidth}
+                onCommit={(next) => {
+                  setPreviewWidth(next);
+                  mutatePreferences((current) => ({
+                    ...current,
+                    preview_width: next,
+                  }));
+                }}
+                value={resolvedPreviewWidth}
+              />
+              <Preview
+                item={preview}
+                onStatusChange={onStatusChange}
+                onTagClick={onTagClick}
+                personalLabels={personalLabels}
+              />
+            </div>,
+            sidePanelLayout.panelElement,
+          )
+        : null}
     </div>
   );
 }

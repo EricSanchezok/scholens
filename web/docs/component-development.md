@@ -183,6 +183,27 @@ Before accepting external source code:
 shadcn/ui is a source distribution mechanism, not a runtime design dependency.
 Imported source becomes Scholens-owned code and follows this handbook.
 
+ReUI is configured as a shadcn registry source under the `@reui` namespace.
+Use only its public free `c-*` examples and supporting primitives as intake
+references unless a separately licensed source is explicitly in scope. ReUI
+composition does not change component ownership: Sidebar, Composer, PaperRow,
+ProjectRow, and other product components remain feature-owned, while their
+adapted colors, typography, icons, focus, and motion continue to follow
+Scholens conventions. Select the Radix-compatible source where a registry item
+offers multiple primitive implementations, and inspect the registry payload
+before adding it so an imported item cannot overwrite an existing shared
+primitive or introduce another icon system.
+
+React Bits is configured under the `@react-bits` namespace as an optional
+motion-recipe source. It is not a second UI system: product structure,
+controls, typography, icons, surfaces, focus, and responsive behavior continue
+to come from Scholens. Intake is limited to motion that communicates hierarchy
+or state, must use semantic tokens, must honor the repository motion runtime
+and `prefers-reduced-motion`, and must not add decorative background effects to
+high-frequency product workspaces. Inspect registry source and dependencies
+before intake, then adapt the smallest useful recipe instead of installing a
+visual bundle wholesale.
+
 ## Changing and deleting components
 
 Before changing a shared primitive, inspect every consumer and its stories. A

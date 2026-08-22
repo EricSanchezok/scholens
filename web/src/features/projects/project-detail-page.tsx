@@ -28,14 +28,14 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Frame,
+  FramePanel,
   IconButton,
   OverflowMenuButton,
   SearchField,
   Select,
   SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
   Sheet,
   SheetContent,
   SheetTitle,
@@ -56,6 +56,7 @@ import {
   DataTableIcon,
   DeleteIcon,
   EditIcon,
+  FilterIcon,
   OpenPanelIcon,
   QuoteIcon,
 } from "@/design-system/icons/semantic-icons";
@@ -78,6 +79,8 @@ import {
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
 import {
+  CollectionToolbar,
+  CollectionToolbarSelectTrigger,
   PaperCollectionFilters,
   PaperCollectionWorkbench,
   paperCollectionTagsQuery,
@@ -137,7 +140,7 @@ function ProjectSearchField({
   return (
     <SearchField
       aria-label={label}
-      className="bg-subtle hover:border-line rounded-full border-transparent"
+      className="border-line bg-surface rounded-full text-base sm:text-sm"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
       value={input}
@@ -284,10 +287,12 @@ function ProjectPaperRow({
 }) {
   const t = useTranslations("Projects.detail.papers");
   return (
-    <div
-      className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--radius-lg)] py-1"
+    <FramePanel
+      className="motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed grid w-full max-w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-visible"
       onFocusCapture={() => onPreview?.(paper)}
       onMouseEnter={() => onPreview?.(paper)}
+      spacing="none"
+      variant="ghost"
     >
       <Link
         className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
@@ -319,7 +324,7 @@ function ProjectPaperRow({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-    </div>
+    </FramePanel>
   );
 }
 
@@ -370,8 +375,11 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
   const format = useFormatter();
   const kind = output.item.kind;
   return (
-    <div className="motion-control hover:bg-hover flex w-full max-w-full min-w-0 items-center gap-3 overflow-hidden rounded-[var(--radius-lg)] px-3 py-4">
-      <div className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
+    <FramePanel
+      className="motion-control hover:bg-hover flex w-full max-w-full min-w-0 items-center gap-3"
+      variant="ghost"
+    >
+      <div className="border-line bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)] border">
         <Icon glyph={outputIcons[kind]} size={20} tone="secondary" />
       </div>
       <div className="min-w-0 flex-1">
@@ -381,7 +389,7 @@ function ProjectOutputRow({ output }: { output: ProjectOutput }) {
       <time className="text-muted hidden text-xs sm:block">
         {format.dateTime(new Date(output.item.updated_at), "short")}
       </time>
-    </div>
+    </FramePanel>
   );
 }
 
@@ -787,51 +795,57 @@ export function ProjectDetailWorkspace({
     />
   );
   const projectPaperToolbar = (
-    <div className="grid min-w-0 gap-2 xl:grid-cols-[minmax(18rem,36rem)_auto_13rem_minmax(0,1fr)] xl:items-center">
-      <ProjectSearchField
-        key={state.paperQuery}
-        label={t("detail.papers.search")}
-        onChange={(paperQuery) =>
-          replaceSearch({ paperCursor: undefined, paperQuery })
-        }
-        value={state.paperQuery}
-      />
-      <PaperCollectionFilters
-        onStatusesChange={(paperStatuses) =>
-          replaceSearch({ paperCursor: undefined, paperStatuses })
-        }
-        onTagIdsChange={(paperTagIds) =>
-          replaceSearch({ paperCursor: undefined, paperTagIds })
-        }
-        statuses={state.paperStatuses}
-        tagIds={state.paperTagIds}
-        tags={personalTagsQuery.data?.items ?? projectPaperTags}
-      />
-      <Select
-        onValueChange={(paperSort: ProjectPaperSort) =>
-          replaceSearch({ paperCursor: undefined, paperSort })
-        }
-        value={state.paperSort}
-      >
-        <SelectTrigger aria-label={t("detail.papers.sortLabel")}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="added_desc">
-            {t("detail.papers.sortAdded")}
-          </SelectItem>
-          <SelectItem value="title_asc">
-            {t("detail.papers.sortTitle")}
-          </SelectItem>
-          <SelectItem value="published_desc">
-            {t("detail.papers.sortPublished")}
-          </SelectItem>
-          <SelectItem value="personal_activity_desc">
-            {t("detail.papers.sortActivity")}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
+    <CollectionToolbar
+      controls={
+        <>
+          <PaperCollectionFilters
+            onStatusesChange={(paperStatuses) =>
+              replaceSearch({ paperCursor: undefined, paperStatuses })
+            }
+            onTagIdsChange={(paperTagIds) =>
+              replaceSearch({ paperCursor: undefined, paperTagIds })
+            }
+            statuses={state.paperStatuses}
+            tagIds={state.paperTagIds}
+            tags={personalTagsQuery.data?.items ?? projectPaperTags}
+          />
+          <Select
+            onValueChange={(paperSort: ProjectPaperSort) =>
+              replaceSearch({ paperCursor: undefined, paperSort })
+            }
+            value={state.paperSort}
+          >
+            <CollectionToolbarSelectTrigger
+              label={t("detail.papers.sortLabel")}
+            />
+            <SelectContent>
+              <SelectItem value="added_desc">
+                {t("detail.papers.sortAdded")}
+              </SelectItem>
+              <SelectItem value="title_asc">
+                {t("detail.papers.sortTitle")}
+              </SelectItem>
+              <SelectItem value="published_desc">
+                {t("detail.papers.sortPublished")}
+              </SelectItem>
+              <SelectItem value="personal_activity_desc">
+                {t("detail.papers.sortActivity")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </>
+      }
+      search={
+        <ProjectSearchField
+          key={state.paperQuery}
+          label={t("detail.papers.search")}
+          onChange={(paperQuery) =>
+            replaceSearch({ paperCursor: undefined, paperQuery })
+          }
+          value={state.paperQuery}
+        />
+      }
+    />
   );
 
   return (
@@ -905,13 +919,13 @@ export function ProjectDetailWorkspace({
           transition={motionTransitions.layout}
         >
           <div
-            className={
-              state.view === "papers"
-                ? "w-full min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-8 lg:pt-6"
-                : "mx-auto w-full max-w-5xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6"
-            }
+            className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6"
+            data-project-detail-canvas=""
           >
-            <header className="hidden min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 lg:grid">
+            <header
+              className="hidden min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 lg:grid"
+              data-project-detail-header=""
+            >
               <Link
                 aria-label={t("detail.back")}
                 className="hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]"
@@ -919,7 +933,7 @@ export function ProjectDetailWorkspace({
               >
                 <Icon glyph={BackIcon} size={20} />
               </Link>
-              <div className="min-w-0 pt-0.5">
+              <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1">
                   <h1
                     className="max-w-3xl min-w-0 text-2xl font-semibold tracking-[-0.02em] break-words"
@@ -1034,19 +1048,19 @@ export function ProjectDetailWorkspace({
             >
               <TabsList className="bg-transparent p-0">
                 <TabsTrigger
-                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  className="data-[state=active]:border-primary w-20 rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
                   value="overview"
                 >
                   {t("detail.tabs.overview")}
                 </TabsTrigger>
                 <TabsTrigger
-                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  className="data-[state=active]:border-primary w-20 rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
                   value="papers"
                 >
                   {t("detail.tabs.papers")}
                 </TabsTrigger>
                 <TabsTrigger
-                  className="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                  className="data-[state=active]:border-primary w-20 rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
                   value="outputs"
                 >
                   {t("detail.tabs.outputs")}
@@ -1054,8 +1068,14 @@ export function ProjectDetailWorkspace({
               </TabsList>
 
               <TabsContent className="mt-5" value="overview">
-                <div className="grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
-                  <section className="min-w-0">
+                <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-start">
+                  <Frame
+                    aria-label={t("detail.recentPapers")}
+                    className="min-w-0"
+                    role="region"
+                    spacing="roomy"
+                    variant="ghost"
+                  >
                     <div className="mb-3 flex items-center justify-between">
                       <h2 className="text-base font-semibold">
                         {t("detail.recentPapers")}
@@ -1068,7 +1088,7 @@ export function ProjectDetailWorkspace({
                         {t("detail.viewAll")}
                       </Button>
                     </div>
-                    <div className="divide-line-subtle border-line-subtle min-w-0 divide-y border-y">
+                    <div className="grid min-w-0 gap-1.5">
                       {projectPapers.slice(0, 3).map((paper) => (
                         <ProjectPaperRow
                           canRemove={project.capabilities.manage_papers}
@@ -1087,9 +1107,15 @@ export function ProjectDetailWorkspace({
                         </p>
                       )}
                     </div>
-                  </section>
-                  <div className="grid min-w-0 gap-10">
-                    <section className="min-w-0">
+                  </Frame>
+                  <div className="grid min-w-0 gap-4">
+                    <Frame
+                      aria-label={t("detail.recentOutputs")}
+                      className="min-w-0"
+                      role="region"
+                      spacing="roomy"
+                      variant="ghost"
+                    >
                       <div className="mb-3 flex items-center justify-between">
                         <h2 className="text-base font-semibold">
                           {t("detail.recentOutputs")}
@@ -1102,7 +1128,7 @@ export function ProjectDetailWorkspace({
                           {t("detail.viewAll")}
                         </Button>
                       </div>
-                      <div className="divide-line-subtle border-line-subtle min-w-0 divide-y overflow-hidden border-y">
+                      <div className="grid min-w-0 gap-1.5">
                         {outputsQuery.data?.items.slice(0, 3).map((output) => (
                           <ProjectOutputRow
                             key={output.item.id}
@@ -1126,7 +1152,7 @@ export function ProjectDetailWorkspace({
                             </div>
                           )}
                       </div>
-                    </section>
+                    </Frame>
                     <ProjectCollaboration
                       onManage={() => setCollaboratorsOpen(true)}
                       project={project}
@@ -1250,66 +1276,83 @@ export function ProjectDetailWorkspace({
               </TabsContent>
 
               <TabsContent className="mt-5" value="outputs">
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_13rem]">
-                  <ProjectSearchField
-                    key={state.outputQuery}
-                    label={t("detail.outputs.search")}
-                    onChange={(outputQuery) =>
-                      replaceSearch({ outputCursor: undefined, outputQuery })
+                <div className="min-w-0">
+                  <CollectionToolbar
+                    controls={
+                      <>
+                        <Select
+                          onValueChange={(value) =>
+                            replaceSearch({
+                              outputCursor: undefined,
+                              outputKinds:
+                                value === "all"
+                                  ? []
+                                  : [value as ProjectOutputKind],
+                            })
+                          }
+                          value={state.outputKinds[0] ?? "all"}
+                        >
+                          <CollectionToolbarSelectTrigger
+                            glyph={FilterIcon}
+                            label={t("detail.outputs.kindLabel")}
+                          />
+                          <SelectContent>
+                            <SelectItem value="all">
+                              {t("detail.outputs.allKinds")}
+                            </SelectItem>
+                            {(
+                              [
+                                "annotation_thread",
+                                "citation",
+                                "audio_overview",
+                                "data_table",
+                              ] as const
+                            ).map((kind) => (
+                              <SelectItem key={kind} value={kind}>
+                                {t(`detail.outputs.kinds.${kind}`)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          onValueChange={(outputSort: ProjectOutputSort) =>
+                            replaceSearch({
+                              outputCursor: undefined,
+                              outputSort,
+                            })
+                          }
+                          value={state.outputSort}
+                        >
+                          <CollectionToolbarSelectTrigger
+                            label={t("detail.outputs.sortLabel")}
+                          />
+                          <SelectContent>
+                            <SelectItem value="updated_desc">
+                              {t("detail.outputs.sortUpdated")}
+                            </SelectItem>
+                            <SelectItem value="title_asc">
+                              {t("detail.outputs.sortTitle")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </>
                     }
-                    value={state.outputQuery}
+                    search={
+                      <ProjectSearchField
+                        key={state.outputQuery}
+                        label={t("detail.outputs.search")}
+                        onChange={(outputQuery) =>
+                          replaceSearch({
+                            outputCursor: undefined,
+                            outputQuery,
+                          })
+                        }
+                        value={state.outputQuery}
+                      />
+                    }
                   />
-                  <Select
-                    onValueChange={(value) =>
-                      replaceSearch({
-                        outputCursor: undefined,
-                        outputKinds:
-                          value === "all" ? [] : [value as ProjectOutputKind],
-                      })
-                    }
-                    value={state.outputKinds[0] ?? "all"}
-                  >
-                    <SelectTrigger aria-label={t("detail.outputs.kindLabel")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        {t("detail.outputs.allKinds")}
-                      </SelectItem>
-                      {(
-                        [
-                          "annotation_thread",
-                          "citation",
-                          "audio_overview",
-                          "data_table",
-                        ] as const
-                      ).map((kind) => (
-                        <SelectItem key={kind} value={kind}>
-                          {t(`detail.outputs.kinds.${kind}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    onValueChange={(outputSort: ProjectOutputSort) =>
-                      replaceSearch({ outputCursor: undefined, outputSort })
-                    }
-                    value={state.outputSort}
-                  >
-                    <SelectTrigger aria-label={t("detail.outputs.sortLabel")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="updated_desc">
-                        {t("detail.outputs.sortUpdated")}
-                      </SelectItem>
-                      <SelectItem value="title_asc">
-                        {t("detail.outputs.sortTitle")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
-                <div className="divide-line-subtle border-line-subtle mt-5 divide-y border-y">
+                <div className="mt-5 grid gap-2">
                   {outputsQuery.isPending ? (
                     <div className="py-6">
                       <LoadingState />

@@ -93,7 +93,8 @@ mode.
 | `motion-dialog`            | Centered modal entrance/exit                                       |
 | `motion-responsive-bottom` | Bottom sheet on narrow screens, centered dialog on desktop         |
 | `motion-responsive-full`   | Full-screen mobile dialog, centered desktop dialog                 |
-| `motion-side-sheet`        | Directional side panel                                             |
+| `motion-side-sheet`        | Right-origin side panel                                            |
+| `motion-side-sheet-left`   | Left-origin navigation panel                                       |
 | `motion-toast`             | Brief status surface without changing document layout              |
 | `motion-progress`          | GPU-friendly `scaleX` progress                                     |
 | `motion-spinner`           | Indeterminate activity; stopped under reduced motion               |

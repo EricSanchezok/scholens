@@ -453,6 +453,58 @@ test("shows the complete Project collaboration roster", async ({ page }) => {
   await expect(
     collaboration.locator('[data-avatar-state="image"]'),
   ).toHaveCount(1);
+  await expect(collaboration.locator('[data-slot="frame-panel"]')).toHaveCount(
+    0,
+  );
+});
+
+test("keeps Project detail geometry stable across tabs", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/projects/${projectFixtures[0]!.id}`);
+
+  const header = page.locator("[data-project-detail-header]");
+  await expect(header).toBeVisible();
+  await expect(
+    header.locator('xpath=ancestor-or-self::*[@data-slot="frame"]'),
+  ).toHaveCount(0);
+
+  const measure = () =>
+    page.evaluate(() => {
+      const canvas = document.querySelector<HTMLElement>(
+        "[data-project-detail-canvas]",
+      );
+      const detailHeader = document.querySelector<HTMLElement>(
+        "[data-project-detail-header]",
+      );
+      const tabs = Array.from(
+        document.querySelectorAll<HTMLElement>('[role="tab"]'),
+      );
+      if (!canvas || !detailHeader || tabs.length !== 3) return null;
+      const box = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          width: Math.round(rect.width),
+          x: Math.round(rect.x),
+        };
+      };
+      return {
+        canvas: box(canvas),
+        header: box(detailHeader),
+        tabs: tabs.map(box),
+      };
+    });
+
+  const overviewGeometry = await measure();
+  expect(overviewGeometry).not.toBeNull();
+  expect(new Set(overviewGeometry!.tabs.map((tab) => tab.width)).size).toBe(1);
+
+  await page.getByRole("tab", { exact: true, name: "Papers" }).click();
+  await expect(page).toHaveURL(/view=papers/);
+  expect(await measure()).toEqual(overviewGeometry);
+
+  await page.getByRole("tab", { exact: true, name: "Outputs" }).click();
+  await expect(page).toHaveURL(/view=outputs/);
+  expect(await measure()).toEqual(overviewGeometry);
 });
 
 test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
@@ -559,3 +611,78 @@ for (const width of [2560, 1440, 768, 430, 390, 320]) {
     ).toBe(1);
   });
 }
+
+test("keeps Project paper and output controls on one phone row", async ({
+  page,
+}) => {
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/projects");
+    const projectSearch = page.getByRole("searchbox", {
+      name: "Search projects",
+    });
+    const projectSort = page.getByRole("combobox", { name: "Sort projects" });
+    const [projectSearchBox, projectSortBox] = await Promise.all([
+      projectSearch.boundingBox(),
+      projectSort.boundingBox(),
+    ]);
+    expect(
+      Math.abs(projectSearchBox!.y - projectSortBox!.y),
+    ).toBeLessThanOrEqual(1);
+    await expect(
+      projectSearch.locator("xpath=ancestor::*[@data-slot='frame']"),
+    ).toHaveCount(0);
+
+    await page.goto(`/projects/${projectFixtures[0]!.id}?view=papers`);
+    const paperSearch = page.getByRole("searchbox", {
+      name: "Search project papers",
+    });
+    const paperControls = [
+      page.getByRole("button", { exact: true, name: "Status" }),
+      page.getByRole("button", { exact: true, name: "Tags" }),
+      page.getByRole("combobox", { name: "Sort project papers" }),
+    ];
+    await expect(paperSearch).toBeVisible();
+    for (const control of paperControls) await expect(control).toBeVisible();
+    const paperBoxes = await Promise.all(
+      [paperSearch, ...paperControls].map((control) => control.boundingBox()),
+    );
+    const paperTops = paperBoxes.map((box) => box!.y);
+    expect(Math.max(...paperTops) - Math.min(...paperTops)).toBeLessThanOrEqual(
+      1,
+    );
+    expect(
+      await paperSearch
+        .locator("xpath=ancestor::*[@data-collection-toolbar]")
+        .evaluate((toolbar) => toolbar.scrollWidth <= toolbar.clientWidth),
+    ).toBe(true);
+
+    await page.goto(`/projects/${projectFixtures[0]!.id}?view=outputs`);
+    const outputSearch = page.getByRole("searchbox", {
+      name: "Search project outputs",
+    });
+    const outputControls = [
+      page.getByRole("combobox", { name: "Filter output type" }),
+      page.getByRole("combobox", { name: "Sort project outputs" }),
+    ];
+    await expect(outputSearch).toBeVisible();
+    for (const control of outputControls) await expect(control).toBeVisible();
+    const outputBoxes = await Promise.all(
+      [outputSearch, ...outputControls].map((control) => control.boundingBox()),
+    );
+    const outputTops = outputBoxes.map((box) => box!.y);
+    expect(
+      Math.max(...outputTops) - Math.min(...outputTops),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      await outputSearch
+        .locator("xpath=ancestor::*[@data-collection-toolbar]")
+        .evaluate((toolbar) => toolbar.scrollWidth <= toolbar.clientWidth),
+    ).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  }
+});

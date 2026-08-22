@@ -38,13 +38,10 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
   Sheet,
   SheetContent,
   SheetTitle,
 } from "@/components/ui";
-import { Badge } from "@/components/ui/display";
 import { Icon } from "@/design-system/icons/icon";
 import {
   AnimatePresence,
@@ -53,6 +50,9 @@ import {
 } from "@/design-system/motion";
 import type { components } from "@/lib/api/generated/schema";
 import {
+  CollectionToolbar,
+  CollectionToolbarButton,
+  CollectionToolbarSelectTrigger,
   PaperCollectionWorkbench,
   type PaperCollectionItem,
   type PaperStatus,
@@ -401,16 +401,11 @@ function TagFilter({
       <div className="hidden sm:block">
         <Popover onOpenChange={(open) => open && onNeedTags()}>
           <PopoverTrigger asChild>
-            <Button
-              className="bg-subtle hover:border-line rounded-full border-transparent"
-              variant="secondary"
-            >
-              <Icon glyph={TagIcon} size={20} tone="secondary" />
-              {t("tags")}
-              {active.length > 0 && (
-                <Badge tone="neutral">{active.length}</Badge>
-              )}
-            </Button>
+            <CollectionToolbarButton
+              count={active.length}
+              glyph={TagIcon}
+              label={t("tags")}
+            />
           </PopoverTrigger>
           <PopoverContent>{renderBody(onManage)}</PopoverContent>
         </Popover>
@@ -439,13 +434,11 @@ function StatusFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          className="bg-subtle hover:border-line rounded-full border-transparent"
-          variant="secondary"
-        >
-          {t("columns.status")}
-          {active.length ? <Badge tone="neutral">{active.length}</Badge> : null}
-        </Button>
+        <CollectionToolbarButton
+          count={active.length}
+          glyph={FilterIcon}
+          label={t("columns.status")}
+        />
       </PopoverTrigger>
       <PopoverContent className="grid gap-1">
         {(["todo", "reading", "completed"] as const).map((status) => (
@@ -493,20 +486,19 @@ function MobileTagFilter({
   }
   return (
     <Sheet onOpenChange={setOpen} open={open}>
-      <Button
+      <CollectionToolbarButton
+        count={activeCount}
+        glyph={TagIcon}
+        label={title}
         onClick={() => {
           onNeedTags();
           setOpen(true);
         }}
-        variant="secondary"
-      >
-        <Icon glyph={FilterIcon} size={20} tone="secondary" />
-        {title}
-        {activeCount > 0 && <Badge tone="neutral">{activeCount}</Badge>}
-      </Button>
+      />
       <SheetContent
-        className="inset-x-0 top-auto bottom-0 h-auto max-h-[76dvh] w-full max-w-none rounded-t-[var(--radius-xl)] border-t border-l-0 p-5"
+        className="h-auto max-h-[76dvh] rounded-t-[var(--radius-xl)] p-5"
         closeLabel={t("close")}
+        side="bottom"
       >
         <SheetTitle className="mb-4 text-lg font-semibold">{title}</SheetTitle>
         {renderBody(manageTags)}
@@ -775,57 +767,61 @@ export function PapersView({
       ) : (
         <MotionPresence
           animate="animate"
-          className="grid min-w-0 gap-2 xl:grid-cols-[minmax(18rem,36rem)_auto_auto_minmax(11rem,13rem)_minmax(8rem,1fr)] xl:items-center"
+          className="min-w-0"
           exit="exit"
           initial="initial"
           key="utility-toolbar"
           variants={motionVariants.swap}
         >
-          <div className="min-w-0">{search}</div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] items-center gap-2 sm:grid-cols-[auto_auto_minmax(11rem,1fr)_auto] xl:contents">
-            <StatusFilter active={statuses} onChange={onStatusFilterChange} />
-            <TagFilter
-              active={tagIds}
-              onChange={onTagFilterChange}
-              onManage={beginTagManagement}
-              onNeedTags={onNeedTags}
-              tags={tags}
-              tagsLoading={tagsLoading}
-            />
-            <Select
-              onValueChange={(value) => onSortChange(value as PaperSort)}
-              value={sort}
-            >
-              <SelectTrigger
-                aria-label={t("sort.label")}
-                className="w-full min-w-0 xl:w-auto xl:min-w-44"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAPER_SORTS.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {t(`sort.${option}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {data && !searchResults && (
-              <span className="text-secondary col-span-2 grid justify-items-end text-right text-sm sm:col-span-1 sm:ml-2 xl:ml-2">
-                <span className="whitespace-nowrap">
-                  {t("count", { count: paperCount })}
-                </span>
-                {ingestionCount > 0 && (
-                  <span className="text-xs whitespace-nowrap">
-                    {t("ingestionCount", {
-                      attentionCount,
-                      count: ingestionCount,
-                    })}
+          <CollectionToolbar
+            controls={
+              <>
+                <StatusFilter
+                  active={statuses}
+                  onChange={onStatusFilterChange}
+                />
+                <TagFilter
+                  active={tagIds}
+                  onChange={onTagFilterChange}
+                  onManage={beginTagManagement}
+                  onNeedTags={onNeedTags}
+                  tags={tags}
+                  tagsLoading={tagsLoading}
+                />
+                <Select
+                  onValueChange={(value) => onSortChange(value as PaperSort)}
+                  value={sort}
+                >
+                  <CollectionToolbarSelectTrigger label={t("sort.label")} />
+                  <SelectContent>
+                    {PAPER_SORTS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {t(`sort.${option}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            }
+            meta={
+              data && !searchResults ? (
+                <span className="grid justify-items-end text-right">
+                  <span className="whitespace-nowrap">
+                    {t("count", { count: paperCount })}
                   </span>
-                )}
-              </span>
-            )}
-          </div>
+                  {ingestionCount > 0 && (
+                    <span className="text-xs whitespace-nowrap">
+                      {t("ingestionCount", {
+                        attentionCount,
+                        count: ingestionCount,
+                      })}
+                    </span>
+                  )}
+                </span>
+              ) : undefined
+            }
+            search={search}
+          />
         </MotionPresence>
       )}
     </AnimatePresence>

@@ -54,7 +54,7 @@ function UsageMeter({
   );
 }
 
-export function UsagePanel() {
+export function UsagePanel({ showHeader = true }: { showHeader?: boolean }) {
   const t = useTranslations("Settings");
   const format = useFormatter();
   const [period, setPeriod] = React.useState<UsagePeriod>("current_week");
@@ -62,10 +62,12 @@ export function UsagePanel() {
 
   return (
     <div>
-      <SettingsPanelHeader
-        description={t("usage.description")}
-        title={t("usage.title")}
-      />
+      {showHeader ? (
+        <SettingsPanelHeader
+          description={t("usage.description")}
+          title={t("usage.title")}
+        />
+      ) : null}
       <AsyncBoundary
         data={usage.data}
         error={usage.error}

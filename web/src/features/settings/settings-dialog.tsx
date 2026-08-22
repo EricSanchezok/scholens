@@ -1,6 +1,9 @@
 "use client";
 
+import type { Route } from "next";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import * as React from "react";
 
 import {
   Dialog,
@@ -25,6 +28,8 @@ import {
 } from "@/design-system/icons/semantic-icons";
 import { clientEnvironment } from "@/lib/env/client";
 import { cn } from "@/lib/utilities/cn";
+import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
+import { mobileSettingsRedirectHref } from "./account-hub-routes";
 import { AccessKeysPanel } from "./access-keys-panel";
 import { AccountPanel } from "./account-panel";
 import { ConnectionsPanel } from "./connections-panel";
@@ -160,6 +165,24 @@ export function SettingsDialog({
   accountCenterUrl?: string;
 }) {
   const { section, setSection } = useSettingsNavigation();
+  const desktop = useDesktopLayout();
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  React.useEffect(() => {
+    if (!section || desktop) return;
+    router.replace(
+      mobileSettingsRedirectHref(
+        section,
+        pathname,
+        new URLSearchParams(searchParams.toString()),
+      ) as Route,
+      { scroll: false },
+    );
+  }, [desktop, pathname, router, searchParams, section]);
+
+  if (section && !desktop) return null;
 
   return (
     <SettingsDialogSurface

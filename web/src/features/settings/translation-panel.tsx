@@ -55,7 +55,11 @@ const translationSchema = z.object({
 });
 type TranslationValues = z.infer<typeof translationSchema>;
 
-export function TranslationPanel() {
+export function TranslationPanel({
+  showHeader = true,
+}: {
+  showHeader?: boolean;
+}) {
   const t = useTranslations("Settings");
   const queryClient = useQueryClient();
   const preferences = useQuery(translationPreferenceQuery());
@@ -96,10 +100,12 @@ export function TranslationPanel() {
 
   return (
     <div>
-      <SettingsPanelHeader
-        description={t("translation.description")}
-        title={t("translation.title")}
-      />
+      {showHeader ? (
+        <SettingsPanelHeader
+          description={t("translation.description")}
+          title={t("translation.title")}
+        />
+      ) : null}
       <AsyncBoundary
         data={preferences.data}
         error={preferences.error}

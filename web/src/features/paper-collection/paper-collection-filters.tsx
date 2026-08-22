@@ -3,13 +3,13 @@
 import { useTranslations } from "next-intl";
 
 import {
-  Button,
   Checkbox,
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui";
-import { Badge } from "@/components/ui/display";
+import { FilterIcon, TagIcon } from "@/design-system/icons/semantic-icons";
+import { CollectionToolbarButton } from "./collection-toolbar";
 import type { PaperCollectionTag } from "./paper-collection-workbench";
 import type { PaperStatus } from "./api";
 
@@ -28,15 +28,14 @@ export function PaperCollectionFilters({
 }) {
   const t = useTranslations("PaperCollection");
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2">
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="secondary">
-            {t("columns.status")}
-            {statuses.length ? (
-              <Badge tone="neutral">{statuses.length}</Badge>
-            ) : null}
-          </Button>
+          <CollectionToolbarButton
+            count={statuses.length}
+            glyph={FilterIcon}
+            label={t("columns.status")}
+          />
         </PopoverTrigger>
         <PopoverContent className="grid gap-1">
           {(["todo", "reading", "completed"] as const).map((status) => (
@@ -62,12 +61,11 @@ export function PaperCollectionFilters({
       </Popover>
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="secondary">
-            {t("columns.tags")}
-            {tagIds.length ? (
-              <Badge tone="neutral">{tagIds.length}</Badge>
-            ) : null}
-          </Button>
+          <CollectionToolbarButton
+            count={tagIds.length}
+            glyph={TagIcon}
+            label={t("columns.tags")}
+          />
         </PopoverTrigger>
         <PopoverContent className="grid max-h-72 gap-1 overflow-auto">
           {tags.map((tag) => (

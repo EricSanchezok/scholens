@@ -286,6 +286,21 @@ export const Library: Story = {
         name: /Memory as a Controlled Process/,
       }),
     ).toBeVisible();
+    const previewToggle = canvas.getByRole("button", {
+      name: "Close paper details",
+    });
+    await expect(previewToggle).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(previewToggle);
+    await expect(previewToggle).toHaveAttribute("aria-pressed", "false");
+    await expect(previewToggle).toHaveAccessibleName("Show paper details");
+    await expect(previewToggle).toHaveFocus();
+    await expect(
+      canvas.queryByRole("complementary", { name: "Paper details" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(previewToggle);
+    await expect(
+      canvas.getByRole("complementary", { name: "Paper details" }),
+    ).toBeVisible();
   },
 };
 
@@ -334,6 +349,11 @@ export const AdjacentColumnResizing: Story = {
     resizePreferenceRequestCount = 0;
     resizedPreferences = preferences;
     const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Close paper details" }),
+    );
+    await waitFor(() => expect(resizePreferenceRequestCount).toBe(1));
+    resizePreferenceRequestCount = 0;
     const table = await canvas.findByRole("table");
     const columnHeader = (label: string) => {
       const header = within(table)
@@ -391,7 +411,10 @@ export const AdjacentColumnResizing: Story = {
       expect(tagsAfter.right).toBeCloseTo(tagsBefore.right, 0);
     });
     await waitFor(() => expect(resizePreferenceRequestCount).toBe(2));
-    await expect(tags.querySelector("[data-paper-resize-handle]")).toBeNull();
+    const lastOpened = columnHeader("Last opened");
+    await expect(
+      lastOpened.querySelector("[data-paper-resize-handle]"),
+    ).toBeNull();
 
     const persistedWidths = Object.fromEntries(
       resizedPreferences.column_widths.map(({ column, width }) => [

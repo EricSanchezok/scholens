@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { Button, keyboardFocusRing, Skeleton } from "@/components/ui";
+import { Button, Frame, keyboardFocusRing, Skeleton } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
@@ -26,14 +26,14 @@ function PaperPreview({ paper }: { paper: LibraryPaper }) {
       // eslint-disable-next-line @next/next/no-img-element
       <img
         alt=""
-        className="h-36 w-full rounded-[var(--radius-md)] border object-cover object-top"
+        className="h-32 w-full object-cover object-top"
         src={paper.preview_url}
       />
     );
   }
   return (
-    <div className="border-line bg-subtle grid h-36 place-items-center overflow-hidden rounded-[var(--radius-md)] border">
-      <div className="bg-surface border-line h-[150px] w-28 translate-y-2 rounded-sm border px-3 pt-3 shadow-sm">
+    <div className="bg-subtle grid h-32 place-items-center overflow-hidden p-1.5">
+      <div className="bg-surface shadow-raised h-[142px] w-24 translate-y-2 rounded-[var(--radius-md)] px-3 pt-3">
         <div className="bg-muted mx-auto h-0.5 w-16 rounded-full" />
         <div className="bg-foreground mx-auto mt-2 h-1 w-20 rounded-full" />
         <div className="bg-foreground mx-auto mt-1 h-0.5 w-14 rounded-full" />
@@ -67,22 +67,30 @@ function PaperCard({ paper }: { paper: LibraryPaper }) {
   const authors = paper.document.authors?.join(", ") || paper.document.journal;
 
   return (
-    <article className="border-line bg-surface grid min-w-0 gap-2 rounded-[var(--radius-md)] border p-3">
-      <PaperPreview paper={paper} />
-      <div className="min-w-0">
-        <h3 className="line-clamp-2 min-h-10 text-sm leading-5 font-medium">
-          {title}
-        </h3>
-        <p className="text-secondary mt-1 truncate text-xs">
-          {authors || paper.document.original_filename}
-        </p>
-      </div>
-      <p className="text-secondary text-xs">
-        {t("opened", {
-          relative: formatRelativeTime(paper.last_accessed_at),
-        })}
-      </p>
-    </article>
+    <Frame
+      asChild
+      className="bg-surface gap-0 overflow-hidden p-0 [--frame-inset:0px]"
+      data-home-recent-card="paper"
+    >
+      <article>
+        <PaperPreview paper={paper} />
+        <div className="border-line grid min-h-[104px] content-between gap-2 border-t p-3">
+          <div className="min-w-0">
+            <h3 className="line-clamp-2 min-h-10 text-sm leading-5 font-medium text-pretty">
+              {title}
+            </h3>
+            <p className="text-secondary mt-1 truncate text-xs">
+              {authors || paper.document.original_filename}
+            </p>
+          </div>
+          <p className="text-secondary text-xs">
+            {t("opened", {
+              relative: formatRelativeTime(paper.last_accessed_at),
+            })}
+          </p>
+        </div>
+      </article>
+    </Frame>
   );
 }
 
@@ -90,20 +98,26 @@ function ProjectRow({ project }: { project: Project }) {
   const t = useTranslations("Home.recents");
   const formatRelativeTime = useRelativeTimeNow();
   return (
-    <article className="border-line bg-surface flex min-w-0 items-center gap-3 rounded-[var(--radius-md)] border p-3">
-      <span className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
-        <Icon glyph={ProjectIcon} size={16} tone="secondary" />
-      </span>
-      <div className="min-w-0">
-        <h3 className="truncate text-sm font-medium">{project.title}</h3>
-        <p className="text-secondary mt-0.5 truncate text-xs">
-          {t("paperCount", { count: project.num_papers })} ·{" "}
-          {t("updated", {
-            relative: formatRelativeTime(project.updated_at),
-          })}
-        </p>
-      </div>
-    </article>
+    <Frame
+      asChild
+      className="bg-surface flex-row items-center gap-3 p-3"
+      data-home-recent-card="project"
+    >
+      <article>
+        <span className="bg-subtle grid size-10 shrink-0 place-items-center rounded-[var(--radius-lg)]">
+          <Icon glyph={ProjectIcon} size={16} tone="secondary" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-medium">{project.title}</h3>
+          <p className="text-secondary mt-1 truncate text-xs">
+            {t("paperCount", { count: project.num_papers })} ·{" "}
+            {t("updated", {
+              relative: formatRelativeTime(project.updated_at),
+            })}
+          </p>
+        </div>
+      </article>
+    </Frame>
   );
 }
 
@@ -156,7 +170,10 @@ function MobileRecentLauncher({
   if (!loading && !error && items.length === 0) return null;
 
   return (
-    <section className="mt-auto w-full max-w-[800px] pb-4 lg:hidden">
+    <section
+      className="mt-14 w-full max-w-[800px] lg:hidden"
+      data-mobile-recent-launcher=""
+    >
       <h2 className="text-secondary mb-3 px-1 text-sm font-medium">
         {t("continue")}
       </h2>
@@ -198,7 +215,7 @@ function MobileRecentLauncher({
                 aria-label={label}
                 aria-pressed={selected}
                 className={cn(
-                  "motion-control bg-subtle hover:bg-hover flex min-h-12 w-fit max-w-full min-w-0 items-center gap-2.5 rounded-full px-4 py-2.5 text-left text-sm font-medium",
+                  "motion-control bg-surface hover:bg-hover flex min-h-12 w-fit max-w-full min-w-0 items-center gap-2.5 rounded-full px-4 py-2.5 text-left text-sm font-medium",
                   keyboardFocusRing,
                   selected && "bg-pressed",
                 )}
@@ -253,8 +270,8 @@ function RecentSection({
 
   return (
     <section className={className}>
-      <div className="mb-3 flex h-6 items-center">
-        <h2 className="text-base font-medium">{title}</h2>
+      <div className="mb-3 flex h-6 items-center px-1">
+        <h2 className="text-sm font-semibold tracking-[-0.01em]">{title}</h2>
       </div>
       {loading ? (
         <div
@@ -342,21 +359,21 @@ export function HomeDashboard({
   return (
     <div
       className={cn(
-        "mx-auto flex min-h-full w-full max-w-[1088px] flex-col px-3 sm:px-8 lg:px-16",
+        "mx-auto flex min-h-full w-full max-w-[1088px] flex-col px-4 sm:px-8 lg:px-16",
         emptyWorkspace
           ? "pb-3 lg:pt-[clamp(12rem,28vh,18rem)] lg:pb-16"
-          : "pb-3 lg:py-16",
+          : "justify-end pb-5 lg:justify-start lg:py-16",
       )}
     >
       <section
         className={cn(
-          "mx-auto flex w-full max-w-[800px] flex-col items-center gap-7 text-center lg:gap-6",
-          !emptyWorkspace && "pt-[clamp(7rem,20vh,11rem)] lg:pt-0",
+          "mx-auto flex w-full max-w-[800px] flex-col items-start gap-7 text-left lg:items-center lg:gap-6 lg:text-center",
           emptyWorkspace &&
             "min-h-full flex-1 justify-between gap-0 lg:min-h-0 lg:flex-none lg:justify-start lg:gap-6",
         )}
       >
         <div
+          data-home-hero=""
           className={cn(
             emptyWorkspace &&
               "flex flex-1 flex-col justify-center pb-[10vh] lg:block lg:pb-0",
@@ -365,7 +382,12 @@ export function HomeDashboard({
           <h1 className="text-[clamp(1.875rem,4vw,2.25rem)] leading-tight font-medium tracking-[-0.02em] text-balance [&:lang(zh-CN)]:leading-[1.28] [&:lang(zh-CN)]:tracking-normal">
             {t("hero.title")}
           </h1>
-          <p className="text-secondary mx-auto mt-2 max-w-[40rem] text-base leading-[1.6] text-pretty lg:text-sm">
+          <p
+            className={cn(
+              "text-secondary mt-2 max-w-[40rem] text-base leading-[1.6] text-pretty lg:mx-auto lg:text-sm",
+              !emptyWorkspace && "max-lg:hidden",
+            )}
+          >
             {emptyWorkspace
               ? t("hero.emptyDescription")
               : t("hero.description")}
@@ -402,7 +424,7 @@ export function HomeDashboard({
       {!emptyWorkspace && (
         <div
           className={cn(
-            "mt-10 hidden w-full gap-8 lg:mx-auto lg:mt-12 lg:grid",
+            "mt-10 hidden w-full gap-8 lg:mx-auto lg:mt-10 lg:grid",
             showPapers &&
               showProjects &&
               "lg:grid-cols-[minmax(0,600px)_minmax(280px,340px)] lg:gap-5",

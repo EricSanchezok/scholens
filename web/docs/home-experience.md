@@ -23,12 +23,20 @@ the deliberately deferred boundaries.
   state, and `AppShell` boundary, but use device-appropriate compositions. The
   desktop sidebar is 288 px when expanded, 320 px on ultrawide viewports, and
   64 px when collapsed. Phones use
-  a persistent bottom bar for Ask, Library, and Projects. Their full-screen,
-  opaque navigation hub is reserved for the account identity, unified search,
-  and complete conversation history; it does not render the desktop Sidebar
-  inside a narrow drawer. The hub closes with a directional return control
-  rather than a dismiss-style X. Search, Settings, and New conversation remain
-  anchored in one bottom utility row above the safe area.
+  a persistent bottom bar for Ask, Library, Projects, and Me. Their full-screen,
+  opaque navigation hub is reserved for an identity link to Me, unified search,
+  and complete conversation history; it enters from the leading left edge to
+  preserve continuity with the hamburger trigger and desktop rail, and it does
+  not render the desktop Sidebar inside a narrow drawer. The hub closes with a
+  directional return control rather than a dismiss-style X. Search and New
+  conversation remain anchored in one bottom utility row above the safe area;
+  the conditional Install entry sits immediately above it. The desktop account
+  dropdown is never embedded in this mobile hub.
+  The persistent destination row is integrated into the canvas: it has no
+  enclosing pill, structural border, or elevation shadow. Only the current
+  destination receives the existing filled circular icon state and stronger
+  label, so selection remains explicit without making navigation float above
+  the page.
 - `AppShell` is fixed to the visual viewport and prevents document scrolling.
   On phones it continuously sizes itself from `visualViewport` (height and
   offsetTop) so expanding mobile browser chrome after a client-side tab switch
@@ -404,7 +412,9 @@ persisted conversation data remain unchanged. A single
 gutters, bottom safe area with a minimum pad fallback
 (`max(0.5rem, env(safe-area-inset-bottom))`), and stacking layer. The Composer and navigation are
 separated by 4 px inside the Dock rather than behaving as independent floating
-surfaces; a non-layout 20 px fade softens the transition from scrolling content.
+surfaces. The Composer retains its deliberate elevation; the navigation row is
+flat on the Dock canvas, and the non-layout 20 px fade is rendered only when a
+Composer needs a transition from scrolling content.
 Only one real Composer is mounted at a time. On desktop it rests as a rounded
 single-line bar and expands to a rounded panel only when the written prompt
 becomes multiline or long. Explicit project and paper selections never add a
@@ -484,7 +494,10 @@ instead of shrinking the desktop paper and project cards. Each launcher keeps
 its icon in a fixed slot and gives its title a shrinkable content slot. Long
 paper and project titles wrap to at most two lines before clipping; they never
 increase the page's horizontal scroll width. The complete title remains the
-button's accessible name.
+button's accessible name. In the populated phone composition, the research
+prompt and launcher list form one lower-canvas task group immediately above
+the composer. The redundant explanatory subtitle is omitted on phones while
+remaining available on desktop and in the phone first-run state.
 
 The navigation-open acceptance frame is `Home / Mobile / Navigation open`
 (`939:2639`). It fills the viewport with an opaque sidebar surface above a

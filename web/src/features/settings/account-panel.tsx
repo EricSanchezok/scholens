@@ -17,8 +17,12 @@ function actorName(displayName: string | null | undefined, email: string) {
 
 export function AccountPanel({
   accountCenterUrl,
+  showHeader = true,
+  showSession = true,
 }: {
   accountCenterUrl?: string;
+  showHeader?: boolean;
+  showSession?: boolean;
 }) {
   const t = useTranslations("Settings");
   const router = useRouter();
@@ -41,10 +45,12 @@ export function AccountPanel({
 
   return (
     <div>
-      <SettingsPanelHeader
-        description={t("account.description")}
-        title={t("account.title")}
-      />
+      {showHeader ? (
+        <SettingsPanelHeader
+          description={t("account.description")}
+          title={t("account.title")}
+        />
+      ) : null}
       {actor ? (
         <div className="max-w-2xl">
           <section className="py-2" aria-labelledby="account-profile-title">
@@ -85,23 +91,27 @@ export function AccountPanel({
             </div>
           </section>
 
-          <section className="border-line-subtle mt-9 flex flex-col gap-4 border-t pt-7 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">{t("account.session")}</h3>
-              <p className="text-secondary mt-1 max-w-xl text-sm leading-5">
-                {t("account.sessionDescription")}
-              </p>
-            </div>
-            <Button
-              className="shrink-0 self-start"
-              loading={signingOut}
-              onClick={() => void handleSignOut()}
-              variant="secondary"
-            >
-              <Icon glyph={SignOutIcon} size={16} />
-              {signingOut ? t("account.signingOut") : t("account.signOut")}
-            </Button>
-          </section>
+          {showSession ? (
+            <section className="border-line-subtle mt-9 flex flex-col gap-4 border-t pt-7 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  {t("account.session")}
+                </h3>
+                <p className="text-secondary mt-1 max-w-xl text-sm leading-5">
+                  {t("account.sessionDescription")}
+                </p>
+              </div>
+              <Button
+                className="shrink-0 self-start"
+                loading={signingOut}
+                onClick={() => void handleSignOut()}
+                variant="secondary"
+              >
+                <Icon glyph={SignOutIcon} size={16} />
+                {signingOut ? t("account.signingOut") : t("account.signOut")}
+              </Button>
+            </section>
+          ) : null}
         </div>
       ) : (
         <AsyncFeedback presentation="inline" state="loading" />

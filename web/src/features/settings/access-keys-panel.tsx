@@ -261,7 +261,11 @@ function AccessKeyFormDialog({
   );
 }
 
-export function AccessKeysPanel() {
+export function AccessKeysPanel({
+  showHeader = true,
+}: {
+  showHeader?: boolean;
+}) {
   const t = useTranslations("Settings");
   const format = useFormatter();
   const queryClient = useQueryClient();
@@ -277,31 +281,34 @@ export function AccessKeysPanel() {
       });
     },
   });
+  const headerActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <LinkButton
+        href={`${DOCUMENTATION_PATH}#${documentationAnchors.mcpSetup}`}
+        rel="noopener noreferrer"
+        size="sm"
+        target="_blank"
+        variant="secondary"
+      >
+        <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
+        {t("accessKeys.configurationGuide")}
+        <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
+      </LinkButton>
+      <Button onClick={() => setFormKey(null)}>{t("accessKeys.create")}</Button>
+    </div>
+  );
 
   return (
     <div>
-      <SettingsPanelHeader
-        action={
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <LinkButton
-              href={`${DOCUMENTATION_PATH}#${documentationAnchors.mcpSetup}`}
-              rel="noopener noreferrer"
-              size="sm"
-              target="_blank"
-              variant="secondary"
-            >
-              <Icon glyph={DocumentationIcon} size={16} tone="secondary" />
-              {t("accessKeys.configurationGuide")}
-              <Icon glyph={ExternalLinkIcon} size={16} tone="secondary" />
-            </LinkButton>
-            <Button onClick={() => setFormKey(null)}>
-              {t("accessKeys.create")}
-            </Button>
-          </div>
-        }
-        description={t("accessKeys.description")}
-        title={t("accessKeys.title")}
-      />
+      {showHeader ? (
+        <SettingsPanelHeader
+          action={headerActions}
+          description={t("accessKeys.description")}
+          title={t("accessKeys.title")}
+        />
+      ) : (
+        <div className="mb-5 flex justify-end">{headerActions}</div>
+      )}
       <AsyncBoundary
         data={keys.data}
         empty={(data) => data.items.length === 0}

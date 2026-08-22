@@ -222,9 +222,11 @@ export function ConversationListItem({
   return (
     <div
       className={cn(
-        "motion-control group/interactive-row hover:bg-hover focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)]",
+        "motion-control group/interactive-row focus-within:bg-hover active:bg-pressed flex min-w-0 items-center rounded-[var(--radius-lg)] border",
         mobile ? "min-h-16 px-1 py-1" : "min-h-12 px-1 py-0.5",
-        current && (mobile ? "bg-surface" : "bg-hover"),
+        current
+          ? "border-line bg-surface shadow-raised"
+          : "hover:bg-hover border-transparent",
       )}
       data-current={current ? "" : undefined}
       data-conversation-row={conversation.id}

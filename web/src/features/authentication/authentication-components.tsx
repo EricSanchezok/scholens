@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
-import { keyboardFocusRing } from "@/components/ui";
+import { Frame, FramePanel, keyboardFocusRing } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
   DocumentationIcon,
@@ -73,11 +73,17 @@ export function AuthenticationPanel({
   className?: string;
 }) {
   return (
-    <section
-      className={cn("mx-auto grid w-full max-w-[22.5rem] gap-5", className)}
+    <Frame
+      asChild
+      className={cn("mx-auto w-full max-w-[23.5rem]", className)}
+      spacing="compact"
     >
-      {children}
-    </section>
+      <section>
+        <FramePanel className="grid gap-5" spacing="roomy">
+          {children}
+        </FramePanel>
+      </section>
+    </Frame>
   );
 }
 

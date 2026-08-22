@@ -51,6 +51,14 @@ and the shared Conversation feature.
   Project-only paper is explicitly “Not in Library” and has no fabricated
   personal state. It does not load the full Project into browser memory or
   implement a route-local search index.
+- Project Papers and Outputs inherit Library's non-wrapping phone utility row:
+  search retains the flexible width while filter, kind, and sort controls use
+  their compact icon form. They never expand into vertically stacked control
+  bands at 320, 390, or 430 px, and the transparent row never adds an enclosing
+  frame around the individual controls.
+- The `/projects` discovery row follows the same contract: Search projects and
+  Sort projects remain on one line at phone widths, with sorting reduced to its
+  labeled 44 px icon trigger and full selected text restored when space allows.
 - Outputs use the canonical Research Item kinds. Types without a dedicated
   viewer are truthful list rows rather than fake links.
 - Archive is not exposed because there is no archived-project collection or
@@ -78,7 +86,8 @@ panel keeps the mounted draft and selected conversation. Server resources use
 TanStack Query; forms use React Hook Form and Zod; dialog and menu disclosure
 remains local.
 
-Desktop detail defaults to a flat editorial canvas with no reserved chat rail.
+Desktop detail defaults to one stable editorial canvas with a flat identity
+header and single-layer overview groups, with no reserved chat rail.
 Opening chat adds the same responsive `clamp(23rem, 34vw, 31.25rem)` side panel
 used by Reader. Mobile uses a Reader-style full-screen Sheet with dynamic
 viewport and safe-area padding; the Workspace app bar remains the only visible
@@ -88,16 +97,19 @@ below the desktop breakpoints, and all controls remain usable at 320px.
 
 Project detail inherits the Library collection language: underlined tabs,
 pill-shaped search, the shared light-line Select surface for sorting and kind,
-quiet separators, local row hover, and unboxed empty states. Paper,
+shared framed utility rows, local row hover, and unboxed empty states. Paper,
 conversation, output, and member counts live with the project title metadata
 instead of in a separate metric card. The Overview and Outputs canvases retain
-the narrower editorial column (`max-w-5xl`). Papers is the intentional
-exception: it uses the full available width for the shared table and details
-preview.
+the same `max-w-6xl` content boundary as Papers. The content canvas, identity
+header, equal-width tab triggers, and toolbar origins therefore remain fixed
+when switching between Overview, Papers, and Outputs. Papers still uses the
+shared table and details preview inside that common boundary.
 
 The Overview tab is an editorial two-column composition on desktop: recent
-papers on the left, recent outputs stacked above a Collaboration strip on the
-right. The Collaboration strip shows the complete accepted-member roster
+papers on the left, recent outputs stacked above a Collaboration panel on the
+right. Each section uses one quiet grouped background with flat interactive
+rows; it does not place bordered rows inside bordered cards. The Collaboration
+panel shows the complete accepted-member roster
 returned by `GET /members`, including the owner, plus the total member count.
 Members with `manage_collaborators` also get a quiet Manage action that opens
 the existing collaborator dialog. The roster query is shared with that dialog
@@ -186,10 +198,10 @@ behavior uses the real public contract and accessible responsive composition.
 The canonical detail matrix is the Figma section `1085:1370`. The former
 56px collapsed-chat rail at `539:7324` is retained only as an explicitly named
 Archive frame; it is not an active acceptance state.
-The compact desktop list and detail headers are intentional runtime refinements
-pending canonical-frame synchronization after local visual acceptance; the
-same applies to the narrower detail column, the members metric, the two-column
-Overview with its Collaboration strip, and the collapsed-then-expandable
+The compact desktop list and flat detail headers are intentional runtime
+refinements pending canonical-frame synchronization after local visual
+acceptance; the same applies to the shared detail column, the members metric,
+the two-column Overview with its Collaboration strip, and the collapsed-then-expandable
 permission summary in the collaborator dialog. The documented responsive and
 interaction state inventory is unchanged.
 

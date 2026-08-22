@@ -23,7 +23,7 @@ export const OverflowMenuButton = React.forwardRef<
     className={cn(
       "group/overflow size-11 sm:size-9 sm:min-h-9",
       visibility === "contextual" &&
-        "group-focus-within/interactive-row:opacity-100! group-hover/interactive-row:opacity-100! group-data-[current]/interactive-row:opacity-100! focus-visible:opacity-100! data-[state=open]:opacity-100! [@media(hover:hover)]:opacity-0",
+        "group-focus-within/interactive-row:opacity-100! group-hover/interactive-row:opacity-100! group-data-[current]/interactive-row:opacity-100! focus-visible:opacity-100! data-[state=open]:opacity-100! sm:[@media(hover:hover)]:opacity-0",
       className,
     )}
     label={label}

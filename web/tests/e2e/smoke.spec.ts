@@ -212,16 +212,19 @@ test("opens one keyboard-search surface for conversations and papers", async ({
     name: "Search conversations or papers",
   });
   const scopeTabs = dialog.getByRole("tablist", { name: "Search scope" });
-  const [inputBox, scopeTabsBox] = await Promise.all([
-    input.boundingBox(),
-    scopeTabs.boundingBox(),
-  ]);
-  expect(inputBox).not.toBeNull();
-  expect(scopeTabsBox).not.toBeNull();
-  expect(Math.abs(inputBox!.y - scopeTabsBox!.y)).toBeLessThanOrEqual(1);
-  expect(Math.abs(inputBox!.height - scopeTabsBox!.height)).toBeLessThanOrEqual(
-    1,
-  );
+  await expect
+    .poll(async () => {
+      const [inputBox, scopeTabsBox] = await Promise.all([
+        input.boundingBox(),
+        scopeTabs.boundingBox(),
+      ]);
+      if (!inputBox || !scopeTabsBox) return false;
+      return (
+        Math.abs(inputBox.y - scopeTabsBox.y) <= 1 &&
+        Math.abs(inputBox.height - scopeTabsBox.height) <= 1
+      );
+    })
+    .toBe(true);
   await input.fill("memory");
   const conversationResult = dialog.getByRole("link", {
     name: new RegExp(homeConversations[0]!.title),
@@ -477,8 +480,11 @@ test("opens mobile navigation as a full-screen history hub", async ({
       name: "Search conversations and papers (⌘K)",
     }),
   ).toBeVisible();
-  await expect(tools.getByRole("button", { name: "Settings" })).toBeVisible();
   await expect(tools.getByRole("link", { name: "New chat" })).toBeVisible();
+  await expect(
+    dialog.getByRole("link", { name: "EricSanchez" }),
+  ).toHaveAttribute("href", "/me");
+  await expect(dialog.getByRole("button", { name: "Settings" })).toHaveCount(0);
   const toolsBox = await tools.boundingBox();
   expect(toolsBox?.y).toBeGreaterThan(400);
   expect((toolsBox?.y ?? 0) + (toolsBox?.height ?? 0)).toBeLessThanOrEqual(568);
@@ -505,11 +511,28 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
   await expect(
     primaryNavigation.getByRole("link", { name: "Library" }),
   ).toHaveAttribute("href", "/library");
+  await expect(
+    primaryNavigation.getByRole("link", { name: "Me" }),
+  ).toHaveAttribute("href", "/me");
   const dock = page.getByTestId("mobile-bottom-dock");
   await expect(dock.getByRole("textbox", { name: "Ask anything" })).toHaveCount(
     1,
   );
   await expect(dock.getByRole("navigation")).toHaveCount(1);
+  expect(
+    await primaryNavigation.evaluate((navigation) => {
+      const style = getComputedStyle(navigation);
+      return {
+        borderRadius: style.borderRadius,
+        borderTopWidth: style.borderTopWidth,
+        boxShadow: style.boxShadow,
+      };
+    }),
+  ).toEqual({
+    borderRadius: "0px",
+    borderTopWidth: "0px",
+    boxShadow: "none",
+  });
   await expect(
     dock.getByRole("button", { name: "Research scope: Library" }),
   ).toBeVisible();
@@ -559,6 +582,67 @@ test("fits the Home shell at 390px without horizontal scrolling", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("navigates the mobile account hierarchy without opening the desktop dialog", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "Me" }).click();
+  await expect(page).toHaveURL("/me");
+  await expect(
+    page.getByRole("link", { name: "Open account details" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open plan and usage" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Open account details" }).click();
+  await expect(page).toHaveURL("/me/account");
+  await expect(
+    page.getByRole("heading", { name: "Account", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await page.getByRole("link", { name: "Go back" }).click();
+  await expect(page).toHaveURL("/me");
+
+  await page.getByRole("link", { name: "Open plan and usage" }).click();
+  await expect(page).toHaveURL("/me/usage");
+  await expect(
+    page.getByRole("heading", { name: "Usage", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Go back" }).click();
+  await expect(page).toHaveURL("/me");
+
+  await page.getByRole("link", { name: /^Settings/ }).click();
+  await expect(page).toHaveURL("/me/settings");
+  await page.getByRole("link", { name: /^Display and interaction/ }).click();
+  await expect(page).toHaveURL("/me/settings/display");
+  await expect(
+    page.getByRole("heading", {
+      name: "Display and interaction",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Primary navigation" }),
+  ).toHaveCount(0);
+
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
+test("maps direct desktop account-hub URLs back to the existing Settings dialog", async ({
+  page,
+}) => {
+  await page.goto("/me/usage");
+  await expect(page).toHaveURL("/?settings=usage");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
 });
 
 test("keeps the unified mobile Dock contained at 320px", async ({ page }) => {

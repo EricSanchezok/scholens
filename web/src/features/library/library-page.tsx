@@ -27,7 +27,7 @@ import {
 import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { integrationQueries } from "@/features/integrations";
-import { useSettingsNavigation } from "@/features/settings";
+import { useSettingsLauncher } from "@/features/settings";
 import {
   PaperSearchResults,
   paperSearchQueries,
@@ -53,7 +53,10 @@ import {
   removeLibraryPapers,
   replaceLibraryTagAssignments,
 } from "./api";
-import { updatePaperStatus } from "@/features/paper-collection";
+import {
+  PaperCollectionSidePanelLayout,
+  updatePaperStatus,
+} from "@/features/paper-collection";
 import { OutputsView } from "./components/outputs-view";
 import { PapersView } from "./components/papers-view";
 import {
@@ -101,7 +104,7 @@ function DebouncedLibrarySearch({
   return (
     <SearchField
       aria-label={label}
-      className="bg-subtle hover:border-line rounded-full border-transparent"
+      className="border-line bg-surface rounded-full text-base sm:text-sm"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
       value={input}
@@ -117,7 +120,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const t = useTranslations("Library");
   const zoteroT = useTranslations("Zotero.oauth");
   const { signOut } = useAuthSession();
-  const { setSection: setSettingsSection } = useSettingsNavigation();
+  const { openSection: openSettingsSection } = useSettingsLauncher();
   const parsed = React.useMemo(
     () => parseLibrarySearch(new URLSearchParams(searchParams.toString())),
     [searchParams],
@@ -429,12 +432,12 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
       onSignOut={handleSignOut}
       signingOut={signingOut}
     >
-      <div className="w-full min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-8 lg:pt-6">
-        <Tabs
-          className="min-w-0"
-          onValueChange={handleTabChange}
-          value={parsed.tab}
-        >
+      <Tabs
+        className="flex h-full min-h-0 min-w-0 flex-col"
+        onValueChange={handleTabChange}
+        value={parsed.tab}
+      >
+        <div className="w-full shrink-0 px-4 pt-5 sm:px-6 lg:px-8 lg:pt-6">
           <header className="flex min-h-11 items-center justify-between gap-6">
             <div className="flex min-w-0 items-center gap-6">
               <h1 className="hidden shrink-0 text-2xl font-semibold tracking-[-0.02em] lg:block">
@@ -490,140 +493,146 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               onDismiss={() => setZoteroOperation(undefined)}
             />
           ) : null}
-          <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
-            <PapersView
-              attentionCount={summaryQuery.data?.attention_count ?? 0}
-              key={`${parsed.query}:${parsed.sort}:${parsed.statuses.join(",")}:${parsed.tagIds.join(",")}`}
-              data={paperList}
-              error={papersQuery.error}
-              ingestions={ingestion.rows}
-              ingestionCount={summaryQuery.data?.ingestion_count ?? 0}
-              loading={papersQuery.isPending}
-              loadingMore={papersQuery.isFetchingNextPage}
-              hasMore={papersQuery.hasNextPage}
-              onCreateTag={(name) => createTagMutation.mutateAsync(name)}
-              onDeleteTag={(tagId) => deleteTagMutation.mutateAsync(tagId)}
-              onRenameTag={(tagId, name) =>
-                renameTagMutation.mutateAsync({ name, tagId })
-              }
-              onReplaceTags={(documentIds, tagIds) =>
-                tagAssignmentMutation
-                  .mutateAsync({ documentIds, tagIds })
-                  .then(() => undefined)
-              }
-              onDownload={(documentId) => void handleDownload(documentId)}
-              onCancelIngestion={(id) =>
-                void runAction(() => ingestion.cancel(id))
-              }
-              onLoadMore={() =>
-                papersQuery.fetchNextPage().then(() => undefined)
-              }
-              onNeedTags={() => setTagsRequested(true)}
-              onRemove={(documentIds) =>
-                runAction(() => removeMutation.mutateAsync(documentIds))
-              }
-              onRetryIngestion={(id) =>
-                (() => {
-                  const row = ingestion.rows.find((item) => item.id === id);
-                  if (row?.requiredIntegration === "mineru") {
-                    setPendingMineruRetry(id);
-                    setSettingsSection("connections");
-                    return;
-                  }
-                  void runAction(() => ingestion.retry(id));
-                })()
-              }
-              onRetryLoad={() => void papersQuery.refetch()}
-              onSortChange={(sort: PaperSort) =>
-                replaceSearch({ cursor: undefined, sort })
-              }
-              onStatusChange={(documentId, status) =>
-                statusMutation.mutate({ documentId, status })
-              }
-              onStatusFilterChange={(statuses) =>
-                replaceSearch({ cursor: undefined, statuses })
-              }
-              onTagFilterChange={(tagIds) =>
-                replaceSearch({ cursor: undefined, tagIds })
-              }
-              search={
-                <DebouncedLibrarySearch
-                  key={`papers:${parsed.query}`}
-                  label={t("papers.search")}
-                  onQueryChange={(query) =>
-                    replaceSearch({ cursor: undefined, query })
-                  }
-                  value={parsed.query}
-                />
-              }
-              searchResults={
-                paperSearchActive
-                  ? (toolbar) => (
-                      <PaperSearchResults
-                        error={paperSearchQuery.error}
-                        hasMore={paperSearchQuery.hasNextPage}
-                        loading={paperSearchQuery.isPending}
-                        loadingMore={paperSearchQuery.isFetchingNextPage}
-                        onLoadMore={() =>
-                          paperSearchQuery.fetchNextPage().then(() => undefined)
-                        }
-                        onRetry={() => void paperSearchQuery.refetch()}
-                        onTagClick={(tagId) =>
-                          replaceSearch({
-                            cursor: undefined,
-                            tagIds: parsed.tagIds.includes(tagId)
-                              ? parsed.tagIds
-                              : [...parsed.tagIds, tagId],
-                          })
-                        }
-                        papers={paperSearchResults}
-                        toolbar={toolbar}
-                        total={paperSearchQuery.data?.pages[0]?.total}
-                      />
-                    )
-                  : undefined
-              }
-              paperCount={summaryQuery.data?.paper_count ?? 0}
-              sort={parsed.sort as PaperSort}
-              tagIds={parsed.tagIds}
-              statuses={parsed.statuses}
-              tags={tagsQuery.data?.items ?? []}
-              tagsLoading={tagsQuery.isPending && tagsRequested}
-            />
-          </TabsContent>
-          <TabsContent className="mt-4 grid min-w-0 gap-4" value="outputs">
-            <OutputsView
-              data={outputsQuery.data}
-              error={outputsQuery.error}
-              kinds={parsed.kinds}
-              loading={outputsQuery.isPending}
-              onKindFilterChange={(kinds) =>
-                replaceSearch({ cursor: undefined, kinds })
-              }
-              onNext={(cursor) => replaceSearch({ cursor })}
-              onPrevious={(cursor) => replaceSearch({ cursor })}
-              onRetryLoad={() => void outputsQuery.refetch()}
-              onSortChange={(sort: OutputSort) =>
-                replaceSearch({ cursor: undefined, sort })
-              }
-              search={
-                <DebouncedLibrarySearch
-                  key={`outputs:${parsed.query}`}
-                  label={t("outputs.search")}
-                  onQueryChange={(query) =>
-                    replaceSearch({ cursor: undefined, query })
-                  }
-                  value={parsed.query}
-                />
-              }
-              sort={parsed.sort as OutputSort}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
+        </div>
+        <PaperCollectionSidePanelLayout>
+          <div className="w-full min-w-0 px-4 pb-12 sm:px-6 lg:px-8">
+            <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
+              <PapersView
+                attentionCount={summaryQuery.data?.attention_count ?? 0}
+                key={`${parsed.query}:${parsed.sort}:${parsed.statuses.join(",")}:${parsed.tagIds.join(",")}`}
+                data={paperList}
+                error={papersQuery.error}
+                ingestions={ingestion.rows}
+                ingestionCount={summaryQuery.data?.ingestion_count ?? 0}
+                loading={papersQuery.isPending}
+                loadingMore={papersQuery.isFetchingNextPage}
+                hasMore={papersQuery.hasNextPage}
+                onCreateTag={(name) => createTagMutation.mutateAsync(name)}
+                onDeleteTag={(tagId) => deleteTagMutation.mutateAsync(tagId)}
+                onRenameTag={(tagId, name) =>
+                  renameTagMutation.mutateAsync({ name, tagId })
+                }
+                onReplaceTags={(documentIds, tagIds) =>
+                  tagAssignmentMutation
+                    .mutateAsync({ documentIds, tagIds })
+                    .then(() => undefined)
+                }
+                onDownload={(documentId) => void handleDownload(documentId)}
+                onCancelIngestion={(id) =>
+                  void runAction(() => ingestion.cancel(id))
+                }
+                onLoadMore={() =>
+                  papersQuery.fetchNextPage().then(() => undefined)
+                }
+                onNeedTags={() => setTagsRequested(true)}
+                onRemove={(documentIds) =>
+                  runAction(() => removeMutation.mutateAsync(documentIds))
+                }
+                onRetryIngestion={(id) =>
+                  (() => {
+                    const row = ingestion.rows.find((item) => item.id === id);
+                    if (row?.requiredIntegration === "mineru") {
+                      setPendingMineruRetry(id);
+                      openSettingsSection("connections");
+                      return;
+                    }
+                    void runAction(() => ingestion.retry(id));
+                  })()
+                }
+                onRetryLoad={() => void papersQuery.refetch()}
+                onSortChange={(sort: PaperSort) =>
+                  replaceSearch({ cursor: undefined, sort })
+                }
+                onStatusChange={(documentId, status) =>
+                  statusMutation.mutate({ documentId, status })
+                }
+                onStatusFilterChange={(statuses) =>
+                  replaceSearch({ cursor: undefined, statuses })
+                }
+                onTagFilterChange={(tagIds) =>
+                  replaceSearch({ cursor: undefined, tagIds })
+                }
+                search={
+                  <DebouncedLibrarySearch
+                    key={`papers:${parsed.query}`}
+                    label={t("papers.search")}
+                    onQueryChange={(query) =>
+                      replaceSearch({ cursor: undefined, query })
+                    }
+                    value={parsed.query}
+                  />
+                }
+                searchResults={
+                  paperSearchActive
+                    ? (toolbar) => (
+                        <PaperSearchResults
+                          error={paperSearchQuery.error}
+                          hasMore={paperSearchQuery.hasNextPage}
+                          loading={paperSearchQuery.isPending}
+                          loadingMore={paperSearchQuery.isFetchingNextPage}
+                          onLoadMore={() =>
+                            paperSearchQuery
+                              .fetchNextPage()
+                              .then(() => undefined)
+                          }
+                          onRetry={() => void paperSearchQuery.refetch()}
+                          onTagClick={(tagId) =>
+                            replaceSearch({
+                              cursor: undefined,
+                              tagIds: parsed.tagIds.includes(tagId)
+                                ? parsed.tagIds
+                                : [...parsed.tagIds, tagId],
+                            })
+                          }
+                          papers={paperSearchResults}
+                          toolbar={toolbar}
+                          total={paperSearchQuery.data?.pages[0]?.total}
+                        />
+                      )
+                    : undefined
+                }
+                paperCount={summaryQuery.data?.paper_count ?? 0}
+                sort={parsed.sort as PaperSort}
+                tagIds={parsed.tagIds}
+                statuses={parsed.statuses}
+                tags={tagsQuery.data?.items ?? []}
+                tagsLoading={tagsQuery.isPending && tagsRequested}
+              />
+            </TabsContent>
+            <TabsContent className="mt-4 grid min-w-0 gap-4" value="outputs">
+              <OutputsView
+                data={outputsQuery.data}
+                error={outputsQuery.error}
+                kinds={parsed.kinds}
+                loading={outputsQuery.isPending}
+                onKindFilterChange={(kinds) =>
+                  replaceSearch({ cursor: undefined, kinds })
+                }
+                onNext={(cursor) => replaceSearch({ cursor })}
+                onPrevious={(cursor) => replaceSearch({ cursor })}
+                onRetryLoad={() => void outputsQuery.refetch()}
+                onSortChange={(sort: OutputSort) =>
+                  replaceSearch({ cursor: undefined, sort })
+                }
+                search={
+                  <DebouncedLibrarySearch
+                    key={`outputs:${parsed.query}`}
+                    label={t("outputs.search")}
+                    onQueryChange={(query) =>
+                      replaceSearch({ cursor: undefined, query })
+                    }
+                    value={parsed.query}
+                  />
+                }
+                sort={parsed.sort as OutputSort}
+              />
+            </TabsContent>
+          </div>
+        </PaperCollectionSidePanelLayout>
+      </Tabs>
 
       <AddPapersDialog
-        onConnectOpenAlex={() => setSettingsSection("connections")}
+        onConnectOpenAlex={() => openSettingsSection("connections")}
         onBrowseZotero={() => setZoteroOpen(true)}
         onOpenChange={setAddOpen}
         onSubmitSource={ingestion.submitSource}

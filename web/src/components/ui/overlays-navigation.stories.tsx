@@ -132,6 +132,79 @@ export const ModalAndPanel: Story = {
   ),
 };
 
+export const DirectionalSheets: Story = {
+  globals: { motion: "full" },
+  render: () => (
+    <div className="flex flex-wrap gap-3">
+      {(
+        [
+          ["left", "Left navigation"],
+          ["right", "Right context"],
+          ["bottom", "Bottom controls"],
+        ] as const
+      ).map(([side, title]) => (
+        <Sheet key={side}>
+          <SheetTrigger asChild>
+            <Button variant="secondary">Open {side} panel</Button>
+          </SheetTrigger>
+          <SheetContent closeLabel={`Close ${side} panel`} side={side}>
+            <SheetTitle className="text-xl font-semibold">{title}</SheetTitle>
+            <SheetDescription className="text-muted mt-2 text-sm">
+              Motion follows the panel&apos;s spatial origin.
+            </SheetDescription>
+          </SheetContent>
+        </Sheet>
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const body = within(document.body);
+    const cases = [
+      {
+        animationName: "motion-side-sheet-left-in",
+        classes: ["motion-side-sheet-left", "left-0", "border-r"],
+        side: "left",
+        title: "Left navigation",
+      },
+      {
+        animationName: "motion-side-sheet-in",
+        classes: ["motion-side-sheet", "right-0", "border-l"],
+        side: "right",
+        title: "Right context",
+      },
+      {
+        animationName: "motion-bottom-sheet-in",
+        classes: ["motion-bottom-sheet", "bottom-0", "border-t"],
+        side: "bottom",
+        title: "Bottom controls",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      await userEvent.click(
+        canvas.getByRole("button", {
+          name: `Open ${testCase.side} panel`,
+        }),
+      );
+      const dialog = await body.findByRole("dialog", {
+        name: testCase.title,
+      });
+      await expect(dialog).toHaveAttribute("data-side", testCase.side);
+      await expect(dialog).toHaveClass(...testCase.classes);
+      await expect(getComputedStyle(dialog).animationName).toBe(
+        testCase.animationName,
+      );
+      await userEvent.keyboard("{Escape}");
+      await waitFor(() =>
+        expect(
+          body.queryByRole("dialog", { name: testCase.title }),
+        ).not.toBeInTheDocument(),
+      );
+    }
+  },
+};
+
 function StatefulNavigation() {
   const [page, setPage] = useState(2);
   return (

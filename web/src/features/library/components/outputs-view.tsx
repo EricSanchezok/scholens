@@ -21,15 +21,17 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
   Sheet,
   SheetContent,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui";
-import { Badge } from "@/components/ui/display";
 import { Icon, type IconGlyph } from "@/design-system/icons/icon";
+import {
+  CollectionToolbar,
+  CollectionToolbarButton,
+  CollectionToolbarSelectTrigger,
+} from "@/features/paper-collection";
 import type { components } from "@/lib/api/generated/schema";
 import type { OutputKind, OutputSort } from "../library-search";
 
@@ -77,7 +79,7 @@ function OutputIdentity({ output }: { output: Output }) {
   const kind = output.item.kind;
   return (
     <div className="flex min-w-0 items-start gap-3">
-      <span className="bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)]">
+      <span className="border-line bg-subtle grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)] border">
         <Icon glyph={kindIcon[kind]} size={20} tone="secondary" />
       </span>
       <span className="min-w-0">
@@ -129,14 +131,11 @@ function KindFilter({
     </div>
   );
   const trigger = (
-    <Button
-      className="bg-subtle hover:border-line rounded-full border-transparent"
-      variant="secondary"
-    >
-      <Icon glyph={FilterIcon} size={20} tone="secondary" />
-      {t("label")}
-      {active.length > 0 && <Badge tone="neutral">{active.length}</Badge>}
-    </Button>
+    <CollectionToolbarButton
+      count={active.length}
+      glyph={FilterIcon}
+      label={t("label")}
+    />
   );
   return (
     <>
@@ -150,8 +149,9 @@ function KindFilter({
         <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
           <SheetTrigger asChild>{trigger}</SheetTrigger>
           <SheetContent
-            className="inset-x-0 top-auto bottom-0 h-auto max-h-[76dvh] w-full max-w-none rounded-t-[var(--radius-xl)] border-t border-l-0 p-5"
+            className="h-auto max-h-[76dvh] rounded-t-[var(--radius-xl)] p-5"
             closeLabel={common("close")}
+            side="bottom"
           >
             <SheetTitle className="mb-4 text-lg font-semibold">
               {t("label")}
@@ -195,34 +195,29 @@ export function OutputsView({
 
   return (
     <>
-      <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(12rem,1fr)_auto_auto_auto] md:items-center">
-        <div className="min-w-0">{search}</div>
-        <div className="flex min-w-0 items-center gap-2 md:contents">
-          <KindFilter active={kinds} onChange={onKindFilterChange} />
-          <Select
-            onValueChange={(value) => onSortChange(value as OutputSort)}
-            value={sort}
-          >
-            <SelectTrigger
-              aria-label={t("sort.label")}
-              className="min-w-0 flex-1 md:w-auto md:min-w-44 md:flex-none"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {OUTPUT_SORTS.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {t(`sort.${option}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {data && (
-            <span className="text-secondary ml-auto shrink-0 text-sm md:ml-2">
-              {t("count", { count: data.total_count })}
-            </span>
-          )}
-        </div>
+      <div className="min-w-0">
+        <CollectionToolbar
+          controls={
+            <>
+              <KindFilter active={kinds} onChange={onKindFilterChange} />
+              <Select
+                onValueChange={(value) => onSortChange(value as OutputSort)}
+                value={sort}
+              >
+                <CollectionToolbarSelectTrigger label={t("sort.label")} />
+                <SelectContent>
+                  {OUTPUT_SORTS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {t(`sort.${option}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          }
+          meta={data ? t("count", { count: data.total_count }) : undefined}
+          search={search}
+        />
       </div>
 
       <div className="mt-4 min-w-0">
@@ -244,9 +239,9 @@ export function OutputsView({
         )}
         {!loading && !error && outputs.length > 0 && (
           <>
-            <div className="border-line hidden border-y md:block">
+            <div className="border-line bg-surface hidden border-y md:block">
               <table className="w-full table-fixed border-collapse text-left">
-                <thead className="text-muted text-xs font-medium">
+                <thead className="bg-subtle text-muted text-xs font-medium">
                   <tr>
                     <th className="px-4 py-3 font-medium">
                       {t("columns.output")}
@@ -298,7 +293,7 @@ export function OutputsView({
               </table>
             </div>
 
-            <ul className="divide-line border-line min-w-0 divide-y border-y md:hidden">
+            <ul className="divide-line border-line bg-surface min-w-0 divide-y border-y md:hidden">
               {outputs.map((output) => (
                 <li
                   className="min-w-0 overflow-hidden py-4"

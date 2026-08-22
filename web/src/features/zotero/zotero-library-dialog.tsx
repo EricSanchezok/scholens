@@ -20,6 +20,7 @@ import {
   DialogHandle,
   DialogHeader,
   DialogTitle,
+  Frame,
   SearchField,
   Select,
   SelectContent,
@@ -220,9 +221,13 @@ export function ZoteroLibraryDialog({
             </div>
           ) : (
             <>
-              <div className="grid gap-3 lg:grid-cols-[minmax(14rem,1fr)_12rem_12rem_12rem]">
+              <Frame
+                className="grid gap-2 lg:grid-cols-[minmax(14rem,1fr)_12rem_12rem_12rem]"
+                spacing="compact"
+              >
                 <SearchField
                   aria-label={t("search")}
+                  className="border-line bg-surface shadow-raised rounded-full"
                   onChange={(event) => {
                     setQuery(event.currentTarget.value);
                     setFilters((current) => ({
@@ -320,7 +325,7 @@ export function ZoteroLibraryDialog({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Frame>
 
               {hasActiveOperation ? (
                 <p className="text-secondary text-sm" role="status">

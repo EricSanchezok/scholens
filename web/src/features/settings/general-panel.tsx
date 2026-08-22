@@ -72,7 +72,7 @@ function AppearancePreview({
   );
 }
 
-export function GeneralPanel() {
+export function GeneralPanel({ showHeader = true }: { showHeader?: boolean }) {
   const t = useTranslations("Settings");
   const { locale, pending: localePending, setLocale } = useLocalePreference();
   const {
@@ -88,10 +88,12 @@ export function GeneralPanel() {
 
   return (
     <div>
-      <SettingsPanelHeader
-        description={t("general.description")}
-        title={t("general.title")}
-      />
+      {showHeader ? (
+        <SettingsPanelHeader
+          description={t("general.description")}
+          title={t("general.title")}
+        />
+      ) : null}
       <div className="max-w-2xl">
         {themeNames.length > 1 ? (
           <section aria-labelledby="theme-title">

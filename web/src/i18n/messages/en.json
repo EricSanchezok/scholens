@@ -258,6 +258,7 @@
       "ask": "Ask",
       "library": "Library",
       "projects": "Projects",
+      "me": "Me",
       "primary": "Primary navigation",
       "sidebar": "Workspace sidebar",
       "settings": "Settings",
@@ -323,6 +324,62 @@
       "repository": "Repository",
       "signOut": "Sign out",
       "signingOut": "Signing out…"
+    }
+  },
+  "AccountHub": {
+    "sectionContent": "{title} details",
+    "account": {
+      "title": "Account",
+      "open": "Open account details"
+    },
+    "usage": {
+      "title": "Usage",
+      "open": "Open plan and usage",
+      "tokenCredits": "Token Credits",
+      "reset": "Credits reset on {date}",
+      "loading": "Loading plan and usage…",
+      "unavailable": "Plan and usage could not be loaded."
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Display, interaction, and translation preferences"
+    },
+    "display": {
+      "title": "Display and interaction",
+      "description": "Appearance, interface language, and motion"
+    },
+    "translation": {
+      "title": "Translation",
+      "description": "Reader translation preferences"
+    },
+    "connections": {
+      "title": "Connections",
+      "description": "Manage research service connections"
+    },
+    "accessKeys": {
+      "title": "Access keys",
+      "description": "Manage MCP access to your account"
+    },
+    "groups": {
+      "account": "Account and preferences",
+      "help": "Help"
+    },
+    "help": {
+      "documentation": "Documentation",
+      "repository": "Repository",
+      "install": "Install Scholens"
+    },
+    "actions": {
+      "back": "Go back",
+      "retry": "Try again",
+      "signOut": "Sign out",
+      "signingOut": "Signing out…"
+    },
+    "session": {
+      "checking": "Checking your session",
+      "retry": "Try again",
+      "unavailableTitle": "Your account is temporarily unavailable",
+      "unavailableDescription": "Scholens could not restore your session. Check the connection and try again."
     }
   },
   "Home": {

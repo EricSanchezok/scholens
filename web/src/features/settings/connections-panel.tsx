@@ -198,7 +198,11 @@ function CredentialDialog({
   );
 }
 
-export function ConnectionsPanel() {
+export function ConnectionsPanel({
+  showHeader = true,
+}: {
+  showHeader?: boolean;
+}) {
   const t = useTranslations("Settings");
   const queryClient = useQueryClient();
   const integrations = useQuery(integrationQueries.current());
@@ -233,10 +237,12 @@ export function ConnectionsPanel() {
 
   return (
     <div>
-      <SettingsPanelHeader
-        description={t("connections.description")}
-        title={t("connections.title")}
-      />
+      {showHeader ? (
+        <SettingsPanelHeader
+          description={t("connections.description")}
+          title={t("connections.title")}
+        />
+      ) : null}
       <AsyncBoundary
         data={integrations.data}
         error={integrations.error}

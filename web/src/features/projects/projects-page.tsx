@@ -22,8 +22,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectTrigger,
-  SelectValue,
   useToast,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
@@ -36,6 +34,10 @@ import {
 import { AddIcon, ProjectIcon } from "@/design-system/icons/semantic-icons";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import {
+  CollectionToolbar,
+  CollectionToolbarSelectTrigger,
+} from "@/features/paper-collection";
 import type { components } from "@/lib/api/generated/schema";
 import {
   createProject,
@@ -98,7 +100,7 @@ function SearchControl({
   return (
     <SearchField
       aria-label={label}
-      className="bg-subtle hover:border-line rounded-full border-transparent"
+      className="border-line bg-surface rounded-full text-base sm:text-sm"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
       value={input}
@@ -232,28 +234,38 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
           </Button>
         </header>
 
-        <div className="mt-0 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] lg:mt-4">
-          <SearchControl
-            key={state.query}
-            label={t("search")}
-            onChange={(query) => replaceSearch({ cursor: undefined, query })}
-            value={state.query}
-          />
-          <Select
-            onValueChange={(sort: ProjectSort) =>
-              replaceSearch({ cursor: undefined, sort })
+        <div className="mt-0 min-w-0 lg:mt-4">
+          <CollectionToolbar
+            controls={
+              <Select
+                onValueChange={(sort: ProjectSort) =>
+                  replaceSearch({ cursor: undefined, sort })
+                }
+                value={state.sort}
+              >
+                <CollectionToolbarSelectTrigger label={t("sort.label")} />
+                <SelectContent>
+                  <SelectItem value="activity_desc">
+                    {t("sort.updated")}
+                  </SelectItem>
+                  <SelectItem value="title_asc">{t("sort.title")}</SelectItem>
+                  <SelectItem value="papers_desc">
+                    {t("sort.papers")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             }
-            value={state.sort}
-          >
-            <SelectTrigger aria-label={t("sort.label")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="activity_desc">{t("sort.updated")}</SelectItem>
-              <SelectItem value="title_asc">{t("sort.title")}</SelectItem>
-              <SelectItem value="papers_desc">{t("sort.papers")}</SelectItem>
-            </SelectContent>
-          </Select>
+            search={
+              <SearchControl
+                key={state.query}
+                label={t("search")}
+                onChange={(query) =>
+                  replaceSearch({ cursor: undefined, query })
+                }
+                value={state.query}
+              />
+            }
+          />
         </div>
 
         <div className="mt-5">
@@ -283,7 +295,7 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
             />
           ) : (
             <>
-              <div className="divide-line-subtle divide-y">
+              <div className="grid gap-2">
                 <AnimatePresence initial={false}>
                   {projectsQuery.data.items.map((project) => (
                     <m.div

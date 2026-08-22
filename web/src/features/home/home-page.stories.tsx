@@ -282,6 +282,9 @@ export const Mobile: Story = {
     await expect(
       await canvas.findByText("Continue your research"),
     ).toBeVisible();
+    await expect(
+      canvas.getByText("Ask across your research."),
+    ).not.toBeVisible();
     await expect(canvas.getByText("Recent papers")).not.toBeVisible();
     await expect(canvas.getByText("Recent projects")).not.toBeVisible();
   },
@@ -328,10 +331,14 @@ export const MobileEmpty: Story = {
     const activeDestination = within(primaryNavigation).getByRole("link", {
       name: "问答",
     });
+    const navigationStyle = getComputedStyle(primaryNavigation);
     await expect(activeDestination).toHaveAttribute("aria-current", "page");
     await expect(
       activeDestination.querySelector("[data-selected-indicator]"),
     ).not.toBeNull();
+    await expect(navigationStyle.boxShadow).toBe("none");
+    await expect(navigationStyle.borderTopWidth).toBe("0px");
+    await expect(navigationStyle.borderRadius).toBe("0px");
     await expect(
       canvas.getByRole("textbox", { name: "问任何问题" }),
     ).toBeVisible();
@@ -439,6 +446,7 @@ export const MobileNavigationOpen: Story = {
   },
   globals: {
     locale: "zh-CN",
+    motion: "full",
     viewport: { value: "mobile", isRotated: false },
   },
   play: async ({ canvasElement }) => {
@@ -453,8 +461,13 @@ export const MobileNavigationOpen: Story = {
     );
     const navigation = within(dialog);
     const panel = navigation.getByRole("complementary");
-    await expect(dialog).toBeVisible();
+    await waitFor(() => expect(dialog).toBeVisible());
     await expect(dialog).toHaveAttribute("data-slot", "sheet-content");
+    await expect(dialog).toHaveAttribute("data-side", "left");
+    await expect(dialog).toHaveClass("motion-side-sheet-left");
+    await expect(getComputedStyle(dialog).animationName).toBe(
+      "motion-side-sheet-left-in",
+    );
     await expect(
       Math.abs(dialog.getBoundingClientRect().width - window.innerWidth),
     ).toBeLessThanOrEqual(1);
@@ -475,8 +488,11 @@ export const MobileNavigationOpen: Story = {
       navigation.getByRole("link", { name: "新对话" }),
     ).toBeVisible();
     await expect(
-      navigation.getByRole("button", { name: "设置" }),
-    ).toBeVisible();
+      navigation.getByRole("link", { name: longIdentityActor.display_name }),
+    ).toHaveAttribute("href", "/me");
+    await expect(
+      navigation.queryByRole("button", { name: "设置" }),
+    ).not.toBeInTheDocument();
     await expect(
       navigation.getByTestId("mobile-navigation-tools"),
     ).toBeVisible();
@@ -508,11 +524,13 @@ export const MobileProcessing: Story = {
 export const SimplifiedChinese: Story = {
   globals: { locale: "zh-CN" },
   play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
     await expect(
-      await within(canvasElement).findByRole("heading", {
+      await canvas.findByRole("heading", {
         name: "你正在研究什么？",
       }),
     ).toBeVisible();
+    await expect(canvas.getByText("基于你的研究资料提问。")).toBeVisible();
   },
 };
 

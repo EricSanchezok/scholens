@@ -8,13 +8,40 @@ runtime contracts rather than reproducing fixed Figma coordinates.
 
 ## Navigation and responsive structure
 
-The active panel is shareable URL state in `?settings=`. Supported values are
-`general`, `account`, `usage`, `access-keys`, `connections`, and `translation`;
-an absent or invalid value closes Settings. Desktop uses a contained dialog
-with a quiet navigation rail and one scrolling content region. Narrow screens
-use the same information architecture as a full-screen dialog with safe-area
-padding and a compact panel selector. Closing the dialog removes only the
-Settings query parameter and preserves other workspace state.
+Desktop Settings remains shareable URL state in `?settings=`. Supported values
+are `general`, `account`, `usage`, `access-keys`, `connections`, and
+`translation`; an absent or invalid value closes Settings. Desktop uses a
+contained dialog with a quiet navigation rail and one scrolling content
+region. Closing the dialog removes only the Settings query parameter and
+preserves other workspace state.
+
+Phones use an account center instead of shrinking that dialog. The fourth
+workspace destination opens `/me`, whose unboxed identity block, one compact
+plan-and-usage summary surface, and divided preference/help groups form the
+mobile account overview. Its children are real routes:
+
+- `/me/account` owns read-only identity, Account Center, and current-browser
+  Sign out;
+- `/me/usage` owns complete plan and resource usage;
+- `/me/settings` discloses only Display and interaction plus Translation;
+- `/me/settings/display` owns appearance, interface locale, and motion;
+- `/me/settings/translation` owns Reader translation preferences;
+- `/me/connections` and `/me/access-keys` own their existing account resources.
+
+The `/me` overview omits both a duplicate title bar and session actions, and
+retains the flat four-item bottom destination row. Every child has a back action
+and centered title, hides the bottom destination row, and falls back to its
+fixed parent route. A
+validated same-origin `returnTo` takes precedence when Library, Reader, or
+another product context launched that child. Unsafe or external return targets
+are ignored.
+
+The responsive Settings launcher writes `?settings=` on desktop and the
+corresponding `/me` path on phones. An old phone `?settings=` URL is replaced
+with the new route while preserving other workspace state and the allowlisted
+Zotero callback fields. Direct desktop visits to `/me` routes replace to the
+equivalent existing Settings dialog, so account controls never acquire a
+second desktop composition.
 
 Desktop navigation uses 20 px semantic glyphs in fixed 24 px slots. The active
 row and its icon strengthen together on one quiet hover surface; inactive icons
@@ -22,16 +49,21 @@ remain secondary. Settings selectors use the same light-line Select surface as
 Reader and collection sorting; only dense desktop toolbars opt into its compact
 height. Hover and open state never strengthen the resting border.
 
-The user menu is the sole shell entry point on desktop and mobile. It uses the
-same current-week billing query as Usage to show the live localized plan, Token
+The user menu is the sole shell entry point on desktop. It uses the same
+current-week billing query as Usage to show the live localized plan, Token
 Credits used/limit, and the next UTC calendar day after the inclusive
 `period_end` as the credit reset date. Loading and provider failure remain
 compact, explicit states. Settings, Account, and Usage are separate actions:
 Settings writes `?settings=general`, while Account and Usage write their named
-sections. Appearance is not duplicated in the menu. Routes mount one
-`SettingsDialog`; individual panels do not own another modal shell. Every panel
-supports keyboard navigation, visible focus, Light and Dark themes, English and
-Simplified Chinese, 320px containment, and reduced-motion-safe feedback.
+sections. Appearance is not duplicated in the menu. The phone navigation hub
+does not embed that dropdown: its identity row links to `/me`, and its bottom
+utility area keeps only Search, New conversation, and the conditional Install
+action. Routes mount one `SettingsDialog`; individual panels do not own another
+modal shell. Desktop and mobile compositions share the same panel queries,
+forms, mutations, feedback, and generated contracts while owning distinct
+navigation shells. Every panel supports keyboard navigation, visible focus,
+Light and Dark themes, English and Simplified Chinese, 320px containment, and
+reduced-motion-safe feedback.
 
 The account menu exposes localized Documentation and Repository rows with
 semantic icons and explicit external-link affordances. The authentication
@@ -154,14 +186,19 @@ dialogs, feedback, and semantic Iconoir wrappers remain shared components.
 
 ## Acceptance states
 
-Storybook covers Appearance, the conditional Theme picker, Account, Usage, Access Keys, Connections,
-Translation, 390px mobile, and Dark Chinese states. Account states
+Storybook covers Appearance, the conditional Theme picker, Account, Usage,
+Access Keys, Connections, Translation, the mobile account overview and child
+routes, 390px mobile, 320px containment, and Dark Chinese states. Account states
 cover direct URL navigation, read-only identity, canonical and overridden
 Account Center, current-session Sign out, mobile, and Dark. The shell account
 menu covers real usage success, loading, failure/retry, keyboard open,
-expanded/collapsed desktop, mobile settings trigger, localized Dark mode, the
-Documentation and Repository links, and the exact Settings/Account/Usage URL
-writes. Usage covers the per-Project paper limit, correct English/Chinese
+expanded/collapsed desktop, localized Dark mode, the Documentation and
+Repository links, and the exact Settings/Account/Usage URL writes. The mobile
+account center covers the fourth navigation destination, identity entry,
+parent and validated-source returns, conditional Install, Account-owned Sign
+out, long identity, billing success/loading/failure, and preference child
+navigation.
+Usage covers the per-Project paper limit, correct English/Chinese
 KiB-derived storage display, and UTC-negative date-only formatting.
 Connection stories include connected, not connected, invalid, replacement,
 OpenAlex key-link, and OpenAlex invalid behavior.

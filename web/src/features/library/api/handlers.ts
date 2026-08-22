@@ -4,6 +4,7 @@ import {
   failedIngestionEntry,
   libraryConversations,
   libraryLongTitlePapers,
+  libraryNextPagePapers,
   libraryOutputs,
   libraryPapers,
   libraryTags,
@@ -12,20 +13,6 @@ import {
 } from "./fixtures";
 
 const api = "http://127.0.0.1:7301/api/v1";
-
-const nextLibraryPage = libraryPapers.map((paper, index) => {
-  const suffix = String(index + 101).padStart(12, "0");
-  const documentId = `70000000-0000-4000-8000-${suffix}`;
-  return {
-    ...paper,
-    document: {
-      ...paper.document,
-      document_id: documentId,
-      title: `Follow-up reading ${index + 1}: ${paper.document.title}`,
-    },
-    library_entry_id: `72000000-0000-4000-8000-${suffix}`,
-  };
-});
 
 const populatedHandlers = [
   http.get(`${api}/integrations/zotero/status`, () =>
@@ -59,7 +46,7 @@ const populatedHandlers = [
   http.get(`${api}/library/papers`, ({ request }) => {
     const cursor = new URL(request.url).searchParams.get("cursor");
     return HttpResponse.json({
-      items: cursor ? nextLibraryPage : libraryPapers,
+      items: cursor ? libraryNextPagePapers : libraryPapers,
       next_cursor: cursor ? null : "next-library-page",
       previous_cursor: null,
       total_count: 6,

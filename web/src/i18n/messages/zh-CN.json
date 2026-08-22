@@ -258,6 +258,7 @@
       "ask": "问答",
       "library": "资料库",
       "projects": "项目",
+      "me": "我的",
       "primary": "主导航",
       "sidebar": "工作区侧栏",
       "settings": "设置",
@@ -323,6 +324,62 @@
       "repository": "仓库",
       "signOut": "退出登录",
       "signingOut": "正在退出…"
+    }
+  },
+  "AccountHub": {
+    "sectionContent": "{title}详情",
+    "account": {
+      "title": "账户",
+      "open": "查看账户详情"
+    },
+    "usage": {
+      "title": "用量",
+      "open": "查看套餐与用量",
+      "tokenCredits": "Token Credits",
+      "reset": "额度于 {date} 重置",
+      "loading": "正在加载套餐与用量…",
+      "unavailable": "暂时无法加载套餐与用量。"
+    },
+    "settings": {
+      "title": "设置",
+      "description": "管理显示、交互与翻译偏好"
+    },
+    "display": {
+      "title": "显示与交互",
+      "description": "外观、界面语言与动态效果"
+    },
+    "translation": {
+      "title": "翻译",
+      "description": "Reader 翻译偏好"
+    },
+    "connections": {
+      "title": "连接",
+      "description": "管理研究服务连接"
+    },
+    "accessKeys": {
+      "title": "访问密钥",
+      "description": "管理账户的 MCP 访问权限"
+    },
+    "groups": {
+      "account": "账户与偏好",
+      "help": "帮助"
+    },
+    "help": {
+      "documentation": "文档",
+      "repository": "仓库",
+      "install": "安装 Scholens"
+    },
+    "actions": {
+      "back": "返回",
+      "retry": "重试",
+      "signOut": "退出登录",
+      "signingOut": "正在退出…"
+    },
+    "session": {
+      "checking": "正在检查登录状态",
+      "retry": "重试",
+      "unavailableTitle": "账户暂不可用",
+      "unavailableDescription": "Scholens 无法恢复登录状态，请检查网络后重试。"
     }
   },
   "Home": {
