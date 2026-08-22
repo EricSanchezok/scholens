@@ -229,7 +229,7 @@ export const UnifiedSearchKeyboard: Story = {
         body.queryByRole("dialog", { name: "Search Scholens" }),
       ).not.toBeInTheDocument(),
     );
-    await expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 
