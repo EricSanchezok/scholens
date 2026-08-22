@@ -1493,6 +1493,8 @@ def test_database_contract_shares_auth_and_isolates_scholens() -> None:
 
     assert "CREATE SCHEMA IF NOT EXISTS auth" in bootstrap
     assert "CREATE SCHEMA IF NOT EXISTS scholens" in bootstrap
+    assert "pg_get_userbyid(nspowner) <> :'auth_migrator_role'" in bootstrap
+    assert "pg_get_userbyid(nspowner) <> :'product_migrator_role'" in bootstrap
     assert "GRANT CREATE ON DATABASE" not in bootstrap
     assert "auth_migrator_role" in bootstrap
     assert "product_migrator_role" in bootstrap
