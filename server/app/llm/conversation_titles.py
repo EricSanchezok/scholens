@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 import re
+from collections.abc import Sequence
 
 from app.llm.backend import HistoryMessage, TextContent
 from app.llm.base import BaseLLMClient
@@ -36,18 +36,6 @@ def fallback_conversation_title(user_query: str) -> str:
     if len(plain) <= _FALLBACK_TITLE_LIMIT:
         return plain
     return f"{plain[: _FALLBACK_TITLE_LIMIT - 1].rstrip()}…"
-
-
-def should_generate_initial_title(
-    *,
-    title_is_default: bool,
-    chat_history: Sequence[HistoryMessage],
-) -> bool:
-    """Generate once, immediately after the first successful assistant reply."""
-    return (
-        title_is_default
-        and sum(message.role == "assistant" for message in chat_history) == 1
-    )
 
 
 class InitialConversationTitleGenerator(BaseLLMClient):
