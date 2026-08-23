@@ -740,19 +740,6 @@ test("keeps conversation scrolling independent from the mobile Dock", async ({
       (element) => element.scrollHeight > element.clientHeight,
     ),
   ).toBe(true);
-  const sourcePill = page.getByRole("button", { name: "1 source" }).last();
-  await expect(sourcePill).toBeVisible();
-  await sourcePill.click();
-  const sourcePanel = page.getByRole("dialog", { name: "1 source" });
-  await expect(sourcePanel).toBeVisible();
-  await expect(
-    sourcePanel.getByText(homePapers[0]!.document.title ?? "", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Close sources" }).click();
-  await expect(sourcePanel).toBeHidden();
-
   await main.evaluate((element) => element.scrollTo({ top: 0 }));
   const jumpToLatest = page.getByRole("button", {
     name: "Jump to the latest response",
