@@ -80,12 +80,26 @@ describe("Home live conversation state", () => {
   });
 
   it("treats a server cancellation as terminal without fabricating a failure", () => {
-    const turn = reduceLiveTurn(
+    let turn = reduceLiveTurn(
       createLiveTurn(turnId, responseId, "Question"),
-      event({ type: "cancelled", turn_id: turnId }),
+      event({
+        type: "assistant_candidate_start",
+        item_id: "assistant:turn-1:answer",
+        sequence: 1,
+      }),
     );
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_candidate_delta",
+        item_id: "assistant:turn-1:answer",
+        delta: "Incomplete answer",
+      }),
+    );
+    turn = reduceLiveTurn(turn, event({ type: "cancelled", turn_id: turnId }));
 
     expect(turn?.state).toBe("cancelled");
+    expect(turn?.answerCandidate).toBeNull();
     expect(turn?.failure).toBeNull();
     expect(turn?.durationMs).toBeGreaterThanOrEqual(0);
   });
@@ -224,14 +238,29 @@ describe("Home live conversation state", () => {
       }),
     )!;
 
-    expect(turn.provisionalItems).toEqual([
-      {
-        id: itemId,
-        sequence: 3,
-        phase: "provisional",
-        content: "Validated answer",
-      },
-    ]);
+    expect(turn.answerCandidate).toEqual({
+      id: itemId,
+      sequence: 3,
+      phase: "provisional",
+      content: "Corrected candidate",
+    });
+    expect(turn.provisionalItems).toEqual([]);
+
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_item_complete",
+        item: {
+          id: itemId,
+          sequence: 3,
+          phase: "final",
+          content: "Validated answer",
+        },
+      }),
+    )!;
+
+    expect(turn.answerCandidate).toBeNull();
+    expect(turn.content).toBe("Validated answer");
   });
 
   it("updates activity by ID, preserves order, and rejects stale running state", () => {
@@ -429,5 +458,32 @@ describe("Home live conversation state", () => {
     ]);
 
     expect(next?.provisionalItems[0]?.content).toBe("流式内容");
+  });
+
+  it("reduces answer candidate batches separately from progress items", () => {
+    const itemId = "assistant:turn-1:answer";
+    const started = reduceLiveTurn(
+      createLiveTurn("turn-1", responseId, "Question"),
+      event({
+        type: "assistant_candidate_start",
+        item_id: itemId,
+        sequence: 2,
+      }),
+    );
+    const next = reduceLiveTurnEvents(started, [
+      event({
+        type: "assistant_candidate_delta",
+        item_id: itemId,
+        delta: "流式",
+      }),
+      event({
+        type: "assistant_candidate_delta",
+        item_id: itemId,
+        delta: "答案",
+      }),
+    ]);
+
+    expect(next?.answerCandidate?.content).toBe("流式答案");
+    expect(next?.provisionalItems).toEqual([]);
   });
 });

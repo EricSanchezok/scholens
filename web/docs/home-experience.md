@@ -133,10 +133,13 @@ that route returns only the validated item lifecycle. A `final` item completes
 only after structured answer validation.
 `response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
-`complete` closes the stream. The client never infers phase from prose or
-renders an unvalidated final draft. Progress and activity share one sequence
-and become an ordered worklog. The final answer remains outside that trace and
-is always visible.
+`complete` closes the stream. The client never infers phase from prose. A
+sanitized answer candidate renders only in the main answer lane while it is
+streaming; it is replaced by the canonical validated item on completion and is
+cleared before a validation retry. Candidate text never becomes a Worklog row,
+enables answer actions, or enters persistence. Progress and activity share one
+sequence and become an ordered worklog. The final answer remains outside that
+trace and is always visible.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
 tool name. Adjacent tool entries with the same outcome are rendered as one
@@ -493,11 +496,12 @@ Markdown is rendered as semantic headings, lists, links, code, and
 horizontally scrollable tables; raw HTML is not accepted. Streaming answers
 disable `text-pretty` so incomplete lines wrap with the same
 `overflow-wrap: anywhere` contract as completed answers; once the stream
-settles, pretty balancing returns. Streaming provisional Worklog rows render
-through the same message markdown surface with a complete `min-w-0` chain, so
-long unbreakable titles or URLs wrap inside the lane instead of widening the
-page. The same messages, stream reducer, context state, and submission logic
-are used by desktop and mobile.
+settles, pretty balancing returns. Streaming answer candidates use the same
+main answer surface as completed answers. Provisional Worklog rows use the same
+Markdown primitive with a complete `min-w-0` chain, so long unbreakable titles
+or URLs wrap inside their own lane instead of widening the page. The same
+messages, stream reducer, context state, and submission logic are used by
+desktop and mobile.
 
 The mobile visual baseline is represented by `Home / Workspace / Mobile Empty`,
 `Mobile Composer Expanded`, `Mobile Conversation`, `Mobile Conversation Large`,

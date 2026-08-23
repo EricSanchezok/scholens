@@ -180,6 +180,7 @@ function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
     userMessage: "Compare the strongest reasoning-compression approaches.",
     content: "",
     entries: [],
+    answerCandidate: null,
     provisionalItems: [],
     completedItemIds: [],
     trace: null,
@@ -753,27 +754,22 @@ export const ProvisionalResponse: Story = {
   args: {
     turns: [],
     liveTurn: liveTurn({
-      provisionalItems: [
-        {
-          id: "assistant:turn:1",
-          sequence: 1,
-          phase: "provisional",
-          content: "I’ll first inspect the research available in your library.",
-        },
-      ],
+      answerCandidate: {
+        id: "assistant:turn:1",
+        sequence: 1,
+        phase: "provisional",
+        content: "The evidence already supports an incremental answer.",
+      },
     }),
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => {
       const content = canvas.getByText(
-        "I’ll first inspect the research available in your library.",
+        "The evidence already supports an incremental answer.",
       );
-      expect(content.closest("li")).toBeVisible();
-      expect(canvas.getByRole("button", { name: /Thinking/ })).toHaveAttribute(
-        "aria-expanded",
-        "true",
-      );
+      expect(content.closest("[data-message-content]")).toBeVisible();
+      expect(content.closest("li")).toBeNull();
     });
   },
 };
@@ -821,29 +817,24 @@ export const MobileStreamingLongTokenOverflow: Story = {
     turns: [],
     liveTurn: liveTurn({
       userMessage: "调研一下长标题论文",
-      provisionalItems: [
-        {
-          id: "assistant:long:1",
-          sequence: 1,
-          phase: "provisional",
-          content:
-            "WhereDoesKnowledgeLiveExternalizingMemoryFromLargeLanguageModelsAndTheReasoningCoreHypothesis 是一个很长的英文标题，流式输出时它必须被安全换行而不能把页面撑宽，后面的中文正文也一样要正常换行。",
-        },
-      ],
+      answerCandidate: {
+        id: "assistant:long:1",
+        sequence: 1,
+        phase: "provisional",
+        content:
+          "WhereDoesKnowledgeLiveExternalizingMemoryFromLargeLanguageModelsAndTheReasoningCoreHypothesis 是一个很长的英文标题，流式输出时它必须被安全换行而不能把页面撑宽，后面的中文正文也一样要正常换行。",
+      },
     }),
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => {
       const content = canvas.getByText(/WhereDoesKnowledgeLive/);
-      expect(content.closest("li")).toBeVisible();
-      expect(canvas.getByRole("button", { name: /正在思考/ })).toHaveAttribute(
-        "aria-expanded",
-        "true",
-      );
+      expect(content.closest("[data-message-content]")).toBeVisible();
+      expect(content.closest("li")).toBeNull();
     });
-    // Streaming provisional rows must never widen the page horizontally,
-    // even with an unbreakable long Latin token and CJK body.
+    // A streaming answer must never widen the page horizontally, even with an
+    // unbreakable long Latin token and CJK body.
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
       window.innerWidth + 1,
     );
