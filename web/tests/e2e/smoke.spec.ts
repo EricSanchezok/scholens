@@ -349,7 +349,7 @@ test("allows another conversation to send while an accepted response continues",
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     const eventMatch = pathname.match(
-      /\/conversations\/([^/]+)\/turns\/([^/]+)\/responses\/([^/]+)\/events$/,
+      /\/conversations\/([^/]+)\/turns\/([^/]+)\/responses\/([^/]+)\/events(?:\/candidates)?$/,
     );
     if (eventMatch && request.method() === "GET") {
       const [, conversationId, turnId, responseId] = eventMatch;
