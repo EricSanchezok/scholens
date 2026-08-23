@@ -2658,6 +2658,33 @@
         "title": "ConversationStreamAssistantItemDeltaEvent",
         "type": "object"
       },
+      "ConversationStreamAssistantItemDiscardEvent": {
+        "properties": {
+          "item_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "response_id": {
+            "format": "uuid",
+            "title": "Response Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "assistant_item_discard",
+            "default": "assistant_item_discard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response_id",
+          "item_id"
+        ],
+        "title": "ConversationStreamAssistantItemDiscardEvent",
+        "type": "object"
+      },
       "ConversationStreamAssistantItemStartEvent": {
         "properties": {
           "item_id": {
@@ -2778,6 +2805,7 @@
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_discard": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
             "error": "#/components/schemas/ConversationStreamErrorEvent",
@@ -2800,6 +2828,9 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
@@ -2959,6 +2990,7 @@
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_discard": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
             "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
@@ -2982,6 +3014,9 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
@@ -12182,6 +12217,22 @@
               ],
               "title": "Prefer"
             }
+          },
+          {
+            "in": "header",
+            "name": "accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
+            }
           }
         ],
         "requestBody": {
@@ -12278,6 +12329,22 @@
               ],
               "title": "Prefer"
             }
+          },
+          {
+            "in": "header",
+            "name": "accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
+            }
           }
         ],
         "requestBody": {
@@ -12373,6 +12440,22 @@
                 }
               ],
               "title": "Prefer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
             }
           }
         ],
@@ -12544,6 +12627,22 @@
                 }
               ],
               "title": "Last-Event-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
             }
           }
         ],

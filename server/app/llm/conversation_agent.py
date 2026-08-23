@@ -40,6 +40,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationStreamActivityEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
+    ConversationStreamAssistantItemDiscardEvent,
     ConversationStreamAssistantItemStartEvent,
     ConversationStreamReferencesEvent,
 )
@@ -79,7 +80,7 @@ from app.tooling import (
 )
 from app.tooling.source_extraction import extract_external_sources
 from app.tooling.workspace import CONVERSATION_TOOL_PROFILE
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from pydantic_ai import (
     Agent,
     AgentRun,
@@ -88,11 +89,8 @@ from pydantic_ai import (
     FunctionToolResultEvent,
     ModelRequestNode,
     ModelRetry,
-    PartDeltaEvent,
-    PartStartEvent,
     RunContext,
     TextPart,
-    TextPartDelta,
     Tool,
     ToolOutput,
     UsageLimits,
@@ -115,6 +113,12 @@ _MAX_AGENT_TOOL_CALLS = 24
 _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
 _FINAL_OUTPUT_TOOL_NAME = "final_answer"
+_PRIVATE_OUTPUT_MARKERS = (
+    "source_keys",
+    "private marker",
+    "initial answer packet",
+)
+_PRIVATE_OUTPUT_HOLDBACK = max(map(len, _PRIVATE_OUTPUT_MARKERS)) - 1
 
 _SCOPE_GRAVITY_TEXT: dict[ConversationScopeType, str] = {
     ConversationScopeType.GLOBAL: (
@@ -184,10 +188,7 @@ def _bounded_json(value: JsonValue) -> JsonValue:
 
 def _contains_private_output_protocol(value: str) -> bool:
     normalized = value.casefold()
-    return "source_keys" in normalized and any(
-        marker in normalized
-        for marker in ("private marker", "initial answer packet", "scholens_cite")
-    )
+    return any(marker in normalized for marker in _PRIVATE_OUTPUT_MARKERS)
 
 
 def _tool_argument_retry_message(error: AppError) -> str:
@@ -278,6 +279,9 @@ class FinalAnswer(BaseModel):
     )
 
 
+_FINAL_ANSWER_ADAPTER: TypeAdapter[FinalAnswer] = TypeAdapter(FinalAnswer)
+
+
 @dataclass(slots=True)
 class _StreamedAssistantItem:
     id: str
@@ -285,6 +289,27 @@ class _StreamedAssistantItem:
     content: str
     packet: AnswerPacket
     parser: GroundedAnswerStreamParser
+
+
+@dataclass(slots=True)
+class _ProvisionalFinalItem:
+    item: _StreamedAssistantItem
+    raw_answer: str = ""
+    private_guard: str = ""
+    started: bool = False
+    discarded: bool = False
+
+
+_ProvisionalFinalEvent = (
+    ConversationStreamAssistantItemStartEvent
+    | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemDiscardEvent
+)
+_CompletedFinalEvent = (
+    ConversationStreamAssistantItemStartEvent
+    | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemCompleteEvent
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +324,7 @@ ConversationAgentStreamEvent = (
     ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
     | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemDiscardEvent
     | ConversationStreamAssistantItemCompleteEvent
     | ConversationStreamReferencesEvent
     | ConversationAgentResult
@@ -499,6 +525,7 @@ class ScholensConversationAgent:
         profile: Any,
     ) -> AsyncGenerator[ConversationAgentStreamEvent, None]:
         usage_settled = False
+        provisional_final: _ProvisionalFinalItem | None = None
         try:
             async with agent.iter(
                 request.user_query,
@@ -512,9 +539,29 @@ class ScholensConversationAgent:
                 node = agent_run.next_node
                 while not isinstance(node, End):
                     if isinstance(node, ModelRequestNode):
-                        next_node, item = await self._consume_model_node(
-                            node=node,
-                            agent_run=agent_run,
+                        async with node.stream(agent_run.ctx) as model_stream:
+                            async for response in model_stream.stream_response(
+                                debounce_by=None
+                            ):
+                                partial_answer = self._partial_final_answer(response)
+                                if partial_answer is None:
+                                    continue
+                                provisional_final, candidate_events = (
+                                    self._advance_provisional_final(
+                                        candidate=provisional_final,
+                                        answer=partial_answer,
+                                        deps=deps,
+                                        turn_id=request.turn_id,
+                                        response_id=request.response_id,
+                                        nonce=nonce,
+                                    )
+                                )
+                                for candidate_event in candidate_events:
+                                    yield candidate_event
+
+                        next_node = await agent_run.next(node)
+                        item = self._progress_item_from_node(
+                            node=next_node,
                             deps=deps,
                             turn_id=request.turn_id,
                             nonce=nonce,
@@ -542,6 +589,11 @@ class ScholensConversationAgent:
                         continue
 
                     if isinstance(node, CallToolsNode):
+                        validates_final = any(
+                            isinstance(part, ToolCallPart)
+                            and part.tool_name == _FINAL_OUTPUT_TOOL_NAME
+                            for part in node.model_response.parts
+                        )
                         async for activity_event in self._stream_tool_activities(
                             node=node,
                             agent_run=agent_run,
@@ -549,7 +601,19 @@ class ScholensConversationAgent:
                             response_id=request.response_id,
                         ):
                             yield activity_event
-                        node = await agent_run.next(node)
+                        next_node = await agent_run.next(node)
+                        if validates_final and not isinstance(next_node, End):
+                            if (
+                                provisional_final is not None
+                                and provisional_final.started
+                                and not provisional_final.discarded
+                            ):
+                                yield ConversationStreamAssistantItemDiscardEvent(
+                                    response_id=request.response_id,
+                                    item_id=provisional_final.item.id,
+                                )
+                            provisional_final = None
+                        node = next_node
                         continue
 
                     node = await agent_run.next(node)
@@ -557,31 +621,26 @@ class ScholensConversationAgent:
                 result = agent_run.result
                 if result is None:
                     raise RuntimeError("Conversation agent ended without a result")
-                final_item = self._assistant_item_from_text(
+                provisional_final, candidate_events = self._advance_provisional_final(
+                    candidate=provisional_final,
+                    answer=result.output.answer,
                     deps=deps,
                     turn_id=request.turn_id,
-                    raw_content=result.output.answer,
+                    response_id=request.response_id,
                     nonce=nonce,
+                )
+                for candidate_event in candidate_events:
+                    yield candidate_event
+                final_item, final_events = self._complete_provisional_final(
+                    candidate=provisional_final,
+                    response_id=request.response_id,
                 )
                 if final_item is None:
                     raise RuntimeError(
                         "Conversation agent produced no visible final answer"
                     )
-                yield ConversationStreamAssistantItemStartEvent(
-                    response_id=request.response_id,
-                    item_id=final_item.id,
-                    sequence=final_item.sequence,
-                )
-                yield ConversationStreamAssistantItemDeltaEvent(
-                    response_id=request.response_id,
-                    item_id=final_item.id,
-                    delta=final_item.content,
-                )
-                yield self._complete_item(
-                    final_item,
-                    response_id=request.response_id,
-                    phase="final",
-                )
+                for final_event in final_events:
+                    yield final_event
                 final_references = final_item.parser.references()
                 if final_references is not None:
                     yield self._references_event(
@@ -623,41 +682,34 @@ class ScholensConversationAgent:
                     status="unknown",
                 )
 
-    async def _consume_model_node(
+    def _progress_item_from_node(
         self,
         *,
-        node: ModelRequestNode[_ConversationAgentDependencies, FinalAnswer],
-        agent_run: AgentRun[_ConversationAgentDependencies, FinalAnswer],
+        node: Any,
         deps: _ConversationAgentDependencies,
         turn_id: uuid.UUID,
         nonce: str,
-    ) -> tuple[Any, _StreamedAssistantItem | None]:
-        text_parts: list[str] = []
-        async with node.stream(agent_run.ctx) as stream:
-            async for event in stream:
-                if isinstance(event, PartStartEvent) and isinstance(
-                    event.part, TextPart
-                ):
-                    text_parts.append(event.part.content)
-                elif isinstance(event, PartDeltaEvent) and isinstance(
-                    event.delta, TextPartDelta
-                ):
-                    text_parts.append(event.delta.content_delta)
-
-        next_node = await agent_run.next(node)
-        if not text_parts or not isinstance(next_node, CallToolsNode):
-            return next_node, None
+    ) -> _StreamedAssistantItem | None:
+        if not isinstance(node, CallToolsNode):
+            return None
         tool_names = {
             part.tool_name
-            for part in next_node.model_response.parts
+            for part in node.model_response.parts
             if isinstance(part, ToolCallPart)
         }
         if not tool_names or _FINAL_OUTPUT_TOOL_NAME in tool_names:
-            return next_node, None
-        return next_node, self._assistant_item_from_text(
+            return None
+        raw_content = "".join(
+            part.content
+            for part in node.model_response.parts
+            if isinstance(part, TextPart)
+        )
+        if not raw_content:
+            return None
+        return self._assistant_item_from_text(
             deps=deps,
             turn_id=turn_id,
-            raw_content="".join(text_parts),
+            raw_content=raw_content,
             nonce=nonce,
         )
 
@@ -1331,6 +1383,173 @@ Initial server-validated answer material:
             packet=packet,
             parser=parser,
         )
+
+    @staticmethod
+    def _partial_final_answer(response: ModelResponse) -> str | None:
+        final_part = next(
+            (
+                part
+                for part in reversed(response.parts)
+                if isinstance(part, ToolCallPart)
+                and part.tool_name == _FINAL_OUTPUT_TOOL_NAME
+            ),
+            None,
+        )
+        if final_part is None:
+            return None
+        try:
+            if isinstance(final_part.args, str):
+                return _FINAL_ANSWER_ADAPTER.validate_json(
+                    final_part.args,
+                    experimental_allow_partial="trailing-strings",
+                ).answer
+            return _FINAL_ANSWER_ADAPTER.validate_python(final_part.args).answer
+        except ValidationError:
+            return None
+
+    def _new_provisional_final(
+        self,
+        *,
+        deps: _ConversationAgentDependencies,
+        turn_id: uuid.UUID,
+        nonce: str,
+    ) -> _ProvisionalFinalItem:
+        sequence = deps.allocate_sequence()
+        packet = self._answer_packet(deps)
+        return _ProvisionalFinalItem(
+            item=_StreamedAssistantItem(
+                id=self._assistant_item_id(turn_id, sequence),
+                sequence=sequence,
+                content="",
+                packet=packet,
+                parser=GroundedAnswerStreamParser(packet.sources, nonce=nonce),
+            )
+        )
+
+    def _advance_provisional_final(
+        self,
+        *,
+        candidate: _ProvisionalFinalItem | None,
+        answer: str,
+        deps: _ConversationAgentDependencies,
+        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+        nonce: str,
+    ) -> tuple[_ProvisionalFinalItem, list[_ProvisionalFinalEvent]]:
+        events: list[_ProvisionalFinalEvent] = []
+        if candidate is not None and not answer.startswith(candidate.raw_answer):
+            if candidate.started and not candidate.discarded:
+                events.append(
+                    ConversationStreamAssistantItemDiscardEvent(
+                        response_id=response_id,
+                        item_id=candidate.item.id,
+                    )
+                )
+            candidate = None
+        if candidate is None:
+            candidate = self._new_provisional_final(
+                deps=deps,
+                turn_id=turn_id,
+                nonce=nonce,
+            )
+
+        delta = answer[len(candidate.raw_answer) :]
+        candidate.raw_answer = answer
+        if not delta or candidate.discarded:
+            return candidate, events
+
+        candidate.private_guard += delta
+        if _contains_private_output_protocol(candidate.private_guard):
+            if candidate.started:
+                events.append(
+                    ConversationStreamAssistantItemDiscardEvent(
+                        response_id=response_id,
+                        item_id=candidate.item.id,
+                    )
+                )
+            candidate.private_guard = ""
+            candidate.discarded = True
+            return candidate, events
+
+        if len(candidate.private_guard) <= _PRIVATE_OUTPUT_HOLDBACK:
+            return candidate, events
+        ready = candidate.private_guard[:-_PRIVATE_OUTPUT_HOLDBACK]
+        candidate.private_guard = candidate.private_guard[-_PRIVATE_OUTPUT_HOLDBACK:]
+        visible = candidate.item.parser.feed(ready)
+        events.extend(
+            self._provisional_delta_events(
+                candidate=candidate,
+                response_id=response_id,
+                visible=visible,
+            )
+        )
+        return candidate, events
+
+    @staticmethod
+    def _provisional_delta_events(
+        *,
+        candidate: _ProvisionalFinalItem,
+        response_id: uuid.UUID,
+        visible: str,
+    ) -> list[
+        ConversationStreamAssistantItemStartEvent
+        | ConversationStreamAssistantItemDeltaEvent
+    ]:
+        if not visible:
+            return []
+        events: list[
+            ConversationStreamAssistantItemStartEvent
+            | ConversationStreamAssistantItemDeltaEvent
+        ] = []
+        if not candidate.started:
+            candidate.started = True
+            events.append(
+                ConversationStreamAssistantItemStartEvent(
+                    response_id=response_id,
+                    item_id=candidate.item.id,
+                    sequence=candidate.item.sequence,
+                )
+            )
+        candidate.item.content += visible
+        events.append(
+            ConversationStreamAssistantItemDeltaEvent(
+                response_id=response_id,
+                item_id=candidate.item.id,
+                delta=visible,
+            )
+        )
+        return events
+
+    def _complete_provisional_final(
+        self,
+        *,
+        candidate: _ProvisionalFinalItem,
+        response_id: uuid.UUID,
+    ) -> tuple[_StreamedAssistantItem | None, list[_CompletedFinalEvent]]:
+        if candidate.discarded:
+            return None, []
+        visible = (
+            candidate.item.parser.feed(candidate.private_guard)
+            + candidate.item.parser.finish()
+        )
+        candidate.private_guard = ""
+        events: list[_CompletedFinalEvent] = list(
+            self._provisional_delta_events(
+                candidate=candidate,
+                response_id=response_id,
+                visible=visible,
+            )
+        )
+        if not candidate.item.content.strip():
+            return None, events
+        events.append(
+            self._complete_item(
+                candidate.item,
+                response_id=response_id,
+                phase="final",
+            )
+        )
+        return candidate.item, events
 
     @staticmethod
     def _progress_entry(item: _StreamedAssistantItem) -> ConversationProgressEntry:

@@ -117,18 +117,22 @@ Conversation creation and continuation request `Prefer: respond-async`. A
 successful `202` receipt identifies the persisted Turn/Response, after which
 the Web app follows its detachable SSE endpoint with `Last-Event-ID`. A legacy
 inline `200` SSE response remains a compatible fallback. Both paths use one
-standard SSE decoder. The stream accepts `start`, the stable-ID
-`assistant_item_start → delta → complete`
-lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
-`complete`, `cancelled`, and `error`. The Server buffers model text until the
-complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`; a `final` item arrives only after structured
-answer validation. `response_ready` supplies the complete persisted turn
-snapshot, and an optional `suggestions` event may supplement it before
-`complete` closes the stream. The client never infers phase from prose or
-renders an unvalidated final draft. Progress and activity share one sequence
-and become an ordered worklog. The final answer remains outside that trace and
-is always visible.
+standard SSE decoder and request
+`text/event-stream; scholens-events=2`. The stream accepts `start`, the
+stable-ID `assistant_item_start → delta → complete|discard` lifecycle,
+`activity`, `references`, `response_ready`, `suggestions`, `complete`,
+`cancelled`, and `error`. The Server buffers model text until the complete node
+establishes its role. Text accompanying a runtime tool call may arrive as
+bounded `progress`; a partially validated structured final answer streams as a
+provisional item. Full validation completes that item, while a retry discards
+it before the replacement appears. The reducer removes discard by item ID and
+never promotes its text into canonical answer content. `response_ready`
+supplies the complete persisted turn snapshot, and an optional `suggestions`
+event may supplement it before `complete` closes the stream. Progress and
+activity share one sequence and become an ordered worklog. The completed final
+answer remains outside that trace and is always visible. Servers buffer these
+item frames for clients that do not negotiate v2, so strict old clients never
+receive the discard discriminator during a rolling release.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
 tool name. Adjacent tool entries with the same outcome are rendered as one
@@ -140,8 +144,12 @@ actions without waiting for a GET refetch, conversation title, or suggestion
 sidecar. `complete`, `cancelled`, and `error` are terminal. A dropped
 subscription reconnects with bounded backoff and event-ID deduplication; it
 never creates a second Turn or retries model generation. Unmounting or changing
-routes aborts only the local subscription. Stop is a separate authorized Server
-cancellation and the UI discloses when that cancellation cannot yet be
+routes aborts only the local subscription. Local stream and submission
+ownership is keyed by scope and Conversation identity: switching from A to B
+releases A's local subscriber so B can submit immediately, while an immutable
+submission token prevents A's late callbacks from mutating B. Returning to A
+recovers its still-running Server response. Stop is a separate authorized
+Server cancellation and the UI discloses when that cancellation cannot yet be
 confirmed. Once
 a turn is accepted into the optimistic transcript, the Composer clears
 immediately and its send action becomes the standard stop-square action for

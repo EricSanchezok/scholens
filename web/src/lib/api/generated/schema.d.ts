@@ -2849,6 +2849,21 @@ export interface components {
              */
             type: "assistant_item_delta";
         };
+        /** ConversationStreamAssistantItemDiscardEvent */
+        ConversationStreamAssistantItemDiscardEvent: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_item_discard";
+        };
         /** ConversationStreamAssistantItemStartEvent */
         ConversationStreamAssistantItemStartEvent: {
             /** Item Id */
@@ -2923,7 +2938,7 @@ export interface components {
          * ConversationStreamEventSchema
          * @description Compatible schema for the existing inline SSE response.
          */
-        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemDiscardEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
             /** References */
@@ -3004,7 +3019,7 @@ export interface components {
          * ConversationSubscriptionEventSchema
          * @description Schema for detachable response subscriptions, including cancellation.
          */
-        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemDiscardEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationSummaryResponse */
         ConversationSummaryResponse: {
             /** Archived At */
@@ -6734,6 +6749,7 @@ export interface operations {
             query?: never;
             header?: {
                 prefer?: string | null;
+                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6781,6 +6797,7 @@ export interface operations {
             query?: never;
             header?: {
                 prefer?: string | null;
+                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6829,6 +6846,7 @@ export interface operations {
             query?: never;
             header?: {
                 prefer?: string | null;
+                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6910,6 +6928,7 @@ export interface operations {
             query?: never;
             header?: {
                 "Last-Event-ID"?: string | null;
+                accept?: string | null;
             };
             path: {
                 conversation_id: string;

@@ -29,6 +29,7 @@ const conversationStreamEventTypes = {
   activity: true,
   assistant_item_start: true,
   assistant_item_delta: true,
+  assistant_item_discard: true,
   assistant_item_complete: true,
   references: true,
   response_ready: true,
@@ -132,7 +133,7 @@ async function streamConversation({
       method: "POST",
       credentials: "include",
       headers: {
-        Accept: "application/json, text/event-stream",
+        Accept: "application/json, text/event-stream; scholens-events=2",
         "Content-Type": "application/json",
         Prefer: "respond-async",
       },
@@ -245,7 +246,7 @@ export async function subscribeConversationEvents({
           method: "GET",
           credentials: "include",
           headers: {
-            Accept: "text/event-stream",
+            Accept: "text/event-stream; scholens-events=2",
             ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
           },
           signal,

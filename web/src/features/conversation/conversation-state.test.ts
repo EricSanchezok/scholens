@@ -180,6 +180,37 @@ describe("Home live conversation state", () => {
     expect(turn.provisionalItems).toEqual([]);
   });
 
+  it("removes a rejected provisional answer without touching accepted content", () => {
+    let turn = createLiveTurn("turn-1", responseId, "Question");
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_item_start",
+        item_id: "assistant:turn-1:1",
+        sequence: 1,
+      }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_item_delta",
+        item_id: "assistant:turn-1:1",
+        delta: "Rejected candidate",
+      }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_item_discard",
+        item_id: "assistant:turn-1:1",
+      }),
+    )!;
+
+    expect(turn.provisionalItems).toEqual([]);
+    expect(turn.content).toBe("");
+    expect(turn.completedItemIds).toEqual([]);
+  });
+
   it("updates activity by ID, preserves order, and rejects stale running state", () => {
     let turn = createLiveTurn("turn-1", responseId, "Compare the papers");
     turn = reduceLiveTurn(

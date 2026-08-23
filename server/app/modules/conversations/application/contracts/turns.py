@@ -52,6 +52,12 @@ class ConversationStreamAssistantItemDeltaEvent(BaseModel):
     delta: str
 
 
+class ConversationStreamAssistantItemDiscardEvent(BaseModel):
+    type: Literal["assistant_item_discard"] = "assistant_item_discard"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+
+
 class ConversationStreamAssistantItemCompleteEvent(BaseModel):
     type: Literal["assistant_item_complete"] = "assistant_item_complete"
     response_id: uuid.UUID
@@ -99,6 +105,7 @@ ConversationLegacyStreamEvent = Annotated[
     | ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
     | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemDiscardEvent
     | ConversationStreamAssistantItemCompleteEvent
     | ConversationStreamReferencesEvent
     | ConversationStreamResponseReadyEvent
@@ -113,6 +120,7 @@ ConversationStreamEvent = Annotated[
     | ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
     | ConversationStreamAssistantItemDeltaEvent
+    | ConversationStreamAssistantItemDiscardEvent
     | ConversationStreamAssistantItemCompleteEvent
     | ConversationStreamReferencesEvent
     | ConversationStreamResponseReadyEvent

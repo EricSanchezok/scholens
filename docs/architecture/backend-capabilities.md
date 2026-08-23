@@ -436,10 +436,13 @@ bounded and projected before returning to the model. `Agent.iter()` exposes
 complete model and tool nodes to the harness, which buffers model text until the
 node establishes its role. Text accompanying an ordinary runtime tool call may
 complete as bounded `progress`. A run can terminate only through the structured
-`final_answer` output; its visible answer and private citation protocol validate
-before any final delta or persistence. Plain terminal text, empty visible
-content, citation-only output, and copied private protocol receive bounded model
-retries and then fail through the stable invalid-response path.
+`final_answer` output. The harness partially validates its cumulative `answer`
+field and streams citation-sanitized text as a provisional final item. Full
+schema, visible-content, and private-protocol validation either completes that
+same item or emits a typed discard before a bounded model retry; only a
+completed item may be persisted. Plain terminal text, empty visible content,
+citation-only output, and copied private protocol still fail through the stable
+invalid-response path after retry exhaustion.
 
 Progress and final items use stable IDs and share a monotonic sequence with
 sanitized activity records. The persisted trace contains ordered progress and
@@ -453,7 +456,10 @@ activity, final-only server-generated references, a persisted `response_ready`
 snapshot, an optional turn-suggestion update, and one terminal event. Accepted
 generations run in the dedicated Server-owned Conversation worker. A bounded
 Redis Stream is only a replayable delivery log; PostgreSQL remains authoritative
-for running and terminal Response state. Raw
+for running and terminal Response state. Clients negotiate provisional
+start/delta/discard semantics with the versioned SSE media parameter; the HTTP
+boundary buffers or drops provisional frames for strict v1 clients during the
+rolling compatibility window. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 

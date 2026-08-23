@@ -562,6 +562,7 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "ConversationStreamActivityEvent",
         "ConversationStreamAssistantItemStartEvent",
         "ConversationStreamAssistantItemDeltaEvent",
+        "ConversationStreamAssistantItemDiscardEvent",
         "ConversationStreamAssistantItemCompleteEvent",
         "ConversationStreamReferencesEvent",
         "ConversationStreamResponseReadyEvent",

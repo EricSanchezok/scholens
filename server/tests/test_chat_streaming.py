@@ -12,8 +12,16 @@ from app.modules.conversations.infrastructure.chat_streaming import (
     stream_with_stable_error,
 )
 from app.modules.conversations.application.contracts.turns import (
+    ConversationAssistantItem,
+    ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
+    ConversationStreamAssistantItemDiscardEvent,
+    ConversationStreamAssistantItemStartEvent,
     ConversationStreamCompleteEvent,
+)
+from app.transport.http.public_v1.turns import (
+    _buffer_provisional_items_for_legacy_client,
+    _event_stream_response,
 )
 
 
@@ -31,6 +39,22 @@ def _payload(event: str) -> dict[str, object]:
     return value
 
 
+def test_v2_event_stream_disables_intermediary_buffering() -> None:
+    async def source():
+        yield "event"
+
+    stream = source()
+    response = _event_stream_response(
+        stream,
+        accept="application/json, text/event-stream; scholens-events=2",
+    )
+
+    assert response.body_iterator is stream
+    assert response.headers["cache-control"] == "no-cache, no-transform"
+    assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["vary"] == "Accept"
+
+
 @pytest.mark.asyncio
 async def test_keepalive_comment_does_not_cancel_pending_event() -> None:
     release = asyncio.Event()
@@ -42,7 +66,11 @@ async def test_keepalive_comment_does_not_cancel_pending_event() -> None:
     stream = stream_with_keepalive(delayed_stream(), interval_seconds=0.001)
     assert await anext(stream) == ": keepalive\n\n"
     release.set()
-    assert await anext(stream) == "typed-event"
+    async with asyncio.timeout(1):
+        event = await anext(stream)
+        while event == ": keepalive\n\n":
+            event = await anext(stream)
+    assert event == "typed-event"
     with pytest.raises(StopAsyncIteration):
         await anext(stream)
 
@@ -173,3 +201,72 @@ async def test_complete_stream_has_no_error_event() -> None:
         )
     ]
     assert _payload(events[-1])["type"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_legacy_adapter_drops_discarded_candidate_and_releases_valid_item() -> (
+    None
+):
+    async def provisional_stream():
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemStartEvent(
+                response_id=RESPONSE_ID,
+                item_id="candidate",
+                sequence=1,
+            )
+        )
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemDeltaEvent(
+                response_id=RESPONSE_ID,
+                item_id="candidate",
+                delta="invalid",
+            )
+        )
+        yield ": keepalive\n\n"
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemDiscardEvent(
+                response_id=RESPONSE_ID,
+                item_id="candidate",
+            )
+        )
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemStartEvent(
+                response_id=RESPONSE_ID,
+                item_id="accepted",
+                sequence=2,
+            )
+        )
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemDeltaEvent(
+                response_id=RESPONSE_ID,
+                item_id="accepted",
+                delta="valid",
+            )
+        )
+        yield encode_conversation_sse(
+            ConversationStreamAssistantItemCompleteEvent(
+                response_id=RESPONSE_ID,
+                item=ConversationAssistantItem(
+                    id="accepted",
+                    sequence=2,
+                    phase="final",
+                    content="valid",
+                ),
+            )
+        )
+
+    frames = [
+        frame
+        async for frame in _buffer_provisional_items_for_legacy_client(
+            provisional_stream()
+        )
+    ]
+
+    assert frames[0] == ": keepalive\n\n"
+    payloads = [_payload(frame) for frame in frames[1:]]
+    assert [payload["type"] for payload in payloads] == [
+        "assistant_item_start",
+        "assistant_item_delta",
+        "assistant_item_complete",
+    ]
+    assert all("invalid" not in frame and "candidate" not in frame for frame in frames)

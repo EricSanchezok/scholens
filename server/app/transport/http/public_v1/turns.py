@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from uuid import UUID
 
 from app.bootstrap.execution import (
@@ -40,8 +43,27 @@ from fastapi.responses import JSONResponse, StreamingResponse
 turn_router = APIRouter()
 
 
+@dataclass(slots=True)
+class _BufferedAssistantItem:
+    item_id: str
+    frames: list[str]
+    deferred_frames: list[str]
+
+
 class ConversationEventStreamResponse(StreamingResponse):
     media_type = "text/event-stream"
+
+    def __init__(self, content: AsyncIterator[str], status_code: int = 200) -> None:
+        super().__init__(
+            content,
+            status_code=status_code,
+            media_type=self.media_type,
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+                "Vary": "Accept",
+            },
+        )
 
 
 def _stream_responses() -> dict[int | str, dict[str, object]]:
@@ -88,6 +110,87 @@ def _prefers_background(prefer: str | None) -> bool:
     )
 
 
+def _supports_provisional_items(accept: str | None) -> bool:
+    for media_range in (accept or "").split(","):
+        parts = [part.strip().casefold() for part in media_range.split(";")]
+        if parts[0] == "text/event-stream" and "scholens-events=2" in parts[1:]:
+            return True
+    return False
+
+
+def _conversation_event_payload(frame: str) -> dict[str, object] | None:
+    data = "\n".join(
+        line.removeprefix("data: ")
+        for line in frame.splitlines()
+        if line.startswith("data: ")
+    )
+    if not data:
+        return None
+    payload = json.loads(data)
+    return payload if isinstance(payload, dict) else None
+
+
+async def _buffer_provisional_items_for_legacy_client(
+    stream: AsyncIterator[str],
+) -> AsyncIterator[str]:
+    """Hide provisional item semantics from clients using the v1 event protocol."""
+    pending: _BufferedAssistantItem | None = None
+    async for frame in stream:
+        payload = _conversation_event_payload(frame)
+        if payload is None:
+            yield frame
+            continue
+
+        event_type = payload.get("type")
+        item_id = payload.get("item_id")
+        if pending is None:
+            if event_type == "assistant_item_start" and isinstance(item_id, str):
+                pending = _BufferedAssistantItem(item_id, [frame], [])
+            elif event_type != "assistant_item_discard":
+                yield frame
+            continue
+
+        if item_id == pending.item_id and event_type == "assistant_item_delta":
+            pending.frames.append(frame)
+            continue
+        if event_type == "assistant_item_complete":
+            item = payload.get("item")
+            completed_item_id = item.get("id") if isinstance(item, dict) else None
+            if completed_item_id == pending.item_id:
+                for buffered in (*pending.frames, *pending.deferred_frames, frame):
+                    yield buffered
+                pending = None
+                continue
+        if item_id == pending.item_id and event_type == "assistant_item_discard":
+            for deferred in pending.deferred_frames:
+                yield deferred
+            pending = None
+            continue
+        if event_type == "assistant_item_start" and isinstance(item_id, str):
+            for deferred in pending.deferred_frames:
+                yield deferred
+            pending = _BufferedAssistantItem(item_id, [frame], [])
+            continue
+        if event_type in {"cancelled", "complete", "error"}:
+            for deferred in (*pending.deferred_frames, frame):
+                yield deferred
+            pending = None
+            continue
+        pending.deferred_frames.append(frame)
+
+    if pending is not None:
+        for deferred in pending.deferred_frames:
+            yield deferred
+
+
+def _event_stream_response(
+    stream: AsyncIterator[str], *, accept: str | None
+) -> ConversationEventStreamResponse:
+    if not _supports_provisional_items(accept):
+        stream = _buffer_provisional_items_for_legacy_client(stream)
+    return ConversationEventStreamResponse(stream)
+
+
 def _conversation_operation(
     *,
     conversation_id: UUID,
@@ -131,6 +234,7 @@ async def create_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
+    accept: str | None = Header(default=None),
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -159,7 +263,7 @@ async def create_conversation_turn(
         request=turn,
         client_ip=http_client_ip(http_request),
     )
-    return ConversationEventStreamResponse(stream)
+    return _event_stream_response(stream, accept=accept)
 
 
 @turn_router.post(
@@ -179,6 +283,7 @@ async def retry_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
+    accept: str | None = Header(default=None),
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -209,7 +314,7 @@ async def retry_conversation_turn(
         response_id=response.response_id,
         client_ip=http_client_ip(http_request),
     )
-    return ConversationEventStreamResponse(stream)
+    return _event_stream_response(stream, accept=accept)
 
 
 @turn_router.post(
@@ -229,6 +334,7 @@ async def branch_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
+    accept: str | None = Header(default=None),
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -259,7 +365,7 @@ async def branch_conversation_turn(
         request=branch,
         client_ip=http_client_ip(http_request),
     )
-    return ConversationEventStreamResponse(stream)
+    return _event_stream_response(stream, accept=accept)
 
 
 @turn_router.get(
@@ -274,6 +380,7 @@ async def subscribe_conversation_response(
     chat: ConversationChat = Depends(get_conversation_chat),
     current_user: Actor = Depends(get_required_user),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    accept: str | None = Header(default=None),
 ) -> ConversationEventStreamResponse:
     events = await chat.subscribe(
         actor=current_user,
@@ -282,7 +389,7 @@ async def subscribe_conversation_response(
         response_id=response_id,
         last_event_id=last_event_id,
     )
-    return ConversationEventStreamResponse(events)
+    return _event_stream_response(events, accept=accept)
 
 
 @turn_router.post(

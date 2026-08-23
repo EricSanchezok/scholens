@@ -280,6 +280,13 @@ export function reduceLiveTurn(
             : item,
         ),
       };
+    case "assistant_item_discard":
+      return {
+        ...current,
+        provisionalItems: current.provisionalItems.filter(
+          (item) => item.id !== event.item_id,
+        ),
+      };
     case "assistant_item_complete":
       return completeAssistantItem(current, event.item);
     case "references":

@@ -25,6 +25,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationStreamActivityEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
+    ConversationStreamAssistantItemDiscardEvent,
     ConversationStreamReferencesEvent,
 )
 from app.modules.conversations.application.contracts.trace import (
@@ -354,6 +355,101 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
 
 
 @pytest.mark.asyncio
+async def test_structured_final_answer_streams_multiple_visible_deltas() -> None:
+    answer = (
+        "The first part is long enough to become visible while the provider is still "
+        "streaming, and the second part completes the answer."
+    )
+
+    async def streamed_answer(
+        _messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        yield {
+            0: DeltaToolCall(
+                name="final_answer",
+                json_args=(
+                    '{"answer":"The first part is long enough to become visible '
+                    "while the provider is still streaming"
+                ),
+                tool_call_id="streamed-final",
+            )
+        }
+        yield {
+            0: DeltaToolCall(
+                json_args=', and the second part completes the answer."}',
+            )
+        }
+
+    events = await _events(
+        model=FunctionModel(stream_function=streamed_answer),
+        dispatcher=_Dispatcher(),
+        query="Stream the complete answer",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    deltas = [
+        event.delta
+        for event in events
+        if isinstance(event, ConversationStreamAssistantItemDeltaEvent)
+    ]
+    assert len(deltas) >= 2
+    assert "".join(deltas) == answer
+
+
+@pytest.mark.asyncio
+async def test_invalid_streamed_candidate_is_discarded_before_retry() -> None:
+    attempts = 0
+
+    async def retried_answer(
+        _messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            yield {
+                0: DeltaToolCall(
+                    name="final_answer",
+                    json_args=(
+                        '{"answer":"This candidate is visible before full validation'
+                    ),
+                    tool_call_id="invalid-final",
+                )
+            }
+            yield {
+                0: DeltaToolCall(
+                    json_args='","unexpected":"not allowed"}',
+                )
+            }
+            return
+        yield _final_answer("This replacement answer is valid.")
+
+    events = await _events(
+        model=FunctionModel(stream_function=retried_answer),
+        dispatcher=_Dispatcher(),
+        query="Retry invalid structured output",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    discarded = [
+        event
+        for event in events
+        if isinstance(event, ConversationStreamAssistantItemDiscardEvent)
+    ]
+    assert attempts == 2
+    assert len(discarded) == 1
+    completed = [
+        event.item
+        for event in events
+        if isinstance(event, ConversationStreamAssistantItemCompleteEvent)
+        and event.item.phase == "final"
+    ]
+    assert [item.content for item in completed] == ["This replacement answer is valid."]
+    assert discarded[0].item_id != completed[0].id
+
+
+@pytest.mark.asyncio
 async def test_text_before_tool_is_completed_as_progress_before_activity() -> None:
     async def staged_answer(
         messages: list[ModelMessage], _info: AgentInfo
@@ -578,9 +674,20 @@ async def test_private_protocol_output_is_retried_before_it_reaches_the_user() -
             if isinstance(part, RetryPromptPart)
         ]
         if not retries:
-            yield _final_answer(
-                "The source_keys are private markers from the initial answer packet."
-            )
+            yield {
+                0: DeltaToolCall(
+                    name="final_answer",
+                    json_args=(
+                        '{"answer":"A visible preface arrives before private source_'
+                    ),
+                    tool_call_id="private-final",
+                )
+            }
+            yield {
+                0: DeltaToolCall(
+                    json_args='keys from the initial answer packet."}',
+                )
+            }
             return
         retry_messages.extend(str(part.content) for part in retries)
         yield _final_answer("The complete answer contains no internal protocol.")
@@ -593,7 +700,17 @@ async def test_private_protocol_output_is_retried_before_it_reaches_the_user() -
         time_zone="UTC",
     )
 
-    assert _final_text(events) == "The complete answer contains no internal protocol."
+    completed = [
+        event.item.content
+        for event in events
+        if isinstance(event, ConversationStreamAssistantItemCompleteEvent)
+        and event.item.phase == "final"
+    ]
+    assert completed == ["The complete answer contains no internal protocol."]
+    assert any(
+        isinstance(event, ConversationStreamAssistantItemDiscardEvent)
+        for event in events
+    )
     assert any("private citation" in message for message in retry_messages)
     assert "source_keys" not in str(events)
 

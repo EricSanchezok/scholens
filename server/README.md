@@ -133,7 +133,7 @@ uv run --frozen --no-sync celery \
 ```
 
 3. Start the optional Jobs service when testing uploads or other Jobs-owned
-queues:
+   queues:
 
 ```bash
 cd ../jobs
@@ -316,15 +316,22 @@ and conditionally cancels both Response and job. The legacy no-Preference path
 retains inline SSE compatibility.
 Selecting the already-active branch is a storage and journal no-op. Consumers
 must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
-`assistant_item_complete`, `activity`, `references`, `response_ready`,
-`suggestions`, `complete`, `cancelled`, and `error` events and treat those last
-three as terminal. `response_ready` carries the complete persisted turn snapshot and
-unblocks response actions; `suggestions` is an optional late sidecar update.
+`assistant_item_discard`, `assistant_item_complete`, `activity`, `references`,
+`response_ready`, `suggestions`, `complete`, `cancelled`, and `error` events and
+treat those last three as terminal. `response_ready` carries the complete
+persisted turn snapshot and unblocks response actions; `suggestions` is an
+optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`; a `final` item is published only after the model submits the
-structured `final_answer` output and its visible content and private citation
-protocol validate. Plain text cannot terminate a Conversation run.
+`progress`. The structured `final_answer.answer` field is partially validated
+and streamed as one provisional `final` candidate; the same item completes only
+after full schema, visible-content, and private-protocol validation. A validator
+retry discards the candidate before its replacement begins, and discarded text
+is never persisted. Plain text cannot terminate a Conversation run. Clients opt
+into provisional item semantics with
+`Accept: text/event-stream; scholens-events=2`; the HTTP adapter buffers item
+frames until completion for older clients and drops a rejected candidate. SSE
+responses disable intermediary transformation and proxy buffering.
 Progress and activity entries share a monotonic sequence. Requests include the
 UI locale and a validated IANA time zone. `activity` contains only a sanitized
 category/state/subject projection and intentionally omits the raw tool name.
@@ -341,9 +348,11 @@ Parent and selected-child pointers form a persistent tree, while the
 Conversation selects one root and publishes a monotonic path revision. Agent
 history contains only the generated turn's selected ancestors. Only the active
 leaf may be retried or switch its selected response, and only one response may
-run in a Conversation at a time. Creating a normal next turn prunes unselected
-response variants from its parent; prompt branches are never pruned as a side
-effect. The active leaf may own persisted follow-up suggestions. Suggestion generation
+run in a Conversation at a time. Different Conversations may run concurrently
+within the actor's configured interactive-generation limit. Creating a normal
+next turn prunes unselected response variants from its parent; prompt branches
+are never pruned as a side effect. The active leaf may own persisted follow-up
+suggestions. Suggestion generation
 starts beside the answer stream and shares the same SSE instead of requiring a
 second HTTP request or polling. It uses no open database transaction while the
 model runs and rechecks active-leaf ownership before persisting. The structured
