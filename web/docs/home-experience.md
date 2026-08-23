@@ -217,6 +217,14 @@ a centered dialog on desktop. Inline citation markers open that same panel and
 highlight the corresponding source instead of introducing a second source
 list. Document and external sources share the same evidence rows; only external
 sources navigate away, and they open in a new tab.
+Conversation content uses the shared academic Markdown renderer also consumed
+by Reader reflow. It supports inline `$...$` and `\\(...\\)` plus display
+`$$...$$` and `\\[...\\]`, leaves inline and fenced code literal, and retains
+KaTeX MathML for assistive technology. Wide display equations scroll within
+their own focusable block instead of widening the message lane or clipping tall
+glyphs. Citation annotations are inserted against the original answer offsets
+before math delimiters are normalized, so formula rendering cannot move a
+source marker onto the wrong passage.
 The Server replaces the default Sidebar title once after the first successful
 assistant reply. Follow-up turns do not regenerate it, and user renames are
 never overwritten by title generation. If optional model title generation
@@ -259,6 +267,7 @@ The Figma conversation-state frames and Storybook stories map one-to-one:
 | Historical answer         | `Conversation View / Historical Answer Has No Retry` |
 | Suggested follow-ups      | `Conversation View / Suggested Follow Ups`           |
 | Answer sources            | `Conversation View / Answer Sources`                 |
+| Math with answer sources  | `Conversation View / Math And Sources`               |
 
 The canonical ordered-harness matrix is Figma node `893:3415`,
 `Matrix / Ordered conversation harness v3`, with Desktop Light/Dark and Mobile

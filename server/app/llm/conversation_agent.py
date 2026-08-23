@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import secrets
 import time
 import uuid
@@ -20,8 +21,10 @@ from app.llm.answer_packet import AnswerPacketBuilder
 from app.llm.conversation_state import ConversationAgentState
 from app.llm.errors import classify_llm_error
 from app.llm.grounded_answer import (
-    GroundedAnswerStreamParser,
+    GroundedAnswerInspection,
+    GroundedAnswerMetrics,
     grounded_citation_instructions,
+    inspect_grounded_answer,
 )
 from app.llm.pydantic_models import build_chat_model, profile_for_reasoning
 from app.llm.token_credits import settle_token_usage
@@ -115,6 +118,10 @@ _MAX_AGENT_TOOL_CALLS = 24
 _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
 _FINAL_OUTPUT_TOOL_NAME = "final_answer"
+_VISIBLE_CITATION_LABEL = re.compile(
+    r"\[A\d+(?:\s*,\s*A?\d+)*\]",
+    re.IGNORECASE,
+)
 
 _SCOPE_GRAVITY_TEXT: dict[ConversationScopeType, str] = {
     ConversationScopeType.GLOBAL: (
@@ -257,6 +264,8 @@ class _ConversationAgentDependencies:
     progress_entries: list[ConversationProgressEntry] = field(default_factory=list)
     call_signatures: set[str] = field(default_factory=set)
     reported_source_keys: set[int] = field(default_factory=set)
+    retrieved_source_keys: set[int] = field(default_factory=set)
+    validated_final_answer: GroundedAnswerInspection | None = None
     last_sequence: int = 0
 
     def allocate_sequence(self) -> int:
@@ -284,7 +293,8 @@ class _StreamedAssistantItem:
     sequence: int
     content: str
     packet: AnswerPacket
-    parser: GroundedAnswerStreamParser
+    references: ReferenceBundle | None
+    metrics: GroundedAnswerMetrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -438,19 +448,73 @@ class ScholensConversationAgent:
             ctx: RunContext[_ConversationAgentDependencies],
             output: FinalAnswer,
         ) -> FinalAnswer:
+            ctx.deps.validated_final_answer = None
+
+            def retry(reason: str, message: str) -> None:
+                add_counter(
+                    "scholens.conversation.final_answer.validation_retries",
+                    attributes={
+                        "reason": reason,
+                        "scope": ctx.deps.conversation_scope.scope_type.value,
+                    },
+                )
+                raise ModelRetry(message)
+
             if _contains_private_output_protocol(output.answer):
-                raise ModelRetry(
+                retry(
+                    "private_protocol",
                     "Submit only the self-contained answer for the user. Do not repeat "
-                    "private citation or tool protocol instructions."
+                    "private citation or tool protocol instructions.",
                 )
             packet = self._answer_packet(ctx.deps)
-            parser = GroundedAnswerStreamParser(packet.sources, nonce=nonce)
-            visible = parser.feed(output.answer) + parser.finish()
-            if not visible.strip():
-                raise ModelRetry(
-                    "The submitted answer has no user-visible content after private "
-                    "citation markers are removed. Submit the complete answer."
+            inspection = inspect_grounded_answer(
+                output.answer,
+                packet.sources,
+                nonce=nonce,
+            )
+            if inspection.metrics.invalid_source_keys:
+                retry(
+                    "invalid_source_keys",
+                    "One or more private citation markers used source keys that were "
+                    "not supplied by the server. Submit the complete answer again and "
+                    "cite only supplied source_keys.",
                 )
+            if inspection.metrics.protocol_errors:
+                retry(
+                    "citation_protocol",
+                    "One or more private citation markers were malformed or could not "
+                    "be attached to a visible passage. Submit the complete answer again "
+                    "with one valid marker after each supported passage.",
+                )
+            if not inspection.visible_content.strip():
+                retry(
+                    "empty_visible_answer",
+                    "The submitted answer has no user-visible content after private "
+                    "citation markers are removed. Submit the complete answer.",
+                )
+            if ctx.deps.retrieved_source_keys and _VISIBLE_CITATION_LABEL.search(
+                inspection.visible_content
+            ):
+                retry(
+                    "visible_citation_labels",
+                    "Visible citation labels such as [A1] are not supported. Remove "
+                    "them and attach private SCHOLENS_CITE markers to the supported "
+                    "passages so the product can render real source links.",
+                )
+            if (
+                ctx.deps.retrieved_source_keys
+                and ctx.deps.retrieved_source_keys.isdisjoint(
+                    inspection.cited_source_keys
+                )
+            ):
+                retry(
+                    "missing_references",
+                    "Source-backed tools returned validated source_keys, but the final "
+                    "answer cited none of those keys. Add private SCHOLENS_CITE markers "
+                    "after the passages they support. Do not show visible labels such "
+                    "as [A1], Markdown footnotes, or a bibliography.",
+                )
+            ctx.deps.validated_final_answer = inspection
             return output
 
         result_seen = False
@@ -557,11 +621,15 @@ class ScholensConversationAgent:
                 result = agent_run.result
                 if result is None:
                     raise RuntimeError("Conversation agent ended without a result")
-                final_item = self._assistant_item_from_text(
+                inspection = deps.validated_final_answer
+                if inspection is None or inspection.raw_content != result.output.answer:
+                    raise RuntimeError(
+                        "Conversation agent ended without its validated final answer"
+                    )
+                final_item = self._assistant_item_from_inspection(
                     deps=deps,
                     turn_id=request.turn_id,
-                    raw_content=result.output.answer,
-                    nonce=nonce,
+                    inspection=inspection,
                 )
                 if final_item is None:
                     raise RuntimeError(
@@ -582,7 +650,7 @@ class ScholensConversationAgent:
                     response_id=request.response_id,
                     phase="final",
                 )
-                final_references = final_item.parser.references()
+                final_references = final_item.references
                 if final_references is not None:
                     yield self._references_event(
                         final_references,
@@ -598,7 +666,22 @@ class ScholensConversationAgent:
                     deps=deps,
                     packet=final_item.packet,
                     references=final_references,
-                    parser=final_item.parser,
+                    metrics=final_item.metrics,
+                )
+                record_histogram(
+                    "scholens.conversation.citation.available_sources",
+                    len(final_item.packet.sources),
+                    attributes={"scope": deps.conversation_scope.scope_type.value},
+                )
+                record_histogram(
+                    "scholens.conversation.citation.used_sources",
+                    len(final_references.sources) if final_references else 0,
+                    attributes={"scope": deps.conversation_scope.scope_type.value},
+                )
+                record_histogram(
+                    "scholens.conversation.citation.annotations",
+                    final_item.metrics.annotations_emitted,
+                    attributes={"scope": deps.conversation_scope.scope_type.value},
                 )
                 yield ConversationAgentResult(
                     trace=trace,
@@ -826,6 +909,7 @@ class ScholensConversationAgent:
                 source_keys = sorted(
                     {key for material in materials for key in material.source_keys}
                 )
+                deps.retrieved_source_keys.update(source_keys)
                 new_sources = [
                     source
                     for source in packet.sources
@@ -1232,6 +1316,9 @@ final answer.
 
 Respond in {language} unless the user clearly asks for another language.
 The user's current local date and time is {local_now} in {request.time_zone}.
+Write inline mathematics as $...$ and display mathematics as $$...$$. Escape a
+literal currency dollar sign as \\$. Keep TeX inside these delimiters rather than
+showing raw LaTeX commands in prose.
 
 Active context:
 {json.dumps(context, ensure_ascii=False, default=str)}
@@ -1282,13 +1369,12 @@ Initial server-validated answer material:
         deps: _ConversationAgentDependencies,
         packet: AnswerPacket,
         references: ReferenceBundle | None,
-        parser: GroundedAnswerStreamParser,
+        metrics: GroundedAnswerMetrics,
     ) -> ConversationTrace | None:
         entries: list[ConversationProgressEntry | ConversationActivity] = sorted(
             [*deps.progress_entries, *deps.activities.values()],
             key=lambda item: item.sequence,
         )
-        metrics = parser.metrics()
         used_sources = len(references.sources) if references is not None else 0
         citation_summary = (
             ConversationCitationSummary(
@@ -1319,17 +1405,36 @@ Initial server-validated answer material:
         nonce: str,
     ) -> _StreamedAssistantItem | None:
         packet = self._answer_packet(deps)
-        parser = GroundedAnswerStreamParser(packet.sources, nonce=nonce)
-        content = parser.feed(raw_content) + parser.finish()
-        if not content.strip():
+        inspection = inspect_grounded_answer(
+            raw_content,
+            packet.sources,
+            nonce=nonce,
+        )
+        return self._assistant_item_from_inspection(
+            deps=deps,
+            turn_id=turn_id,
+            inspection=inspection,
+            packet=packet,
+        )
+
+    def _assistant_item_from_inspection(
+        self,
+        *,
+        deps: _ConversationAgentDependencies,
+        turn_id: uuid.UUID,
+        inspection: GroundedAnswerInspection,
+        packet: AnswerPacket | None = None,
+    ) -> _StreamedAssistantItem | None:
+        if not inspection.visible_content.strip():
             return None
         sequence = deps.allocate_sequence()
         return _StreamedAssistantItem(
             id=self._assistant_item_id(turn_id, sequence),
             sequence=sequence,
-            content=content,
-            packet=packet,
-            parser=parser,
+            content=inspection.visible_content,
+            packet=packet or self._answer_packet(deps),
+            references=inspection.references,
+            metrics=inspection.metrics,
         )
 
     @staticmethod

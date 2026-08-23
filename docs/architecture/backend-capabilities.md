@@ -439,7 +439,13 @@ complete as bounded `progress`. A run can terminate only through the structured
 `final_answer` output; its visible answer and private citation protocol validate
 before any final delta or persistence. Plain terminal text, empty visible
 content, citation-only output, and copied private protocol receive bounded model
-retries and then fail through the stable invalid-response path.
+retries and then fail through the stable invalid-response path. After a
+successful source-backed tool call registers validated source keys, the final
+answer must materialize at least one valid reference; missing references,
+unknown keys, malformed markers, and visible `[A1]`-style placeholders are
+retried at that same boundary. One completed grounded-answer inspection
+supplies validation, visible content, references, trace counts, and publication
+so those paths cannot parse the private protocol differently.
 
 Progress and final items use stable IDs and share a monotonic sequence with
 sanitized activity records. The persisted trace contains ordered progress and

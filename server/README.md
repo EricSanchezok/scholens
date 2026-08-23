@@ -324,7 +324,11 @@ The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
 `progress`; a `final` item is published only after the model submits the
 structured `final_answer` output and its visible content and private citation
-protocol validate. Plain text cannot terminate a Conversation run.
+protocol validate. A successful source-backed tool result also makes at least
+one valid materialized reference mandatory; missing references, invalid source
+keys, malformed private markers, and visible `[A1]`-style placeholders receive
+the same bounded model retry before publication. Plain text cannot terminate a
+Conversation run.
 Progress and activity entries share a monotonic sequence. Requests include the
 UI locale and a validated IANA time zone. `activity` contains only a sanitized
 category/state/subject projection and intentionally omits the raw tool name.
@@ -528,7 +532,10 @@ deliberately when formatting; verification commands never rewrite source.
 The Home conversation surface can ask questions across the authorized knowledge
 base. AI-generated responses carry validated inline citations that open the
 source panel; paper and Reader context use the canonical typed source and anchor
-contracts described above.
+contracts described above. Source-backed final answers are accepted only when
+they materialize at least one of the validated source keys returned by the
+successful tool calls; direct no-tool answers retain their ordinary uncited
+path.
 
 The response agent is one contextual Pydantic AI runtime with access to the
 authorized subset of the canonical workspace and connector tools:

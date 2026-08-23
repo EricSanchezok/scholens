@@ -187,7 +187,9 @@ figure captions remain intentionally narrower within the Reader feature. The
 shared measure is defined in `src/design-system/tokens/dimensions.json`; the
 surface also provides semantic block types, overflow-contained tables and code,
 authorized lazy image assets, Light and Dark support, and mobile safe-area
-padding. Wide display equations
+padding. Reflow uses the same shared academic Markdown renderer as conversation
+messages, including its code-region preservation, MathML, and delimiter
+normalization contract. Wide display equations
 scroll horizontally inside their block, and tall equation glyphs are never
 vertically clipped by that scroll container. Reflow does not preserve PDF page
 whitespace or restart layout at page boundaries. Every block retains ordered
