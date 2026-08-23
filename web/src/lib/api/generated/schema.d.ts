@@ -470,6 +470,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/v2": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Subscribe Conversation Response V2 */
+        get: operations["subscribe_conversation_response_v2_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_v2_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {
         parameters: {
             query?: never;
@@ -2938,7 +2955,7 @@ export interface components {
          * ConversationStreamEventSchema
          * @description Compatible schema for the existing inline SSE response.
          */
-        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemDiscardEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationStreamEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationStreamReferencesEvent */
         ConversationStreamReferencesEvent: {
             /** References */
@@ -3016,10 +3033,15 @@ export interface components {
             type: "suggestions";
         };
         /**
+         * ConversationStreamV2EventSchema
+         * @description Opt-in provisional-item protocol shared by inline and detached streams.
+         */
+        ConversationStreamV2EventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"] | components["schemas"]["ConversationStreamAssistantItemDiscardEvent"] | components["schemas"]["ConversationStreamCancelledEvent"];
+        /**
          * ConversationSubscriptionEventSchema
          * @description Schema for detachable response subscriptions, including cancellation.
          */
-        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemDiscardEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamErrorEvent"] | components["schemas"]["ConversationStreamCancelledEvent"];
         /** ConversationSummaryResponse */
         ConversationSummaryResponse: {
             /** Archived At */
@@ -6749,7 +6771,6 @@ export interface operations {
             query?: never;
             header?: {
                 prefer?: string | null;
-                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6797,7 +6818,6 @@ export interface operations {
             query?: never;
             header?: {
                 prefer?: string | null;
-                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6846,7 +6866,6 @@ export interface operations {
             query?: never;
             header?: {
                 prefer?: string | null;
-                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6928,7 +6947,6 @@ export interface operations {
             query?: never;
             header?: {
                 "Last-Event-ID"?: string | null;
-                accept?: string | null;
             };
             path: {
                 conversation_id: string;
@@ -6946,6 +6964,41 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["ConversationSubscriptionEventSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscribe_conversation_response_v2_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_v2_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                turn_id: string;
+                response_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Replayable SSE subscription with provisional assistant items. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationStreamV2EventSchema"];
                 };
             };
             /** @description Validation Error */

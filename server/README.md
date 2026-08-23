@@ -309,13 +309,16 @@ Response, DurableJob, and outbox dispatch commit atomically. The dedicated
 Server-owned `conversation` worker then generates outside the browser request.
 `GET /api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events`
 replays the bounded Redis event log from `Last-Event-ID` and reconciles terminal
-state from PostgreSQL; Redis is never canonical. Route changes, mobile
+state from PostgreSQL using the buffered v1 event contract.
+`GET .../responses/{response_id}/events/v2` exposes the additive provisional-item
+contract used by the Web app; Redis is never canonical. Route changes, mobile
 backgrounding, reload, and connectivity loss therefore detach only a subscriber.
 `POST .../responses/{response_id}/cancel` is the sole user cancellation boundary
 and conditionally cancels both Response and job. The legacy no-Preference path
 retains inline SSE compatibility.
 Selecting the already-active branch is a storage and journal no-op. Consumers
-must handle the typed `start`, `assistant_item_start`, `assistant_item_delta`,
+V2 consumers must handle the typed `start`, `assistant_item_start`,
+`assistant_item_delta`,
 `assistant_item_discard`, `assistant_item_complete`, `activity`, `references`,
 `response_ready`, `suggestions`, `complete`, `cancelled`, and `error` events and
 treat those last three as terminal. `response_ready` carries the complete
@@ -327,11 +330,11 @@ role. Text accompanying an ordinary tool call may be published as bounded
 and streamed as one provisional `final` candidate; the same item completes only
 after full schema, visible-content, and private-protocol validation. A validator
 retry discards the candidate before its replacement begins, and discarded text
-is never persisted. Plain text cannot terminate a Conversation run. Clients opt
-into provisional item semantics with
-`Accept: text/event-stream; scholens-events=2`; the HTTP adapter buffers item
-frames until completion for older clients and drops a rejected candidate. SSE
-responses disable intermediary transformation and proxy buffering.
+is never persisted. Plain text cannot terminate a Conversation run. The v1
+subscription and inline endpoints buffer item frames until completion and drop
+a rejected candidate; the additive `/events/v2` endpoint publishes provisional
+items and typed discard directly. SSE responses disable intermediary
+transformation and proxy buffering.
 Progress and activity entries share a monotonic sequence. Requests include the
 UI locale and a validated IANA time zone. `activity` contains only a sanitized
 category/state/subject projection and intentionally omits the raw tool name.

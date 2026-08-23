@@ -64,8 +64,9 @@ local subscriber. No release gate measured first-visible-delta behavior.
 ## Resolution and recovery
 
 The Server now partially validates and streams the structured answer as a
-provisional item, retracts it when full validation retries, and buffers those
-semantics for v1 clients. The Web reducer handles retraction, and the session
+provisional item, retracts it when full validation retries, exposes that
+lifecycle through `/events/v2`, and preserves buffered semantics on v1. The Web
+reducer handles retraction, and the session
 hook detaches on Conversation identity changes while leaving accepted Server
 work running. Submission tokens prevent stale callbacks from releasing a newer
 Conversation's state. Production recovery remains pending deployment and

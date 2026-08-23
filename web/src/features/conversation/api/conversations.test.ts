@@ -136,13 +136,13 @@ describe("durable conversation generation", () => {
     const post = fetchMock.mock.calls[0]?.[0] as Request;
     expect(post.headers.get("Prefer")).toBe("respond-async");
     expect(post.headers.get("Accept")).toContain("application/json");
-    expect(post.headers.get("Accept")).toContain("scholens-events=2");
+    expect(post.headers.get("Accept")).toBe(
+      "application/json, text/event-stream",
+    );
     const subscription = fetchMock.mock.calls[1]?.[0] as Request;
     expect(subscription.method).toBe("GET");
-    expect(subscription.url).toContain(`/${responseId}/events`);
-    expect(subscription.headers.get("Accept")).toBe(
-      "text/event-stream; scholens-events=2",
-    );
+    expect(subscription.url).toContain(`/${responseId}/events/v2`);
+    expect(subscription.headers.get("Accept")).toBe("text/event-stream");
   });
 
   it("keeps the legacy inline SSE contract as a compatibility fallback", async () => {

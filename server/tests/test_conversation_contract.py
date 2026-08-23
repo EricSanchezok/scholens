@@ -562,7 +562,6 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         "ConversationStreamActivityEvent",
         "ConversationStreamAssistantItemStartEvent",
         "ConversationStreamAssistantItemDeltaEvent",
-        "ConversationStreamAssistantItemDiscardEvent",
         "ConversationStreamAssistantItemCompleteEvent",
         "ConversationStreamReferencesEvent",
         "ConversationStreamResponseReadyEvent",
@@ -604,8 +603,22 @@ def test_conversation_turns_expose_a_typed_standard_sse_contract() -> None:
         == "#/components/schemas/ConversationSubscriptionEventSchema"
     )
     subscription_schema = schemas["ConversationSubscriptionEventSchema"]["oneOf"]
-    assert "ConversationStreamCancelledEvent" in {
+    subscription_events = {
         item["$ref"].rsplit("/", maxsplit=1)[-1] for item in subscription_schema
+    }
+    assert "ConversationStreamCancelledEvent" in subscription_events
+    assert "ConversationStreamAssistantItemDiscardEvent" not in subscription_events
+    v2_subscription = app.openapi()["paths"][
+        "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/"
+        "{response_id}/events/v2"
+    ]["get"]["responses"]["200"]
+    assert set(v2_subscription["content"]) == {"text/event-stream"}
+    assert v2_subscription["content"]["text/event-stream"]["schema"]["$ref"] == (
+        "#/components/schemas/ConversationStreamV2EventSchema"
+    )
+    v2_schema = schemas["ConversationStreamV2EventSchema"]["oneOf"]
+    assert "ConversationStreamAssistantItemDiscardEvent" in {
+        item["$ref"].rsplit("/", maxsplit=1)[-1] for item in v2_schema
     }
     create_properties = schemas["ConversationTurnCreateRequest"]["properties"]
     assert "contexts" in create_properties

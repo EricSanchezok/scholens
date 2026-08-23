@@ -16,6 +16,7 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationResponseCreateRequest,
     ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
+    ConversationStreamV2EventSchema,
     ConversationTurnCreateRequest,
     ConversationTurnBranchCreateRequest,
 )
@@ -61,7 +62,6 @@ class ConversationEventStreamResponse(StreamingResponse):
             headers={
                 "Cache-Control": "no-cache, no-transform",
                 "X-Accel-Buffering": "no",
-                "Vary": "Accept",
             },
         )
 
@@ -79,7 +79,7 @@ def _stream_responses() -> dict[int | str, dict[str, object]]:
                     "schema": {
                         "$ref": "#/components/schemas/ConversationStreamEventSchema"
                     }
-                }
+                },
             },
         }
     }
@@ -97,6 +97,24 @@ def _subscription_responses() -> dict[int | str, dict[str, object]]:
                             "#/components/schemas/ConversationSubscriptionEventSchema"
                         )
                     }
+                },
+            },
+        }
+    }
+
+
+def _v2_subscription_responses() -> dict[int | str, dict[str, object]]:
+    return {
+        200: {
+            "description": (
+                "Replayable SSE subscription with provisional assistant items."
+            ),
+            "model": ConversationStreamV2EventSchema,
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "$ref": "#/components/schemas/ConversationStreamV2EventSchema"
+                    }
                 }
             },
         }
@@ -108,14 +126,6 @@ def _prefers_background(prefer: str | None) -> bool:
         token.strip().casefold() == "respond-async"
         for token in (prefer or "").split(",")
     )
-
-
-def _supports_provisional_items(accept: str | None) -> bool:
-    for media_range in (accept or "").split(","):
-        parts = [part.strip().casefold() for part in media_range.split(";")]
-        if parts[0] == "text/event-stream" and "scholens-events=2" in parts[1:]:
-            return True
-    return False
 
 
 def _conversation_event_payload(frame: str) -> dict[str, object] | None:
@@ -184,9 +194,9 @@ async def _buffer_provisional_items_for_legacy_client(
 
 
 def _event_stream_response(
-    stream: AsyncIterator[str], *, accept: str | None
+    stream: AsyncIterator[str], *, provisional_items: bool
 ) -> ConversationEventStreamResponse:
-    if not _supports_provisional_items(accept):
+    if not provisional_items:
         stream = _buffer_provisional_items_for_legacy_client(stream)
     return ConversationEventStreamResponse(stream)
 
@@ -234,7 +244,6 @@ async def create_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    accept: str | None = Header(default=None),
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -263,7 +272,7 @@ async def create_conversation_turn(
         request=turn,
         client_ip=http_client_ip(http_request),
     )
-    return _event_stream_response(stream, accept=accept)
+    return _event_stream_response(stream, provisional_items=False)
 
 
 @turn_router.post(
@@ -283,7 +292,6 @@ async def retry_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    accept: str | None = Header(default=None),
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -314,7 +322,7 @@ async def retry_conversation_turn(
         response_id=response.response_id,
         client_ip=http_client_ip(http_request),
     )
-    return _event_stream_response(stream, accept=accept)
+    return _event_stream_response(stream, provisional_items=False)
 
 
 @turn_router.post(
@@ -334,7 +342,6 @@ async def branch_conversation_turn(
     request_operation: OperationContext = Depends(get_required_operation),
     operation_factory: OperationContextFactory = Depends(get_operation_context_factory),
     prefer: str | None = Header(default=None),
-    accept: str | None = Header(default=None),
 ) -> Response:
     operation = _conversation_operation(
         conversation_id=conversation_id,
@@ -365,7 +372,7 @@ async def branch_conversation_turn(
         request=branch,
         client_ip=http_client_ip(http_request),
     )
-    return _event_stream_response(stream, accept=accept)
+    return _event_stream_response(stream, provisional_items=False)
 
 
 @turn_router.get(
@@ -380,7 +387,6 @@ async def subscribe_conversation_response(
     chat: ConversationChat = Depends(get_conversation_chat),
     current_user: Actor = Depends(get_required_user),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
-    accept: str | None = Header(default=None),
 ) -> ConversationEventStreamResponse:
     events = await chat.subscribe(
         actor=current_user,
@@ -389,7 +395,30 @@ async def subscribe_conversation_response(
         response_id=response_id,
         last_event_id=last_event_id,
     )
-    return _event_stream_response(events, accept=accept)
+    return _event_stream_response(events, provisional_items=False)
+
+
+@turn_router.get(
+    "/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/v2",
+    response_class=ConversationEventStreamResponse,
+    responses=_v2_subscription_responses(),
+)
+async def subscribe_conversation_response_v2(
+    conversation_id: UUID,
+    turn_id: UUID,
+    response_id: UUID,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+) -> ConversationEventStreamResponse:
+    events = await chat.subscribe(
+        actor=current_user,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        response_id=response_id,
+        last_event_id=last_event_id,
+    )
+    return _event_stream_response(events, provisional_items=True)
 
 
 @turn_router.post(

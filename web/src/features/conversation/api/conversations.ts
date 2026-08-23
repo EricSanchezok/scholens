@@ -10,7 +10,7 @@ import {
 import { clientEnvironment } from "@/lib/env/client";
 
 export type ConversationStreamEvent =
-  components["schemas"]["ConversationSubscriptionEventSchema"];
+  components["schemas"]["ConversationStreamV2EventSchema"];
 export type ConversationTurnCreateRequest =
   components["schemas"]["ConversationTurnCreateRequest"];
 export type ConversationTurnBranchCreateRequest =
@@ -133,7 +133,7 @@ async function streamConversation({
       method: "POST",
       credentials: "include",
       headers: {
-        Accept: "application/json, text/event-stream; scholens-events=2",
+        Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
         Prefer: "respond-async",
       },
@@ -241,12 +241,12 @@ export async function subscribeConversationEvents({
   while (!signal.aborted) {
     try {
       const response = await authenticatedFetch(
-        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events`,
+        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events/v2`,
         {
           method: "GET",
           credentials: "include",
           headers: {
-            Accept: "text/event-stream; scholens-events=2",
+            Accept: "text/event-stream",
             ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
           },
           signal,

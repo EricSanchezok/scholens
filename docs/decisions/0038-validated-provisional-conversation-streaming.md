@@ -31,14 +31,12 @@ event cannot be sent to every client during a rolling release.
   completes the same stable item. A retry emits `assistant_item_discard` for an
   already visible candidate before the replacement attempt begins; discarded
   content is never persisted.
-- Clients opt into provisional semantics with
-  `Accept: text/event-stream; scholens-events=2`. The HTTP boundary buffers item
-  start/delta frames for clients without that parameter, releases them only on
-  item completion, and drops them on discard. Old clients therefore retain the
-  ADR 0036 behavior during a rolling release.
+- The additive detachable `/events/v2` endpoint exposes provisional semantics.
+  Existing `/events` and inline v1 streams buffer item start/delta frames,
+  release them only on item completion, and drop them on discard. Their
+  published event unions therefore remain unchanged.
 - Conversation SSE responses disable transformation and proxy buffering with
-  `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and vary
-  by `Accept`.
+  `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`.
 
 ## Alternatives considered
 
@@ -54,12 +52,11 @@ event cannot be sent to every client during a rolling release.
 
 ## Consequences
 
-New clients regain low first-token latency while completion and persistence
+V2 clients regain low first-token latency while completion and persistence
 remain fully validated. A rare validator retry can briefly show a candidate
 and then remove it; reducers must treat discard as idempotent and scoped to the
-stable item ID. The compatibility adapter temporarily preserves buffered
-delivery for old clients and can be removed only after the v1 event consumer is
-outside the supported rollout window.
+stable item ID. The v1 transport adapter preserves its published buffered
+delivery contract independently of the canonical application event model.
 
 ## Validation
 

@@ -115,10 +115,10 @@ DTOs.
 
 Conversation creation and continuation request `Prefer: respond-async`. A
 successful `202` receipt identifies the persisted Turn/Response, after which
-the Web app follows its detachable SSE endpoint with `Last-Event-ID`. A legacy
+the Web app follows its detachable `/events/v2` SSE endpoint with
+`Last-Event-ID`. A legacy
 inline `200` SSE response remains a compatible fallback. Both paths use one
-standard SSE decoder and request
-`text/event-stream; scholens-events=2`. The stream accepts `start`, the
+standard SSE decoder. The v2 stream accepts `start`, the
 stable-ID `assistant_item_start → delta → complete|discard` lifecycle,
 `activity`, `references`, `response_ready`, `suggestions`, `complete`,
 `cancelled`, and `error`. The Server buffers model text until the complete node
@@ -130,9 +130,9 @@ never promotes its text into canonical answer content. `response_ready`
 supplies the complete persisted turn snapshot, and an optional `suggestions`
 event may supplement it before `complete` closes the stream. Progress and
 activity share one sequence and become an ordered worklog. The completed final
-answer remains outside that trace and is always visible. Servers buffer these
-item frames for clients that do not negotiate v2, so strict old clients never
-receive the discard discriminator during a rolling release.
+answer remains outside that trace and is always visible. The existing v1
+subscription and inline streams buffer these item frames, so strict old clients
+never receive the discard discriminator.
 
 `activity` is an ID-addressed, sanitized tool lifecycle record without a raw
 tool name. Adjacent tool entries with the same outcome are rendered as one

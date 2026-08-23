@@ -2805,7 +2805,6 @@
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
-            "assistant_item_discard": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
             "complete": "#/components/schemas/ConversationStreamCompleteEvent",
             "error": "#/components/schemas/ConversationStreamErrorEvent",
@@ -2828,9 +2827,6 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
@@ -2983,8 +2979,8 @@
         "title": "ConversationStreamSuggestionsEvent",
         "type": "object"
       },
-      "ConversationSubscriptionEventSchema": {
-        "description": "Schema for detachable response subscriptions, including cancellation.",
+      "ConversationStreamV2EventSchema": {
+        "description": "Opt-in provisional-item protocol shared by inline and detached streams.",
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
@@ -3016,7 +3012,62 @@
             "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
           },
           {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamReferencesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamResponseReadyEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
+          },
+          {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemDiscardEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
+          }
+        ],
+        "title": "ConversationStreamV2EventSchema"
+      },
+      "ConversationSubscriptionEventSchema": {
+        "description": "Schema for detachable response subscriptions, including cancellation.",
+        "discriminator": {
+          "mapping": {
+            "activity": "#/components/schemas/ConversationStreamActivityEvent",
+            "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
+            "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
+            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
+            "complete": "#/components/schemas/ConversationStreamCompleteEvent",
+            "error": "#/components/schemas/ConversationStreamErrorEvent",
+            "references": "#/components/schemas/ConversationStreamReferencesEvent",
+            "response_ready": "#/components/schemas/ConversationStreamResponseReadyEvent",
+            "start": "#/components/schemas/ConversationStreamStartEvent",
+            "suggestions": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ConversationStreamStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamActivityEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
@@ -3034,10 +3085,10 @@
             "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
           },
           {
-            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
+            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
           },
           {
-            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
+            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
           }
         ],
         "title": "ConversationSubscriptionEventSchema"
@@ -12217,22 +12268,6 @@
               ],
               "title": "Prefer"
             }
-          },
-          {
-            "in": "header",
-            "name": "accept",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Accept"
-            }
           }
         ],
         "requestBody": {
@@ -12329,22 +12364,6 @@
               ],
               "title": "Prefer"
             }
-          },
-          {
-            "in": "header",
-            "name": "accept",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Accept"
-            }
           }
         ],
         "requestBody": {
@@ -12440,22 +12459,6 @@
                 }
               ],
               "title": "Prefer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "accept",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Accept"
             }
           }
         ],
@@ -12628,22 +12631,6 @@
               ],
               "title": "Last-Event-Id"
             }
-          },
-          {
-            "in": "header",
-            "name": "accept",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Accept"
-            }
           }
         ],
         "responses": {
@@ -12675,6 +12662,88 @@
           }
         ],
         "summary": "Subscribe Conversation Response"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/v2": {
+      "get": {
+        "operationId": "subscribe_conversation_response_v2_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_v2_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Response Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStreamV2EventSchema",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Replayable SSE subscription with provisional assistant items."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Subscribe Conversation Response V2"
       }
     },
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {

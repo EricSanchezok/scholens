@@ -100,34 +100,33 @@ class ConversationStreamErrorEvent(BaseModel):
     error: dict[str, JsonValue]
 
 
-ConversationLegacyStreamEvent = Annotated[
+_ConversationStreamCommonEvent = (
     ConversationStreamStartEvent
     | ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
     | ConversationStreamAssistantItemDeltaEvent
-    | ConversationStreamAssistantItemDiscardEvent
     | ConversationStreamAssistantItemCompleteEvent
     | ConversationStreamReferencesEvent
     | ConversationStreamResponseReadyEvent
     | ConversationStreamSuggestionsEvent
     | ConversationStreamCompleteEvent
-    | ConversationStreamErrorEvent,
+    | ConversationStreamErrorEvent
+)
+
+ConversationLegacyStreamEvent = Annotated[
+    _ConversationStreamCommonEvent,
+    Field(discriminator="type"),
+]
+
+ConversationLegacySubscriptionEvent = Annotated[
+    _ConversationStreamCommonEvent | ConversationStreamCancelledEvent,
     Field(discriminator="type"),
 ]
 
 ConversationStreamEvent = Annotated[
-    ConversationStreamStartEvent
-    | ConversationStreamActivityEvent
-    | ConversationStreamAssistantItemStartEvent
-    | ConversationStreamAssistantItemDeltaEvent
+    _ConversationStreamCommonEvent
     | ConversationStreamAssistantItemDiscardEvent
-    | ConversationStreamAssistantItemCompleteEvent
-    | ConversationStreamReferencesEvent
-    | ConversationStreamResponseReadyEvent
-    | ConversationStreamSuggestionsEvent
-    | ConversationStreamCompleteEvent
-    | ConversationStreamCancelledEvent
-    | ConversationStreamErrorEvent,
+    | ConversationStreamCancelledEvent,
     Field(discriminator="type"),
 ]
 
@@ -136,8 +135,14 @@ class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
     """Compatible schema for the existing inline SSE response."""
 
 
-class ConversationSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+class ConversationSubscriptionEventSchema(
+    RootModel[ConversationLegacySubscriptionEvent]
+):
     """Schema for detachable response subscriptions, including cancellation."""
+
+
+class ConversationStreamV2EventSchema(RootModel[ConversationStreamEvent]):
+    """Opt-in provisional-item protocol shared by inline and detached streams."""
 
 
 class ConversationTurnCreateRequest(BaseModel):

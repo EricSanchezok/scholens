@@ -46,13 +46,13 @@ def test_v2_event_stream_disables_intermediary_buffering() -> None:
     stream = source()
     response = _event_stream_response(
         stream,
-        accept="application/json, text/event-stream; scholens-events=2",
+        provisional_items=True,
     )
 
     assert response.body_iterator is stream
     assert response.headers["cache-control"] == "no-cache, no-transform"
     assert response.headers["x-accel-buffering"] == "no"
-    assert response.headers["vary"] == "Accept"
+    assert "vary" not in response.headers
 
 
 @pytest.mark.asyncio

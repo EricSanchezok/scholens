@@ -456,10 +456,9 @@ activity, final-only server-generated references, a persisted `response_ready`
 snapshot, an optional turn-suggestion update, and one terminal event. Accepted
 generations run in the dedicated Server-owned Conversation worker. A bounded
 Redis Stream is only a replayable delivery log; PostgreSQL remains authoritative
-for running and terminal Response state. Clients negotiate provisional
-start/delta/discard semantics with the versioned SSE media parameter; the HTTP
-boundary buffers or drops provisional frames for strict v1 clients during the
-rolling compatibility window. Raw
+for running and terminal Response state. The additive `/events/v2` subscription
+exposes provisional start/delta/discard semantics; the HTTP boundary buffers or
+drops provisional frames for the stable v1 subscription and inline streams. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
 
