@@ -42,7 +42,7 @@ export function ProjectRow({
       className="motion-control group/interactive-row hover:border-line-strong hover:bg-hover focus-within:border-line-strong focus-within:bg-hover active:bg-pressed flex-row items-start"
       spacing="compact"
     >
-      <article>
+      <article data-project-row="">
         <Link
           aria-label={project.title}
           className={cn(

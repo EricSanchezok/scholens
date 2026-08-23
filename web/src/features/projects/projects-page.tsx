@@ -295,11 +295,12 @@ export function ProjectsWorkspace({ actor }: { actor: Actor }) {
             />
           ) : (
             <>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 <AnimatePresence initial={false}>
                   {projectsQuery.data.items.map((project) => (
                     <m.div
                       animate="animate"
+                      className="min-w-0"
                       exit="exit"
                       initial="initial"
                       key={project.id}

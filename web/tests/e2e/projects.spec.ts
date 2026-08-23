@@ -612,6 +612,25 @@ for (const width of [2560, 1440, 768, 430, 390, 320]) {
   });
 }
 
+for (const width of [430, 390, 320]) {
+  test(`contains every Project list row within a ${width}px viewport`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/projects");
+    const rows = page.locator("[data-project-row]");
+    await expect(rows.first()).toBeVisible();
+    expect(
+      await rows.evaluateAll((items) =>
+        items.every((item) => {
+          const rect = item.getBoundingClientRect();
+          return rect.left >= 0 && rect.right <= window.innerWidth;
+        }),
+      ),
+    ).toBe(true);
+  });
+}
+
 test("keeps Project paper and output controls on one phone row", async ({
   page,
 }) => {
