@@ -35,6 +35,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function expectProjectRowsContained(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await expect(
+    await canvas.findByRole("link", { name: "Truthward" }),
+  ).toBeVisible();
+  const canvasRect = canvasElement.getBoundingClientRect();
+  const rows =
+    canvasElement.querySelectorAll<HTMLElement>("[data-project-row]");
+  await expect(rows.length).toBeGreaterThan(0);
+  for (const row of rows) {
+    const rect = row.getBoundingClientRect();
+    await expect(rect.left).toBeGreaterThanOrEqual(Math.floor(canvasRect.left));
+    await expect(rect.right).toBeLessThanOrEqual(Math.ceil(canvasRect.right));
+  }
+}
+
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -143,9 +159,7 @@ export const Mobile390: Story = {
   globals: { viewport: { value: "mobile", isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      await canvas.findByRole("link", { name: "Truthward" }),
-    ).toBeVisible();
+    await expectProjectRowsContained(canvasElement);
     await expect(
       canvas.getByRole("button", { name: "New project" }),
     ).toBeVisible();
@@ -165,11 +179,15 @@ export const Mobile390: Story = {
 
 export const LargeMobile430: Story = {
   globals: { viewport: { value: "largeMobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await expectProjectRowsContained(canvasElement);
+  },
 };
 
 export const SmallMobile320: Story = {
   globals: { viewport: { value: "smallMobile", isRotated: false } },
   play: async ({ canvasElement }) => {
+    await expectProjectRowsContained(canvasElement);
     await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(
       canvasElement.clientWidth,
     );

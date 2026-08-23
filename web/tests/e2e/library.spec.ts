@@ -651,8 +651,8 @@ test("restores URL state and contains each supported phone width", async ({
     await page.goto("/library");
     await expect(
       page
-        .getByRole("row")
-        .filter({ hasText: "Attention Is All You Need", visible: true }),
+        .locator(`a[href="/reader/${libraryPapers[0]!.document.document_id}"]`)
+        .filter({ visible: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(
