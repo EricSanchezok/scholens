@@ -2,16 +2,13 @@
 
 import * as React from "react";
 
+import type { VisualViewportMetrics } from "@/lib/utilities/use-visual-viewport";
+
 const MINIMUM_KEYBOARD_OCCLUSION = 96;
 const CLOSED_KEYBOARD_STATE = {
   open: false,
   viewportHeight: undefined as number | undefined,
   viewportOffsetTop: undefined as number | undefined,
-};
-
-export type VisualViewportMetrics = {
-  height: number;
-  offsetTop: number;
 };
 
 export function calculateMobileKeyboardState({

@@ -1026,7 +1026,7 @@ export function ReaderContextPanel({
     <aside
       aria-label={t("contextPanel")}
       className={cn(
-        "border-line bg-canvas h-full w-full shrink-0 flex-col overflow-hidden border-l max-lg:pt-[env(safe-area-inset-top)] max-lg:pb-[env(safe-area-inset-bottom)] lg:w-[clamp(23rem,34vw,31.25rem)]",
+        "border-line bg-canvas h-full w-full shrink-0 flex-col overflow-hidden border-l lg:w-[clamp(23rem,34vw,31.25rem)]",
         className ?? "flex",
       )}
     >

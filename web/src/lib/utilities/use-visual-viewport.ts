@@ -2,47 +2,45 @@
 
 import * as React from "react";
 
-export type ShellVisualViewport = {
+export type VisualViewportMetrics = {
   height: number;
   offsetTop: number;
 };
 
-/**
- * Keep the fixed workspace shell aligned to the browser visual viewport on
- * phones. Layout-viewport fixed positioning can leave the bottom dock under
- * expanding mobile browser chrome after client-side tab switches; refresh often
- * collapses that chrome and temporarily hides the bug.
- */
-export function readShellVisualViewport(
+export function readVisualViewport(
   visualViewport?: { height: number; offsetTop: number } | null,
   innerHeight = 0,
-): ShellVisualViewport {
+): VisualViewportMetrics {
   if (!visualViewport) {
     return { height: innerHeight, offsetTop: 0 };
   }
+
   return {
     height: visualViewport.height,
     offsetTop: visualViewport.offsetTop,
   };
 }
 
-export function useShellVisualViewport(
-  enabled: boolean,
-): ShellVisualViewport | null {
-  const [viewport, setViewport] = React.useState<ShellVisualViewport | null>(
+/**
+ * Track the browser's visible viewport instead of the layout viewport. Mobile
+ * browsers can shrink and pan this viewport independently when browser chrome
+ * or the software keyboard opens.
+ */
+export function useVisualViewport(
+  enabled = true,
+): VisualViewportMetrics | null {
+  const [viewport, setViewport] = React.useState<VisualViewportMetrics | null>(
     null,
   );
 
   React.useEffect(() => {
-    if (!enabled) {
-      return;
-    }
+    if (!enabled) return;
 
     const visualViewport = window.visualViewport;
 
     function update() {
       setViewport(
-        readShellVisualViewport(
+        readVisualViewport(
           visualViewport
             ? {
                 height: visualViewport.height,

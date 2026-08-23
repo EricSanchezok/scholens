@@ -315,7 +315,7 @@ export function PaperCollectionSidePanelLayout({
         data-paper-collection-page-layout=""
         ref={rootRef}
       >
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
         <div
           className={cn(
             "relative h-full min-h-0 shrink-0",
@@ -1052,9 +1052,12 @@ export function PaperCollectionWorkbench({
     ? t("preview.close")
     : t("preview.open");
   return (
-    <div className="min-w-0" ref={rootRef}>
+    <div
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      ref={rootRef}
+    >
       <div
-        className="mb-3 flex min-h-11 min-w-0 items-center"
+        className="mb-3 flex min-h-11 min-w-0 shrink-0 items-center"
         data-paper-collection-toolbar=""
       >
         {toolbar ? (
@@ -1100,11 +1103,9 @@ export function PaperCollectionWorkbench({
           />
         </div>
       </div>
-      {beforeTable}
+      {beforeTable ? <div className="shrink-0">{beforeTable}</div> : null}
       <div
-        className={cn(
-          "border-line grid h-[max(28rem,calc(100dvh-12rem))] min-w-0 items-stretch overflow-hidden border-t",
-        )}
+        className="border-line grid min-h-0 min-w-0 flex-1 items-stretch overflow-hidden border-t"
         data-paper-collection-split=""
         style={
           previewVisible && !sidePanelLayout
@@ -1221,7 +1222,8 @@ export function PaperCollectionWorkbench({
             </div>
           )}
           <div
-            className="min-h-0 flex-1 overflow-auto"
+            className="min-h-0 flex-1 overflow-auto overscroll-contain"
+            data-paper-collection-scroll=""
             onScroll={(event) => {
               if (headerScrollRef.current) {
                 headerScrollRef.current.scrollLeft =

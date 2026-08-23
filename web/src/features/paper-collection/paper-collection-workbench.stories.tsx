@@ -139,6 +139,17 @@ const items: PaperCollectionItem[] = [
   },
 ];
 
+const scrollingItems = Array.from({ length: 36 }, (_, index) => {
+  const source = items[index % items.length]!;
+  const suffix = String(index + 1).padStart(12, "0");
+  return {
+    ...source,
+    href: `/reader/00000000-0000-4000-8000-${suffix}` as Route,
+    id: `00000000-0000-4000-8000-${suffix}`,
+    title: `${index + 1}. ${source.title}`,
+  };
+});
+
 const meta = {
   title: "Features/Paper Collection/Workbench",
   component: PaperCollectionWorkbench,
@@ -161,7 +172,7 @@ const meta = {
   decorators: [
     (Story) => (
       <ToastProvider dismissLabel="Dismiss notification">
-        <div className="mx-auto w-full max-w-[1680px] p-6">
+        <div className="mx-auto h-[calc(100dvh-3rem)] min-h-80 w-full max-w-[1680px] p-6">
           <Story />
         </div>
       </ToastProvider>
@@ -329,6 +340,44 @@ export const SearchResults: Story = {
       ...item,
       snippet: "…adaptive memory is updated through a controlled process…",
     })),
+  },
+};
+
+export const ContainedScrolling: Story = {
+  args: {
+    items: scrollingItems,
+    tableFooter: (
+      <p className="text-secondary py-6 text-center text-xs">End of papers</p>
+    ),
+  },
+  globals: { viewport: { value: "mobile", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const toolbar = canvasElement.querySelector<HTMLElement>(
+      "[data-paper-collection-toolbar]",
+    );
+    const scroller = canvasElement.querySelector<HTMLElement>(
+      "[data-paper-collection-scroll]",
+    );
+    const split = canvasElement.querySelector<HTMLElement>(
+      "[data-paper-collection-split]",
+    );
+    await expect(toolbar).not.toBeNull();
+    await expect(scroller).not.toBeNull();
+    await expect(split).not.toBeNull();
+    if (!toolbar || !scroller || !split) return;
+
+    const toolbarTop = toolbar.getBoundingClientRect().top;
+    scroller.scrollTop = scroller.scrollHeight;
+    fireEvent.scroll(scroller);
+    await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(0));
+
+    expect(
+      Math.abs(toolbar.getBoundingClientRect().top - toolbarTop),
+    ).toBeLessThanOrEqual(1);
+    expect(getComputedStyle(scroller).overscrollBehaviorY).toBe("contain");
+    expect(split.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      split.parentElement!.getBoundingClientRect().bottom + 1,
+    );
   },
 };
 

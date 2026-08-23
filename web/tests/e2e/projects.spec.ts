@@ -11,6 +11,8 @@ import {
   projectPaperFixtures,
 } from "../../src/features/projects/api/fixtures";
 import { mockBillingUsage } from "./billing-fixture";
+import { expectPaperCollectionScrollContained } from "./paper-collection-scroll";
+import { mockVisualViewport, setVisualViewport } from "./visual-viewport";
 
 const apiPattern = "**/api/v1";
 const actor = {
@@ -509,6 +511,7 @@ test("keeps Project detail geometry stable across tabs", async ({ page }) => {
 
 test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await mockVisualViewport(page, { height: 844, offsetTop: 0 });
   await page.goto(`/projects/${projectFixtures[0]!.id}`);
   await expect(page.locator("[data-project-chat]")).toBeHidden();
   await page.getByRole("button", { name: "Chat" }).click();
@@ -536,9 +539,84 @@ test("opens Project Chat as a full-height mobile panel", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+
+  await setVisualViewport(page, { height: 500, offsetTop: 220 });
+  const mobilePanel = page.locator('[data-placement="visual-full"]');
+  await expect
+    .poll(() =>
+      mobilePanel.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          bottom: Math.round(bounds.bottom),
+          height: Math.round(bounds.height),
+          top: Math.round(bounds.top),
+        };
+      }),
+    )
+    .toEqual({ bottom: 720, height: 500, top: 220 });
+  const [historyWithKeyboard, composerWithKeyboard] = await Promise.all([
+    history.boundingBox(),
+    composer.locator("xpath=ancestor::form").boundingBox(),
+  ]);
+  expect(historyWithKeyboard!.y).toBeGreaterThanOrEqual(220);
+  expect(
+    composerWithKeyboard!.y + composerWithKeyboard!.height,
+  ).toBeLessThanOrEqual(720);
+
+  await setVisualViewport(page, { height: 844, offsetTop: 0 });
+  await expect
+    .poll(() => mobilePanel.evaluate((element) => element.clientHeight))
+    .toBe(844);
   await page.getByRole("button", { name: "Close project chat" }).click();
   await expect(page).not.toHaveURL(/panel=chat/);
   await expect(page.getByRole("button", { name: "Chat" })).toBeFocused();
+});
+
+test("keeps progressive Project papers inside the collection scroller", async ({
+  page,
+}) => {
+  const project = projectFixtures[0]!;
+  const papers = Array.from({ length: 32 }, (_, index) => {
+    const source = projectPaperFixtures[index % projectPaperFixtures.length]!;
+    const suffix = String(index + 1).padStart(12, "0");
+    return {
+      ...source,
+      document_id: `10000000-0000-4000-8001-${suffix}`,
+      title: `Project paper ${index + 1}: ${source.title}`,
+    };
+  });
+  let reads = 0;
+  await page.route(`${apiPattern}/projects/${project.id}/papers**`, (route) => {
+    reads += 1;
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: cursor ? papers.slice(16) : papers.slice(0, 16),
+        next_cursor: cursor ? null : "next-project-papers",
+        previous_cursor: null,
+        total_count: papers.length,
+      }),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/projects/${project.id}?view=papers`);
+  const scroller = page.locator("[data-paper-collection-scroll]");
+  await expect(scroller).toBeVisible();
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+
+  await expectPaperCollectionScrollContained({
+    page,
+    toolbar: page.locator("[data-paper-collection-toolbar]"),
+  });
+  await expect(
+    page.getByRole("link", { name: /Project paper 32:/ }),
+  ).toBeVisible();
 });
 
 test("keeps the selected conversation when Project Chat closes", async ({

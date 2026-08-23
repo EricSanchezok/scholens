@@ -108,8 +108,10 @@ At 320, 390, and 430 CSS pixels, Reader becomes an immersive document surface:
   bottom-sheet pattern used by Sources;
 - dismissing a panel preserves page, zoom, search result, draft, selection, and
   active conversation;
-- the soft keyboard resizes the active panel without moving document controls
-  underneath the keyboard.
+- the portalled panel follows the visual viewport height and vertical offset;
+  the soft keyboard therefore resizes the active panel without hiding its
+  switcher or Composer and without moving document controls underneath the
+  keyboard.
 
 Desktop columns must never be compressed into a narrow three-column layout.
 The breakpoint changes the information architecture, not only widths.
