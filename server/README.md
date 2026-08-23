@@ -322,14 +322,14 @@ three as terminal. `response_ready` carries the complete persisted turn snapshot
 unblocks response actions; `suggestions` is an optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`. Subscriptions that send
-`X-Scholens-Stream-Capabilities: assistant-candidates-v1` additionally receive
+`progress`. The additive `/events/candidates` subscription additionally returns
 sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
 `assistant_candidate_reset` events parsed from partial structured
 `final_answer` arguments. The adapter filters those additive events for older
-clients; retries clear the provisional candidate, while a bounded suffix and
-private citation protocol never enter it. A `final` item is published only
-after the model submits the
+clients on the original `/events` route; newer clients fall back to that route
+when the additive endpoint is unavailable. Retries clear the provisional
+candidate, while a bounded suffix and private citation protocol never enter it.
+A `final` item is published only after the model submits the
 structured `final_answer` output and its visible content and private citation
 protocol validate. A successful source-backed tool result also makes at least
 one valid materialized reference mandatory; missing references, invalid source

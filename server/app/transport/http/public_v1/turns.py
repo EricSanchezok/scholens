@@ -10,6 +10,7 @@ from app.bootstrap.execution import (
 )
 from app.modules.conversations.application.chat import ConversationChat
 from app.modules.conversations.application.contracts.turns import (
+    ConversationCandidateSubscriptionEventSchema,
     ConversationResponseCreateRequest,
     ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
@@ -38,7 +39,6 @@ from fastapi import APIRouter, Depends, Header, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 turn_router = APIRouter()
-_ASSISTANT_CANDIDATE_CAPABILITY = "assistant-candidates-v1"
 
 
 class ConversationEventStreamResponse(StreamingResponse):
@@ -82,17 +82,31 @@ def _subscription_responses() -> dict[int | str, dict[str, object]]:
     }
 
 
+def _candidate_subscription_responses() -> dict[int | str, dict[str, object]]:
+    return {
+        200: {
+            "description": (
+                "Replayable SSE subscription with sanitized answer candidates."
+            ),
+            "model": ConversationCandidateSubscriptionEventSchema,
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "$ref": (
+                            "#/components/schemas/"
+                            "ConversationCandidateSubscriptionEventSchema"
+                        )
+                    }
+                }
+            },
+        }
+    }
+
+
 def _prefers_background(prefer: str | None) -> bool:
     return any(
         token.strip().casefold() == "respond-async"
         for token in (prefer or "").split(",")
-    )
-
-
-def _supports_assistant_candidates(capabilities: str | None) -> bool:
-    return any(
-        token.strip().casefold() == _ASSISTANT_CANDIDATE_CAPABILITY
-        for token in (capabilities or "").split(",")
     )
 
 
@@ -282,10 +296,6 @@ async def subscribe_conversation_response(
     chat: ConversationChat = Depends(get_conversation_chat),
     current_user: Actor = Depends(get_required_user),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
-    stream_capabilities: str | None = Header(
-        default=None,
-        alias="X-Scholens-Stream-Capabilities",
-    ),
 ) -> ConversationEventStreamResponse:
     events = await chat.subscribe(
         actor=current_user,
@@ -293,9 +303,30 @@ async def subscribe_conversation_response(
         turn_id=turn_id,
         response_id=response_id,
         last_event_id=last_event_id,
-        include_assistant_candidates=_supports_assistant_candidates(
-            stream_capabilities
-        ),
+    )
+    return ConversationEventStreamResponse(events)
+
+
+@turn_router.get(
+    "/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/candidates",
+    response_class=ConversationEventStreamResponse,
+    responses=_candidate_subscription_responses(),
+)
+async def subscribe_conversation_response_candidates(
+    conversation_id: UUID,
+    turn_id: UUID,
+    response_id: UUID,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+) -> ConversationEventStreamResponse:
+    events = await chat.subscribe(
+        actor=current_user,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        response_id=response_id,
+        last_event_id=last_event_id,
+        include_assistant_candidates=True,
     )
     return ConversationEventStreamResponse(events)
 

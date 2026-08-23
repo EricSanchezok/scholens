@@ -1810,6 +1810,73 @@
         "title": "ConversationBranchSelectionRequest",
         "type": "object"
       },
+      "ConversationCandidateSubscriptionEventSchema": {
+        "description": "Schema for subscriptions that include sanitized answer candidates.",
+        "discriminator": {
+          "mapping": {
+            "activity": "#/components/schemas/ConversationStreamActivityEvent",
+            "assistant_candidate_delta": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent",
+            "assistant_candidate_reset": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent",
+            "assistant_candidate_start": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent",
+            "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
+            "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
+            "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
+            "cancelled": "#/components/schemas/ConversationStreamCancelledEvent",
+            "complete": "#/components/schemas/ConversationStreamCompleteEvent",
+            "error": "#/components/schemas/ConversationStreamErrorEvent",
+            "references": "#/components/schemas/ConversationStreamReferencesEvent",
+            "response_ready": "#/components/schemas/ConversationStreamResponseReadyEvent",
+            "start": "#/components/schemas/ConversationStreamStartEvent",
+            "suggestions": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ConversationStreamStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamActivityEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamReferencesEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamResponseReadyEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamSuggestionsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamCancelledEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationStreamErrorEvent"
+          }
+        ],
+        "title": "ConversationCandidateSubscriptionEventSchema"
+      },
       "ConversationCapabilitiesResponse": {
         "properties": {
           "archive": {
@@ -3049,9 +3116,6 @@
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
-            "assistant_candidate_delta": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent",
-            "assistant_candidate_reset": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent",
-            "assistant_candidate_start": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent",
             "assistant_item_complete": "#/components/schemas/ConversationStreamAssistantItemCompleteEvent",
             "assistant_item_delta": "#/components/schemas/ConversationStreamAssistantItemDeltaEvent",
             "assistant_item_start": "#/components/schemas/ConversationStreamAssistantItemStartEvent",
@@ -3071,15 +3135,6 @@
           },
           {
             "$ref": "#/components/schemas/ConversationStreamActivityEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateStartEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateDeltaEvent"
-          },
-          {
-            "$ref": "#/components/schemas/ConversationStreamAssistantCandidateResetEvent"
           },
           {
             "$ref": "#/components/schemas/ConversationStreamAssistantItemStartEvent"
@@ -12649,22 +12704,6 @@
               ],
               "title": "Last-Event-Id"
             }
-          },
-          {
-            "in": "header",
-            "name": "X-Scholens-Stream-Capabilities",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Scholens-Stream-Capabilities"
-            }
           }
         ],
         "responses": {
@@ -12696,6 +12735,88 @@
           }
         ],
         "summary": "Subscribe Conversation Response"
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/candidates": {
+      "get": {
+        "operationId": "subscribe_conversation_response_candidates_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_candidates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "response_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Response Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Replayable SSE subscription with sanitized answer candidates."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Subscribe Conversation Response Candidates"
       }
     },
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {

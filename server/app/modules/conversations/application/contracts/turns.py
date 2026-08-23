@@ -114,7 +114,7 @@ class ConversationStreamErrorEvent(BaseModel):
     error: dict[str, JsonValue]
 
 
-ConversationLegacyStreamEvent = Annotated[
+ConversationBaseStreamEvent = (
     ConversationStreamStartEvent
     | ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
@@ -124,23 +124,25 @@ ConversationLegacyStreamEvent = Annotated[
     | ConversationStreamResponseReadyEvent
     | ConversationStreamSuggestionsEvent
     | ConversationStreamCompleteEvent
+)
+
+ConversationLegacyStreamEvent = Annotated[
+    ConversationBaseStreamEvent | ConversationStreamErrorEvent,
+    Field(discriminator="type"),
+]
+
+ConversationSubscriptionEvent = Annotated[
+    ConversationBaseStreamEvent
+    | ConversationStreamCancelledEvent
     | ConversationStreamErrorEvent,
     Field(discriminator="type"),
 ]
 
 ConversationStreamEvent = Annotated[
-    ConversationStreamStartEvent
-    | ConversationStreamActivityEvent
+    ConversationBaseStreamEvent
     | ConversationStreamAssistantCandidateStartEvent
     | ConversationStreamAssistantCandidateDeltaEvent
     | ConversationStreamAssistantCandidateResetEvent
-    | ConversationStreamAssistantItemStartEvent
-    | ConversationStreamAssistantItemDeltaEvent
-    | ConversationStreamAssistantItemCompleteEvent
-    | ConversationStreamReferencesEvent
-    | ConversationStreamResponseReadyEvent
-    | ConversationStreamSuggestionsEvent
-    | ConversationStreamCompleteEvent
     | ConversationStreamCancelledEvent
     | ConversationStreamErrorEvent,
     Field(discriminator="type"),
@@ -151,8 +153,12 @@ class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
     """Compatible schema for the existing inline SSE response."""
 
 
-class ConversationSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+class ConversationSubscriptionEventSchema(RootModel[ConversationSubscriptionEvent]):
     """Schema for detachable response subscriptions, including cancellation."""
+
+
+class ConversationCandidateSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+    """Schema for subscriptions that include sanitized answer candidates."""
 
 
 class ConversationTurnCreateRequest(BaseModel):

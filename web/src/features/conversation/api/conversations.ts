@@ -10,7 +10,7 @@ import {
 import { clientEnvironment } from "@/lib/env/client";
 
 export type ConversationStreamEvent =
-  components["schemas"]["ConversationSubscriptionEventSchema"];
+  components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
 export type ConversationTurnCreateRequest =
   components["schemas"]["ConversationTurnCreateRequest"];
 export type ConversationTurnBranchCreateRequest =
@@ -239,22 +239,26 @@ export async function subscribeConversationEvents({
 }) {
   let lastEventId: string | undefined;
   let reconnectDelayMs = 500;
+  let candidateSubscription = true;
   const seenEventIds = new Set<string>();
   while (!signal.aborted) {
     try {
       const response = await authenticatedFetch(
-        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events`,
+        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events${candidateSubscription ? "/candidates" : ""}`,
         {
           method: "GET",
           credentials: "include",
           headers: {
             Accept: "text/event-stream",
-            "X-Scholens-Stream-Capabilities": "assistant-candidates-v1",
             ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
           },
           signal,
         },
       );
+      if (candidateSubscription && response.status === 404) {
+        candidateSubscription = false;
+        continue;
+      }
       if (!response.ok) throw await toApiError(response);
       onConnectionState?.("connected");
       reconnectDelayMs = 500;

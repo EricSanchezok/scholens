@@ -122,14 +122,15 @@ standard SSE decoder. The stream accepts `start`, the stable-ID
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`. The detachable subscription also negotiates
-`assistant-candidates-v1`: sanitized partial `final_answer` arguments then use
+arrive as bounded `progress`. The additive `/events/candidates` subscription
+returns sanitized partial `final_answer` arguments through
 `assistant_candidate_start`, `assistant_candidate_delta`, and
 `assistant_candidate_reset` while the structured answer is still arriving. A
 bounded suffix and all private citation markers stay server-side, and a model
 validation retry resets the candidate before replacement text appears. Clients
-without that explicit capability receive only the original validated item
-lifecycle. A `final` item completes only after structured answer validation.
+fall back to the original `/events` route when the additive endpoint is absent;
+that route returns only the validated item lifecycle. A `final` item completes
+only after structured answer validation.
 `response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
 `complete` closes the stream. The client never infers phase from prose or

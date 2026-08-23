@@ -440,7 +440,7 @@ complete as bounded `progress`. A run can terminate only through the structured
 partially validate `answer`, strip private citation markers, hold a bounded
 suffix, and publish an opt-in provisional candidate. A later validation retry
 resets that stable candidate before replacement text; clients that do not
-negotiate the candidate capability receive no provisional events. The visible
+use the additive candidate subscription receive no provisional events. The visible
 answer and private citation protocol still validate before the canonical final
 item or persistence. Plain terminal text, empty visible
 content, citation-only output, and copied private protocol receive bounded model
