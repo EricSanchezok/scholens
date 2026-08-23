@@ -38,6 +38,8 @@ and implementation snapshots.
   documents project-specific external service setup.
 - [`operations/AWS_OBSERVABILITY_SETUP.md`](./operations/AWS_OBSERVABILITY_SETUP.md)
   documents production observability provisioning.
+- [`operations/mcp-tool-test-report.md`](./operations/mcp-tool-test-report.md)
+  records the current end-to-end MCP tool and resource audit baseline.
 - [`legal-content-review.md`](./legal-content-review.md) records the factual
   questions that must be approved before replacing public legal text.
 
