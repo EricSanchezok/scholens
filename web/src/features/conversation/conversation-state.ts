@@ -36,6 +36,7 @@ export type LiveTurn = {
   userMessage: string;
   content: string;
   entries: ConversationTraceEntry[];
+  answerCandidate: ProvisionalAssistantItem | null;
   provisionalItems: ProvisionalAssistantItem[];
   completedItemIds: string[];
   trace: ConversationTrace | null;
@@ -66,6 +67,7 @@ export function createLiveTurn(
     userMessage,
     content: "",
     entries: [],
+    answerCandidate: null,
     provisionalItems: [],
     completedItemIds: [],
     trace: null,
@@ -149,6 +151,10 @@ function completeAssistantItem(
 ) {
   if (current.completedItemIds.includes(item.id)) return current;
   const completedItemIds = [...current.completedItemIds, item.id];
+  const answerCandidate =
+    item.phase === "final" || current.answerCandidate?.id === item.id
+      ? null
+      : current.answerCandidate;
   const provisionalItems = current.provisionalItems.filter(
     (candidate) => candidate.id !== item.id,
   );
@@ -156,6 +162,7 @@ function completeAssistantItem(
     return {
       ...current,
       completedItemIds,
+      answerCandidate,
       provisionalItems,
       entries: updateEntry(current.entries, {
         kind: "progress",
@@ -168,6 +175,7 @@ function completeAssistantItem(
   return {
     ...current,
     completedItemIds,
+    answerCandidate,
     provisionalItems,
     content: item.content,
   };
@@ -194,6 +202,7 @@ export function reduceLiveTurn(
       suggestions: event.turn.suggestions,
       readyTurn: event.turn,
       durationMs: response.duration_ms ?? current.durationMs,
+      answerCandidate: null,
       provisionalItems: [],
       state: "ready",
     };
@@ -224,6 +233,7 @@ export function reduceLiveTurn(
     if (event.turn_id !== current.turnId) return current;
     return {
       ...current,
+      answerCandidate: null,
       durationMs: Math.max(0, Date.now() - current.startedAtMs),
       state: "cancelled",
     };
@@ -234,6 +244,7 @@ export function reduceLiveTurn(
     }
     return {
       ...current,
+      answerCandidate: null,
       failure: conversationFailureFromValue(event.error),
       durationMs: Math.max(0, Date.now() - current.startedAtMs),
       state: "error",
@@ -254,24 +265,22 @@ export function reduceLiveTurn(
     case "assistant_candidate_start":
       if (
         current.completedItemIds.includes(event.item_id) ||
-        current.provisionalItems.some((item) => item.id === event.item_id)
+        current.answerCandidate?.id === event.item_id
       ) {
         return current;
       }
       return {
         ...current,
-        provisionalItems: [
-          ...current.provisionalItems,
-          {
-            id: event.item_id,
-            sequence: event.sequence,
-            phase: "provisional" as const,
-            content: "",
-          },
-        ].sort((left, right) => left.sequence - right.sequence),
+        answerCandidate: {
+          id: event.item_id,
+          sequence: event.sequence,
+          phase: "provisional" as const,
+          content: "",
+        },
       };
     case "assistant_item_start":
       if (current.completedItemIds.includes(event.item_id)) return current;
+      if (current.answerCandidate?.id === event.item_id) return current;
       if (current.provisionalItems.some((item) => item.id === event.item_id)) {
         return {
           ...current,
@@ -294,15 +303,28 @@ export function reduceLiveTurn(
       };
     case "assistant_candidate_reset":
       if (current.completedItemIds.includes(event.item_id)) return current;
+      if (current.answerCandidate?.id !== event.item_id) return current;
       return {
         ...current,
-        provisionalItems: current.provisionalItems.map((item) =>
-          item.id === event.item_id ? { ...item, content: "" } : item,
-        ),
+        answerCandidate: { ...current.answerCandidate, content: "" },
       };
     case "assistant_candidate_delta":
+      if (
+        current.completedItemIds.includes(event.item_id) ||
+        current.answerCandidate?.id !== event.item_id
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        answerCandidate: {
+          ...current.answerCandidate,
+          content: current.answerCandidate.content + event.delta,
+        },
+      };
     case "assistant_item_delta":
       if (current.completedItemIds.includes(event.item_id)) return current;
+      if (current.answerCandidate?.id === event.item_id) return current;
       return {
         ...current,
         provisionalItems: current.provisionalItems.map((item) =>

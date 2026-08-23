@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { createServer } from "node:http";
 
 import {
   homeConversations,
@@ -323,6 +324,186 @@ test("lets the Server generate the initial conversation title", async ({
   });
 });
 
+test("shows streamed answer text before the response completes", async ({
+  page,
+}) => {
+  const conversation = homeConversations[2]!;
+  const partialAnswer =
+    "The first evidence-backed sentence is already visible.";
+  const finalAnswer = `${partialAnswer} The validated response is now complete.`;
+  let submitted:
+    { response_id: string; turn_id: string; user_query: string } | undefined;
+  let releaseFinalResponse: (() => void) | undefined;
+  let finalResponseReleased = false;
+  const finalResponseGate = new Promise<void>((resolve) => {
+    releaseFinalResponse = resolve;
+  });
+  const server = createServer(async (request, response) => {
+    response.setHeader("Access-Control-Allow-Credentials", "true");
+    response.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type",
+    );
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    response.setHeader("Access-Control-Allow-Origin", "http://127.0.0.1:7300");
+    if (request.method === "OPTIONS") {
+      response.writeHead(204).end();
+      return;
+    }
+    if (!submitted) {
+      response.writeHead(409).end();
+      return;
+    }
+    const itemId = `assistant:${submitted.turn_id}:1`;
+    response.writeHead(200, {
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "Content-Type": "text/event-stream",
+      "X-Accel-Buffering": "no",
+    });
+    const send = (id: number, event: Record<string, unknown>) => {
+      response.write(
+        `id: ${id}-0\nevent: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`,
+      );
+    };
+    send(1, {
+      type: "assistant_candidate_start",
+      response_id: submitted.response_id,
+      item_id: itemId,
+      sequence: 1,
+    });
+    send(2, {
+      type: "assistant_candidate_delta",
+      response_id: submitted.response_id,
+      item_id: itemId,
+      delta: partialAnswer,
+    });
+    await finalResponseGate;
+    send(3, {
+      type: "assistant_item_complete",
+      response_id: submitted.response_id,
+      item: {
+        id: itemId,
+        sequence: 1,
+        phase: "final",
+        content: finalAnswer,
+      },
+    });
+    const baseTurn = homeTurns[0]!;
+    const baseResponse = baseTurn.responses[0]!;
+    const turn = {
+      ...baseTurn,
+      id: submitted.turn_id,
+      user_query: submitted.user_query,
+      responses: [
+        {
+          ...baseResponse,
+          content: finalAnswer,
+          id: submitted.response_id,
+        },
+      ],
+      selected_response_id: submitted.response_id,
+    };
+    send(4, { type: "response_ready", turn });
+    send(5, {
+      type: "complete",
+      response_id: submitted.response_id,
+      turn_id: submitted.turn_id,
+    });
+    response.end();
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Streaming test server did not expose a TCP port");
+  }
+  const testApiUrl = `http://127.0.0.1:${address.port}`;
+  await page.unroute(`${apiPattern}/conversations**`);
+  await page.route(`${apiPattern}/conversations**`, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.endsWith("/events/candidates")) {
+      await route.continue({
+        url: request.url().replace("http://127.0.0.1:7301", testApiUrl),
+      });
+      return;
+    }
+    if (
+      pathname === `/api/v1/conversations/${conversation.id}/turns` &&
+      request.method() === "POST"
+    ) {
+      submitted = request.postDataJSON() as typeof submitted;
+      await route.fulfill({
+        contentType: "application/json",
+        status: 202,
+        body: JSON.stringify({
+          conversation_id: conversation.id,
+          generation_kind: "initial",
+          response_id: submitted!.response_id,
+          turn_id: submitted!.turn_id,
+          variant_index: 1,
+        }),
+      });
+      return;
+    }
+    if (pathname.endsWith("/turns")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [],
+          next_cursor: null,
+          path_revision: 0,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(
+        pathname === `/api/v1/conversations/${conversation.id}`
+          ? {
+              ...conversation,
+              paper_context: { kind: "library" },
+              tool_permissions: [],
+            }
+          : { items: [conversation], next_cursor: null },
+      ),
+    });
+  });
+
+  try {
+    await page.goto(`/?conversation=${conversation.id}`);
+    const composer = page.getByRole("textbox", { name: "Ask a follow-up" });
+    await composer.fill("Stream this answer");
+    await composer.press("Enter");
+
+    const partial = page.getByText(partialAnswer, { exact: true });
+    await expect(partial).toBeVisible();
+    expect(finalResponseReleased).toBe(false);
+    expect(
+      await partial.evaluate((element) =>
+        Boolean(element.closest("[data-message-content]")),
+      ),
+    ).toBe(true);
+    expect(
+      await partial.evaluate((element) => Boolean(element.closest("li"))),
+    ).toBe(false);
+
+    finalResponseReleased = true;
+    releaseFinalResponse?.();
+    await expect(page.getByText(finalAnswer, { exact: true })).toBeVisible();
+  } finally {
+    releaseFinalResponse?.();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
 test("allows another conversation to send while an accepted response continues", async ({
   page,
 }) => {
@@ -339,6 +520,7 @@ test("allows another conversation to send while an accepted response continues",
     ]),
   );
   const postedConversationIds: string[] = [];
+  const persistedTurns = new Map<string, ConversationTurn[]>();
   let releaseFirstSubscription: (() => void) | undefined;
   const secondAccepted = new Promise<void>((resolve) => {
     releaseFirstSubscription = resolve;
@@ -388,6 +570,7 @@ test("allows another conversation to send while an accepted response continues",
         { type: "response_ready", turn },
         { type: "complete", turn_id: turnId, response_id: responseId },
       ];
+      persistedTurns.set(conversationId!, [turn as ConversationTurn]);
       await route.fulfill({
         contentType: "text/event-stream",
         body: events
@@ -427,9 +610,9 @@ test("allows another conversation to send while an accepted response continues",
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          items: [],
+          items: persistedTurns.get(turnsMatch[1]!) ?? [],
           next_cursor: null,
-          path_revision: 0,
+          path_revision: persistedTurns.has(turnsMatch[1]!) ? 1 : 0,
         }),
       });
       return;

@@ -87,6 +87,7 @@ function FollowUpSuggestions({
 function AssistantMessage({
   entries,
   content,
+  answerCandidate,
   provisionalItems,
   references,
   sourceTotal,
@@ -109,6 +110,7 @@ function AssistantMessage({
 }: {
   entries: ConversationTraceEntry[];
   content: string;
+  answerCandidate?: ProvisionalAssistantItem | null;
   provisionalItems?: ProvisionalAssistantItem[];
   references: unknown;
   sourceTotal: number;
@@ -136,7 +138,7 @@ function AssistantMessage({
   const [selectedSourceKey, setSelectedSourceKey] = React.useState<
     number | undefined
   >();
-  const visibleContent = content;
+  const visibleContent = content || answerCandidate?.content || "";
   const presentationState =
     content && state === "streaming" ? "complete" : state;
   const orderedVariants = canSwitch
@@ -369,6 +371,7 @@ function MessageHistory({
                   Boolean(readyTurn && readyTurn.responses.length > 1)
                 }
                 content={liveTurn.content}
+                answerCandidate={liveTurn.answerCandidate}
                 entries={liveTurn.entries}
                 failure={liveTurn.failure}
                 onRetryResponse={() => onRetryResponse(readyTurn ?? turn)}
@@ -652,6 +655,7 @@ export function ConversationView({
                         )
                       }
                       content={liveTurn.content}
+                      answerCandidate={liveTurn.answerCandidate}
                       entries={liveTurn.entries}
                       key={liveTurn.turnId}
                       onActivityOpenChange={(open) => {
