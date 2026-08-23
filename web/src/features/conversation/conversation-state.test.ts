@@ -180,6 +180,60 @@ describe("Home live conversation state", () => {
     expect(turn.provisionalItems).toEqual([]);
   });
 
+  it("replaces a rejected streamed candidate before publishing the final item", () => {
+    const itemId = "assistant:turn-1:3";
+    let turn = createLiveTurn("turn-1", responseId, "Question");
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_candidate_start",
+        item_id: itemId,
+        sequence: 3,
+      }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_candidate_delta",
+        item_id: itemId,
+        delta: "Rejected candidate",
+      }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({ type: "assistant_candidate_reset", item_id: itemId }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_candidate_delta",
+        item_id: itemId,
+        delta: "Corrected candidate",
+      }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({ type: "assistant_item_start", item_id: itemId, sequence: 3 }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_item_delta",
+        item_id: itemId,
+        delta: "Validated answer",
+      }),
+    )!;
+
+    expect(turn.provisionalItems).toEqual([
+      {
+        id: itemId,
+        sequence: 3,
+        phase: "provisional",
+        content: "Validated answer",
+      },
+    ]);
+  });
+
   it("updates activity by ID, preserves order, and rejects stale running state", () => {
     let turn = createLiveTurn("turn-1", responseId, "Compare the papers");
     turn = reduceLiveTurn(

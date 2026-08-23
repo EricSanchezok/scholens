@@ -56,7 +56,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "iconoir-react": "^7.11.1",
-    "katex": "^0.18.4",
+    "katex": "0.16.47",
     "motion": "^13.1.0",
     "next": "16.2.11",
     "next-intl": "4.13.4",

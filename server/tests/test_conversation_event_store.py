@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.bootstrap.adapters.conversation_chat import _is_assistant_candidate_frame
 from app.modules.conversations.infrastructure.event_store import (
     ConversationEventStore,
 )
@@ -48,6 +49,18 @@ class _Redis:
 
 async def _source(frame: str) -> AsyncIterator[str]:
     yield frame
+
+
+def test_candidate_frame_detection_supports_stored_and_inline_sse() -> None:
+    assert _is_assistant_candidate_frame(
+        "id: 2-0\nevent: assistant_candidate_delta\ndata: {}\n\n"
+    )
+    assert _is_assistant_candidate_frame(
+        "event: assistant_candidate_reset\ndata: {}\n\n"
+    )
+    assert not _is_assistant_candidate_frame(
+        "id: 3-0\nevent: assistant_item_delta\ndata: {}\n\n"
+    )
 
 
 @pytest.mark.asyncio

@@ -122,8 +122,16 @@ standard SSE decoder. The stream accepts `start`, the stable-ID
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`; a `final` item arrives only after structured
-answer validation. `response_ready` supplies the complete persisted turn
+arrive as bounded `progress`. The additive `/events/candidates` subscription
+returns sanitized partial `final_answer` arguments through
+`assistant_candidate_start`, `assistant_candidate_delta`, and
+`assistant_candidate_reset` while the structured answer is still arriving. A
+bounded suffix and all private citation markers stay server-side, and a model
+validation retry resets the candidate before replacement text appears. Clients
+fall back to the original `/events` route when the additive endpoint is absent;
+that route returns only the validated item lifecycle. A `final` item completes
+only after structured answer validation.
+`response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
 `complete` closes the stream. The client never infers phase from prose or
 renders an unvalidated final draft. Progress and activity share one sequence
@@ -140,9 +148,12 @@ actions without waiting for a GET refetch, conversation title, or suggestion
 sidecar. `complete`, `cancelled`, and `error` are terminal. A dropped
 subscription reconnects with bounded backoff and event-ID deduplication; it
 never creates a second Turn or retries model generation. Unmounting or changing
-routes aborts only the local subscription. Stop is a separate authorized Server
-cancellation and the UI discloses when that cancellation cannot yet be
-confirmed. Once
+routes aborts only the local subscription. Moving to another conversation also
+releases that conversation's local Composer state; its accepted generation
+continues on the Server, so a different conversation can generate independently
+while the original remains limited to one running response. Stop is a separate
+authorized Server cancellation and the UI discloses when that cancellation
+cannot yet be confirmed. Once
 a turn is accepted into the optimistic transcript, the Composer clears
 immediately and its send action becomes the standard stop-square action for
 the lifetime of that stream. A failure before optimistic acceptance preserves
@@ -217,6 +228,14 @@ a centered dialog on desktop. Inline citation markers open that same panel and
 highlight the corresponding source instead of introducing a second source
 list. Document and external sources share the same evidence rows; only external
 sources navigate away, and they open in a new tab.
+Conversation content uses the shared academic Markdown renderer also consumed
+by Reader reflow. It supports inline `$...$` and `\\(...\\)` plus display
+`$$...$$` and `\\[...\\]`, leaves inline and fenced code literal, and retains
+KaTeX MathML for assistive technology. Wide display equations scroll within
+their own focusable block instead of widening the message lane or clipping tall
+glyphs. Citation annotations are inserted against the original answer offsets
+before math delimiters are normalized, so formula rendering cannot move a
+source marker onto the wrong passage.
 The Server replaces the default Sidebar title once after the first successful
 assistant reply. Follow-up turns do not regenerate it, and user renames are
 never overwritten by title generation. If optional model title generation
@@ -259,6 +278,7 @@ The Figma conversation-state frames and Storybook stories map one-to-one:
 | Historical answer         | `Conversation View / Historical Answer Has No Retry` |
 | Suggested follow-ups      | `Conversation View / Suggested Follow Ups`           |
 | Answer sources            | `Conversation View / Answer Sources`                 |
+| Math with answer sources  | `Conversation View / Math And Sources`               |
 
 The canonical ordered-harness matrix is Figma node `893:3415`,
 `Matrix / Ordered conversation harness v3`, with Desktop Light/Dark and Mobile

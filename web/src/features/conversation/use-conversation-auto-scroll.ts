@@ -168,10 +168,11 @@ export function useConversationAutoScroll({
   }, [getScroller, stopAnimation, updateJumpVisibility]);
 
   const jumpToLatest = React.useCallback(() => {
+    stopAnimation();
     followingRef.current = true;
     setShowJumpToLatest(false);
-    requestFollowFrame();
-  }, [requestFollowFrame]);
+    animateToLatestRef.current(window.performance.now());
+  }, [stopAnimation]);
 
   React.useEffect(() => {
     const scroller = getScroller();

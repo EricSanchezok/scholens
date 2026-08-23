@@ -322,9 +322,20 @@ three as terminal. `response_ready` carries the complete persisted turn snapshot
 unblocks response actions; `suggestions` is an optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`; a `final` item is published only after the model submits the
+`progress`. The additive `/events/candidates` subscription additionally returns
+sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
+`assistant_candidate_reset` events parsed from partial structured
+`final_answer` arguments. The adapter filters those additive events for older
+clients on the original `/events` route; newer clients fall back to that route
+when the additive endpoint is unavailable. Retries clear the provisional
+candidate, while a bounded suffix and private citation protocol never enter it.
+A `final` item is published only after the model submits the
 structured `final_answer` output and its visible content and private citation
-protocol validate. Plain text cannot terminate a Conversation run.
+protocol validate. A successful source-backed tool result also makes at least
+one valid materialized reference mandatory; missing references, invalid source
+keys, malformed private markers, and visible `[A1]`-style placeholders receive
+the same bounded model retry before publication. Plain text cannot terminate a
+Conversation run.
 Progress and activity entries share a monotonic sequence. Requests include the
 UI locale and a validated IANA time zone. `activity` contains only a sanitized
 category/state/subject projection and intentionally omits the raw tool name.
@@ -341,7 +352,9 @@ Parent and selected-child pointers form a persistent tree, while the
 Conversation selects one root and publishes a monotonic path revision. Agent
 history contains only the generated turn's selected ancestors. Only the active
 leaf may be retried or switch its selected response, and only one response may
-run in a Conversation at a time. Creating a normal next turn prunes unselected
+run in a Conversation at a time. Different conversations may generate
+concurrently under the user's interactive concurrency limit. Creating a normal
+next turn prunes unselected
 response variants from its parent; prompt branches are never pruned as a side
 effect. The active leaf may own persisted follow-up suggestions. Suggestion generation
 starts beside the answer stream and shares the same SSE instead of requiring a
@@ -528,7 +541,10 @@ deliberately when formatting; verification commands never rewrite source.
 The Home conversation surface can ask questions across the authorized knowledge
 base. AI-generated responses carry validated inline citations that open the
 source panel; paper and Reader context use the canonical typed source and anchor
-contracts described above.
+contracts described above. Source-backed final answers are accepted only when
+they materialize at least one of the validated source keys returned by the
+successful tool calls; direct no-tool answers retain their ordinary uncited
+path.
 
 The response agent is one contextual Pydantic AI runtime with access to the
 authorized subset of the canonical workspace and connector tools:

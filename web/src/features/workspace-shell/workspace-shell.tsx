@@ -86,7 +86,7 @@ import {
   type ConversationListController,
 } from "./use-conversation-list-controller";
 import { useDesktopLayout } from "@/lib/utilities/use-desktop-layout";
-import { useShellVisualViewport } from "./use-shell-visual-viewport";
+import { useVisualViewport } from "@/lib/utilities/use-visual-viewport";
 
 export type WorkspaceDestination = "ask" | "library" | "projects" | "me";
 
@@ -1412,7 +1412,7 @@ export function WorkspaceShell({
   );
   const railAnimationsRef = React.useRef<Animation[]>([]);
   const isDesktop = useDesktopLayout();
-  const shellVisualViewport = useShellVisualViewport(!isDesktop);
+  const shellVisualViewport = useVisualViewport(!isDesktop);
   const effectiveMobileViewport = mobileViewport ?? { open: false };
   const shellViewportHeight = effectiveMobileViewport.open
     ? (effectiveMobileViewport.viewportHeight ?? shellVisualViewport?.height)

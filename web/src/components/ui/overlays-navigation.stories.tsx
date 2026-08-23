@@ -205,6 +205,56 @@ export const DirectionalSheets: Story = {
   },
 };
 
+export const VisualViewportSheet: Story = {
+  parameters: { layout: "fullscreen" },
+  render: () => (
+    <Sheet defaultOpen>
+      <SheetContent
+        closeLabel="Close research panel"
+        placement="visual-full"
+        showCloseButton={false}
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="border-line shrink-0 border-b p-4">
+            <SheetTitle className="text-lg font-semibold">
+              Research panel
+            </SheetTitle>
+            <SheetDescription className="text-secondary mt-1 text-sm">
+              Full-screen sheets follow the visible mobile viewport.
+            </SheetDescription>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            Context remains independently scrollable.
+          </div>
+          <label className="border-line shrink-0 border-t p-4 text-sm">
+            Follow-up
+            <input
+              className="border-line bg-surface mt-2 h-11 w-full rounded-[var(--radius-md)] border px-3"
+              type="text"
+            />
+          </label>
+        </div>
+      </SheetContent>
+    </Sheet>
+  ),
+  play: async () => {
+    const body = within(document.body);
+    const panel = await body.findByRole("dialog", { name: "Research panel" });
+    await expect(panel).toHaveAttribute("data-placement", "visual-full");
+    await waitFor(() => {
+      const bounds = panel.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      expect(
+        Math.abs(bounds.top - (viewport?.offsetTop ?? 0)),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(bounds.height - (viewport?.height ?? window.innerHeight)),
+      ).toBeLessThanOrEqual(1);
+    });
+    await expect(body.getByLabelText("Follow-up")).toBeVisible();
+  },
+};
+
 function StatefulNavigation() {
   const [page, setPage] = useState(2);
   return (

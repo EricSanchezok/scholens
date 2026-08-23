@@ -52,6 +52,26 @@ class ConversationStreamAssistantItemDeltaEvent(BaseModel):
     delta: str
 
 
+class ConversationStreamAssistantCandidateStartEvent(BaseModel):
+    type: Literal["assistant_candidate_start"] = "assistant_candidate_start"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+    sequence: int = Field(ge=1)
+
+
+class ConversationStreamAssistantCandidateDeltaEvent(BaseModel):
+    type: Literal["assistant_candidate_delta"] = "assistant_candidate_delta"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+    delta: str
+
+
+class ConversationStreamAssistantCandidateResetEvent(BaseModel):
+    type: Literal["assistant_candidate_reset"] = "assistant_candidate_reset"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+
+
 class ConversationStreamAssistantItemCompleteEvent(BaseModel):
     type: Literal["assistant_item_complete"] = "assistant_item_complete"
     response_id: uuid.UUID
@@ -94,7 +114,7 @@ class ConversationStreamErrorEvent(BaseModel):
     error: dict[str, JsonValue]
 
 
-ConversationLegacyStreamEvent = Annotated[
+ConversationBaseStreamEvent = (
     ConversationStreamStartEvent
     | ConversationStreamActivityEvent
     | ConversationStreamAssistantItemStartEvent
@@ -104,20 +124,25 @@ ConversationLegacyStreamEvent = Annotated[
     | ConversationStreamResponseReadyEvent
     | ConversationStreamSuggestionsEvent
     | ConversationStreamCompleteEvent
+)
+
+ConversationLegacyStreamEvent = Annotated[
+    ConversationBaseStreamEvent | ConversationStreamErrorEvent,
+    Field(discriminator="type"),
+]
+
+ConversationSubscriptionEvent = Annotated[
+    ConversationBaseStreamEvent
+    | ConversationStreamCancelledEvent
     | ConversationStreamErrorEvent,
     Field(discriminator="type"),
 ]
 
 ConversationStreamEvent = Annotated[
-    ConversationStreamStartEvent
-    | ConversationStreamActivityEvent
-    | ConversationStreamAssistantItemStartEvent
-    | ConversationStreamAssistantItemDeltaEvent
-    | ConversationStreamAssistantItemCompleteEvent
-    | ConversationStreamReferencesEvent
-    | ConversationStreamResponseReadyEvent
-    | ConversationStreamSuggestionsEvent
-    | ConversationStreamCompleteEvent
+    ConversationBaseStreamEvent
+    | ConversationStreamAssistantCandidateStartEvent
+    | ConversationStreamAssistantCandidateDeltaEvent
+    | ConversationStreamAssistantCandidateResetEvent
     | ConversationStreamCancelledEvent
     | ConversationStreamErrorEvent,
     Field(discriminator="type"),
@@ -128,8 +153,12 @@ class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
     """Compatible schema for the existing inline SSE response."""
 
 
-class ConversationSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+class ConversationSubscriptionEventSchema(RootModel[ConversationSubscriptionEvent]):
     """Schema for detachable response subscriptions, including cancellation."""
+
+
+class ConversationCandidateSubscriptionEventSchema(RootModel[ConversationStreamEvent]):
+    """Schema for subscriptions that include sanitized answer candidates."""
 
 
 class ConversationTurnCreateRequest(BaseModel):

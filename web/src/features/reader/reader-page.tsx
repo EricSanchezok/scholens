@@ -1278,8 +1278,8 @@ function ReaderDocumentWorkspace({
         open={!useDesktopPanel && desktopPanelOpen}
       >
         <SheetContent
-          className="inset-0 h-dvh w-full max-w-none rounded-none border-0 p-0"
           closeLabel={t("closePanel")}
+          placement="visual-full"
           showCloseButton={false}
         >
           <SheetTitle className="sr-only">{t("contextPanel")}</SheetTitle>

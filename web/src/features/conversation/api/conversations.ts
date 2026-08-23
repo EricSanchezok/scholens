@@ -10,7 +10,7 @@ import {
 import { clientEnvironment } from "@/lib/env/client";
 
 export type ConversationStreamEvent =
-  components["schemas"]["ConversationSubscriptionEventSchema"];
+  components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
 export type ConversationTurnCreateRequest =
   components["schemas"]["ConversationTurnCreateRequest"];
 export type ConversationTurnBranchCreateRequest =
@@ -27,6 +27,9 @@ export type ConversationGenerationAccepted =
 const conversationStreamEventTypes = {
   start: true,
   activity: true,
+  assistant_candidate_start: true,
+  assistant_candidate_delta: true,
+  assistant_candidate_reset: true,
   assistant_item_start: true,
   assistant_item_delta: true,
   assistant_item_complete: true,
@@ -236,11 +239,12 @@ export async function subscribeConversationEvents({
 }) {
   let lastEventId: string | undefined;
   let reconnectDelayMs = 500;
+  let candidateSubscription = true;
   const seenEventIds = new Set<string>();
   while (!signal.aborted) {
     try {
       const response = await authenticatedFetch(
-        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events`,
+        `${clientEnvironment.NEXT_PUBLIC_API_URL}/api/v1/conversations/${conversationId}/turns/${turnId}/responses/${responseId}/events${candidateSubscription ? "/candidates" : ""}`,
         {
           method: "GET",
           credentials: "include",
@@ -251,6 +255,10 @@ export async function subscribeConversationEvents({
           signal,
         },
       );
+      if (candidateSubscription && response.status === 404) {
+        candidateSubscription = false;
+        continue;
+      }
       if (!response.ok) throw await toApiError(response);
       onConnectionState?.("connected");
       reconnectDelayMs = 500;

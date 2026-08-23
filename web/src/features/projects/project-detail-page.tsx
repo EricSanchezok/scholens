@@ -78,6 +78,7 @@ import {
   type ResearchContext,
 } from "@/features/conversation";
 import { WorkspaceShell } from "@/features/workspace-shell";
+import { cn } from "@/lib/utilities/cn";
 import {
   CollectionToolbar,
   CollectionToolbarSelectTrigger,
@@ -847,6 +848,21 @@ export function ProjectDetailWorkspace({
       }
     />
   );
+  const projectPaperPagination =
+    !paperSearchActive && papersQuery.hasNextPage ? (
+      <div className="flex justify-center py-6" ref={paperLoadMoreRef}>
+        <Button
+          loading={papersQuery.isFetchingNextPage}
+          onClick={() => void papersQuery.fetchNextPage()}
+          size="sm"
+          variant="ghost"
+        >
+          {papersQuery.isFetchingNextPage
+            ? t("detail.papers.loadingMore")
+            : t("detail.papers.loadMore")}
+        </Button>
+      </div>
+    ) : null;
 
   return (
     <WorkspaceShell
@@ -914,16 +930,25 @@ export function ProjectDetailWorkspace({
         transition={motionTransitions.layout}
       >
         <m.div
-          className="min-w-0 flex-1 overflow-x-clip overflow-y-auto"
+          className={cn(
+            "min-w-0 flex-1 overflow-x-clip",
+            state.view === "papers" ? "overflow-hidden" : "overflow-y-auto",
+          )}
+          data-project-detail-scroll=""
           layout="size"
           transition={motionTransitions.layout}
         >
           <div
-            className="mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 pb-12 sm:px-6 lg:px-10 lg:pt-6"
+            className={cn(
+              "mx-auto w-full max-w-6xl min-w-0 px-4 pt-5 sm:px-6 lg:px-10 lg:pt-6",
+              state.view === "papers"
+                ? "flex h-full min-h-0 flex-col"
+                : "pb-12",
+            )}
             data-project-detail-canvas=""
           >
             <header
-              className="hidden min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 lg:grid"
+              className="hidden min-h-11 min-w-0 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 lg:grid"
               data-project-detail-header=""
             >
               <Link
@@ -1007,7 +1032,7 @@ export function ProjectDetailWorkspace({
               </div>
             </header>
 
-            <section className="grid gap-3 lg:hidden">
+            <section className="grid shrink-0 gap-3 lg:hidden">
               {project.description ? (
                 <p className="text-secondary line-clamp-3 text-sm leading-6">
                   {project.description}
@@ -1040,13 +1065,17 @@ export function ProjectDetailWorkspace({
             </section>
 
             <Tabs
-              className="mt-6 lg:mt-4"
+              className={cn(
+                "mt-6 lg:mt-4",
+                state.view === "papers" &&
+                  "flex min-h-0 flex-1 flex-col overflow-hidden",
+              )}
               onValueChange={(view: string) =>
                 replaceSearch({ view: view as ProjectView })
               }
               value={state.view}
             >
-              <TabsList className="bg-transparent p-0">
+              <TabsList className="shrink-0 bg-transparent p-0">
                 <TabsTrigger
                   className="data-[state=active]:border-primary w-20 rounded-none border-b-2 border-transparent px-1 shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none"
                   value="overview"
@@ -1161,7 +1190,10 @@ export function ProjectDetailWorkspace({
                 </div>
               </TabsContent>
 
-              <TabsContent className="mt-5" value="papers">
+              <TabsContent
+                className="mt-5 min-h-0 flex-1 overflow-hidden"
+                value="papers"
+              >
                 {paperSearchActive ? (
                   <PaperSearchResults
                     error={paperSearchQuery.error}
@@ -1253,25 +1285,9 @@ export function ProjectDetailWorkspace({
                       })
                     }
                     personalLabels
+                    tableFooter={projectPaperPagination}
                     toolbar={projectPaperToolbar}
                   />
-                )}
-                {!paperSearchActive && papersQuery.hasNextPage && (
-                  <div
-                    className="mt-5 flex justify-center"
-                    ref={paperLoadMoreRef}
-                  >
-                    <Button
-                      loading={papersQuery.isFetchingNextPage}
-                      onClick={() => void papersQuery.fetchNextPage()}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {papersQuery.isFetchingNextPage
-                        ? t("detail.papers.loadingMore")
-                        : t("detail.papers.loadMore")}
-                    </Button>
-                  </div>
                 )}
               </TabsContent>
 
@@ -1439,13 +1455,14 @@ export function ProjectDetailWorkspace({
           open={state.panel === "chat"}
         >
           <SheetContent
-            className="inset-0 h-[100dvh] w-full max-w-none border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] data-[state=closed]:hidden"
+            className="data-[state=closed]:hidden"
             closeLabel={t("detail.closeChat")}
             forceMount
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               mobileChatTriggerRef.current?.focus();
             }}
+            placement="visual-full"
             showCloseButton={false}
           >
             <SheetTitle className="sr-only">{t("chat.title")}</SheetTitle>

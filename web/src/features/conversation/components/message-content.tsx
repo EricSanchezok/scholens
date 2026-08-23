@@ -1,10 +1,9 @@
 import type { Components } from "react-markdown";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { keyboardFocusRing } from "@/components/ui";
+import { AcademicMarkdown } from "@/components/ui/academic-markdown";
 import type { components as ApiComponents } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
 
@@ -169,13 +168,12 @@ export function MessageContent({
     [onCitationOpen, streaming, t],
   );
   return (
-    <div
-      className="w-full max-w-full min-w-0 overflow-x-clip text-base leading-7 [overflow-wrap:anywhere] lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4"
+    <AcademicMarkdown
+      className="w-full overflow-x-clip text-base leading-7 lg:text-sm lg:leading-7 [&>*+*]:mt-5 lg:[&>*+*]:mt-4"
+      components={components}
       data-message-content
     >
-      <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
-        {renderedContent}
-      </ReactMarkdown>
-    </div>
+      {renderedContent}
+    </AcademicMarkdown>
   );
 }

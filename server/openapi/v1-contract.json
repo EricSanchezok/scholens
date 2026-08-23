@@ -92,6 +92,9 @@
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events": [
       "get"
     ],
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/candidates": [
+      "get"
+    ],
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": [
       "put"
     ],

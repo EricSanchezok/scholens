@@ -574,6 +574,7 @@ class ConversationChatGateway(Protocol):
         turn_id: UUID,
         response_id: UUID,
         last_event_id: str | None,
+        include_assistant_candidates: bool = False,
     ) -> AsyncIterator[str]: ...
 
     async def cancel(
@@ -712,6 +713,7 @@ class ConversationChat:
         turn_id: UUID,
         response_id: UUID,
         last_event_id: str | None,
+        include_assistant_candidates: bool = False,
     ) -> AsyncIterator[str]:
         return await self._gateway.subscribe(
             actor=actor,
@@ -719,6 +721,7 @@ class ConversationChat:
             turn_id=turn_id,
             response_id=response_id,
             last_event_id=last_event_id,
+            include_assistant_candidates=include_assistant_candidates,
         )
 
     async def cancel(

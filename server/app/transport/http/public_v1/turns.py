@@ -10,6 +10,7 @@ from app.bootstrap.execution import (
 )
 from app.modules.conversations.application.chat import ConversationChat
 from app.modules.conversations.application.contracts.turns import (
+    ConversationCandidateSubscriptionEventSchema,
     ConversationResponseCreateRequest,
     ConversationSubscriptionEventSchema,
     ConversationStreamEventSchema,
@@ -73,6 +74,27 @@ def _subscription_responses() -> dict[int | str, dict[str, object]]:
                     "schema": {
                         "$ref": (
                             "#/components/schemas/ConversationSubscriptionEventSchema"
+                        )
+                    }
+                }
+            },
+        }
+    }
+
+
+def _candidate_subscription_responses() -> dict[int | str, dict[str, object]]:
+    return {
+        200: {
+            "description": (
+                "Replayable SSE subscription with sanitized answer candidates."
+            ),
+            "model": ConversationCandidateSubscriptionEventSchema,
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "$ref": (
+                            "#/components/schemas/"
+                            "ConversationCandidateSubscriptionEventSchema"
                         )
                     }
                 }
@@ -281,6 +303,30 @@ async def subscribe_conversation_response(
         turn_id=turn_id,
         response_id=response_id,
         last_event_id=last_event_id,
+    )
+    return ConversationEventStreamResponse(events)
+
+
+@turn_router.get(
+    "/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/candidates",
+    response_class=ConversationEventStreamResponse,
+    responses=_candidate_subscription_responses(),
+)
+async def subscribe_conversation_response_candidates(
+    conversation_id: UUID,
+    turn_id: UUID,
+    response_id: UUID,
+    chat: ConversationChat = Depends(get_conversation_chat),
+    current_user: Actor = Depends(get_required_user),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+) -> ConversationEventStreamResponse:
+    events = await chat.subscribe(
+        actor=current_user,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        response_id=response_id,
+        last_event_id=last_event_id,
+        include_assistant_candidates=True,
     )
     return ConversationEventStreamResponse(events)
 

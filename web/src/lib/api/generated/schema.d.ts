@@ -470,6 +470,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/responses/{response_id}/events/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Subscribe Conversation Response Candidates */
+        get: operations["subscribe_conversation_response_candidates_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/selected-response": {
         parameters: {
             query?: never;
@@ -2522,6 +2539,11 @@ export interface components {
              */
             turn_id: string;
         };
+        /**
+         * ConversationCandidateSubscriptionEventSchema
+         * @description Schema for subscriptions that include sanitized answer candidates.
+         */
+        ConversationCandidateSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamAssistantCandidateStartEvent"] | components["schemas"]["ConversationStreamAssistantCandidateDeltaEvent"] | components["schemas"]["ConversationStreamAssistantCandidateResetEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationCapabilitiesResponse */
         ConversationCapabilitiesResponse: {
             /**
@@ -2817,6 +2839,55 @@ export interface components {
              * @enum {string}
              */
             type: "activity";
+        };
+        /** ConversationStreamAssistantCandidateDeltaEvent */
+        ConversationStreamAssistantCandidateDeltaEvent: {
+            /** Delta */
+            delta: string;
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_candidate_delta";
+        };
+        /** ConversationStreamAssistantCandidateResetEvent */
+        ConversationStreamAssistantCandidateResetEvent: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_candidate_reset";
+        };
+        /** ConversationStreamAssistantCandidateStartEvent */
+        ConversationStreamAssistantCandidateStartEvent: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_candidate_start";
         };
         /** ConversationStreamAssistantItemCompleteEvent */
         ConversationStreamAssistantItemCompleteEvent: {
@@ -6927,6 +6998,41 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["ConversationSubscriptionEventSchema"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscribe_conversation_response_candidates_api_v1_conversations__conversation_id__turns__turn_id__responses__response_id__events_candidates_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                turn_id: string;
+                response_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Replayable SSE subscription with sanitized answer candidates. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationCandidateSubscriptionEventSchema"];
                 };
             };
             /** @description Validation Error */

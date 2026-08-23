@@ -81,6 +81,22 @@ const researchContent = `# 思维链压缩技术调研
 - 不能只比较输出长度，还要检查答案正确率和校准程度。
 - 对数学、代码和开放式研究问题应分别评估。`;
 
+const mathematicalResearchContent = [
+  researchContent,
+  "",
+  "## 评测公式",
+  "",
+  String.raw`内联预算可写为 $B(x)=\mathbb{E}[T\mid x]$，条件质量为 \(Q(y \mid x)\)。`,
+  "",
+  "$$",
+  String.raw`S = \sum_{i=1}^{n} w_i q_i`,
+  "$$",
+  "",
+  String.raw`\[`,
+  String.raw`\operatorname{score}(m)=\frac{\Delta q_m}{\Delta c_m}`,
+  String.raw`\]`,
+].join("\n");
+
 const searchActivity = {
   kind: "activity" as const,
   id: "search-1",
@@ -644,6 +660,40 @@ export const AnswerSources: Story = {
     ).toBeVisible();
     await expect(
       page.getByText(homePapers[0]!.document.title ?? "Source 1"),
+    ).toBeVisible();
+  },
+};
+
+export const MathAndSources: Story = {
+  globals: { locale: "zh-CN" },
+  args: {
+    turns: [
+      researchTurn({
+        responses: [
+          response({
+            id: "41000000-0000-4000-8000-000000000012",
+            content: mathematicalResearchContent,
+            references: researchReferences,
+            trace: researchTrace,
+          }),
+        ],
+        selected_response_id: "41000000-0000-4000-8000-000000000012",
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await waitFor(() =>
+      expect(canvasElement.querySelectorAll(".katex")).toHaveLength(4),
+    );
+    await expect(
+      canvasElement.querySelectorAll(".katex-mathml math"),
+    ).toHaveLength(4);
+    await userEvent.click(canvas.getByRole("button", { name: "打开来源 1" }));
+    await expect(
+      within(canvasElement.ownerDocument.body).getByRole("dialog", {
+        name: "引用来源 3",
+      }),
     ).toBeVisible();
   },
 };

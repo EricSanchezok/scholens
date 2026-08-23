@@ -57,6 +57,7 @@ import {
   type PaperCollectionItem,
   type PaperStatus,
 } from "@/features/paper-collection";
+import { cn } from "@/lib/utilities/cn";
 import type { PaperSort, PaperStatus as FilterStatus } from "../library-search";
 import type { PaperIngestionRow } from "../use-paper-ingestions";
 import { TagManagerDialog, type LibraryTag } from "./tag-manager-dialog";
@@ -862,13 +863,22 @@ export function PapersView({
     ) : null;
 
   return (
-    <>
+    <div
+      className={cn(
+        "min-w-0",
+        (searchResults || workbenchVisible) && "h-full min-h-0 overflow-hidden",
+      )}
+    >
       {searchResults ? (
         searchResults(collectionToolbar)
       ) : (
         <>
           {!workbenchVisible ? collectionToolbar : null}
-          <div className={workbenchVisible ? undefined : "mt-4"}>
+          <div
+            className={
+              workbenchVisible ? "h-full min-h-0 overflow-hidden" : "mt-4"
+            }
+          >
             {loading && <LoadingState label={t("loading")} />}
             {Boolean(error) && !loading && (
               <AsyncFeedback
@@ -976,6 +986,6 @@ export function PapersView({
           </div>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 }
