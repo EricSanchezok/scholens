@@ -86,6 +86,18 @@ def _final_answer(
     }
 
 
+def _grounded_final_answer(
+    answer: str,
+    info: AgentInfo,
+) -> dict[int, DeltaToolCall]:
+    nonce_match = re.search(
+        r"SCHOLENS_CITE:([0-9a-f]+):1",
+        info.instructions or "",
+    )
+    assert nonce_match is not None
+    return _final_answer(f"{answer}[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
+
+
 def _unused_handler(*_args: object, **_kwargs: object) -> ToolOutcome:
     raise AssertionError("the runtime must use ToolDispatcher")
 
@@ -356,7 +368,7 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
 @pytest.mark.asyncio
 async def test_text_before_tool_is_completed_as_progress_before_activity() -> None:
     async def staged_answer(
-        messages: list[ModelMessage], _info: AgentInfo
+        messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         has_result = any(
             isinstance(part, ToolReturnPart)
@@ -373,7 +385,7 @@ async def test_text_before_tool_is_completed_as_progress_before_activity() -> No
                 )
             }
             return
-        yield _final_answer("Final answer.")
+        yield _grounded_final_answer("Final answer.", info)
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -425,7 +437,7 @@ async def test_progress_is_bounded_without_breaking_the_final_answer() -> None:
     long_progress = "p" * 4_500
 
     async def staged_answer(
-        messages: list[ModelMessage], _info: AgentInfo
+        messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         has_result = any(
             isinstance(part, ToolReturnPart)
@@ -442,7 +454,7 @@ async def test_progress_is_bounded_without_breaking_the_final_answer() -> None:
                 )
             }
             return
-        yield _final_answer("Final answer after bounded progress.")
+        yield _grounded_final_answer("Final answer after bounded progress.", info)
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -487,7 +499,7 @@ async def test_hidden_only_pre_tool_text_does_not_emit_an_empty_item() -> None:
                 )
             }
             return
-        yield _final_answer("Visible final answer.")
+        yield _grounded_final_answer("Visible final answer.", info)
 
     events = await _events(
         model=FunctionModel(stream_function=staged_answer),
@@ -603,7 +615,7 @@ async def test_invalid_tool_arguments_receive_safe_actionable_retry_details() ->
     retry_messages: list[str] = []
 
     async def correct_invalid_arguments(
-        messages: list[ModelMessage], _info: AgentInfo
+        messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[dict[int, DeltaToolCall]]:
         has_result = any(
             isinstance(part, ToolReturnPart)
@@ -611,7 +623,7 @@ async def test_invalid_tool_arguments_receive_safe_actionable_retry_details() ->
             for part in message.parts
         )
         if has_result:
-            yield _final_answer("The corrected search succeeded.")
+            yield _grounded_final_answer("The corrected search succeeded.", info)
             return
         retries = [
             part
@@ -730,6 +742,71 @@ async def test_research_tool_streams_sanitized_activity_and_references() -> None
 
 
 @pytest.mark.asyncio
+async def test_source_backed_answer_retries_visible_and_missing_citations() -> None:
+    final_attempts = 0
+    retry_messages: list[str] = []
+
+    async def research_answer(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        nonlocal final_attempts
+        has_result = any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            for part in message.parts
+        )
+        if not has_result:
+            yield {
+                0: DeltaToolCall(
+                    name="search_saved_papers",
+                    json_args='{"query":"citation regression"}',
+                    tool_call_id="search-citation-regression",
+                )
+            }
+            return
+
+        retries = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, RetryPromptPart)
+        ]
+        final_attempts += 1
+        if not retries:
+            yield _final_answer("Grounded claim [A1]")
+            return
+
+        retry_messages.extend(str(part.content) for part in retries)
+        if len(retries) == 1:
+            yield _final_answer("Grounded claim without a private citation")
+            return
+
+        nonce_match = re.search(r"SCHOLENS_CITE:([0-9a-f]+):1", info.instructions or "")
+        assert nonce_match is not None
+        yield _final_answer(f"Grounded claim[[SCHOLENS_CITE:{nonce_match.group(1)}:1]]")
+
+    events = await _events(
+        model=FunctionModel(stream_function=research_answer),
+        dispatcher=_Dispatcher(),
+        query="Research this with citations",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    assert final_attempts == 3
+    assert any("Visible citation labels" in message for message in retry_messages)
+    assert any("validated source_keys" in message for message in retry_messages)
+    assert _final_text(events) == "Grounded claim"
+    assert "[A1]" not in str(events)
+    references = next(
+        ReferenceBundle.model_validate(event.references)
+        for event in events
+        if isinstance(event, ConversationStreamReferencesEvent)
+    )
+    assert len(references.sources) == 1
+
+
+@pytest.mark.asyncio
 async def test_tool_failure_can_continue_to_a_natural_answer() -> None:
     async def answer_after_failure(
         messages: list[ModelMessage], _info: AgentInfo
@@ -770,7 +847,7 @@ async def test_tool_failure_can_continue_to_a_natural_answer() -> None:
 @pytest.mark.asyncio
 async def test_multiple_tools_preserve_order_and_terminal_state() -> None:
     async def multi_tool_answer(
-        messages: list[ModelMessage], _info: AgentInfo
+        messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         result_count = sum(
             isinstance(part, ToolReturnPart)
@@ -788,7 +865,7 @@ async def test_multiple_tools_preserve_order_and_terminal_state() -> None:
                 )
             }
             return
-        yield _final_answer("Combined answer.")
+        yield _grounded_final_answer("Combined answer.", info)
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -837,7 +914,7 @@ async def test_multiple_tools_preserve_order_and_terminal_state() -> None:
 @pytest.mark.asyncio
 async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
     async def duplicate_answer(
-        messages: list[ModelMessage], _info: AgentInfo
+        messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         result_count = sum(
             isinstance(part, ToolReturnPart)
@@ -854,7 +931,7 @@ async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
                 )
             }
             return
-        yield _final_answer("Used the first result.")
+        yield _grounded_final_answer("Used the first result.", info)
 
     dispatcher = _Dispatcher()
     events = await _events(
@@ -877,7 +954,7 @@ async def test_duplicate_tool_call_is_blocked_before_dispatch() -> None:
 @pytest.mark.asyncio
 async def test_repeatable_tool_call_can_dispatch_with_identical_arguments() -> None:
     async def repeated_answer(
-        messages: list[ModelMessage], _info: AgentInfo
+        messages: list[ModelMessage], info: AgentInfo
     ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         result_count = sum(
             isinstance(part, ToolReturnPart)
@@ -894,7 +971,7 @@ async def test_repeatable_tool_call_can_dispatch_with_identical_arguments() -> N
                 )
             }
             return
-        yield _final_answer("Both bounded waits completed.")
+        yield _grounded_final_answer("Both bounded waits completed.", info)
 
     dispatcher = _Dispatcher()
     events = await _events(

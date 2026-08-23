@@ -3,12 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Components } from "react-markdown";
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeKatex from "rehype-katex";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 
 import { Button } from "@/components/ui";
+import { AcademicMarkdown } from "@/components/ui/academic-markdown";
 import { cn } from "@/lib/utilities/cn";
 import {
   reflowQueries,
@@ -59,23 +56,6 @@ const createMarkdownComponents = (figurePlaceholder: string): Components => ({
       {children}
     </code>
   ),
-  span: ({ children, className, node: _node, ...props }) => {
-    void _node;
-    if (className?.includes("katex-display")) {
-      // Wide equations scroll horizontally; make the scroll container
-      // keyboard-accessible like the overflow-contained table wrapper.
-      return (
-        <span {...props} className={className} tabIndex={0}>
-          {children}
-        </span>
-      );
-    }
-    return (
-      <span {...props} className={className}>
-        {children}
-      </span>
-    );
-  },
   h1: ({ children }) => (
     <h1 className="text-3xl leading-[1.14] font-semibold tracking-[-0.025em] text-balance sm:text-4xl">
       {children}
@@ -171,20 +151,9 @@ function MarkdownBlock({
     [figurePlaceholder],
   );
   return (
-    // Wide display equations scroll horizontally inside their own box. The
-    // previous overflow-y-hidden shaved off the tops of tall glyphs (sums,
-    // fractions, superscripts) because KaTeX paints their overhang through
-    // zero-height positioned spans; 0.5em breathing padding keeps that
-    // overhang inside the scroll box instead.
-    <div className="min-w-0 [overflow-wrap:anywhere] [&_.katex-display]:max-w-full [&_.katex-display]:overflow-x-auto [&_.katex-display]:py-[0.5em] [&>*+*]:mt-5">
-      <ReactMarkdown
-        components={components}
-        rehypePlugins={[rehypeKatex]}
-        remarkPlugins={[remarkGfm, remarkMath]}
-      >
-        {sanitizeAcademicMarkdown(markdown)}
-      </ReactMarkdown>
-    </div>
+    <AcademicMarkdown className="[&>*+*]:mt-5" components={components}>
+      {sanitizeAcademicMarkdown(markdown)}
+    </AcademicMarkdown>
   );
 }
 

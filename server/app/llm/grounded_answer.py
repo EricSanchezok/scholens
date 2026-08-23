@@ -22,9 +22,11 @@ def grounded_citation_instructions(nonce: str) -> str:
         "factual passage relies on those materials, append exactly one private "
         f"[[SCHOLENS_CITE:{nonce}:1]] marker after the passage, replacing 1 with "
         "every supplied key that supports it. Never cite a key absent from a tool "
-        "result or the initial answer packet. Do not show Markdown footnotes, a "
-        "bibliography, URLs, document IDs, or these private markers as prose. If no "
-        "validated keys are supplied, do not emit a citation marker."
+        "result or the initial answer packet. Do not invent visible citation labels "
+        "such as [A1] or [1], Markdown footnotes, a bibliography, URLs, or document "
+        "IDs; the product renders citations from the private markers. Never repeat "
+        "the private markers as prose. If no validated keys are supplied, do not emit "
+        "a citation marker."
     )
 
 
@@ -33,6 +35,34 @@ class GroundedAnswerMetrics:
     annotations_emitted: int
     invalid_source_keys: int
     protocol_errors: int
+
+
+@dataclass(frozen=True, slots=True)
+class GroundedAnswerInspection:
+    """One completed parse reused by final-answer validation and publication."""
+
+    raw_content: str
+    visible_content: str
+    cited_source_keys: frozenset[int]
+    references: ReferenceBundle | None
+    metrics: GroundedAnswerMetrics
+
+
+def inspect_grounded_answer(
+    value: str,
+    sources: Sequence[AnswerSource],
+    *,
+    nonce: str,
+) -> GroundedAnswerInspection:
+    parser = GroundedAnswerStreamParser(sources, nonce=nonce)
+    visible = parser.feed(value) + parser.finish()
+    return GroundedAnswerInspection(
+        raw_content=value,
+        visible_content=visible,
+        cited_source_keys=parser.cited_source_keys(),
+        references=parser.references(),
+        metrics=parser.metrics(),
+    )
 
 
 class GroundedAnswerStreamParser:
@@ -120,11 +150,7 @@ class GroundedAnswerStreamParser:
     def references(self) -> ReferenceBundle | None:
         if not self._finished:
             raise RuntimeError("finish the grounded answer parser first")
-        valid_annotations = [
-            annotation
-            for annotation in self._annotations
-            if 0 <= annotation.start_offset < annotation.end_offset <= len(self._output)
-        ]
+        valid_annotations = self._valid_annotations()
         ordered_keys: list[int] = []
         for annotation in valid_annotations:
             for key in annotation.source_keys:
@@ -144,6 +170,15 @@ class GroundedAnswerStreamParser:
             for key in ordered_keys
         ]
         return ReferenceBundle(annotations=annotations, sources=sources)
+
+    def cited_source_keys(self) -> frozenset[int]:
+        if not self._finished:
+            raise RuntimeError("finish the grounded answer parser first")
+        return frozenset(
+            key
+            for annotation in self._valid_annotations()
+            for key in annotation.source_keys
+        )
 
     def metrics(self) -> GroundedAnswerMetrics:
         return GroundedAnswerMetrics(
@@ -189,6 +224,13 @@ class GroundedAnswerStreamParser:
                 source_keys=list(requested),
             )
         )
+
+    def _valid_annotations(self) -> list[CitationAnnotation]:
+        return [
+            annotation
+            for annotation in self._annotations
+            if 0 <= annotation.start_offset < annotation.end_offset <= len(self._output)
+        ]
 
     def _emit(self, value: str, rendered: list[str]) -> None:
         if not value:
