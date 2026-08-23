@@ -122,8 +122,15 @@ standard SSE decoder. The stream accepts `start`, the stable-ID
 lifecycle, `activity`, `references`, `response_ready`, `suggestions`,
 `complete`, `cancelled`, and `error`. The Server buffers model text until the
 complete node establishes its role. Text accompanying a runtime tool call may
-arrive as bounded `progress`; a `final` item arrives only after structured
-answer validation. `response_ready` supplies the complete persisted turn
+arrive as bounded `progress`. The detachable subscription also negotiates
+`assistant-candidates-v1`: sanitized partial `final_answer` arguments then use
+`assistant_candidate_start`, `assistant_candidate_delta`, and
+`assistant_candidate_reset` while the structured answer is still arriving. A
+bounded suffix and all private citation markers stay server-side, and a model
+validation retry resets the candidate before replacement text appears. Clients
+without that explicit capability receive only the original validated item
+lifecycle. A `final` item completes only after structured answer validation.
+`response_ready` supplies the complete persisted turn
 snapshot, and an optional `suggestions` event may supplement it before
 `complete` closes the stream. The client never infers phase from prose or
 renders an unvalidated final draft. Progress and activity share one sequence
@@ -140,9 +147,12 @@ actions without waiting for a GET refetch, conversation title, or suggestion
 sidecar. `complete`, `cancelled`, and `error` are terminal. A dropped
 subscription reconnects with bounded backoff and event-ID deduplication; it
 never creates a second Turn or retries model generation. Unmounting or changing
-routes aborts only the local subscription. Stop is a separate authorized Server
-cancellation and the UI discloses when that cancellation cannot yet be
-confirmed. Once
+routes aborts only the local subscription. Moving to another conversation also
+releases that conversation's local Composer state; its accepted generation
+continues on the Server, so a different conversation can generate independently
+while the original remains limited to one running response. Stop is a separate
+authorized Server cancellation and the UI discloses when that cancellation
+cannot yet be confirmed. Once
 a turn is accepted into the optimistic transcript, the Composer clears
 immediately and its send action becomes the standard stop-square action for
 the lifetime of that stream. A failure before optimistic acceptance preserves

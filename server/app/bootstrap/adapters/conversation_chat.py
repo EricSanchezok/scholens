@@ -36,6 +36,9 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
     ConversationTurnBranchCreateRequest,
     ConversationTurnCreateRequest,
+    ConversationStreamAssistantCandidateDeltaEvent,
+    ConversationStreamAssistantCandidateResetEvent,
+    ConversationStreamAssistantCandidateStartEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
     ConversationStreamAssistantItemStartEvent,
@@ -83,6 +86,12 @@ logger = logging.getLogger(__name__)
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _JSON_OBJECT_LIST = TypeAdapter(list[dict[str, JsonValue]])
 _SUGGESTION_TAIL_SECONDS = 2.0
+
+
+def _is_assistant_candidate_frame(frame: str) -> bool:
+    return any(
+        line.startswith("event: assistant_candidate_") for line in frame.splitlines()
+    )
 
 
 class ConversationSuggestionGenerator(Protocol):
@@ -262,6 +271,7 @@ async def stream_conversation_agent(
     diagnostic_recorder: DiagnosticSnapshotRecorder | None = None,
     turn_start_override: ConversationTurnStart | None = None,
     limits_preacquired: bool = False,
+    include_assistant_candidates: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Run one contextual agent and expose its sanitized product event stream."""
     conversation_scope = executor.query(
@@ -526,6 +536,18 @@ async def stream_conversation_agent(
             if isinstance(event, ConversationAgentResult):
                 trace = event.trace
                 artifacts = event.artifacts
+                continue
+            if (
+                isinstance(
+                    event,
+                    (
+                        ConversationStreamAssistantCandidateStartEvent,
+                        ConversationStreamAssistantCandidateDeltaEvent,
+                        ConversationStreamAssistantCandidateResetEvent,
+                    ),
+                )
+                and not include_assistant_candidates
+            ):
                 continue
             if isinstance(event, ConversationStreamAssistantItemCompleteEvent):
                 if event.item.phase == "final":
@@ -927,6 +949,7 @@ class DefaultConversationChatGateway:
             diagnostic_recorder=self._diagnostic_recorder,
             turn_start_override=preparation.turn_start,
             limits_preacquired=True,
+            include_assistant_candidates=True,
         )
 
     async def stream(
@@ -1077,6 +1100,7 @@ class DefaultConversationChatGateway:
         turn_id: uuid.UUID,
         response_id: uuid.UUID,
         last_event_id: str | None,
+        include_assistant_candidates: bool = False,
     ) -> AsyncIterator[str]:
         _generation_snapshot(
             executor=self._executor,
@@ -1098,6 +1122,11 @@ class DefaultConversationChatGateway:
                         first_line = frame.partition("\n")[0]
                         if first_line.startswith("id: "):
                             cursor = first_line.removeprefix("id: ")
+                        if (
+                            not include_assistant_candidates
+                            and _is_assistant_candidate_frame(frame)
+                        ):
+                            continue
                         yield frame
                         if any(
                             terminal in frame

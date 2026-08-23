@@ -62,6 +62,11 @@ type StreamSession = {
   durable: boolean;
 };
 
+function discardStreamDeltas(session: StreamSession) {
+  session.deltaBuffer?.discard();
+  session.deltaBuffer = undefined;
+}
+
 function sameContext(left: ResearchContext, right: ResearchContext) {
   if (left.kind !== right.kind) return false;
   if (left.kind === "library" || right.kind === "library") return true;
@@ -105,8 +110,10 @@ export function useConversationSession({
   const [liveTurn, setLiveTurn] = React.useState<LiveTurn | null>(null);
   const [liveTurnConversationId, setLiveTurnConversationId] =
     React.useState<string>();
-  const [submissionPending, setSubmissionPending] = React.useState(false);
+  const [submissionPendingConversationId, setSubmissionPendingConversationId] =
+    React.useState<string | null>();
   const streamSession = React.useRef<StreamSession | null>(null);
+  const detachedResponseOwners = React.useRef(new Map<string, string>());
   const submissionInFlight = React.useRef(false);
   const composerForm = useResearchComposerForm();
   const scopeIdentity = `${scopeType}:${scopeId ?? ""}`;
@@ -151,7 +158,7 @@ export function useConversationSession({
       streamSession.current = null;
       session.controller.abort();
       submissionInFlight.current = false;
-      setSubmissionPending(false);
+      setSubmissionPendingConversationId(undefined);
     }
   }, [scopeIdentity]);
 
@@ -182,13 +189,40 @@ export function useConversationSession({
   function releaseSubmission(session: StreamSession) {
     if (streamSession.current !== session) return;
     submissionInFlight.current = false;
-    setSubmissionPending(false);
+    setSubmissionPendingConversationId(undefined);
   }
 
-  function discardStreamDeltas(session: StreamSession) {
-    session.deltaBuffer?.discard();
-    session.deltaBuffer = undefined;
-  }
+  const detachForeignStream = React.useCallback(
+    function detachForeignStream(nextConversationId: string | undefined) {
+      const session = streamSession.current;
+      if (session && session.conversationId !== nextConversationId) {
+        detachedResponseOwners.current.set(
+          session.responseId,
+          session.conversationId,
+        );
+        session.superseded = true;
+        discardStreamDeltas(session);
+        streamSession.current = null;
+        session.controller.abort();
+        submissionInFlight.current = false;
+      }
+      if (liveTurnConversationId !== nextConversationId) {
+        setLiveTurn(null);
+        setLiveTurnConversationId(undefined);
+      }
+      if (
+        submissionPendingConversationId !== undefined &&
+        submissionPendingConversationId !== (nextConversationId ?? null)
+      ) {
+        setSubmissionPendingConversationId(undefined);
+      }
+    },
+    [liveTurnConversationId, submissionPendingConversationId],
+  );
+
+  React.useEffect(() => {
+    detachForeignStream(activeConversationId);
+  }, [activeConversationId, detachForeignStream]);
 
   React.useEffect(() => {
     const session = streamSession.current;
@@ -205,7 +239,7 @@ export function useConversationSession({
     discardStreamDeltas(session);
     session.controller.abort();
     submissionInFlight.current = false;
-    setSubmissionPending(false);
+    setSubmissionPendingConversationId(undefined);
     setLiveTurn((current) =>
       current?.responseId === session.responseId ? null : current,
     );
@@ -243,7 +277,10 @@ export function useConversationSession({
     event: ConversationStreamEvent,
   ) {
     if (streamSession.current !== session || session.superseded) return;
-    if (event.type === "assistant_item_delta") {
+    if (
+      event.type === "assistant_item_delta" ||
+      event.type === "assistant_candidate_delta"
+    ) {
       if (event.response_id !== session.responseId) return;
       queueStreamDelta(session, event);
       return;
@@ -355,6 +392,11 @@ export function useConversationSession({
     ) {
       return;
     }
+    const detachedOwner = detachedResponseOwners.current.get(
+      runningResponse.id,
+    );
+    if (detachedOwner && detachedOwner !== activeConversationId) return;
+    detachedResponseOwners.current.delete(runningResponse.id);
     const controller = new AbortController();
     const session: StreamSession = {
       conversationId: activeConversationId,
@@ -369,7 +411,7 @@ export function useConversationSession({
     };
     streamSession.current = session;
     submissionInFlight.current = true;
-    setSubmissionPending(true);
+    setSubmissionPendingConversationId(activeConversationId);
     setLiveTurnConversationId(activeConversationId);
     setLiveTurn({
       ...createLiveTurn(
@@ -411,7 +453,7 @@ export function useConversationSession({
         if (streamSession.current !== session) return;
         streamSession.current = null;
         submissionInFlight.current = false;
-        setSubmissionPending(false);
+        setSubmissionPendingConversationId(undefined);
         void queryClient.invalidateQueries({
           queryKey: conversationKeys.turns(activeConversationId),
         });
@@ -422,7 +464,7 @@ export function useConversationSession({
         session.superseded = true;
         streamSession.current = null;
         submissionInFlight.current = false;
-        setSubmissionPending(false);
+        setSubmissionPendingConversationId(undefined);
         setLiveTurn((current) =>
           current?.responseId === session.responseId ? null : current,
         );
@@ -442,9 +484,11 @@ export function useConversationSession({
   ]);
 
   async function sendMessage(message: string) {
+    detachForeignStream(activeConversationId);
     if (submissionInFlight.current) return;
     submissionInFlight.current = true;
-    setSubmissionPending(true);
+    setSubmissionPendingConversationId(activeConversationId ?? null);
+    setLiveTurnConversationId(activeConversationId);
     supersedeReadyStream();
     const previousLiveTurn =
       liveTurn?.state === "ready" || liveTurn?.state === "complete"
@@ -461,6 +505,7 @@ export function useConversationSession({
           paper_context: context,
         });
         nextConversationId = conversation.id;
+        setSubmissionPendingConversationId(conversation.id);
         setCreatedConversationId(conversation.id);
         queryClient.setQueryData(
           conversationKeys.detail(conversation.id),
@@ -585,7 +630,7 @@ export function useConversationSession({
       if (!session || streamSession.current === session) {
         if (streamSession.current === session) streamSession.current = null;
         submissionInFlight.current = false;
-        setSubmissionPending(false);
+        setSubmissionPendingConversationId(undefined);
       }
     }
   }
@@ -605,12 +650,13 @@ export function useConversationSession({
     depth: number;
     stream: (session: StreamSession) => Promise<void>;
   }): Promise<void> {
+    detachForeignStream(activeConversationId);
     if (!activeConversationId || submissionInFlight.current) {
       return Promise.reject(new Error("Conversation is unavailable or busy"));
     }
     const sessionConversationId = activeConversationId;
     submissionInFlight.current = true;
-    setSubmissionPending(true);
+    setSubmissionPendingConversationId(activeConversationId);
     supersedeReadyStream();
     const previousLiveTurn =
       liveTurn?.state === "ready" || liveTurn?.state === "complete"
@@ -708,7 +754,7 @@ export function useConversationSession({
         if (streamSession.current === session) {
           streamSession.current = null;
           submissionInFlight.current = false;
-          setSubmissionPending(false);
+          setSubmissionPendingConversationId(undefined);
         }
       }
     }
@@ -861,7 +907,13 @@ export function useConversationSession({
       });
   }
 
-  const conversationBusy = submissionPending || liveTurn?.state === "streaming";
+  const activeLiveTurn =
+    liveTurnConversationId === activeConversationId ? liveTurn : null;
+  const activeSubmissionPending =
+    submissionPendingConversationId !== undefined &&
+    submissionPendingConversationId === (activeConversationId ?? null);
+  const conversationBusy =
+    activeSubmissionPending || activeLiveTurn?.state === "streaming";
   const conversationUnavailable = activeConversationId
     ? conversationQuery.isPending ||
       conversationQuery.isError ||
@@ -880,13 +932,13 @@ export function useConversationSession({
     conversationQuery,
     conversationUnavailable,
     editMessage,
-    liveTurn: liveTurnConversationId === activeConversationId ? liveTurn : null,
+    liveTurn: activeLiveTurn,
     retryResponse,
     selectBranch,
     selectResponse,
     sendMessage,
     stop,
-    submissionPending,
+    submissionPending: activeSubmissionPending,
     turnsQuery,
     useSuggestion,
   };

@@ -2818,6 +2818,55 @@ export interface components {
              */
             type: "activity";
         };
+        /** ConversationStreamAssistantCandidateDeltaEvent */
+        ConversationStreamAssistantCandidateDeltaEvent: {
+            /** Delta */
+            delta: string;
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_candidate_delta";
+        };
+        /** ConversationStreamAssistantCandidateResetEvent */
+        ConversationStreamAssistantCandidateResetEvent: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_candidate_reset";
+        };
+        /** ConversationStreamAssistantCandidateStartEvent */
+        ConversationStreamAssistantCandidateStartEvent: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Response Id
+             * Format: uuid
+             */
+            response_id: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "assistant_candidate_start";
+        };
         /** ConversationStreamAssistantItemCompleteEvent */
         ConversationStreamAssistantItemCompleteEvent: {
             item: components["schemas"]["ConversationAssistantItem"];
@@ -3004,7 +3053,7 @@ export interface components {
          * ConversationSubscriptionEventSchema
          * @description Schema for detachable response subscriptions, including cancellation.
          */
-        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
+        ConversationSubscriptionEventSchema: components["schemas"]["ConversationStreamStartEvent"] | components["schemas"]["ConversationStreamActivityEvent"] | components["schemas"]["ConversationStreamAssistantCandidateStartEvent"] | components["schemas"]["ConversationStreamAssistantCandidateDeltaEvent"] | components["schemas"]["ConversationStreamAssistantCandidateResetEvent"] | components["schemas"]["ConversationStreamAssistantItemStartEvent"] | components["schemas"]["ConversationStreamAssistantItemDeltaEvent"] | components["schemas"]["ConversationStreamAssistantItemCompleteEvent"] | components["schemas"]["ConversationStreamReferencesEvent"] | components["schemas"]["ConversationStreamResponseReadyEvent"] | components["schemas"]["ConversationStreamSuggestionsEvent"] | components["schemas"]["ConversationStreamCompleteEvent"] | components["schemas"]["ConversationStreamCancelledEvent"] | components["schemas"]["ConversationStreamErrorEvent"];
         /** ConversationSummaryResponse */
         ConversationSummaryResponse: {
             /** Archived At */
@@ -6910,6 +6959,7 @@ export interface operations {
             query?: never;
             header?: {
                 "Last-Event-ID"?: string | null;
+                "X-Scholens-Stream-Capabilities"?: string | null;
             };
             path: {
                 conversation_id: string;

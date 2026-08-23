@@ -27,6 +27,9 @@ export type ConversationGenerationAccepted =
 const conversationStreamEventTypes = {
   start: true,
   activity: true,
+  assistant_candidate_start: true,
+  assistant_candidate_delta: true,
+  assistant_candidate_reset: true,
   assistant_item_start: true,
   assistant_item_delta: true,
   assistant_item_complete: true,
@@ -246,6 +249,7 @@ export async function subscribeConversationEvents({
           credentials: "include",
           headers: {
             Accept: "text/event-stream",
+            "X-Scholens-Stream-Capabilities": "assistant-candidates-v1",
             ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
           },
           signal,

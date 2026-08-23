@@ -23,6 +23,7 @@ from app.llm.errors import classify_llm_error
 from app.llm.grounded_answer import (
     GroundedAnswerInspection,
     GroundedAnswerMetrics,
+    GroundedAnswerStreamParser,
     grounded_citation_instructions,
     inspect_grounded_answer,
 )
@@ -41,6 +42,9 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
     ConversationTurnCreateRequest,
     ConversationStreamActivityEvent,
+    ConversationStreamAssistantCandidateDeltaEvent,
+    ConversationStreamAssistantCandidateResetEvent,
+    ConversationStreamAssistantCandidateStartEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
     ConversationStreamAssistantItemStartEvent,
@@ -105,6 +109,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     ToolCallPart,
+    ToolCallPartDelta,
     UserPromptPart,
 )
 from pydantic_ai.messages import TextPart as HistoryTextPart
@@ -117,6 +122,7 @@ _MAX_AGENT_REQUESTS = 32
 _MAX_AGENT_TOOL_CALLS = 24
 _MAX_TOOL_RESULT_TOKENS = 80_000
 _MAX_PROGRESS_CHARS = 4_000
+_FINAL_CANDIDATE_HOLD_CHARS = 32
 _FINAL_OUTPUT_TOOL_NAME = "final_answer"
 _VISIBLE_CITATION_LABEL = re.compile(
     r"\[A\d+(?:\s*,\s*A?\d+)*\]",
@@ -287,6 +293,9 @@ class FinalAnswer(BaseModel):
     )
 
 
+_FINAL_ANSWER_ADAPTER = TypeAdapter(FinalAnswer)
+
+
 @dataclass(slots=True)
 class _StreamedAssistantItem:
     id: str
@@ -295,6 +304,27 @@ class _StreamedAssistantItem:
     packet: AnswerPacket
     references: ReferenceBundle | None
     metrics: GroundedAnswerMetrics
+
+
+@dataclass(slots=True)
+class _FinalAnswerCandidate:
+    item_id: str | None = None
+    sequence: int | None = None
+    published_content: str = ""
+    started: bool = False
+    attempt_started: bool = False
+    reset_for_retry: bool = False
+    suppressed: bool = False
+    packet: AnswerPacket | None = None
+    parser: GroundedAnswerStreamParser | None = None
+    raw_content: str = ""
+    visible_content: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _ConsumedModelNode:
+    next_node: Any
+    progress_item: _StreamedAssistantItem | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,6 +337,9 @@ class ConversationAgentResult:
 
 ConversationAgentStreamEvent = (
     ConversationStreamActivityEvent
+    | ConversationStreamAssistantCandidateStartEvent
+    | ConversationStreamAssistantCandidateDeltaEvent
+    | ConversationStreamAssistantCandidateResetEvent
     | ConversationStreamAssistantItemStartEvent
     | ConversationStreamAssistantItemDeltaEvent
     | ConversationStreamAssistantItemCompleteEvent
@@ -574,15 +607,41 @@ class ScholensConversationAgent:
                 ),
             ) as agent_run:
                 node = agent_run.next_node
+                final_candidate = _FinalAnswerCandidate()
                 while not isinstance(node, End):
                     if isinstance(node, ModelRequestNode):
-                        next_node, item = await self._consume_model_node(
+                        if (
+                            final_candidate.attempt_started
+                            and final_candidate.started
+                            and final_candidate.item_id is not None
+                        ):
+                            yield ConversationStreamAssistantCandidateResetEvent(
+                                response_id=request.response_id,
+                                item_id=final_candidate.item_id,
+                            )
+                            final_candidate.published_content = ""
+                            final_candidate.reset_for_retry = True
+                        final_candidate.attempt_started = False
+                        consumed: _ConsumedModelNode | None = None
+                        async for model_event in self._consume_model_node(
                             node=node,
                             agent_run=agent_run,
                             deps=deps,
                             turn_id=request.turn_id,
+                            response_id=request.response_id,
                             nonce=nonce,
-                        )
+                            final_candidate=final_candidate,
+                        ):
+                            if isinstance(model_event, _ConsumedModelNode):
+                                consumed = model_event
+                            else:
+                                yield model_event
+                        if consumed is None:
+                            raise RuntimeError(
+                                "Conversation model node did not complete"
+                            )
+                        next_node = consumed.next_node
+                        item = consumed.progress_item
                         if item is not None:
                             progress = self._progress_entry(item)
                             deps.progress_entries.append(progress)
@@ -630,6 +689,7 @@ class ScholensConversationAgent:
                     deps=deps,
                     turn_id=request.turn_id,
                     inspection=inspection,
+                    sequence=final_candidate.sequence,
                 )
                 if final_item is None:
                     raise RuntimeError(
@@ -713,9 +773,12 @@ class ScholensConversationAgent:
         agent_run: AgentRun[_ConversationAgentDependencies, FinalAnswer],
         deps: _ConversationAgentDependencies,
         turn_id: uuid.UUID,
+        response_id: uuid.UUID,
         nonce: str,
-    ) -> tuple[Any, _StreamedAssistantItem | None]:
+        final_candidate: _FinalAnswerCandidate,
+    ) -> AsyncGenerator[ConversationAgentStreamEvent | _ConsumedModelNode, None]:
         text_parts: list[str] = []
+        tool_parts: dict[int, ToolCallPart] = {}
         async with node.stream(agent_run.ctx) as stream:
             async for event in stream:
                 if isinstance(event, PartStartEvent) and isinstance(
@@ -726,23 +789,205 @@ class ScholensConversationAgent:
                     event.delta, TextPartDelta
                 ):
                     text_parts.append(event.delta.content_delta)
+                elif isinstance(event, PartStartEvent) and isinstance(
+                    event.part, ToolCallPart
+                ):
+                    tool_parts[event.index] = event.part
+                elif isinstance(event, PartDeltaEvent) and isinstance(
+                    event.delta, ToolCallPartDelta
+                ):
+                    existing = tool_parts.get(event.index)
+                    if existing is None:
+                        created = event.delta.as_part()
+                        if isinstance(created, ToolCallPart):
+                            tool_parts[event.index] = created
+                    else:
+                        updated = event.delta.apply(existing)
+                        if isinstance(updated, ToolCallPart):
+                            tool_parts[event.index] = updated
+                else:
+                    continue
+
+                partial_answer = self._partial_final_answer(tool_parts.get(event.index))
+                if partial_answer is None:
+                    continue
+                for candidate_event in self._candidate_events(
+                    candidate=final_candidate,
+                    answer=partial_answer.answer,
+                    deps=deps,
+                    turn_id=turn_id,
+                    response_id=response_id,
+                    nonce=nonce,
+                ):
+                    yield candidate_event
 
         next_node = await agent_run.next(node)
         if not text_parts or not isinstance(next_node, CallToolsNode):
-            return next_node, None
+            yield _ConsumedModelNode(next_node=next_node, progress_item=None)
+            return
         tool_names = {
             part.tool_name
             for part in next_node.model_response.parts
             if isinstance(part, ToolCallPart)
         }
         if not tool_names or _FINAL_OUTPUT_TOOL_NAME in tool_names:
-            return next_node, None
-        return next_node, self._assistant_item_from_text(
-            deps=deps,
-            turn_id=turn_id,
-            raw_content="".join(text_parts),
-            nonce=nonce,
+            yield _ConsumedModelNode(next_node=next_node, progress_item=None)
+            return
+        yield _ConsumedModelNode(
+            next_node=next_node,
+            progress_item=self._assistant_item_from_text(
+                deps=deps,
+                turn_id=turn_id,
+                raw_content="".join(text_parts),
+                nonce=nonce,
+            ),
         )
+
+    @staticmethod
+    def _partial_final_answer(part: ToolCallPart | None) -> FinalAnswer | None:
+        if part is None or part.tool_name != _FINAL_OUTPUT_TOOL_NAME:
+            return None
+        try:
+            if isinstance(part.args, dict):
+                return FinalAnswer.model_validate(part.args)
+            if not isinstance(part.args, str):
+                return None
+            return _FINAL_ANSWER_ADAPTER.validate_json(
+                part.args,
+                experimental_allow_partial="trailing-strings",
+            )
+        except ValueError:
+            return None
+
+    def _candidate_events(
+        self,
+        *,
+        candidate: _FinalAnswerCandidate,
+        answer: str,
+        deps: _ConversationAgentDependencies,
+        turn_id: uuid.UUID,
+        response_id: uuid.UUID,
+        nonce: str,
+    ) -> list[
+        ConversationStreamAssistantCandidateStartEvent
+        | ConversationStreamAssistantCandidateDeltaEvent
+        | ConversationStreamAssistantCandidateResetEvent
+    ]:
+        events: list[
+            ConversationStreamAssistantCandidateStartEvent
+            | ConversationStreamAssistantCandidateDeltaEvent
+            | ConversationStreamAssistantCandidateResetEvent
+        ] = []
+        if not candidate.attempt_started:
+            candidate.attempt_started = True
+            candidate.suppressed = False
+            candidate.published_content = ""
+            candidate.packet = self._answer_packet(deps)
+            candidate.parser = GroundedAnswerStreamParser(
+                candidate.packet.sources,
+                nonce=nonce,
+            )
+            candidate.raw_content = ""
+            candidate.visible_content = ""
+            if candidate.sequence is None:
+                candidate.sequence = deps.allocate_sequence()
+                candidate.item_id = self._assistant_item_id(turn_id, candidate.sequence)
+            if candidate.item_id is None or candidate.sequence is None:
+                raise RuntimeError("Final answer candidate identity is incomplete")
+            if candidate.started:
+                if candidate.reset_for_retry:
+                    candidate.reset_for_retry = False
+                else:
+                    events.append(
+                        ConversationStreamAssistantCandidateResetEvent(
+                            response_id=response_id,
+                            item_id=candidate.item_id,
+                        )
+                    )
+            else:
+                candidate.started = True
+                events.append(
+                    ConversationStreamAssistantCandidateStartEvent(
+                        response_id=response_id,
+                        item_id=candidate.item_id,
+                        sequence=candidate.sequence,
+                    )
+                )
+
+        parser = candidate.parser
+        if parser is None:
+            raise RuntimeError("Final answer candidate parser is unavailable")
+        if answer.startswith(candidate.raw_content):
+            candidate.visible_content += parser.feed(
+                answer[len(candidate.raw_content) :]
+            )
+        else:
+            packet = candidate.packet
+            if packet is None:
+                raise RuntimeError("Final answer candidate packet is unavailable")
+            candidate.parser = GroundedAnswerStreamParser(
+                packet.sources,
+                nonce=nonce,
+            )
+            candidate.visible_content = candidate.parser.feed(answer)
+            if candidate.published_content:
+                events.append(
+                    ConversationStreamAssistantCandidateResetEvent(
+                        response_id=response_id,
+                        item_id=cast(str, candidate.item_id),
+                    )
+                )
+                candidate.published_content = ""
+        candidate.raw_content = answer
+        visible_content = candidate.visible_content
+        visible_normalized = visible_content.casefold()
+        unsafe_candidate = bool(
+            _VISIBLE_CITATION_LABEL.search(visible_content)
+            or any(
+                marker in visible_normalized
+                for marker in (
+                    "source_keys",
+                    "private marker",
+                    "initial answer packet",
+                    "scholens_cite",
+                )
+            )
+        )
+        if unsafe_candidate:
+            if not candidate.suppressed and candidate.published_content:
+                events.append(
+                    ConversationStreamAssistantCandidateResetEvent(
+                        response_id=response_id,
+                        item_id=cast(str, candidate.item_id),
+                    )
+                )
+            candidate.published_content = ""
+            candidate.suppressed = True
+            return events
+        if candidate.suppressed:
+            return events
+
+        publishable_length = max(0, len(visible_content) - _FINAL_CANDIDATE_HOLD_CHARS)
+        publishable = visible_content[:publishable_length]
+        if not publishable.startswith(candidate.published_content):
+            events.append(
+                ConversationStreamAssistantCandidateResetEvent(
+                    response_id=response_id,
+                    item_id=cast(str, candidate.item_id),
+                )
+            )
+            candidate.published_content = ""
+        delta = publishable[len(candidate.published_content) :]
+        if delta:
+            events.append(
+                ConversationStreamAssistantCandidateDeltaEvent(
+                    response_id=response_id,
+                    item_id=cast(str, candidate.item_id),
+                    delta=delta,
+                )
+            )
+            candidate.published_content = publishable
+        return events
 
     async def _stream_tool_activities(
         self,
@@ -1424,13 +1669,14 @@ Initial server-validated answer material:
         turn_id: uuid.UUID,
         inspection: GroundedAnswerInspection,
         packet: AnswerPacket | None = None,
+        sequence: int | None = None,
     ) -> _StreamedAssistantItem | None:
         if not inspection.visible_content.strip():
             return None
-        sequence = deps.allocate_sequence()
+        item_sequence = sequence if sequence is not None else deps.allocate_sequence()
         return _StreamedAssistantItem(
-            id=self._assistant_item_id(turn_id, sequence),
-            sequence=sequence,
+            id=self._assistant_item_id(turn_id, item_sequence),
+            sequence=item_sequence,
             content=inspection.visible_content,
             packet=packet or self._answer_packet(deps),
             references=inspection.references,

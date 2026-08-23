@@ -322,7 +322,14 @@ three as terminal. `response_ready` carries the complete persisted turn snapshot
 unblocks response actions; `suggestions` is an optional late sidecar update.
 The runtime buffers model text until the complete model node establishes its
 role. Text accompanying an ordinary tool call may be published as bounded
-`progress`; a `final` item is published only after the model submits the
+`progress`. Subscriptions that send
+`X-Scholens-Stream-Capabilities: assistant-candidates-v1` additionally receive
+sanitized `assistant_candidate_start`, `assistant_candidate_delta`, and
+`assistant_candidate_reset` events parsed from partial structured
+`final_answer` arguments. The adapter filters those additive events for older
+clients; retries clear the provisional candidate, while a bounded suffix and
+private citation protocol never enter it. A `final` item is published only
+after the model submits the
 structured `final_answer` output and its visible content and private citation
 protocol validate. A successful source-backed tool result also makes at least
 one valid materialized reference mandatory; missing references, invalid source
@@ -345,7 +352,9 @@ Parent and selected-child pointers form a persistent tree, while the
 Conversation selects one root and publishes a monotonic path revision. Agent
 history contains only the generated turn's selected ancestors. Only the active
 leaf may be retried or switch its selected response, and only one response may
-run in a Conversation at a time. Creating a normal next turn prunes unselected
+run in a Conversation at a time. Different conversations may generate
+concurrently under the user's interactive concurrency limit. Creating a normal
+next turn prunes unselected
 response variants from its parent; prompt branches are never pruned as a side
 effect. The active leaf may own persisted follow-up suggestions. Suggestion generation
 starts beside the answer stream and shares the same SSE instead of requiring a

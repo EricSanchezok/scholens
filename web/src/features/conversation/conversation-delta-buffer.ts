@@ -2,7 +2,7 @@ import type { ConversationStreamEvent } from "./api/conversations";
 
 export type ConversationDeltaEvent = Extract<
   ConversationStreamEvent,
-  { type: "assistant_item_delta" }
+  { type: "assistant_item_delta" | "assistant_candidate_delta" }
 >;
 
 type AnimationFrameScheduler = {

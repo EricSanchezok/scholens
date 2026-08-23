@@ -14,6 +14,15 @@ function delta(value: string): ConversationDeltaEvent {
   };
 }
 
+function candidateDelta(value: string): ConversationDeltaEvent {
+  return {
+    type: "assistant_candidate_delta",
+    response_id: "60000000-0000-4000-8000-000000000001",
+    item_id: "assistant:1",
+    delta: value,
+  };
+}
+
 describe("ConversationDeltaBuffer", () => {
   it("commits ordered deltas once per animation frame", () => {
     let scheduled: FrameRequestCallback | undefined;
@@ -63,5 +72,26 @@ describe("ConversationDeltaBuffer", () => {
     buffer.flush();
 
     expect(onFlush).not.toHaveBeenCalled();
+  });
+
+  it("batches candidate deltas with the same frame policy", () => {
+    let scheduled: FrameRequestCallback | undefined;
+    const onFlush = vi.fn();
+    const buffer = new ConversationDeltaBuffer(onFlush, {
+      cancel: vi.fn(),
+      request: (callback) => {
+        scheduled = callback;
+        return 17;
+      },
+    });
+
+    buffer.push(candidateDelta("候选"));
+    buffer.push(candidateDelta("答案"));
+    scheduled?.(16);
+
+    expect(onFlush).toHaveBeenCalledWith([
+      candidateDelta("候选"),
+      candidateDelta("答案"),
+    ]);
   });
 });

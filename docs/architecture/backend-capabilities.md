@@ -436,8 +436,13 @@ bounded and projected before returning to the model. `Agent.iter()` exposes
 complete model and tool nodes to the harness, which buffers model text until the
 node establishes its role. Text accompanying an ordinary runtime tool call may
 complete as bounded `progress`. A run can terminate only through the structured
-`final_answer` output; its visible answer and private citation protocol validate
-before any final delta or persistence. Plain terminal text, empty visible
+`final_answer` output. While that tool's JSON arguments stream, the harness can
+partially validate `answer`, strip private citation markers, hold a bounded
+suffix, and publish an opt-in provisional candidate. A later validation retry
+resets that stable candidate before replacement text; clients that do not
+negotiate the candidate capability receive no provisional events. The visible
+answer and private citation protocol still validate before the canonical final
+item or persistence. Plain terminal text, empty visible
 content, citation-only output, and copied private protocol receive bounded model
 retries and then fail through the stable invalid-response path. After a
 successful source-backed tool call registers validated source keys, the final
@@ -462,6 +467,11 @@ Redis Stream is only a replayable delivery log; PostgreSQL remains authoritative
 for running and terminal Response state. Raw
 reasoning, provider heartbeats, tool identity, full parameters, and tool return
 payloads remain internal diagnostics.
+
+The aggregate serializes generation only within one Conversation. Separate
+conversations may hold concurrent accepted responses under the per-user
+interactive limit; changing the active browser conversation detaches its local
+subscription without cancelling that Server-owned work.
 
 The conversation aggregate has one canonical Turn/Response tree rather than a
 second message-shaped domain model. Any required compatibility translation

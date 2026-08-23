@@ -35,6 +35,19 @@ describe("conversation SSE parsing", () => {
     });
   });
 
+  it("parses capability-gated assistant candidate events", () => {
+    expect(
+      parseConversationEventBlock(
+        'event: assistant_candidate_delta\ndata: {"type":"assistant_candidate_delta","response_id":"60000000-0000-4000-8000-000000000001","item_id":"assistant-1","delta":"hello"}',
+      ),
+    ).toEqual({
+      type: "assistant_candidate_delta",
+      response_id: responseId,
+      item_id: "assistant-1",
+      delta: "hello",
+    });
+  });
+
   it("joins multiline data fields and ignores comments", () => {
     expect(
       parseConversationEventBlock(
@@ -127,6 +140,9 @@ describe("durable conversation generation", () => {
     const subscription = fetchMock.mock.calls[1]?.[0] as Request;
     expect(subscription.method).toBe("GET");
     expect(subscription.url).toContain(`/${responseId}/events`);
+    expect(subscription.headers.get("X-Scholens-Stream-Capabilities")).toBe(
+      "assistant-candidates-v1",
+    );
   });
 
   it("keeps the legacy inline SSE contract as a compatibility fallback", async () => {

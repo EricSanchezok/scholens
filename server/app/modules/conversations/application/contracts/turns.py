@@ -52,6 +52,26 @@ class ConversationStreamAssistantItemDeltaEvent(BaseModel):
     delta: str
 
 
+class ConversationStreamAssistantCandidateStartEvent(BaseModel):
+    type: Literal["assistant_candidate_start"] = "assistant_candidate_start"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+    sequence: int = Field(ge=1)
+
+
+class ConversationStreamAssistantCandidateDeltaEvent(BaseModel):
+    type: Literal["assistant_candidate_delta"] = "assistant_candidate_delta"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+    delta: str
+
+
+class ConversationStreamAssistantCandidateResetEvent(BaseModel):
+    type: Literal["assistant_candidate_reset"] = "assistant_candidate_reset"
+    response_id: uuid.UUID
+    item_id: str = Field(min_length=1, max_length=200)
+
+
 class ConversationStreamAssistantItemCompleteEvent(BaseModel):
     type: Literal["assistant_item_complete"] = "assistant_item_complete"
     response_id: uuid.UUID
@@ -111,6 +131,9 @@ ConversationLegacyStreamEvent = Annotated[
 ConversationStreamEvent = Annotated[
     ConversationStreamStartEvent
     | ConversationStreamActivityEvent
+    | ConversationStreamAssistantCandidateStartEvent
+    | ConversationStreamAssistantCandidateDeltaEvent
+    | ConversationStreamAssistantCandidateResetEvent
     | ConversationStreamAssistantItemStartEvent
     | ConversationStreamAssistantItemDeltaEvent
     | ConversationStreamAssistantItemCompleteEvent

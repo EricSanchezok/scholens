@@ -23,6 +23,9 @@ from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
     ConversationTurnCreateRequest,
     ConversationStreamActivityEvent,
+    ConversationStreamAssistantCandidateDeltaEvent,
+    ConversationStreamAssistantCandidateResetEvent,
+    ConversationStreamAssistantCandidateStartEvent,
     ConversationStreamAssistantItemCompleteEvent,
     ConversationStreamAssistantItemDeltaEvent,
     ConversationStreamReferencesEvent,
@@ -352,17 +355,86 @@ async def test_zero_tool_answer_uses_injected_local_date() -> None:
         "result" if isinstance(event, ConversationAgentResult) else event.type
         for event in events
     ] == [
+        "assistant_candidate_start",
         "assistant_item_start",
         "assistant_item_delta",
         "assistant_item_complete",
         "result",
     ]
-    assert isinstance(events[2], ConversationStreamAssistantItemCompleteEvent)
-    assert events[2].item.phase == "final"
+    assert isinstance(events[3], ConversationStreamAssistantItemCompleteEvent)
+    assert events[3].item.phase == "final"
     assert "2026-08-06" in seen_instructions[0]
     assert "Asia/Shanghai" in seen_instructions[0]
     assert _result(events).trace is None
     assert all(not isinstance(event, dict) for event in events)
+
+
+@pytest.mark.asyncio
+async def test_structured_final_answer_streams_candidate_deltas_incrementally() -> None:
+    answer = (
+        "A structured final answer can reach the user while its tool arguments "
+        "are still arriving from the model, without publishing the held suffix."
+    )
+
+    async def streamed_answer(
+        _messages: list[ModelMessage], _info: AgentInfo
+    ) -> AsyncIterator[dict[int, DeltaToolCall]]:
+        yield {
+            0: DeltaToolCall(
+                name="final_answer",
+                json_args='{"answer":"A structured final answer can reach ',
+                tool_call_id="streamed-final",
+            )
+        }
+        yield {
+            0: DeltaToolCall(
+                json_args=("the user while its tool arguments are still arriving from ")
+            )
+        }
+        yield {
+            0: DeltaToolCall(
+                json_args=('the model, without publishing the held suffix."}')
+            )
+        }
+
+    events = await _events(
+        model=FunctionModel(stream_function=streamed_answer),
+        dispatcher=_Dispatcher(),
+        query="Stream the answer",
+        locale="en",
+        time_zone="UTC",
+    )
+
+    candidate_start = next(
+        event
+        for event in events
+        if isinstance(event, ConversationStreamAssistantCandidateStartEvent)
+    )
+    candidate_deltas = [
+        event.delta
+        for event in events
+        if isinstance(event, ConversationStreamAssistantCandidateDeltaEvent)
+    ]
+    final_complete_index = next(
+        index
+        for index, event in enumerate(events)
+        if isinstance(event, ConversationStreamAssistantItemCompleteEvent)
+        and event.item.phase == "final"
+    )
+    last_candidate_index = max(
+        index
+        for index, event in enumerate(events)
+        if isinstance(event, ConversationStreamAssistantCandidateDeltaEvent)
+    )
+
+    assert candidate_deltas
+    assert answer.startswith("".join(candidate_deltas))
+    assert len(answer) - len("".join(candidate_deltas)) == 32
+    assert last_candidate_index < final_complete_index
+    final_item = events[final_complete_index]
+    assert isinstance(final_item, ConversationStreamAssistantItemCompleteEvent)
+    assert final_item.item.id == candidate_start.item_id
+    assert final_item.item.content == answer
 
 
 @pytest.mark.asyncio
@@ -607,6 +679,15 @@ async def test_private_protocol_output_is_retried_before_it_reaches_the_user() -
 
     assert _final_text(events) == "The complete answer contains no internal protocol."
     assert any("private citation" in message for message in retry_messages)
+    assert any(
+        isinstance(event, ConversationStreamAssistantCandidateResetEvent)
+        for event in events
+    )
+    assert "source_keys" not in "".join(
+        event.delta
+        for event in events
+        if isinstance(event, ConversationStreamAssistantCandidateDeltaEvent)
+    )
     assert "source_keys" not in str(events)
 
 

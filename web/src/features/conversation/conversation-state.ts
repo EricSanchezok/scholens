@@ -251,7 +251,7 @@ export function reduceLiveTurn(
         ...current,
         entries: updateEntry(current.entries, event.activity),
       };
-    case "assistant_item_start":
+    case "assistant_candidate_start":
       if (
         current.completedItemIds.includes(event.item_id) ||
         current.provisionalItems.some((item) => item.id === event.item_id)
@@ -270,6 +270,37 @@ export function reduceLiveTurn(
           },
         ].sort((left, right) => left.sequence - right.sequence),
       };
+    case "assistant_item_start":
+      if (current.completedItemIds.includes(event.item_id)) return current;
+      if (current.provisionalItems.some((item) => item.id === event.item_id)) {
+        return {
+          ...current,
+          provisionalItems: current.provisionalItems.map((item) =>
+            item.id === event.item_id ? { ...item, content: "" } : item,
+          ),
+        };
+      }
+      return {
+        ...current,
+        provisionalItems: [
+          ...current.provisionalItems,
+          {
+            id: event.item_id,
+            sequence: event.sequence,
+            phase: "provisional" as const,
+            content: "",
+          },
+        ].sort((left, right) => left.sequence - right.sequence),
+      };
+    case "assistant_candidate_reset":
+      if (current.completedItemIds.includes(event.item_id)) return current;
+      return {
+        ...current,
+        provisionalItems: current.provisionalItems.map((item) =>
+          item.id === event.item_id ? { ...item, content: "" } : item,
+        ),
+      };
+    case "assistant_candidate_delta":
     case "assistant_item_delta":
       if (current.completedItemIds.includes(event.item_id)) return current;
       return {

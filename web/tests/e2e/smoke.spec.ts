@@ -323,6 +323,173 @@ test("lets the Server generate the initial conversation title", async ({
   });
 });
 
+test("allows another conversation to send while an accepted response continues", async ({
+  page,
+}) => {
+  const firstConversation = homeConversations[2]!;
+  const secondConversation = homeConversations[3]!;
+  const details = new Map(
+    [firstConversation, secondConversation].map((conversation) => [
+      conversation.id,
+      {
+        ...conversation,
+        paper_context: { kind: "library" as const },
+        tool_permissions: [],
+      },
+    ]),
+  );
+  const postedConversationIds: string[] = [];
+  let releaseFirstSubscription: (() => void) | undefined;
+  const secondAccepted = new Promise<void>((resolve) => {
+    releaseFirstSubscription = resolve;
+  });
+
+  await page.unroute(`${apiPattern}/conversations**`);
+  await page.route(`${apiPattern}/conversations**`, async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    const eventMatch = pathname.match(
+      /\/conversations\/([^/]+)\/turns\/([^/]+)\/responses\/([^/]+)\/events$/,
+    );
+    if (eventMatch && request.method() === "GET") {
+      const [, conversationId, turnId, responseId] = eventMatch;
+      if (conversationId === firstConversation.id) await secondAccepted;
+      const userQuery =
+        conversationId === firstConversation.id
+          ? "Keep researching the first topic"
+          : "Answer in the second conversation";
+      const turn = {
+        branch: { count: 1, index: 1 },
+        contexts: [],
+        depth: 1,
+        id: turnId,
+        locale: "en",
+        paper_context: { kind: "library" },
+        parent_turn_id: null,
+        reasoning_level: "standard",
+        responses: [
+          {
+            artifacts: null,
+            content: `Completed: ${userQuery}`,
+            duration_ms: 1200,
+            id: responseId,
+            references: null,
+            status: "completed",
+            trace: null,
+            variant_index: 1,
+          },
+        ],
+        selected_response_id: responseId,
+        suggestions: null,
+        time_zone: "UTC",
+        user_query: userQuery,
+      };
+      const events = [
+        { type: "response_ready", turn },
+        { type: "complete", turn_id: turnId, response_id: responseId },
+      ];
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: events
+          .map(
+            (event, index) =>
+              `id: ${index + 1}-0\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          )
+          .join(""),
+      });
+      return;
+    }
+
+    const turnsMatch = pathname.match(/\/conversations\/([^/]+)\/turns$/);
+    if (turnsMatch && request.method() === "POST") {
+      const conversationId = turnsMatch[1]!;
+      const body = request.postDataJSON() as {
+        response_id: string;
+        turn_id: string;
+      };
+      postedConversationIds.push(conversationId);
+      if (conversationId === secondConversation.id)
+        releaseFirstSubscription?.();
+      await route.fulfill({
+        contentType: "application/json",
+        status: 202,
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          generation_kind: "initial",
+          response_id: body.response_id,
+          turn_id: body.turn_id,
+          variant_index: 1,
+        }),
+      });
+      return;
+    }
+    if (turnsMatch && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [],
+          next_cursor: null,
+          path_revision: 0,
+        }),
+      });
+      return;
+    }
+
+    const detailMatch = pathname.match(/\/conversations\/([^/]+)$/);
+    if (detailMatch) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(details.get(detailMatch[1]!)),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [firstConversation, secondConversation],
+        next_cursor: null,
+      }),
+    });
+  });
+
+  await page.goto(`/?conversation=${firstConversation.id}`);
+  const composer = page.getByRole("textbox", { name: "Ask a follow-up" });
+  await composer.fill("Keep researching the first topic");
+  await composer.press("Enter");
+  await expect
+    .poll(() => postedConversationIds)
+    .toEqual([firstConversation.id]);
+
+  const secondDetail = page.waitForRequest(
+    (request) =>
+      request.method() === "GET" &&
+      new URL(request.url()).pathname.endsWith(
+        `/conversations/${secondConversation.id}`,
+      ),
+  );
+  await page.getByRole("link", { name: secondConversation.title }).click();
+  await secondDetail;
+  await expect(page).toHaveURL(
+    new RegExp(`conversation=${secondConversation.id}`),
+  );
+  await expect(
+    page.locator(`[data-conversation-row="${secondConversation.id}"]`),
+  ).toHaveAttribute("data-current", "");
+  await expect(
+    page.getByRole("button", { name: "Stop response" }),
+  ).toBeHidden();
+  await expect(composer).toBeEnabled();
+  await composer.fill("Answer in the second conversation");
+  await composer.press("Enter");
+
+  await expect
+    .poll(() => postedConversationIds)
+    .toEqual([firstConversation.id, secondConversation.id]);
+  await expect(
+    page.getByText("Completed: Answer in the second conversation"),
+  ).toBeVisible();
+});
+
 test("keeps an IME candidate-confirmation Enter in the Composer", async ({
   page,
 }) => {
