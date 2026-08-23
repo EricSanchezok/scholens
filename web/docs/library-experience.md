@@ -67,8 +67,11 @@ title and tabs, then fills the remaining content height. The panel follows the
 same spatial model as Project Chat, defaults to 512 px, and can be resized from
 400 to 720 px while preserving at least 640 px for the collection. The fixed
 page header does not resize when the panel opens or a user changes tabs. The
-collection and panel scroll
-independently when their own content exceeds the viewport. One persistent,
+collection and panel scroll independently when their own content exceeds the
+viewport. The virtualized collection body is the only vertical scroll owner on
+the Papers surface; page chrome, tabs, search, and filters remain fixed while
+continuation pages append, and a terminal downward gesture never chains into
+the Workspace page or exposes layout padding below the collection. One persistent,
 icon-only eye control in the collection toolbar opens and closes the panel,
 changes icon and pressed state with disclosure, and retains focus in place; the
 panel does not duplicate that control in its own header. Project Papers keeps

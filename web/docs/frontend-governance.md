@@ -88,6 +88,10 @@ and the header/body/footer spacing contract. Feature components may choose the
 placement, semantic content, and an intentional maximum width; they must not
 hand-roll an overlay, reserve arbitrary empty height, place actions inside the
 scrolling body, or recreate these slots with page-local padding.
+Portalled full-screen mobile panels use `SheetContent` with
+`placement="visual-full"`; that primitive follows the visual viewport height
+and vertical offset while owning safe-area padding. Feature code must not
+recreate that behavior with `h-dvh`, `100dvh`, or page-local keyboard offsets.
 
 Destructive confirmations use `AlertDialog`. A chooser is implemented only
 when its resource and mutation lifecycle are real. An unfinished dependency

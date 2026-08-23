@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { mockBillingUsage } from "./billing-fixture";
+import { mockVisualViewport, setVisualViewport } from "./visual-viewport";
 import path from "node:path";
 
 import { libraryPapers } from "../../src/features/library/api/fixtures";
@@ -1856,6 +1857,50 @@ test("keeps the context-panel control pinned to the viewport edge", async ({
       return Math.abs((before?.x ?? 0) - (after?.x ?? 0));
     })
     .toBeLessThanOrEqual(2);
+});
+
+test("keeps Reader Ask controls inside a panned visual viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockVisualViewport(page, { height: 844, offsetTop: 0 });
+  await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
+
+  const panel = page.locator('[data-placement="visual-full"]');
+  const newConversation = page
+    .getByRole("button", { name: "New conversation", exact: true })
+    .first();
+  const composer = page
+    .getByRole("textbox", { name: "Ask a follow-up" })
+    .locator("xpath=ancestor::form");
+  await expect(panel).toBeVisible();
+  await expect(newConversation).toBeVisible();
+  await expect(composer).toBeVisible();
+
+  await setVisualViewport(page, { height: 500, offsetTop: 220 });
+  await expect
+    .poll(() =>
+      panel.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          bottom: Math.round(bounds.bottom),
+          height: Math.round(bounds.height),
+          top: Math.round(bounds.top),
+        };
+      }),
+    )
+    .toEqual({ bottom: 720, height: 500, top: 220 });
+  const [newConversationBox, composerBox] = await Promise.all([
+    newConversation.boundingBox(),
+    composer.boundingBox(),
+  ]);
+  expect(newConversationBox!.y).toBeGreaterThanOrEqual(220);
+  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(720);
+
+  await setVisualViewport(page, { height: 844, offsetTop: 0 });
+  await expect
+    .poll(() => panel.evaluate((element) => element.clientHeight))
+    .toBe(844);
 });
 
 for (const width of [320, 390]) {

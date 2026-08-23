@@ -10,6 +10,7 @@ import {
   processingIngestion,
 } from "../../src/features/library/api/fixtures";
 import { mockBillingUsage } from "./billing-fixture";
+import { expectPaperCollectionScrollContained } from "./paper-collection-scroll";
 
 const apiPattern = "**/api/v1";
 const actor = {
@@ -332,6 +333,56 @@ test("keeps Library output controls on one mobile row", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("keeps progressive Library papers inside the collection scroller", async ({
+  page,
+}) => {
+  const papers = Array.from({ length: 32 }, (_, index) => {
+    const source = libraryPapers[index % libraryPapers.length]!;
+    const suffix = String(index + 1).padStart(12, "0");
+    return {
+      ...source,
+      document: {
+        ...source.document,
+        document_id: `70000000-0000-4000-8001-${suffix}`,
+        title: `Library paper ${index + 1}: ${source.document.title}`,
+      },
+      library_entry_id: `72000000-0000-4000-8001-${suffix}`,
+    };
+  });
+  let reads = 0;
+  await page.route(`${apiPattern}/library/papers**`, (route) => {
+    reads += 1;
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: cursor ? papers.slice(16) : papers.slice(0, 16),
+        next_cursor: cursor ? null : "next-library-papers",
+        previous_cursor: null,
+        total_count: papers.length,
+      }),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/library");
+  const scroller = page.locator("[data-paper-collection-scroll]");
+  await expect(scroller).toBeVisible();
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect.poll(() => reads).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+
+  await expectPaperCollectionScrollContained({
+    page,
+    toolbar: page.locator("[data-paper-collection-toolbar]"),
+  });
+  await expect(
+    page.getByRole("link", { name: /Library paper 32:/ }),
+  ).toBeVisible();
 });
 
 test("loads the tag catalog only when tag controls are requested", async ({

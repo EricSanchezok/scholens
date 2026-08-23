@@ -495,8 +495,11 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
           ) : null}
         </div>
         <PaperCollectionSidePanelLayout>
-          <div className="w-full min-w-0 px-4 pb-12 sm:px-6 lg:px-8">
-            <TabsContent className="mt-4 grid min-w-0 gap-4" value="papers">
+          <div className="flex h-full min-h-0 w-full min-w-0 flex-col px-4 sm:px-6 lg:px-8">
+            <TabsContent
+              className="mt-4 min-h-0 flex-1 overflow-hidden"
+              value="papers"
+            >
               <PapersView
                 attentionCount={summaryQuery.data?.attention_count ?? 0}
                 key={`${parsed.query}:${parsed.sort}:${parsed.statuses.join(",")}:${parsed.tagIds.join(",")}`}
@@ -599,7 +602,10 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
                 tagsLoading={tagsQuery.isPending && tagsRequested}
               />
             </TabsContent>
-            <TabsContent className="mt-4 grid min-w-0 gap-4" value="outputs">
+            <TabsContent
+              className="mt-4 min-h-0 flex-1 overflow-y-auto pb-12"
+              value="outputs"
+            >
               <OutputsView
                 data={outputsQuery.data}
                 error={outputsQuery.error}

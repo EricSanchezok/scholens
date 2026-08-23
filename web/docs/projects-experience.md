@@ -50,7 +50,10 @@ and the shared Conversation feature.
   always the current actor's private Library metadata and are labeled “My”. A
   Project-only paper is explicitly “Not in Library” and has no fabricated
   personal state. It does not load the full Project into browser memory or
-  implement a route-local search index.
+  implement a route-local search index. In the Papers view, the virtualized
+  collection body is the sole vertical scroll owner; Project identity, tabs,
+  search, and filters remain fixed while continuation pages append. Overview
+  and Outputs retain their normal page scrolling.
 - Project Papers and Outputs inherit Library's non-wrapping phone utility row:
   search retains the flexible width while filter, kind, and sort controls use
   their compact icon form. They never expand into vertically stacked control
@@ -89,8 +92,9 @@ remains local.
 Desktop detail defaults to one stable editorial canvas with a flat identity
 header and single-layer overview groups, with no reserved chat rail.
 Opening chat adds the same responsive `clamp(23rem, 34vw, 31.25rem)` side panel
-used by Reader. Mobile uses a Reader-style full-screen Sheet with dynamic
-viewport and safe-area padding; the Workspace app bar remains the only visible
+used by Reader. Mobile uses a Reader-style full-screen Sheet aligned to the
+visual viewport height and vertical offset with shared safe-area padding; the
+Workspace app bar remains the only visible
 page title, while conversation history and New Conversation keep the same
 placement and icons as Reader. Papers and rows become one-column compositions
 below the desktop breakpoints, and all controls remain usable at 320px.

@@ -132,7 +132,7 @@ export function PaperSearchResults({
   }
 
   return (
-    <div className="min-w-0">
+    <div className="h-full min-h-0 min-w-0">
       <PaperCollectionWorkbench
         items={items}
         onStatusChange={(item, status) => {
