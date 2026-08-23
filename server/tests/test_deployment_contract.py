@@ -261,6 +261,15 @@ def test_bootstrap_roles_enforce_immutable_release_and_scoped_secrets() -> None:
         item for item in production if "s3:PutObject" in _actions(item)
     )
     assert "cloudformation/*" in str(production_put["Resource"])
+    avatar_simulation = next(
+        item for item in production if "iam:SimulatePrincipalPolicy" in _actions(item)
+    )
+    assert avatar_simulation["Resource"] == {
+        "Fn::Sub": (
+            "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/"
+            "SanchezCloudScholensApiTaskRole"
+        )
+    }
     database_put = next(item for item in database if "s3:PutObject" in _actions(item))
     assert "migrations/*" in str(database_put["Resource"])
     database_describe_task_definition = next(
@@ -997,10 +1006,15 @@ def test_shared_avatar_access_is_read_only_and_api_scoped() -> None:
     for deployment_contract in (workflow, readme):
         assert "sanchezcloud-account-center-foundation" in deployment_contract
         assert "Outputs[?OutputKey==`AvatarKmsKeyArn`]" in deployment_contract
-        assert 'test "$avatar_kms_key_arn" != None' in deployment_contract
+    assert 'test "$avatar_kms_key_arn" != None' in workflow
+    assert 'test "$avatar_kms_key_arn" != None' in readme
+    assert "iam simulate-principal-policy" in workflow
+    assert "AllowedByPermissionsBoundary == true" in workflow
+    assert "s3:GetObject" in workflow
+    assert "kms:Decrypt" in workflow
     assert (
         workflow.count(
-            'AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$avatar_kms_key_arn")'
+            'AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$AVATAR_KMS_KEY_ARN")'
         )
         == 2
     )

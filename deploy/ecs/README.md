@@ -329,6 +329,12 @@ Deploy a reviewed bootstrap permissions-boundary update before a runtime templat
 depends on its new action. In particular, the scoped `s3:GetObjectVersion` boundary must
 be active before deploying the API role policy that performs version-locked staged-upload
 reads; verify the managed policy's default version before starting the runtime release.
+Every later runtime release also simulates the live API role's `s3:GetObject` and
+`kms:Decrypt` decisions for the shared avatar prefix and key. The release fails closed
+unless both the role policy and its permissions boundary allow the exact dependency with
+the required KMS context. Therefore the administrator-owned bootstrap must be updated
+before a release that introduces or changes shared-avatar access; a committed template or
+runtime stack parameter alone is not accepted as proof of the effective permission.
 The restricted role scopes the serverless-cache ARN to the canonical
 `sanchezcloud-scholens` name and includes both create and rollback deletion for each
 CloudFormation-managed bucket policy; keep those lifecycle permissions symmetric when the

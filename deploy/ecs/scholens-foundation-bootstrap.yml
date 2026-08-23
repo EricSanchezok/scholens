@@ -281,6 +281,7 @@ Resources:
           - {Action: ['s3:GetObject', 's3:PutObject'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}/cloudformation/*'}
           - {Action: ['s3:GetBucketLocation', 's3:ListBucket'], Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:s3:::sanchezcloud-scholens-releases-${AWS::AccountId}-${AWS::Region}'}
           - {Action: ['ecs:DescribeServices', 'ecs:DescribeTasks'], Effect: Allow, Resource: '*'}
+          - {Action: 'iam:SimulatePrincipalPolicy', Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SanchezCloudScholensApiTaskRole'}
           - {Action: ['ecr:BatchGetImage', 'ecr:DescribeImages', 'ecr:DescribeImageScanFindings'], Effect: Allow, Resource: [!Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-web', !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-api', !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sanchezcloud-scholens-jobs']}
           - {Action: ['kms:Decrypt', 'kms:Encrypt', 'kms:GenerateDataKey'], Condition: {StringEquals: {'aws:ResourceTag/Product': Scholens}}, Effect: Allow, Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'}
   DatabaseDeployRole:

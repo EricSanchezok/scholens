@@ -166,6 +166,63 @@ jobs:
           test "$OPERATION" = deploy
           test "$APPLICATION_ENABLED" = false
           test "$SCHEDULER_STATE" = DISABLED
+      - name: Resolve avatar dependency and require live runtime access
+        id: avatar-access
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          PREVIOUS_EXISTS: ${{ steps.previous.outputs.exists }}
+        run: |
+          identity=$(aws sts get-caller-identity --output json)
+          account_id=$(jq -er .Account <<<"$identity")
+          partition=$(jq -er '.Arn | split(":")[1]' <<<"$identity")
+          # JMESPath uses literal backticks.
+          # shellcheck disable=SC2016
+          avatar_kms_key_arn=$(aws cloudformation describe-stacks \
+            --stack-name sanchezcloud-account-center-foundation \
+            --query 'Stacks[0].Outputs[?OutputKey==`AvatarKmsKeyArn`].OutputValue|[0]' \
+            --output text)
+          test "$avatar_kms_key_arn" != None
+          echo "avatar_kms_key_arn=$avatar_kms_key_arn" >> "$GITHUB_OUTPUT"
+          if [[ "$PREVIOUS_EXISTS" != true ]]; then
+            exit 0
+          fi
+
+          api_role_arn="arn:${partition}:iam::${account_id}:role/SanchezCloudScholensApiTaskRole"
+          avatar_object_arn="arn:${partition}:s3:::sanchezcloud-account-avatars-${account_id}-${AWS_REGION}/auth/avatars/v1/release-preflight"
+          aws iam simulate-principal-policy \
+            --policy-source-arn "$api_role_arn" \
+            --action-names s3:GetObject \
+            --resource-arns "$avatar_object_arn" \
+            --output json > avatar-s3-simulation.json
+          aws iam simulate-principal-policy \
+            --policy-source-arn "$api_role_arn" \
+            --action-names kms:Decrypt \
+            --resource-arns "$avatar_kms_key_arn" \
+            --context-entries \
+              ContextKeyName=kms:ViaService,ContextKeyValues="s3.${AWS_REGION}.amazonaws.com",ContextKeyType=string \
+              ContextKeyName=kms:EncryptionContext:aws:s3:arn,ContextKeyValues="$avatar_object_arn",ContextKeyType=string \
+            --output json > avatar-kms-simulation.json
+          require_allowed() {
+            local action=$1
+            local resource=$2
+            local simulation=$3
+            # The jq variables are intentionally single-quoted shell literals.
+            # shellcheck disable=SC2016
+            if ! jq -e --arg action "$action" --arg resource "$resource" '
+              (.EvaluationResults | length) == 1 and
+              .EvaluationResults[0].EvalActionName == $action and
+              .EvaluationResults[0].EvalResourceName == $resource and
+              .EvaluationResults[0].EvalDecision == "allowed" and
+              .EvaluationResults[0].PermissionsBoundaryDecisionDetail.AllowedByPermissionsBoundary == true and
+              ((.EvaluationResults[0].MissingContextValues // []) | length) == 0
+            ' "$simulation" >/dev/null; then
+              jq '{EvaluationResults}' "$simulation" >&2
+              echo "The live API role or its permissions boundary does not allow $action on the shared avatar dependency. Apply the reviewed foundation-bootstrap update before releasing." >&2
+              return 1
+            fi
+          }
+          require_allowed s3:GetObject "$avatar_object_arn" avatar-s3-simulation.json
+          require_allowed kms:Decrypt "$avatar_kms_key_arn" avatar-kms-simulation.json
       - name: Require matching protected migration attestation
         if: steps.previous.outputs.exists == 'true'
         env:
@@ -197,18 +254,17 @@ jobs:
           SCHEDULER_STATE: ${{ inputs.scheduler_state }}
           EDGE_SECRET_VERSION_ID: ${{ inputs.edge_secret_version_id }}
           EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
+          AVATAR_KMS_KEY_ARN: ${{ steps.avatar-access.outputs.avatar_kms_key_arn }}
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
           template_bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          # JMESPath uses literal backticks.
+          # shellcheck disable=SC2016
           template_kms_key_arn=$(aws cloudformation list-exports \
             --query 'Exports[?Name==`sanchezcloud-scholens-configuration-key-arn`].Value|[0]' \
             --output text)
-          avatar_kms_key_arn=$(aws cloudformation describe-stacks \
-            --stack-name sanchezcloud-account-center-foundation \
-            --query 'Stacks[0].Outputs[?OutputKey==`AvatarKmsKeyArn`].OutputValue|[0]' \
-            --output text)
           test "$template_kms_key_arn" != None
-          test "$avatar_kms_key_arn" != None
+          test "$AVATAR_KMS_KEY_ARN" != None
           web_image=$(jq -r .images.web release-manifest.json)
           api_image=$(jq -r .images.api release-manifest.json)
           jobs_image=$(jq -r .images.jobs release-manifest.json)
@@ -221,7 +277,7 @@ jobs:
               DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
               CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
               RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
-              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$avatar_kms_key_arn") ;;
+              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$AVATAR_KMS_KEY_ARN") ;;
               WebImage) parameter_overrides+=("WebImage=$web_image") ;;
               ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
               JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
@@ -242,6 +298,8 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --no-fail-on-empty-changeset \
             --parameter-overrides "${parameter_overrides[@]}"; then
+            # JMESPath uses literal backticks.
+            # shellcheck disable=SC2016
             aws cloudformation describe-stack-events \
               --stack-name sanchezcloud-scholens-production \
               --max-items 30 \
@@ -309,14 +367,13 @@ jobs:
           CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_RUNTIME_CLOUDFORMATION_ROLE_ARN }}
           EDGE_SECRET_VERSION_ID: ${{ inputs.edge_secret_version_id }}
           EDGE_SECRET_PREVIOUS_VERSION_ID: ${{ inputs.edge_secret_previous_version_id }}
+          AVATAR_KMS_KEY_ARN: ${{ steps.avatar-access.outputs.avatar_kms_key_arn }}
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
-          avatar_kms_key_arn=$(aws cloudformation describe-stacks \
-            --stack-name sanchezcloud-account-center-foundation \
-            --query 'Stacks[0].Outputs[?OutputKey==`AvatarKmsKeyArn`].OutputValue|[0]' \
-            --output text)
-          test "$avatar_kms_key_arn" != None
+          test "$AVATAR_KMS_KEY_ARN" != None
           bucket="sanchezcloud-scholens-releases-${account_id}-${AWS_REGION}"
+          # JMESPath uses literal backticks.
+          # shellcheck disable=SC2016
           template_kms_key_arn=$(aws cloudformation list-exports \
             --query 'Exports[?Name==`sanchezcloud-scholens-configuration-key-arn`].Value|[0]' \
             --output text)
@@ -376,7 +433,7 @@ jobs:
               DomainName) parameter_overrides+=("DomainName=$DOMAIN_NAME") ;;
               CertificateArn) parameter_overrides+=("CertificateArn=$CERTIFICATE_ARN") ;;
               RdsSecurityGroupId) parameter_overrides+=("RdsSecurityGroupId=$RDS_SECURITY_GROUP_ID") ;;
-              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$avatar_kms_key_arn") ;;
+              AvatarKmsKeyArn) parameter_overrides+=("AvatarKmsKeyArn=$AVATAR_KMS_KEY_ARN") ;;
               WebImage) parameter_overrides+=("WebImage=$web_image") ;;
               ApiImage) parameter_overrides+=("ApiImage=$api_image") ;;
               JobsImage) parameter_overrides+=("JobsImage=$jobs_image") ;;
