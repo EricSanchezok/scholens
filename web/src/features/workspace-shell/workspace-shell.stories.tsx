@@ -388,6 +388,16 @@ export const DesktopCollapsed: Story = {
     await expect(getComputedStyle(railChrome).clipPath).toContain("224px");
     await expect(railContent.getAnimations()).toHaveLength(0);
     await expect(railChrome.getAnimations()).toHaveLength(0);
+    const account = canvas.getByRole("button", { name: "Open account menu" });
+    const accountStyle = getComputedStyle(account);
+    await expect(account).toHaveClass(
+      "h-14",
+      "w-10",
+      "bg-transparent",
+      "shadow-none",
+    );
+    await expect(account).not.toHaveClass("shadow-raised");
+    await expect(accountStyle.borderTopWidth).toBe("0px");
 
     await userEvent.click(
       canvas.getByRole("button", { name: "Expand sidebar" }),

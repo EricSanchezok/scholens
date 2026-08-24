@@ -1962,7 +1962,7 @@
     "untitled": "Untitled paper",
     "unknownAuthors": "Unknown authors",
     "form": {
-      "minimumQuery": "Enter at least 2 characters, or clear the field and press Enter to show all papers.",
+      "minimumQuery": "Enter at least 2 characters, or clear the field to show all papers.",
       "relevanceSort": "Relevance"
     },
     "results": {

@@ -83,7 +83,7 @@ describe("PaperSearchForm", () => {
     expect(input).toHaveFocus();
   });
 
-  it("clears a committed query when an empty draft is submitted", async () => {
+  it("clears a committed query as soon as the draft becomes empty", async () => {
     const onCommit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -92,7 +92,6 @@ describe("PaperSearchForm", () => {
     const input = screen.getByRole("searchbox", { name: "Search papers" });
 
     await user.clear(input);
-    await user.keyboard("{Enter}");
     expect(onCommit).toHaveBeenCalledWith("");
   });
 
@@ -106,7 +105,7 @@ describe("PaperSearchForm", () => {
     expect(onCommit).not.toHaveBeenCalled();
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription(
-      "Enter at least 2 characters, or clear the field and press Enter to show all papers.",
+      "Enter at least 2 characters, or clear the field to show all papers.",
     );
 
     await user.clear(input);

@@ -206,7 +206,7 @@ export function GlobalSearch({
                 <SearchField
                   aria-label={t("inputLabel")}
                   autoFocus
-                  className="h-12 rounded-[var(--radius-lg)] text-base"
+                  className="h-12 text-base"
                   onChange={(event) => {
                     const nextQuery = event.currentTarget.value;
                     setQuery(nextQuery);
@@ -231,6 +231,7 @@ export function GlobalSearch({
                       ? t("conversationPlaceholder")
                       : t("paperPlaceholder")
                   }
+                  surfaceClassName="rounded-[var(--radius-lg)]"
                   value={query}
                 />
               </div>

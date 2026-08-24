@@ -115,9 +115,10 @@ function DebouncedLibrarySearch({
   return (
     <SearchField
       aria-label={label}
-      className="border-line bg-surface rounded-full text-base sm:text-sm"
+      className="border-line text-base sm:text-sm"
       onChange={(event) => setInput(event.currentTarget.value)}
       placeholder={label}
+      surfaceClassName="rounded-full"
       value={input}
     />
   );

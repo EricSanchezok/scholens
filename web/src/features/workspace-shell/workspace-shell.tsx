@@ -434,11 +434,11 @@ function AccountMenu({
         <button
           aria-label={t("account.openMenu")}
           className={cn(
-            "border-line bg-surface shadow-raised hover:bg-hover flex h-14 items-center rounded-[var(--radius-xl)] border",
+            "hover:bg-hover flex items-center",
             focusSurfaceVariants({ intent: "neutral" }),
             collapsed
-              ? "ml-auto w-10 justify-center px-2"
-              : "w-full gap-3 px-2",
+              ? "ml-auto h-14 w-10 justify-center rounded-[var(--radius-md)] bg-transparent p-1 shadow-none"
+              : "border-line bg-surface shadow-raised h-14 w-full gap-3 rounded-[var(--radius-xl)] border px-2",
           )}
           type="button"
         >

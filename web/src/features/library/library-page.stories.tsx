@@ -127,7 +127,13 @@ export const Populated: Story = {
     await expect(
       Math.abs(previewBox.bottom - layoutBox.bottom),
     ).toBeLessThanOrEqual(1);
-    await expect(search).toHaveClass("rounded-full");
+    const pillSurface = search.closest<HTMLElement>("[data-focus-surface]");
+    await expect(pillSurface).not.toBeNull();
+    await expect(pillSurface).toHaveClass("rounded-full");
+    await expect(getComputedStyle(search).borderRadius).toBe(
+      getComputedStyle(pillSurface!).borderRadius,
+    );
+    await expect(search).toHaveClass("bg-transparent");
     await expect(
       canvas
         .getAllByText("Transformers")
