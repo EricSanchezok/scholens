@@ -9,11 +9,11 @@ import { Button, LinkButton, useToast } from "@/components/ui";
 import { integrationQueries } from "@/features/integrations";
 import { useSettingsLauncher } from "@/features/settings";
 import { ApiError } from "@/lib/api/errors";
+import { academicMarkdownToPlainText } from "@/lib/content/academic-text";
 import { reflowKeys, reflowQueries, requestDocumentReflowAttempt } from "./api";
 import {
   isTranslatableReflowBlock,
   ReaderReflowView,
-  reflowMarkdownPlainText,
 } from "./reader-reflow-view";
 import type { ReaderReflowOutlineItem } from "./reader-reflow-outline";
 import type { DocumentReflowSourceSpan } from "./api";
@@ -74,7 +74,7 @@ export function ReaderReflowSurface({
         .filter((block) => block.kind === "heading")
         .map((block) => ({
           id: block.id,
-          label: reflowMarkdownPlainText(block.render_markdown),
+          label: academicMarkdownToPlainText(block.render_markdown),
           level: block.heading_level ?? 2,
         }))
         .filter((item) => item.label.length > 0),

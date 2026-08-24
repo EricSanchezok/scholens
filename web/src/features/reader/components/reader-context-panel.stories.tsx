@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
 
+import {
+  expectLayeredKeyboardFocus,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import type { ReaderSelection } from "./pdf-page";
 import {
   ReaderAnnotationPanel,
@@ -234,10 +239,23 @@ export const AnnotationThread: Story = {
   args: { selectedAnnotationId: annotation.id },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
-    const card = canvasElement.querySelector(
+    const card = canvasElement.querySelector<HTMLElement>(
       `[data-reader-annotation-card="${annotation.id}"]`,
     );
     await expect(card).not.toBeNull();
+    const cardButton = card!.querySelector<HTMLButtonElement>("button");
+    await expect(cardButton).not.toBeNull();
+    const restingCard = readFocusVisual(card!);
+    const restingButton = readFocusVisual(cardButton!);
+    await focusWithKeyboard(cardButton!);
+    await expectLayeredKeyboardFocus({
+      element: cardButton!,
+      resting: restingButton,
+    });
+    await expectLayeredKeyboardFocus({
+      element: card!,
+      resting: restingCard,
+    });
     await userEvent.hover(card!);
     await expect(args.onPreviewChange).toHaveBeenLastCalledWith(annotation.id);
     await expect(
@@ -366,6 +384,28 @@ export const NarrowProjectDiscussion: Story = {
 
 export const SelectionReady: Story = {
   args: { annotationSelection: selection, annotations: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const button = canvas.getByRole("button", { name: "Yellow highlight" });
+    const colorDisc = button.querySelector<HTMLElement>(":scope > span");
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect(colorDisc).not.toBeNull();
+
+    const restingButton = readFocusVisual(button);
+    const restingDisc = readFocusVisual(colorDisc!);
+    await expect(restingDisc.boxShadow).not.toBe("none");
+    await focusWithKeyboard(button);
+    await expectLayeredKeyboardFocus({
+      element: button,
+      resting: restingButton,
+    });
+    await expect(readFocusVisual(colorDisc!).backgroundColor).toBe(
+      restingDisc.backgroundColor,
+    );
+    await expect(readFocusVisual(colorDisc!).boxShadow).toBe(
+      restingDisc.boxShadow,
+    );
+  },
 };
 
 export const EmptyAnnotations: Story = {
@@ -375,6 +415,19 @@ export const EmptyAnnotations: Story = {
 export const NarrowSelection: Story = {
   args: { annotationSelection: selection, annotations: [] },
   globals: { viewport: { value: "smallMobile" } },
+  play: async ({ canvasElement }) => {
+    const palette = canvasElement.querySelector<HTMLElement>(
+      "[data-reader-highlight-palette]",
+    );
+    await expect(palette).not.toBeNull();
+    const paletteRect = palette!.getBoundingClientRect();
+    expect(palette!.querySelectorAll("button")).toHaveLength(8);
+    for (const swatch of palette!.querySelectorAll("button")) {
+      const rect = swatch.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(paletteRect.left);
+      expect(rect.right).toBeLessThanOrEqual(paletteRect.right);
+    }
+  },
 };
 
 export const Details: Story = {

@@ -71,17 +71,52 @@
       "minimum": 4.5
     },
     {
-      "foreground": "color.focus.ring",
+      "foreground": "color.focus.foreground",
+      "background": "color.focus.surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.focus.secondary",
+      "background": "color.focus.surface",
+      "minimum": 4.5
+    },
+    {
+      "foreground": "color.focus.icon",
+      "background": "color.focus.surface",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.scrollbar",
       "background": "color.bg.canvas",
       "minimum": 3
     },
     {
-      "foreground": "color.focus.ring",
+      "foreground": "color.focus.scrollbar",
+      "background": "color.bg.sidebar",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.scrollbar",
       "background": "color.bg.surface",
       "minimum": 3
     },
     {
-      "foreground": "color.focus.ring",
+      "foreground": "color.focus.scrollbar",
+      "background": "color.bg.subtle",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.scrollbar",
+      "background": "color.bg.hover",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.scrollbar",
+      "background": "color.bg.pressed",
+      "minimum": 3
+    },
+    {
+      "foreground": "color.focus.scrollbar",
       "background": "color.bg.elevated",
       "minimum": 3
     }

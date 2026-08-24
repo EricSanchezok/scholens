@@ -386,13 +386,80 @@ export const MobileChat: Story = {
   },
   play: async () => {
     const body = within(document.body);
+    const chat = await body.findByRole("region", { name: "Project chat" });
+    await expect(chat).toBeVisible();
+    const switcher = chat.querySelector<HTMLElement>(
+      "[data-conversation-switcher]",
+    );
+    const history = chat.querySelector<HTMLElement>(
+      "[data-conversation-switcher-history]",
+    );
+    const reasoning = within(chat).getByRole("button", {
+      name: "Reasoning strength: Standard",
+    });
+    const create = within(chat)
+      .getAllByRole("button", { name: "New conversation" })
+      .find((control) => control !== history);
+    const close = within(chat).getByRole("button", {
+      name: "Close project chat",
+    });
+    await expect(switcher).not.toBeNull();
+    await expect(history).not.toBeNull();
+    await expect(create).toBeDefined();
+    if (!switcher || !history || !create) return;
+
+    const boxes = [history, reasoning, create, close].map((control) =>
+      control.getBoundingClientRect(),
+    );
+    await expect(Array.from(switcher.querySelectorAll("button"))).toEqual([
+      history,
+      reasoning,
+      create,
+      close,
+    ]);
+    await expect(boxes.map((box) => Math.round(box.x))).toEqual(
+      [...boxes]
+        .sort((left, right) => left.x - right.x)
+        .map((box) => Math.round(box.x)),
+    );
+    await expect(boxes[0]!.width).toBeGreaterThan(
+      Math.max(...boxes.slice(1).map((box) => box.width)),
+    );
     await expect(
-      await body.findByRole("region", { name: "Project chat" }),
-    ).toBeVisible();
+      boxes
+        .slice(0, -1)
+        .every((box, index) => box.right <= boxes[index + 1]!.left),
+    ).toBe(true);
+    await expect(switcher.scrollWidth).toBeLessThanOrEqual(
+      switcher.clientWidth,
+    );
+
+    history.focus();
+    await userEvent.tab();
+    await expect(reasoning).toHaveFocus();
+    await userEvent.tab();
+    await expect(create).toHaveFocus();
+    await userEvent.tab();
+    await expect(close).toHaveFocus();
+
+    await userEvent.click(reasoning);
+    await userEvent.click(body.getByRole("menuitemradio", { name: /Deep/ }));
     await expect(
-      body.getByRole("button", { name: "Close project chat" }),
+      within(chat).getByRole("button", {
+        name: "Reasoning strength: Deep",
+      }),
     ).toBeVisible();
   },
+};
+
+export const MobileChat430: Story = {
+  ...MobileChat,
+  globals: { viewport: { value: "largeMobile", isRotated: false } },
+};
+
+export const MobileChat320: Story = {
+  ...MobileChat,
+  globals: { viewport: { value: "smallMobile", isRotated: false } },
 };
 
 export const Tablet768: Story = {

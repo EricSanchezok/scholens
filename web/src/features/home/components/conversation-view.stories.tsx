@@ -9,6 +9,11 @@ import {
   within,
 } from "storybook/test";
 
+import {
+  expectLayeredKeyboardFocus,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import type { components } from "@/lib/api/generated/schema";
 import type { LiveTurn } from "@/features/conversation";
 import {
@@ -266,6 +271,29 @@ export const DirectAnswer: Story = {
     await expect(
       canvas.queryByText(/Research complete/),
     ).not.toBeInTheDocument();
+  },
+};
+
+export const InlineLinkFocus: Story = {
+  args: {
+    turns: [
+      turn({
+        responses: [
+          response({
+            content:
+              "Review the [research note](https://example.com/research-note) before continuing.",
+          }),
+        ],
+      }),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const link = within(canvasElement).getByRole("link", {
+      name: "research note",
+    });
+    const resting = readFocusVisual(link);
+    await focusWithKeyboard(link);
+    await expectLayeredKeyboardFocus({ element: link, resting });
   },
 };
 

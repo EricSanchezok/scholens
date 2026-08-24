@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
-import { keyboardFocusRing } from "./focus";
+import { focusSurfaceVariants } from "./focus";
 
 export const Checkbox = React.forwardRef<
   React.ElementRef<typeof CheckboxPrimitive.Root>,
@@ -16,14 +16,18 @@ export const Checkbox = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <CheckboxPrimitive.Root
     className={cn(
-      "motion-control border-control bg-surface text-primary-foreground hover:border-line-strong data-[state=checked]:border-primary data-[state=checked]:bg-primary grid size-5 place-items-center rounded-[var(--radius-xs)] border disabled:opacity-[var(--opacity-disabled)]",
-      keyboardFocusRing,
+      "motion-control border-control bg-surface text-primary-foreground hover:bg-hover data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover grid size-5 place-items-center rounded-[var(--radius-xs)] border disabled:opacity-[var(--opacity-disabled)]",
+      focusSurfaceVariants({ intent: "selection" }),
       className,
     )}
+    data-selection-control="checkbox"
     ref={ref}
     {...props}
   >
-    <CheckboxPrimitive.Indicator className="settled-content-enter">
+    <CheckboxPrimitive.Indicator
+      className="settled-content-enter"
+      data-selection-indicator=""
+    >
       <Icon glyph={Check} size={16} tone="inverse" />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
@@ -37,14 +41,18 @@ export const RadioItem = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <RadioGroupPrimitive.Item
     className={cn(
-      "border-control bg-surface data-[state=checked]:border-primary grid size-5 place-items-center rounded-full border disabled:opacity-[var(--opacity-disabled)]",
-      keyboardFocusRing,
+      "motion-control border-control bg-surface hover:bg-hover data-[state=checked]:border-primary data-[state=checked]:hover:bg-subtle grid size-5 place-items-center rounded-full border disabled:opacity-[var(--opacity-disabled)]",
+      focusSurfaceVariants({ intent: "selection" }),
       className,
     )}
+    data-selection-control="radio"
     ref={ref}
     {...props}
   >
-    <RadioGroupPrimitive.Indicator className="bg-primary size-2.5 rounded-full" />
+    <RadioGroupPrimitive.Indicator
+      className="bg-primary size-2.5 rounded-full"
+      data-selection-indicator=""
+    />
   </RadioGroupPrimitive.Item>
 ));
 RadioItem.displayName = RadioGroupPrimitive.Item.displayName;
@@ -55,14 +63,18 @@ export const Switch = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SwitchPrimitive.Root
     className={cn(
-      "motion-control bg-secondary-action data-[state=checked]:bg-primary h-6 w-11 rounded-full p-0.5 disabled:opacity-[var(--opacity-disabled)]",
-      keyboardFocusRing,
+      "motion-control bg-secondary-action hover:bg-hover data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover h-6 w-11 rounded-full p-0.5 disabled:opacity-[var(--opacity-disabled)]",
+      focusSurfaceVariants({ intent: "selection" }),
       className,
     )}
+    data-selection-control="switch"
     ref={ref}
     {...props}
   >
-    <SwitchPrimitive.Thumb className="motion-icon bg-surface block size-5 rounded-full shadow-sm data-[state=checked]:translate-x-5" />
+    <SwitchPrimitive.Thumb
+      className="motion-icon bg-surface block size-5 rounded-full shadow-sm data-[state=checked]:translate-x-5"
+      data-selection-thumb=""
+    />
   </SwitchPrimitive.Root>
 ));
 Switch.displayName = SwitchPrimitive.Root.displayName;

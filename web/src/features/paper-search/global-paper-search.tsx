@@ -13,12 +13,12 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
+  focusSurfaceVariants,
   SearchField,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  keyboardFocusRing,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
@@ -29,6 +29,7 @@ import {
 import { conversationQueries } from "@/features/conversation";
 import { useRelativeTimeNow } from "@/i18n/use-relative-time-now";
 import type { components } from "@/lib/api/generated/schema";
+import { isSearchQuery, normalizeSearchQuery } from "@/lib/search/query";
 import { cn } from "@/lib/utilities/cn";
 import { paperSearchQueries } from "./api";
 
@@ -129,17 +130,17 @@ export function GlobalSearch({
   const composingRef = React.useRef(false);
   const debouncedQuery = useDebouncedValue(committedQuery);
   const resultFocusRef = React.useRef<(() => void) | undefined>(undefined);
-  const normalizedQuery = debouncedQuery.trim();
+  const normalizedQuery = normalizeSearchQuery(debouncedQuery);
+  const validQuery = isSearchQuery(normalizedQuery) ? normalizedQuery : "";
   const conversationSearch = useInfiniteQuery(
     conversationQueries.infiniteSearch(
-      kind === "conversations" ? normalizedQuery : "",
+      kind === "conversations" ? validQuery : "",
     ),
   );
   const paperSearch = useInfiniteQuery(
-    paperSearchQueries.infiniteResults(
-      kind === "papers" ? normalizedQuery : "",
-      { kind: "library" },
-    ),
+    paperSearchQueries.infiniteResults(kind === "papers" ? validQuery : "", {
+      kind: "library",
+    }),
   );
   const conversationResults =
     conversationSearch.data?.pages.flatMap((page) => page.items) ?? [];
@@ -157,7 +158,7 @@ export function GlobalSearch({
         .slice(0, 15),
     [conversations],
   );
-  const hasQuery = committedQuery.trim().length >= 2;
+  const hasQuery = isSearchQuery(committedQuery);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -238,7 +239,10 @@ export function GlobalSearch({
 
           <div className="min-h-0 flex-1">
             <TabsContent
-              className="h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              className={cn(
+                "h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+                focusSurfaceVariants({ intent: "scroll" }),
+              )}
               data-scrollbar-gutter="stable"
               value="conversations"
             >
@@ -254,7 +258,7 @@ export function GlobalSearch({
                           <Link
                             className={cn(
                               "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
-                              keyboardFocusRing,
+                              focusSurfaceVariants({ intent: "neutral" }),
                             )}
                             data-search-result=""
                             href={`/?conversation=${conversation.id}` as Route}
@@ -317,7 +321,7 @@ export function GlobalSearch({
                         <Link
                           className={cn(
                             "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
-                            keyboardFocusRing,
+                            focusSurfaceVariants({ intent: "neutral" }),
                           )}
                           data-search-result=""
                           href={
@@ -370,7 +374,10 @@ export function GlobalSearch({
             </TabsContent>
 
             <TabsContent
-              className="h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              className={cn(
+                "h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+                focusSurfaceVariants({ intent: "scroll" }),
+              )}
               data-scrollbar-gutter="stable"
               value="papers"
             >
@@ -417,7 +424,7 @@ export function GlobalSearch({
                         <Link
                           className={cn(
                             "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
-                            keyboardFocusRing,
+                            focusSurfaceVariants({ intent: "neutral" }),
                           )}
                           data-search-result=""
                           href={`/reader/${paper.document_id}` as Route}

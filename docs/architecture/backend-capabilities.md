@@ -658,6 +658,38 @@ text do not leave Scholens for semantic retrieval. `postgres_fts` remains an
 explicit lexical-only degradation backend, and semantic runtime failure falls
 back within the hybrid adapter without failing the search request.
 
+The query planner keeps numeric-only input and ambiguous short input below
+three compact characters out of fuzzy, full-text, passage, and semantic lanes;
+two CJK characters are sufficient to enable hybrid retrieval. Those strict
+queries match only complete title, author, or keyword tokens,
+normalized DOI equality, and an exact publication year for four digits. Hybrid
+trigram candidates require similarity `0.12`. If any exact metadata result
+exists, semantic retrieval may rerank only the lexical result set and cannot
+expand it. Otherwise, a semantic-only result must have cosine distance at most
+`0.20`, be within `0.04` of the best semantic candidate, and is capped with all
+other semantic-only results at 20. These are conservative acceptance guardrails
+bound to the pinned embedding-model revision, not a claim of completed relevance
+calibration. Loosening them requires the fixed evaluation set called for by ADR
+0030. The policy lives with the paper-search adapter rather than the
+provider-neutral embedding package. Response totals and `search_mode` describe
+the accepted result set, not every vector candidate considered. Result snippets
+come only from full-text-matching passages; the same PostgreSQL query produces a
+ranked headline before it is projected as bounded plain text, so stemming does
+not discard a valid passage. An unmatched paper never receives the beginning of
+raw parser Markdown as a fallback snippet.
+
+Query normalization applies NFKC to user input, but the current generated
+compact metadata projection is lowercased and punctuation-stripped without
+NFKC. Compatibility-form characters already stored in paper metadata are not
+therefore guaranteed to match their ASCII equivalents; repairing that side of
+the comparison requires an expand–backfill–switch projection migration.
+Metadata expressions and the explicit trigram similarity threshold can also
+require a scan at the current product scale. Before increasing the 5,000-paper
+account limit or applying this adapter to a materially larger corpus, the owner
+must add a production-shaped `EXPLAIN ANALYZE` latency gate and choose an
+index-backed candidate strategy; changing to PostgreSQL's `%` operator without
+controlling its session threshold would silently change recall.
+
 `Document.search_text_compact` and `DocumentSearchEmbedding` are derived search
 projections. The latter is keyed by document and model revision and carries a
 digest of the bounded title/keywords/summary/abstract source. PDF completion

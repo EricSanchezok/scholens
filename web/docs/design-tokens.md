@@ -115,15 +115,27 @@ translation remain distinguishable without introducing decorative chrome.
 Interactive descendants inherit the state of their shared control. In
 particular, an icon inside a disabled button resolves to the shared disabled
 icon role even when its enabled state is inverse. Composite controls may
-suppress a native child's outline only when the containing control exposes an
-equivalent focus-visible state using semantic control or focus tokens. Mark
-that child with `data-focus-delegate`; this is the shared contract that keeps
-the global focus fallback from drawing a second, rectangular focus surface.
-Ordinary interactive elements consume the shared `keyboardFocusRing` utility;
-its one-pixel semantic ring is the only approved product focus recipe. Global
-CSS owns only delegated text-control focus. It must not restore a broad native
-outline fallback that can turn composite disclosures into thick black or white
-rectangles.
+suppress a native child's outline only when the containing control exposes the
+shared focus-visible surface. Mark that child with
+`data-focus-delegate="surface"` and its owner with `data-focus-surface`; use
+`data-focus-delegate="self"` when the native element remains the complete
+interaction surface. These attributes keep composite controls from drawing a
+second rectangle around an inner input.
+
+Ordinary interactive elements consume `focusSurfaceVariants({ intent })`.
+Normal Light and Dark focus feedback uses `color.focus.surface`,
+`color.focus.foreground`, `color.focus.secondary`, `color.focus.icon`, and
+`color.focus.scrollbar`; it does not alter the structural border or introduce a
+ring, outline, or zero-offset perimeter shadow. Primary, danger, status, and an
+explicitly approved bounded card may add the existing offset
+`elevation.raised` recipe through those shared intents. The
+`keyboardFocusRing`, `color.focus.ring`, and
+`color.border.focus` contracts are retired and must not be restored or aliased.
+Global CSS owns the shared recipes, delegation, and forced-colors fallback
+only; forced colors use `focus.width` (`--focus-width`) with system `Highlight`
+rather than a product focus-color token. Selection controls explicitly map
+checked state to system colors, while Reader color swatches preserve only their
+inner document color and keep focus on the outer system-owned button.
 
 Disabled prominence is also semantic. If a disabled primary action disappears
 into a canvas in one appearance, adjust `color.action.disabled-*` for that

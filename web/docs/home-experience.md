@@ -371,25 +371,26 @@ are not implementation references.
 
 The mobile Dock acceptance inventory extends that mapping:
 
-| Figma `20 — Home / Mobile` target | Storybook acceptance state                          |
-| --------------------------------- | --------------------------------------------------- |
-| Empty + Dock / Ask selected       | `Workspace / Mobile Empty`                          |
-| Recent research launcher          | `Workspace / Mobile`                                |
-| Launcher loading                  | `Dashboard / Mobile Recents Loading`                |
-| Launcher error                    | `Dashboard / Mobile Recents Error`                  |
-| Launcher long titles at 320 px    | `Dashboard / Mobile Recents Long Titles`            |
-| Launcher removed after submit     | `Workspace / Mobile Recents Disappear After Submit` |
-| Conversation + Dock               | `Workspace / Mobile Conversation`                   |
-| Keyboard Open                     | `Workspace / Mobile Keyboard Open`                  |
-| Library scope                     | `Research Composer / Library Scope`                 |
-| Multiple-paper scope              | `Research Composer / Multiple Papers Scope`         |
-| Long project scope at 320 px      | `Research Composer / Long Project Scope`            |
-| Multiline input                   | `Research Composer / Multiline Input`               |
-| Mobile reasoning menu             | `Workspace / Mobile Reasoning Menu Open`            |
-| Mobile navigation panel           | `Workspace / Mobile Navigation Open`                |
-| Desktop reasoning menu            | `Research Composer / Desktop Reasoning Menu Open`   |
-| Streaming / Stop                  | `Research Composer / Streaming Stop`                |
-| 430 px Dark English               | `Research Composer / Dark English Large`            |
+| Figma `20 — Home / Mobile` target | Storybook acceptance state                                  |
+| --------------------------------- | ----------------------------------------------------------- |
+| Empty + Dock / Ask selected       | `Workspace / Mobile Empty`                                  |
+| Recent research launcher          | `Workspace / Mobile`                                        |
+| Launcher loading                  | `Dashboard / Mobile Recents Loading`                        |
+| Launcher error                    | `Dashboard / Mobile Recents Error`                          |
+| Launcher long titles at 320 px    | `Dashboard / Mobile Recents Long Titles`                    |
+| Launcher removed after submit     | `Workspace / Mobile Recents Disappear After Submit`         |
+| Conversation + Dock               | `Workspace / Mobile Conversation`                           |
+| Keyboard Open                     | `Workspace / Mobile Keyboard Open`                          |
+| Library scope                     | `Research Composer / Library Scope`                         |
+| Multiple-paper scope              | `Research Composer / Multiple Papers Scope`                 |
+| Long project scope at 320 px      | `Research Composer / Long Project Scope`                    |
+| Explicit newline                  | `Research Composer / Multiline Input`                       |
+| Mobile visual wrap / input limit  | `Conversation / Context Panel Mobile Visual Wrap Expansion` |
+| Mobile reasoning menu             | `Workspace / Mobile Reasoning Menu Open`                    |
+| Mobile navigation panel           | `Workspace / Mobile Navigation Open`                        |
+| Desktop reasoning menu            | `Research Composer / Desktop Reasoning Menu Open`           |
+| Streaming / Stop                  | `Research Composer / Streaming Stop`                        |
+| 430 px Dark English               | `Research Composer / Dark English Large`                    |
 
 The mobile acceptance set is synchronized to the active `20 — Home` Figma
 page. Its primary navigation state uses the shared action surface and inverse
@@ -452,11 +453,13 @@ separated by 4 px inside the Dock rather than behaving as independent floating
 surfaces. The Composer retains its deliberate elevation; the navigation row is
 flat on the Dock canvas, and the non-layout 20 px fade is rendered only when a
 Composer needs a transition from scrolling content.
-Only one real Composer is mounted at a time. On desktop it rests as a rounded
-single-line bar and expands to a rounded panel only when the written prompt
-becomes multiline or long. Explicit project and paper selections never add a
-second row: the AtSign trigger carries a compact count badge, caps its visible
-value at `9+`, and opens the existing context picker for inspection or removal.
+Only one real Composer is mounted at a time. It follows the
+[shared Composer shape contract](./visual-language.md#shape-and-density): an
+explicit line break or visual text wrap expands the surface upward, and input
+beyond its height limit scrolls internally. Explicit project and paper
+selections never add a second row: the AtSign trigger carries a compact count
+badge, caps its visible value at `9+`, and opens the existing context picker for
+inspection or removal.
 Entire Library uses a quiet status dot because it is a scope rather than a
 countable selection; an empty explicit selection has no indicator. A temporary
 passage supplied to one turn may still use a compact, truncated context rail so
@@ -465,13 +468,12 @@ stays one compact row above primary navigation: the
 Iconoir AtSign context trigger anchors the left, the input owns the flexible
 middle slot, and the circular submit or stop action anchors the right. The
 context trigger's accessible name and native title carry the current library,
-project, paper, mixed-item, or empty-selection scope. Standard and Deep open
-one text-only radio menu from the phone header or desktop Composer instead of a
-segmented toggle. The phone menu is a compact two-label list; the desktop menu
-retains one supporting description per mode. Decorative mode icons do not
-repeat the labels. The trigger indicator is decorative because its accessible
-name already announces the complete current scope; it must not create a second
-focus target.
+project, paper, mixed-item, or empty-selection scope. Standard and Deep use the
+[shared reasoning-strength treatment](./visual-language.md#shape-and-density):
+desktop surfaces retain descriptions, while phone headers use the compact
+label-only menu. Decorative mode icons do not repeat the labels. The context
+trigger indicator is decorative because its accessible name already announces
+the complete current scope; it must not create a second focus target.
 Entire Library is mutually exclusive with selected projects and papers. While
 it is active, the context picker hides search and item selection rather than
 showing controls that cannot affect the scope; switching it off restores the
@@ -552,9 +554,11 @@ above primary navigation; the research prompt remains in the available reading
 area rather than pulling the input toward screen center. On desktop, the 760 px
 composer retains the centered Figma composition. Its textarea delegates focus
 presentation to the rounded composer boundary. Pointer and touch focus leave
-that boundary visually stable; keyboard navigation alone receives the shared
-semantic focus indicator, so a native rectangular outline never splits the
-composition.
+that boundary visually stable; keyboard navigation adds the shared neutral
+surface tint and local content emphasis without changing the Composer's border,
+radius, size, or existing elevation shadow. Normal Light and Dark modes draw no
+ring or outline, so a native rectangular frame never splits the composition;
+forced-colors mode uses the shared 2 px system `Highlight` outline.
 The account trigger sits against the sidebar's bottom safe-area inset without a
 redundant disclosure arrow. Its menu aligns to the expanded sidebar content
 edge and opens to the right of the collapsed rail.

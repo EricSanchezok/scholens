@@ -1953,6 +1953,10 @@
     "emptyDescription": "请换一个更宽泛的描述或相关概念。",
     "untitled": "未命名论文",
     "unknownAuthors": "作者未知",
+    "form": {
+      "minimumQuery": "请输入至少 2 个字符，或清空输入框后按回车显示全部论文。",
+      "relevanceSort": "相关性"
+    },
     "results": {
       "loading": "正在搜索论文",
       "retry": "重试",

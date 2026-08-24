@@ -10,6 +10,7 @@ import * as React from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
+import { focusSurfaceVariants } from "@/components/ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/display";
@@ -25,6 +26,7 @@ import { useToast } from "@/components/ui/toast";
 import { Icon } from "@/design-system/icons/icon";
 import { useInstallExperience } from "@/features/install-experience";
 import { ApiError, publicApiClient } from "@/lib/api";
+import { cn } from "@/lib/utilities/cn";
 import {
   AuthenticationHeader,
   AuthenticationPanel,
@@ -131,7 +133,10 @@ function BackToSignIn({ returnTo }: { returnTo?: string }) {
   const t = useTranslations("Authentication.navigation");
   return (
     <Link
-      className="text-secondary hover:text-foreground inline-flex min-h-11 items-center gap-2 text-sm font-medium"
+      className={cn(
+        "text-secondary hover:text-foreground inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] text-sm font-medium",
+        focusSurfaceVariants({ intent: "inline" }),
+      )}
       href={authenticationHref({ mode: "sign-in", returnTo })}
     >
       <Icon glyph={BackIcon} size={20} tone="secondary" />
@@ -237,13 +242,19 @@ function SignInForm({ returnTo }: { returnTo?: string }) {
       </form>
       <nav className="flex items-center justify-between gap-4 text-sm">
         <Link
-          className="hover:text-foreground text-secondary min-h-11 py-3"
+          className={cn(
+            "hover:text-foreground text-secondary min-h-11 rounded-[var(--radius-sm)] py-3",
+            focusSurfaceVariants({ intent: "inline" }),
+          )}
           href={authenticationHref({ mode: "register", returnTo })}
         >
           {t("navigation.createAccount")}
         </Link>
         <Link
-          className="hover:text-foreground text-secondary min-h-11 py-3 text-right"
+          className={cn(
+            "hover:text-foreground text-secondary min-h-11 rounded-[var(--radius-sm)] py-3 text-right",
+            focusSurfaceVariants({ intent: "inline" }),
+          )}
           href={authenticationHref({ mode: "forgot", returnTo })}
         >
           {t("navigation.forgotPassword")}
@@ -448,7 +459,10 @@ function RegisterFlow({ returnTo }: { returnTo?: string }) {
         </Button>
       </form>
       <Link
-        className="text-secondary hover:text-foreground min-h-11 py-3 text-center text-sm"
+        className={cn(
+          "text-secondary hover:text-foreground min-h-11 rounded-[var(--radius-sm)] py-3 text-center text-sm",
+          focusSurfaceVariants({ intent: "inline" }),
+        )}
         href={authenticationHref({ mode: "sign-in", returnTo })}
       >
         {t("navigation.alreadyHaveAccount")}

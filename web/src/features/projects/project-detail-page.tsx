@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
   Frame,
   FramePanel,
+  focusSurfaceVariants,
   IconButton,
   OverflowMenuButton,
   SearchField,
@@ -72,6 +73,7 @@ import {
   conversationQueries,
   ConversationSwitcher,
   ConversationView,
+  ReasoningMenu,
   setConversationPinned,
   useConversationSession,
   type ReasoningLevel,
@@ -82,18 +84,23 @@ import { cn } from "@/lib/utilities/cn";
 import {
   CollectionToolbar,
   CollectionToolbarSelectTrigger,
+  CollectionToolbarStaticValue,
   PaperCollectionFilters,
   PaperCollectionWorkbench,
   paperCollectionTagsQuery,
   updatePaperStatus,
   type PaperCollectionItem,
+  type PaperCollectionWorkbenchProps,
 } from "@/features/paper-collection";
 import {
-  PaperSearchResults,
+  PaperSearchForm,
   paperSearchQueries,
+  usePaperSearchDraft,
+  usePaperSearchWorkbench,
 } from "@/features/paper-search";
 import { ApiError } from "@/lib/api";
 import type { components } from "@/lib/api/generated/schema";
+import { isSearchQuery } from "@/lib/search/query";
 import {
   addProjectPapers,
   deleteProject,
@@ -215,6 +222,14 @@ function ProjectChat({
     >
       <ConversationSwitcher
         activeId={conversationId}
+        beforeNewAction={
+          <ReasoningMenu
+            className="lg:hidden"
+            onChange={setReasoningLevel}
+            value={reasoningLevel}
+            variant="panelHeader"
+          />
+        }
         conversations={conversations}
         labels={{
           empty: t("empty"),
@@ -310,7 +325,10 @@ function ProjectPaperRow({
       variant="ghost"
     >
       <Link
-        className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        className={cn(
+          "hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+          focusSurfaceVariants({ intent: "neutral" }),
+        )}
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
       >
         <span className="min-w-0">
@@ -489,6 +507,7 @@ export function ProjectDetailWorkspace({
   const queryClient = useQueryClient();
   const toast = useToast();
   const t = useTranslations("Projects");
+  const paperSearchT = useTranslations("PaperSearch");
   const format = useFormatter();
   const desktopLayout = useDesktopLayout();
   const { signOut } = useAuthSession();
@@ -498,7 +517,19 @@ export function ProjectDetailWorkspace({
     [searchParams],
   );
   const paperSearchActive =
-    state.view === "papers" && state.paperQuery.trim().length >= 2;
+    state.view === "papers" && isSearchQuery(state.paperQuery);
+  const projectPaperScrollResetKey = JSON.stringify([
+    projectId,
+    state.view,
+    state.paperQuery,
+    state.paperSort,
+    state.paperStatuses,
+    state.paperTagIds,
+  ]);
+  const [paperSearchDraft, setPaperSearchDraft] = usePaperSearchDraft(
+    state.paperQuery,
+    projectId,
+  );
   const [collapsed, setCollapsed] = React.useState(false);
   const [signingOut, setSigningOut] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
@@ -598,6 +629,7 @@ export function ProjectDetailWorkspace({
     () => paperSearchQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [paperSearchQuery.data?.pages],
   );
+  const projectPaperSearchTotal = paperSearchQuery.data?.pages[0]?.total;
   React.useEffect(() => {
     const target = paperLoadMoreRef.current;
     if (
@@ -643,6 +675,24 @@ export function ProjectDetailWorkspace({
     },
     [projectId, router, state],
   );
+  const projectPaperSearchWorkbench = usePaperSearchWorkbench({
+    enabled: paperSearchActive,
+    error: paperSearchQuery.error,
+    hasMore: paperSearchQuery.hasNextPage,
+    loading: paperSearchQuery.isPending,
+    loadingMore: paperSearchQuery.isFetchingNextPage,
+    onLoadMore: () => paperSearchQuery.fetchNextPage().then(() => undefined),
+    onRetry: () => void paperSearchQuery.refetch(),
+    onTagClick: (tagId) =>
+      replaceSearch({
+        paperCursor: undefined,
+        paperTagIds: state.paperTagIds.includes(tagId)
+          ? state.paperTagIds
+          : [...state.paperTagIds, tagId],
+      }),
+    papers: projectPaperSearchResults,
+    readerProjectId: projectId,
+  });
   const updateMutation = useMutation({
     mutationFn: (value: { title: string; description: string | null }) =>
       updateProject(projectId, value),
@@ -824,40 +874,54 @@ export function ProjectDetailWorkspace({
             tagIds={state.paperTagIds}
             tags={personalTagsQuery.data?.items ?? projectPaperTags}
           />
-          <Select
-            onValueChange={(paperSort: ProjectPaperSort) =>
-              replaceSearch({ paperCursor: undefined, paperSort })
-            }
-            value={state.paperSort}
-          >
-            <CollectionToolbarSelectTrigger
-              label={t("detail.papers.sortLabel")}
+          {paperSearchActive ? (
+            <CollectionToolbarStaticValue
+              label={paperSearchT("form.relevanceSort")}
             />
-            <SelectContent>
-              <SelectItem value="added_desc">
-                {t("detail.papers.sortAdded")}
-              </SelectItem>
-              <SelectItem value="title_asc">
-                {t("detail.papers.sortTitle")}
-              </SelectItem>
-              <SelectItem value="published_desc">
-                {t("detail.papers.sortPublished")}
-              </SelectItem>
-              <SelectItem value="personal_activity_desc">
-                {t("detail.papers.sortActivity")}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          ) : (
+            <Select
+              onValueChange={(paperSort: ProjectPaperSort) =>
+                replaceSearch({ paperCursor: undefined, paperSort })
+              }
+              value={state.paperSort}
+            >
+              <CollectionToolbarSelectTrigger
+                label={t("detail.papers.sortLabel")}
+              />
+              <SelectContent>
+                <SelectItem value="added_desc">
+                  {t("detail.papers.sortAdded")}
+                </SelectItem>
+                <SelectItem value="title_asc">
+                  {t("detail.papers.sortTitle")}
+                </SelectItem>
+                <SelectItem value="published_desc">
+                  {t("detail.papers.sortPublished")}
+                </SelectItem>
+                <SelectItem value="personal_activity_desc">
+                  {t("detail.papers.sortActivity")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          )}
         </>
       }
+      meta={
+        paperSearchActive && typeof projectPaperSearchTotal === "number"
+          ? paperSearchT("results.count", {
+              count: projectPaperSearchTotal,
+            })
+          : undefined
+      }
       search={
-        <ProjectSearchField
-          key={state.paperQuery}
+        <PaperSearchForm
+          committedQuery={state.paperQuery}
+          draft={paperSearchDraft}
           label={t("detail.papers.search")}
-          onChange={(paperQuery) =>
+          onCommit={(paperQuery) =>
             replaceSearch({ paperCursor: undefined, paperQuery })
           }
-          value={state.paperQuery}
+          onDraftChange={setPaperSearchDraft}
         />
       }
     />
@@ -877,6 +941,77 @@ export function ProjectDetailWorkspace({
         </Button>
       </div>
     ) : null;
+  let projectPaperContentState: React.ReactNode;
+  if (papersQuery.isPending) {
+    projectPaperContentState = (
+      <div className="p-4">
+        <LoadingState />
+      </div>
+    );
+  } else if (papersQuery.isError) {
+    projectPaperContentState = (
+      <div className="p-4">
+        <AsyncFeedback
+          action={{
+            label: t("feedback.retry"),
+            onClick: () => void papersQuery.refetch(),
+          }}
+          state="error"
+        />
+      </div>
+    );
+  } else if (projectPapers.length === 0) {
+    projectPaperContentState = (
+      <p className="text-muted p-12 text-center text-sm">
+        {t("detail.papers.empty")}
+      </p>
+    );
+  }
+  const projectPaperBrowseProps: PaperCollectionWorkbenchProps = {
+    actions: (item) => {
+      const paper = projectPaperById.get(item.id);
+      return paper && project.capabilities.manage_papers ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <OverflowMenuButton
+              label={t("detail.papers.openMenu")}
+              visibility="contextual"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              destructive
+              onSelect={() => void requestPaperRemoval(paper)}
+            >
+              <Icon glyph={DeleteIcon} size={16} />
+              {t("detail.papers.remove")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null;
+    },
+    contentState: projectPaperContentState,
+    items: projectPaperContentState === undefined ? projectWorkbenchItems : [],
+    onStatusChange: (item, status) => {
+      if (item.inLibrary) {
+        statusMutation.mutate({
+          documentId: item.id,
+          status,
+        });
+      }
+    },
+    onTagClick: (tag) =>
+      replaceSearch({
+        paperCursor: undefined,
+        paperTagIds: state.paperTagIds.includes(tag.id)
+          ? state.paperTagIds
+          : [...state.paperTagIds, tag.id],
+      }),
+    personalLabels: true,
+    tableFooter: projectPaperPagination,
+  };
+  const projectPaperWorkbenchProps: PaperCollectionWorkbenchProps =
+    projectPaperSearchWorkbench ?? projectPaperBrowseProps;
 
   return (
     <WorkspaceShell
@@ -895,7 +1030,10 @@ export function ProjectDetailWorkspace({
       mobileHeaderLeading={
         <Link
           aria-label={t("detail.back")}
-          className="hover:bg-hover grid size-11 shrink-0 place-items-center rounded-[var(--radius-md)]"
+          className={cn(
+            "hover:bg-hover grid size-11 shrink-0 place-items-center rounded-[var(--radius-md)]",
+            focusSurfaceVariants({ intent: "neutral" }),
+          )}
           href="/projects"
         >
           <Icon glyph={BackIcon} size={20} />
@@ -947,9 +1085,11 @@ export function ProjectDetailWorkspace({
           className={cn(
             "min-w-0 flex-1 overflow-x-clip",
             state.view === "papers" ? "overflow-hidden" : "overflow-y-auto",
+            focusSurfaceVariants({ intent: "scroll" }),
           )}
           data-project-detail-scroll=""
           layout="size"
+          tabIndex={state.view === "papers" ? undefined : 0}
           transition={motionTransitions.layout}
         >
           <div
@@ -967,7 +1107,10 @@ export function ProjectDetailWorkspace({
             >
               <Link
                 aria-label={t("detail.back")}
-                className="hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]"
+                className={cn(
+                  "hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]",
+                  focusSurfaceVariants({ intent: "neutral" }),
+                )}
                 href="/projects"
               >
                 <Icon glyph={BackIcon} size={20} />
@@ -1208,101 +1351,11 @@ export function ProjectDetailWorkspace({
                 className="mt-5 min-h-0 flex-1 overflow-hidden"
                 value="papers"
               >
-                {paperSearchActive ? (
-                  <PaperSearchResults
-                    error={paperSearchQuery.error}
-                    hasMore={paperSearchQuery.hasNextPage}
-                    loading={paperSearchQuery.isPending}
-                    loadingMore={paperSearchQuery.isFetchingNextPage}
-                    onLoadMore={() =>
-                      paperSearchQuery.fetchNextPage().then(() => undefined)
-                    }
-                    onRetry={() => void paperSearchQuery.refetch()}
-                    onTagClick={(tagId) =>
-                      replaceSearch({
-                        paperCursor: undefined,
-                        paperTagIds: state.paperTagIds.includes(tagId)
-                          ? state.paperTagIds
-                          : [...state.paperTagIds, tagId],
-                      })
-                    }
-                    papers={projectPaperSearchResults}
-                    readerProjectId={projectId}
-                    toolbar={projectPaperToolbar}
-                    total={paperSearchQuery.data?.pages[0]?.total}
-                  />
-                ) : papersQuery.isPending ? (
-                  <>
-                    {projectPaperToolbar}
-                    <div className="mt-5 py-6">
-                      <LoadingState />
-                    </div>
-                  </>
-                ) : papersQuery.isError ? (
-                  <>
-                    {projectPaperToolbar}
-                    <div className="mt-5 py-6">
-                      <AsyncFeedback
-                        action={{
-                          label: t("feedback.retry"),
-                          onClick: () => void papersQuery.refetch(),
-                        }}
-                        state="error"
-                      />
-                    </div>
-                  </>
-                ) : projectPapers.length === 0 ? (
-                  <>
-                    {projectPaperToolbar}
-                    <p className="text-muted mt-5 py-12 text-center text-sm">
-                      {t("detail.papers.empty")}
-                    </p>
-                  </>
-                ) : (
-                  <PaperCollectionWorkbench
-                    actions={(item) => {
-                      const paper = projectPaperById.get(item.id);
-                      return paper && project.capabilities.manage_papers ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <OverflowMenuButton
-                              label={t("detail.papers.openMenu")}
-                              visibility="contextual"
-                            />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              destructive
-                              onSelect={() => void requestPaperRemoval(paper)}
-                            >
-                              <Icon glyph={DeleteIcon} size={16} />
-                              {t("detail.papers.remove")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : null;
-                    }}
-                    items={projectWorkbenchItems}
-                    onStatusChange={(item, status) => {
-                      if (item.inLibrary)
-                        statusMutation.mutate({
-                          documentId: item.id,
-                          status,
-                        });
-                    }}
-                    onTagClick={(tag) =>
-                      replaceSearch({
-                        paperCursor: undefined,
-                        paperTagIds: state.paperTagIds.includes(tag.id)
-                          ? state.paperTagIds
-                          : [...state.paperTagIds, tag.id],
-                      })
-                    }
-                    personalLabels
-                    tableFooter={projectPaperPagination}
-                    toolbar={projectPaperToolbar}
-                  />
-                )}
+                <PaperCollectionWorkbench
+                  {...projectPaperWorkbenchProps}
+                  scrollResetKey={projectPaperScrollResetKey}
+                  toolbar={projectPaperToolbar}
+                />
               </TabsContent>
 
               <TabsContent className="mt-5" value="outputs">
