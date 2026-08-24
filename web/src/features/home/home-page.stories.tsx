@@ -10,7 +10,7 @@ import {
   readFocusVisual,
 } from "@/components/ui/focus-contract.story-test";
 import { resetRefreshForTests } from "@/lib/api";
-import { homeHandlers } from "./api/handlers";
+import { homeHandlers, resetHomeHandlerState } from "./api/handlers";
 import { homeConversations } from "./api/fixtures";
 import { HomeWorkspace } from "./home-page";
 
@@ -34,6 +34,7 @@ const meta = {
   loaders: [
     async () => {
       resetRefreshForTests();
+      resetHomeHandlerState();
       window.sessionStorage.clear();
       return {};
     },
@@ -218,7 +219,9 @@ export const Processing: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Ask Scholens" }));
     await waitFor(() => expect(composer).toHaveValue(""));
     await waitFor(() =>
-      expect(canvas.getByText("Searching your research…")).toBeVisible(),
+      expect(canvas.getByRole("status")).toHaveTextContent(
+        "Searching your research…",
+      ),
     );
     await expect(
       canvas.getByRole("button", { name: "Stop response" }),
@@ -241,11 +244,12 @@ export const CreationUnavailable: Story = {
     await userEvent.type(composer, "Summarize my recent research");
     await userEvent.click(canvas.getByRole("button", { name: "Ask Scholens" }));
     const restoredComposer = await canvas.findByRole("textbox", {
-      name: "Ask a follow-up",
+      name: "Ask anything",
     });
     await waitFor(() =>
       expect(restoredComposer).toHaveValue("Summarize my recent research"),
     );
+    await expect(restoredComposer).toHaveFocus();
     await expect(
       await body.findByText(
         "Your input is still in the composer. Try sending it again later.",
@@ -537,7 +541,9 @@ export const MobileProcessing: Story = {
       canvas.getByRole("button", { name: "询问 Scholens" }),
     );
     await waitFor(() =>
-      expect(canvas.getByText("正在检索你的研究资料…")).toBeVisible(),
+      expect(canvas.getByRole("status")).toHaveTextContent(
+        "正在检索你的研究资料…",
+      ),
     );
   },
 };

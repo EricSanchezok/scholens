@@ -17,6 +17,7 @@ import {
 import type { components } from "@/lib/api/generated/schema";
 import type { LiveTurn } from "@/features/conversation";
 import {
+  ConversationLiveStore,
   ConversationView,
   type ConversationResponseVariant,
   type ConversationTurn,
@@ -176,8 +177,8 @@ function researchTurn(overrides: Partial<ConversationTurn> = {}) {
   });
 }
 
-function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
-  return {
+function liveTurn(overrides: Partial<LiveTurn> = {}) {
+  return new ConversationLiveStore({
     turnId: "52000000-0000-4000-8000-000000000001",
     responseId: "42000000-0000-4000-8000-000000000001",
     variantIndex: null,
@@ -196,13 +197,14 @@ function liveTurn(overrides: Partial<LiveTurn> = {}): LiveTurn {
     depth: 1,
     durationMs: null,
     startedAtMs: Date.now() - 4_000,
-    state: "streaming",
+    phase: "working",
     connectionState: "connected",
+    stopFailure: false,
     ...overrides,
-  };
+  });
 }
 
-function responseReadyLiveTurn(suggestions: string[] | null): LiveTurn {
+function responseReadyLiveTurn(suggestions: string[] | null) {
   const canonicalResponse = response({
     id: "42000000-0000-4000-8000-000000000001",
     content: "The answer is ready without waiting for a refetch.",
@@ -219,7 +221,7 @@ function responseReadyLiveTurn(suggestions: string[] | null): LiveTurn {
     content: canonicalResponse.content ?? "",
     readyTurn: canonicalTurn,
     suggestions,
-    state: "ready",
+    phase: "ready",
   });
 }
 
@@ -229,7 +231,7 @@ const meta = {
   args: {
     layout: "workspace",
     turns: homeTurns,
-    liveTurn: null,
+    liveTurn: new ConversationLiveStore(),
     context: { kind: "library" },
     papers: homePapers,
     projects: homeProjects,
@@ -245,6 +247,7 @@ const meta = {
     onSelectResponse: fn(),
     onUseSuggestion: fn(),
     canSend: true,
+    stopAvailable: false,
   },
   decorators: [
     (Story) => (
@@ -385,8 +388,10 @@ export const TimedDirectAnswer: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("status")).toHaveTextContent("21s");
-    await expect(canvas.getByText("Completed in 21s")).toHaveClass("sr-only");
+    const worklog = canvasElement.querySelector('[data-state="ready"]');
+    await expect(worklog).not.toBeNull();
+    await expect(worklog).toHaveTextContent(/Research complete.*21s/);
+    await expect(canvas.queryByRole("status")).not.toBeInTheDocument();
   },
 };
 
@@ -411,9 +416,9 @@ export const FailedLeafAfterRefresh: Story = {
     await waitFor(() =>
       expect(canvas.getByText("Could not complete")).toBeVisible(),
     );
-    await waitFor(() =>
-      expect(canvas.getByRole("status")).toHaveTextContent("4s"),
-    );
+    const worklog = canvasElement.querySelector('[data-state="error"]');
+    await expect(worklog).not.toBeNull();
+    await expect(worklog).toHaveTextContent("Could not complete · 4s");
     await userEvent.click(
       canvas.getByRole("button", { name: "Try another response" }),
     );
@@ -636,7 +641,7 @@ export const RetryFailed: Story = {
     liveTurn: liveTurn({
       turnId,
       generationKind: "retry",
-      state: "error",
+      phase: "error",
       failure: {
         code: "research_service_unavailable",
         kind: "unavailable",
@@ -648,9 +653,9 @@ export const RetryFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() =>
-      expect(
-        canvas.getByText(/Research service is temporarily unavailable/),
-      ).toBeVisible(),
+      expect(canvas.getByRole("status")).toHaveTextContent(
+        /Research service is temporarily unavailable/,
+      ),
     );
     await expect(canvas.getAllByText("What day is it today?")).toHaveLength(1);
   },
@@ -755,7 +760,7 @@ export const MobileWorklogExpanded: Story = {
         { ...readActivity, sequence: 5, subject: "Reasoning Efficiently" },
       ],
       content: "现有研究主要围绕短轨迹训练、隐式推理和动态预算展开。",
-      state: "complete",
+      phase: "ready",
       trace: researchTrace,
     }),
   },
@@ -773,7 +778,9 @@ export const ThinkingWithoutTools: Story = {
   args: { turns: [], liveTurn: liveTurn() },
   play: async ({ canvasElement }) => {
     await waitFor(() =>
-      expect(within(canvasElement).getByText("Thinking…")).toBeVisible(),
+      expect(within(canvasElement).getByRole("status")).toHaveTextContent(
+        "Thinking…",
+      ),
     );
   },
 };
@@ -809,11 +816,9 @@ export const MobileReconnecting: Story = {
     liveTurn: liveTurn({ connectionState: "reconnecting" }),
   },
   play: async ({ canvasElement }) => {
-    await expect(
-      within(canvasElement).getByText(
-        "Still running in the background · reconnecting…",
-      ),
-    ).toBeVisible();
+    await expect(within(canvasElement).getByRole("status")).toHaveTextContent(
+      "Still running in the background · reconnecting…",
+    );
   },
 };
 
@@ -828,14 +833,12 @@ export const MobileReconnectingDark: Story = {
 export const StopCouldNotBeConfirmed: Story = {
   args: {
     turns: [],
-    liveTurn: liveTurn({ connectionState: "stop_failed" }),
+    liveTurn: liveTurn({ stopFailure: true }),
   },
   play: async ({ canvasElement }) => {
-    await expect(
-      within(canvasElement).getByText(
-        "Could not stop yet · still running in the background",
-      ),
-    ).toBeVisible();
+    await expect(within(canvasElement).getByRole("status")).toHaveTextContent(
+      "Could not stop yet · still running in the background",
+    );
   },
 };
 
@@ -949,7 +952,7 @@ export const CompletedCollapsed: Story = {
     liveTurn: liveTurn({
       entries: [searchActivity, readActivity],
       content: "The evidence supports a shorter distilled reasoning trace.",
-      state: "complete",
+      phase: "ready",
       trace: researchTrace,
     }),
   },
@@ -967,7 +970,7 @@ export const PartialFailure: Story = {
     liveTurn: liveTurn({
       entries: [searchActivity, { ...readActivity, state: "failed" }],
       content: "I found enough material to answer.",
-      state: "complete",
+      phase: "ready",
       trace: {
         ...researchTrace,
         entries: [searchActivity, { ...readActivity, state: "failed" }],
@@ -988,7 +991,7 @@ export const PartialFailure: Story = {
 export const Cancelled: Story = {
   args: {
     turns: [],
-    liveTurn: liveTurn({ entries: [searchActivity], state: "cancelled" }),
+    liveTurn: liveTurn({ entries: [searchActivity], phase: "cancelled" }),
   },
 };
 
@@ -996,7 +999,7 @@ export const Error: Story = {
   args: {
     turns: [],
     liveTurn: liveTurn({
-      state: "error",
+      phase: "error",
       failure: {
         code: "rate_limit_unavailable",
         kind: "unavailable",

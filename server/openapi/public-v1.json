@@ -2645,6 +2645,24 @@
         "title": "ConversationSearchResult",
         "type": "object"
       },
+      "ConversationStartRequest": {
+        "additionalProperties": false,
+        "description": "Atomically create a Conversation and accept its first turn.\n\nReplay identity uses the client IDs, owner, originally accepted scope,\nimmutable Turn fields, and the Turn's paper-context snapshot. Mutable Conversation\ntitle, current scope, current context, and tool permissions are not replay-identity\nfields.",
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/ConversationCreateRequest"
+          },
+          "turn": {
+            "$ref": "#/components/schemas/ConversationTurnCreateRequest"
+          }
+        },
+        "required": [
+          "conversation",
+          "turn"
+        ],
+        "title": "ConversationStartRequest",
+        "type": "object"
+      },
       "ConversationStreamActivityEvent": {
         "properties": {
           "activity": {
@@ -2931,7 +2949,7 @@
         "type": "object"
       },
       "ConversationStreamEventSchema": {
-        "description": "Compatible schema for the existing inline SSE response.",
+        "description": "Compatible schema for the original direct generation response.",
         "discriminator": {
           "mapping": {
             "activity": "#/components/schemas/ConversationStreamActivityEvent",
@@ -12186,6 +12204,92 @@
         "summary": "Select Conversation Branch"
       }
     },
+    "/api/v1/conversations/{conversation_id}/start": {
+      "post": {
+        "operationId": "start_conversation_api_v1_conversations__conversation_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "prefer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prefer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSubscriptionEventSchema"
+                }
+              }
+            },
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationGenerationAccepted"
+                }
+              }
+            },
+            "description": "Durable generation accepted for background delivery."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Start Conversation"
+      }
+    },
     "/api/v1/conversations/{conversation_id}/tool-permissions": {
       "put": {
         "operationId": "update_conversation_tool_permissions_api_v1_conversations__conversation_id__tool_permissions_put",
@@ -12361,13 +12465,18 @@
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               },
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {
@@ -12377,7 +12486,7 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Durable generation accepted for background delivery."
           },
           "422": {
             "content": {
@@ -12457,13 +12566,18 @@
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               },
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {
@@ -12473,7 +12587,7 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Durable generation accepted for background delivery."
           },
           "422": {
             "content": {
@@ -12553,13 +12667,18 @@
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               },
+              "application/vnd.scholens.conversation-events": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationCandidateSubscriptionEventSchema"
+                }
+              },
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationStreamEventSchema"
                 }
               }
             },
-            "description": "Standard SSE stream of typed conversation events."
+            "description": "A durable typed event stream. Request the Scholens candidate media type to include sanitized partial answer events."
           },
           "202": {
             "content": {
@@ -12569,7 +12688,7 @@
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Durable generation accepted for background delivery."
           },
           "422": {
             "content": {

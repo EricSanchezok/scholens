@@ -48,6 +48,15 @@ async def test_rate_limit_uses_two_cluster_safe_single_key_scripts(
         feature="chat",
     )
 
+    # Default AI_RATE_PER_IP is 120: a count of 120 must not exceed it.
+    client.eval.reset_mock()
+    client.eval.side_effect = [1, 120]
+    await ai_limits.enforce_rate_limit(
+        user_id=42,
+        ip_address="203.0.113.10",
+        feature="chat",
+    )
+
     window = 1_725_000_012 // 60
     assert client.eval.await_args_list == [
         call(
@@ -60,6 +69,44 @@ async def test_rate_limit_uses_two_cluster_safe_single_key_scripts(
             ai_limits._RATE_LIMIT_SCRIPT,
             1,
             f"scholens:rate:ip:203.0.113.10:chat:{window}",
+            61,
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_deduplicates_a_durable_operation_in_each_counter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = AsyncMock()
+    client.eval.side_effect = [4, 7]
+    monkeypatch.setattr(ai_limits, "_redis_client", lambda _url=None: client)
+    monkeypatch.setattr(ai_limits.time, "time", lambda: 1_725_000_012)
+    monkeypatch.setenv("AI_RATE_WINDOW_SECONDS", "60")
+
+    await ai_limits.enforce_rate_limit(
+        user_id=42,
+        ip_address="203.0.113.10",
+        feature="chat",
+        operation_id="response-1",
+    )
+
+    window = 1_725_000_012 // 60
+    user_key = f"scholens:rate:user:42:chat:{window}"
+    ip_key = f"scholens:rate:ip:203.0.113.10:chat:{window}"
+    assert client.eval.await_args_list == [
+        call(
+            ai_limits._IDEMPOTENT_RATE_LIMIT_SCRIPT,
+            2,
+            user_key,
+            f"scholens:rate:dedupe:{{{user_key}}}:response-1",
+            61,
+        ),
+        call(
+            ai_limits._IDEMPOTENT_RATE_LIMIT_SCRIPT,
+            2,
+            ip_key,
+            f"scholens:rate:dedupe:{{{ip_key}}}:response-1",
             61,
         ),
     ]
@@ -168,11 +215,27 @@ async def test_concurrency_limits_default_to_worker_aligned_values(
         feature="chat",
     )
 
-    # Default AI_RATE_PER_IP is 120: a count of 120 must not exceed it.
-    client.eval.reset_mock()
-    client.eval.side_effect = [1, 120]
-    await ai_limits.enforce_rate_limit(
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("result", "created"),
+    [(1, True), (2, False)],
+    ids=["new-member", "existing-member"],
+)
+async def test_concurrency_acquire_reports_atomic_member_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+    result: int,
+    created: bool,
+) -> None:
+    client = AsyncMock()
+    client.eval.return_value = result
+    monkeypatch.setattr(ai_limits, "_redis_client", lambda _url=None: client)
+
+    lease = await ai_limits.acquire_concurrency(
         user_id=42,
-        ip_address="203.0.113.10",
-        feature="chat",
+        category="interactive",
+        operation_id="response-1",
     )
+
+    assert lease.member == "response-1"
+    assert lease.created is created

@@ -1,4 +1,6 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -19,6 +21,10 @@ from app.modules.jobs.infrastructure.dispatcher import (
     _reserve_dispatches,
     dispatch_pending_jobs_once,
 )
+from app.modules.jobs.infrastructure.dispatcher_wakeup import JobDispatcherWakeup
+from app.modules.jobs.application.jobs import EnqueueJobCommand
+from app.modules.jobs.infrastructure.application_gateway import SqlAlchemyJobsGateway
+from scholens_job_contracts import JobQueue
 from sqlalchemy.orm import Session
 
 
@@ -346,6 +352,71 @@ def test_conversation_redelivery_interrupts_expired_lease_before_claiming() -> N
     release.assert_called_once_with(user_id=7, response_id=request.response_id)
 
 
+def test_conversation_generation_preserves_the_legacy_worker_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.bootstrap.adapters.conversation_worker import (
+        ConversationGenerationTaskRequest,
+    )
+    from app.modules.jobs.infrastructure import application_gateway
+
+    conversation_id = uuid4()
+    turn_id = uuid4()
+    response_id = uuid4()
+    payload = {
+        "conversation_id": str(conversation_id),
+        "turn_id": str(turn_id),
+        "response_id": str(response_id),
+        "generation_kind": "initial",
+    }
+    enqueue = MagicMock(
+        return_value=SimpleNamespace(
+            job=SimpleNamespace(payload=payload),
+            created=True,
+        )
+    )
+    monkeypatch.setattr(job_repository, "enqueue", enqueue)
+    monkeypatch.setattr(
+        application_gateway,
+        "get_webhook_base_url",
+        lambda: "https://server.invalid",
+    )
+    monkeypatch.setattr(
+        application_gateway,
+        "job_response",
+        lambda _job: SimpleNamespace(),
+    )
+    gateway = SqlAlchemyJobsGateway(MagicMock(spec=Session))
+
+    gateway.enqueue(
+        command=EnqueueJobCommand(
+            job_id=response_id,
+            operation=JobOperation.CONVERSATION_GENERATE,
+            requested_by_id=7,
+            correlation_id=uuid4(),
+            origin_operation_id=uuid4(),
+            idempotency_key=f"conversation-response:{response_id}",
+            payload=payload,
+            task_name=(
+                "app.bootstrap.adapters.conversation_worker."
+                "generate_conversation_response"
+            ),
+            queue=JobQueue.CONVERSATION,
+            project_id=uuid4(),
+        )
+    )
+
+    persisted = enqueue.call_args.kwargs["request"]
+    assert persisted.payload == payload
+    assert persisted.task_kwargs == {"request": payload}
+    assert (
+        ConversationGenerationTaskRequest.model_validate(
+            persisted.task_kwargs["request"]
+        ).response_id
+        == response_id
+    )
+
+
 def test_publish_failure_keeps_dispatch_pending_for_retry() -> None:
     job = _job()
     dispatch = ReservedJobDispatch(
@@ -384,6 +455,55 @@ def test_publish_failure_keeps_dispatch_pending_for_retry() -> None:
     assert published == 0
     assert dispatch.attempt_count == 1
     record_failure.assert_called_once()
+
+
+def test_outbox_queue_age_metric_is_partitioned_only_by_queue() -> None:
+    dispatch = ReservedJobDispatch(
+        dispatch_id=uuid4(),
+        job_id=uuid4(),
+        task_name="generate_conversation_response",
+        queue="conversation",
+        kwargs={"request": {}},
+        attempt_count=1,
+        enqueued_at=datetime.now(UTC),
+        correlation_id=uuid4(),
+        origin_operation_id=uuid4(),
+        requested_by_id=42,
+    )
+
+    with (
+        patch(
+            "app.modules.jobs.infrastructure.dispatcher._reserve_dispatches",
+            return_value=(dispatch,),
+        ),
+        patch(
+            "app.modules.jobs.infrastructure.dispatcher._record_publish_success",
+            return_value=True,
+        ),
+        patch("app.modules.jobs.infrastructure.dispatcher.jobs_client.publish_task"),
+        patch("app.modules.jobs.infrastructure.dispatcher.record_histogram") as metric,
+    ):
+        assert dispatch_pending_jobs_once() == 1
+
+    queue_age = next(
+        call
+        for call in metric.call_args_list
+        if call.args[0] == "scholens.jobs.queue_age"
+    )
+    assert queue_age.kwargs["attributes"] == {"queue": "conversation"}
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_wakeup_interrupts_idle_wait_and_keeps_poll_fallback() -> None:
+    wakeup = JobDispatcherWakeup()
+    stop = asyncio.Event()
+
+    wakeup.notify()
+    async with asyncio.timeout(0.1):
+        await wakeup.wait(stop, timeout=60)
+
+    async with asyncio.timeout(0.1):
+        await wakeup.wait(stop, timeout=0.001)
 
 
 def test_dispatch_reservation_uses_a_versioned_publishing_lease() -> None:

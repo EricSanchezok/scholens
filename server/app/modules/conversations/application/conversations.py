@@ -90,6 +90,14 @@ class ConversationGateway(Protocol):
         request: ConversationCreateRequest,
     ) -> ConversationDetailResponse: ...
 
+    def create_with_id(
+        self,
+        *,
+        user_id: int,
+        conversation_id: UUID,
+        request: ConversationCreateRequest,
+    ) -> ConversationChange[ConversationDetailResponse]: ...
+
     def get(
         self, *, user_id: int, conversation_id: UUID
     ) -> ConversationDetailResponse: ...
@@ -257,6 +265,29 @@ class Conversations:
             action=CONVERSATION_CREATED,
             resources=(ResourceRef("conversation", str(result.id)),),
         )
+        return result
+
+    def create_with_id(
+        self,
+        *,
+        actor: Actor,
+        operation: OperationContext,
+        conversation_id: UUID,
+        request: ConversationCreateRequest,
+    ) -> ConversationChange[ConversationDetailResponse]:
+        """Create a client-identified Conversation or return its owned row."""
+        result = self._gateway.create_with_id(
+            user_id=actor.id,
+            conversation_id=conversation_id,
+            request=request,
+        )
+        if result.changed:
+            self._journal.append(
+                actor=actor,
+                operation=operation,
+                action=CONVERSATION_CREATED,
+                resources=(ResourceRef("conversation", str(conversation_id)),),
+            )
         return result
 
     def get(

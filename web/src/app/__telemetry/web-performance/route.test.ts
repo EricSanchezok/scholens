@@ -63,4 +63,36 @@ describe("web performance telemetry route", () => {
       await POST(request(validEvent, { "sec-fetch-site": "cross-site" })),
     ).toMatchObject({ status: 204 });
   });
+
+  it("accepts a content-free conversation milestone", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const response = await POST(
+      request({
+        device_class: "desktop",
+        effective_type: "4g",
+        event_id: "2b5724e5-b36d-4bfa-9b7e-e1f0b3092eb2",
+        metric: "conversation_first_content",
+        release: "development",
+        save_data: false,
+        stream_kind: "direct",
+        to_route: "reader",
+        value: 612,
+      }),
+    );
+
+    expect(response.status).toBe(204);
+    const logged = JSON.parse(info.mock.calls[0]![0] as string) as Record<
+      string,
+      unknown
+    >;
+    expect(logged).toMatchObject({
+      event: "conversation_performance",
+      metric: "conversation_first_content",
+      stream_kind: "direct",
+      to_route: "reader",
+      value: 612,
+    });
+    expect(logged).not.toHaveProperty("conversation_id");
+    expect(logged).not.toHaveProperty("content");
+  });
 });

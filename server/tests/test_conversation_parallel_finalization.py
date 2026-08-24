@@ -13,10 +13,11 @@ from app.bootstrap.adapters.conversation_chat import (
     DefaultConversationChatGateway,
     stream_conversation_agent,
 )
-from app.helpers.ai_limits import AILimitExceeded
+from app.helpers.ai_limits import AIConcurrencyLease
 from app.modules.conversations.application.chat import (
     ConversationChatScope,
     ConversationContextSnapshot,
+    ConversationGenerationPreparation,
     ConversationTurnCompletion,
     ConversationTurnStart,
     MentionScope,
@@ -30,11 +31,11 @@ from app.modules.conversations.application.contracts.conversations import (
 from app.modules.conversations.application.contracts.turns import (
     ConversationAssistantItem,
     ConversationStreamAssistantItemCompleteEvent,
+    ConversationStreamAssistantItemStartEvent,
     ConversationTurnCreateRequest,
 )
 from app.modules.papers.application.contracts.search import LibraryPaperCollection
 from app.shared.application import Actor
-from app.shared.domain import AppError, FailureKind
 from app.shared.domain.enums import ConversationScopeType
 from app.shared.domain.enums import JobOperation
 from scholens_job_contracts import JobQueue
@@ -49,6 +50,34 @@ def _payload(event: str) -> dict[str, Any]:
     payload = json.loads(data)
     assert isinstance(payload, dict)
     return payload
+
+
+def _generation_preparation(
+    request: ConversationTurnCreateRequest,
+) -> ConversationGenerationPreparation:
+    return ConversationGenerationPreparation(
+        request=request,
+        turn_start=ConversationTurnStart(
+            turn_id=request.turn_id,
+            response=PersistedChatResponse(
+                id=request.response_id,
+                turn_id=request.turn_id,
+                variant_index=1,
+                status="running",
+                content="",
+                references=None,
+                trace=None,
+                duration_ms=None,
+            ),
+            turn_operation_id=uuid4(),
+            correlation_id=uuid4(),
+            turn_created=False,
+            response_created=False,
+            generation_kind="initial",
+            suggestions=(),
+        ),
+        paper_context=LibraryPaperCollection(),
+    )
 
 
 @dataclass
@@ -67,13 +96,20 @@ class _Runtime:
         self._suggestions_started = suggestions_started
 
     async def stream(self, **kwargs: object):
-        await asyncio.wait_for(self._suggestions_started.wait(), timeout=0.5)
         request = kwargs["request"]
         assert isinstance(request, ConversationTurnCreateRequest)
+        assert isinstance(kwargs["history"], list)
+        item_id = f"assistant:{request.turn_id}:1"
+        yield ConversationStreamAssistantItemStartEvent(
+            response_id=request.response_id,
+            item_id=item_id,
+            sequence=1,
+        )
+        await asyncio.wait_for(self._suggestions_started.wait(), timeout=0.5)
         yield ConversationStreamAssistantItemCompleteEvent(
             response_id=request.response_id,
             item=ConversationAssistantItem(
-                id=f"assistant:{request.turn_id}:1",
+                id=item_id,
                 sequence=1,
                 phase="final",
                 content="Answer",
@@ -86,7 +122,7 @@ class _FailingRuntime:
         self._suggestions_started = suggestions_started
 
     async def stream(self, **_: object):
-        await asyncio.wait_for(self._suggestions_started.wait(), timeout=0.5)
+        self._suggestions_started.set()
         if False:
             yield None
         raise RuntimeError("agent failed")
@@ -114,6 +150,7 @@ class _ChatData:
         self.request = request
         self.title_is_default = title_is_default
         self.suggestions: list[str] | None = None
+        self.history_calls = 0
         self.completed = False
         self.complete_duration_ms: int | None = None
         self.finished: tuple[str, int] | None = None
@@ -167,6 +204,7 @@ class _ChatData:
         )
 
     def history(self, **_: object) -> list[object]:
+        self.history_calls += 1
         return []
 
     def complete_turn(self, **kwargs: object) -> ConversationTurnCompletion:
@@ -244,15 +282,20 @@ class _Conversations:
 class _Executor:
     def __init__(self, chat_data: _ChatData) -> None:
         self.chat_data = chat_data
-        self.job_commands = SimpleNamespace(enqueue=lambda **kwargs: kwargs["command"])
+        self.job_commands = SimpleNamespace(
+            enqueue=lambda **_kwargs: SimpleNamespace(created=True),
+            find_by_idempotency_key=lambda **_kwargs: None,
+        )
         self.capabilities = SimpleNamespace(
             conversation_chat_data=chat_data,
             conversations=_Conversations(chat_data),
             job_commands=self.job_commands,
         )
+        self.query_calls = 0
         self.command_calls = 0
 
     def query(self, callback):
+        self.query_calls += 1
         return callback(self.capabilities)
 
     def command(self, callback):
@@ -274,18 +317,9 @@ class _Executor:
 
 
 def _patch_stream_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def acquire(**_: object) -> object:
-        return object()
-
     async def no_op(*_: object, **__: object) -> None:
         return None
 
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
-    )
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", acquire
-    )
     monkeypatch.setattr(
         "app.bootstrap.adapters.conversation_chat.release_concurrency", no_op
     )
@@ -312,16 +346,24 @@ async def test_async_acceptance_persists_response_and_outbox_in_one_command(
     chat_data = _ChatData(request)
     executor = _Executor(chat_data)
     enqueued: list[object] = []
-    executor.job_commands.enqueue = lambda **kwargs: enqueued.append(kwargs["command"])
+
+    def enqueue(**kwargs: object) -> object:
+        enqueued.append(kwargs["command"])
+        return SimpleNamespace(created=True)
+
+    executor.job_commands.enqueue = enqueue
 
     async def no_op(*_: object, **__: object) -> None:
         return None
+
+    async def acquire(*_: object, **__: object) -> AIConcurrencyLease:
+        return AIConcurrencyLease(key="", member="", created=True)
 
     monkeypatch.setattr(
         "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
     )
     monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", no_op
+        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", acquire
     )
     operation = SimpleNamespace(
         trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
@@ -335,6 +377,7 @@ async def test_async_acceptance_persists_response_and_outbox_in_one_command(
         SimpleNamespace(),
         _SuggestionGenerator(asyncio.Event(), asyncio.Event()),
     )
+    conversation_id = uuid4()
 
     accepted = await gateway.accept(
         actor=Actor(
@@ -344,7 +387,7 @@ async def test_async_acceptance_persists_response_and_outbox_in_one_command(
             email_verified=True,
         ),
         operation=operation,
-        conversation_id=uuid4(),
+        conversation_id=conversation_id,
         request=request,
         client_ip="127.0.0.1",
     )
@@ -356,7 +399,12 @@ async def test_async_acceptance_persists_response_and_outbox_in_one_command(
     assert command.job_id == request.response_id
     assert command.operation is JobOperation.CONVERSATION_GENERATE
     assert command.queue is JobQueue.CONVERSATION
-    assert command.payload["response_id"] == str(request.response_id)
+    assert command.payload == {
+        "conversation_id": str(conversation_id),
+        "turn_id": str(request.turn_id),
+        "response_id": str(request.response_id),
+        "generation_kind": "initial",
+    }
 
 
 @pytest.mark.asyncio
@@ -402,6 +450,9 @@ async def test_terminal_acceptance_replay_releases_its_idempotent_capacity_lease
     async def no_op(*_: object, **__: object) -> None:
         return None
 
+    async def acquire(*_: object, **__: object) -> AIConcurrencyLease:
+        return AIConcurrencyLease(key="", member="", created=True)
+
     async def release(lease: object) -> None:
         released.append(lease)
 
@@ -409,7 +460,7 @@ async def test_terminal_acceptance_replay_releases_its_idempotent_capacity_lease
         "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
     )
     monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", no_op
+        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", acquire
     )
     monkeypatch.setattr(
         "app.bootstrap.adapters.conversation_chat.release_concurrency", release
@@ -444,253 +495,7 @@ async def test_terminal_acceptance_replay_releases_its_idempotent_capacity_lease
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "failure_stage",
-    ["quota", "rate", "rate_unavailable", "capacity"],
-)
-async def test_branch_preflight_failure_preserves_authoritative_state(
-    monkeypatch: pytest.MonkeyPatch,
-    failure_stage: str,
-) -> None:
-    request = ConversationTurnCreateRequest(
-        turn_id=uuid4(),
-        response_id=uuid4(),
-        user_query="Edited question",
-        locale="en",
-        time_zone="UTC",
-    )
-    chat_data = _ChatData(request)
-    executor = _Executor(chat_data)
-    original_state = (
-        list(chat_data.selected_path),
-        chat_data.path_revision,
-        dict(chat_data.paper_context),
-    )
-
-    async def no_op(*_: object, **__: object) -> None:
-        return None
-
-    async def fail_limit(*_: object, **__: object) -> None:
-        raise AILimitExceeded(
-            {
-                "rate": "rate_limit_exceeded",
-                "rate_unavailable": "rate_limit_unavailable",
-            }.get(failure_stage, "interactive_concurrency_exceeded")
-        )
-
-    if failure_stage == "quota":
-
-        def fail_prepare(**_: object) -> ConversationChatScope:
-            raise AppError(
-                code="token_quota_exceeded",
-                message="Token quota exceeded",
-                kind=FailureKind.RATE_LIMITED,
-            )
-
-        chat_data.prepare = fail_prepare  # type: ignore[method-assign]
-        monkeypatch.setattr(
-            "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
-        )
-        monkeypatch.setattr(
-            "app.bootstrap.adapters.conversation_chat.acquire_concurrency", no_op
-        )
-    else:
-        monkeypatch.setattr(
-            "app.bootstrap.adapters.conversation_chat.enforce_rate_limit",
-            fail_limit if failure_stage.startswith("rate") else no_op,
-        )
-        monkeypatch.setattr(
-            "app.bootstrap.adapters.conversation_chat.acquire_concurrency",
-            fail_limit if failure_stage == "capacity" else no_op,
-        )
-
-    operation = SimpleNamespace(
-        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
-        origin="test",
-        credential=None,
-    )
-    with pytest.raises(AppError) as exc_info:
-        await stream_conversation_agent(
-            request,
-            conversation_id=uuid4(),
-            client_ip="127.0.0.1",
-            executor=executor,
-            current_user=Actor(
-                id=7,
-                email="reader@example.com",
-                status="active",
-                email_verified=True,
-            ),
-            runtime=_FailingRuntime(asyncio.Event()),
-            operation=operation,
-            operation_factory=SimpleNamespace(resume=lambda **_: operation),
-            suggestion_generator=_SuggestionGenerator(
-                asyncio.Event(),
-                asyncio.Event(),
-            ),
-            generation_kind="branch",
-            branch_from_turn_id=chat_data.selected_path[0],
-            paper_context_snapshot=LibraryPaperCollection(),
-        )
-
-    assert exc_info.value.code in {
-        "token_quota_exceeded",
-        "rate_limit_exceeded",
-        "rate_limit_unavailable",
-        "interactive_concurrency_exceeded",
-    }
-    assert executor.command_calls == 0
-    assert chat_data.start_calls == 0
-    assert (
-        chat_data.selected_path,
-        chat_data.path_revision,
-        chat_data.paper_context,
-    ) == original_state
-
-
-@pytest.mark.asyncio
-async def test_successful_branch_switches_context_and_path_in_accept_command(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = ConversationTurnCreateRequest(
-        turn_id=uuid4(),
-        response_id=uuid4(),
-        user_query="Edited question",
-        locale="en",
-        time_zone="UTC",
-    )
-    chat_data = _ChatData(request)
-    source_turn_id = chat_data.selected_path[0]
-    chat_data.paper_context = {"kind": "selection", "document_ids": [str(uuid4())]}
-    executor = _Executor(chat_data)
-    _patch_stream_dependencies(monkeypatch)
-    operation = SimpleNamespace(
-        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
-        origin="test",
-        credential=None,
-    )
-
-    source = await stream_conversation_agent(
-        request,
-        conversation_id=uuid4(),
-        client_ip="127.0.0.1",
-        executor=executor,
-        current_user=Actor(
-            id=7,
-            email="reader@example.com",
-            status="active",
-            email_verified=True,
-        ),
-        runtime=_FailingRuntime(asyncio.Event()),
-        operation=operation,
-        operation_factory=SimpleNamespace(resume=lambda **_: operation),
-        suggestion_generator=_SuggestionGenerator(asyncio.Event(), asyncio.Event()),
-        generation_kind="branch",
-        branch_from_turn_id=source_turn_id,
-        paper_context_snapshot=LibraryPaperCollection(),
-    )
-
-    assert executor.command_calls == 1
-    assert chat_data.start_calls == 1
-    assert chat_data.selected_path == [request.turn_id]
-    assert chat_data.path_revision == 4
-    assert chat_data.paper_context == {"kind": "library"}
-
-    iterator = source.__aiter__()
-    assert _payload(await anext(iterator))["type"] == "start"
-    await iterator.aclose()
-
-
-@pytest.mark.asyncio
-async def test_turn_id_conflict_rolls_back_acceptance_and_releases_capacity_lease(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = ConversationTurnCreateRequest(
-        turn_id=uuid4(),
-        response_id=uuid4(),
-        user_query="Edited question",
-        locale="en",
-        time_zone="UTC",
-    )
-    chat_data = _ChatData(request)
-    executor = _Executor(chat_data)
-    lease = object()
-    released: list[object] = []
-
-    async def no_op(*_: object, **__: object) -> None:
-        return None
-
-    async def acquire(**_: object) -> object:
-        return lease
-
-    async def release(value: object, **_: object) -> None:
-        released.append(value)
-
-    original_state = (
-        list(chat_data.selected_path),
-        chat_data.path_revision,
-        dict(chat_data.paper_context),
-    )
-
-    def reject_start(**kwargs: object) -> ConversationTurnStart:
-        chat_data.paper_context = dict(kwargs["paper_context"])  # type: ignore[arg-type]
-        chat_data.selected_path = [request.turn_id]
-        chat_data.path_revision += 1
-        raise AppError(
-            code="conversation_turn_conflict",
-            message="Turn was already used differently",
-            kind=FailureKind.CONFLICT,
-        )
-
-    chat_data.start_turn = reject_start  # type: ignore[method-assign]
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.enforce_rate_limit", no_op
-    )
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.acquire_concurrency", acquire
-    )
-    monkeypatch.setattr(
-        "app.bootstrap.adapters.conversation_chat.release_concurrency", release
-    )
-    operation = SimpleNamespace(
-        trace=SimpleNamespace(operation_id=uuid4(), correlation_id=uuid4()),
-        origin="test",
-        credential=None,
-    )
-
-    with pytest.raises(AppError) as exc_info:
-        await stream_conversation_agent(
-            request,
-            conversation_id=uuid4(),
-            client_ip="127.0.0.1",
-            executor=executor,
-            current_user=Actor(
-                id=7,
-                email="reader@example.com",
-                status="active",
-                email_verified=True,
-            ),
-            runtime=_FailingRuntime(asyncio.Event()),
-            operation=operation,
-            operation_factory=SimpleNamespace(resume=lambda **_: operation),
-            suggestion_generator=_SuggestionGenerator(
-                asyncio.Event(),
-                asyncio.Event(),
-            ),
-        )
-
-    assert exc_info.value.code == "conversation_turn_conflict"
-    assert executor.command_calls == 1
-    assert released == [lease]
-    assert (
-        chat_data.selected_path,
-        chat_data.path_revision,
-        chat_data.paper_context,
-    ) == original_state
-
-
-@pytest.mark.asyncio
-async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
+async def test_sidecars_reuse_one_history_query_after_the_first_public_frame(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = ConversationTurnCreateRequest(
@@ -711,11 +516,12 @@ async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
         origin="test",
         credential=None,
     )
+    executor = _Executor(chat_data)
     source = await stream_conversation_agent(
-        request,
+        _generation_preparation(request),
         conversation_id=uuid4(),
         client_ip="127.0.0.1",
-        executor=_Executor(chat_data),
+        executor=executor,
         current_user=Actor(
             id=7,
             email="reader@example.com",
@@ -727,12 +533,25 @@ async def test_suggestions_start_before_answer_and_arrive_after_response_ready(
         operation_factory=SimpleNamespace(resume=lambda **_: operation),
         suggestion_generator=_SuggestionGenerator(started, release),
     )
+    assert executor.query_calls == 1
 
     iterator = source.__aiter__()
-    event_types: list[str] = []
+    event_types = [str(_payload(await anext(iterator))["type"])]
+    assert event_types == ["start"]
+    assert executor.query_calls == 1
+    assert chat_data.history_calls == 0
+    assert not started.is_set()
+
+    event_types.append(str(_payload(await anext(iterator))["type"]))
+    assert event_types[-1] == "assistant_item_start"
+    assert executor.query_calls == 2
+    assert chat_data.history_calls == 1
+    assert not started.is_set()
+
     while "response_ready" not in event_types:
         event_types.append(str(_payload(await anext(iterator))["type"]))
 
+    assert chat_data.history_calls == 1
     assert started.is_set()
     assert chat_data.completed is True
     assert chat_data.suggestions is None
@@ -778,28 +597,8 @@ async def test_resumed_async_generation_applies_initial_title(
         origin="test",
         credential=None,
     )
-    turn_start = ConversationTurnStart(
-        turn_id=request.turn_id,
-        response=PersistedChatResponse(
-            id=request.response_id,
-            turn_id=request.turn_id,
-            variant_index=1,
-            status="running",
-            content="",
-            references=None,
-            trace=None,
-            duration_ms=None,
-        ),
-        turn_operation_id=uuid4(),
-        correlation_id=uuid4(),
-        turn_created=False,
-        response_created=False,
-        generation_kind="initial",
-        suggestions=(),
-    )
-
     source = await stream_conversation_agent(
-        request,
+        _generation_preparation(request),
         conversation_id=uuid4(),
         client_ip="127.0.0.1",
         executor=executor,
@@ -816,8 +615,6 @@ async def test_resumed_async_generation_applies_initial_title(
             suggestions_started,
             suggestions_release,
         ),
-        turn_start_override=turn_start,
-        limits_preacquired=True,
     )
 
     event_types = [_payload(event)["type"] async for event in source]
@@ -847,7 +644,7 @@ async def test_failed_stream_persists_terminal_status_and_duration(
         credential=None,
     )
     source = await stream_conversation_agent(
-        request,
+        _generation_preparation(request),
         conversation_id=uuid4(),
         client_ip="127.0.0.1",
         executor=_Executor(chat_data),
@@ -893,7 +690,7 @@ async def test_cancelled_stream_persists_terminal_status_and_duration(
         credential=None,
     )
     source = await stream_conversation_agent(
-        request,
+        _generation_preparation(request),
         conversation_id=uuid4(),
         client_ip="127.0.0.1",
         executor=_Executor(chat_data),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -55,7 +56,7 @@ from app.modules.research.application.positions import (
 )
 from pydantic import TypeAdapter
 from sqlalchemy import Float, and_, cast, func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 _CITATION_SNAPSHOTS = TypeAdapter(list[CitationSnapshot])
 
@@ -633,6 +634,48 @@ class ResearchRepository:
             )
         research_item_policy.require_visible(db, item=item, user_id=user_id)
         return item
+
+    def get_annotation_threads_visible(
+        self,
+        db: Session,
+        *,
+        thread_ids: Iterable[uuid.UUID],
+        user_id: int,
+    ) -> list[ResearchItem]:
+        """Return visible annotation threads in first-seen input order.
+
+        The query reuses the complete Research-item audience predicate used by
+        the single-thread lookup. Missing, inaccessible, non-thread, and
+        duplicate identifiers are omitted without issuing per-thread
+        authorization or comment queries.
+        """
+
+        ordered_ids = list(dict.fromkeys(thread_ids))
+        if not ordered_ids:
+            return []
+        items = (
+            db.scalars(
+                select(ResearchItem)
+                .where(
+                    ResearchItem.id.in_(ordered_ids),
+                    ResearchItem.kind == ResearchItemKind.ANNOTATION_THREAD.value,
+                    research_item_visible_to(user_id),
+                )
+                .options(
+                    joinedload(ResearchItem.annotation_thread).options(
+                        selectinload(AnnotationThread.comments)
+                    )
+                )
+            )
+            .unique()
+            .all()
+        )
+        items_by_id = {item.id: item for item in items}
+        return [
+            item
+            for thread_id in ordered_ids
+            if (item := items_by_id.get(thread_id)) is not None
+        ]
 
     def get_zotero_annotation_keys(
         self,

@@ -68,6 +68,58 @@ function readyEvent({
 }
 
 describe("Home live conversation state", () => {
+  it("uses one explicit generation phase from submission through readiness", () => {
+    let turn = createLiveTurn(turnId, responseId, "Question");
+    expect(turn.phase).toBe("submitting");
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "start",
+        conversation_id: "40000000-0000-4000-8000-000000000001",
+        turn_id: turnId,
+        variant_index: 1,
+        generation_kind: "initial",
+      }),
+    )!;
+    expect(turn.phase).toBe("queued");
+    turn = reduceLiveTurn(
+      turn,
+      event({ type: "activity", activity: running }),
+    )!;
+    expect(turn.phase).toBe("working");
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_candidate_start",
+        item_id: "answer-1",
+        sequence: 3,
+      }),
+    )!;
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_candidate_delta",
+        item_id: "answer-1",
+        delta: "Answer",
+      }),
+    )!;
+    expect(turn.phase).toBe("answering");
+    turn = reduceLiveTurn(
+      turn,
+      event({
+        type: "assistant_item_complete",
+        item: {
+          id: "answer-1",
+          sequence: 3,
+          phase: "final",
+          content: "Answer",
+        },
+      }),
+    )!;
+    expect(turn.phase).toBe("finalizing");
+    expect(reduceLiveTurn(turn, readyEvent())?.phase).toBe("ready");
+  });
+
   it("reconciles a detached stream from the canonical persisted response", () => {
     const turn = readyEvent().turn;
 
@@ -98,7 +150,7 @@ describe("Home live conversation state", () => {
     );
     turn = reduceLiveTurn(turn, event({ type: "cancelled", turn_id: turnId }));
 
-    expect(turn?.state).toBe("cancelled");
+    expect(turn?.phase).toBe("cancelled");
     expect(turn?.answerCandidate).toBeNull();
     expect(turn?.failure).toBeNull();
     expect(turn?.durationMs).toBeGreaterThanOrEqual(0);
@@ -310,7 +362,7 @@ describe("Home live conversation state", () => {
       readyEvent(),
     );
 
-    expect(turn?.state).toBe("ready");
+    expect(turn?.phase).toBe("ready");
     expect(turn?.content).toBe("Canonical answer");
     expect(turn?.entries[0]).toMatchObject({ state: "succeeded" });
     expect(turn?.trace?.citation_summary?.source_count).toBe(3);
@@ -318,7 +370,7 @@ describe("Home live conversation state", () => {
     expect(turn?.durationMs).toBe(18_400);
 
     turn = reduceLiveTurn(turn, event({ type: "complete", turn_id: turnId }));
-    expect(turn?.state).toBe("complete");
+    expect(turn?.phase).toBe("ready");
 
     turn = reduceLiveTurn(
       turn,
@@ -374,7 +426,7 @@ describe("Home live conversation state", () => {
       }),
     );
 
-    expect(prematurelyCompleted?.state).toBe("streaming");
+    expect(prematurelyCompleted?.phase).toBe("submitting");
     expect(stale?.suggestions).toBeNull();
   });
 
@@ -394,7 +446,7 @@ describe("Home live conversation state", () => {
       }),
     );
 
-    expect(turn?.state).toBe("ready");
+    expect(turn?.phase).toBe("ready");
     expect(turn?.variantIndex).toBe(2);
     expect(turn?.failure).toBeNull();
   });
@@ -413,7 +465,7 @@ describe("Home live conversation state", () => {
       }),
     );
 
-    expect(turn?.state).toBe("error");
+    expect(turn?.phase).toBe("error");
     expect(turn?.failure).toEqual({
       code: "chat_stream_failed",
       kind: "dependency_failure",

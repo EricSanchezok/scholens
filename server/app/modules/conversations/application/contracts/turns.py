@@ -6,6 +6,7 @@ from app.shared.domain import JsonValue
 from app.shared.domain.enums import ReasoningLevel
 from app.modules.conversations.application.contracts.contexts import TurnContext
 from app.modules.conversations.application.contracts.conversations import (
+    ConversationCreateRequest,
     ConversationTurnResponse,
 )
 from app.modules.conversations.application.contracts.trace import (
@@ -150,7 +151,7 @@ ConversationStreamEvent = Annotated[
 
 
 class ConversationStreamEventSchema(RootModel[ConversationLegacyStreamEvent]):
-    """Compatible schema for the existing inline SSE response."""
+    """Compatible schema for the original direct generation response."""
 
 
 class ConversationSubscriptionEventSchema(RootModel[ConversationSubscriptionEvent]):
@@ -174,6 +175,13 @@ class ConversationTurnCreateRequest(BaseModel):
     contexts: list[TurnContext] = Field(default_factory=list, max_length=50)
     reasoning_level: ReasoningLevel = ReasoningLevel.STANDARD
 
+    @field_validator("user_query", mode="before")
+    @classmethod
+    def normalize_postgres_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.replace("\x00", "")
+        return value
+
     @field_validator("time_zone")
     @classmethod
     def validate_time_zone(cls, value: str) -> str:
@@ -182,6 +190,21 @@ class ConversationTurnCreateRequest(BaseModel):
         except ZoneInfoNotFoundError as exc:
             raise ValueError("time_zone must be a valid IANA time zone") from exc
         return value
+
+
+class ConversationStartRequest(BaseModel):
+    """Atomically create a Conversation and accept its first turn.
+
+    Replay identity uses the client IDs, owner, originally accepted scope,
+    immutable Turn fields, and the Turn's paper-context snapshot. Mutable Conversation
+    title, current scope, current context, and tool permissions are not replay-identity
+    fields.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    conversation: ConversationCreateRequest
+    turn: ConversationTurnCreateRequest
 
 
 class ConversationTurnBranchCreateRequest(BaseModel):

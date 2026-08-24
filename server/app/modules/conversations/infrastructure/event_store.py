@@ -4,22 +4,53 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from time import monotonic
 from typing import cast
 from uuid import UUID
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
-from scholens_observability import add_counter, log_event
+from scholens_observability import add_counter, log_event, record_histogram
 
 logger = logging.getLogger(__name__)
 
 _MAX_EVENTS = 10_000
 _TERMINAL_TTL_SECONDS = 24 * 60 * 60
+_TTL_REFRESH_INTERVAL_SECONDS = _TERMINAL_TTL_SECONDS // 2
 _BLOCK_MILLISECONDS = 15_000
+_PUBLISH_SOCKET_TIMEOUT_SECONDS = 1.0
+_SUBSCRIBE_SOCKET_TIMEOUT_SECONDS = 20.0
+_TERMINAL_EVENT_KINDS = frozenset({"complete", "cancelled", "error"})
+_EVENT_KINDS = frozenset(
+    {
+        "start",
+        "assistant_item_start",
+        "assistant_item_delta",
+        "assistant_item_complete",
+        "assistant_candidate_start",
+        "assistant_candidate_delta",
+        "assistant_candidate_reset",
+        "activity",
+        "references",
+        "response_ready",
+        "suggestions",
+        *_TERMINAL_EVENT_KINDS,
+    }
+)
 
 
 def _key(response_id: UUID) -> str:
     return f"scholens:conversation-events:{response_id}"
+
+
+def _frame_kind(frame: str) -> str:
+    if frame.startswith(":"):
+        return "comment"
+    for line in frame.splitlines():
+        if line.startswith("event: "):
+            candidate = line.removeprefix("event: ")
+            return candidate if candidate in _EVENT_KINDS else "unknown"
+    return "unknown"
 
 
 class ConversationEventStore:
@@ -28,14 +59,14 @@ class ConversationEventStore:
     def __init__(self, redis_url: str | None) -> None:
         self._redis_url = redis_url
 
-    def _client(self) -> Redis | None:
+    def _client(self, *, socket_timeout: float) -> Redis | None:
         if self._redis_url is None:
             return None
         return Redis.from_url(
             self._redis_url,
             decode_responses=True,
             socket_connect_timeout=1,
-            socket_timeout=20,
+            socket_timeout=socket_timeout,
             retry_on_timeout=False,
         )
 
@@ -46,20 +77,48 @@ class ConversationEventStore:
         source: AsyncIterator[str],
     ) -> AsyncIterator[str]:
         """Persist each frame best-effort while preserving the source stream."""
-        client = self._client()
+        client = self._client(socket_timeout=_PUBLISH_SOCKET_TIMEOUT_SECONDS)
+        first_frame = True
+        ttl_refresh_due_at: float | None = None
         try:
             async for frame in source:
                 if client is not None:
+                    frame_kind = _frame_kind(frame)
+                    append_started = monotonic()
                     try:
-                        await client.xadd(
-                            _key(response_id),
-                            {"sse": frame},
-                            maxlen=_MAX_EVENTS,
-                            approximate=True,
+                        key = _key(response_id)
+                        refresh_ttl = (
+                            first_frame
+                            or frame_kind in _TERMINAL_EVENT_KINDS
+                            or (
+                                ttl_refresh_due_at is not None
+                                and append_started >= ttl_refresh_due_at
+                            )
                         )
-                        await client.expire(
-                            _key(response_id),
-                            _TERMINAL_TTL_SECONDS,
+                        if refresh_ttl:
+                            pipeline = client.pipeline(transaction=True)
+                            pipeline.xadd(
+                                key,
+                                {"sse": frame},
+                                maxlen=_MAX_EVENTS,
+                                approximate=True,
+                            )
+                            pipeline.expire(key, _TERMINAL_TTL_SECONDS)
+                            await pipeline.execute()
+                            ttl_refresh_due_at = (
+                                append_started + _TTL_REFRESH_INTERVAL_SECONDS
+                            )
+                        else:
+                            await client.xadd(
+                                key,
+                                {"sse": frame},
+                                maxlen=_MAX_EVENTS,
+                                approximate=True,
+                            )
+                        record_histogram(
+                            "scholens.conversation.event_store.append_latency",
+                            (monotonic() - append_started) * 1000,
+                            attributes={"frame_kind": frame_kind},
                         )
                     except RedisError as error:
                         add_counter(
@@ -75,10 +134,22 @@ class ConversationEventStore:
                         )
                         await client.aclose()
                         client = None
+                first_frame = False
                 yield frame
         finally:
             if client is not None:
                 await client.aclose()
+
+    async def append_terminal(self, *, response_id: UUID, frame: str) -> None:
+        """Best-effort append of one terminal frame with a refreshed replay TTL."""
+        if _frame_kind(frame) not in _TERMINAL_EVENT_KINDS:
+            raise ValueError("Conversation terminal append requires a terminal event")
+
+        async def source() -> AsyncIterator[str]:
+            yield frame
+
+        async for _frame in self.publish(response_id=response_id, source=source()):
+            pass
 
     async def subscribe(
         self,
@@ -87,7 +158,7 @@ class ConversationEventStore:
         after: str | None,
     ) -> AsyncIterator[str | None]:
         """Yield framed replay events; ``None`` represents an SSE heartbeat."""
-        client = self._client()
+        client = self._client(socket_timeout=_SUBSCRIBE_SOCKET_TIMEOUT_SECONDS)
         if client is None:
             yield None
             return

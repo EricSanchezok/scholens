@@ -262,7 +262,7 @@ export const DesktopReasoningMenuOpen: Story = {
 };
 
 export const StreamingStop: Story = {
-  args: { busy: true },
+  args: { busy: true, stopAvailable: true },
   play: async ({ canvasElement }) => {
     await expect(
       within(canvasElement).getByRole("button", { name: "停止生成" }),

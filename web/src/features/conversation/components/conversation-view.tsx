@@ -16,11 +16,19 @@ import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
 import type {
   ConversationFailure,
+  ConversationPhase,
   ProvisionalAssistantItem,
   ConversationTraceEntry,
   LiveTurn,
 } from "../conversation-state";
-import { conversationFailureFromValue } from "../conversation-state";
+import {
+  conversationFailureFromValue,
+  isActiveConversationPhase,
+} from "../conversation-state";
+import {
+  ConversationLiveStore,
+  type ConversationLiveMetadata,
+} from "../conversation-live-store";
 import type { ComposerValues } from "../schemas";
 import type { UseFormReturn } from "react-hook-form";
 import {
@@ -53,6 +61,77 @@ export type ConversationEmptyState = {
   description: string;
   title: string;
 };
+
+function LiveConversationWorklog({
+  historical,
+  onOpenChange,
+  sourceTotal,
+  store,
+}: {
+  historical?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  sourceTotal: number;
+  store: ConversationLiveStore;
+}) {
+  const snapshot = React.useSyncExternalStore(
+    store.subscribeWorklog,
+    store.getWorklogSnapshot,
+    store.getWorklogSnapshot,
+  );
+  if (!snapshot) return null;
+  return (
+    <ConversationWorklog
+      connectionState={snapshot.connectionState}
+      durationMs={snapshot.durationMs}
+      entries={snapshot.entries}
+      failure={snapshot.failure}
+      historical={historical}
+      onOpenChange={onOpenChange}
+      phase={snapshot.phase}
+      provisionalItems={snapshot.provisionalItems}
+      sourceTotal={sourceTotal}
+      startedAtMs={snapshot.startedAtMs}
+      stopFailure={snapshot.stopFailure}
+    />
+  );
+}
+
+function LiveMessageContent({
+  onContentVisible,
+  onCitationOpen,
+  store,
+}: {
+  onContentVisible?: () => void;
+  onCitationOpen: (sourceKeys: number[]) => void;
+  store: ConversationLiveStore;
+}) {
+  const snapshot = React.useSyncExternalStore(
+    store.subscribeContent,
+    store.getContentSnapshot,
+    store.getContentSnapshot,
+  );
+  const visibleContent = snapshot
+    ? snapshot.content || snapshot.answerCandidate?.content || ""
+    : "";
+  React.useEffect(() => {
+    if (!visibleContent || !onContentVisible) return;
+    const frame = window.requestAnimationFrame(onContentVisible);
+    return () => window.cancelAnimationFrame(frame);
+  }, [onContentVisible, visibleContent]);
+  if (!snapshot || !visibleContent) return null;
+  return (
+    <MessageContent
+      annotations={
+        isReferenceBundle(snapshot.references)
+          ? snapshot.references.annotations
+          : undefined
+      }
+      content={visibleContent}
+      onCitationOpen={onCitationOpen}
+      streaming={isActiveConversationPhase(snapshot.phase)}
+    />
+  );
+}
 
 function FollowUpSuggestions({
   suggestions,
@@ -91,7 +170,7 @@ function AssistantMessage({
   provisionalItems,
   references,
   sourceTotal,
-  state,
+  phase,
   failure,
   historical,
   onActivityOpenChange,
@@ -107,6 +186,9 @@ function AssistantMessage({
   durationMs,
   startedAtMs,
   connectionState,
+  stopFailure,
+  liveStore,
+  onContentVisible,
 }: {
   entries: ConversationTraceEntry[];
   content: string;
@@ -114,7 +196,7 @@ function AssistantMessage({
   provisionalItems?: ProvisionalAssistantItem[];
   references: unknown;
   sourceTotal: number;
-  state: LiveTurn["state"];
+  phase: ConversationPhase;
   failure?: ConversationFailure | null;
   historical?: boolean;
   onActivityOpenChange?: (open: boolean) => void;
@@ -132,6 +214,9 @@ function AssistantMessage({
   durationMs?: number | null;
   startedAtMs?: number;
   connectionState?: LiveTurn["connectionState"];
+  stopFailure?: boolean;
+  liveStore?: ConversationLiveStore;
+  onContentVisible?: () => void;
 }) {
   const t = useTranslations("Home.conversation");
   const [sourcesOpen, setSourcesOpen] = React.useState(false);
@@ -139,8 +224,6 @@ function AssistantMessage({
     number | undefined
   >();
   const visibleContent = content || answerCandidate?.content || "";
-  const presentationState =
-    content && state === "streaming" ? "complete" : state;
   const orderedVariants = canSwitch
     ? [...(variants ?? [])]
         .filter((candidate) => candidate.status === "completed")
@@ -150,36 +233,59 @@ function AssistantMessage({
     (candidate) => candidate.id === response?.id,
   );
   const completedActionsVisible = Boolean(
-    response?.status === "completed" &&
-    visibleContent &&
-    (state === "ready" || state === "complete"),
+    response?.status === "completed" && visibleContent && phase === "ready",
   );
   const terminalRetryVisible = Boolean(
     canRetry &&
     onRetryResponse &&
     (response?.status === "failed" ||
       response?.status === "cancelled" ||
-      state === "error" ||
-      state === "cancelled"),
+      phase === "error" ||
+      phase === "cancelled"),
   );
+  React.useEffect(() => {
+    if (liveStore || !visibleContent || !onContentVisible) return;
+    const frame = window.requestAnimationFrame(onContentVisible);
+    return () => window.cancelAnimationFrame(frame);
+  }, [liveStore, onContentVisible, visibleContent]);
   return (
     <article
       aria-label={t("assistantMessage")}
+      aria-busy={isActiveConversationPhase(phase)}
       className="grid min-w-0 gap-2 lg:gap-3"
     >
-      <ConversationWorklog
-        entries={entries}
-        failure={failure ?? null}
-        historical={historical}
-        onOpenChange={onActivityOpenChange}
-        provisionalItems={provisionalItems ?? []}
-        sourceTotal={sourceTotal}
-        state={presentationState}
-        durationMs={durationMs}
-        startedAtMs={startedAtMs}
-        connectionState={connectionState}
-      />
-      {visibleContent && (
+      {liveStore ? (
+        <LiveConversationWorklog
+          historical={historical}
+          onOpenChange={onActivityOpenChange}
+          sourceTotal={sourceTotal}
+          store={liveStore}
+        />
+      ) : (
+        <ConversationWorklog
+          entries={entries}
+          failure={failure ?? null}
+          historical={historical}
+          onOpenChange={onActivityOpenChange}
+          provisionalItems={provisionalItems ?? []}
+          sourceTotal={sourceTotal}
+          phase={phase}
+          durationMs={durationMs}
+          startedAtMs={startedAtMs}
+          connectionState={connectionState}
+          stopFailure={stopFailure}
+        />
+      )}
+      {liveStore ? (
+        <LiveMessageContent
+          onContentVisible={onContentVisible}
+          onCitationOpen={(sourceKeys) => {
+            setSelectedSourceKey(sourceKeys[0]);
+            setSourcesOpen(true);
+          }}
+          store={liveStore}
+        />
+      ) : visibleContent ? (
         <MessageContent
           annotations={
             isReferenceBundle(references) ? references.annotations : undefined
@@ -189,9 +295,9 @@ function AssistantMessage({
             setSelectedSourceKey(sourceKeys[0]);
             setSourcesOpen(true);
           }}
-          streaming={state === "streaming"}
+          streaming={false}
         />
-      )}
+      ) : null}
       {(completedActionsVisible || terminalRetryVisible || suggestions) && (
         <footer className="grid gap-2 lg:max-w-2xl lg:gap-1">
           {(completedActionsVisible || terminalRetryVisible) && (
@@ -305,9 +411,88 @@ function selectedResponse(turn: ConversationTurn) {
   );
 }
 
+const HistoricalTurnRow = React.memo(function HistoricalTurnRow({
+  canSend,
+  latestControlsVisible,
+  onDocumentSourceOpen,
+  onEditMessage,
+  onRetryResponse,
+  onSelectBranch,
+  onSelectResponse,
+  onUseSuggestion,
+  onContentVisible,
+  turn,
+}: {
+  canSend: boolean;
+  latestControlsVisible: boolean;
+  onDocumentSourceOpen?: (
+    source: components["schemas"]["DocumentAnswerSource"],
+  ) => void;
+  onEditMessage: (turn: ConversationTurn, message: string) => Promise<void>;
+  onRetryResponse: (turn: RetryableConversationTurn) => void;
+  onSelectBranch: (turnId: string) => void;
+  onSelectResponse: (turnId: string, responseId: string) => void;
+  onUseSuggestion: (suggestion: string) => void;
+  onContentVisible?: (responseId: string) => void;
+  turn: ConversationTurn;
+}) {
+  const response = selectedResponse(turn);
+  return (
+    <div className="settled-content-enter grid gap-9 [contain-intrinsic-size:auto_20rem] [content-visibility:auto] lg:gap-8">
+      <ConversationUserMessage
+        branch={turn.branch}
+        canEdit={canSend}
+        message={turn.user_query}
+        onEdit={(message) => onEditMessage(turn, message)}
+        onSelectBranch={onSelectBranch}
+      />
+      {response ? (
+        <AssistantMessage
+          canRetry={latestControlsVisible && canSend}
+          canSwitch={latestControlsVisible}
+          content={response.content ?? ""}
+          durationMs={response.duration_ms}
+          entries={response.trace?.entries ?? []}
+          failure={
+            response.failure
+              ? conversationFailureFromValue(response.failure)
+              : null
+          }
+          historical
+          onDocumentSourceOpen={onDocumentSourceOpen}
+          onContentVisible={() => onContentVisible?.(response.id)}
+          onRetryResponse={() => onRetryResponse(turn)}
+          onSelectResponse={(responseId) =>
+            onSelectResponse(turn.id, responseId)
+          }
+          onUseSuggestion={latestControlsVisible ? onUseSuggestion : undefined}
+          phase={
+            response.status === "cancelled"
+              ? "cancelled"
+              : response.status === "failed"
+                ? "error"
+                : response.status === "running"
+                  ? "working"
+                  : "ready"
+          }
+          references={response.references}
+          response={response}
+          sourceTotal={
+            response.trace?.citation_summary?.source_count ??
+            referenceSourceCount(response.references)
+          }
+          suggestions={turn.suggestions}
+          variants={turn.responses}
+        />
+      ) : null}
+    </div>
+  );
+});
+
 function MessageHistory({
   turns,
   liveTurn,
+  liveStore,
   canSend,
   suppressLatestControls,
   onRetryResponse,
@@ -315,10 +500,12 @@ function MessageHistory({
   onEditMessage,
   onSelectBranch,
   onUseSuggestion,
+  onLiveContentVisible,
   onDocumentSourceOpen,
 }: {
   turns: ConversationTurn[];
-  liveTurn: LiveTurn | null;
+  liveTurn: ConversationLiveMetadata | null;
+  liveStore: ConversationLiveStore;
   canSend: boolean;
   suppressLatestControls: boolean;
   onRetryResponse: (turn: RetryableConversationTurn) => void;
@@ -326,6 +513,7 @@ function MessageHistory({
   onEditMessage: (turn: ConversationTurn, message: string) => Promise<void>;
   onSelectBranch: (turnId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
+  onLiveContentVisible?: (responseId: string) => void;
   onDocumentSourceOpen?: (
     source: components["schemas"]["DocumentAnswerSource"],
   ) => void;
@@ -334,19 +522,35 @@ function MessageHistory({
   return (
     <>
       {turns.map((turn) => {
-        const response = selectedResponse(turn);
         const isLive = liveTurn?.turnId === turn.id;
+        const latestControlsVisible =
+          turn.id === latestTurnId && !suppressLatestControls;
+        if (!isLive || !liveTurn) {
+          return (
+            <HistoricalTurnRow
+              canSend={canSend}
+              key={turn.id}
+              latestControlsVisible={latestControlsVisible}
+              onDocumentSourceOpen={onDocumentSourceOpen}
+              onEditMessage={onEditMessage}
+              onRetryResponse={onRetryResponse}
+              onSelectBranch={onSelectBranch}
+              onSelectResponse={onSelectResponse}
+              onUseSuggestion={onUseSuggestion}
+              onContentVisible={onLiveContentVisible}
+              turn={turn}
+            />
+          );
+        }
         const readyTurn = isLive ? liveTurn?.readyTurn : null;
         const liveResponse = readyTurn
           ? readyTurn.responses.find(
               (candidate) => candidate.id === liveTurn?.responseId,
             )
           : undefined;
-        const latestControlsVisible =
-          turn.id === latestTurnId && !suppressLatestControls;
         return (
           <div
-            className="settled-content-enter grid gap-9 lg:gap-8"
+            className="settled-content-enter grid gap-9 [contain-intrinsic-size:auto_20rem] [content-visibility:auto] lg:gap-8"
             key={turn.id}
           >
             <ConversationUserMessage
@@ -356,86 +560,47 @@ function MessageHistory({
               onEdit={(message) => onEditMessage(turn, message)}
               onSelectBranch={onSelectBranch}
             />
-            {isLive && liveTurn ? (
-              <AssistantMessage
-                canRetry={
-                  latestControlsVisible &&
-                  canSend &&
-                  (liveTurn.state === "ready" ||
-                    liveTurn.state === "complete" ||
-                    liveTurn.state === "error" ||
-                    liveTurn.state === "cancelled")
-                }
-                canSwitch={
-                  latestControlsVisible &&
-                  Boolean(readyTurn && readyTurn.responses.length > 1)
-                }
-                content={liveTurn.content}
-                answerCandidate={liveTurn.answerCandidate}
-                entries={liveTurn.entries}
-                failure={liveTurn.failure}
-                onRetryResponse={() => onRetryResponse(readyTurn ?? turn)}
-                onSelectResponse={(responseId) =>
-                  onSelectResponse(turn.id, responseId)
-                }
-                onUseSuggestion={
-                  latestControlsVisible ? onUseSuggestion : undefined
-                }
-                onDocumentSourceOpen={onDocumentSourceOpen}
-                provisionalItems={liveTurn.provisionalItems}
-                references={liveTurn.references}
-                response={liveResponse}
-                sourceTotal={
-                  liveTurn.trace?.citation_summary?.source_count ??
-                  referenceSourceCount(liveTurn.references)
-                }
-                state={liveTurn.state}
-                suggestions={liveTurn.suggestions}
-                variants={readyTurn?.responses}
-                durationMs={liveTurn.durationMs}
-                startedAtMs={liveTurn.startedAtMs}
-                connectionState={liveTurn.connectionState}
-              />
-            ) : response ? (
-              <AssistantMessage
-                canRetry={latestControlsVisible && canSend}
-                canSwitch={latestControlsVisible}
-                content={response.content ?? ""}
-                entries={response.trace?.entries ?? []}
-                historical
-                onRetryResponse={() => onRetryResponse(turn)}
-                onSelectResponse={(responseId) =>
-                  onSelectResponse(turn.id, responseId)
-                }
-                onUseSuggestion={
-                  latestControlsVisible ? onUseSuggestion : undefined
-                }
-                onDocumentSourceOpen={onDocumentSourceOpen}
-                references={response.references}
-                response={response}
-                sourceTotal={
-                  response.trace?.citation_summary?.source_count ??
-                  referenceSourceCount(response.references)
-                }
-                state={
-                  response.status === "cancelled"
-                    ? "cancelled"
-                    : response.status === "failed"
-                      ? "error"
-                      : response.status === "running"
-                        ? "streaming"
-                        : "complete"
-                }
-                suggestions={turn.suggestions}
-                failure={
-                  response.failure
-                    ? conversationFailureFromValue(response.failure)
-                    : null
-                }
-                variants={turn.responses}
-                durationMs={response.duration_ms}
-              />
-            ) : null}
+            <AssistantMessage
+              canRetry={
+                latestControlsVisible &&
+                canSend &&
+                (liveTurn.phase === "ready" ||
+                  liveTurn.phase === "error" ||
+                  liveTurn.phase === "cancelled")
+              }
+              canSwitch={
+                latestControlsVisible &&
+                Boolean(readyTurn && readyTurn.responses.length > 1)
+              }
+              content={liveResponse?.content ?? ""}
+              entries={liveResponse?.trace?.entries ?? []}
+              failure={liveTurn.failure}
+              liveStore={liveStore}
+              onRetryResponse={() => onRetryResponse(readyTurn ?? turn)}
+              onSelectResponse={(responseId) =>
+                onSelectResponse(turn.id, responseId)
+              }
+              onUseSuggestion={
+                latestControlsVisible ? onUseSuggestion : undefined
+              }
+              onDocumentSourceOpen={onDocumentSourceOpen}
+              onContentVisible={() =>
+                onLiveContentVisible?.(liveTurn.responseId)
+              }
+              references={liveTurn.references}
+              response={liveResponse}
+              sourceTotal={
+                liveTurn.trace?.citation_summary?.source_count ??
+                referenceSourceCount(liveTurn.references)
+              }
+              phase={liveTurn.phase}
+              suggestions={liveTurn.suggestions}
+              variants={readyTurn?.responses}
+              durationMs={liveTurn.durationMs}
+              startedAtMs={liveTurn.startedAtMs}
+              connectionState={liveTurn.connectionState}
+              stopFailure={liveTurn.stopFailure}
+            />
           </div>
         );
       })}
@@ -446,7 +611,7 @@ function MessageHistory({
 export function ConversationView({
   layout,
   turns,
-  liveTurn,
+  liveTurn: liveTurnSource,
   context,
   papers,
   projects,
@@ -463,8 +628,11 @@ export function ConversationView({
   onEditMessage,
   onSelectBranch,
   onUseSuggestion,
+  onLiveContentVisible,
   canSend,
+  completionAnnouncementId,
   submissionPending = false,
+  stopAvailable,
   readOnlyReason,
   composerForm,
   showComposer = true,
@@ -475,7 +643,7 @@ export function ConversationView({
 }: {
   layout: ConversationViewLayout;
   turns: ConversationTurn[];
-  liveTurn: LiveTurn | null;
+  liveTurn: ConversationLiveStore;
   context: ResearchContext;
   papers: ResearchContextPaperOption[];
   projects: ResearchContextProjectOption[];
@@ -492,8 +660,11 @@ export function ConversationView({
   onEditMessage: (turn: ConversationTurn, message: string) => Promise<void>;
   onSelectBranch: (turnId: string) => void;
   onUseSuggestion: (suggestion: string) => void;
+  onLiveContentVisible?: (responseId: string) => void;
   canSend: boolean;
+  completionAnnouncementId?: string;
   submissionPending?: boolean;
+  stopAvailable: boolean;
   readOnlyReason?: string | null;
   composerForm?: UseFormReturn<ComposerValues>;
   showComposer?: boolean;
@@ -507,6 +678,12 @@ export function ConversationView({
   const t = useTranslations("Home.conversation");
   const rootRef = React.useRef<HTMLDivElement>(null);
   const panelScrollRef = React.useRef<HTMLDivElement>(null);
+  const liveStore = liveTurnSource;
+  const liveTurn = React.useSyncExternalStore(
+    liveStore.subscribeMetadata,
+    liveStore.getMetadataSnapshot,
+    liveStore.getMetadataSnapshot,
+  );
   const visibleTurns = React.useMemo(() => {
     if (!liveTurn || liveTurn.generationKind === "retry") return turns;
     return turns.filter(
@@ -517,7 +694,8 @@ export function ConversationView({
     (response) => response.id === liveTurn.responseId,
   );
   const suppressLatestControls =
-    submissionPending || liveTurn?.state === "streaming";
+    submissionPending ||
+    (liveTurn ? isActiveConversationPhase(liveTurn.phase) : false);
   const liveTurnRenderedInHistory = visibleTurns.some(
     (turn) => turn.id === liveTurn?.turnId,
   );
@@ -543,6 +721,17 @@ export function ConversationView({
       }
       ref={rootRef}
     >
+      {completionAnnouncementId ? (
+        <span
+          aria-atomic="true"
+          aria-live="polite"
+          className="sr-only"
+          key={completionAnnouncementId}
+          role="status"
+        >
+          {t("completed")}
+        </span>
+      ) : null}
       <div
         className={
           layout === "side-panel"
@@ -613,14 +802,16 @@ export function ConversationView({
                 canSend={
                   canSend &&
                   !submissionPending &&
-                  liveTurn?.state !== "streaming"
+                  !(liveTurn && isActiveConversationPhase(liveTurn.phase))
                 }
                 liveTurn={liveTurn}
+                liveStore={liveStore}
                 onRetryResponse={onRetryResponse}
                 onEditMessage={onEditMessage}
                 onSelectBranch={onSelectBranch}
                 onSelectResponse={onSelectResponse}
                 onUseSuggestion={onUseSuggestion}
+                onLiveContentVisible={onLiveContentVisible}
                 onDocumentSourceOpen={onDocumentSourceOpen}
                 suppressLatestControls={suppressLatestControls}
                 turns={visibleTurns}
@@ -643,10 +834,9 @@ export function ConversationView({
                       canRetry={
                         canSend &&
                         !submissionPending &&
-                        (liveTurn.state === "ready" ||
-                          liveTurn.state === "complete" ||
-                          liveTurn.state === "error" ||
-                          liveTurn.state === "cancelled")
+                        (liveTurn.phase === "ready" ||
+                          liveTurn.phase === "error" ||
+                          liveTurn.phase === "cancelled")
                       }
                       canSwitch={
                         !submissionPending &&
@@ -655,10 +845,10 @@ export function ConversationView({
                           liveTurn.readyTurn.responses.length > 1,
                         )
                       }
-                      content={liveTurn.content}
-                      answerCandidate={liveTurn.answerCandidate}
-                      entries={liveTurn.entries}
+                      content={liveResponse?.content ?? ""}
+                      entries={liveResponse?.trace?.entries ?? []}
                       key={liveTurn.turnId}
+                      liveStore={liveStore}
                       onActivityOpenChange={(open) => {
                         if (open) pauseFollowing();
                       }}
@@ -678,20 +868,23 @@ export function ConversationView({
                         submissionPending ? undefined : onUseSuggestion
                       }
                       onDocumentSourceOpen={onDocumentSourceOpen}
-                      provisionalItems={liveTurn.provisionalItems}
+                      onContentVisible={() =>
+                        onLiveContentVisible?.(liveTurn.responseId)
+                      }
                       references={liveTurn.references}
                       response={liveResponse}
                       sourceTotal={
                         liveTurn.trace?.citation_summary?.source_count ??
                         referenceSourceCount(liveTurn.references)
                       }
-                      state={liveTurn.state}
+                      phase={liveTurn.phase}
                       suggestions={liveTurn.suggestions}
                       variants={liveTurn.readyTurn?.responses}
                       failure={liveTurn.failure}
                       durationMs={liveTurn.durationMs}
                       startedAtMs={liveTurn.startedAtMs}
                       connectionState={liveTurn.connectionState}
+                      stopFailure={liveTurn.stopFailure}
                     />
                   </div>
                 )}
@@ -747,12 +940,16 @@ export function ConversationView({
             }
           >
             <ResearchComposer
-              busy={submissionPending || liveTurn?.state === "streaming"}
+              busy={
+                submissionPending ||
+                Boolean(liveTurn && isActiveConversationPhase(liveTurn.phase))
+              }
               context={context}
               form={composerForm}
               onContextChange={onContextChange}
               onReasoningLevelChange={onReasoningLevelChange}
               onStop={onStop}
+              stopAvailable={stopAvailable}
               onSubmit={onSubmit}
               papers={papers}
               projects={projects}

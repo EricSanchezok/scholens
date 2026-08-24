@@ -85,7 +85,11 @@ export const Mobile: Story = {
 };
 
 export const Streaming: Story = {
-  args: { busy: true },
+  args: { busy: true, stopAvailable: true },
+};
+
+export const Submitting: Story = {
+  args: { busy: true, stopAvailable: false },
 };
 
 export const ContextPanelSelection: Story = {

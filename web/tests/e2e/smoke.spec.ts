@@ -394,15 +394,20 @@ test("lets the Server generate the initial conversation title", async ({
   const creation = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
-      request.url().endsWith("/api/v1/conversations"),
+      /\/api\/v1\/conversations\/[^/]+\/start$/.test(
+        new URL(request.url()).pathname,
+      ),
   );
 
   await page.getByRole("textbox", { name: "Ask anything" }).fill("Study RAG");
   await page.getByRole("button", { name: "Ask Scholens" }).click();
 
-  expect((await creation).postDataJSON()).toEqual({
-    scope_type: "global",
-    paper_context: { kind: "library" },
+  expect((await creation).postDataJSON()).toMatchObject({
+    conversation: {
+      scope_type: "global",
+      paper_context: { kind: "library" },
+    },
+    turn: { user_query: "Study RAG" },
   });
 });
 
@@ -762,7 +767,9 @@ test("keeps an IME candidate-confirmation Enter in the Composer", async ({
   page.on("request", (request) => {
     if (
       request.method() === "POST" &&
-      request.url().endsWith("/api/v1/conversations")
+      /\/api\/v1\/conversations\/[^/]+\/start$/.test(
+        new URL(request.url()).pathname,
+      )
     ) {
       creations.push(request.url());
     }
@@ -1585,8 +1592,9 @@ test("edits any prompt into a persistent branch and switches the full suffix", a
   editedTurn = persistedFailed;
   activePath = [persistedFailed];
   await page.reload();
-  await expect(page.getByText("Could not complete")).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("6s");
+  await expect(
+    page.getByRole("article", { name: "Assistant response" }),
+  ).toContainText("Could not complete · 6s");
   await page.getByRole("button", { name: "Try another response" }).click();
   await expect(
     page.getByText("The failed branch completed after retry."),

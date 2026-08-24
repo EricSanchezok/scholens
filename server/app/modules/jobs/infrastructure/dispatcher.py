@@ -16,6 +16,7 @@ from app.modules.jobs.infrastructure.repository import (
     job_repository,
 )
 from app.modules.jobs.infrastructure.models import DurableJob
+from app.modules.jobs.infrastructure.dispatcher_wakeup import JobDispatcherWakeup
 from sqlalchemy.orm import Session
 from scholens_observability import add_counter, instrumented_span, record_histogram
 
@@ -145,6 +146,7 @@ def dispatch_pending_jobs_once(
                     (datetime.now(UTC) - dispatch.enqueued_at).total_seconds(),
                 ),
                 unit="s",
+                attributes={"queue": dispatch.queue},
             )
             status = "published"
             try:
@@ -202,10 +204,12 @@ def dispatch_pending_jobs_once(
 async def run_job_dispatcher(
     stop: asyncio.Event,
     *,
+    wakeup: JobDispatcherWakeup | None = None,
     recover_conversation: Callable[[Session, DurableJob], None] | None = None,
     recover_unclaimed_pdf: Callable[[Session, DurableJob], None] | None = None,
 ) -> None:
     """Continuously drain the outbox without blocking the ASGI event loop."""
+    idle_wakeup = wakeup or JobDispatcherWakeup()
     while not stop.is_set():
         try:
             published = await asyncio.to_thread(
@@ -218,7 +222,4 @@ async def run_job_dispatcher(
             published = 0
         if published:
             continue
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=DISPATCH_IDLE_SECONDS)
-        except TimeoutError:
-            pass
+        await idle_wakeup.wait(stop, timeout=DISPATCH_IDLE_SECONDS)

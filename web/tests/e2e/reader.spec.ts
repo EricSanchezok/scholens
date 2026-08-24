@@ -531,10 +531,10 @@ async function mockReaderReflow(
 }
 
 async function mockReaderConversationCreation(page: Page) {
-  const conversationId = "60000000-0000-4000-8000-000000000001";
+  let conversationId: string | undefined;
   const answer = "The paper presents a persistent agent runtime.";
   let persistedTurn: Record<string, unknown> | undefined;
-  const detail = {
+  const detail = (id: string) => ({
     archived_at: null,
     capabilities: {
       archive: true,
@@ -546,7 +546,7 @@ async function mockReaderConversationCreation(page: Page) {
       send: true,
       share: false,
     },
-    id: conversationId,
+    id,
     paper_context: {
       kind: "selection",
       document_ids: [paperDocument.document_id],
@@ -562,52 +562,50 @@ async function mockReaderConversationCreation(page: Page) {
     title: "New conversation",
     tool_permissions: [],
     updated_at: "2026-08-14T00:00:00Z",
-  };
+  });
 
   await page.unroute(`${apiPattern}/conversations**`);
   await page.route(`${apiPattern}/conversations**`, async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
-    if (pathname.endsWith("/conversations") && request.method() === "POST") {
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify(detail),
-      });
-      return;
-    }
-    if (
-      pathname.endsWith(`/conversations/${conversationId}/turns`) &&
-      request.method() === "POST"
-    ) {
+    const startMatch = pathname.match(/\/conversations\/([^/]+)\/start$/);
+    if (startMatch && request.method() === "POST") {
+      conversationId = startMatch[1]!;
       const body = request.postDataJSON() as {
-        response_id: string;
-        turn_id: string;
-        user_query: string;
+        conversation: {
+          paper_context: ReturnType<typeof detail>["paper_context"];
+        };
+        turn: {
+          response_id: string;
+          turn_id: string;
+          user_query: string;
+        };
       };
+      const turnRequest = body.turn;
       const turn = {
         branch: { count: 1, index: 1 },
         contexts: [],
         depth: 1,
-        id: body.turn_id,
+        id: turnRequest.turn_id,
         locale: "en",
         reasoning_level: "standard",
         responses: [
           {
             artifacts: null,
             content: answer,
-            id: body.response_id,
+            id: turnRequest.response_id,
             references: null,
             status: "completed",
             trace: null,
             variant_index: 0,
           },
         ],
-        paper_context: detail.paper_context,
+        paper_context: body.conversation.paper_context,
         parent_turn_id: null,
-        selected_response_id: body.response_id,
+        selected_response_id: turnRequest.response_id,
         suggestions: null,
         time_zone: "Asia/Shanghai",
-        user_query: body.user_query,
+        user_query: turnRequest.user_query,
       };
       persistedTurn = turn;
       const events = [
@@ -615,27 +613,27 @@ async function mockReaderConversationCreation(page: Page) {
           type: "start",
           conversation_id: conversationId,
           generation_kind: "initial",
-          response_id: body.response_id,
-          turn_id: body.turn_id,
+          response_id: turnRequest.response_id,
+          turn_id: turnRequest.turn_id,
           variant_index: 0,
         },
         {
           type: "assistant_item_start",
           item_id: "assistant-item-1",
-          response_id: body.response_id,
+          response_id: turnRequest.response_id,
           sequence: 1,
         },
         {
           type: "assistant_item_delta",
           delta: answer,
           item_id: "assistant-item-1",
-          response_id: body.response_id,
+          response_id: turnRequest.response_id,
         },
         { type: "response_ready", turn },
         {
           type: "complete",
-          response_id: body.response_id,
-          turn_id: body.turn_id,
+          response_id: turnRequest.response_id,
+          turn_id: turnRequest.turn_id,
         },
       ];
       await route.fulfill({
@@ -646,7 +644,10 @@ async function mockReaderConversationCreation(page: Page) {
       });
       return;
     }
-    if (pathname.endsWith(`/conversations/${conversationId}/turns`)) {
+    if (
+      conversationId &&
+      pathname.endsWith(`/conversations/${conversationId}/turns`)
+    ) {
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -657,10 +658,13 @@ async function mockReaderConversationCreation(page: Page) {
       });
       return;
     }
-    if (pathname.endsWith(`/conversations/${conversationId}`)) {
+    if (
+      conversationId &&
+      pathname.endsWith(`/conversations/${conversationId}`)
+    ) {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify(detail),
+        body: JSON.stringify(detail(conversationId)),
       });
       return;
     }
@@ -670,7 +674,7 @@ async function mockReaderConversationCreation(page: Page) {
     });
   });
 
-  return { answer, conversationId };
+  return { answer, getConversationId: () => conversationId };
 }
 
 async function selectPdfPassage(page: Page, pageNumber: number) {
@@ -1758,12 +1762,17 @@ test("filters Project Ask by the current paper and preserves an unsent draft", a
 test("activates a newly created Reader conversation before history refreshes", async ({
   page,
 }) => {
-  const { answer, conversationId } = await mockReaderConversationCreation(page);
+  const { answer, getConversationId } =
+    await mockReaderConversationCreation(page);
   const question = "What is the paper's central contribution?";
   await page.goto(`/reader/${paperDocument.document_id}?panel=ask`);
 
   await page.getByRole("textbox", { name: "Ask a follow-up" }).fill(question);
   await page.getByRole("button", { name: "Ask Scholens" }).click();
+
+  await expect.poll(getConversationId).not.toBeUndefined();
+  const conversationId = getConversationId();
+  if (!conversationId) throw new Error("Conversation start was not observed");
 
   await expect(page).toHaveURL(
     new RegExp(`panel=ask.*conversation=${conversationId}`),

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 import hashlib
 import secrets
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -22,6 +23,7 @@ from app.database.models import (
 from app.shared.domain import AppError, FailureKind
 from app.modules.papers.domain import normalize_doi
 from app.modules.papers.infrastructure.access import (
+    accessible_document_condition,
     get_document_access,
     require_document_access,
 )
@@ -85,6 +87,47 @@ class DocumentRepository:
             access.library_paper.last_accessed_at = datetime.now(timezone.utc)
             db.flush()
         return access.document
+
+    def find_accessible_many(
+        self,
+        db: Session,
+        *,
+        document_ids: Iterable[object],
+        user: Actor,
+    ) -> list[Document]:
+        """Return accessible Documents in first-seen input order.
+
+        Invalid, duplicate, missing, and inaccessible identifiers are omitted.
+        The set-based query uses the same complete access predicate as the
+        single-document lookup without updating personal access timestamps.
+        """
+
+        parsed_ids: list[uuid.UUID] = []
+        seen: set[uuid.UUID] = set()
+        for document_id in document_ids:
+            try:
+                parsed_id = uuid.UUID(str(document_id))
+            except (TypeError, ValueError):
+                continue
+            if parsed_id in seen:
+                continue
+            seen.add(parsed_id)
+            parsed_ids.append(parsed_id)
+        if not parsed_ids:
+            return []
+
+        documents = db.scalars(
+            select(Document).where(
+                Document.id.in_(parsed_ids),
+                accessible_document_condition(user_id=user.id),
+            )
+        ).all()
+        documents_by_id = {document.id: document for document in documents}
+        return [
+            document
+            for document_id in parsed_ids
+            if (document := documents_by_id.get(document_id)) is not None
+        ]
 
     def update_canonical(
         self,

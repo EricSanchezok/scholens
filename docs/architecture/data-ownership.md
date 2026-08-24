@@ -109,7 +109,9 @@ path, and increments `path_revision`. Those aggregate fields therefore never
 describe a branch that the Server has not durably accepted. The same transaction
 creates a `conversation_generate` DurableJob and outbox dispatch whose ID equals
 the Response ID. The job owns delivery and lease state only; it never owns the
-answer or selects the active branch.
+answer or selects the active branch. For a first prompt, that same transaction
+may insert the client-identified Conversation before its root Turn; no empty
+Conversation or partial first generation becomes externally accepted.
 
 A turn also owns its typed paper-context snapshot and Reader context. A
 `paper_selection` captures the
