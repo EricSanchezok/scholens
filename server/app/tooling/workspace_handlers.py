@@ -172,7 +172,7 @@ class WorkspaceToolHandlers:
         self._web_base_url = web_base_url.rstrip("/")
         self._knowledge_cursors = SignedCursorCodec(
             cursor_secret,
-            revision="scholens-knowledge:1",
+            revision="scholens-knowledge:2",
             error_code="knowledge_search_cursor_invalid",
             error_kind=FailureKind.INVALID_ARGUMENT,
         )

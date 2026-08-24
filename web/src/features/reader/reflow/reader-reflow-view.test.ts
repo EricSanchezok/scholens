@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { academicMarkdownToPlainText } from "@/lib/content/academic-text";
 import type { DocumentReflowBlock } from "./api";
 import {
   isTranslatableReflowBlock,
   primaryReflowSource,
-  reflowMarkdownPlainText,
-  sanitizeAcademicMarkdown,
 } from "./reader-reflow-view";
 
 function block(kind: DocumentReflowBlock["kind"]): DocumentReflowBlock {
@@ -29,19 +28,8 @@ function block(kind: DocumentReflowBlock["kind"]): DocumentReflowBlock {
 }
 
 describe("academic reflow rendering", () => {
-  it("converts supported inline academic HTML without exposing raw tags", () => {
-    const value = sanitizeAcademicMarkdown(
-      "Author<sup>1,2</sup><!-- hidden --><br>H<sub>2</sub>O <unknown>visible</unknown> �",
-    );
-
-    expect(value).toBe("Author$^{1,2}$  \nH$_{2}$O visible ");
-    expect(value).not.toContain("<sup>");
-    expect(value).not.toContain("hidden");
-    expect(value).not.toContain("�");
-  });
-
   it("derives stable plain-text outline labels", () => {
-    expect(reflowMarkdownPlainText("## **1 Method** $x^2$")).toBe(
+    expect(academicMarkdownToPlainText("## **1 Method** $x^2$")).toBe(
       "1 Method x^2",
     );
   });

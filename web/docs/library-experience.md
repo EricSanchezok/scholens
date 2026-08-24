@@ -20,22 +20,26 @@ Home's conversation or composer implementation.
 
 ## State ownership
 
-| State                                                       | Owner                    |
-| ----------------------------------------------------------- | ------------------------ |
-| active tab, query, status/tag/kind filters, sort            | URL search parameters    |
-| papers, outputs, summary, tags, projects, ingestion jobs    | TanStack Query           |
-| ordered paper columns, column widths, and preview layout    | account preference API   |
-| Zotero collections, library pages, operations, status       | TanStack Query           |
-| source import fields                                        | React Hook Form + Zod    |
-| selected rows, Zotero selection, open dialogs, upload queue | feature-local state      |
-| shell collapse and mobile navigation disclosure             | Workspace Shell boundary |
+| State                                                         | Owner                    |
+| ------------------------------------------------------------- | ------------------------ |
+| active tab, committed query, status/tag/kind filters, sort    | URL search parameters    |
+| papers, outputs, summary, tags, projects, ingestion jobs      | TanStack Query           |
+| ordered paper columns, column widths, and preview layout      | account preference API   |
+| Zotero collections, library pages, operations, status         | TanStack Query           |
+| source import fields                                          | React Hook Form + Zod    |
+| paper search draft, selected rows, open dialogs, upload queue | feature-local state      |
+| Zotero selection                                              | feature-local state      |
+| shell collapse and mobile navigation disclosure               | Workspace Shell boundary |
 
-Search is debounced by 250 ms and query requests receive an abort signal. A
-filter, sort, or tab transition clears row selection. Paper browse and search
-use separate infinite TanStack queries and progressively append pages as the
-collection approaches the viewport; a visible Load more action remains the
-keyboard, reduced-motion, and observer fallback. Opaque continuation cursors
-are never decoded by the Web. Outputs retain explicit Previous/Next navigation.
+Paper search keeps an editable local draft and submits its trimmed value only
+when the user presses Enter; typing never changes the URL or result collection.
+The submitted query is the shareable URL state, and requests receive an abort
+signal. Output search retains its 250 ms debounce. A filter, sort, or tab
+transition clears row selection. Paper browse and search use separate infinite
+TanStack queries and progressively append pages as the collection approaches
+the viewport; a visible Load more action remains the keyboard, reduced-motion,
+and observer fallback. Opaque continuation cursors are never decoded by the
+Web. Outputs retain explicit Previous/Next navigation.
 
 Desktop Library chrome is a compact 44 px workbench header: the page title,
 Papers/Outputs tabs with counts, and Add papers action share one row. Search,
@@ -128,8 +132,11 @@ is rendered as restrained editorial content rather than exposed source syntax.
 The preview presents the portrait beside core metadata so the abstract or
 summary starts earlier, and never repeats navigation.
 
-Two or more query characters switch the paper collection to the shared hybrid
-search contract. Exact title/author/DOI matches, whitespace-insensitive and
+Submitting two or more query characters switches the paper collection to the
+shared hybrid search contract. Its toolbar remains mounted while the result
+region loads, fails, or becomes empty, and search mode presents relevance as a
+fixed ordering instead of exposing browse sorts that do not apply. Exact
+title/author/DOI matches, whitespace-insensitive and
 typo-tolerant matches, full-text passages, and local multilingual semantic
 similarity are fused into one relevance order. Results explain why they match
 through metadata, abstract/summary context, and bounded snippets. Semantic

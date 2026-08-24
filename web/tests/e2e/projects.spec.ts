@@ -95,6 +95,45 @@ async function mockProjects(page: Page) {
       }),
     }),
   );
+  await page.route(`${apiPattern}/search/papers`, (route) => {
+    const paper = projectPaperFixtures[1]!;
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            abstract: paper.abstract,
+            authors: paper.authors,
+            created_at: paper.added_at,
+            document_id: paper.document_id,
+            doi: paper.doi,
+            journal: paper.journal,
+            keywords: ["retrieval-augmented generation"],
+            last_accessed_at: paper.added_at,
+            matched_fields: ["title", "abstract"],
+            personal_last_accessed_at: paper.added_at,
+            personal_status: paper.status,
+            personal_tags: [],
+            preview_url: null,
+            publish_date: paper.publish_date,
+            retrieval_modes: ["full_text", "semantic"],
+            snippets: [
+              {
+                text: "Retrieval-augmented generation for knowledge-intensive tasks.",
+              },
+            ],
+            status: "completed",
+            summary: null,
+            title: paper.title,
+          },
+        ],
+        next_cursor: null,
+        search_mode: "hybrid",
+        semantic_index_coverage: 1,
+        total: 1,
+      }),
+    });
+  });
   await page.route(`${apiPattern}/project-invitations/**`, (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -365,6 +404,73 @@ test("supports the Projects critical journey", async ({ page }) => {
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("commits Project paper search on Enter without replacing its input", async ({
+  page,
+}) => {
+  const project = projectFixtures[0]!;
+  await page.goto(`/projects/${project.id}?view=papers`);
+
+  const searchbox = page.getByRole("searchbox", {
+    name: "Search project papers",
+  });
+  await searchbox.evaluate((element) => {
+    element.setAttribute("data-e2e-owner", "project-paper-search");
+  });
+  await searchbox.fill("retrieval");
+  await expect(page).not.toHaveURL(/paper_q=/);
+
+  await page.getByRole("button", { exact: true, name: "Status" }).click();
+  await page.getByRole("checkbox", { exact: true, name: "Reading" }).click();
+  await expect(page).toHaveURL(/paper_status=reading/);
+  await expect(page).not.toHaveURL(/paper_q=/);
+  await expect(searchbox).toHaveValue("retrieval");
+  await expect(searchbox).toHaveAttribute(
+    "data-e2e-owner",
+    "project-paper-search",
+  );
+
+  const searchRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/api/v1/search/papers"),
+  );
+  await searchbox.click();
+  await searchbox.press("Enter");
+  expect((await searchRequest).postDataJSON()).toEqual({
+    collection: { kind: "selection", project_ids: [project.id] },
+    filters: {
+      personal_statuses: ["reading"],
+      personal_tag_ids: [],
+    },
+    limit: 50,
+    query: "retrieval",
+    sort: "relevance",
+  });
+  await expect(page).toHaveURL(/paper_q=retrieval/);
+  await expect(searchbox).toBeFocused();
+  await expect(searchbox).toHaveAttribute(
+    "data-e2e-owner",
+    "project-paper-search",
+  );
+  await expect(page.getByText("Relevance", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("combobox", { name: "Sort project papers" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", {
+      name: /Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks/,
+    }),
+  ).toBeVisible();
+
+  await searchbox.fill("");
+  await expect(page).toHaveURL(/paper_q=retrieval/);
+  await searchbox.press("Enter");
+  await expect(page).not.toHaveURL(/paper_q=/);
+  await expect(
+    page.getByRole("combobox", { name: "Sort project papers" }),
+  ).toBeVisible();
 });
 
 test("invites a collaborator and accepts the emailed link", async ({
