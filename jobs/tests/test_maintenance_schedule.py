@@ -110,6 +110,7 @@ def test_retention_schedule_recovers_after_transient_locked_rows() -> None:
 
 def test_hourly_entrypoint_uses_daily_zotero_threshold_and_runs_retention() -> None:
     with (
+        patch.dict(schedule_maintenance.os.environ, {}, clear=True),
         patch(
             "src.schedule_maintenance.callback_base_url",
             return_value="https://server.example",
