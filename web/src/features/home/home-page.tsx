@@ -10,6 +10,10 @@ import { useToast } from "@/components/ui/toast";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { useInstallExperience } from "@/features/install-experience";
 import {
+  HomeActivitySnapshot,
+  researchActivityQueries,
+} from "@/features/research-activity";
+import {
   ConversationView,
   ReasoningMenu,
   ResearchComposer,
@@ -55,6 +59,10 @@ export function HomeWorkspace({
 
   const papersQuery = useQuery(homeQueries.papers());
   const projectsQuery = useQuery(homeQueries.projects());
+  const activityQuery = useQuery(researchActivityQueries.personal("30d"));
+  const activityPreferencesQuery = useQuery(
+    researchActivityQueries.preferences(),
+  );
   usePrimaryContentReady(papersQuery.isSuccess && projectsQuery.isSuccess);
   const papers = (papersQuery.data?.items ?? []).flatMap((entry) =>
     entry.entry_type === "paper" ? [entry] : [],
@@ -209,6 +217,17 @@ export function HomeWorkspace({
           data-home-surface="dashboard"
         >
           <HomeDashboard
+            activity={
+              <HomeActivitySnapshot
+                error={activityQuery.isError}
+                insights={activityQuery.data}
+                loading={activityQuery.isPending}
+                onRetry={() => void activityQuery.refetch()}
+                recordingEnabled={
+                  activityPreferencesQuery.data?.recordingEnabled
+                }
+              />
+            }
             composerForm={conversation.composerForm}
             context={context}
             onContextChange={handleContextChange}

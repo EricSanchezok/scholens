@@ -81,11 +81,13 @@ and the shared Conversation feature.
 
 List search and sort live in the URL. The Project-paper search field keeps its
 unsubmitted draft in feature-local state and writes the trimmed committed query
-to the URL only on Enter. Detail view, selected
-conversation, chat disclosure, and namespaced paper/output filters also live in
-the URL. Project and output lists retain opaque URL cursors; Project-paper
-continuations live in TanStack Query and append in place. `panel=chat` means the
-responsive Project conversation is open;
+to the URL only on Enter. Detail view, selected conversation, chat disclosure,
+the Overview insight range, and namespaced paper/output filters also live in the
+URL. `range` accepts `7d`,
+`30d`, `90d`, or `all`; the default `30d` is omitted. Project and output lists
+retain opaque URL cursors; Project-paper continuations live in TanStack Query
+and append in place. `panel=chat` means the responsive Project conversation is
+open;
 omitting `panel` fully collapses it without deleting `conversation`. Closing the
 panel keeps the mounted draft and selected conversation. Server resources use
 TanStack Query; forms use React Hook Form and Zod; dialog and menu disclosure
@@ -113,11 +115,12 @@ header, equal-width tab triggers, and toolbar origins therefore remain fixed
 when switching between Overview, Papers, and Outputs. Papers still uses the
 shared table and details preview inside that common boundary.
 
-The Overview tab is an editorial two-column composition on desktop: recent
-papers on the left, recent outputs stacked above a Collaboration panel on the
-right. Each section uses one quiet grouped background with flat interactive
-rows; it does not place bordered rows inside bordered cards. The Collaboration
-panel shows the complete accepted-member roster
+The Overview tab begins with one full-width research-activity sequence: Mine
+and Team metric strips, a dual-track trend, a paper-engagement table, and the
+shared activity feed. Recent Outputs and Collaboration then form the editorial
+two-column composition on desktop. Each section uses one quiet grouped
+background with flat interactive rows; it does not place bordered rows inside
+bordered cards. The Collaboration panel shows the complete accepted-member roster
 returned by `GET /members`, including the owner, plus the total member count.
 Members with `manage_collaborators` also get a quiet Manage action that opens
 the existing collaborator dialog. The roster query is shared with that dialog
@@ -125,7 +128,71 @@ through the Projects TanStack Query keys, so collaborator changes update both
 surfaces without a duplicate member model. Accepted members show their shared
 profile avatar when available and otherwise keep the deterministic initial; the
 same read-only avatar view is used in the management dialog. Below the desktop breakpoint the
-sections stack in one column in reading order: papers, outputs, collaboration.
+sections stack in one column in reading order: insight summary, trend, paper
+engagement, activity, outputs, collaboration.
+
+## Research activity in Project Overview
+
+The Project research-activity sequence ships with
+[ADR 0039](../../docs/decisions/0039-first-party-research-activity-ledger.md)
+and consumes the real insight and Project-activity contracts. It does not fill
+the Overview with fake chart data when a dependency is unavailable. Period
+changes refetch an authorized Server projection; the browser never downloads
+member sessions and aggregates them locally.
+
+Mine remains a private view for the signed-in member. Its metric strip may show
+active-reading estimate, visible time, sessions, active days, substantive
+coverage, annotations, and private Project questions. Team shows only anonymous
+reading aggregates plus separate canonical counters for papers added, shared
+annotations, discussion messages, resolved discussions, and outputs. Those counters
+are not summed into a synthetic “shared actions” score. It never reveals
+another member's private questions or personal annotations. Effort, process,
+and outcome retain separate labels; the interface does not calculate a Project
+productivity score.
+
+The team reading strip and series are available only when the selected period
+contains at least three contributors. Returned team time is already rounded to
+five-minute units. When the threshold is not met, the complete team-reading
+layer is replaced by a quiet privacy explanation; zeroes are not drawn because
+they would falsely mean no work occurred. There is no member picker,
+member-level table, exact team session boundary, contribution ranking, or
+reading-time leaderboard. Disabling anonymous contribution affects future
+Project attribution without hiding the member's private Mine history.
+
+The trend uses one solid, directly labeled Mine series and one dashed,
+directly labeled Team series. Legend text and a keyboard-accessible equivalent
+table keep the comparison understandable without color or line style alone.
+Points are not smoothed across missing dates, the collection boundary is
+visible, and comparison copy is omitted when the previous period is incomplete.
+
+The paper-engagement table prioritizes title, the current actor's active-reading
+estimate and substantive coverage, shared annotation and discussion-message counts, and
+last activity for the selected period. Mine reading values remain private; the
+table contains no per-paper team reading time and never identifies who read the
+paper. Selecting a paper opens its Reader Insights panel at
+`/reader/[documentId]?project=[projectId]&panel=insights` rather than creating a
+second Project-only paper heatmap. Sort controls have text labels and do not
+imply that duration is paper quality.
+
+The shared activity feed is an authorized chronological projection of facts
+already visible to Project members: papers added, members joined, Project-
+audience annotations and discussion messages, outputs, and resolved discussions. It may
+identify the author of a shared action because that canonical resource already
+does. It never emits “member read page” events, session
+boundaries, private conversation activity, or personal annotations. Feed rows
+carrying an authorized canonical document identifier link to that paper's
+Reader Insights panel. Rows without a safe document destination remain plain
+chronological facts in the first release; the client does not infer a
+destination from an activity kind or private identifier. Feed rows do not
+duplicate or mutate the underlying resources.
+
+Mine includes one Remove my Project contribution data control. After an
+explicit confirmation it deletes only this actor's Project-attributed reading
+rollups; the same sessions remain in private personal insight, and no paper,
+annotation, comment, output, conversation, membership, or other member's data
+changes. A later eligible Project-context reading session may contribute again
+when the anonymous-contribution preference remains enabled. The action is not
+worded as Leave Project or Clear personal history.
 
 Desktop Projects uses the same compact workbench density as Library. The list
 title and New project action share a 44 px row, followed by search and sorting
@@ -163,6 +230,19 @@ independent action target and is always discoverable on touch layouts.
 - `GET /api/v1/projects/{projectId}/outputs` applies the same search, kind,
   sort, visibility, and cursor semantics as Library Outputs while restricting
   the collection to one authorized Project.
+- `GET /api/v1/projects/{projectId}/insights` accepts the selected
+  `range` and returns the current member's private projection plus a separately
+  suppressible anonymous team projection. Project insight dates and period
+  aggregation use UTC; finite windows include UTC-hour ledger buckets rather
+  than claiming millisecond-exact boundaries. The response includes collection
+  and completeness boundaries; the Web does not infer pre-launch history.
+- `GET /api/v1/projects/{projectId}/activity` returns the authorized shared
+  Project-fact feed. It is derived from canonical paper, Project-audience
+  research-item/comment, and collaborator records rather than a copied activity
+  table.
+- `DELETE /api/v1/projects/{projectId}/me/reading-activity` removes only the
+  current actor's Project attribution. It preserves the actor's private reading
+  history and every canonical shared Project fact.
 - `DELETE /api/v1/projects/{projectId}/papers/{documentId}` is attempted
   without confirmation first. A `confirmation_required` conflict returns the
   exact annotation impact and a short-lived state-bound token. The dialog
@@ -205,6 +285,14 @@ instead of the superseded card grid; the active Figma list frames record this
 intent. Other intentional differences are the omitted topic chips, “Most
 active” sort, Archive action, and Figma-only Report/Note output labels. Runtime
 behavior uses the real public contract and accessible responsive composition.
+
+The research-activity runtime acceptance adds Mine-only, published Team,
+privacy-suppressed Team, partial-history, recording-disabled, trend-table,
+paper-engagement, activity-feed, mobile, and Dark states in Project Detail
+Storybook and E2E coverage. No stable research-activity Figma node is recorded
+yet; this document and the executable states own that behavior until the
+canonical Project matrix is synchronized. Reviewers must not cite an unrelated
+frame as substitute evidence.
 
 The canonical detail matrix is the Figma section `1085:1370`. The former
 56px collapsed-chat rail at `539:7324` is retained only as an explicitly named

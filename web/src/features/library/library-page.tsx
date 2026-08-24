@@ -5,6 +5,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  useQueries,
 } from "@tanstack/react-query";
 import { AddIcon } from "@/design-system/icons/semantic-icons";
 import type { Route } from "next";
@@ -28,6 +29,12 @@ import {
 import { Icon } from "@/design-system/icons/icon";
 import { useAuthSession, type Actor } from "@/features/authentication";
 import { integrationQueries } from "@/features/integrations";
+import {
+  chunkPaperSummaryDocumentIds,
+  hasPaperActivityEvidence,
+  researchActivityQueries,
+  type PaperActivitySummary,
+} from "@/features/research-activity";
 import { useSettingsLauncher } from "@/features/settings";
 import {
   PaperSearchForm,
@@ -271,6 +278,34 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
   const paperEntries = React.useMemo(
     () => papersQuery.data?.pages.flatMap((page) => page.items) ?? [],
     [papersQuery.data?.pages],
+  );
+  const paperActivityIds = React.useMemo(
+    () =>
+      paperEntries.flatMap((entry) =>
+        entry.entry_type === "paper" ? [entry.document.document_id] : [],
+      ),
+    [paperEntries],
+  );
+  const paperActivityIdChunks = React.useMemo(
+    () => chunkPaperSummaryDocumentIds(paperActivityIds),
+    [paperActivityIds],
+  );
+  const paperActivityQueries = useQueries({
+    queries: paperActivityIdChunks.map((documentIds) =>
+      researchActivityQueries.paperSummaries(documentIds),
+    ),
+  });
+  const paperActivitySummaries = paperActivityQueries.flatMap(
+    (query) => query.data ?? [],
+  );
+  const paperActivityByDocumentId = React.useMemo(
+    () =>
+      new Map<string, PaperActivitySummary>(
+        paperActivitySummaries
+          .filter(hasPaperActivityEvidence)
+          .map((summary) => [summary.documentId, summary]),
+      ),
+    [paperActivitySummaries],
   );
   const paperList = React.useMemo(() => {
     const lastPage = papersQuery.data?.pages.at(-1);
@@ -526,6 +561,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               value="papers"
             >
               <PapersView
+                activityByDocumentId={paperActivityByDocumentId}
                 attentionCount={summaryQuery.data?.attention_count ?? 0}
                 data={paperList}
                 error={papersQuery.error}

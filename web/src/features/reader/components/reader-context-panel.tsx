@@ -959,6 +959,7 @@ export type ReaderContextPanelProps = {
   onTurnContextClear: () => void;
   setReasoningLevel: (level: ReasoningLevel) => void;
   title: string;
+  insightsPanel?: React.ReactNode;
   translationPanel: React.ReactNode;
 };
 
@@ -1007,6 +1008,7 @@ export function ReaderContextPanel({
   onTurnContextClear,
   setReasoningLevel,
   title,
+  insightsPanel,
   translationPanel,
 }: ReaderContextPanelProps) {
   const t = useTranslations("Reader");
@@ -1031,11 +1033,19 @@ export function ReaderContextPanel({
       )}
     >
       <div className="border-line flex h-14 shrink-0 items-center gap-1 border-b px-3">
-        {(["ask", "annotations", "translation", "details"] as const).map(
-          (item) => (
+        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto overscroll-x-contain">
+          {(
+            [
+              "ask",
+              "annotations",
+              "translation",
+              "insights",
+              "details",
+            ] as const
+          ).map((item) => (
             <Button
               className={cn(
-                "h-9 min-h-9 px-2",
+                "h-9 min-h-9 shrink-0 px-2",
                 activePanel === item && "bg-hover",
               )}
               key={item}
@@ -1047,11 +1057,11 @@ export function ReaderContextPanel({
             >
               {t(`panels.${item}`)}
             </Button>
-          ),
-        )}
+          ))}
+        </div>
         <IconButton
           autoFocus
-          className="ml-auto"
+          className="shrink-0"
           label={t("toolbar.closePanel")}
           onClick={onClose}
           variant="ghost"
@@ -1072,6 +1082,14 @@ export function ReaderContextPanel({
           >
             {activePanel === "translation" ? (
               translationPanel
+            ) : activePanel === "insights" ? (
+              (insightsPanel ?? (
+                <div className="grid h-full place-items-center p-5 text-center">
+                  <p className="text-secondary max-w-xs text-sm">
+                    {t("insights.unavailable")}
+                  </p>
+                </div>
+              ))
             ) : activePanel === "details" ? (
               <div
                 className={cn(

@@ -1,7 +1,8 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from uuid import UUID
+from unittest.mock import MagicMock
+from uuid import UUID, uuid4
 
 from app.shared.domain import AppError, FailureKind
 from app.transport.http.errors import (
@@ -10,6 +11,7 @@ from app.transport.http.errors import (
     unhandled_error_handler,
     validation_error_handler,
 )
+from app.transport.http import errors as error_handlers
 from app.transport.http.error_boundary import UnhandledErrorMiddleware
 from app.transport.http.observability import RequestObservabilityMiddleware
 from fastapi import FastAPI
@@ -94,6 +96,32 @@ def test_unhandled_error_does_not_expose_exception() -> None:
     assert body["kind"] == "internal"
     assert body["retryable"] is False
     UUID(body["diagnostic_id"])
+
+
+def test_reading_activity_unhandled_error_drops_payload_and_diagnostic(
+    monkeypatch,
+) -> None:
+    session_id = uuid4()
+    sensitive = f"statement parameters session={session_id} segments=[1,2,3]"
+    request = _request(f"/api/v1/reading-sessions/{session_id}")
+    request.scope["method"] = "PUT"
+    request.scope["route"] = SimpleNamespace(
+        path="/api/v1/reading-sessions/{session_id}"
+    )
+    logged = MagicMock()
+    diagnostic = MagicMock()
+    monkeypatch.setattr(error_handlers, "log_event", logged)
+    monkeypatch.setattr(error_handlers, "_record_diagnostic", diagnostic)
+
+    response = asyncio.run(unhandled_error_handler(request, RuntimeError(sensitive)))
+
+    rendered = repr(logged.call_args)
+    assert response.status_code == 500
+    assert "diagnostic_id" not in _body(response)
+    assert str(session_id) not in rendered
+    assert "segments" not in rendered
+    assert "exc_info" not in rendered
+    diagnostic.assert_not_called()
 
 
 def test_validation_error_uses_envelope_without_echoing_input() -> None:

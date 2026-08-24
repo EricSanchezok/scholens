@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import cast
 from uuid import UUID
 
 import click
 
+from app.modules.reading_activity.application import ReadingActivityRetentionResult
 from app.operator_cli.common import (
     CliState,
     OutputGroup,
@@ -19,6 +21,9 @@ from app.operator_cli.common import (
     guarded,
     load_user,
 )
+
+
+MAX_READING_RETENTION_BATCHES_PER_INVOCATION = 1000
 
 
 @click.group("maintenance", cls=OutputGroup)
@@ -68,6 +73,90 @@ def backfill_passages(
         "indexed_passages": result.indexed_passages,
     }
     emit(state, payload)
+
+
+@maintenance_group.command("purge-reading-session-pages")
+@click.option("--actor-email", required=True, callback=email_callback)
+@click.option(
+    "--retention-days",
+    type=click.IntRange(1, 90),
+    default=90,
+    show_default=True,
+    help="Maximum age of fine-grained page trajectories.",
+)
+@click.option(
+    "--batch-size",
+    type=click.IntRange(1, 100),
+    default=100,
+    show_default=True,
+    help="Maximum sessions considered per transaction (also page-row budgeted).",
+)
+@click.option(
+    "--apply", is_flag=True, help="Apply deletion; otherwise only count candidates."
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt when applying.")
+@click.pass_obj
+@guarded
+def purge_reading_session_pages(
+    state: CliState,
+    actor_email: str,
+    retention_days: int,
+    batch_size: int,
+    apply: bool,
+    yes: bool,
+) -> None:
+    """Enforce the fine-grained reading trajectory retention ceiling."""
+    actor_user = load_user(actor_email)
+    if apply:
+        confirm("Permanently purge expired reading session page detail?", yes=yes)
+
+    def purge_batch() -> ReadingActivityRetentionResult:
+        runner = executor()
+        invoke = runner.command if apply else runner.query
+        return cast(
+            ReadingActivityRetentionResult,
+            invoke(
+                lambda capabilities: (
+                    capabilities.reading_activity_retention.purge_session_pages(
+                        actor=current_admin(capabilities, actor_user.id),
+                        operation=cli_operation(
+                            "maintenance.purge-reading-session-pages"
+                        ),
+                        retention_days=retention_days,
+                        batch_size=batch_size,
+                        apply=apply,
+                    )
+                )
+            ),
+        )
+
+    result = purge_batch()
+    initial_candidates = result.candidates
+    total_purged_sessions = result.purged_sessions
+    total_purged_pages = result.purged_pages
+    if apply:
+        for _ in range(MAX_READING_RETENTION_BATCHES_PER_INVOCATION - 1):
+            if result.candidates <= result.purged_sessions:
+                break
+            if result.purged_sessions == 0:
+                raise RuntimeError("reading_activity_retention_drain_stalled")
+            result = purge_batch()
+            total_purged_sessions += result.purged_sessions
+            total_purged_pages += result.purged_pages
+        else:
+            if result.candidates > result.purged_sessions:
+                raise RuntimeError("reading_activity_retention_drain_incomplete")
+    emit(
+        state,
+        {
+            "status": "changed" if total_purged_sessions else "unchanged",
+            "dry_run": not apply,
+            "cutoff": result.cutoff.isoformat(),
+            "candidates": initial_candidates,
+            "purged_sessions": total_purged_sessions,
+            "purged_pages": total_purged_pages,
+        },
+    )
 
 
 @maintenance_group.command("backfill-search-embeddings")

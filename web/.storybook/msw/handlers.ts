@@ -13,6 +13,20 @@ const conversationSearchUrl =
 const paperListPreferencesUrl =
   "http://127.0.0.1:7301/api/v1/me/paper-list-preferences";
 const libraryTagsUrl = "http://127.0.0.1:7301/api/v1/library/tags";
+const readingActivityPreferencesUrl =
+  "http://127.0.0.1:7301/api/v1/me/reading-activity-preferences";
+
+export const readingActivityPreferencesHandlers = [
+  http.get(readingActivityPreferencesUrl, () =>
+    HttpResponse.json({
+      contribute_anonymous_project_aggregates: true,
+      recording_enabled: true,
+    }),
+  ),
+  http.put(readingActivityPreferencesUrl, async ({ request }) =>
+    HttpResponse.json(await request.json()),
+  ),
+];
 
 export const paperListPreferencesHandlers = [
   http.get(paperListPreferencesUrl, () =>
@@ -180,6 +194,7 @@ export const successHandlers = [
   http.get(apiUrl, () =>
     HttpResponse.json({ items: [{ id: "1", title: "Foundation item" }] }),
   ),
+  ...readingActivityPreferencesHandlers,
 ];
 export const slowHandlers = [
   http.get(apiUrl, async () => {

@@ -252,6 +252,7 @@ def test_digital_pdf_uses_pymupdf4llm_full(
     )
 
     assert result.success
+    assert result.page_count == 2
     assert result.parser_backend == "pymupdf4llm"
     assert result.parser_quality == "full"
     assert result.parser_warning_code is None
@@ -289,6 +290,7 @@ def test_pymupdf4llm_failure_falls_back_to_markitdown(
     )
 
     assert result.success
+    assert result.page_count == 2
     assert result.parser_backend == "markitdown"
     assert result.parser_quality == "text_only"
     assert result.parser_warning_code == "markitdown_fallback"
@@ -324,6 +326,7 @@ def test_local_failure_rescues_via_mineru_with_archive(
     )
 
     assert result.success
+    assert result.page_count == 2
     assert result.parser_backend == "mineru"
     assert result.parser_quality == "full"
     assert result.parser_archive_s3_key == f"documents/{'c' * 64}/mineru-result.zip"
@@ -359,6 +362,7 @@ def test_mineru_rescue_timeout_uses_text_last_resort(
     )
 
     assert result.success
+    assert result.page_count == 2
     assert result.parser_backend == "pymupdf4llm"
     assert result.parser_quality == "text_only"
     assert result.parser_warning_code == "text_only_fallback"
@@ -385,6 +389,7 @@ def test_scanned_pdf_goes_directly_to_mineru(
     )
 
     assert result.success
+    assert result.page_count == 1
     assert result.parser_backend == "mineru"
     assert result.parser_quality == "full"
     assert result.parser_archive_s3_key == f"documents/{'e' * 64}/mineru-result.zip"
@@ -417,6 +422,7 @@ def _recorded_mineru_data_id(
     )
 
     assert result.success
+    assert result.page_count == 1
     assert len(instances) == 1
     assert len(instances[0].received_data_ids) == 1
     return instances[0].received_data_ids[0]
@@ -517,6 +523,7 @@ def test_skip_metadata_extraction_skips_llm(
     )
 
     assert result.success
+    assert result.page_count == 2
     assert result.parser_backend == "pymupdf4llm"
     assert result.metadata is None
 
@@ -527,3 +534,17 @@ def test_pdf_processing_result_rejects_half_success() -> None:
 
     with pytest.raises(ValueError, match="error code"):
         PDFProcessingResult(success=False, job_id="job-1")
+
+
+def test_pdf_processing_result_rejects_offsets_beyond_physical_page_count() -> None:
+    with pytest.raises(ValueError, match="physical PDF page count"):
+        PDFProcessingResult(
+            success=True,
+            job_id="job-1",
+            raw_content="enough text",
+            page_offset_map={1: [0, 5], 3: [5, 11]},
+            page_count=2,
+            parser_backend="pymupdf4llm",
+            parser_quality="full",
+            parser_version="test",
+        )

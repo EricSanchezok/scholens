@@ -24,6 +24,7 @@ import {
   useMotionPreference,
 } from "@/design-system/motion/motion-provider";
 import { useLocalePreference } from "@/i18n/use-locale-preference";
+import { ReadingActivityPreferencesSettings } from "@/features/research-activity";
 import { cn } from "@/lib/utilities/cn";
 import { SettingsPanelHeader } from "./settings-layout";
 
@@ -214,6 +215,10 @@ export function GeneralPanel({ showHeader = true }: { showHeader?: boolean }) {
             </Select>
           </Field>
         </section>
+
+        <div className="border-line-subtle mt-8 border-t pt-7">
+          <ReadingActivityPreferencesSettings />
+        </div>
       </div>
     </div>
   );

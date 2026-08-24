@@ -304,6 +304,9 @@ function ReflowBlock({
       data-presentation-status={block.presentation_status}
       data-reflow-block={block.id}
       data-reflow-kind={block.kind}
+      data-source-height={primarySource?.source_rect.height}
+      data-source-page-number={pageNumber}
+      data-source-y={primarySource?.source_rect.y}
       ref={ref}
     >
       {showOriginal ? (

@@ -644,6 +644,7 @@ export function PdfPage({
   projectContext,
   translationPreview,
   sourceTarget,
+  activityScrollContainerRef,
 }: {
   adapter: PdfDocumentAdapter;
   annotationNavigation?: { id: string; request: number };
@@ -678,11 +679,13 @@ export function PdfPage({
   projectContext?: boolean;
   translationPreview?: ReaderSelectionTranslationPreview;
   sourceTarget?: ReaderPdfSourceTarget;
+  activityScrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   onActiveTextSelectionChange?: (
     selection: ReaderSelection | undefined,
   ) => void;
 }) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  const internalContainerRef = React.useRef<HTMLDivElement>(null);
+  const containerRef = activityScrollContainerRef ?? internalContainerRef;
   const routePageRef = React.useRef(pageNumber);
   const activePageRef = React.useRef(0);
   const internallyReportedPagesRef = React.useRef<number[]>([]);
@@ -781,7 +784,7 @@ export function PdfPage({
       },
     });
     return () => controller.dispose();
-  }, [onActiveTextSelectionChange]);
+  }, [containerRef, onActiveTextSelectionChange]);
 
   React.useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -803,7 +806,7 @@ export function PdfPage({
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [containerRef]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -846,7 +849,7 @@ export function PdfPage({
       window.cancelAnimationFrame(frame);
       scrollContainer.removeEventListener("scroll", updateVisiblePage);
     };
-  }, [reportVisiblePage]);
+  }, [containerRef, reportVisiblePage]);
 
   React.useEffect(() => {
     const routeDecision =
@@ -897,6 +900,7 @@ export function PdfPage({
     }
     return () => window.cancelAnimationFrame(alignmentFrameRef.current);
   }, [
+    containerRef,
     containerSize.height,
     containerSize.width,
     pageNumber,
@@ -928,7 +932,7 @@ export function PdfPage({
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [containerSize.height, containerSize.width, sourceTarget]);
+  }, [containerRef, containerSize.height, containerSize.width, sourceTarget]);
 
   React.useEffect(() => {
     if (!annotationNavigation) return;
@@ -960,7 +964,7 @@ export function PdfPage({
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [annotationNavigation]);
+  }, [annotationNavigation, containerRef]);
 
   // Stable per-page match arrays: the page render effect depends on
   // `searchMatches`, so a fresh array identity on every parent render would

@@ -6706,6 +6706,92 @@
         "title": "PaperIngestionRequest",
         "type": "object"
       },
+      "PaperInsightsResponse": {
+        "properties": {
+          "activity_history_complete_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity History Complete Since"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "metric_definition_version": {
+            "default": "active-reading-v1",
+            "title": "Metric Definition Version",
+            "type": "string"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPageInsightResponse"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "range": {
+            "$ref": "#/components/schemas/ReadingInsightsRange"
+          },
+          "reading_data_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading Data Since"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReadingSummaryResponse"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingTrendPointResponse"
+            },
+            "title": "Trend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_id",
+          "reading_data_since",
+          "activity_history_complete_since",
+          "time_zone",
+          "range",
+          "summary",
+          "trend",
+          "pages"
+        ],
+        "title": "PaperInsightsResponse",
+        "type": "object"
+      },
       "PaperListColumn": {
         "enum": [
           "status",
@@ -7752,6 +7838,108 @@
         "title": "PrimaryLocationSource",
         "type": "object"
       },
+      "ProjectActivityItemResponse": {
+        "properties": {
+          "actor_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Display Name"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Title"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ProjectActivityKind"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "occurred_at"
+        ],
+        "title": "ProjectActivityItemResponse",
+        "type": "object"
+      },
+      "ProjectActivityKind": {
+        "enum": [
+          "paper_added",
+          "member_joined",
+          "annotation_created",
+          "output_created",
+          "discussion_message_posted",
+          "discussion_resolved"
+        ],
+        "title": "ProjectActivityKind",
+        "type": "string"
+      },
+      "ProjectActivityResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectActivityItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "items"
+        ],
+        "title": "ProjectActivityResponse",
+        "type": "object"
+      },
       "ProjectCapabilitiesResponse": {
         "properties": {
           "contribute_research": {
@@ -7899,6 +8087,90 @@
           "title"
         ],
         "title": "ProjectCreateRequest",
+        "type": "object"
+      },
+      "ProjectInsightsResponse": {
+        "properties": {
+          "activity_history_complete_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity History Complete Since"
+          },
+          "metric_definition_version": {
+            "default": "active-reading-v1",
+            "title": "Metric Definition Version",
+            "type": "string"
+          },
+          "mine": {
+            "$ref": "#/components/schemas/ProjectMineInsightsResponse"
+          },
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectPaperInsightResponse"
+            },
+            "title": "Papers",
+            "type": "array"
+          },
+          "papers_total_count": {
+            "minimum": 0.0,
+            "title": "Papers Total Count",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/ReadingInsightsRange"
+          },
+          "reading_data_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading Data Since"
+          },
+          "team": {
+            "$ref": "#/components/schemas/ProjectTeamInsightsResponse"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectReadingTrendPointResponse"
+            },
+            "title": "Trend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "reading_data_since",
+          "activity_history_complete_since",
+          "time_zone",
+          "range",
+          "mine",
+          "team",
+          "trend",
+          "papers",
+          "papers_total_count"
+        ],
+        "title": "ProjectInsightsResponse",
         "type": "object"
       },
       "ProjectInvitationAcceptedResponse": {
@@ -8111,6 +8383,36 @@
         "title": "ProjectMembershipResponse",
         "type": "object"
       },
+      "ProjectMineInsightsResponse": {
+        "properties": {
+          "annotation_count": {
+            "minimum": 0.0,
+            "title": "Annotation Count",
+            "type": "integer"
+          },
+          "papers_with_activity": {
+            "minimum": 0.0,
+            "title": "Papers With Activity",
+            "type": "integer"
+          },
+          "private_conversation_count": {
+            "minimum": 0.0,
+            "title": "Private Conversation Count",
+            "type": "integer"
+          },
+          "reading": {
+            "$ref": "#/components/schemas/ReadingSummaryResponse"
+          }
+        },
+        "required": [
+          "reading",
+          "papers_with_activity",
+          "private_conversation_count",
+          "annotation_count"
+        ],
+        "title": "ProjectMineInsightsResponse",
+        "type": "object"
+      },
       "ProjectOutputListResponse": {
         "properties": {
           "items": {
@@ -8204,6 +8506,76 @@
           "file_url"
         ],
         "title": "ProjectPaperFileUrlResponse",
+        "type": "object"
+      },
+      "ProjectPaperInsightResponse": {
+        "properties": {
+          "discussion_message_count": {
+            "minimum": 0.0,
+            "title": "Discussion Message Count",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
+          "my_active_ms": {
+            "minimum": 0.0,
+            "title": "My Active Ms",
+            "type": "integer"
+          },
+          "my_coverage_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Coverage Percent"
+          },
+          "shared_annotation_count": {
+            "minimum": 0.0,
+            "title": "Shared Annotation Count",
+            "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "my_active_ms",
+          "shared_annotation_count",
+          "discussion_message_count",
+          "last_activity_at"
+        ],
+        "title": "ProjectPaperInsightResponse",
         "type": "object"
       },
       "ProjectPaperListResponse": {
@@ -8580,6 +8952,44 @@
         "title": "ProjectPermissionSet",
         "type": "object"
       },
+      "ProjectReadingTrendPointResponse": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "my_active_ms": {
+            "minimum": 0.0,
+            "title": "My Active Ms",
+            "type": "integer"
+          },
+          "shared_activity_count": {
+            "minimum": 0.0,
+            "title": "Shared Activity Count",
+            "type": "integer"
+          },
+          "team_active_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Active Ms"
+          }
+        },
+        "required": [
+          "date",
+          "my_active_ms",
+          "shared_activity_count"
+        ],
+        "title": "ProjectReadingTrendPointResponse",
+        "type": "object"
+      },
       "ProjectResearchAudience": {
         "additionalProperties": false,
         "properties": {
@@ -8693,6 +9103,103 @@
         "title": "ProjectSort",
         "type": "string"
       },
+      "ProjectTeamInsightsResponse": {
+        "properties": {
+          "active_collaborators": {
+            "minimum": 0.0,
+            "title": "Active Collaborators",
+            "type": "integer"
+          },
+          "active_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Ms"
+          },
+          "anonymous_reading_available": {
+            "title": "Anonymous Reading Available",
+            "type": "boolean"
+          },
+          "discussion_message_count": {
+            "minimum": 0.0,
+            "title": "Discussion Message Count",
+            "type": "integer"
+          },
+          "outputs": {
+            "minimum": 0.0,
+            "title": "Outputs",
+            "type": "integer"
+          },
+          "papers_added": {
+            "minimum": 0.0,
+            "title": "Papers Added",
+            "type": "integer"
+          },
+          "papers_with_activity": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Papers With Activity"
+          },
+          "resolved_discussions": {
+            "minimum": 0.0,
+            "title": "Resolved Discussions",
+            "type": "integer"
+          },
+          "shared_annotations": {
+            "minimum": 0.0,
+            "title": "Shared Annotations",
+            "type": "integer"
+          },
+          "substantive_pages": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Substantive Pages"
+          },
+          "visible_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible Ms"
+          }
+        },
+        "required": [
+          "anonymous_reading_available",
+          "papers_added",
+          "shared_annotations",
+          "discussion_message_count",
+          "resolved_discussions",
+          "outputs",
+          "active_collaborators"
+        ],
+        "title": "ProjectTeamInsightsResponse",
+        "type": "object"
+      },
       "ProjectTransferRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8777,6 +9284,662 @@
         ],
         "title": "PublicPaperResponse",
         "type": "object"
+      },
+      "ReadingActivityExportRecordResponse": {
+        "properties": {
+          "payload": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Payload",
+            "type": "object"
+          },
+          "record_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Record Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record_type",
+          "payload"
+        ],
+        "title": "ReadingActivityExportRecordResponse",
+        "type": "object"
+      },
+      "ReadingActivityExportResponse": {
+        "properties": {
+          "exported_at": {
+            "format": "date-time",
+            "title": "Exported At",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingActivityExportRecordResponse"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exported_at",
+          "records"
+        ],
+        "title": "ReadingActivityExportResponse",
+        "type": "object"
+      },
+      "ReadingActivityPreferencesResponse": {
+        "properties": {
+          "contribute_anonymous_project_aggregates": {
+            "default": true,
+            "title": "Contribute Anonymous Project Aggregates",
+            "type": "boolean"
+          },
+          "recording_enabled": {
+            "default": true,
+            "title": "Recording Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "ReadingActivityPreferencesResponse",
+        "type": "object"
+      },
+      "ReadingActivityPreferencesUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "contribute_anonymous_project_aggregates": {
+            "title": "Contribute Anonymous Project Aggregates",
+            "type": "boolean"
+          },
+          "recording_enabled": {
+            "title": "Recording Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recording_enabled",
+          "contribute_anonymous_project_aggregates"
+        ],
+        "title": "ReadingActivityPreferencesUpdateRequest",
+        "type": "object"
+      },
+      "ReadingExportFormat": {
+        "enum": [
+          "json",
+          "csv"
+        ],
+        "title": "ReadingExportFormat",
+        "type": "string"
+      },
+      "ReadingHourSnapshotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "active_ms": {
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "bucket_start": {
+            "format": "date-time",
+            "title": "Bucket Start",
+            "type": "string"
+          },
+          "visible_ms": {
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bucket_start",
+          "visible_ms",
+          "active_ms"
+        ],
+        "title": "ReadingHourSnapshotRequest",
+        "type": "object"
+      },
+      "ReadingInsightsRange": {
+        "enum": [
+          "7d",
+          "30d",
+          "90d",
+          "365d",
+          "all"
+        ],
+        "title": "ReadingInsightsRange",
+        "type": "string"
+      },
+      "ReadingPageBucketResponse": {
+        "properties": {
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "end_page": {
+            "minimum": 1.0,
+            "title": "End Page",
+            "type": "integer"
+          },
+          "start_page": {
+            "minimum": 1.0,
+            "title": "Start Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_page",
+          "end_page",
+          "active_ms"
+        ],
+        "title": "ReadingPageBucketResponse",
+        "type": "object"
+      },
+      "ReadingPageInsightResponse": {
+        "properties": {
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "annotation_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Annotation Count",
+            "type": "integer"
+          },
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "vertical_segments_ms": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "minItems": 20,
+            "title": "Vertical Segments Ms",
+            "type": "array"
+          },
+          "visible_ms": {
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          },
+          "visit_count": {
+            "minimum": 0.0,
+            "title": "Visit Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_number",
+          "active_ms",
+          "visible_ms",
+          "visit_count",
+          "vertical_segments_ms"
+        ],
+        "title": "ReadingPageInsightResponse",
+        "type": "object"
+      },
+      "ReadingPageSnapshotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "active_ms": {
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "page_number": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          },
+          "vertical_segments_ms": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "minItems": 20,
+            "title": "Vertical Segments Ms",
+            "type": "array"
+          },
+          "visible_ms": {
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          },
+          "visit_count": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Visit Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_number",
+          "visible_ms",
+          "active_ms",
+          "visit_count",
+          "vertical_segments_ms"
+        ],
+        "title": "ReadingPageSnapshotRequest",
+        "type": "object"
+      },
+      "ReadingPaperSummariesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPaperSummaryItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ReadingPaperSummariesResponse",
+        "type": "object"
+      },
+      "ReadingPaperSummaryItemResponse": {
+        "properties": {
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "coverage_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Percent"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "page_buckets": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPageBucketResponse"
+            },
+            "title": "Page Buckets",
+            "type": "array"
+          },
+          "visible_ms": {
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "active_ms",
+          "visible_ms",
+          "page_buckets"
+        ],
+        "title": "ReadingPaperSummaryItemResponse",
+        "type": "object"
+      },
+      "ReadingPaperSummaryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Document Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_ids"
+        ],
+        "title": "ReadingPaperSummaryRequest",
+        "type": "object"
+      },
+      "ReadingSessionResponse": {
+        "properties": {
+          "active_ms": {
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "metric_definition_version": {
+            "title": "Metric Definition Version",
+            "type": "string"
+          },
+          "page_detail_available": {
+            "title": "Page Detail Available",
+            "type": "boolean"
+          },
+          "project_contribution_enabled": {
+            "title": "Project Contribution Enabled",
+            "type": "boolean"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "revision": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "view_mode": {
+            "$ref": "#/components/schemas/ReadingViewMode"
+          },
+          "visible_ms": {
+            "title": "Visible Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "project_id",
+          "view_mode",
+          "time_zone",
+          "metric_definition_version",
+          "revision",
+          "visible_ms",
+          "active_ms",
+          "started_at",
+          "last_seen_at",
+          "ended_at",
+          "project_contribution_enabled",
+          "page_detail_available"
+        ],
+        "title": "ReadingSessionResponse",
+        "type": "object"
+      },
+      "ReadingSessionSnapshotRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "active_ms": {
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingHourSnapshotRequest"
+            },
+            "maxItems": 26,
+            "minItems": 1,
+            "title": "Hours",
+            "type": "array"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPageSnapshotRequest"
+            },
+            "maxItems": 100,
+            "title": "Pages",
+            "type": "array"
+          },
+          "revision": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "visible_ms": {
+            "maximum": 86400000.0,
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "visible_ms",
+          "active_ms",
+          "last_seen_at",
+          "hours"
+        ],
+        "title": "ReadingSessionSnapshotRequest",
+        "type": "object"
+      },
+      "ReadingSessionStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "metric_definition_version": {
+            "default": "active-reading-v1",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Metric Definition Version",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "time_zone": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "view_mode": {
+            "$ref": "#/components/schemas/ReadingViewMode"
+          }
+        },
+        "required": [
+          "session_id",
+          "view_mode",
+          "started_at",
+          "time_zone"
+        ],
+        "title": "ReadingSessionStartRequest",
+        "type": "object"
+      },
+      "ReadingSummaryResponse": {
+        "properties": {
+          "active_days": {
+            "minimum": 0.0,
+            "title": "Active Days",
+            "type": "integer"
+          },
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "coverage_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Percent"
+          },
+          "session_count": {
+            "minimum": 0.0,
+            "title": "Session Count",
+            "type": "integer"
+          },
+          "substantive_pages": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Substantive Pages"
+          },
+          "visible_ms": {
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_ms",
+          "visible_ms",
+          "session_count",
+          "active_days"
+        ],
+        "title": "ReadingSummaryResponse",
+        "type": "object"
+      },
+      "ReadingTrendPointResponse": {
+        "properties": {
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "session_count": {
+            "minimum": 0.0,
+            "title": "Session Count",
+            "type": "integer"
+          },
+          "visible_ms": {
+            "minimum": 0.0,
+            "title": "Visible Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "active_ms",
+          "visible_ms",
+          "session_count"
+        ],
+        "title": "ReadingTrendPointResponse",
+        "type": "object"
+      },
+      "ReadingViewMode": {
+        "enum": [
+          "pdf",
+          "reflow"
+        ],
+        "title": "ReadingViewMode",
+        "type": "string"
       },
       "ReasoningLevel": {
         "enum": [
@@ -8959,6 +10122,106 @@
         "title": "ResearchCreatorResponse",
         "type": "object"
       },
+      "ResearchInsightsResponse": {
+        "properties": {
+          "activity_history_complete_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity History Complete Since"
+          },
+          "annotation_count": {
+            "minimum": 0.0,
+            "title": "Annotation Count",
+            "type": "integer"
+          },
+          "conversation_count": {
+            "minimum": 0.0,
+            "title": "Conversation Count",
+            "type": "integer"
+          },
+          "metric_definition_version": {
+            "default": "active-reading-v1",
+            "title": "Metric Definition Version",
+            "type": "string"
+          },
+          "output_count": {
+            "minimum": 0.0,
+            "title": "Output Count",
+            "type": "integer"
+          },
+          "papers_with_activity": {
+            "minimum": 0.0,
+            "title": "Papers With Activity",
+            "type": "integer"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchProjectBreakdownResponse"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "range": {
+            "$ref": "#/components/schemas/ReadingInsightsRange"
+          },
+          "reading_data_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading Data Since"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReadingSummaryResponse"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          },
+          "top_papers": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchPaperBreakdownResponse"
+            },
+            "title": "Top Papers",
+            "type": "array"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingTrendPointResponse"
+            },
+            "title": "Trend",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reading_data_since",
+          "activity_history_complete_since",
+          "time_zone",
+          "range",
+          "summary",
+          "trend",
+          "projects",
+          "top_papers",
+          "papers_with_activity",
+          "annotation_count",
+          "conversation_count",
+          "output_count"
+        ],
+        "title": "ResearchInsightsResponse",
+        "type": "object"
+      },
       "ResearchItemCapabilities": {
         "properties": {
           "delete": {
@@ -9126,6 +10389,88 @@
           "capabilities"
         ],
         "title": "ResearchItemResponse",
+        "type": "object"
+      },
+      "ResearchPaperBreakdownResponse": {
+        "properties": {
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "last_read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Read At"
+          },
+          "session_count": {
+            "minimum": 0.0,
+            "title": "Session Count",
+            "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "active_ms",
+          "session_count",
+          "last_read_at"
+        ],
+        "title": "ResearchPaperBreakdownResponse",
+        "type": "object"
+      },
+      "ResearchProjectBreakdownResponse": {
+        "properties": {
+          "active_ms": {
+            "minimum": 0.0,
+            "title": "Active Ms",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "session_count": {
+            "minimum": 0.0,
+            "title": "Session Count",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "title",
+          "active_ms",
+          "session_count"
+        ],
+        "title": "ResearchProjectBreakdownResponse",
         "type": "object"
       },
       "ResearchSearchComment": {
@@ -15442,6 +16787,288 @@
         ]
       }
     },
+    "/api/v1/me/reading-activity": {
+      "delete": {
+        "operationId": "delete_all_reading_activity_api_v1_me_reading_activity_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete All Reading Activity",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
+    "/api/v1/me/reading-activity-preferences": {
+      "get": {
+        "operationId": "get_reading_activity_preferences_api_v1_me_reading_activity_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingActivityPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Reading Activity Preferences",
+        "tags": [
+          "reading-activity"
+        ]
+      },
+      "put": {
+        "operationId": "update_reading_activity_preferences_api_v1_me_reading_activity_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingActivityPreferencesUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingActivityPreferencesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Reading Activity Preferences",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
+    "/api/v1/me/reading-activity/export": {
+      "get": {
+        "operationId": "export_reading_activity_api_v1_me_reading_activity_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ReadingExportFormat",
+              "default": "json"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_header",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Header",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingActivityExportResponse"
+                }
+              },
+              "text/csv": {}
+            },
+            "description": "JSON or CSV reading activity export"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Export Reading Activity",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
+    "/api/v1/me/reading-activity/paper-summaries": {
+      "post": {
+        "operationId": "get_reading_paper_summaries_api_v1_me_reading_activity_paper_summaries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingPaperSummaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingPaperSummariesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Reading Paper Summaries",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
+    "/api/v1/me/research-insights": {
+      "get": {
+        "operationId": "get_research_insights_api_v1_me_research_insights_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ReadingInsightsRange",
+              "default": "365d"
+            }
+          },
+          {
+            "in": "query",
+            "name": "time_zone",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Time Zone",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchInsightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Research Insights",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
     "/api/v1/me/translation-preferences": {
       "get": {
         "operationId": "get_translation_preferences_api_v1_me_translation_preferences_get",
@@ -16205,6 +17832,92 @@
         "summary": "Get Document File Url"
       }
     },
+    "/api/v1/papers/{document_id}/insights": {
+      "get": {
+        "operationId": "get_paper_insights_api_v1_papers__document_id__insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ReadingInsightsRange",
+              "default": "30d"
+            }
+          },
+          {
+            "in": "query",
+            "name": "time_zone",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Time Zone",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperInsightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Paper Insights",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
     "/api/v1/papers/{document_id}/projects": {
       "get": {
         "operationId": "get_projects_from_document_id_api_v1_papers__document_id__projects_get",
@@ -16248,6 +17961,105 @@
           }
         ],
         "summary": "Get Projects From Document Id"
+      }
+    },
+    "/api/v1/papers/{document_id}/reading-activity": {
+      "delete": {
+        "operationId": "delete_paper_reading_activity_api_v1_papers__document_id__reading_activity_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Paper Reading Activity",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
+    "/api/v1/papers/{document_id}/reading-sessions": {
+      "post": {
+        "operationId": "start_reading_session_api_v1_papers__document_id__reading_sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingSessionStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Start Reading Session",
+        "tags": [
+          "reading-activity"
+        ]
       }
     },
     "/api/v1/papers/{document_id}/reflow": {
@@ -16890,6 +18702,84 @@
         "summary": "Update Project"
       }
     },
+    "/api/v1/projects/{project_id}/activity": {
+      "get": {
+        "operationId": "get_project_activity_api_v1_projects__project_id__activity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Project Activity",
+        "tags": [
+          "reading-activity"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/audio-overviews": {
       "post": {
         "operationId": "create_project_audio_overview_api_v1_projects__project_id__audio_overviews_post",
@@ -17032,6 +18922,63 @@
           }
         ],
         "summary": "Create Project Data Table"
+      }
+    },
+    "/api/v1/projects/{project_id}/insights": {
+      "get": {
+        "operationId": "get_project_insights_api_v1_projects__project_id__insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ReadingInsightsRange",
+              "default": "30d"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInsightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Project Insights",
+        "tags": [
+          "reading-activity"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/invitations": {
@@ -17271,6 +19218,47 @@
           }
         ],
         "summary": "Leave Project"
+      }
+    },
+    "/api/v1/projects/{project_id}/me/reading-activity": {
+      "delete": {
+        "operationId": "delete_project_reading_contribution_api_v1_projects__project_id__me_reading_activity_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Project Reading Contribution",
+        "tags": [
+          "reading-activity"
+        ]
       }
     },
     "/api/v1/projects/{project_id}/members": {
@@ -18008,6 +19996,103 @@
           }
         ],
         "summary": "Transfer Project"
+      }
+    },
+    "/api/v1/reading-sessions/{session_id}": {
+      "delete": {
+        "operationId": "delete_reading_session_api_v1_reading_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete Reading Session",
+        "tags": [
+          "reading-activity"
+        ]
+      },
+      "put": {
+        "operationId": "update_reading_session_api_v1_reading_sessions__session_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadingSessionSnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadingSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Reading Session",
+        "tags": [
+          "reading-activity"
+        ]
       }
     },
     "/api/v1/research-items/{item_id}": {

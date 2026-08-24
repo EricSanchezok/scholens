@@ -12,10 +12,11 @@ the deliberately deferred boundaries.
   `/login` with a safe return target.
 - The selected conversation is shareable navigation state and therefore lives
   in `?conversation=<uuid>`. A refresh restores that conversation.
-- Conversations, papers, projects, and message history are server state owned
-  by TanStack Query. Composer input uses React Hook Form and Zod; its form state
-  is owned by `HomeWorkspace` so responsive composition changes never discard
-  an unsent draft. Sidebar and picker state remain local. An in-progress
+- Conversations, papers, projects, personal research insight, and message
+  history are server state owned by TanStack Query. Composer input uses React
+  Hook Form and Zod; its form state is owned by `HomeWorkspace` so responsive
+  composition changes never discard an unsent draft. Sidebar and picker state
+  remain local. An in-progress
   subscriber is local, but accepted generation and its terminal state are
   Server-owned and survive route changes, backgrounding, reload, and offline
   intervals.
@@ -109,9 +110,9 @@ the deliberately deferred boundaries.
 
 ## Data and streaming
 
-Home consumes only the public conversation, project, library-paper, and actor
-contracts. It does not import from `client/` and does not define duplicate wire
-DTOs.
+Home consumes only the public conversation, project, library-paper,
+research-insight, and actor contracts. It does not import from `client/` and
+does not define duplicate wire DTOs.
 
 Conversation continuation uses the direct durable SSE response, and a first
 prompt uses `POST /api/v1/conversations/{id}/start` to atomically create the
@@ -260,11 +261,51 @@ fails or times out, the Server derives a cleaned title of at most 60 characters
 from the first user question. The administrator-only, idempotent maintenance
 command applies the same fallback to legacy default-titled conversations.
 
+## Personal research snapshot
+
+The dashboard adds one private 30-day research snapshot from
+`GET /api/v1/me/research-insights`; it does not derive a second analytics model
+from recent-paper cards. The snapshot appears only in the Home dashboard state,
+not above or inside an active conversation. Its complete surface links to
+`/me/activity`, which owns longer periods and data controls.
+
+The desktop snapshot is one quiet editorial group with an active-reading
+estimate, active days, substantively engaged papers, annotations, private
+questions, and durable output counts, followed by a compact unsmoothed daily
+trend. Effort, process, and outcomes remain separate values;
+they are not summed into a productivity score. Visible time may appear as
+supporting detail, but it never replaces the “Active reading estimate” label.
+The initial snapshot uses accumulated days, papers, annotations, questions, and
+outputs as its quiet accomplishment signal; it does not invent a personal-best
+claim or streak. Any later comparison would require a complete prior period. It
+never creates a member comparison, global rank, punitive streak, or reward for
+leaving Reader open.
+
+On phones the same response becomes a compact, touch-sized snapshot and one
+View activity action above the Composer. It does not shrink the annual calendar,
+Project bars, or Top papers table into the Home canvas. At 320 px, metric labels
+and values wrap within their own cells without making the page scroll
+horizontally.
+
+`reading_data_since`, `activity_history_complete_since`, and the metric-
+definition version are part of the visible state contract. A partial previous
+period omits percentage comparison instead of treating missing days as zero. A
+new account receives a first-research prompt; a recording-disabled account may
+still see retained history plus an honest disabled state. Home never turns the
+preference back on, deletes history, or exposes Project team aggregates.
+
+The personal snapshot is delivered with the research-activity slice described
+by [ADR 0039](../../docs/decisions/0039-first-party-research-activity-ledger.md).
+Until its canonical Home Figma frames are synchronized, Storybook and route E2E
+own the populated, first-use, partial-history, recording-disabled, loading,
+recoverable-error, mobile, localized, and Dark acceptance states; an unrelated
+historical dashboard frame is not substitute evidence.
+
 ## State coverage
 
 | Surface      | Deterministic coverage                                                                                                                                                  |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Home data    | populated, loading/slow, empty, and recoverable error                                                                                                                   |
+| Home data    | populated, loading/slow, empty, recoverable error, 30-day insight, first-use insight, partial history, and recording disabled                                           |
 | Navigation   | 288 px desktop, 320 px ultrawide, collapsed, full paginated history, old active conversation, mobile full-screen hub, unified search, active conversation               |
 | Context      | entire library and selected project/paper sources, including search                                                                                                     |
 | Conversation | direct answer, tool activity, timed result, prompt edit/branch, partial failure, reconnecting, stop failure, refresh-safe retry, references, complete, cancelled, error |

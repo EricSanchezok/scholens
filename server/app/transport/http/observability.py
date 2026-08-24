@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from contextlib import nullcontext
 from time import monotonic
 from typing import Any
 from uuid import UUID, uuid4
@@ -21,9 +23,49 @@ from scholens_observability import (
     update_context,
 )
 from fastapi import Request
+from opentelemetry.instrumentation.utils import suppress_instrumentation
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+
+_READING_ACTIVITY_PATH_TEMPLATES = (
+    (
+        re.compile(r"^/api/v1/me/reading-activity-preferences/?$"),
+        "/api/v1/me/reading-activity-preferences",
+    ),
+    (
+        re.compile(r"^/api/v1/papers/[^/]+/reading-sessions/?$"),
+        "/api/v1/papers/{document_id}/reading-sessions",
+    ),
+    (
+        re.compile(r"^/api/v1/reading-sessions/[^/]+/?$"),
+        "/api/v1/reading-sessions/{session_id}",
+    ),
+    (
+        re.compile(r"^(/api/v1/papers)/[^/]+(/(?:insights|reading-activity))/?$"),
+        r"\1/{document_id}\2",
+    ),
+    (
+        re.compile(
+            r"^(/api/v1/projects)/[^/]+/"
+            r"(insights|activity|me/reading-activity)/?$"
+        ),
+        r"\1/{project_id}/\2",
+    ),
+    (
+        re.compile(r"^/api/v1/me/research-insights/?$"),
+        "/api/v1/me/research-insights",
+    ),
+    (
+        re.compile(r"^/api/v1/me/reading-activity(?:/paper-summaries|/export)?/?$"),
+        "",
+    ),
+)
+_UUID_PATH_SEGMENT = re.compile(
+    r"(?<=/)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"[0-9a-f]{4}-[0-9a-f]{12}(?=/|$)",
+    re.IGNORECASE,
+)
 
 
 def ensure_request_id(request: Request) -> UUID:
@@ -62,6 +104,23 @@ def attach_operation_context(
         ),
         origin=operation.origin.kind,
     )
+
+
+def is_reading_activity_request(scope: Scope) -> bool:
+    """Identify the privacy-sensitive activity surface before routing."""
+
+    path = str(scope.get("path", ""))
+    return _reading_activity_route_template(path) is not None
+
+
+def _reading_activity_route_template(path: str) -> str | None:
+    for pattern, replacement in _READING_ACTIVITY_PATH_TEMPLATES:
+        if pattern.fullmatch(path) is None:
+            continue
+        if replacement:
+            return pattern.sub(replacement, path)
+        return path.removesuffix("/")
+    return None
 
 
 class RequestObservabilityMiddleware:
@@ -115,6 +174,7 @@ class RequestObservabilityMiddleware:
         started = monotonic()
         response_status = 500
         response_started = False
+        private_reading = is_reading_activity_request(scope)
 
         async def observed_send(message: Message) -> None:
             nonlocal response_status, response_started
@@ -132,31 +192,37 @@ class RequestObservabilityMiddleware:
             await send(message)
 
         with bind_context(**self._base_context.fields(), request_id=request_id):
-            log_event(
-                logger,
-                logging.INFO,
-                "http.request.started",
-                method=scope.get("method", "UNKNOWN"),
-                client_ip=state["client_ip"],
-            )
-            try:
-                await self._app(scope, receive, observed_send)
-            except asyncio.CancelledError:
-                duration_ms = (monotonic() - started) * 1000
-                add_counter("scholens.http.client_disconnected")
+            if not private_reading:
                 log_event(
                     logger,
                     logging.INFO,
-                    "http.request.client_disconnected",
+                    "http.request.started",
                     method=scope.get("method", "UNKNOWN"),
-                    route=_route_template(scope),
-                    duration_ms=round(duration_ms, 3),
                     client_ip=state["client_ip"],
                 )
+            try:
+                instrumentation_scope = (
+                    suppress_instrumentation() if private_reading else nullcontext()
+                )
+                with instrumentation_scope:
+                    await self._app(scope, receive, observed_send)
+            except asyncio.CancelledError:
+                duration_ms = (monotonic() - started) * 1000
+                add_counter("scholens.http.client_disconnected")
+                if not private_reading:
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "http.request.client_disconnected",
+                        method=scope.get("method", "UNKNOWN"),
+                        route=safe_http_route_template(scope),
+                        duration_ms=round(duration_ms, 3),
+                        client_ip=state["client_ip"],
+                    )
                 raise
             finally:
                 duration_ms = (monotonic() - started) * 1000
-                route = _route_template(scope)
+                route = safe_http_route_template(scope)
                 attributes: dict[str, str | int | float | bool] = {
                     "method": str(scope.get("method", "UNKNOWN")),
                     "route": route,
@@ -173,25 +239,26 @@ class RequestObservabilityMiddleware:
                 stream_failed = bool(state.get("stream_failed"))
                 if stream_failed:
                     add_counter("scholens.http.stream_failures")
-                log_event(
-                    logger,
-                    logging.INFO if response_status < 500 else logging.ERROR,
-                    "http.request.completed",
-                    method=scope.get("method", "UNKNOWN"),
-                    route=route,
-                    status_code=response_status,
-                    response_started=response_started,
-                    stream_failed=stream_failed,
-                    duration_ms=round(duration_ms, 3),
-                    client_ip=state["client_ip"],
-                )
-                self._record_sampled_success(
-                    scope=scope,
-                    state=state,
-                    route=route,
-                    status_code=response_status,
-                    duration_ms=duration_ms,
-                )
+                if not private_reading:
+                    log_event(
+                        logger,
+                        logging.INFO if response_status < 500 else logging.ERROR,
+                        "http.request.completed",
+                        method=scope.get("method", "UNKNOWN"),
+                        route=route,
+                        status_code=response_status,
+                        response_started=response_started,
+                        stream_failed=stream_failed,
+                        duration_ms=round(duration_ms, 3),
+                        client_ip=state["client_ip"],
+                    )
+                    self._record_sampled_success(
+                        scope=scope,
+                        state=state,
+                        route=route,
+                        status_code=response_status,
+                        duration_ms=duration_ms,
+                    )
 
     def _record_sampled_success(
         self,
@@ -241,7 +308,13 @@ class RequestObservabilityMiddleware:
         recorder.record(snapshot)
 
 
-def _route_template(scope: Scope) -> str:
+def safe_http_route_template(scope: Scope) -> str:
+    """Return a bounded route label without resource identifiers or query data."""
+
     route: Any = scope.get("route")
     path = getattr(route, "path", None)
-    return str(path) if path else str(scope.get("path", "unknown"))
+    raw = str(path) if path else str(scope.get("path", "unknown"))
+    reading_route = _reading_activity_route_template(raw)
+    if reading_route is not None:
+        return reading_route
+    return _UUID_PATH_SEGMENT.sub("{id}", raw)

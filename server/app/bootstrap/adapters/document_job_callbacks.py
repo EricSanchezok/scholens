@@ -165,6 +165,28 @@ def _complete_pdf_job(
     return changed
 
 
+def _document_update_from_pdf_result(
+    result: PDFProcessingResult,
+    **metadata_fields: object,
+) -> DocumentUpdate:
+    payload: dict[str, object] = {
+        "preview_s3_key": result.preview_s3_key,
+        "raw_content": result.raw_content,
+        "parser_markdown_s3_key": result.parser_markdown_s3_key,
+        "parser_archive_s3_key": result.parser_archive_s3_key,
+        "parser_backend": result.parser_backend,
+        "parser_quality": result.parser_quality,
+        "parser_version": result.parser_version,
+        "parser_warning_code": result.parser_warning_code,
+        "page_offset_map": result.page_offset_map,
+        "processing_status": DocumentProcessingStatus.COMPLETED.value,
+        **metadata_fields,
+    }
+    if "page_count" in result.model_fields_set and result.page_count is not None:
+        payload["page_count"] = result.page_count
+    return DocumentUpdate.model_validate(payload)
+
+
 def _enqueue_pdf_postprocess(
     db: Session,
     *,
@@ -236,18 +258,7 @@ def _finalize_zotero_import(
 
     paper = document_repository.update_canonical(
         db,
-        update=DocumentUpdate(
-            preview_s3_key=result.preview_s3_key,
-            raw_content=result.raw_content,
-            parser_markdown_s3_key=result.parser_markdown_s3_key,
-            parser_archive_s3_key=result.parser_archive_s3_key,
-            parser_backend=result.parser_backend,
-            parser_quality=result.parser_quality,
-            parser_version=result.parser_version,
-            parser_warning_code=result.parser_warning_code,
-            page_offset_map=result.page_offset_map,
-            processing_status=DocumentProcessingStatus.COMPLETED.value,
-        ),
+        update=_document_update_from_pdf_result(result),
         document=existing_paper,
         user=job_user,
         refresh_result=False,
@@ -1046,8 +1057,8 @@ async def handle_paper_processing_webhook(
                     raise RuntimeError("document_completion_transition_rejected")
                 paper = document_repository.update_canonical(
                     db,
-                    update=DocumentUpdate(
-                        preview_s3_key=result.preview_s3_key,
+                    update=_document_update_from_pdf_result(
+                        result,
                         title=metadata.title,
                         authors=metadata.authors,
                         abstract=metadata.abstract,
@@ -1060,15 +1071,6 @@ async def handle_paper_processing_webhook(
                             if metadata.publish_date
                             else None
                         ),
-                        raw_content=result.raw_content,
-                        parser_markdown_s3_key=result.parser_markdown_s3_key,
-                        parser_archive_s3_key=result.parser_archive_s3_key,
-                        parser_backend=result.parser_backend,
-                        parser_quality=result.parser_quality,
-                        parser_version=result.parser_version,
-                        parser_warning_code=result.parser_warning_code,
-                        page_offset_map=result.page_offset_map,
-                        processing_status=(DocumentProcessingStatus.COMPLETED.value),
                     ),
                     document=existing_paper,
                     user=actor,

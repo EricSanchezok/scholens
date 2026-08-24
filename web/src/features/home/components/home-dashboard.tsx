@@ -319,7 +319,9 @@ export function HomeDashboard({
   onRetryProjects,
   composerForm,
   showComposer = true,
+  activity,
 }: {
+  activity?: React.ReactNode;
   papers: LibraryPaper[];
   projects: Project[];
   papersLoading?: boolean;
@@ -421,6 +423,11 @@ export function HomeDashboard({
           projects={recentProjects}
         />
       )}
+      {activity ? (
+        <div className="mt-8 w-full lg:mx-auto lg:max-w-[960px]">
+          {activity}
+        </div>
+      ) : null}
       {!emptyWorkspace && (
         <div
           className={cn(

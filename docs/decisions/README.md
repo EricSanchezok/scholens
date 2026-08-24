@@ -70,6 +70,7 @@ change what the accepted record decided.
 - [ADR 0036: Validated Conversation final output](./0036-validated-conversation-final-output.md)
 - [ADR 0037: Registry intake without a second UI system](./0037-registry-intake-without-a-second-ui-system.md)
 - [ADR 0038: Durable direct Conversation streaming](./0038-durable-direct-conversation-stream.md)
+- [ADR 0039: First-party research activity ledger](./0039-first-party-research-activity-ledger.md)
 
 ADR 0026 supersedes only the pre-release reset-first/disposable-data clauses
 in earlier records and amends ADR 0022's exact-migration-head rollback rule.

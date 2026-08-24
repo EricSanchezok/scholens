@@ -144,6 +144,98 @@ async function mockProjects(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    const requestedProjectId =
+      path.match(/\/projects\/([^/]+)/)?.[1] ?? activeProject.id;
+    if (path.endsWith("/insights") && request.method() === "GET") {
+      const range = url.searchParams.get("range") ?? "30d";
+      const allTime = range === "all";
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          activity_history_complete_since: "2026-01-01T00:00:00Z",
+          metric_definition_version: "active-reading-v1",
+          mine: {
+            annotation_count: 7,
+            papers_with_activity: 2,
+            private_conversation_count: 3,
+            reading: {
+              active_days: 6,
+              active_ms: 5_400_000,
+              coverage_percent: allTime ? 48 : null,
+              session_count: 9,
+              substantive_pages: allTime ? 12 : null,
+              visible_ms: 6_300_000,
+            },
+          },
+          papers: projectPaperFixtures.slice(0, 3).map((paper, index) => ({
+            discussion_message_count: index + 1,
+            document_id: paper.document_id,
+            last_activity_at: `2026-08-${22 + index}T08:00:00Z`,
+            my_active_ms: (index + 1) * 1_200_000,
+            my_coverage_percent: allTime ? 25 + index * 15 : null,
+            shared_annotation_count: index + 2,
+            title: paper.title,
+          })),
+          papers_total_count: projectPaperFixtures.length,
+          project_id: requestedProjectId,
+          range,
+          reading_data_since: "2026-08-01T00:00:00Z",
+          team: {
+            active_collaborators: 4,
+            active_ms: 12_000_000,
+            anonymous_reading_available: true,
+            discussion_message_count: 11,
+            outputs: 3,
+            papers_added: 5,
+            papers_with_activity: 6,
+            resolved_discussions: 2,
+            shared_annotations: 9,
+            substantive_pages: allTime ? 31 : null,
+            visible_ms: 14_400_000,
+          },
+          time_zone: "UTC",
+          trend: [
+            {
+              date: "2026-08-23",
+              my_active_ms: 1_800_000,
+              shared_activity_count: 2,
+              team_active_ms: 3_000_000,
+            },
+            {
+              date: "2026-08-24",
+              my_active_ms: 2_400_000,
+              shared_activity_count: 3,
+              team_active_ms: 4_200_000,
+            },
+          ],
+        }),
+      });
+    }
+    if (path.endsWith("/activity") && request.method() === "GET") {
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [
+            {
+              actor_display_name: "Eric",
+              document_id: projectPaperFixtures[0]!.document_id,
+              document_title: projectPaperFixtures[0]!.title,
+              id: "project-activity-1",
+              kind: "annotation_created",
+              occurred_at: "2026-08-24T08:00:00Z",
+            },
+          ],
+          next_cursor: null,
+          project_id: requestedProjectId,
+        }),
+      });
+    }
+    if (
+      path.endsWith("/me/reading-activity") &&
+      request.method() === "DELETE"
+    ) {
+      return route.fulfill({ status: 204 });
+    }
     if (request.method() === "POST" && path.endsWith("/projects")) {
       const body = request.postDataJSON() as {
         title: string;

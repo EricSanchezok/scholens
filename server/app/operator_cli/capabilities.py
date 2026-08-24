@@ -30,6 +30,10 @@ from app.modules.papers.infrastructure.passage_maintenance import SqlPassageBack
 from app.modules.papers.infrastructure.search_embedding_maintenance import (
     SqlSearchEmbeddingBackfill,
 )
+from app.modules.reading_activity.application import ReadingActivityRetention
+from app.modules.reading_activity.infrastructure.retention import (
+    SqlReadingActivityRetention,
+)
 from app.shared.infrastructure import SystemClock
 from sqlalchemy.orm import Session
 
@@ -87,6 +91,14 @@ class OperatorCapabilities:
                 stuck_job_recoverer=recover_unclaimed_pdf_job,
             ),
             journal=self._journal,
+        )
+
+    @cached_property
+    def reading_activity_retention(self) -> ReadingActivityRetention:
+        return ReadingActivityRetention(
+            SqlReadingActivityRetention(self._session),
+            journal=self._journal,
+            clock=self._clock,
         )
 
 

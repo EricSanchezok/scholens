@@ -1,0 +1,1 @@
+"""Reading activity persistence adapters."""

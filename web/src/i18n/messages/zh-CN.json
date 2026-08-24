@@ -344,6 +344,10 @@
       "title": "设置",
       "description": "管理显示、交互与翻译偏好"
     },
+    "activity": {
+      "title": "研究活动",
+      "description": "回顾阅读时长、研究节奏与进展"
+    },
     "display": {
       "title": "显示与交互",
       "description": "外观、界面语言与动态效果"
@@ -909,7 +913,11 @@
       "ask": "提问",
       "annotations": "批注",
       "translation": "翻译",
+      "insights": "洞察",
       "details": "详情"
+    },
+    "insights": {
+      "unavailable": "阅读洞察暂时不可用，你仍可继续正常阅读。"
     },
     "search": {
       "close": "关闭 PDF 搜索",
@@ -2011,6 +2019,206 @@
     "unknownAuthors": "作者未知",
     "loadMore": "加载更多结果",
     "loadingMore": "正在加载更多结果"
+  },
+  "ResearchActivity": {
+    "title": "研究活动",
+    "description": "回顾 Scholens 为你记录的阅读投入、覆盖范围与研究成果。",
+    "since": "自 {date} 开始记录",
+    "metricCollectionSince": "研究活动统计自 {date} 起可用",
+    "partialHistory": "{date} 之前的活动可能不完整；该时段的空白日期或页面不一定代表没有活动。",
+    "metricVersion": "统计方法：{version}",
+    "actions": {
+      "retry": "重试",
+      "export": "导出活动",
+      "settings": "活动设置",
+      "delete": "删除活动",
+      "deleteProjectContribution": "删除我的阅读"
+    },
+    "exportError": "无法导出活动，请重试。",
+    "deleteDialog": {
+      "paperTitle": "删除这篇论文的阅读活动？",
+      "paperDescription": "这会永久删除你对这篇论文的阅读会话和页级地图；论文与批注仍会保留。阅读记录偏好仍保持开启，继续阅读会产生新的活动。",
+      "projectTitle": "删除你的项目阅读贡献？",
+      "projectDescription": "这会移除阅读历史中的项目归属与匿名贡献；你的私人阅读会话和历史仍会保留，共享论文、批注、讨论与产物也不受影响。阅读记录偏好仍保持开启，继续在该项目中阅读会产生新的贡献。",
+      "allTitle": "删除全部阅读活动？",
+      "allDescription": "这会永久删除账号中的所有阅读会话和页级地图；论文与其他研究工作仍会保留。阅读记录偏好仍保持开启，继续阅读会产生新的活动。",
+      "cancel": "取消",
+      "confirm": "永久删除",
+      "error": "无法删除活动，请重试。"
+    },
+    "metrics": {
+      "activeTime": "主动阅读估算",
+      "visibleTime": "前台可见",
+      "activeDays": "活跃天数",
+      "activeMembers": "活跃协作者",
+      "sessions": "阅读次数",
+      "coverage": "实质覆盖",
+      "substantivePages": "实质阅读页",
+      "annotations": "批注",
+      "conversations": "私人提问",
+      "outputs": "产物",
+      "papersWithActivity": "有阅读活动的论文",
+      "papersAdded": "新增论文",
+      "resolvedDiscussions": "解决讨论",
+      "sharedAnnotations": "共享批注",
+      "discussionMessages": "讨论消息"
+    },
+    "legend": {
+      "none": "无记录",
+      "under15s": "少于 15 秒",
+      "from15sTo1m": "15 秒–1 分钟",
+      "from1mTo3m": "1–3 分钟",
+      "atLeast3m": "至少 3 分钟",
+      "relativeNone": "无活动",
+      "relativeLow": "较低",
+      "relativeMedium": "中等",
+      "relativeHigh": "较高",
+      "relativePeak": "当前视图最高"
+    },
+    "ranges": {
+      "label": "活动时间范围",
+      "7d": "7 天",
+      "30d": "30 天",
+      "90d": "90 天",
+      "365d": "1 年",
+      "all": "全部"
+    },
+    "chart": {
+      "myReading": "我的主动阅读估算",
+      "teamReading": "匿名团队阅读估算",
+      "date": "日期",
+      "events": "共享事件",
+      "showTable": "查看数据表",
+      "paperLabel": "这篇论文的每日主动阅读估算",
+      "projectLabel": "我的阅读估算与匿名团队阅读估算趋势",
+      "personalLabel": "我的每日主动阅读估算"
+    },
+    "paper": {
+      "loading": "正在加载阅读洞察",
+      "errorTitle": "暂时无法加载阅读洞察",
+      "errorDescription": "论文仍可正常阅读，请重新加载活动数据。",
+      "emptyTitle": "阅读地图会显示在这里",
+      "emptyDescription": "开始阅读后，Scholens 会为你记录近似且私密的活动历史。",
+      "summary": "阅读摘要",
+      "approximate": "主动时间是估算值，不代表注意力或理解程度。页面累计主动阅读达到 15 秒才计入实质覆盖。",
+      "readingMap": "阅读地图",
+      "readingMapDescription": "页面颜色越深，主动阅读时间越长；侧边细条显示页内停留位置，圆点表示批注。",
+      "scaleLabel": "阅读地图色阶",
+      "absolute": "固定时段",
+      "relative": "本文相对",
+      "annotationCount": "{count} 条批注",
+      "pageDetail": "第 {page} 页：{time}，访问 {visits} 次，{annotations} 条批注",
+      "pageRangeDetail": "第 {startPage}–{endPage} 页：{time}，访问 {visits} 次，{annotations} 条批注",
+      "trend": "阅读节奏",
+      "focusPages": "阅读投入最多的页面",
+      "page": "第 {page} 页",
+      "pages": "第 {startPage}–{endPage} 页",
+      "revisitContext": "访问 {visits} 次 · {annotations} 条批注",
+      "untitled": "未命名论文"
+    },
+    "recording": {
+      "offTitle": "阅读记录已关闭",
+      "offEmptyDescription": "已有历史仍会保留，但在重新开启记录前，后续阅读不会添加到这里。",
+      "offHistory": "已有历史仍会保留；当前不会记录后续阅读。",
+      "unknownTitle": "暂时无法确认阅读记录状态",
+      "unknownDescription": "请打开活动设置，确认后续阅读是否会被记录。"
+    },
+    "project": {
+      "title": "研究进展",
+      "description": "你的私人投入与项目共享成果分开呈现。",
+      "loading": "正在加载项目洞察",
+      "errorTitle": "暂时无法加载项目洞察",
+      "errorDescription": "论文和产物仍可正常使用，请重新加载活动数据。",
+      "mine": "我的进展",
+      "team": "项目脉搏",
+      "teamThreshold": "本周期至少有 3 位协作者贡献后，才会显示匿名团队阅读时间。",
+      "trend": "研究节奏",
+      "trendDescription": "阅读分钟与共享事件分轨展示，避免混合不同量纲。",
+      "paperProgress": "论文推进",
+      "paperProgressDescription": "主动阅读估算跟随所选周期；页面覆盖仅在“全部时间”显示，页面累计主动阅读达到 15 秒才计入实质覆盖。打开论文可查看私密阅读地图。",
+      "noPaperActivity": "项目论文的阅读活动会显示在这里。",
+      "papersTruncated": "正在显示 {total} 篇项目论文中的 {shown} 篇。",
+      "viewPapers": "查看全部项目论文",
+      "coverageValue": "覆盖 {value}%",
+      "discussionBreakdown": "{annotations} 条批注 · {messages} 条消息",
+      "lastActivityValue": "最近活动 {date}",
+      "noLastActivity": "本周期暂无活动",
+      "activity": "共享活动",
+      "activityError": "暂时无法加载共享活动；上方项目洞察仍是最新数据。",
+      "activityKinds": {
+        "annotation_created": "添加了共享批注",
+        "discussion_message_posted": "添加了讨论消息",
+        "discussion_resolved": "解决了共享讨论",
+        "member_joined": "加入了项目",
+        "output_created": "创建了共享产物",
+        "paper_added": "添加了论文",
+        "unknown": "更新了项目"
+      },
+      "columns": {
+        "paper": "论文",
+        "reading": "我的主动阅读估算",
+        "coverage": "我的覆盖",
+        "discussions": "共享讨论活动",
+        "lastActivity": "最近活动"
+      }
+    },
+    "personal": {
+      "loading": "正在加载研究活动",
+      "errorTitle": "暂时无法加载研究活动",
+      "errorDescription": "你的研究内容没有受到影响，请检查网络后重试。",
+      "emptyTitle": "你的研究节奏从这里开始",
+      "emptyDescription": "阅读论文、添加批注、提出问题和创建产物后，这里会形成你的私密研究历史。",
+      "summary": "本周期",
+      "summaryDescription": "私密回顾你的研究投入，以及它转化出的工作。",
+      "calendar": "阅读日历",
+      "calendarDescription": "每个格子代表一天的主动阅读。",
+      "calendarLabel": "每日主动阅读日历",
+      "trend": "阅读趋势",
+      "projects": "项目投入",
+      "papers": "阅读最多的论文",
+      "sessionContext": "阅读 {count} 次",
+      "paperContext": "阅读 {count} 次 · 最近阅读 {date}",
+      "noProjects": "项目阅读会显示在这里。",
+      "noPapers": "论文阅读会显示在这里。"
+    },
+    "preferences": {
+      "title": "阅读活动",
+      "description": "管理私人阅读记录与匿名项目贡献。",
+      "recording": "记录我的阅读活动",
+      "recordingDescription": "阅读器可见且近期有操作时，估算主动时间和页面覆盖。关闭后将停止后续记录，已有历史仍会保留。",
+      "project": "贡献匿名项目阅读",
+      "projectDescription": "仅在至少 3 位协作者贡献时，计入取整后的匿名阅读总量。关闭后将停止后续贡献；此前的匿名贡献会保留，直到你在对应项目中删除自己的阅读贡献，私人历史也仍会保留。",
+      "saving": "正在保存活动设置",
+      "saved": "阅读活动偏好已保存。",
+      "saveError": "无法保存活动设置，请重试。",
+      "loading": "正在加载阅读活动设置",
+      "errorTitle": "暂时无法加载阅读活动设置",
+      "errorDescription": "现有偏好不会改变，请重新加载。",
+      "retry": "重试"
+    },
+    "library": {
+      "summary": "主动阅读估算 {duration}，实质覆盖 {coverage}%",
+      "durationOnly": "主动阅读估算 {duration}",
+      "durationAndCoverage": "{duration} · 覆盖 {coverage}%"
+    },
+    "home": {
+      "title": "研究活动",
+      "period": "最近 30 天",
+      "active": "主动阅读估算",
+      "daysAndPapers": "{days} 天 · {papers} 篇有阅读活动的论文",
+      "annotations": "{count} 条批注",
+      "questions": "{count} 个私密提问",
+      "outputs": "{count} 个产物",
+      "recorded": "已有研究活动记录",
+      "empty": "你的阅读节奏与研究进展会显示在这里。",
+      "open": "查看活动",
+      "settings": "活动设置",
+      "recordingOff": "阅读记录已关闭；已有历史仍会保留，但后续阅读不会添加到这里。",
+      "recordingOffHistory": "当前不会记录后续阅读；已有历史仍会保留。",
+      "preferenceUnknown": "请打开活动设置，确认后续阅读是否会被记录。",
+      "error": "研究活动暂时不可用。",
+      "retry": "重试"
+    }
   },
   "Errors": {
     "unexpected": {

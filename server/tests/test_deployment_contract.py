@@ -555,6 +555,9 @@ def test_runtime_role_scopes_scheduler_lifecycle_to_declared_schedule() -> None:
     bootstrap = load_template("scholens-foundation-bootstrap.yml")["Resources"]
     runtime = load_template("scholens-production.yml")
     schedule_name = runtime["Resources"]["ZoteroSchedule"]["Properties"]["Name"]
+    schedule_expression = runtime["Resources"]["ZoteroSchedule"]["Properties"][
+        "ScheduleExpression"
+    ]
     statements = bootstrap["RuntimeOperationsPolicy"]["Properties"]["PolicyDocument"][
         "Statement"
     ]
@@ -563,6 +566,7 @@ def test_runtime_role_scopes_scheduler_lifecycle_to_declared_schedule() -> None:
     )
 
     assert schedule_name == "sanchezcloud-scholens-zotero-sync"
+    assert schedule_expression == "rate(1 hour)"
     assert scheduler["Resource"] == {
         "Fn::Sub": (
             "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:"
@@ -2168,6 +2172,7 @@ def test_migration_chain_starts_with_the_consolidated_baseline() -> None:
         "2026_08_21_1200_paper_list_preferences.py",
         "2026_08_21_1630_conversation_search_indexes.py",
         "2026_08_22_1015_paper_list_layout_sizes.py",
+        "2026_08_24_1700_reading_activity_ledger.py",
     ]
     baseline = versions[0].read_text(encoding="utf-8")
     assert "down_revision: str | None = None" in baseline
@@ -2378,10 +2383,14 @@ def test_waf_free_text_path_sets_classify_every_public_write_route() -> None:
         "PATCH /api/v1/me/profile",
         "PUT /api/v1/me/profile",
         "PUT /api/v1/me/paper-list-preferences",
+        "POST /api/v1/me/reading-activity/paper-summaries",
+        "PUT /api/v1/me/reading-activity-preferences",
+        "POST /api/v1/papers/{document_id}/reading-sessions",
         "POST /api/v1/projects/{project_id}/invitations",
         "PATCH /api/v1/projects/{project_id}/members/{user_id}",
         "POST /api/v1/projects/{project_id}/papers",
         "POST /api/v1/projects/{project_id}/transfer",
+        "PUT /api/v1/reading-sessions/{session_id}",
     }
 
     openapi = json.loads(
