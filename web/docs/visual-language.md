@@ -43,6 +43,22 @@ list, article, navigation region, or table into a generic Item.
 - Selected navigation and current records use a surface, structure border, and
   restrained raised shadow together. Inactive peers remain quiet.
 
+## Focus hierarchy
+
+Focus reinforces the existing surface instead of redrawing its perimeter.
+Pointer and touch activation add no focus-only appearance. In Light and Dark,
+keyboard focus applies a quiet semantic surface tint with stronger local text
+or icon content; persistent selection and status colors keep their meaning.
+Primary, danger, and status intents may add the existing small offset raised
+shadow through the shared recipe. Inputs, search fields, Composers, flat
+controls, and scroll regions do not gain a focus shadow.
+
+Hover and focus never change border color, width, style, radius, or component
+size. Normal color modes use no focus ring, outline, or zero-offset enclosing
+shadow. Forced-colors mode deliberately replaces this treatment with a 2 px
+system `Highlight` outline (inset for scroll regions), preserving a visible
+system-owned keyboard cue without reintroducing a product border token.
+
 ## External recipe mapping
 
 Registry names identify source recipes to inspect. They are not instructions to

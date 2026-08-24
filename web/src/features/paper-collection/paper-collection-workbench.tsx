@@ -18,8 +18,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  focusSurfaceVariants,
   IconButton,
-  keyboardFocusRing,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -223,8 +223,8 @@ function ResizeHandle({
       aria-valuemin={min}
       aria-valuenow={value}
       className={cn(
-        "group flex cursor-col-resize touch-none items-center justify-center outline-none select-none",
-        keyboardFocusRing,
+        "group flex cursor-col-resize touch-none items-center justify-center select-none",
+        focusSurfaceVariants({ intent: "neutral" }),
         className,
       )}
       data-paper-resize-handle=""
@@ -460,7 +460,7 @@ function TagButtons({
             })}
             className={cn(
               "bg-subtle hover:bg-hover max-w-20 truncate rounded-[var(--radius-sm)] px-1.5 py-1 text-[0.6875rem] font-medium",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             key={tag.id}
             onClick={() => onTagClick(tag)}
@@ -653,7 +653,10 @@ const previewMarkdownComponents: Components = {
   ),
   a: ({ children, href }) => (
     <a
-      className="decoration-line-strong hover:decoration-foreground underline underline-offset-2"
+      className={cn(
+        "decoration-line-strong hover:decoration-foreground rounded-[var(--radius-xs)] underline underline-offset-2",
+        focusSurfaceVariants({ intent: "inline" }),
+      )}
       href={href}
       rel="noreferrer"
       target="_blank"
@@ -683,8 +686,12 @@ function Preview({
   return (
     <aside
       aria-label={t("preview.label")}
-      className="border-line-subtle bg-subtle h-full min-w-0 overflow-y-auto border-l px-5 pb-5"
+      className={cn(
+        "border-line-subtle bg-subtle h-full min-w-0 overflow-y-auto border-l px-5 pb-5",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
       data-paper-collection-preview=""
+      tabIndex={0}
     >
       <div className="flex h-10 items-center">
         <h2 className="text-sm font-semibold">{t("preview.label")}</h2>
@@ -1274,8 +1281,11 @@ export function PaperCollectionWorkbench({
                           <Link
                             className={cn(
                               "min-w-0 rounded-[var(--radius-sm)]",
-                              keyboardFocusRing,
+                              focusSurfaceVariants({ intent: "selection" }),
                             )}
+                            data-state={
+                              preview?.id === item.id ? "active" : undefined
+                            }
                             href={item.href}
                           >
                             <span className="line-clamp-2 text-sm leading-5 font-semibold">
@@ -1317,8 +1327,11 @@ export function PaperCollectionWorkbench({
                           <Link
                             className={cn(
                               "grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--radius-sm)]",
-                              keyboardFocusRing,
+                              focusSurfaceVariants({ intent: "selection" }),
                             )}
+                            data-state={
+                              preview?.id === item.id ? "active" : undefined
+                            }
                             href={item.href}
                           >
                             <PaperThumbnail item={item} />

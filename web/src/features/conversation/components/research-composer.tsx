@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
   IconButton,
   isImeComposing,
-  keyboardFocusRing,
+  focusSurfaceVariants,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -252,7 +252,7 @@ function ContextPicker({
           aria-label={accessibleLabel}
           className={cn(
             "hover:bg-hover active:bg-pressed grid size-12 shrink-0 place-items-center rounded-full lg:size-11",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
             triggerClassName,
           )}
           disabled={disabled}
@@ -492,7 +492,7 @@ export function ReasoningMenu({
             compactMenu
               ? "h-11 shrink-0 rounded-[var(--radius-md)] px-3"
               : "h-11 rounded-full px-3",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "neutral" }),
             className,
           )}
           disabled={disabled}
@@ -623,6 +623,7 @@ export function ResearchComposer({
           contextPanelExpanded
             ? "rounded-[var(--radius-2xl)]"
             : "rounded-[var(--radius-full)]",
+          focusSurfaceVariants({ intent: "neutral" }),
         )}
         data-expanded={contextPanelExpanded}
         data-focus-surface
@@ -631,7 +632,7 @@ export function ResearchComposer({
         <textarea
           aria-label={placeholder}
           className={cn(
-            "placeholder:text-muted [field-sizing:content] max-h-28 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none focus-visible:outline-none",
+            "placeholder:text-muted [field-sizing:content] max-h-28 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6",
             contextPanelExpanded
               ? "col-span-3 col-start-1 row-start-1 min-h-11 px-2 py-2"
               : "col-start-2 row-start-1 min-h-9 px-1 py-1.5",
@@ -687,7 +688,10 @@ export function ResearchComposer({
               {onTurnContextClear ? (
                 <button
                   aria-label={t("composer.removeTurnContext")}
-                  className="hover:bg-hover grid size-6 shrink-0 place-items-center rounded-full"
+                  className={cn(
+                    "hover:bg-hover grid size-6 shrink-0 place-items-center rounded-full",
+                    focusSurfaceVariants({ intent: "neutral" }),
+                  )}
                   onClick={onTurnContextClear}
                   type="button"
                 >
@@ -734,6 +738,7 @@ export function ResearchComposer({
         expanded
           ? "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:rounded-[var(--radius-2xl)] lg:p-3"
           : "lg:grid-cols-[auto_minmax(0,1fr)_auto_auto] lg:items-center lg:rounded-[var(--radius-full)] lg:p-1.5",
+        focusSurfaceVariants({ intent: "neutral" }),
       )}
       data-expanded={expanded}
       data-has-context={hasContext || undefined}
@@ -743,7 +748,7 @@ export function ResearchComposer({
       <textarea
         aria-label={placeholder}
         className={cn(
-          "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 py-3 text-[17px] leading-6 outline-none focus-visible:outline-none lg:max-h-36 lg:text-sm lg:leading-6",
+          "placeholder:text-muted col-start-2 row-start-1 [field-sizing:content] max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 py-3 text-[17px] leading-6 lg:max-h-36 lg:text-sm lg:leading-6",
           expanded
             ? "lg:col-span-4 lg:col-start-1 lg:min-h-14 lg:px-1"
             : "lg:col-span-1 lg:col-start-2 lg:min-h-11 lg:self-center lg:px-1 lg:py-2.5",

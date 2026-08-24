@@ -13,7 +13,7 @@ import {
   IconButton,
   Input,
   isImeComposing,
-  keyboardFocusRing,
+  focusSurfaceVariants,
   OverflowMenuButton,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
@@ -235,7 +235,7 @@ export function ConversationListItem({
         aria-current={current ? "page" : undefined}
         className={cn(
           "min-w-0 flex-1 rounded-[var(--radius-md)]",
-          keyboardFocusRing,
+          focusSurfaceVariants({ intent: "selection" }),
           mobile
             ? "flex min-h-14 items-center px-2 py-2"
             : "flex min-h-11 items-start gap-2 px-1 py-1.5",

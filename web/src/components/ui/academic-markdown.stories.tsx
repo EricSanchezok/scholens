@@ -2,6 +2,11 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, waitFor } from "storybook/test";
 
 import { AcademicMarkdown } from "./academic-markdown";
+import {
+  expectLayeredKeyboardFocus,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "./focus-contract.story-test";
 
 const academicExample = [
   String.raw`Inline formulas support $E = mc^2$ and \(p(x \mid y)\).`,
@@ -77,6 +82,9 @@ export const NarrowWideEquation: Story = {
     await expect(
       parseFloat(getComputedStyle(display).paddingTop),
     ).toBeGreaterThan(0);
+    const resting = readFocusVisual(display);
+    await focusWithKeyboard(display);
+    await expectLayeredKeyboardFocus({ element: display, resting });
   },
 };
 
@@ -85,5 +93,19 @@ export const IncompleteStreamingFormula: Story = {
   play: async ({ canvasElement }) => {
     await expect(canvasElement.querySelector(".katex")).toBeNull();
     await expect(canvasElement.textContent).toContain("(x^2 +");
+  },
+};
+
+export const ShortEquationSkipsScrollStop: Story = {
+  args: { children: String.raw`\[x + y = z\]` },
+  play: async ({ canvasElement }) => {
+    const display = canvasElement.querySelector<HTMLElement>(".katex-display");
+    await expect(display).not.toBeNull();
+    await waitFor(() => {
+      expect(display!.scrollWidth).toBeLessThanOrEqual(
+        display!.clientWidth + 1,
+      );
+      expect(display).not.toHaveAttribute("tabindex");
+    });
   },
 };

@@ -8,6 +8,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { CopyActionButton } from "@/components/feedback";
 import {
   Button,
+  focusSurfaceVariants,
   IconButton,
   isImeComposing,
   useTextControlFocus,
@@ -18,6 +19,7 @@ import {
   PreviousIcon,
 } from "@/design-system/icons/semantic-icons";
 import { Icon } from "@/design-system/icons/icon";
+import { cn } from "@/lib/utilities/cn";
 import { composerSchema, type ComposerValues } from "../schemas";
 
 export type PromptBranch = {
@@ -93,13 +95,16 @@ export function ConversationUserMessage({
     return (
       <form
         aria-label={t("editMessageForm")}
-        className="border-line bg-subtle ml-auto flex w-full flex-col gap-3 rounded-[var(--radius-2xl)] border px-4 pt-3 pb-2 lg:max-w-[80%]"
+        className={cn(
+          "border-line bg-subtle ml-auto flex w-full flex-col gap-3 rounded-[var(--radius-2xl)] border px-4 pt-3 pb-2 lg:max-w-[80%]",
+          focusSurfaceVariants({ intent: "neutral" }),
+        )}
         data-focus-surface
         onSubmit={form.handleSubmit(save)}
       >
         <textarea
           aria-label={t("editMessageLabel")}
-          className="placeholder:text-muted [field-sizing:content] max-h-72 min-h-12 w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-base leading-6 outline-none focus-visible:outline-none lg:text-sm"
+          className="placeholder:text-muted [field-sizing:content] max-h-72 min-h-12 w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-base leading-6 lg:text-sm"
           data-focus-delegate="surface"
           data-focus-origin={focusOrigin ?? undefined}
           disabled={saving}

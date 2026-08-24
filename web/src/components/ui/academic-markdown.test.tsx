@@ -64,7 +64,10 @@ $$
       container.querySelectorAll(".katex-html[aria-hidden='true']"),
     ).toHaveLength(4);
     expect(
-      container.querySelectorAll(".katex-display[tabindex='0']"),
+      container.querySelectorAll(".katex-display.focus-recipe-scroll"),
     ).toHaveLength(2);
+    expect(
+      container.querySelectorAll(".katex-display[tabindex='0']"),
+    ).toHaveLength(0);
   });
 });

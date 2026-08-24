@@ -106,6 +106,42 @@ Automated axe checks are a gate, not a complete audit. Also verify:
 Serious and critical axe violations fail Storybook tests. Critical product
 flows receive a Playwright keyboard pass before release.
 
+### Focus-surface regression contract
+
+Computed-style assertions, not screenshots alone, protect the shared focus
+surface. Storybook owns representative Light and Dark coverage for Foundation
+controls (neutral input/search/textarea/select, primary/danger actions,
+checkbox/radio/switch), Library search, unified workspace search, Composer,
+ProjectRow, Reader cards and highlight swatches, inline links, and both Radix
+and native scroll regions. Playwright keeps a small route-level sample and the
+forced-colors exception.
+
+For normal Light and Dark keyboard focus, compare the resting and focused
+states and assert all four border colors, widths, and styles; every corner
+radius; and the rendered width and height are identical. `outline` remains
+none and no ring or zero-offset enclosing shadow appears. Inputs, search,
+Composer, inline links, selection controls, and flat surfaces retain their
+resting `box-shadow`; primary, danger, and status intents may instead resolve
+exactly to the semantic raised shadow. At least one approved non-perimeter
+cue—surface or local content color, the selection recipe's exact brightness
+treatment, or the scroll recipe's internal marks—must change.
+Pointer-focus checks compare the complete hovered visual state
+before and after activation so ordinary hover feedback is not mistaken for a
+focus-only change. Reader swatches assert the outer button perimeter separately
+from the inner document color and persistent selected ring.
+
+Forced-colors Playwright checks set the media feature before navigation. A
+keyboard-focused owner must resolve to a 2 px system `Highlight` outline with
+`forced-color-adjust: auto`; a scroll region uses the same outline inset. The
+delegated native child must remain outline-free so a composite draws only one
+system focus owner. Checked selection controls, highlighted Select/Menu items,
+and Reader swatches retain distinguishable persistent state under the same
+media emulation. The
+normal soft-layered treatment is intentionally not claimed to meet the WCAG
+2.4.13 AAA 3:1 focus-indicator-area contrast metric. Axe also cannot establish
+that visual contract, so these computed assertions and manual Light/Dark/high-
+contrast review remain required.
+
 ## Playwright scope
 
 Use Playwright for a small set of high-value browser journeys, not exhaustive

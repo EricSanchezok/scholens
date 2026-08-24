@@ -4,6 +4,12 @@ import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 
 import { authHandlers, actor } from "../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
+import {
+  expectLayeredKeyboardFocus,
+  expectStableFocusPerimeter,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import { resetRefreshForTests } from "@/lib/api";
 import { libraryHandlers } from "./api/handlers";
 import { libraryLongTitlePapers } from "./api/fixtures";
@@ -142,6 +148,25 @@ export const Populated: Story = {
     await expect(
       canvas.queryByRole("button", { name: "Next" }),
     ).not.toBeInTheDocument();
+
+    const focusSearch = canvas.getByRole("searchbox", {
+      name: "Search papers",
+    });
+    const searchSurface = focusSearch.closest<HTMLElement>(
+      "[data-focus-surface]",
+    );
+    await expect(searchSurface).not.toBeNull();
+    const restingInput = readFocusVisual(focusSearch);
+    const restingSurface = readFocusVisual(searchSurface!);
+    await focusWithKeyboard(focusSearch);
+    await expectStableFocusPerimeter({
+      element: focusSearch,
+      resting: restingInput,
+    });
+    await expectLayeredKeyboardFocus({
+      element: searchSurface!,
+      resting: restingSurface,
+    });
   },
 };
 

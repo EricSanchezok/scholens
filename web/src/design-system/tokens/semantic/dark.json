@@ -29,8 +29,7 @@
       "default": { "$type": "color", "$value": "{palette.neutral.800}" },
       "subtle": { "$type": "color", "$value": "{palette.neutral.900}" },
       "strong": { "$type": "color", "$value": "{palette.neutral.600}" },
-      "control": { "$type": "color", "$value": "{palette.neutral.600}" },
-      "focus": { "$type": "color", "$value": "{palette.neutral.0}" }
+      "control": { "$type": "color", "$value": "{palette.neutral.600}" }
     },
     "scrollbar": {
       "thumb": { "$type": "color", "$value": "{palette.neutral.600}" },
@@ -106,7 +105,13 @@
         "$value": "{palette.document-highlight.gray}"
       }
     },
-    "focus": { "ring": { "$type": "color", "$value": "{palette.neutral.0}" } },
+    "focus": {
+      "surface": { "$type": "color", "$value": "{palette.neutral.700}" },
+      "foreground": { "$type": "color", "$value": "{palette.neutral.0}" },
+      "secondary": { "$type": "color", "$value": "{palette.neutral.200}" },
+      "icon": { "$type": "color", "$value": "{palette.neutral.200}" },
+      "scrollbar": { "$type": "color", "$value": "{palette.neutral.400}" }
+    },
     "overlay": {
       "backdrop": { "$type": "color", "$value": "{palette.overlay.40}" }
     },

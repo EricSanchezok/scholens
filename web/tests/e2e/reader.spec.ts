@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { mockBillingUsage } from "./billing-fixture";
+import { focusThroughTab } from "./focus";
 import { mockVisualViewport, setVisualViewport } from "./visual-viewport";
 import path from "node:path";
 
@@ -1032,8 +1033,16 @@ test("creates a persistent document highlight with the full color palette", asyn
   expect(
     await swatches.evaluateAll(
       (items) =>
-        new Set(items.map((item) => getComputedStyle(item).backgroundColor))
-          .size,
+        new Set(
+          items.map(
+            (item) =>
+              getComputedStyle(
+                item.querySelector<HTMLElement>(
+                  "[data-reader-highlight-swatch]",
+                )!,
+              ).backgroundColor,
+          ),
+        ).size,
     ),
   ).toBe(8);
 
@@ -1081,6 +1090,48 @@ test("creates a persistent document highlight with the full color palette", asyn
     "background-color",
     persistedAppearance.background,
   );
+});
+
+test("preserves Reader swatch colors and one focus owner in forced colors", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto(`/reader/${paperDocument.document_id}?page=2`);
+  await expect(
+    page.locator('[data-pdf-page-number="2"] > canvas'),
+  ).toBeVisible();
+  await selectPdfPassage(page, 2);
+  await page.getByRole("button", { name: "Add annotation" }).click();
+
+  const palette = page.locator("[data-reader-highlight-palette]");
+  const swatches = palette.getByRole("button");
+  await expect(swatches).toHaveCount(8);
+  expect(
+    await palette
+      .locator("[data-reader-highlight-swatch]")
+      .evaluateAll(
+        (items) =>
+          new Set(items.map((item) => getComputedStyle(item).backgroundColor))
+            .size,
+      ),
+  ).toBe(8);
+
+  const selected = palette.getByRole("button", { name: "Yellow highlight" });
+  await expect(selected).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    selected.locator("[data-reader-highlight-swatch]"),
+  ).toHaveAttribute("data-selected", "true");
+  await focusThroughTab(selected);
+  await expect
+    .poll(() =>
+      selected.evaluate((element) => ({
+        outline: getComputedStyle(element).outlineWidth,
+        swatchOutline: getComputedStyle(
+          element.querySelector<HTMLElement>("[data-reader-highlight-swatch]")!,
+        ).outlineStyle,
+      })),
+    )
+    .toEqual({ outline: "2px", swatchOutline: "none" });
 });
 test("preserves an exact partial-span PDF selection", async ({ page }) => {
   await page.goto(`/reader/${paperDocument.document_id}?page=2`);

@@ -1,3 +1,5 @@
+"use client";
+
 import type { Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import * as React from "react";
@@ -6,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
 import { cn } from "@/lib/utilities/cn";
+import { focusSurfaceVariants } from "./focus";
 
 type AcademicMarkdownProps = Omit<
   React.ComponentPropsWithoutRef<"div">,
@@ -14,6 +17,50 @@ type AcademicMarkdownProps = Omit<
   children: string;
   components?: Omit<Components, "span">;
 };
+
+function OverflowAwareMathDisplay({
+  children,
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"span">) {
+  const elementRef = React.useRef<HTMLSpanElement>(null);
+  const [overflowing, setOverflowing] = React.useState(false);
+
+  React.useLayoutEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+    let active = true;
+    const update = () => {
+      if (active) {
+        setOverflowing(element.scrollWidth > element.clientWidth + 1);
+      }
+    };
+    update();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(update);
+    observer?.observe(element);
+    if (element.firstElementChild) observer?.observe(element.firstElementChild);
+    void document.fonts?.ready.then(update);
+    return () => {
+      active = false;
+      observer?.disconnect();
+    };
+  }, []);
+
+  return (
+    <span
+      {...props}
+      className={cn(className, focusSurfaceVariants({ intent: "scroll" }))}
+      data-overflow-focus={overflowing || undefined}
+      ref={elementRef}
+      tabIndex={overflowing ? 0 : undefined}
+    >
+      {children}
+    </span>
+  );
+}
 
 function transformOutsideInlineCode(
   value: string,
@@ -117,9 +164,9 @@ const academicComponents: Pick<Components, "span"> = {
     void _node;
     if (className?.includes("katex-display")) {
       return (
-        <span {...props} className={className} tabIndex={0}>
+        <OverflowAwareMathDisplay {...props} className={className}>
           {children}
-        </span>
+        </OverflowAwareMathDisplay>
       );
     }
     return (

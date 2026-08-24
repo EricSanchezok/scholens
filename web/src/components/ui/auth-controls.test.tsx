@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Button, LinkButton } from "./button";
@@ -11,6 +12,7 @@ import {
   FieldMessage,
 } from "./field";
 import { Input, PasswordInput } from "./input";
+import { InputModalityListener } from "./text-control-focus";
 
 describe("authentication controls", () => {
   it("associates the field label, description, error, and control", () => {
@@ -116,6 +118,30 @@ describe("authentication controls", () => {
 
     await user.click(screen.getByRole("button", { name: "Before field" }));
     await user.tab();
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute("data-focus-origin", "keyboard");
+  });
+
+  it("preserves keyboard modality when a lazy control auto-focuses", async () => {
+    function LazyControl() {
+      const [open, setOpen] = React.useState(false);
+      return (
+        <>
+          <InputModalityListener />
+          <button onClick={() => setOpen(true)} type="button">
+            Open search
+          </button>
+          {open ? <Input aria-label="Lazy search" autoFocus /> : null}
+        </>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(<LazyControl />);
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    const input = screen.getByRole("textbox", { name: "Lazy search" });
     expect(input).toHaveFocus();
     expect(input).toHaveAttribute("data-focus-origin", "keyboard");
   });

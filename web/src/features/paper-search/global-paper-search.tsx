@@ -13,12 +13,12 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
+  focusSurfaceVariants,
   SearchField,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  keyboardFocusRing,
 } from "@/components/ui";
 import { Icon } from "@/design-system/icons/icon";
 import {
@@ -238,7 +238,10 @@ export function GlobalSearch({
 
           <div className="min-h-0 flex-1">
             <TabsContent
-              className="h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              className={cn(
+                "h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+                focusSurfaceVariants({ intent: "scroll" }),
+              )}
               data-scrollbar-gutter="stable"
               value="conversations"
             >
@@ -254,7 +257,7 @@ export function GlobalSearch({
                           <Link
                             className={cn(
                               "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
-                              keyboardFocusRing,
+                              focusSurfaceVariants({ intent: "neutral" }),
                             )}
                             data-search-result=""
                             href={`/?conversation=${conversation.id}` as Route}
@@ -317,7 +320,7 @@ export function GlobalSearch({
                         <Link
                           className={cn(
                             "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
-                            keyboardFocusRing,
+                            focusSurfaceVariants({ intent: "neutral" }),
                           )}
                           data-search-result=""
                           href={
@@ -370,7 +373,10 @@ export function GlobalSearch({
             </TabsContent>
 
             <TabsContent
-              className="h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              className={cn(
+                "h-full min-h-0 overflow-y-auto overscroll-contain pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+                focusSurfaceVariants({ intent: "scroll" }),
+              )}
               data-scrollbar-gutter="stable"
               value="papers"
             >
@@ -417,7 +423,7 @@ export function GlobalSearch({
                         <Link
                           className={cn(
                             "hover:bg-hover active:bg-pressed motion-control flex min-w-0 items-start gap-3 rounded-[var(--radius-lg)] px-3 py-3",
-                            keyboardFocusRing,
+                            focusSurfaceVariants({ intent: "neutral" }),
                           )}
                           data-search-result=""
                           href={`/reader/${paper.document_id}` as Route}

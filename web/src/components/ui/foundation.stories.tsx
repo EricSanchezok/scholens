@@ -14,6 +14,14 @@ import {
 } from "./dialog";
 import { Badge, Progress, Separator, Skeleton } from "./display";
 import { Field, FieldMessage, Label } from "./field";
+import {
+  expectLayeredKeyboardFocus,
+  expectStableFocusPerimeter,
+  focusWithKeyboard,
+  readFocusVisual,
+  readSettledFocusVisual,
+  type FocusShadowPolicy,
+} from "./focus-contract.story-test";
 import { Input, SearchField, Textarea } from "./input";
 import { Checkbox, RadioGroup, RadioItem, Switch } from "./selection-controls";
 import {
@@ -32,6 +40,30 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+async function expectKeyboardSurface(
+  target: HTMLElement,
+  {
+    owner = target,
+    shadow = "stable",
+  }: { owner?: HTMLElement; shadow?: FocusShadowPolicy } = {},
+) {
+  const restingTarget = readFocusVisual(target);
+  const restingOwner =
+    owner === target ? restingTarget : readFocusVisual(owner);
+  await focusWithKeyboard(target);
+  if (owner !== target) {
+    await expectStableFocusPerimeter({
+      element: target,
+      resting: restingTarget,
+    });
+  }
+  await expectLayeredKeyboardFocus({
+    element: owner,
+    resting: restingOwner,
+    shadow,
+  });
+}
 
 export const AllStates: Story = {
   render: () => (
@@ -75,6 +107,10 @@ export const AllStates: Story = {
             <Checkbox defaultChecked />
             Checkbox
           </label>
+          <label className="flex items-center gap-2">
+            <Checkbox />
+            Unchecked checkbox
+          </label>
           <RadioGroup className="flex gap-4" defaultValue="a">
             <label className="flex items-center gap-2">
               <RadioItem value="a" />
@@ -88,6 +124,10 @@ export const AllStates: Story = {
           <label className="flex items-center gap-2">
             <Switch defaultChecked />
             Enabled
+          </label>
+          <label className="flex items-center gap-2">
+            <Switch />
+            Off switch
           </label>
         </div>
         <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
@@ -139,6 +179,104 @@ export const AllStates: Story = {
       </section>
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const primary = canvas.getByRole("button", { name: "Primary" });
+    await readSettledFocusVisual(primary);
+    const restingPrimary = readFocusVisual(primary);
+    await expectKeyboardSurface(primary, { shadow: "raised" });
+    await expect(readFocusVisual(primary).backgroundColor).not.toBe(
+      restingPrimary.backgroundColor,
+    );
+    await expectKeyboardSurface(
+      canvas.getByRole("button", { name: "Danger" }),
+      { shadow: "raised" },
+    );
+    await expectKeyboardSurface(canvas.getByRole("textbox", { name: "Title" }));
+
+    const search = canvas.getByRole("searchbox", { name: "Search" });
+    const searchSurface = search.closest<HTMLElement>("[data-focus-surface]");
+    await expect(searchSurface).not.toBeNull();
+    await expectKeyboardSurface(search, { owner: searchSurface! });
+
+    await expectKeyboardSurface(
+      canvas.getByRole("textbox", { name: "Description" }),
+    );
+    await expectKeyboardSurface(
+      canvas.getByRole("textbox", { name: "Error state" }),
+    );
+    const checkedCheckbox = canvas.getByRole("checkbox", { name: "Checkbox" });
+    await expectKeyboardSurface(checkedCheckbox);
+    await expect(readFocusVisual(checkedCheckbox).filter).toBe(
+      "brightness(0.92)",
+    );
+    const uncheckedCheckbox = canvas.getByRole("checkbox", {
+      name: "Unchecked checkbox",
+    });
+    const restingUnchecked = readFocusVisual(uncheckedCheckbox);
+    await expectKeyboardSurface(uncheckedCheckbox);
+    await expect(readFocusVisual(uncheckedCheckbox).backgroundColor).not.toBe(
+      restingUnchecked.backgroundColor,
+    );
+    const radio = canvas.getByRole("radio", { name: "One" });
+    const radioGroup = canvas.getByRole("radiogroup");
+    const restingRadio = readFocusVisual(radio);
+    const radioSentinel = document.createElement("button");
+    radioGroup.before(radioSentinel);
+    radioSentinel.focus();
+    await userEvent.tab();
+    radioSentinel.remove();
+    await expect(radio).toHaveFocus();
+    await expectStableFocusPerimeter({ element: radio, resting: restingRadio });
+    await expect(readFocusVisual(radio).filter).toBe("brightness(0.92)");
+    const enabledSwitch = canvas.getByRole("switch", { name: "Enabled" });
+    await expectKeyboardSurface(enabledSwitch);
+    await expect(readFocusVisual(enabledSwitch).filter).toBe(
+      "brightness(0.92)",
+    );
+    const offSwitch = canvas.getByRole("switch", { name: "Off switch" });
+    const restingOffSwitch = readFocusVisual(offSwitch);
+    await expectKeyboardSurface(offSwitch);
+    await expect(readFocusVisual(offSwitch).backgroundColor).not.toBe(
+      restingOffSwitch.backgroundColor,
+    );
+    await expectKeyboardSurface(
+      canvas.getByRole("combobox", { name: "Language" }),
+    );
+
+    const activeTab = canvas.getByRole("tab", { name: "One" });
+    const restingTab = readFocusVisual(activeTab);
+    const tabSentinel = document.createElement("button");
+    canvas.getByRole("tablist").before(tabSentinel);
+    tabSentinel.focus();
+    await userEvent.tab();
+    tabSentinel.remove();
+    await expect(activeTab).toHaveFocus();
+    await expectStableFocusPerimeter({
+      element: activeTab,
+      resting: restingTab,
+    });
+    await expect(readFocusVisual(activeTab).filter).toBe("brightness(0.92)");
+
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Select an option" }),
+    );
+    const body = within(document.body);
+    const selectedOption = await body.findByRole("button", {
+      name: "Default",
+    });
+    await expectKeyboardSurface(selectedOption);
+    await expect(selectedOption).toHaveAttribute("aria-pressed", "true");
+    await expect(readFocusVisual(selectedOption).filter).toBe(
+      "brightness(0.92)",
+    );
+    await userEvent.keyboard("{Escape}");
+  },
+};
+
+export const AllStatesDark: Story = {
+  ...AllStates,
+  globals: { appearance: "dark" },
 };
 
 export const KeyboardDialog: Story = {

@@ -5,6 +5,7 @@ import * as React from "react";
 
 import {
   Button,
+  focusSurfaceVariants,
   Label,
   Popover,
   PopoverContent,
@@ -154,7 +155,12 @@ function TranslationSettings({
         />
 
         <details className="border-line border-t pt-3">
-          <summary className="cursor-pointer text-sm font-medium">
+          <summary
+            className={cn(
+              "cursor-pointer rounded-[var(--radius-sm)] text-sm font-medium",
+              focusSurfaceVariants({ intent: "neutral" }),
+            )}
+          >
             {t("instructions.title")}
           </summary>
           <div className="mt-3 grid gap-3">
@@ -266,7 +272,10 @@ export function ReaderFullTranslationControl({
     <Sheet onOpenChange={setOpen} open={open}>
       {trigger}
       <SheetContent
-        className="h-auto max-h-[88dvh] overflow-y-auto rounded-t-[var(--radius-xl)] px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+        className={cn(
+          "h-auto max-h-[88dvh] overflow-y-auto rounded-t-[var(--radius-xl)] px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]",
+          focusSurfaceVariants({ intent: "scroll" }),
+        )}
         closeLabel={t("close")}
         side="bottom"
       >

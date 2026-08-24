@@ -3,6 +3,11 @@ import { expect, fn, userEvent, within } from "storybook/test";
 
 import { authHandlers } from "../../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
+import {
+  expectLayeredKeyboardFocus,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import { projectFixtures } from "../api/fixtures";
 import { ProjectRow } from "./project-row";
 
@@ -36,8 +41,22 @@ type Story = StoryObj<typeof meta>;
 export const Owner: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole("link", { name: "Truthward" })).toBeVisible();
+    const link = canvas.getByRole("link", { name: "Truthward" });
+    const row = canvasElement.querySelector<HTMLElement>("[data-project-row]");
+    await expect(link).toBeVisible();
+    await expect(row).not.toBeNull();
     await expect(canvas.getByText("18")).toBeVisible();
+    const restingLink = readFocusVisual(link);
+    const restingRow = readFocusVisual(row!);
+    await focusWithKeyboard(link);
+    await expectLayeredKeyboardFocus({
+      element: link,
+      resting: restingLink,
+    });
+    await expectLayeredKeyboardFocus({
+      element: row!,
+      resting: restingRow,
+    });
     await userEvent.click(
       canvas.getByRole("button", { name: "Open project actions" }),
     );

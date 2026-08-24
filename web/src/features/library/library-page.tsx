@@ -16,6 +16,7 @@ import * as React from "react";
 import { AsyncFeedback, LoadingState } from "@/components/feedback";
 import {
   Button,
+  focusSurfaceVariants,
   IconButton,
   SearchField,
   Tabs,
@@ -603,7 +604,7 @@ export function LibraryWorkspace({ actor }: { actor: Actor }) {
               />
             </TabsContent>
             <TabsContent
-              className="mt-4 min-h-0 flex-1 overflow-y-auto pb-12"
+              className={`mt-4 min-h-0 flex-1 overflow-y-auto pb-12 ${focusSurfaceVariants({ intent: "scroll" })}`}
               value="outputs"
             >
               <OutputsView
