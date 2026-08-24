@@ -32751,7 +32751,6 @@
                     "type": "null"
                   }
                 ],
-                "default": null,
                 "title": "Color"
               },
               "id": {
@@ -32767,7 +32766,8 @@
             },
             "required": [
               "id",
-              "name"
+              "name",
+              "color"
             ],
             "title": "LibraryTagToolResponse",
             "type": "object"
@@ -49793,43 +49793,8 @@
             "title": "AnnotationThreadCapabilities",
             "type": "object"
           },
-          "AnnotationThreadMode": {
-            "enum": [
-              "highlight",
-              "note",
-              "discussion"
-            ],
-            "title": "AnnotationThreadMode",
-            "type": "string"
-          },
-          "AnnotationThreadStatus": {
-            "enum": [
-              "open",
-              "resolved"
-            ],
-            "title": "AnnotationThreadStatus",
-            "type": "string"
-          },
-          "AnnotationThreadSummaryResponse": {
+          "AnnotationThreadContent": {
             "properties": {
-              "audience": {
-                "discriminator": {
-                  "mapping": {
-                    "personal": "#/$defs/PersonalResearchAudience",
-                    "project": "#/$defs/ProjectResearchAudience"
-                  },
-                  "propertyName": "kind"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/$defs/PersonalResearchAudience"
-                  },
-                  {
-                    "$ref": "#/$defs/ProjectResearchAudience"
-                  }
-                ],
-                "title": "Audience"
-              },
               "capabilities": {
                 "$ref": "#/$defs/AnnotationThreadCapabilities"
               },
@@ -49847,19 +49812,6 @@
                 },
                 "title": "Comments",
                 "type": "array"
-              },
-              "created_at": {
-                "format": "date-time",
-                "title": "Created At",
-                "type": "string"
-              },
-              "created_by": {
-                "$ref": "#/$defs/ResearchCreatorResponse"
-              },
-              "id": {
-                "format": "uuid",
-                "title": "Id",
-                "type": "string"
               },
               "last_activity_at": {
                 "format": "date-time",
@@ -49926,19 +49878,9 @@
               },
               "status": {
                 "$ref": "#/$defs/AnnotationThreadStatus"
-              },
-              "target_document_id": {
-                "format": "uuid",
-                "title": "Target Document Id",
-                "type": "string"
               }
             },
             "required": [
-              "id",
-              "audience",
-              "target_document_id",
-              "created_by",
-              "created_at",
               "quote_text",
               "position",
               "color",
@@ -49952,7 +49894,321 @@
               "capabilities",
               "comments"
             ],
-            "title": "AnnotationThreadSummaryResponse",
+            "title": "AnnotationThreadContent",
+            "type": "object"
+          },
+          "AnnotationThreadMode": {
+            "enum": [
+              "highlight",
+              "note",
+              "discussion"
+            ],
+            "title": "AnnotationThreadMode",
+            "type": "string"
+          },
+          "AnnotationThreadStatus": {
+            "enum": [
+              "open",
+              "resolved"
+            ],
+            "title": "AnnotationThreadStatus",
+            "type": "string"
+          },
+          "AudioOverviewContent": {
+            "properties": {
+              "audio_url": {
+                "title": "Audio Url",
+                "type": "string"
+              },
+              "citations": {
+                "items": {
+                  "$ref": "#/$defs/ResponseCitation"
+                },
+                "title": "Citations",
+                "type": "array"
+              },
+              "model_version": {
+                "title": "Model Version",
+                "type": "string"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Title"
+              },
+              "transcript": {
+                "title": "Transcript",
+                "type": "string"
+              },
+              "voice_id": {
+                "title": "Voice Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "transcript",
+              "citations",
+              "audio_url",
+              "voice_id",
+              "model_version"
+            ],
+            "title": "AudioOverviewContent",
+            "type": "object"
+          },
+          "CitationContent": {
+            "properties": {
+              "snapshot": {
+                "$ref": "#/$defs/CitationSnapshot"
+              }
+            },
+            "required": [
+              "snapshot"
+            ],
+            "title": "CitationContent",
+            "type": "object"
+          },
+          "CitationData": {
+            "description": "Structured, populated citation metadata. The client renders this into a\ncitation string in the user's chosen style \u2014 the server does not format it.",
+            "properties": {
+              "authors": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Authors",
+                "type": "array"
+              },
+              "document_id": {
+                "title": "Document Id",
+                "type": "string"
+              },
+              "doi": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Doi"
+              },
+              "journal": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Journal"
+              },
+              "publish_date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Publish Date"
+              },
+              "publisher": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Publisher"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Title"
+              }
+            },
+            "required": [
+              "document_id"
+            ],
+            "title": "CitationData",
+            "type": "object"
+          },
+          "CitationSnapshot": {
+            "additionalProperties": false,
+            "description": "Immutable, validated citation card emitted by the evidence pipeline.",
+            "properties": {
+              "confidence": {
+                "anyOf": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Confidence"
+              },
+              "data": {
+                "$ref": "#/$defs/CitationData"
+              },
+              "document_id": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Document Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "citation",
+                "title": "Kind",
+                "type": "string"
+              },
+              "method": {
+                "enum": [
+                  "cached",
+                  "deterministic",
+                  "agentic",
+                  "partial",
+                  "not_found"
+                ],
+                "title": "Method",
+                "type": "string"
+              },
+              "missing_fields": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Missing Fields",
+                "type": "array"
+              },
+              "preferred_style": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Preferred Style",
+                "type": "string"
+              },
+              "style_display": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Style Display",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "document_id",
+              "preferred_style",
+              "style_display",
+              "data",
+              "method"
+            ],
+            "title": "CitationSnapshot",
+            "type": "object"
+          },
+          "DataTableContent": {
+            "properties": {
+              "citations": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Citations",
+                "type": "array"
+              },
+              "columns": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Columns",
+                "type": "array"
+              },
+              "row_failures": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Row Failures",
+                "type": "array"
+              },
+              "rows": {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "title": "Rows",
+                "type": "array"
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Title"
+              }
+            },
+            "required": [
+              "title",
+              "columns",
+              "rows",
+              "citations",
+              "row_failures"
+            ],
+            "title": "DataTableContent",
+            "type": "object"
+          },
+          "DocumentResearchAudience": {
+            "additionalProperties": false,
+            "properties": {
+              "document_id": {
+                "description": "Immutable Scholens document UUID defining the audience.",
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "document",
+                "default": "document",
+                "description": "Share the research item through one authorized document scope.",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "required": [
+              "document_id"
+            ],
+            "title": "DocumentResearchAudience",
             "type": "object"
           },
           "DocumentSourceCandidate": {
@@ -50436,10 +50692,190 @@
             "title": "ResearchCreatorResponse",
             "type": "object"
           },
-          "ThreadSummaryActionOutput": {
+          "ResearchItemCapabilities": {
+            "properties": {
+              "delete": {
+                "title": "Delete",
+                "type": "boolean"
+              },
+              "edit": {
+                "title": "Edit",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "edit",
+              "delete"
+            ],
+            "title": "ResearchItemCapabilities",
+            "type": "object"
+          },
+          "ResearchItemKind": {
+            "enum": [
+              "annotation_thread",
+              "citation",
+              "audio_overview",
+              "data_table"
+            ],
+            "title": "ResearchItemKind",
+            "type": "string"
+          },
+          "ResearchItemResponse": {
+            "properties": {
+              "annotation_thread": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AnnotationThreadContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "audience": {
+                "discriminator": {
+                  "mapping": {
+                    "document": "#/$defs/DocumentResearchAudience",
+                    "personal": "#/$defs/PersonalResearchAudience",
+                    "project": "#/$defs/ProjectResearchAudience"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/PersonalResearchAudience"
+                  },
+                  {
+                    "$ref": "#/$defs/DocumentResearchAudience"
+                  },
+                  {
+                    "$ref": "#/$defs/ProjectResearchAudience"
+                  }
+                ],
+                "title": "Audience"
+              },
+              "audio_overview": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AudioOverviewContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "capabilities": {
+                "$ref": "#/$defs/ResearchItemCapabilities"
+              },
+              "citation": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CitationContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "$ref": "#/$defs/ResearchCreatorResponse"
+              },
+              "data_table": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DataTableContent"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/$defs/ResearchItemKind"
+              },
+              "target_document_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Target Document Id"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "audience",
+              "target_document_id",
+              "created_by",
+              "created_at",
+              "updated_at",
+              "capabilities"
+            ],
+            "title": "ResearchItemResponse",
+            "type": "object"
+          },
+          "ResponseCitation": {
+            "description": "Schema for a citation in the paper.\nThis is used to represent a single citation with its text and context.",
+            "properties": {
+              "document_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "The unique identifier of the paper from which this citation is drawn. This helps to contextualize the citation within the broader multi-paper analysis. This is required when there are multiple papers being analyzed.",
+                "title": "Document Id"
+              },
+              "index": {
+                "description": "The index of the citation in the paper's reference list. This is used to identify the citation in discussions or findings.",
+                "title": "Index",
+                "type": "integer"
+              },
+              "text": {
+                "description": "The raw text of the citation as it appears in the paper. Ensure that this is a direct quote or paraphrase from the paper.",
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "index"
+            ],
+            "title": "ResponseCitation",
+            "type": "object"
+          },
+          "ThreadActionOutput": {
             "properties": {
               "content_truncated": {
-                "default": true,
+                "default": false,
                 "description": "Whether quote, position, or comments were reduced in this mutation receipt.",
                 "title": "Content Truncated",
                 "type": "boolean"
@@ -50462,17 +50898,17 @@
                 "type": "string"
               },
               "thread": {
-                "$ref": "#/$defs/AnnotationThreadSummaryResponse"
+                "$ref": "#/$defs/ResearchItemResponse"
               }
             },
             "required": [
               "thread",
               "resource_uri"
             ],
-            "title": "ThreadSummaryActionOutput",
+            "title": "ThreadActionOutput",
             "type": "object"
           },
-          "ThreadSummaryActionOutputToolStructuredResult": {
+          "ThreadActionOutputToolStructuredResult": {
             "properties": {
               "action": {
                 "anyOf": [
@@ -50507,7 +50943,7 @@
                 "type": "array"
               },
               "result": {
-                "$ref": "#/$defs/ThreadSummaryActionOutput"
+                "$ref": "#/$defs/ThreadActionOutput"
               },
               "sources": {
                 "items": {
@@ -50527,7 +50963,7 @@
             "required": [
               "result"
             ],
-            "title": "ThreadSummaryActionOutputToolStructuredResult",
+            "title": "ThreadActionOutputToolStructuredResult",
             "type": "object"
           },
           "ToolErrorEnvelope": {
@@ -50679,7 +51115,7 @@
         },
         "anyOf": [
           {
-            "$ref": "#/$defs/ThreadSummaryActionOutputToolStructuredResult"
+            "$ref": "#/$defs/ThreadActionOutputToolStructuredResult"
           },
           {
             "$ref": "#/$defs/ToolErrorResultEnvelope"

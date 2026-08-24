@@ -276,7 +276,7 @@ class SqlAlchemyResearchItemGateway:
         user_id: int,
         thread_id: UUID,
         request: UpdateAnnotationThreadRequest,
-    ) -> ResearchItemChange[AnnotationThreadSummaryResponse]:
+    ) -> ResearchItemChange[ResearchItemResponse]:
         result = research_repository.update_annotation_thread(
             self._db,
             thread_id=thread_id,

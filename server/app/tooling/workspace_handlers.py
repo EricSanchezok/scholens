@@ -105,10 +105,7 @@ from app.tooling.annotation_mutation_projection import (
 from app.tooling.invocations import tool_arguments_hash
 from app.tooling.results import persisted_tool_outcome, restore_tool_outcome
 from app.tooling import workspace_contracts as wc
-from app.tooling.annotation_summary_projection import (
-    ANNOTATION_SUMMARY_MAX_PAGE_ITEMS,
-    project_annotation_summary,
-)
+from app.tooling.annotation_summary_projection import ANNOTATION_SUMMARY_MAX_PAGE_ITEMS
 from app.tooling.job_waiting import JobWaiter
 from app.tooling.json_document_paging import (
     JsonDocumentPager,
@@ -3953,15 +3950,17 @@ class WorkspaceToolHandlers:
                 color=parsed.color, status=parsed.status
             ),
         )
-        thread = project_annotation_summary(result)
+        projection = project_annotation_thread(result)
         resource_uri = f"scholens://annotation-threads/{result.id}"
-        payload = wc.ThreadSummaryActionOutput(
-            thread=thread,
+        payload = wc.ThreadActionOutput(
+            thread=projection.thread,
             resource_uri=resource_uri,
-            content_truncated=True,
+            content_truncated=projection.content_truncated,
             guidance=(
                 "Use get_annotation_thread_page to read the complete stored quote, "
                 "position, and comments."
+                if projection.content_truncated
+                else None
             ),
         )
         return ToolOutcome(
@@ -3970,7 +3969,7 @@ class WorkspaceToolHandlers:
                 "kind": "annotation_thread_updated",
                 "thread_id": str(result.id),
                 "resource_uri": resource_uri,
-                "content_truncated": True,
+                "content_truncated": projection.content_truncated,
             },
             resource_links=(_thread_link(result.id),),
         )

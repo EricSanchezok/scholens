@@ -888,7 +888,7 @@ class ListLibraryTagsInput(ToolInput):
 
 class LibraryTagToolResponse(LibraryTagResponse):
     name: str = Field(max_length=256)
-    color: str | None = Field(default=None, max_length=256)
+    color: str | None = Field(max_length=256)
 
 
 class LibraryTagListOutput(BaseModel):
@@ -1377,21 +1377,6 @@ class ThreadActionOutput(BaseModel):
     resource_uri: str
     content_truncated: bool = Field(
         default=False,
-        description=(
-            "Whether quote, position, or comments were reduced in this mutation receipt."
-        ),
-    )
-    guidance: str | None = Field(
-        default=None,
-        description="How to continue to the complete stored thread when truncated.",
-    )
-
-
-class ThreadSummaryActionOutput(BaseModel):
-    thread: AnnotationThreadSummaryResponse
-    resource_uri: str
-    content_truncated: bool = Field(
-        default=True,
         description=(
             "Whether quote, position, or comments were reduced in this mutation receipt."
         ),

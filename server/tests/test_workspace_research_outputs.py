@@ -19,7 +19,6 @@ from app.modules.research.application.contracts import (
     AnnotationCommentResponse,
     AnnotationThreadCapabilities,
     AnnotationThreadContent,
-    AnnotationThreadSummaryResponse,
     AudioOverviewContent,
     CitationContent,
     CitationSnapshot,
@@ -76,7 +75,7 @@ from app.tooling.workspace_contracts import (
     ProjectOutputScope,
     ResearchOutputInput,
     ResearchOutputList,
-    ThreadSummaryActionOutput,
+    ThreadActionOutput,
     UpdateAnnotationCommentInput,
     UpdateAnnotationThreadInput,
 )
@@ -823,33 +822,38 @@ def test_annotation_thread_mutation_receipt_bounds_large_stored_content() -> Non
     thread_id = uuid4()
     large_text = "🧪" * 100_000
     hostile_identity = '\x00\\"🙂' * 100_000
-    thread = AnnotationThreadSummaryResponse(
+    thread = ResearchItemResponse(
         id=thread_id,
+        kind=ResearchItemKind.ANNOTATION_THREAD,
         audience=PersonalResearchAudience(),
         target_document_id=document_id,
         created_by=ResearchCreatorResponse(id=7, display_name=hostile_identity),
         created_at=now,
-        quote_text=large_text,
-        position=ParsedTextPosition(start_offset=0, end_offset=100_000),
-        color=AnnotationColor.YELLOW,
-        role="assistant",
-        mode=AnnotationThreadMode.HIGHLIGHT,
-        comment_count=1,
-        last_activity_at=now,
-        status=AnnotationThreadStatus.OPEN,
-        resolved_by=ResearchCreatorResponse(
-            id=8,
-            display_name=hostile_identity,
+        updated_at=now,
+        capabilities=ResearchItemCapabilities(edit=True, delete=True),
+        annotation_thread=AnnotationThreadContent(
+            quote_text=large_text,
+            position=ParsedTextPosition(start_offset=0, end_offset=100_000),
+            color=AnnotationColor.YELLOW,
+            role="assistant",
+            mode=AnnotationThreadMode.HIGHLIGHT,
+            comment_count=1,
+            last_activity_at=now,
+            status=AnnotationThreadStatus.OPEN,
+            resolved_by=ResearchCreatorResponse(
+                id=8,
+                display_name=hostile_identity,
+            ),
+            resolved_at=None,
+            capabilities=AnnotationThreadCapabilities(
+                reply=True,
+                recolor=True,
+                resolve=True,
+                reopen=False,
+                delete=True,
+            ),
+            comments=[],
         ),
-        resolved_at=None,
-        capabilities=AnnotationThreadCapabilities(
-            reply=True,
-            recolor=True,
-            resolve=True,
-            reopen=False,
-            delete=True,
-        ),
-        comments=[],
     )
     capabilities = MagicMock()
     capabilities.research_items.update_annotation_thread_bounded.return_value = thread
@@ -865,13 +869,25 @@ def test_annotation_thread_mutation_receipt_bounds_large_stored_content() -> Non
     capabilities.research_items.update_annotation_thread.assert_not_called()
     capabilities.research_items.update_annotation_thread_bounded.assert_called_once()
 
-    receipt = ThreadSummaryActionOutput.model_validate(outcome.payload)
+    receipt = ThreadActionOutput.model_validate(outcome.payload)
+    annotation = receipt.thread.annotation_thread
+    assert annotation is not None
     assert receipt.content_truncated is True
-    assert receipt.thread.position == thread.position
-    assert receipt.thread.comments == []
-    assert len(receipt.thread.quote_text.encode("utf-8")) <= 4_096
+    assert annotation.position is None
+    assert annotation.comments == []
+    assert len(annotation.quote_text.encode("utf-8")) <= 4_096
     assert receipt.thread.created_by.display_name is not None
-    assert receipt.thread.resolved_by is not None
+    assert annotation.resolved_by is not None
+    receipt_data = receipt.model_dump(mode="json")
+    assert {
+        "kind",
+        "updated_at",
+        "capabilities",
+        "annotation_thread",
+        "citation",
+        "audio_overview",
+        "data_table",
+    } <= receipt_data["thread"].keys()
     assert (
         len(
             json.dumps(
@@ -884,7 +900,7 @@ def test_annotation_thread_mutation_receipt_bounds_large_stored_content() -> Non
     assert (
         len(
             json.dumps(
-                receipt.thread.resolved_by.display_name,
+                annotation.resolved_by.display_name,
                 ensure_ascii=False,
             ).encode("utf-8")
         )

@@ -32,11 +32,15 @@ from app.database.models import (
 )
 from app.main import app
 from app.modules.research.application.contracts import (
+    AnnotationThreadCapabilities,
     AnnotationThreadMode,
+    AnnotationThreadSummaryResponse,
     AnnotationThreadStatus,
     CitationSnapshot,
     CreateAnnotationThreadRequest,
+    PersonalResearchAudience,
     ProjectResearchAudience,
+    ResearchCreatorResponse,
     UpdateAnnotationThreadRequest,
 )
 from app.modules.research.application.positions import (
@@ -464,6 +468,64 @@ def test_bounded_annotation_update_gateway_never_calls_full_serializer() -> None
     assert result.changed is True
     bounded_serializer.assert_called_once_with(db, item=item, user_id=2)
     full_serializer.assert_not_called()
+
+
+def test_bounded_annotation_mutation_preserves_the_existing_item_shape() -> None:
+    now = datetime.now(timezone.utc)
+    item = _item(creator_id=2, audience_type=ResearchAudienceType.PERSONAL)
+    item.updated_at = now
+    summary = AnnotationThreadSummaryResponse(
+        id=item.id,
+        audience=PersonalResearchAudience(),
+        target_document_id=uuid.uuid4(),
+        created_by=ResearchCreatorResponse(id=2, display_name="Researcher"),
+        created_at=now,
+        quote_text="Evidence",
+        position=None,
+        color=AnnotationColor.YELLOW,
+        role="assistant",
+        mode=AnnotationThreadMode.HIGHLIGHT,
+        comment_count=0,
+        last_activity_at=now,
+        status=AnnotationThreadStatus.OPEN,
+        resolved_by=None,
+        resolved_at=None,
+        capabilities=AnnotationThreadCapabilities(
+            reply=True,
+            recolor=True,
+            resolve=False,
+            reopen=False,
+            delete=True,
+        ),
+        comments=[],
+    )
+    db = MagicMock(spec=Session)
+    db.execute.return_value.one.return_value = SimpleNamespace(
+        comment_count=0,
+        last_activity_at=None,
+        foreign_reply_count=0,
+    )
+
+    with patch.object(
+        research_repository,
+        "serialize_annotation_summary",
+        return_value=summary,
+    ):
+        response = research_repository.serialize_annotation_mutation_response(
+            db,
+            item=item,
+            user_id=2,
+        )
+
+    assert response.kind is ResearchItemKind.ANNOTATION_THREAD
+    assert response.updated_at == now
+    assert response.capabilities.edit is True
+    assert response.capabilities.delete is True
+    assert response.annotation_thread is not None
+    assert response.annotation_thread.quote_text == "Evidence"
+    assert response.citation is None
+    assert response.audio_overview is None
+    assert response.data_table is None
 
 
 def test_annotation_request_uses_immutable_discriminated_audience() -> None:

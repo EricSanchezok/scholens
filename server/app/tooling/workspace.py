@@ -1189,7 +1189,7 @@ def build_workspace_tool_catalog(
                 next_step="read it again when coordinating concurrent collaborators.",
             ),
             input_model=wc.UpdateAnnotationThreadInput,
-            output_model=wc.ThreadSummaryActionOutput,
+            output_model=wc.ThreadActionOutput,
             permission=write,
             handler=handlers.update_annotation_thread,
             execution=command,

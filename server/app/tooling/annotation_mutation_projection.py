@@ -73,6 +73,7 @@ def project_annotation_thread(
         quote_preview != content.quote_text
         or content.position is not None
         or bool(content.comments)
+        or content.comment_count > len(content.comments)
         or creator_truncated
         or resolved_by_truncated
     )

@@ -1586,7 +1586,7 @@ class ResearchRepository:
         *,
         item: ResearchItem,
         user_id: int,
-    ) -> AnnotationThreadSummaryResponse:
+    ) -> ResearchItemResponse:
         """Build an exact mutation receipt without loading comment bodies."""
 
         stats = db.execute(
@@ -1598,7 +1598,7 @@ class ResearchRepository:
                 .label("foreign_reply_count"),
             ).where(AnnotationComment.thread_id == item.id)
         ).one()
-        return self.serialize_annotation_summary(
+        summary = self.serialize_annotation_summary(
             db,
             item=item,
             user_id=user_id,
@@ -1606,6 +1606,33 @@ class ResearchRepository:
             last_activity_at=stats.last_activity_at or item.created_at,
             has_foreign_replies=bool(stats.foreign_reply_count),
             include_comments=False,
+        )
+        return ResearchItemResponse(
+            id=summary.id,
+            kind=ResearchItemKind.ANNOTATION_THREAD,
+            audience=summary.audience,
+            target_document_id=summary.target_document_id,
+            created_by=summary.created_by,
+            created_at=summary.created_at,
+            updated_at=item.updated_at,
+            capabilities=ResearchItemCapabilities(
+                edit=summary.capabilities.recolor,
+                delete=summary.capabilities.delete,
+            ),
+            annotation_thread=AnnotationThreadContent(
+                quote_text=summary.quote_text,
+                position=summary.position,
+                color=summary.color,
+                role=summary.role,
+                mode=summary.mode,
+                comment_count=summary.comment_count,
+                last_activity_at=summary.last_activity_at,
+                status=summary.status,
+                resolved_by=summary.resolved_by,
+                resolved_at=summary.resolved_at,
+                capabilities=summary.capabilities,
+                comments=list(summary.comments),
+            ),
         )
 
     def update_comment(

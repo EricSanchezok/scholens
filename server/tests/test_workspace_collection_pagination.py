@@ -277,6 +277,26 @@ def test_library_tag_pages_close_and_allow_page_size_changes() -> None:
     )
 
 
+def test_library_tag_tool_color_remains_required_and_nullable() -> None:
+    tag_id = uuid4()
+    outcome = project_library_tag_list(
+        ToolOutcome(
+            payload=LibraryTagListResponse(
+                items=[LibraryTagResponse(id=tag_id, name="Methods", color=None)]
+            ).model_dump(mode="json")
+        )
+    )
+
+    parsed = LibraryTagListOutput.model_validate(outcome.payload)
+    item_schema = LibraryTagListOutput.model_json_schema()["$defs"][
+        "LibraryTagToolResponse"
+    ]
+    assert "color" in item_schema["required"]
+    assert parsed.model_dump(mode="json")["items"] == [
+        {"id": str(tag_id), "name": "Methods", "color": None}
+    ]
+
+
 @pytest.mark.parametrize("binding_change", ["actor", "tamper"])
 def test_library_tag_cursor_rejects_tamper_and_cross_actor_reuse(
     binding_change: str,

@@ -207,7 +207,7 @@ class ResearchItemGateway(Protocol):
         user_id: int,
         thread_id: UUID,
         request: UpdateAnnotationThreadRequest,
-    ) -> ResearchItemChange[AnnotationThreadSummaryResponse]: ...
+    ) -> ResearchItemChange[ResearchItemResponse]: ...
 
     def delete_item(
         self,
@@ -443,7 +443,7 @@ class ResearchItems:
         operation: OperationContext,
         thread_id: UUID,
         request: UpdateAnnotationThreadRequest,
-    ) -> AnnotationThreadSummaryResponse:
+    ) -> ResearchItemResponse:
         """Update a thread and return the bounded Agent mutation projection."""
 
         result = self._gateway.update_annotation_thread_bounded(
