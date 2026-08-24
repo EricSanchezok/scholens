@@ -9,6 +9,12 @@ import {
   within,
 } from "storybook/test";
 
+import {
+  expectLayeredKeyboardFocus,
+  expectStableFocusPerimeter,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import { ResearchComposer } from "./research-composer";
 
 const api = "http://127.0.0.1:7301/api/v1";
@@ -110,9 +116,18 @@ export const ContextPanelSelection: Story = {
     await expect(composer).toHaveAttribute("data-expanded", "true");
     const restingBorder = getComputedStyle(composer!).borderTopColor;
     await expect(restingBorder).not.toBe("transparent");
-    await userEvent.tab();
-    await expect(textbox).toHaveFocus();
+    const restingTextbox = readFocusVisual(textbox);
+    const restingComposer = readFocusVisual(composer!);
+    await focusWithKeyboard(textbox);
     await expect(composer).toHaveAttribute("data-focus-surface");
+    await expectStableFocusPerimeter({
+      element: textbox,
+      resting: restingTextbox,
+    });
+    await expectLayeredKeyboardFocus({
+      element: composer!,
+      resting: restingComposer,
+    });
   },
 };
 

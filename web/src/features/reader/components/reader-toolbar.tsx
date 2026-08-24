@@ -20,6 +20,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  focusSurfaceVariants,
   IconButton,
   Button,
   Input,
@@ -241,12 +242,19 @@ export function ReaderToolbar({
 
       {search ? (
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <div className="border-line bg-canvas flex h-9 min-w-0 flex-1 items-center rounded-[var(--radius-md)] border pl-2">
+          <div
+            className={cn(
+              "border-line bg-canvas flex h-9 min-w-0 flex-1 items-center rounded-[var(--radius-md)] border pl-2",
+              focusSurfaceVariants({ intent: "neutral" }),
+            )}
+            data-focus-surface
+          >
             <Icon glyph={SearchIcon} size={20} tone="secondary" />
             <Input
               aria-label={labels.search}
               autoFocus
-              className="h-8 min-w-0 border-0 bg-transparent px-2 shadow-none"
+              className="h-8 min-w-0 border-0 bg-transparent px-2 shadow-none hover:bg-transparent"
+              data-focus-delegate="surface"
               onChange={(event) =>
                 search.onQueryChange(event.currentTarget.value)
               }
@@ -338,11 +346,18 @@ export function ReaderToolbar({
               >
                 <Icon glyph={PreviousIcon} size={20} />
               </IconButton>
-              <label className="border-line bg-canvas flex h-9 items-center rounded-[var(--radius-md)] border px-2 text-sm">
+              <label
+                className={cn(
+                  "border-line bg-canvas flex h-9 items-center rounded-[var(--radius-md)] border px-2 text-sm",
+                  focusSurfaceVariants({ intent: "neutral" }),
+                )}
+                data-focus-surface
+              >
                 <span className="sr-only">{labels.page}</span>
-                <input
+                <Input
                   aria-label={labels.page}
-                  className="w-8 bg-transparent text-center tabular-nums outline-none"
+                  className="h-8 w-8 border-0 bg-transparent p-0 text-center tabular-nums shadow-none hover:bg-transparent"
+                  data-focus-delegate="surface"
                   inputMode="numeric"
                   max={pageCount}
                   min={1}

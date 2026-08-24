@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { scrollbarTrackRemovalDelayMs } from "@/design-system/scrollbars/scrollbar-activity";
 import { cn } from "@/lib/utilities/cn";
+import { focusSurfaceVariants } from "./focus";
 
 export const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
@@ -20,7 +21,10 @@ export const ScrollArea = React.forwardRef<
     {...props}
   >
     <ScrollAreaPrimitive.Viewport
-      className="size-full rounded-[inherit]"
+      className={cn(
+        "size-full rounded-[inherit]",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
       data-scrollbar-gutter="stable"
       tabIndex={0}
     >

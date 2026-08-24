@@ -9,6 +9,7 @@ import {
   homeTurns,
 } from "../../src/features/home/api/fixtures";
 import { mockBillingUsage } from "./billing-fixture";
+import { focusThroughTab } from "./focus";
 
 const apiPattern = "**/api/v1";
 const avatarUrl =
@@ -196,6 +197,87 @@ test("renders the authenticated Home shell and primary data", async ({
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
+});
+
+test("keeps stable focus surfaces in Windows forced colors", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto("/");
+
+  const composer = page.getByRole("textbox", { name: "Ask anything" });
+  await composer.click();
+  await expect
+    .poll(() =>
+      composer.evaluate((element) => getComputedStyle(element).outlineStyle),
+    )
+    .toBe("none");
+
+  await page.keyboard.press("Control+K");
+  const dialog = page.getByRole("dialog", { name: "Search Scholens" });
+  const input = dialog.getByRole("searchbox", {
+    name: "Search conversations or papers",
+  });
+  await expect(input).toHaveAttribute("data-focus-origin", "keyboard");
+  const inputSurface = input.locator(
+    "xpath=ancestor::*[@data-focus-surface][1]",
+  );
+  await expect
+    .poll(() =>
+      input.evaluate((element) => getComputedStyle(element).outlineStyle),
+    )
+    .toBe("none");
+  await expect
+    .poll(() =>
+      inputSurface.evaluate(
+        (element) => getComputedStyle(element).outlineWidth,
+      ),
+    )
+    .toBe("2px");
+
+  await page.keyboard.press("Escape");
+  await page.goto("/?settings=general");
+  const settings = page.getByRole("dialog");
+  const selectedAppearance = settings.locator('[aria-pressed="true"]').first();
+  const availableAppearance = settings
+    .locator('[aria-pressed="false"]')
+    .first();
+  await expect(selectedAppearance).toBeVisible();
+  await expect(availableAppearance).toBeVisible();
+  expect(
+    await selectedAppearance.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+  ).not.toBe(
+    await availableAppearance.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+  );
+
+  const language = settings.getByRole("combobox").last();
+  await focusThroughTab(language);
+  await page.keyboard.press("Enter");
+  const highlightedOption = page.locator('[role="option"][data-highlighted]');
+  await expect(highlightedOption).toBeVisible();
+  await expect
+    .poll(() =>
+      highlightedOption.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    )
+    .not.toBe("rgb(255, 255, 255)");
+  await page.keyboard.press("Escape");
+
+  const scrollSurface = settings.locator("main.focus-recipe-scroll");
+  await focusThroughTab(scrollSurface);
+  await expect
+    .poll(() =>
+      scrollSurface.evaluate((element) => ({
+        offset: getComputedStyle(element).outlineOffset,
+        width: getComputedStyle(element).outlineWidth,
+      })),
+    )
+    .toEqual({ offset: "-2px", width: "2px" });
 });
 
 test("opens one keyboard-search surface for conversations and papers", async ({

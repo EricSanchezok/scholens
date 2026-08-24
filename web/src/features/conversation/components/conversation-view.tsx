@@ -10,7 +10,7 @@ import {
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
-import { Button, IconButton, keyboardFocusRing } from "@/components/ui";
+import { Button, focusSurfaceVariants, IconButton } from "@/components/ui";
 import { CopyActionButton } from "@/components/feedback";
 import { Icon } from "@/design-system/icons/icon";
 import type { components } from "@/lib/api/generated/schema";
@@ -72,7 +72,7 @@ function FollowUpSuggestions({
     >
       {suggestions.map((suggestion) => (
         <button
-          className={`motion-control bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 lg:-mx-3 lg:min-h-10 lg:w-auto lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${keyboardFocusRing}`}
+          className={`motion-control bg-subtle hover:bg-hover active:bg-pressed lg:border-line-subtle lg:text-secondary lg:hover:text-foreground lg:focus-visible:text-foreground min-h-11 max-w-full rounded-full px-4 py-2 text-left text-sm leading-5 lg:-mx-3 lg:min-h-10 lg:w-auto lg:rounded-[var(--radius-sm)] lg:border-t lg:bg-transparent lg:px-3 lg:py-2.5 lg:first:border-t-0 ${focusSurfaceVariants({ intent: "neutral" })}`}
           key={suggestion}
           onClick={() => onUseSuggestion(suggestion)}
           type="button"
@@ -546,7 +546,7 @@ export function ConversationView({
       <div
         className={
           layout === "side-panel"
-            ? "flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-5 pt-3 pb-6"
+            ? `flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto px-5 pt-3 pb-6 ${focusSurfaceVariants({ intent: "scroll" })}`
             : "flex-1 pt-6 pb-10 lg:py-8"
         }
         data-conversation-scroll-root={
@@ -554,6 +554,7 @@ export function ConversationView({
         }
         ref={layout === "side-panel" ? panelScrollRef : undefined}
         data-scrollbar-gutter={layout === "side-panel" ? "stable" : undefined}
+        tabIndex={layout === "side-panel" ? 0 : undefined}
       >
         <div
           className={

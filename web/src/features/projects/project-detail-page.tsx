@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
   Frame,
   FramePanel,
+  focusSurfaceVariants,
   IconButton,
   OverflowMenuButton,
   SearchField,
@@ -310,7 +311,10 @@ function ProjectPaperRow({
       variant="ghost"
     >
       <Link
-        className="hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+        className={cn(
+          "hover:bg-hover grid min-w-0 gap-2 rounded-[var(--radius-md)] px-2 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+          focusSurfaceVariants({ intent: "neutral" }),
+        )}
         href={`/reader/${paper.document_id}?project=${projectId}` as Route}
       >
         <span className="min-w-0">
@@ -1012,7 +1016,10 @@ export function ProjectDetailWorkspace({
       mobileHeaderLeading={
         <Link
           aria-label={t("detail.back")}
-          className="hover:bg-hover grid size-11 shrink-0 place-items-center rounded-[var(--radius-md)]"
+          className={cn(
+            "hover:bg-hover grid size-11 shrink-0 place-items-center rounded-[var(--radius-md)]",
+            focusSurfaceVariants({ intent: "neutral" }),
+          )}
           href="/projects"
         >
           <Icon glyph={BackIcon} size={20} />
@@ -1064,9 +1071,11 @@ export function ProjectDetailWorkspace({
           className={cn(
             "min-w-0 flex-1 overflow-x-clip",
             state.view === "papers" ? "overflow-hidden" : "overflow-y-auto",
+            focusSurfaceVariants({ intent: "scroll" }),
           )}
           data-project-detail-scroll=""
           layout="size"
+          tabIndex={state.view === "papers" ? undefined : 0}
           transition={motionTransitions.layout}
         >
           <div
@@ -1084,7 +1093,10 @@ export function ProjectDetailWorkspace({
             >
               <Link
                 aria-label={t("detail.back")}
-                className="hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]"
+                className={cn(
+                  "hover:bg-hover grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)]",
+                  focusSurfaceVariants({ intent: "neutral" }),
+                )}
                 href="/projects"
               >
                 <Icon glyph={BackIcon} size={20} />

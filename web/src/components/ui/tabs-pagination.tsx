@@ -7,6 +7,7 @@ import * as React from "react";
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
 import { Button, IconButton } from "./button";
+import { focusSurfaceVariants } from "./focus";
 
 export const Tabs = TabsPrimitive.Root;
 export const TabsList = React.forwardRef<
@@ -30,6 +31,7 @@ export const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     className={cn(
       "motion-control text-muted hover:text-foreground data-[state=active]:bg-surface data-[state=active]:text-foreground disabled:text-disabled h-9 rounded-[var(--radius-md)] px-3 text-sm data-[state=active]:shadow-sm",
+      focusSurfaceVariants({ intent: "selection" }),
       className,
     )}
     ref={ref}

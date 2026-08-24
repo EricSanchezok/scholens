@@ -14,7 +14,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { cn } from "@/lib/utilities/cn";
 import type {
   ConversationActivity,
@@ -314,7 +314,7 @@ export function ConversationWorklog({
           aria-expanded={open}
           className={cn(
             "motion-control hover:text-foreground focus-visible:text-foreground inline-flex min-h-11 w-fit max-w-full items-center gap-1.5 rounded-[var(--radius-sm)] text-left lg:min-h-8",
-            keyboardFocusRing,
+            focusSurfaceVariants({ intent: "inline" }),
           )}
           onClick={toggle}
           type="button"

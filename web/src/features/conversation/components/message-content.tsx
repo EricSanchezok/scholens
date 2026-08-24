@@ -2,7 +2,7 @@ import type { Components } from "react-markdown";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 
-import { keyboardFocusRing } from "@/components/ui";
+import { focusSurfaceVariants } from "@/components/ui";
 import { AcademicMarkdown } from "@/components/ui/academic-markdown";
 import type { components as ApiComponents } from "@/lib/api/generated/schema";
 import { cn } from "@/lib/utilities/cn";
@@ -81,12 +81,24 @@ const baseComponents: Components = {
     </code>
   ),
   pre: ({ children }) => (
-    <pre className="bg-subtle max-w-full overflow-x-auto overscroll-x-contain rounded-[var(--radius-lg)] p-4 text-sm leading-6">
+    <pre
+      className={cn(
+        "bg-subtle max-w-full overflow-x-auto overscroll-x-contain rounded-[var(--radius-lg)] p-4 text-sm leading-6",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
+      tabIndex={0}
+    >
       {children}
     </pre>
   ),
   table: ({ children }) => (
-    <div className="border-line max-w-full overflow-x-auto overscroll-x-contain rounded-[var(--radius-lg)] border">
+    <div
+      className={cn(
+        "border-line max-w-full overflow-x-auto overscroll-x-contain rounded-[var(--radius-lg)] border",
+        focusSurfaceVariants({ intent: "scroll" }),
+      )}
+      tabIndex={0}
+    >
       <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
         {children}
       </table>
@@ -144,7 +156,7 @@ export function MessageContent({
               })}
               className={cn(
                 "bg-subtle hover:bg-hover mx-0.5 inline-flex min-h-6 items-center rounded-full px-2 align-baseline text-xs font-medium",
-                keyboardFocusRing,
+                focusSurfaceVariants({ intent: "neutral" }),
               )}
               onClick={() => onCitationOpen?.(sourceKeys)}
               type="button"
@@ -155,7 +167,10 @@ export function MessageContent({
         }
         return (
           <a
-            className="decoration-line-strong hover:decoration-foreground [overflow-wrap:anywhere] underline underline-offset-4"
+            className={cn(
+              "decoration-line-strong hover:decoration-foreground rounded-[var(--radius-xs)] [overflow-wrap:anywhere] underline underline-offset-4",
+              focusSurfaceVariants({ intent: "inline" }),
+            )}
             href={href}
             rel="noreferrer"
             target="_blank"

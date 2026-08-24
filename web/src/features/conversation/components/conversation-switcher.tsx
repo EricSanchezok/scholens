@@ -5,7 +5,7 @@ import * as React from "react";
 
 import {
   IconButton,
-  keyboardFocusRing,
+  focusSurfaceVariants,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -88,7 +88,10 @@ export function ConversationSwitcher({
       >
         <button
           aria-current={activeId === conversation.id ? "true" : undefined}
-          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm"
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] px-2 py-2 text-left text-sm",
+            focusSurfaceVariants({ intent: "selection" }),
+          )}
           onClick={() => {
             onChange(conversation.id);
             setOpen(false);
@@ -142,7 +145,7 @@ export function ConversationSwitcher({
             aria-expanded={open}
             className={cn(
               "motion-control hover:bg-hover flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-2.5 text-left text-sm",
-              keyboardFocusRing,
+              focusSurfaceVariants({ intent: "neutral" }),
             )}
             data-conversation-switcher-history=""
             type="button"

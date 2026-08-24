@@ -1,9 +1,17 @@
-/**
- * The shared keyboard-only focus treatment for native interactive controls.
- *
- * Pointer and touch interactions never receive a decorative focus ring. The
- * ring is intentionally a single semantic pixel so focus remains discoverable
- * without changing component geometry or introducing a high-contrast frame.
- */
-export const keyboardFocusRing =
-  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-focus-ring)]";
+import { cva } from "class-variance-authority";
+
+/** Shared focus-surface intents. Visual behavior lives in globals.css. */
+export const focusSurfaceVariants = cva("focus-recipe", {
+  variants: {
+    intent: {
+      neutral: "focus-recipe-neutral",
+      primary: "focus-recipe-primary",
+      danger: "focus-recipe-danger",
+      status: "focus-recipe-status",
+      selection: "focus-recipe-selection",
+      inline: "focus-recipe-inline",
+      scroll: "focus-recipe-scroll",
+    },
+  },
+  defaultVariants: { intent: "neutral" },
+});

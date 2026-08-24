@@ -75,12 +75,34 @@ const buttonStyle: CSSProperties = {
 export function GlobalErrorFallback({ reset }: GlobalErrorFallbackProps) {
   return (
     <main data-global-error-surface style={surfaceStyle}>
+      <style>{`
+        .global-error-retry:focus-visible {
+          background: GrayText;
+          background: color-mix(in srgb, CanvasText 86%, Canvas);
+          outline: none;
+          transform: translateY(-1px);
+        }
+
+        @media (forced-colors: active) {
+          .global-error-retry:focus-visible {
+            background: CanvasText;
+            outline: 2px solid Highlight;
+            outline-offset: 2px;
+            transform: none;
+          }
+        }
+      `}</style>
       <span aria-hidden="true" data-global-error-artwork style={artworkStyle} />
       <div style={copyStyle}>
         <h1 style={headingStyle}>Scholens could not start</h1>
         <p style={descriptionStyle}>Try the startup sequence again.</p>
       </div>
-      <button onClick={reset} style={buttonStyle} type="button">
+      <button
+        className="global-error-retry"
+        onClick={reset}
+        style={buttonStyle}
+        type="button"
+      >
         Try again
       </button>
     </main>

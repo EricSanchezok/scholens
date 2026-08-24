@@ -13,6 +13,7 @@ import {
   FieldControl,
   FieldDescription,
   FieldLabel,
+  focusSurfaceVariants,
   Label,
   Select,
   SelectContent,
@@ -158,7 +159,13 @@ function TranslationResult({
         <p className="text-muted text-xs font-medium tracking-wide uppercase">
           {t("selectedText")}
         </p>
-        <p className="text-secondary mt-2 max-h-32 overflow-y-auto text-sm leading-6">
+        <p
+          className={cn(
+            "text-secondary mt-2 max-h-32 overflow-y-auto text-sm leading-6",
+            focusSurfaceVariants({ intent: "scroll" }),
+          )}
+          tabIndex={0}
+        >
           {state.selection?.selected_text}
         </p>
       </div>
@@ -275,7 +282,14 @@ export function ReaderTranslationPanel({
   );
 
   return (
-    <div className={cn("h-full overflow-y-auto", className)} tabIndex={0}>
+    <div
+      className={cn(
+        "h-full overflow-y-auto",
+        focusSurfaceVariants({ intent: "scroll" }),
+        className,
+      )}
+      tabIndex={0}
+    >
       <div className="grid gap-5 p-4 sm:p-5">
         <div className="grid grid-cols-1 gap-3 min-[26rem]:grid-cols-2">
           <TranslationLanguageSelect
@@ -332,7 +346,12 @@ export function ReaderTranslationPanel({
         ) : null}
 
         <details className="border-line border-t pt-4">
-          <summary className="cursor-pointer text-sm font-medium">
+          <summary
+            className={cn(
+              "cursor-pointer rounded-[var(--radius-sm)] text-sm font-medium",
+              focusSurfaceVariants({ intent: "neutral" }),
+            )}
+          >
             {t("instructions.title")}
           </summary>
           <form

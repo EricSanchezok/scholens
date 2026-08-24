@@ -540,9 +540,11 @@ above primary navigation; the research prompt remains in the available reading
 area rather than pulling the input toward screen center. On desktop, the 760 px
 composer retains the centered Figma composition. Its textarea delegates focus
 presentation to the rounded composer boundary. Pointer and touch focus leave
-that boundary visually stable; keyboard navigation alone receives the shared
-semantic focus indicator, so a native rectangular outline never splits the
-composition.
+that boundary visually stable; keyboard navigation adds the shared neutral
+surface tint and local content emphasis without changing the Composer's border,
+radius, size, or existing elevation shadow. Normal Light and Dark modes draw no
+ring or outline, so a native rectangular frame never splits the composition;
+forced-colors mode uses the shared 2 px system `Highlight` outline.
 The account trigger sits against the sidebar's bottom safe-area inset without a
 redundant disclosure arrow. Its menu aligns to the expanded sidebar content
 edge and opens to the right of the collapsed rail.

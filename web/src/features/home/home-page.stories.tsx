@@ -3,6 +3,12 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { authHandlers, actor } from "../../../.storybook/msw/auth-handlers";
 import { Providers } from "@/app/providers";
+import {
+  expectLayeredKeyboardFocus,
+  expectStableFocusPerimeter,
+  focusWithKeyboard,
+  readFocusVisual,
+} from "@/components/ui/focus-contract.story-test";
 import { resetRefreshForTests } from "@/lib/api";
 import { homeHandlers } from "./api/handlers";
 import { homeConversations } from "./api/fixtures";
@@ -104,6 +110,21 @@ export const UnifiedSearch: Story = {
         name: /CWM: An Open-Weights LLM for Code Generation with World Models/,
       }),
     ).toBeVisible();
+
+    await userEvent.click(body.getByRole("tab", { name: "Papers" }));
+    const searchSurface = search.closest<HTMLElement>("[data-focus-surface]");
+    await expect(searchSurface).not.toBeNull();
+    const restingInput = readFocusVisual(search);
+    const restingSurface = readFocusVisual(searchSurface!);
+    await focusWithKeyboard(search);
+    await expectStableFocusPerimeter({
+      element: search,
+      resting: restingInput,
+    });
+    await expectLayeredKeyboardFocus({
+      element: searchSurface!,
+      resting: restingSurface,
+    });
   },
 };
 

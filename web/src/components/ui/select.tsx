@@ -7,7 +7,7 @@ import * as React from "react";
 
 import { Icon } from "@/design-system/icons/icon";
 import { cn } from "@/lib/utilities/cn";
-import { keyboardFocusRing } from "./focus";
+import { focusSurfaceVariants } from "./focus";
 
 export const Select = SelectPrimitive.Root;
 export const SelectGroup = SelectPrimitive.Group;
@@ -28,7 +28,7 @@ export const SelectValue = React.forwardRef<
 SelectValue.displayName = SelectPrimitive.Value.displayName;
 
 export const selectTriggerVariants = cva(
-  `motion-control group/select border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border px-3 text-sm disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-subtle aria-invalid:border-[var(--color-danger-border)] ${keyboardFocusRing}`,
+  `motion-control group/select border-line bg-surface hover:bg-subtle data-[state=open]:bg-subtle active:bg-pressed disabled:text-disabled flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border px-3 text-sm disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-subtle aria-invalid:border-[var(--color-danger-border)] ${focusSurfaceVariants({ intent: "neutral" })}`,
   {
     variants: {
       variant: {
